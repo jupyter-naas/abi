@@ -704,19 +704,21 @@ SUPERVISOR SYSTEM PROMPT:
 
 Remember, you are a specialized agent working under the supervision of {self.state.supervisor_agent}.
 
-1. Stay focused on your specialized role and core capabilities
-2. Follow your system prompt instructions precisely
-3. For EVERY user message, first evaluate if you can handle it within your core capabilities
-4. If you encounter ANY of these situations:
+1. Stay focused on your specialized role and core capabilities.
+2. Follow your system prompt instructions precisely.
+3. For EVERY user message, first evaluate if you can handle it within your core capabilities.
+4. If the user message is not clear, ask for clarification and evaluate again if you can handle it within your core capabilities.
+5. If you encounter ANY of these situations:
    - You are uncertain about how to proceed
    - The task seems outside your core capabilities 
    - You need clarification about requirements
    - You want to confirm a critical action
    - You are not 100% confident in your ability to handle the task
    Then you MUST use the `request_help` tool to ask your supervisor for help.
-5. Do not attempt tasks beyond your defined role
-6. Always maintain consistency with your system prompt rules
-7. When in doubt, ALWAYS request help rather than risk mistakes
+   IMPORTANT: Do NOT explain to the user that you cannot perform the task or say it is outside your scope. Instead, IMMEDIATELY and directly use `request_help`.
+6. Do not attempt tasks beyond your defined role.
+7. Always maintain consistency with your system prompt rules.
+8. When in doubt, ALWAYS request help rather than risk mistakes. Do not type or explain your inability—just use the tool.
 
 Your supervisor will help ensure you operate effectively within your role while providing guidance for complex scenarios.
 
@@ -836,7 +838,7 @@ AGENT SYSTEM PROMPT:
             and len(response.tool_calls) > 0
         ):
             tool_names = [tool_call["name"] for tool_call in response.tool_calls]
-            logger.debug(f"⏩ Calling tools: {', '.join(tool_names)}")
+            logger.debug(f"⏩ Calling tools")
             # TODO: Rethink this.
             # This is done to prevent an LLM to call multiple tools at once.
             # It's important because, as some tools are subgraphs, and that we are passing the full state, the subgraph will be able to mess with the state.
@@ -883,7 +885,7 @@ AGENT SYSTEM PROMPT:
         called_tools: list[BaseTool] = []
         for tool_call in tool_calls:
             tool_name: str = tool_call["name"]
-            logger.debug(f"🛠️ Calling tool: {tool_name}")
+            logger.debug(f"🛠️  Calling tool: {tool_name}")
             tool_: BaseTool = self._tools_by_name[tool_name]
 
             tool_input_fields = tool_.get_input_schema().model_json_schema()[
@@ -946,7 +948,6 @@ AGENT SYSTEM PROMPT:
         # If the last response is a ToolMessage, we want the model to interpret it.
         last_tool_reponse: ToolMessage | Command | None = pd.get(results[-1], 'update.messages[-1]', None)
         logger.debug(f"last_tool_reponse: {last_tool_reponse}")
-        logger.debug(f"results -1: {results[-1]}")
         if (
             isinstance(last_tool_reponse, ToolMessage) and 
             hasattr(last_tool_reponse, "name") and
@@ -954,13 +955,13 @@ AGENT SYSTEM PROMPT:
             not last_tool_reponse.name.startswith("transfer_to_")
         ):
             if return_direct is False:
-                logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
+                logger.debug("⏩ Calling model to interpret the tool response.")
                 results.append(Command(goto="call_model"))
             else:
-                logger.debug("Injecting ToolMessage into AIMessage for the user to see.")
-                logger.debug(f"last_message: {last_message}")
-                results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
+                logger.debug("📧 Injecting ToolMessage into AIMessage for the user to see.")
+                results.append(Command(update={"messages": [AIMessage(content=last_tool_reponse.content)]}))
 
+        logger.debug(f"✅ Tool results: {results}")
         return results
 
     @property
