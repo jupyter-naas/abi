@@ -10,7 +10,7 @@ from src import secret, config
 
 NAME = "Support"
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
-DESCRIPTION = "A Support Agent that helps to get any feedbacks/bugs or needs from user."
+DESCRIPTION = "Get user feedbacks to create tickets for support team in GitHub."
 SYSTEM_PROMPT = f"""
 <role>
 You are a Support Agent focused on handling user feedbacks.
@@ -153,6 +153,8 @@ def create_agent(
         # Feature request intents
         Intent(intent_value="Feature request", intent_type=IntentType.TOOL, intent_target="feature_request"),
         Intent(intent_value="I need a new feature", intent_type=IntentType.TOOL, intent_target="feature_request"),
+        Intent(intent_value="I want to suggest a new feature", intent_type=IntentType.TOOL, intent_target="feature_request"),
+        Intent(intent_value="Create an issue in GitHub", intent_type=IntentType.TOOL, intent_target="feature_request"),
     ]
    
     # Set configuration
