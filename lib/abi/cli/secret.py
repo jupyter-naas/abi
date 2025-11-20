@@ -1,16 +1,6 @@
 import os
 
 import click
-from abi import logger
-
-# from dotenv import load_dotenv
-
-# load_dotenv()
-
-
-@click.group("abi")
-def main():
-    pass
 
 
 @click.group("secrets")
@@ -85,31 +75,3 @@ def get_secret(naas_api_key, naas_api_url, naas_secret_name):
             print(f'{key}="{value}"')
         else:
             print(f"{key}={value}")
-
-
-@naas.command("chat")
-@click.option("--module-name", type=str, required=True, default="chatgpt")
-@click.option("--agent-name", type=str, required=True, default="ChatGPTAgent")
-def chat(module_name: str, agent_name: str):
-    from abi.engine.Engine import Engine
-
-    engine = Engine()
-    engine.load(module_names=[module_name])
-
-    from abi.apps.terminal_agent.main import run_agent
-
-    logger.debug(f"Module agents: {engine.modules[module_name].agents}")
-
-    for agent_class in engine.modules[module_name].agents:
-        logger.debug(f"Agent class: {agent_class.__name__}")
-        if agent_class.__name__ == agent_name:
-            run_agent(agent_class.New())
-            break
-
-
-# Add the secrets group to the main abi group
-main.add_command(secrets)
-main.add_command(chat)
-
-if __name__ == "__main__":
-    main()

@@ -19,6 +19,7 @@ from abi.engine.engine_configuration.EngineConfiguration_VectorStoreService impo
 from abi.services.secret.Secret import Secret
 from jinja2 import Template
 from pydantic import BaseModel, model_validator
+from typing_extensions import Literal
 
 
 class ServicesConfiguration(BaseModel):
@@ -65,6 +66,10 @@ class ModuleConfig(BaseModel):
         return self
 
 
+class GlobalConfig(BaseModel):
+    ai_mode: Literal["cloud", "local", "airgap"]
+
+
 class EngineConfiguration(BaseModel):
     workspace_id: str
     storage_name: str
@@ -79,6 +84,8 @@ class EngineConfiguration(BaseModel):
     cors_origins: List[str]
 
     services: ServicesConfiguration
+
+    global_config: GlobalConfig
 
     modules: List[ModuleConfig]
 
@@ -99,7 +106,10 @@ class EngineConfiguration(BaseModel):
             def __getattr__(self, name):
                 if self.secret_service is None:
                     return 0
-                return self.secret_service.get(name)
+                secret = self.secret_service.get(name)
+                if secret is None:
+                    raise ValueError(f"Secret {name} not found")
+                return secret
 
             def get(self, key, default=None):
                 return 0

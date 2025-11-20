@@ -16,6 +16,9 @@ auto_publish:
   exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
   default_agent: "Abi" # Which agent to set as default in workspace
 
+global_config:
+  ai_mode: "cloud"
+
 modules:
   - module: alice
     enabled: true
@@ -27,13 +30,18 @@ modules:
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  - module: src.core.abi
+    enabled: true
+    config:
+      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
 
 services:
   secret:
     secret_adapters:
       - adapter: "dotenv"
         config: {}
-  object_storage: &object_storage
+  object_storage:
     object_storage_adapter:
       adapter: "fs"
       config:

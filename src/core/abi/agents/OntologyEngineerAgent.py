@@ -1,9 +1,14 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Optional
+
+# from src import secret
+from abi import logger
+from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from langchain_openai import ChatOpenAI  # noqa: F401
 from pydantic import SecretStr
-from src import secret
-from abi import logger
+
+from src.core.abi import ABIModule
+
+MODULE: ABIModule = ABIModule.get_instance()
 
 NAME = "Ontology_Engineer_Agent"
 DESCRIPTION = "A agent that helps users understand BFO Ontology and transform text into ontologies."
@@ -65,8 +70,8 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
     # Set model based on AI_MODE
-    ai_mode = secret.get("AI_MODE")
-    
+    ai_mode = MODULE.configuration.global_config.ai_mode
+
     if ai_mode == "airgap":
         # Use airgap model (Docker Model Runner)
         model = ChatOpenAI(
@@ -77,15 +82,13 @@ def create_agent(
         )
     else:
         # Use cloud model for cloud/local modes
-        openai_api_key = secret.get("OPENAI_API_KEY")
+        openai_api_key = MODULE.configuration.openai_api_key
         if not openai_api_key:
             logger.error("OpenAI API key not available for OntologyEngineerAgent")
             logger.error("   Set OPENAI_API_KEY in .env or switch to airgap mode")
             return None
         model = ChatOpenAI(
-            model=MODEL, 
-            temperature=TEMPERATURE, 
-            api_key=SecretStr(openai_api_key)
+            model=MODEL, temperature=TEMPERATURE, api_key=SecretStr(openai_api_key)
         )
 
     # Use provided configuration or create default one
@@ -99,13 +102,14 @@ def create_agent(
     tools: list = []
 
     agents: list = []
-    from src.core.abi.agents.EntitytoSPARQLAgent import create_agent as entity_to_sparql_agent
-    from src.core.abi.agents.KnowledgeGraphBuilderAgent import create_agent as knowledge_graph_builder_agent
-    
-    agents += [
-        entity_to_sparql_agent(),
-        knowledge_graph_builder_agent()
-    ]
+    from src.core.abi.agents.EntitytoSPARQLAgent import (
+        create_agent as entity_to_sparql_agent,
+    )
+    from src.core.abi.agents.KnowledgeGraphBuilderAgent import (
+        create_agent as knowledge_graph_builder_agent,
+    )
+
+    agents += [entity_to_sparql_agent(), knowledge_graph_builder_agent()]
 
     return OntologyEngineerAgent(
         name=NAME,
@@ -117,6 +121,7 @@ def create_agent(
         state=agent_shared_state,
         configuration=agent_configuration,
     )
+
 
 class OntologyEngineerAgent(Agent):
     pass

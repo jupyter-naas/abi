@@ -15,6 +15,8 @@ class ModuleAgentLoader:
 
         agents_path = module_root_path / "agents"
 
+        logger.debug(f"Loading agents from {agents_path}")
+
         if os.path.exists(agents_path):
             for file in os.listdir(agents_path):
                 if file.endswith(".py") and not file.endswith("test.py"):

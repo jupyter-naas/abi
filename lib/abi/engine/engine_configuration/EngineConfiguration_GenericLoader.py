@@ -1,7 +1,7 @@
-from pydantic import BaseModel, model_validator
-from typing_extensions import Self
-from typing import Dict, Any
 import importlib
+from typing import Any, Dict
+
+from pydantic import BaseModel
 
 
 class GenericLoader(BaseModel):

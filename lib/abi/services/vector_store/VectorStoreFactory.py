@@ -4,7 +4,7 @@ from typing import Optional
 
 from .IVectorStorePort import IVectorStorePort
 from .VectorStoreService import VectorStoreService
-@
+
 logger = logging.getLogger(__name__)
 
 
