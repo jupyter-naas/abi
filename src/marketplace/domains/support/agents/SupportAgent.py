@@ -9,8 +9,6 @@ from typing import Optional
 from src import secret, config
 
 NAME = "Support"
-MODEL = "gpt-4.1-mini"
-TEMPERATURE = 0
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "A Support Agent that helps to get any feedbacks/bugs or needs from user."
 SYSTEM_PROMPT = f"""
@@ -34,12 +32,7 @@ You are working with the GitHub repository: {config.github_repository}, {config.
 </tasks>
 
 <tools>
-- `report_bug`: Create bug reports about issues, errors, crashes etc.
-- `feature_request`: Create feature requests about new features or improvements, documentation, etc.
-- `github_list_repository_contributors`: List contributors to a repository.
-- `github_list_organization_repositories`: List repositories for an organization.
-- `githubgraphql_list_priorities`: List priorities for a project.
-- `githubgraphql_get_project_node_id`: Get the node ID of a project.
+[TOOLS]
 </tools>
 
 <operating_guidelines>
@@ -98,7 +91,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    from src.core.chatgpt.models.gpt_4_1_mini import model
+    from src.marketplace.domains.support.models.default import model
 
     # Define tools
     tools: list = []
@@ -163,9 +156,13 @@ def create_agent(
     ]
    
     # Set configuration
+    system_prompt = SYSTEM_PROMPT.replace("[TOOLS]", "\n".join([
+        f"- {tool.name}: {tool.description}" 
+        for tool in tools
+    ]))
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
+            system_prompt=system_prompt
         )
     
     # Set shared state
