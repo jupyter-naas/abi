@@ -687,7 +687,7 @@ class Agent(Expose):
             self._state.current_active_agent is not None and 
             self._state.current_active_agent != self.name
         ):
-            logger.debug(f"🔀 Continuing conversation with agent '{self._state.current_active_agent}'")
+            logger.debug(f"⏩ Continuing conversation with agent '{self._state.current_active_agent}'")
             # Check if current active agent is in list of agents.
             agent = pd.find(self._agents, lambda a: a.name.lower() == self._state.current_active_agent.lower())
             if agent is not None:
@@ -816,27 +816,28 @@ AGENT SYSTEM PROMPT:
         self,
         state: MessagesState,
     ) -> Command[Literal["call_tools", "__end__"]]:
-        logger.debug(f"call_model on: {self.name}")
         self._state.set_current_active_agent(self.name)
-        # logger.debug(f"tools: {self._structured_tools}")
+        logger.debug(f"🧠 Calling model on current active agent: {self.name}")
+
+        # Inserting system prompt before messages.
         messages = state["messages"]
         if self._system_prompt:
             messages = [
                 SystemMessage(content=self._system_prompt),
             ] + messages
-        # logger.info(f"system prompt: {self._system_prompt}")
-        # logger.info(f"messages: {messages}")
 
+        # Calling model
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
-        logger.debug(f"call_model response: {response}")
-        # logger.info(f"response type: {type(response)}")
-        # if isinstance(response, AIMessage):
-        #     response.additional_kwargs["agent"] = self.name
+        logger.debug(f"Model response content: {response.content if hasattr(response, 'content') else response}")
+
+        # Handle tool calls if present
         if (
             isinstance(response, AIMessage)
             and hasattr(response, "tool_calls")
             and len(response.tool_calls) > 0
         ):
+            tool_names = [tool_call["name"] for tool_call in response.tool_calls]
+            logger.debug(f"⏩ Calling tools: {', '.join(tool_names)}")
             # TODO: Rethink this.
             # This is done to prevent an LLM to call multiple tools at once.
             # It's important because, as some tools are subgraphs, and that we are passing the full state, the subgraph will be able to mess with the state.
@@ -855,21 +856,36 @@ AGENT SYSTEM PROMPT:
 
 
     def call_tools(self, state: MessagesState) -> list[Command]:
+        # Check if messages are present in the state.
+        if "messages" not in state or not isinstance(state["messages"], list) or len(state["messages"]) == 0:
+            logger.warning("No messages in state, cannot call tools")
+            return [Command(goto="__end__")]
+
+        # Check if the last message is an AIMessage and has tool calls.
         last_message: AnyMessage = state["messages"][-1]
-        if not isinstance(last_message, AIMessage) or not hasattr(
-            last_message, "tool_calls"
-        ) or len(last_message.tool_calls) == 0:
-            logger.warning(f"No tool calls found in last message but call_tools was called: {last_message}")
+        if (
+            not isinstance(last_message, AIMessage)
+            or not hasattr(last_message, "tool_calls")
+            or len(last_message.tool_calls) == 0
+        ):
+            logger.warning(
+                f"No tool calls found in last message but call_tools was called: {last_message}"
+            )
             return [Command(goto="__end__", update={"messages": [last_message]})]
 
+        # Get the tool calls from the last message.
         tool_calls: list[ToolCall] = last_message.tool_calls
+        assert len(tool_calls) > 0, state["messages"][-1]
 
-        # assert len(tool_calls) > 0, state["messages"][-1]
-
+        # Initialize the results list.
         results: list[Command] = []
+
+        # Initialize the called tools list.
         called_tools: list[BaseTool] = []
         for tool_call in tool_calls:
-            tool_: BaseTool = self._tools_by_name[tool_call["name"]]
+            tool_name: str = tool_call["name"]
+            logger.debug(f"🛠️ Calling tool: {tool_name}")
+            tool_: BaseTool = self._tools_by_name[tool_name]
 
             tool_input_fields = tool_.get_input_schema().model_json_schema()[
                 "properties"
@@ -879,40 +895,44 @@ AGENT SYSTEM PROMPT:
             # according to LangChain's requirements
             args: dict[str, Any] | ToolCall = tool_call
 
-            # Check if tool needs state injection or is a handoff tool
+            # Check if tool needs state injection
             if "state" in tool_input_fields:
-                # inject state
-                args = {**tool_call, "state": state}
-                # args["args"]["state"] = state
+                args = {**tool_call, "state": state} # inject state
 
-            # if "tool_call" in tool_input_fields:
-            #     args["args"]["tool_call"] = tool_call
-
+            # Check if tool is a handoff tool
             is_handoff = tool_call["name"].startswith("transfer_to_")
             if is_handoff is True:
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
                 
+            # Try to invoke the tool.
             try:
-                logger.debug(f"TOOL CALL ARGS: {args}")
+                logger.debug(f"🔧 Tool arguments: {args.get('args')}")
                 tool_response = tool_.invoke(args)
-                called_tools.append(tool_)
-                logger.debug(f"TOOL CALL RESPONSE: {tool_response}, TYPE: {type(tool_response)}")
+                logger.debug(f"📦 Tool response: {tool_response.content if hasattr(tool_response, 'content') else tool_response}")
+                if (
+                    tool_response is not None and 
+                    hasattr(tool_response, "name") and 
+                    tool_response.name == "request_help" and 
+                    self._state.supervisor_agent != self.name
+                ):
+                    self._state.set_current_active_agent(self._state.supervisor_agent)
+                    self._state.set_requesting_help(True)
+                    results.append(Command(goto="current_active_agent", graph=Command.PARENT))
+                    return results
 
+                called_tools.append(tool_)
+
+                # Handle tool response.
                 if isinstance(tool_response, ToolMessage):
                     results.append(Command(update={"messages": [tool_response]}))
-                # handle tools that return Command directly
                 elif isinstance(tool_response, Command):
                     results.append(tool_response)
                 else:
-                    raise ValueError(
-                        f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
-                    )
+                    logger.warning(f"Tool call {tool_name} returned an unexpected type: {type(tool_response)}")
+                    results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=str(tool_response), tool_call_id=tool_call["id"])]}))
             except Exception as e:
-                if os.environ.get("LOG_LEVEL") == "DEBUG":
-                    raise e
-                # If the tool call fails, we want the model to interpret it.
-                results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=str(e), tool_call_id=tool_call["id"])]}))
-
+                logger.error(f"🚨 Tool call {tool_name} failed: {e}")
+                results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=f"Tool call {tool_name} failed: {str(e)}", tool_call_id=tool_call["id"])]}))
 
         assert len(results) > 0, state
 
@@ -920,33 +940,28 @@ AGENT SYSTEM PROMPT:
         # This is used to know if we can send the ToolMessage to the call_model node.
         return_direct : bool = True
         for t in called_tools:
-            if t.return_direct is False:
+            if hasattr(t, "return_direct") and t.return_direct is False:
                 return_direct = False
                 break
 
         # If the last response is a ToolMessage, we want the model to interpret it.
+        last_tool_reponse: ToolMessage | Command | None = pd.get(results[-1], 'update.messages[-1]', None)
+        logger.debug(f"last_tool_reponse: {last_tool_reponse}")
+        logger.debug(f"results -1: {results[-1]}")
         if (
-            isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and 
-            not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_")
+            isinstance(last_tool_reponse, ToolMessage) and 
+            hasattr(last_tool_reponse, "name") and
+            last_tool_reponse.name is not None and
+            not last_tool_reponse.name.startswith("transfer_to_")
         ):
             if return_direct is False:
                 logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
                 results.append(Command(goto="call_model"))
             else:
                 logger.debug("Injecting ToolMessage into AIMessage for the user to see.")
-                last_message = pd.get(results[-1], 'update.messages[-1]', None)
                 logger.debug(f"last_message: {last_message}")
                 results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
 
-        if (
-            tool_response is not None and 
-            hasattr(tool_response, "name") and 
-            tool_response.name == "request_help" and 
-            self._state.supervisor_agent != self.name
-        ):
-            self._state.set_current_active_agent(self._state.supervisor_agent)
-            self._state.set_requesting_help(True)
-            results.append(Command(goto="current_active_agent", graph=Command.PARENT))
         return results
 
     @property
@@ -1041,12 +1056,17 @@ AGENT SYSTEM PROMPT:
                     continue
                 
                 if isinstance(v, dict):
-                    if "messages" in v:
+                    if "messages" in v and isinstance(v["messages"], list) and len(v["messages"]) > 0:
                         last_messages = [v["messages"][-1]]
                     else:
                         continue
+                elif isinstance(v, list):
+                    last_messages = []
+                    for e in v:
+                        if isinstance(e, dict) and "messages" in e and isinstance(e["messages"], list) and len(e["messages"]) > 0:
+                            last_messages.append(e["messages"][-1])
                 else:
-                    last_messages = [e["messages"][-1] for e in v]
+                    continue
 
 
                 for last_message in last_messages:
@@ -1099,13 +1119,29 @@ AGENT SYSTEM PROMPT:
 
             chunks.append(chunk)
 
-        value = list(chunks[-1].values())[0]
-        if isinstance(value, dict):
-            messages = value["messages"]
-        elif isinstance(value, list):
-            messages = value[-1]["messages"]
+        if len(chunks) == 0:
+            return ""
 
-        content = messages[-1].content
+        last_chunk_values = list(chunks[-1].values())
+        if len(last_chunk_values) == 0:
+            return ""
+        value = last_chunk_values[0]
+        messages = []
+        if isinstance(value, dict) and "messages" in value and isinstance(value["messages"], list):
+            messages = value["messages"]
+        elif isinstance(value, list) and len(value) > 0:
+            last_item = value[-1]
+            if isinstance(last_item, dict) and "messages" in last_item and isinstance(last_item["messages"], list):
+                messages = last_item["messages"]
+
+        if len(messages) == 0:
+            return ""
+        
+        last_message = messages[-1]
+        if hasattr(last_message, "content"):
+            content = last_message.content
+        else:
+            content = str(last_message) if last_message is not None else ""
          # content = list(chunks[-1].values())[0]["messages"][-1].content
 
         return content
