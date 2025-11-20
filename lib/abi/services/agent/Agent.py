@@ -837,8 +837,7 @@ AGENT SYSTEM PROMPT:
             and hasattr(response, "tool_calls")
             and len(response.tool_calls) > 0
         ):
-            tool_names = [tool_call["name"] for tool_call in response.tool_calls]
-            logger.debug(f"⏩ Calling tools")
+            logger.debug("⏩ Calling tools")
             # TODO: Rethink this.
             # This is done to prevent an LLM to call multiple tools at once.
             # It's important because, as some tools are subgraphs, and that we are passing the full state, the subgraph will be able to mess with the state.
