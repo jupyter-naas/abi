@@ -221,9 +221,11 @@ You can browse the data and run queries there."""
     ]
     
     # Set configuration
+    agents_string = "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])
+    tools_string = "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
+            system_prompt=SYSTEM_PROMPT.replace("[AGENTS]", agents_string).replace("[TOOLS]", tools_string),
         )
 
     # Add intents for each agent (using agent names directly to avoid recursion)
@@ -232,7 +234,8 @@ You can browse the data and run queries there."""
         intents.append(Intent(
             intent_type=IntentType.AGENT,
             intent_value=f"Chat with {agent.name} Agent",
-            intent_target=agent.name
+            intent_target=agent.name,
+            intent_scope=IntentScope.DIRECT,
         ))
                 
         if hasattr(agent, 'intents'):
