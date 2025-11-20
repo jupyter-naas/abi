@@ -378,7 +378,7 @@ class IntentAgent(Agent):
         Checks if the intent mapping should be filtered based on the threshold
         and neighbor values.
         """
-        if len(intents) == 1 and intents[0]['score'] > self._threshold:
+        if len(intents) == 1 and intents[0]['score'] > self._direct_intent_score:
             return "intent_mapping_router"
         if len(intents) == 0:
             logger.debug("❌ No intents found, going to call_model")
