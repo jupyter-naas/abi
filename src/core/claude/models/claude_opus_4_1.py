@@ -6,6 +6,10 @@ from pydantic import SecretStr
 MODEL_ID = "claude-opus-4-1-20250805"
 PROVIDER = "anthropic"
 
+api_key = secret.get("ANTHROPIC_API_KEY")
+if secret.get("OPENROUTER_API_KEY"):
+    api_key = secret.get("OPENROUTER_API_KEY")
+
 model: ChatModel = ChatModel(
     model_id=MODEL_ID,
     provider=PROVIDER,
@@ -13,7 +17,7 @@ model: ChatModel = ChatModel(
         model_name=MODEL_ID,
         temperature=0,
         max_retries=2,
-        api_key=SecretStr(secret.get("ANTHROPIC_API_KEY")),
+        api_key=SecretStr(api_key),
         timeout=None,
         stop=None
     ),

@@ -69,6 +69,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
+          SUPPORT_ACCESS_TOKEN: ${{ secrets.SUPPORT_ACCESS_TOKEN }}
         run: |
           docker pull ghcr.io/${{ github.repository }}/abi:latest
           export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
@@ -87,7 +88,7 @@ jobs:
           ENV_CONFIG="{\
             \"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\
             \"NAAS_API_KEY\":\"$NAAS_CREDENTIALS_JWT_TOKEN\",\
-            \"GITHUB_ACCESS_TOKEN\":\"$ACCESS_TOKEN\",\
+            \"GITHUB_ACCESS_TOKEN\":\"$SUPPORT_ACCESS_TOKEN\",\
             \"ABI_API_KEY\":\"$ABI_API_KEY\"\
           }"
 

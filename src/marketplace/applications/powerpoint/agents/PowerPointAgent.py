@@ -134,7 +134,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Set model
-    from src.marketplace.applications.powerpoint.models.default import model
+    from src.core.chatgpt.models.gpt_4_1 import model
 
     from src.core.templatablesparqlquery import get_tools
     tools: list = []
