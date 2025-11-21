@@ -25,12 +25,10 @@ class ImageGenerationStorageWorkflowParameters(WorkflowParameters):
         example="A beautiful sunset over mountains with a lake reflection"
     )]
     file_name: Optional[Annotated[str, Field(
-        default="generated_image.png",
         description="Name for the generated image file",
         example="sunset_mountains.png"
     )]] = "generated_image.png"
     folder_name: Optional[Annotated[str, Field(
-        default="images",
         description="Subfolder name within the timestamped directory",
         example="images"
     )]] = "images"

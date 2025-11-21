@@ -230,7 +230,7 @@ local-build: deps
 agent=AbiAgent
 # Generic chat command - allows specifying agent via agent=AgentName parameter
 chat: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli $(agent)
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli $(agent)
 
 # Main ABI agent - the primary conversational AI interface
 chat-abi-agent: deps
@@ -414,7 +414,8 @@ test-api-init-container: build
 # Interactive test selector using fzf (fuzzy finder)
 q=''
 ftest: deps
-	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
+	@ clear
+	LOG_LEVEL=DEBUG uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 dtest: deps
 	@ uv run python -m pytest $(shell find lib src tests -type d | fzf -q $(q)) $(args)

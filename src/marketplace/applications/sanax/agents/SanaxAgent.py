@@ -57,14 +57,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:
     # Define model based on AI_MODE
-    from src import secret
-    ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
-    if ai_mode == "cloud":
-        from src.marketplace.applications.sanax.models.gpt_4_1 import model as cloud_model
-        selected_model = cloud_model.model
-    else:
-        from src.marketplace.applications.sanax.models.qwen3_8b import model as local_model
-        selected_model = local_model.model
+    from src.marketplace.applications.sanax.models.default import model
     
     # Define tools
     from langchain_core.tools import StructuredTool
@@ -109,7 +102,7 @@ def create_agent(
 
     class CountSchema(BaseModel):
         function_name: str = Field(description="The name of the function to call")
-        function_args: Optional[Dict[str, Any]] = Field(default=None, description="Arguments to pass to the target function")
+        function_args: Optional[Dict[str, Any]] = Field(description="Arguments to pass to the target function")
 
     def count_items(function_name: str, function_args: Optional[Dict[str, Any]] = None) -> int:
         """Count the number of results returned by another tool.
@@ -235,7 +228,7 @@ def create_agent(
     return SanaxAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=selected_model,
+        chat_model=model,
         tools=tools, 
         agents=agents,
         intents=intents,

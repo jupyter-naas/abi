@@ -84,7 +84,7 @@ def create_agent(
     return QwenAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=model,
         intents=intents,
         tools=tools,
         agents=agents,

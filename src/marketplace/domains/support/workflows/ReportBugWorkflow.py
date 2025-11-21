@@ -40,11 +40,11 @@ class ReportBugParameters(WorkflowParameters):
     """
     issue_title: Annotated[str, Field(..., description="The title of the bug report")]
     issue_body: Annotated[str, Field(..., description="The description of the bug, including steps to reproduce")]
-    repo_name: Annotated[str, Field(..., description="The name of the repository to create the bug report in")] = config.github_repository
-    assignees: Optional[Annotated[list, Field(..., description="The assignees of the bug report")]] = []
-    labels: Optional[Annotated[list, Field(..., description="The labels of the bug report")]] = ["bug"]
-    priority_id: Optional[Annotated[str, Field(..., description="The ID of the priority of the bug report")]] = "4fb76f2d"
-    status_id: Optional[Annotated[str, Field(..., description="The ID of the status of the bug report")]] = "97363483"
+    repo_name: Annotated[str, Field(config.github_repository, description="The name of the repository to create the bug report in")]
+    assignees: Optional[Annotated[list, Field(description="The assignees of the bug report")]] = []
+    labels: Optional[Annotated[list, Field(description="The labels of the bug report")]] = ["bug"]
+    priority_id: Optional[Annotated[str, Field(description="The ID of the priority of the bug report")]] = "4fb76f2d"
+    status_id: Optional[Annotated[str, Field(description="The ID of the status of the bug report")]] = "97363483"
     
 
 class ReportBugWorkflow(Workflow):
@@ -74,7 +74,7 @@ class ReportBugWorkflow(Workflow):
         save_json(issue, os.path.join(self.__configuration.data_store_path, issue_path, "issues"), f"{issue.get('number')}.json")
         
         # Add the issue to project using direct project_node_id
-        issue_node_id = issue['node_id']
+        issue_node_id = issue.get('node_id', "")
         logger.debug(f"Issue node ID: {issue_node_id}")
         issue_graphql = self.__github_graphql_integration.add_issue_to_project(
             project_node_id=self.__configuration.project_node_id,
