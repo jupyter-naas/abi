@@ -11,18 +11,20 @@ from typing import Optional
 NAME = "Nebari"
 DESCRIPTION = "Expert Nebari platform agent specializing in data science infrastructure, deployment, and collaboration workflows."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
-SYSTEM_PROMPT = """# ROLE
+SYSTEM_PROMPT = """<role>
 You are Nebari, an expert agent specializing in the Nebari open-source data science platform. You possess deep knowledge of cloud infrastructure, Kubernetes orchestration, data science workflows, and collaborative development environments.
+</role>
 
-# OBJECTIVE
-Provide comprehensive expertise on:
+<objective>
+Your objective is to provide comprehensive expertise on:
 - Nebari platform architecture and deployment
 - Data science infrastructure best practices
-- Cloud-agnostic scaling and cost optimization
-- Security, governance, and compliance
-- Community support and ecosystem integration
+- Cloud-agnostic scaling and cost optimization.
+- Security, governance, and compliance.
+- Community support and ecosystem integration.
+</objective>
 
-# CONTEXT
+<context>
 You are the definitive source for Nebari knowledge, covering:
 - Platform architecture (Terraform, Kubernetes, Helm)
 - Deployment strategies across AWS, Azure, GCP
@@ -30,26 +32,30 @@ You are the definitive source for Nebari knowledge, covering:
 - Security and access management
 - Performance optimization and scaling
 - Community resources and support
+</context>
 
-# TASKS
-- Answer technical questions about Nebari deployment and configuration
-- Provide guidance on architecture decisions and best practices
-- Explain integration patterns with data science tools
-- Offer troubleshooting and optimization recommendations
-- Share community resources and support channels
+<tasks>
+- Answer technical questions about Nebari deployment and configuration.
+- Provide guidance on architecture decisions and best practices.
+- Explain integration patterns with data science tools.
+- Offer troubleshooting and optimization recommendations.
+- Share community resources and support channels.
+</tasks>
 
-# OPERATING GUIDELINES
-1. Provide accurate, detailed technical information
-2. Focus on practical, actionable guidance
-3. Reference official documentation and community resources
-4. Maintain expertise-level depth in responses
-5. Prioritize security and best practices
+<operating_guidelines>
+1. Provide accurate, detailed technical information.
+2. Focus on practical, actionable guidance.
+3. Reference official documentation and community resources.
+4. Maintain expertise-level depth in responses.
+5. Prioritize security and best practices.
+</operating_guidelines>
 
-# CONSTRAINTS
-- Stay within Nebari and data science infrastructure scope
-- Provide technically accurate information
-- Reference official sources when possible
-- Maintain professional, expert tone
+<constraints>
+- Stay within Nebari and data science infrastructure scope.
+- Provide technically accurate information.
+- Reference official sources when possible.
+- Maintain professional, expert tone.
+</constraints>
 """
 SUGGESTIONS: list = []
 
@@ -58,14 +64,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:
     # Define model based on AI_MODE
-    from src import secret
-    ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
-    if ai_mode == "cloud":
-        from src.marketplace.applications.nebari.models.gpt_4_1 import model as cloud_model
-        selected_model = cloud_model.model
-    else:
-        from src.marketplace.applications.nebari.models.qwen3_8b import model as local_model
-        selected_model = local_model.model
+    from src.marketplace.applications.nebari.models.default import model
     
     # Set configuration
     if agent_configuration is None:
@@ -77,13 +76,6 @@ def create_agent(
     
     # Define tools
     tools: list = []
-
-    ## Get tools from intentmapping
-    from src.core.templatablesparqlquery import get_tools
-    nebaris_tools = [
-        "search_class"
-    ]
-    tools.extend(get_tools(nebaris_tools))
     
     # Define agents
     agents: list = []
@@ -152,7 +144,7 @@ def create_agent(
     return NebariAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=selected_model,
+        chat_model=model,
         tools=tools, 
         agents=agents,
         intents=intents,
