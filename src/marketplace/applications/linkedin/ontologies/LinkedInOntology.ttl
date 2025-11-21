@@ -208,6 +208,13 @@ linkedin:Location a owl:Class ;
     rdfs:comment "A LinkedIn Location represents a hierarchical geographical designation that can combine multiple location types (country, state/region, metropolitan area, city) into a single concatenated string." ;
     abi:is_curated_in_foundry "enterprise_management_foundry" .
 
+linkedin:ActOfConnection a owl:Class ;
+    rdfs:subClassOf cco:ont00000434 ; # Act of association
+    rdfs:label "Act of LinkedIn Connection" ;
+    skos:definition "An Act of Association between two LinkedIn profiles." ;
+    skos:example "John Doe connects with Jane Smith on LinkedIn through their profile pages." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
 #################################################################
 #    Object Properties
 #################################################################

@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from abi.services.agent.IntentAgent import (
     IntentAgent,
     Intent,
@@ -7,15 +6,11 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
 )
 from typing import Optional
-from src import secret
-from pydantic import SecretStr
-from src import config
+from src import secret, config
 
 NAME = "Support"
-MODEL = "gpt-4.1-mini"
-TEMPERATURE = 0
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
-DESCRIPTION = "A Support Agent that helps to get any feedbacks/bugs or needs from user."
+DESCRIPTION = "Get user feedbacks to create tickets for support team in GitHub."
 SYSTEM_PROMPT = f"""
 <role>
 You are a Support Agent focused on handling user feedbacks.
@@ -37,12 +32,7 @@ You are working with the GitHub repository: {config.github_repository}, {config.
 </tasks>
 
 <tools>
-- `report_bug`: Create bug reports about issues, errors, crashes etc.
-- `feature_request`: Create feature requests about new features or improvements, documentation, etc.
-- `github_list_repository_contributors`: List contributors to a repository.
-- `github_list_organization_repositories`: List repositories for an organization.
-- `githubgraphql_list_priorities`: List priorities for a project.
-- `githubgraphql_get_project_node_id`: Get the node ID of a project.
+[TOOLS]
 </tools>
 
 <operating_guidelines>
@@ -52,8 +42,8 @@ You are working with the GitHub repository: {config.github_repository}, {config.
     - title: based on the request in markdown format.
     - description: based on the request in markdown format.
     - priority: use the `githubgraphql_list_priorities` tool to get the priority's information and assign the appropriate priority to the ticket. If not specified, assign medium priority.
-    - assignees (optional): if specified in brief, use the `github_list_repository_contributors` tool to get the contributor's information and add it to the assignee list if it matches a contributor.
-    - repository (optional): if specified in brief, use the `github_list_organization_repositories` tool to get the repository's information and assign the appropriate repository to the ticket. If not specified, use the default repository.
+    - assignees (): if specified in brief, use the `github_list_repository_contributors` tool to get the contributor's information and add it to the assignee list if it matches a contributor.
+    - repository (): if specified in brief, use the `github_list_organization_repositories` tool to get the repository's information and assign the appropriate repository to the ticket. If not specified, use the default repository.
     ```
     ### Repository (change if specified in brief)
     {config.github_repository} (default)
@@ -101,11 +91,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+    from src.marketplace.domains.support.models.default import model
 
     # Define tools
     tools: list = []
@@ -167,12 +153,18 @@ def create_agent(
         # Feature request intents
         Intent(intent_value="Feature request", intent_type=IntentType.TOOL, intent_target="feature_request"),
         Intent(intent_value="I need a new feature", intent_type=IntentType.TOOL, intent_target="feature_request"),
+        Intent(intent_value="I want to suggest a new feature", intent_type=IntentType.TOOL, intent_target="feature_request"),
+        Intent(intent_value="Create an issue in GitHub", intent_type=IntentType.TOOL, intent_target="feature_request"),
     ]
    
     # Set configuration
+    system_prompt = SYSTEM_PROMPT.replace("[TOOLS]", "\n".join([
+        f"- {tool.name}: {tool.description}" 
+        for tool in tools
+    ]))
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
+            system_prompt=system_prompt
         )
     
     # Set shared state

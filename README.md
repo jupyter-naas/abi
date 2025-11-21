@@ -35,6 +35,7 @@
 - **10GB+ disk space** - For Docker images and models
 
 **Optional (for cloud modes):**
+- OpenRouter API key
 - OpenAI API key
 - Anthropic API key  
 - Google AI API key
@@ -261,7 +262,7 @@ Moreover, this project is built with international standards and regulatory fram
 - **Vector Search**: Intent matching via embeddings and similarity search
 - **Object Storage**: File storage and retrieval with MinIO compatibility
 - **Memory**: Persistent context and conversation history storage
-- 
+
 <div align="left">
 <img src="assets/knowledge-management-banner-v2.png" alt="Knowledge Management & Storage Technologies" width="400">
 

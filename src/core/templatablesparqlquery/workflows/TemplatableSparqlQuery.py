@@ -147,6 +147,6 @@ def load_workflows():
             )
             workflows.append(p)
         except Exception as e:
-            logger.error(f"Error loading workflow: {e}")
+            logger.warning(f"Error loading workflow for query {query['label']}\nMessage: {e}")
 
     return workflows

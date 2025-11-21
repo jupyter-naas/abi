@@ -1,4 +1,4 @@
-from lib.abi.services.cache.CachePort import ICacheService, ICacheAdapter, CachedData, DataType, CacheNotFoundError, CacheExpiredError
+from abi.services.cache.CachePort import ICacheService, ICacheAdapter, CachedData, DataType, CacheNotFoundError, CacheExpiredError
 from typing import Any, Callable
 import datetime
 import json

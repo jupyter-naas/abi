@@ -7,7 +7,7 @@ from abi.integration.integration import Integration, IntegrationConnectionError,
 import os
 from src.utils.Storage import save_json
 from lib.abi.services.cache.CacheFactory import CacheFactory
-from lib.abi.services.cache.CachePort import DataType
+from abi.services.cache.CachePort import DataType
 import datetime
 from abi import logger
 

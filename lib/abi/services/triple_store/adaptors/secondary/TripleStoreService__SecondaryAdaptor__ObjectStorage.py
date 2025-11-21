@@ -13,7 +13,7 @@ from abi.services.triple_store.adaptors.secondary.base.TripleStoreService__Secon
 from rdflib import Graph, query, Node, URIRef
 import rdflib
 from typing import List, Dict, Tuple, Any
-from abi.utils.Logger import logger
+from abi import logger
 from abi.utils.Workers import WorkerPool, Job
 import queue
 from threading import Thread, Lock

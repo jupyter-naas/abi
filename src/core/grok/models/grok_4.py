@@ -3,29 +3,33 @@ from langchain_xai import ChatXAI
 from src import secret
 from pydantic import SecretStr
 
-NAME = "grok-4-latest"
-ID = "grok-4-latest"
+MODEL_ID = "grok-4"
+NAME = "Grok 4"
 TEMPERATURE = 0.1
 MAX_TOKENS = 4096
 SEARCH_MODE = "auto"
 MAX_SEARCH_RESULTS = 5
-OWNER = "xai"
+PROVIDER = "xai"
 IMAGE = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOv3K6RevHQCscoWPa2BvxKTq-9ygcQ4mhRA&s"
 DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
 CONTEXT_WINDOW = 200000
 
+api_key = secret.get("XAI_API_KEY")
+if secret.get("OPENROUTER_API_KEY"):
+    api_key = secret.get("OPENROUTER_API_KEY")
+
 model: ChatModel = ChatModel(
-    model_id=ID,
+    model_id=MODEL_ID,
     name=NAME,
     description=DESCRIPTION,
     image=IMAGE,
-    owner=OWNER,
+    provider=PROVIDER,
     context_window=CONTEXT_WINDOW,
     model=ChatXAI(
-        model=ID,
+        model=MODEL_ID,
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS,
-        api_key=SecretStr(secret.get("XAI_API_KEY")),
+        api_key=SecretStr(api_key),
         # Enable Live Search for real-time information
         search_parameters={
             "mode": SEARCH_MODE,

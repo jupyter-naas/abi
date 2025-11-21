@@ -100,7 +100,7 @@ def create_agent(
     return DeepSeekAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=model,
         intents=intents,
         tools=tools,
         agents=agents,

@@ -4,7 +4,6 @@ from abi.services.agent.IntentAgent import (
     IntentType,
     AgentConfiguration,
     AgentSharedState,
-    
 )
 from typing import Optional
 
@@ -73,7 +72,7 @@ def create_agent(
     return LlamaAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=model,
         tools=tools,
         agents=agents,
         intents=intents,
