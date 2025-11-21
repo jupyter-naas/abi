@@ -3,8 +3,6 @@ from lib.abi.models.Model import ChatModel
 import os
 
 model: ChatModel
-airgap_model: ChatModel
-cloud_model: ChatModel
 ai_mode = secret.get("AI_MODE")
 
 if ai_mode == "airgap" or not os.getenv("OPENAI_API_KEY") and not os.getenv("OPENROUTER_API_KEY"):
