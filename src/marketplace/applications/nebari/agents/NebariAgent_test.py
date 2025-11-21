@@ -1,6 +1,7 @@
 import pytest
 
 from src.marketplace.applications.nebari.agents.NebariAgent import create_agent
+from abi.services.agent.IntentAgent import IntentType, IntentScope
 
 @pytest.fixture
 def agent():
@@ -12,20 +13,12 @@ def test_agent_name(agent):
     assert result is not None, result
     assert "Nebari" in result, result
 
-def test_intent_favorite_color(agent):
-    result = agent.invoke("What is your favorite color?")
+def test_intents(agent):
+    if hasattr(agent, "intents"):
+        intents = agent.intents
 
-    assert result is not None, result
-    assert "blue" in result.lower(), result
-
-def test_intent_favorite_animal(agent):
-    result = agent.invoke("What is your favorite animal?")
-
-    assert result is not None, result
-    assert "dog" in result.lower(), result
-
-def test_intent_favorite_food(agent):
-    result = agent.invoke("What is your favorite food?")
-
-    assert result is not None, result
-    assert "pizza" in result.lower(), result
+    for intent in intents:
+        if intent.intent_type == IntentType.RAW and intent.intent_scope != IntentScope.DIRECT:
+            result = agent.invoke(intent.intent_value)
+            assert result is not None, f"Intent: {intent.intent_value} did not return a result."
+            assert intent.intent_target in result, f"For intent '{intent.intent_value}', expected '{intent.intent_target}' in result: {result}"
