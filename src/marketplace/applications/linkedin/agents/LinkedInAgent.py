@@ -93,8 +93,8 @@ def create_agent(
     # Set tools
     from src.marketplace.applications.linkedin.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
     tools: list = []
-    li_at = "AQEDARCNSioE2dAnAAABmbhM51IAAAGapfpA-E0AU2nAbiSPq8u-qEfMlklIUKXmsdvuZQpP0pflN4p-jHwYVq57YTzHq9Xivussd2HPcqVVQX8BDKks6kiMN_u3fNNkYJTfW041fEQMJDhLJ60SVjSC" or secret.get('li_at')
-    JSESSIONID = "ajax:7698090324817961474" or secret.get('JSESSIONID')
+    li_at = secret.get('li_at')
+    JSESSIONID = secret.get('JSESSIONID')
     linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
     from src.marketplace.applications.linkedin.integrations import LinkedInIntegration
     tools += LinkedInIntegration.as_tools(linkedin_integration_config)
