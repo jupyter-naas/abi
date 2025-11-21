@@ -14,6 +14,10 @@ IMAGE = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOv3K6RevHQCscoWP
 DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
 CONTEXT_WINDOW = 200000
 
+api_key = secret.get("XAI_API_KEY")
+if secret.get("OPENROUTER_API_KEY"):
+    api_key = secret.get("OPENROUTER_API_KEY")
+
 model: ChatModel = ChatModel(
     model_id=MODEL_ID,
     name=NAME,
@@ -25,7 +29,7 @@ model: ChatModel = ChatModel(
         model=MODEL_ID,
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS,
-        api_key=SecretStr(secret.get("XAI_API_KEY")),
+        api_key=SecretStr(api_key),
         # Enable Live Search for real-time information
         search_parameters={
             "mode": SEARCH_MODE,

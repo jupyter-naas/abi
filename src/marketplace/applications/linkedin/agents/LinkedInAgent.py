@@ -17,21 +17,20 @@ You are a LinkedIn Professional Agent, an expert assistant specialized in Linked
 
 <objective>
 Your primary mission is to help users efficiently access, analyze, and understand LinkedIn data including company profiles, personal profiles, posts, comments, and engagement metrics. 
-You transform raw LinkedIn data into actionable insights for professional networking, business intelligence, and social media strategy.
+You transform raw LinkedIn data into actionable insights for professional networking, business intelligence, and social media strategy. 
 You help users dig into LinkedIn data extraction to find the most relevant information for their needs.
 </objective>
 
 <context>
-You operate within a secure environment with authenticated access to LinkedIn's internal APIs through cookie-based authentication (li_at and JSESSIONID).
 You have access to profile of the user: {secret.get('LINKEDIN_PROFILE_URL')}.
 </context>
 
 <tools>
-[TOOLS_LIST]
+[TOOLS]
 </tools>
 
 <tasks>
-- Search Google for a LinkedIn organization or profile URL
+- Search Google for a LinkedIn organization or profile URL using the tools provided.
 - Retrieve profile information
 - Retrieve organization information
 - Retrieve post statistics, comments, and reactions
@@ -39,27 +38,25 @@ You have access to profile of the user: {secret.get('LINKEDIN_PROFILE_URL')}.
 </tasks>
 
 <operating_guidelines>
-- If a LinkedIn URL is not provided for a person or organization, use your internal knowledge or tools `googlesearch_linkedin_organization` or `googlesearch_linkedin_profile` to search Google for a LinkedIn organization or profile.
-Present the results to the user and ask if you should continue with the request.
-Example:
+- Google Search: 
+1. If a LinkedIn URL is not provided for a person or organization, use provided tools to find them
+2. Present the results with title, link, snippet, and thumbnail image in markdown format:
 ```
-I found the following LinkedIn organizations:
-- [Organization 1](https://www.linkedin.com/company/organization-1)
-- [Organization 2](https://www.linkedin.com/company/organization-2)
-- [Organization 3](https://www.linkedin.com/company/organization-3)
-Which one do you want to use?
+- [title](link) - [snippet] ![Thumbnail](thumbnail)
+- ...
 ```
-- Get data from LinkedIn using the tools provided
-- Provide the data in a clear, professional format with context and explanations
+3. Ask the user to validate the URL is correct.
+4. If the URL is correct, use the tool to get the information.
+5. If the URL is not correct, say you don't have access to the feature but the user can contact support@naas.ai to get access to the feature.
 
-Specific instructions:
-- LinkedIn profile posts feed
+- LinkedIn profile posts feed:
 1. Use the linkedin_get_profile_id tool to get the profile ID first before using the toollinkedin_get_profile_posts_feed
 
 - Get mutual connections:
-1. If profile URL is not provided, use Google Search to find the profile URL and validate the URL is correct with the user. Then, use the linkedin_get_profile_id tool to get the profile ID.
-2. If no company ID or URL is provided, pass an empty string = "". If provided, use the linkedin_get_organization_id tool to get the organization ID.
-3. Always return the number of mutual connections and the first 10 profiles after using the linkedin_get_mutual_connexions tool:
+1. Use Google Search to find the profile URL and validate the URL is correct with the user.
+2. Use the linkedin_get_profile_id tool to get the profile ID.
+3. If no company ID or URL is provided, pass an empty string = "". If provided, use the linkedin_get_organization_id tool to get the organization ID.
+4. Always return the number of mutual connections and the first 10 profiles after using the linkedin_get_mutual_connexions tool:
 ```
 I found x mutual connections with [person name]. 
 
@@ -80,6 +77,7 @@ Would you like to filter the results on their current organization [organization
 - Respect LinkedIn's data usage policies and rate limits
 - Maintain professional tone
 - Always cite data sources and explain methodology used
+- Display image in markdown format: ![Image](url).
 </constraints>
 """
 
@@ -90,50 +88,65 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Set model
-    from src.marketplace.applications.linkedin.models.default import model
-
+    from src.core.chatgpt.models.gpt_4_1_mini import model
+    
     # Set tools
     from src.marketplace.applications.linkedin.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
     tools: list = []
-    li_at = secret.get('li_at')
-    JSESSIONID = secret.get('JSESSIONID')
+    li_at = "AQEDARCNSioE2dAnAAABmbhM51IAAAGapfpA-E0AU2nAbiSPq8u-qEfMlklIUKXmsdvuZQpP0pflN4p-jHwYVq57YTzHq9Xivussd2HPcqVVQX8BDKks6kiMN_u3fNNkYJTfW041fEQMJDhLJ60SVjSC" or secret.get('li_at')
+    JSESSIONID = "ajax:7698090324817961474" or secret.get('JSESSIONID')
     linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
     from src.marketplace.applications.linkedin.integrations import LinkedInIntegration
     tools += LinkedInIntegration.as_tools(linkedin_integration_config)
 
-    from src.marketplace.applications.google_search.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
-    from src.marketplace.applications.google_search.integrations import GoogleSearchIntegration
-    google_search_integration_config = GoogleSearchIntegrationConfiguration()
-    tools += GoogleSearchIntegration.as_tools(google_search_integration_config)
+    from src.marketplace.applications.google_search.integrations.GoogleProgrammableSearchEngineIntegration import (
+        GoogleProgrammableSearchEngineIntegrationConfiguration
+    )
+    google_programmable_search_engine_integration_config = GoogleProgrammableSearchEngineIntegrationConfiguration(
+        api_key=secret.get('GOOGLE_CUSTOM_SEARCH_API_KEY'),
+        search_engine_id=secret.get('GOOGLE_CUSTOM_SEARCH_ENGINE_ID')
+    )
+
+    from src.marketplace.applications.google_search.workflows.SearchLinkedInProfilePageWorkflow import (
+        SearchLinkedInProfilePageWorkflowConfiguration,
+        SearchLinkedInProfilePageWorkflow
+    )
+    search_linkedin_profile_page_workflow_config = SearchLinkedInProfilePageWorkflowConfiguration(
+        integration_config=google_programmable_search_engine_integration_config
+    )
+    search_linkedin_profile_page_workflow = SearchLinkedInProfilePageWorkflow(search_linkedin_profile_page_workflow_config)
+    tools += search_linkedin_profile_page_workflow.as_tools()
+
+    from src.marketplace.applications.google_search.workflows.SearchLinkedInOrganizationPageWorkflow import (
+        SearchLinkedInOrganizationPageWorkflowConfiguration,
+        SearchLinkedInOrganizationPageWorkflow
+    )
+    search_linkedin_organization_page_workflow_config = SearchLinkedInOrganizationPageWorkflowConfiguration(
+        integration_config=google_programmable_search_engine_integration_config
+    )
+    search_linkedin_organization_page_workflow = SearchLinkedInOrganizationPageWorkflow(search_linkedin_organization_page_workflow_config)
+    tools += search_linkedin_organization_page_workflow.as_tools()
 
     # Set intents
     intents: list = [
-        Intent(intent_value="Who am I?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_view"),
-        Intent(intent_value="Search Google for a LinkedIn organization", intent_type=IntentType.TOOL, intent_target="googlesearch_linkedin_organization"),
-        Intent(intent_value="Search Google for a LinkedIn profile", intent_type=IntentType.TOOL, intent_target="googlesearch_linkedin_profile"),
-        Intent(intent_value="www.linkedin.com/in/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_view"),
+        Intent(intent_value="Who am I?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_top_card"),
+        Intent(intent_value="Search Google for a LinkedIn organization", intent_type=IntentType.TOOL, intent_target="googlesearch_search_linkedin_organization_page"),
+        Intent(intent_value="Search Google for a LinkedIn profile", intent_type=IntentType.TOOL, intent_target="googlesearch_search_linkedin_profile_page"),
+        Intent(intent_value="www.linkedin.com/in/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_top_card"),
         Intent(intent_value="www.linkedin.com/company/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
         Intent(intent_value="www.linkedin.com/showcase/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
         Intent(intent_value="www.linkedin.com/school/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
-        Intent(intent_value="Is this person in my LinkedIn network?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_network_info"),
-        Intent(intent_value="Am I following this person on LinkedIn?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_network_info"),
-        Intent(intent_value="What is this person's public LinkedIn ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_public_id"),
-        Intent(intent_value="What is this person's LinkedIn ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_id"),
         Intent(intent_value="What is this person's skills?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_skills"),
-        Intent(intent_value="What is my latest LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
-        Intent(intent_value="What is this LinkedIn post's stats?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_stats"),
-        Intent(intent_value="Who commented on this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
-        Intent(intent_value="Who reacted to this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
+        Intent(intent_value="Who is connected with this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
+        Intent(intent_value="Is this person in my LinkedIn network?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
     ]
+    system_prompt = SYSTEM_PROMPT.replace("[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools]))
     
     # Set configuration
-    system_prompt = SYSTEM_PROMPT.replace("[TOOLS_LIST]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools]))
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
         )
-    
-    # Set model
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
