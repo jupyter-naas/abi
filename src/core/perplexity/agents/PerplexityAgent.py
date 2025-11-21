@@ -7,6 +7,7 @@ from abi.services.agent.IntentAgent import (
 )
 from typing import Optional
 
+
 NAME = "Perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/perplexity.png"
@@ -109,7 +110,7 @@ def create_agent(
     """
     )
     tools += as_tools(integration_config)
-    
+
     # Define intents
     intents: list = [
         Intent(intent_value="quick search about", intent_type=IntentType.TOOL, intent_target="perplexity_quick_search"),

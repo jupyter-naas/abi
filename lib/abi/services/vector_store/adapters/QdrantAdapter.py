@@ -145,9 +145,9 @@ class QdrantAdapter(IVectorStorePort):
                 from typing import cast
                 search_filter = Filter(must=cast(Any, conditions))
         
-        search_result = self.client.search(
+        search_result = self.client.query_points(
             collection_name=collection_name,
-            query_vector=query_vector.tolist(),
+            query=query_vector.tolist(),
             limit=k,
             query_filter=search_filter,
             with_vectors=include_vectors,
@@ -155,7 +155,7 @@ class QdrantAdapter(IVectorStorePort):
         )
         
         results = []
-        for hit in search_result:
+        for hit in search_result.points:
             result = SearchResult(
                 id=str(hit.id),
                 score=hit.score,
@@ -251,7 +251,7 @@ class QdrantAdapter(IVectorStorePort):
             raise RuntimeError("Adapter not initialized")
         
         collection_info = self.client.get_collection(collection_name=collection_name)
-        return collection_info.vectors_count or 0
+        return collection_info.indexed_vectors_count or 0
 
     def close(self) -> None:
         if self.client:
