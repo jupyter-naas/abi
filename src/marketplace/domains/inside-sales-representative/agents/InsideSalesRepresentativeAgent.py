@@ -11,10 +11,10 @@ from abi.services.agent.IntentAgent import (
 from typing import Optional
 from abi import logger
 
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/domain-experts/inside-sales representative.png"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/domain-experts/inside-sales-representative.png"
 NAME = "Inside Sales Representative"
 TYPE = "domain-expert"
-SLUG = "inside-sales representative"
+SLUG = "inside-sales-representative"
 DESCRIPTION = "Expert inside sales representative specializing in remote sales, phone prospecting, CRM management, and inbound lead conversion."
 MODEL = "gpt-4o"
 SYSTEM_PROMPT = """You are a Inside Sales Representative Expert, a specialized AI assistant with deep expertise in remote sales, phone prospecting, crm management.
