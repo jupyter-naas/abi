@@ -1,15 +1,18 @@
-from lib.abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
-from pydantic import Field, BaseModel
-from langchain_core.tools import StructuredTool, BaseTool
-from typing import Any
-from openai import OpenAI
-from src import secrets
 from enum import Enum
+from typing import Any
+
 from abi.services.cache.CacheFactory import CacheFactory
+from langchain_core.tools import BaseTool, StructuredTool
+from openai import OpenAI
+from pydantic import BaseModel, Field
+
+from lib.abi.integration.integration import Integration, IntegrationConfiguration
 from lib.abi.services.cache.CachePort import DataType
+from src.core.chatgpt import ABIModule
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openai_deep_research")
+
 
 class DeepResearchModel(str, Enum):
     # Fast research, but less accurate
@@ -18,18 +21,20 @@ class DeepResearchModel(str, Enum):
     # Lenghty research, but more accurate
     o3_deep_research = "o3-deep-research"
 
+
 @dataclass
 class OpenAIDeepResearchIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for OpenAIDeepResearch workflow.
-    
+
     Attributes:
         openai_api_key (str): OpenAI API key for authentication
         model (DeepResearchModel): Deep research model to use for analysis
         system_prompt (str): System prompt to guide the research behavior
     """
+
     openai_api_key: str
-    model : DeepResearchModel = DeepResearchModel.o3_deep_research
-    system_prompt : str = """
+    model: DeepResearchModel = DeepResearchModel.o3_deep_research
+    system_prompt: str = """
 You are a professional researcher preparing a structured, data-driven report in response to the user's question. Your task is to analyze the topic with a focus on actionable, evidence-based insights.
 
 Do:
@@ -42,98 +47,103 @@ Do:
 Be analytical, avoid vague statements, and ensure each section contributes to a fact-based understanding that could inform decision-making or strategic planning.
 """
 
+
 class OpenAIDeepResearchIntegration(Integration):
     """Workflow for performing web searches using OpenAI."""
-    
+
     __configuration: OpenAIDeepResearchIntegrationConfiguration
-    
+
     def __init__(self, configuration: OpenAIDeepResearchIntegrationConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.openai_client = OpenAI(api_key=self.__configuration.openai_api_key)
-    
-    @cache(lambda self, query: self.__configuration.model + self.__configuration.system_prompt + query, cache_type=DataType.PICKLE)
+
+    @cache(
+        lambda self, query: self.__configuration.model
+        + self.__configuration.system_prompt
+        + query,
+        cache_type=DataType.PICKLE,
+    )
     def run(self, query: str) -> Any:
         """Execute the deep research workflow.
-        
+
         Args:
             parameters (OpenAIDeepResearchParameters): Search parameters
-            
+
         Returns:
             str: Search results from OpenAI
         """
-        
+
         response = self.openai_client.responses.create(
             model="o3-deep-research",
             input=[
                 {
-                "role": "developer",
-                "content": [
-                    {
-                    "type": "input_text",
-                    "text": self.__configuration.system_prompt,
-                    }
-                ]
+                    "role": "developer",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": self.__configuration.system_prompt,
+                        }
+                    ],
                 },
                 {
-                "role": "user",
-                "content": [
-                    {
-                    "type": "input_text",
-                    "text": query,
-                    }
-                ]
-                }
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": query,
+                        }
+                    ],
+                },
             ],
-            reasoning={
-                "summary": "auto"
-            },
+            reasoning={"summary": "auto"},
             tools=[
+                {"type": "web_search_preview"},
                 {
-                "type": "web_search_preview"
+                    "type": "code_interpreter",
+                    "container": {"type": "auto", "file_ids": []},
                 },
-                {
-                "type": "code_interpreter",
-                "container": {
-                    "type": "auto",
-                    "file_ids": []
-                }
-                }
-            ]
+            ],
         )
-        
+
         return response
 
-def as_tools(configuration: OpenAIDeepResearchIntegrationConfiguration) -> list[BaseTool]:
+
+def as_tools(
+    configuration: OpenAIDeepResearchIntegrationConfiguration,
+) -> list[BaseTool]:
     """Returns a list of LangChain tools for this workflow.
-    
+
     Returns:
         list[BaseTool]: List containing the workflow tool
     """
     integration = OpenAIDeepResearchIntegration(configuration)
 
     class OpenAIDeepResearchParameters(BaseModel):
-        query: str = Field(..., description="The query to perform a deep research using OpenAI.")
+        query: str = Field(
+            ..., description="The query to perform a deep research using OpenAI."
+        )
 
     return [
         StructuredTool(
             name="openai_deep_research",
             description="Perform a deep research using OpenAI.",
             func=lambda query: integration.run(query),
-            args_schema=OpenAIDeepResearchParameters
+            args_schema=OpenAIDeepResearchParameters,
         )
     ]
-    
+
+
 if __name__ == "__main__":
-    from src import secrets
-    
+    module: ABIModule = ABIModule.get_instance()
+
     configuration = OpenAIDeepResearchIntegrationConfiguration(
-        openai_api_key=secrets.get('OPENAI_API_KEY') or '',
-        model=DeepResearchModel.o3_deep_research
+        openai_api_key=module.configuration.openai_api_key,
+        model=DeepResearchModel.o3_deep_research,
     )
-    
+
     integration = OpenAIDeepResearchIntegration(configuration)
-    
+
     query = """
 # MetaPrompt: Market Intelligence Slides - Generic Template
 
@@ -328,6 +338,6 @@ The generated document should:
 Instructions for LLM: Use this meta-prompt to create a comprehensive, professional Market Intelligence presentation for {TARGET_COMPANY} that matches the quality and depth of analysis expected from a top-tier consulting firm. Research current information about {TARGET_COMPANY} and their industry to populate all sections with accurate, relevant, and strategic content."""
     response = integration.run(query)
     import rich
-    
+
     rich.inspect(response)
-    rich.print(f'Output text: {response.output_text}')
+    rich.print(f"Output text: {response.output_text}")

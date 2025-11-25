@@ -20,17 +20,21 @@ global_config:
   ai_mode: "cloud"
 
 modules:
-  - module: alice
-    enabled: true
-    config:
-      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-  - module: bob
-    enabled: true
-  - module: chatgpt
-    enabled: true
-    config:
-      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  # - module: alice
+  #   enabled: true
+  #   config:
+  #     openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  # - module: bob
+  #   enabled: true
+  # - module: chatgpt
+  #   enabled: true
+  #   config:
+  #     openai_api_key: "{{ secret.OPENAI_API_KEY }}"
   - module: src.core.abi
+    enabled: true
+    config:
+      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  - module: src.core.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"

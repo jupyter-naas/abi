@@ -1,5 +1,5 @@
 [project]
-name = "src"
+name = "abi"
 version = "0.1.0"
 description = "AI system"
 authors = [{ name = "AI Team", email = "aiteam@company.com" }]

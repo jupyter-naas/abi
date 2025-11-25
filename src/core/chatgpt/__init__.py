@@ -1,7 +1,12 @@
-from src import secret
+from abi.module.Module import BaseModule, ModuleConfiguration, ModuleDependencies
 
-def requirements():
-    openai_api_key = secret.get("OPENAI_API_KEY")
-    if openai_api_key:
-        return True
-    return False
+
+class ABIModule(BaseModule):
+    dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
+
+    class Configuration(ModuleConfiguration):
+        openai_api_key: str
+
+    @property
+    def instance(self) -> "ABIModule":
+        return self.get_instance()

@@ -1,22 +1,27 @@
 import pytest
 
+from src.core.chatgpt import ABIModule
 from src.core.chatgpt.integrations.OpenAIDeepResearchIntegration import (
-    OpenAIDeepResearchIntegration, 
-    OpenAIDeepResearchIntegrationConfiguration, 
-    DeepResearchModel
+    DeepResearchModel,
+    OpenAIDeepResearchIntegration,
+    OpenAIDeepResearchIntegrationConfiguration,
 )
+
 
 @pytest.fixture
 def integration() -> OpenAIDeepResearchIntegration:
-    from src import secrets
-    
+    module: ABIModule = ABIModule.get_instance()
+
     configuration = OpenAIDeepResearchIntegrationConfiguration(
-        openai_api_key=secrets.get('OPENAI_API_KEY') or '',
-        model=DeepResearchModel.o3_deep_research
+        openai_api_key=module.configuration.openai_api_key,
+        model=DeepResearchModel.o3_deep_research,
     )
     return OpenAIDeepResearchIntegration(configuration)
 
-def test_deep_research_default_system_prompt(integration: OpenAIDeepResearchIntegration):
+
+def test_deep_research_default_system_prompt(
+    integration: OpenAIDeepResearchIntegration,
+):
     query = """
 I need to find the following information about the company Michelin for the year 2024:
 - Revenue
@@ -27,9 +32,9 @@ I need to find the following information about the company Michelin for the year
 - Equity"""
     response = integration.run(query)
     import rich
-    
+
     rich.inspect(response)
-    rich.print(f'Output text: {response.output_text}')
+    rich.print(f"Output text: {response.output_text}")
     assert "Michelin" in response.output_text, response.output_text
     assert "Revenue" in response.output_text, response.output_text
     assert "Net Income" in response.output_text, response.output_text
