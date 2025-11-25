@@ -1,7 +1,8 @@
-from lib.abi.models.Model import ChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
-from src import secret
+
+from lib.abi.models.Model import ChatModel
+from src.core.chatgpt import ABIModule
 
 ID = "gpt-4.1"
 NAME = "gpt-4.1"
@@ -19,7 +20,7 @@ model: ChatModel = ChatModel(
     model=ChatOpenAI(
         model=ID,
         temperature=0,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
+        api_key=SecretStr(ABIModule.get_instance().configuration.openai_api_key),
     ),
     context_window=CONTEXT_WINDOW,
 )

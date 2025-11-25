@@ -1,11 +1,14 @@
+from typing import Optional
+
 from abi.services.agent.IntentAgent import (
-    IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
+    Intent,
+    IntentAgent,
+    IntentType,
 )
-from typing import Optional
+
+from src.core.chatgpt import ABIModule
 
 NAME = "ChatGPT"
 MODEL = "gpt-4.1-mini"
@@ -65,48 +68,115 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
 """
 SUGGESTIONS: list = []
 
+
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None, 
-    agent_configuration: Optional[AgentConfiguration] = None
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
     from langchain_openai import ChatOpenAI
     from pydantic import SecretStr
-    from src import secret
+
+    module: ABIModule = ABIModule.get_instance()
 
     model = ChatOpenAI(
-        model=MODEL,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
+        model=MODEL, api_key=SecretStr(module.configuration.openai_api_key)
     )
-    
+
     # Define tools
     tools: list = []
-    from src.core.chatgpt.integrations.OpenAIResponsesIntegration import as_tools
-    from src.core.chatgpt.integrations.OpenAIResponsesIntegration import OpenAIResponsesIntegrationConfiguration
+    from src.core.chatgpt.integrations.OpenAIResponsesIntegration import (
+        OpenAIResponsesIntegrationConfiguration,
+        as_tools,
+    )
 
     integration_config = OpenAIResponsesIntegrationConfiguration(
-        api_key=secret.get("OPENAI_API_KEY")
+        api_key=module.configuration.openai_api_key
     )
     tools += as_tools(integration_config)
 
     # Define intents
     intents: list = [
-        Intent(intent_value="search news about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
-        Intent(intent_value="search web about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
-        Intent(intent_value="research online about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
-        Intent(intent_value="latest events about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
-        Intent(intent_value="search information about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
-        Intent(intent_value="analyze an image from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
-        Intent(intent_value="analyze this image", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
-        Intent(intent_value="describe this image", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
-        Intent(intent_value="what can you tell about the content of this image", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
-        Intent(intent_value="analyze a PDF document from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
-        Intent(intent_value="analyze this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
-        Intent(intent_value="what can you tell about the content of this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
-        Intent(intent_value="Summarize the content of this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
-        Intent(intent_value="Extract all people cited in this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
-        Intent(intent_value="help me write python code", intent_type=IntentType.AGENT, intent_target="call_model"),
-        Intent(intent_value="Access OpenAI models documentation", intent_type=IntentType.RAW, intent_target="🚀 **OpenAI Models Documentation**\n\n[OpenAI Models Documentation](https://platform.openai.com/docs/models)\n\nFeatures: Available models, capabilities, pricing, and usage guidelines"),
+        Intent(
+            intent_value="search news about",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_search_web",
+        ),
+        Intent(
+            intent_value="search web about",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_search_web",
+        ),
+        Intent(
+            intent_value="research online about",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_search_web",
+        ),
+        Intent(
+            intent_value="latest events about",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_search_web",
+        ),
+        Intent(
+            intent_value="search information about",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_search_web",
+        ),
+        Intent(
+            intent_value="analyze an image from URL",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_image",
+        ),
+        Intent(
+            intent_value="analyze this image",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_image",
+        ),
+        Intent(
+            intent_value="describe this image",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_image",
+        ),
+        Intent(
+            intent_value="what can you tell about the content of this image",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_image",
+        ),
+        Intent(
+            intent_value="analyze a PDF document from URL",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_pdf",
+        ),
+        Intent(
+            intent_value="analyze this PDF document",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_pdf",
+        ),
+        Intent(
+            intent_value="what can you tell about the content of this PDF document",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_pdf",
+        ),
+        Intent(
+            intent_value="Summarize the content of this PDF document",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_pdf",
+        ),
+        Intent(
+            intent_value="Extract all people cited in this PDF document",
+            intent_type=IntentType.TOOL,
+            intent_target="chatgpt_analyze_pdf",
+        ),
+        Intent(
+            intent_value="help me write python code",
+            intent_type=IntentType.AGENT,
+            intent_target="call_model",
+        ),
+        Intent(
+            intent_value="Access OpenAI models documentation",
+            intent_type=IntentType.RAW,
+            intent_target="🚀 **OpenAI Models Documentation**\n\n[OpenAI Models Documentation](https://platform.openai.com/docs/models)\n\nFeatures: Available models, capabilities, pricing, and usage guidelines",
+        ),
     ]
 
     # Set configuration
@@ -119,12 +189,13 @@ def create_agent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
-        tools=tools, 
+        tools=tools,
         intents=intents,
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=None
-    ) 
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=None,
+    )
+
 
 class ChatGPTAgent(IntentAgent):
     pass

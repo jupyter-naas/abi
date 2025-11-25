@@ -1,15 +1,18 @@
+from typing import Optional
+
+from abi import logger
 from abi.services.agent.IntentAgent import (
-    IntentAgent,
-    Intent,
-    IntentType,
-    IntentScope,
     AgentConfiguration,
     AgentSharedState,
+    Intent,
+    IntentAgent,
+    IntentScope,
+    IntentType,
 )
-from typing import Optional
-from abi import logger
 from langchain_core.tools import tool
 from pydantic import SecretStr
+
+from src.core.abi import ABIModule
 
 NAME = "Abi"
 AVATAR_URL = (
@@ -139,10 +142,10 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     from langchain_openai import ChatOpenAI
-    from src import secret
 
+    module: ABIModule = ABIModule.get_instance()
     # Define model based on AI_MODE
-    ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
+    ai_mode = module.configuration.global_config.ai_mode
     if ai_mode == "cloud":
         from src.core.abi.models.gpt_4_1 import model as cloud_model
 

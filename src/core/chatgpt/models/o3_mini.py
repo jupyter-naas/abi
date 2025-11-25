@@ -1,7 +1,8 @@
-from lib.abi.models.Model import ChatModel
 from langchain_openai import ChatOpenAI
-from src import secret
 from pydantic import SecretStr
+
+from lib.abi.models.Model import ChatModel
+from src.core.chatgpt import ABIModule
 
 ID = "o3-mini"
 NAME = "o3-mini"
@@ -20,7 +21,7 @@ model: ChatModel = ChatModel(
         model=ID,
         temperature=1,  # AbiAgent uses temperature=1 for creative orchestration
         max_retries=2,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
+        api_key=SecretStr(ABIModule.get_instance().configuration.openai_api_key),
     ),
     context_window=CONTEXT_WINDOW,
 )

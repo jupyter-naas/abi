@@ -1,6 +1,7 @@
-from typing import TypeVar, Generic, Type
-from langchain_core.tools import StructuredTool, BaseTool
+from typing import Generic, Type, TypeVar
+
 from abi.utils.SPARQL import results_to_list
+from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
@@ -32,7 +33,7 @@ class GenericWorkflow(Generic[T]):
             results = services.triple_store_service.query(sparql_query)
             return results_to_list(results)
         except Exception as e:
-            return [{'error': str(e)}]
+            return [{"error": str(e)}]
 
     def as_tools(self) -> list[BaseTool]:
         return [
