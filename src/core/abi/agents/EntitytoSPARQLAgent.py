@@ -2,8 +2,6 @@ from datetime import datetime
 from queue import Queue
 from typing import Any, Callable, Optional, Union
 
-from abi import logger
-
 # from src import secret
 from abi.engine.EngineProxy import ServicesProxy
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
@@ -16,8 +14,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from pydantic import SecretStr
 
+from lib.abi.models.Model import ChatModel
 from src.core.abi import ABIModule
 
 MODULE: ABIModule = ABIModule.get_instance()
@@ -25,8 +23,6 @@ SERVICES: ServicesProxy = MODULE.engine.services
 
 NAME = "Entity_to_SPARQL"
 DESCRIPTION = "A agent that extracts entities from text and transform them into SPARQL INSERT DATA statements."
-MODEL = "o3-mini"
-TEMPERATURE = None
 SYSTEM_PROMPT = """
 # ROLE: 
 You are an expert Ontology Engineer specialized in extracting entities from text and transforming them into SPARQL INSERT DATA statements using the BFO (Basic Formal Ontology) framework.
@@ -150,23 +146,9 @@ def create_agent(
     ai_mode = MODULE.configuration.global_config.ai_mode
 
     if ai_mode == "airgap":
-        # Use airgap model (Docker Model Runner)
-        model = ChatOpenAI(
-            model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
-            temperature=TEMPERATURE,
-            api_key="no needed",  # type: ignore
-            base_url="http://localhost:12434/engines/v1",
-        )
+        from src.core.abi.models.default import model
     else:
-        # Use cloud model for cloud/local modes
-        openai_api_key = secret.get("OPENAI_API_KEY")
-        if not openai_api_key:
-            logger.error("OpenAI API key not available for EntitytoSPARQLAgent")
-            logger.error("   Set OPENAI_API_KEY in .env or switch to airgap mode")
-            return None
-        model = ChatOpenAI(
-            model=MODEL, temperature=TEMPERATURE, api_key=SecretStr(openai_api_key)
-        )
+        from src.core.chatgpt.models.o3_mini import model
 
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
@@ -207,7 +189,7 @@ class EntitytoSPARQLAgent(Agent):
         self,
         name: str,
         description: str,
-        chat_model: BaseChatModel,
+        chat_model: BaseChatModel | ChatModel,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver = MemorySaver(),

@@ -70,13 +70,16 @@ dependencies = [
     "dagster>=1.11.12",
     "dagster-webserver>=1.11.12",
     "dagster-postgres>=0.27.12",
-    "dagster-aws[s3]>=0.27.12",
+    "dagster-aws>=0.27.12",
     "ratelimit>=2.2.1",
     "yahooquery>=2.4.1",
+    "bodo>=2025.10",
     "pandas-stubs>=2.3.2.250926",
     "alice",
     "bob",
-    "chatgpt"
+    "chatgpt",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-psycopg2>=2.9.21.20251012",
 ]
 
 [project.scripts]

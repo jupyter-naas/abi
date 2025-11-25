@@ -7,6 +7,7 @@ from pydantic import BaseModel
 import requests
 import io
 import pdfplumber
+from lib.abi.models.Model import OPENROUTER_MODEL_MAPPING
 
 @dataclass
 class OpenAIResponsesIntegrationConfiguration(IntegrationConfiguration):
@@ -34,6 +35,10 @@ class OpenAIResponsesIntegration(Integration):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.__configuration.api_key}"
         }
+        if self.__configuration.base_url.startswith("https://openrouter.ai/api/v1"):
+            self.model = OPENROUTER_MODEL_MAPPING[self.__configuration.model]
+        else:
+            self.model = self.__configuration.model
 
     def _make_request(self, method: str, endpoint: Optional[str] = None, params: dict = {}, json: dict = {}) -> Any:
         # Make request
@@ -67,7 +72,7 @@ class OpenAIResponsesIntegration(Integration):
             str: Search results from OpenAI
         """        
         payload = {
-            "model": self.__configuration.model,
+            "model": self.model,
             "tools": [
                 {
                     "type": "web_search_preview",
@@ -95,13 +100,15 @@ class OpenAIResponsesIntegration(Integration):
                         return text_content
                         
                     # Format annotations section
-                    annotation_text = "\n\n\n\n*Annotations:*\n"
-                    for annotation in annotations:
-                        if not isinstance(annotation, dict) or annotation.get("type") != "url_citation":
-                            continue
-                        title = annotation.get('title', '')
-                        url = annotation.get('url', '')
-                        annotation_text += f"- [{title}]({url})\n"
+                    annotation_text = ""
+                    # if len(annotations) > 0:
+                    #     annotation_text = "\n\n\n\n*Annotations:*\n"
+                    #     for annotation in annotations:
+                    #         if not isinstance(annotation, dict) or annotation.get("type") != "url_citation":
+                    #             continue
+                    #         title = annotation.get('title', '')
+                    #         url = annotation.get('url', '')
+                    #         annotation_text += f"- [{title}]({url})\n"
                         
                     return text_content + annotation_text
                     
@@ -151,7 +158,7 @@ class OpenAIResponsesIntegration(Integration):
         
         # Prepare payload
         payload = {
-            "model": self.__configuration.model,
+            "model": self.model,
             "input": [
                 {
                     "role": "user",
@@ -226,7 +233,7 @@ class OpenAIResponsesIntegration(Integration):
         
         # Build payload
         payload = {
-            "model": self.__configuration.model,
+            "model": self.model,
             "input": messages
         }
 

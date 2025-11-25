@@ -42,7 +42,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:    
     # Define model
-    from src.core.mistral.models.mistral_large_2 import model
+    from src.core.mistral.models.mistral_large_2411 import model
     
     # Define tools
     tools: list = []

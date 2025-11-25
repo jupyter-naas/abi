@@ -1,0 +1,37 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nebari: <http://ontology.naas.ai/abi/nebari/> .
+
+#################################################################
+#    Classes
+#################################################################
+
+nebari:NebariClass a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Nebari Class"@en ;
+    skos:definition "A Nebari Class is a class that is used to represent a nebari."@en ;
+    skos:example "A nebari class is a class that is used to represent a nebari."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+nebari:hasNebariClass a owl:ObjectProperty ;
+    rdfs:label "has nebari class"@en ;
+    skos:definition "Relates a subject to its nebari class."@en ;
+    rdfs:domain bfo:BFO_0000001 ; # Entity
+    rdfs:range nebari:NebariClass .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+nebari:dataProperty a owl:DatatypeProperty ;
+    rdfs:label "data property"@en ;
+    skos:definition "A data property is a property that is used to represent a data property."@en ;
+    rdfs:domain bfo:BFO_0000001 ; # Entity
+    rdfs:range xsd:string .

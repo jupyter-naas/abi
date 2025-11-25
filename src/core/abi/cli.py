@@ -9,6 +9,8 @@ import shutil
 import re
 from rich.console import Console
 from rich.prompt import Prompt
+import yaml
+import dotenv
 
 console = Console(style="")
 
@@ -80,8 +82,6 @@ def get_component_selection():
 
 def enable_module_in_config(module_path: str):
     """Enable the module in config files if they exist."""
-    import yaml
-    import dotenv
     dotenv.load_dotenv()
     
     env = os.getenv("ENV")
@@ -229,8 +229,9 @@ def create_new_module():
                         content = f.read()
                     
                     # Replace template references
-                    content = content.replace('__templates__', module_name)
                     content = content.replace('Template', module_name.replace('_', '').title())
+                    content = content.replace(template_path.replace('\\', '/').replace('/', '.'), target_path.replace('\\', '/').replace('/', '.'))
+                    content = content.replace('__templates__', module_name)
                     content = content.replace('template', module_name.replace('_', '').lower())
                     
                     # Update path references

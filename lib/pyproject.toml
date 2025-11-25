@@ -25,6 +25,7 @@ dependencies = [
     "pydash>=8.0.5",
     "starlette>=0.46.2",
     "rich>=13.9.4,<14",
+    "types-tqdm>=4.67.0.20250809",
 ]
 
 [project.optional-dependencies]
