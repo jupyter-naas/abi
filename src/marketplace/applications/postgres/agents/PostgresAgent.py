@@ -79,7 +79,7 @@ def create_agent(
     if all(secret.get(key) for key in ['POSTGRES_HOST', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD']):    
         integration_config = PostgresIntegrationConfiguration(
             host=secret.get('POSTGRES_HOST'),
-            port=int(secret.get('POSTGRES_PORT', 5432)),
+            port=int(secret.get('POSTGRES_PORT', "5432")),
             database=secret.get('POSTGRES_DB'),
             user=secret.get('POSTGRES_USER'),
             password=secret.get('POSTGRES_PASSWORD')

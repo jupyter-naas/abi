@@ -44,20 +44,6 @@ ppt:Shape a owl:Class ;
 #    Object Properties
 #################################################################
 
-ppt:hasPresentation a owl:ObjectProperty ;
-    rdfs:domain cco:ont00001180 ; # Organization
-    rdfs:range ppt:Presentation ;
-    rdfs:label "has presentation" ;
-    skos:definition "Relates an Organization to a PowerPoint Presentation that it owns or is associated with."@en ;
-    skos:example "The organization 'Air Liquide' has the presentation 'Annual Report'"@en .
-
-ppt:isPresentationOf a owl:ObjectProperty ;
-    rdfs:domain ppt:Presentation ;
-    rdfs:range cco:ont00001180 ; # Organization
-    rdfs:label "is presentation of" ;
-    skos:definition "Relates a PowerPoint Presentation to the Organization that owns or is associated with it."@en ;
-    skos:example "The presentation 'Annual Report' is associated with the organization 'Air Liquide'"@en .
-
 ppt:hasSlide a owl:ObjectProperty ;
     rdfs:domain ppt:Presentation ;
     rdfs:range ppt:Slide ;
@@ -86,9 +72,67 @@ ppt:isShapeOf a owl:ObjectProperty ;
     skos:definition "Relates a Shape to the Slide it is a part of."@en ;
     skos:example "The shape 'Title' is part of the slide 'Introduction'"@en .
 
+ppt:hasTemplate a owl:ObjectProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range ppt:Presentation ;
+    rdfs:label "has template" ;
+    skos:definition "Relates a PowerPoint Presentation to its template presentation."@en ;
+    skos:example "The presentation 'Sales Pitch' has the template 'Sales Pitch Template'"@en ;
+    rdfs:inverseOf ppt:isTemplateOf .
+
+ppt:isTemplateOf a owl:ObjectProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range ppt:Presentation ;
+    rdfs:label "is template of" ;
+    skos:definition "Relates a PowerPoint Presentation to its template presentation."@en ;
+    skos:example "The presentation 'Sales Pitch Template' is the template of the presentation 'Sales Pitch'"@en ;
+    rdfs:inverseOf ppt:hasTemplate .
+
 #################################################################
 #    Data Properties
 #################################################################
+
+ppt:download_url a owl:DatatypeProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range xsd:string ;
+    rdfs:label "download url" ;
+    skos:definition "The URL of the PowerPoint Presentation."@en .
+
+ppt:storage_path a owl:DatatypeProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range xsd:string ;
+    rdfs:label "storage path" ;
+    skos:definition "The storage path of the PowerPoint Presentation."@en .
+
+ppt:author a owl:DatatypeProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range xsd:string ;
+    rdfs:label "author" ;
+    skos:definition "The author of the PowerPoint Presentation."@en .
+
+ppt:created_date a owl:DatatypeProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "created date" ;
+    skos:definition "The date and time the PowerPoint Presentation was created."@en .
+
+ppt:last_modified_by a owl:DatatypeProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range xsd:string ;
+    rdfs:label "last modified by" ;
+    skos:definition "The last person who modified the PowerPoint Presentation."@en .
+
+ppt:modified_date a owl:DatatypeProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "modified date" ;
+    skos:definition "The date and time the PowerPoint Presentation was last modified."@en .
+
+ppt:slide_number a owl:DatatypeProperty ;
+    rdfs:domain ppt:Slide ;
+    rdfs:range xsd:integer ;
+    rdfs:label "slide number" ;
+    skos:definition "The slide number within the presentation."@en .
 
 ppt:shape_id a owl:DatatypeProperty ;
     rdfs:domain ppt:Shape ;
@@ -143,3 +187,9 @@ ppt:shape_rotation_angle a owl:DatatypeProperty ;
     rdfs:range xsd:decimal ;
     rdfs:label "shape rotation angle" ;
     skos:definition "The rotation angle of the shape in degrees."@en .
+
+ppt:shape_table_data a owl:DatatypeProperty ;   
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:string ;
+    rdfs:label "shape table data" ;
+    skos:definition "The data of the shape as a table."@en .

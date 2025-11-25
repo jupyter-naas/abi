@@ -14,7 +14,7 @@ from abi.integration.integration import IntegrationConnectionError
 from abi import logger
 from ratelimit import limits
 from abi.services.cache.CacheFactory import CacheFactory
-from lib.abi.services.cache.CachePort import DataType
+from abi.services.cache.CachePort import DataType
 from abi.services.cache.CacheService import CacheService
 from src.marketplace.applications.pubmed.ontologies.PubMed import (
     PubMedPaperSummary,

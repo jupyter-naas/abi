@@ -13,6 +13,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 
+from lib.abi.models.Model import ChatModel
+
 from .Agent import Agent, AgentConfiguration, AgentSharedState, create_checkpointer
 from .beta.IntentMapper import Intent, IntentMapper, IntentScope, IntentType
 
@@ -425,7 +427,7 @@ class IntentAgent(Agent):
         self,
         name: str,
         description: str,
-        chat_model: BaseChatModel,
+        chat_model: BaseChatModel | ChatModel,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         intents: list[Intent] = [],
@@ -700,7 +702,7 @@ class IntentAgent(Agent):
         Checks if the intent mapping should be filtered based on the threshold
         and neighbor values.
         """
-        if len(intents) == 1 and intents[0]["score"] > self._threshold:
+        if len(intents) == 1 and intents[0]["score"] > self._direct_intent_score:
             return "intent_mapping_router"
         if len(intents) == 0:
             logger.debug("❌ No intents found, going to call_model")
@@ -1090,14 +1092,18 @@ Last user message: "{last_human_message.content}"
         logger.debug("💉 Inject Intents in System Prompt")
 
         # We reset the system prompt to the original one.
-        self._system_prompt = self._configuration.system_prompt
+        # self._system_prompt = self._configuration.system_prompt
 
         if "intent_mapping" in state and len(state["intent_mapping"]["intents"]) > 0:
             intents = state["intent_mapping"]["intents"]
-            updated_system_prompt = f"""{self._configuration.system_prompt}
+            intents_str = ""
+            for intent in intents:
+                intents_str += f"-Mapped intent: `{intent['intent'].intent_value}`, tool to call: `{intent['intent'].intent_target}`\n"
 
----
-INTENT RULES:
+            if "<intents_rules>" not in self._system_prompt:
+                updated_system_prompt = f"""{self._system_prompt}
+
+<intents_rules>
 Everytime a user is sending a message, a system is trying to map the prompt/message to an intent or a list of intents using a vector search.
 The following is the list of mapped intents. This list will change over time as new messages comes in.
 You must analyze if the user message and the mapped intents are related to each other. 
@@ -1105,17 +1111,25 @@ If it's the case, you must take them into account, otherwise you must ignore the
 If you endup with a single intent which is of type RAW, you must output the intent_target and nothing else as there will be tests asserting the correctness of the output.
 If you endup with a single intent which is of type TOOL, you must call this tool.
 
+<intents>\n{intents_str}\n</intents>
 
-
+</intents_rules>
 """
+            else:
+                import re
 
-            for intent in intents:
-                updated_system_prompt += f"""
-                - {intent["intent"]}
-                """
+                pattern = r"(<intents>)(.*?)(</intents>)"
 
-            updated_system_prompt += "\n\nEND INTENT RULES"
+                def replace(match):
+                    return f"{match.group(1)}\n{intents_str}\n{match.group(3)}"
+
+                updated_system_prompt = re.sub(
+                    pattern, replace, self._system_prompt, flags=re.DOTALL
+                )
+
             self._system_prompt = updated_system_prompt
+            self.set_system_prompt(self._system_prompt)
+            logger.debug(f"Injected in system prompt: {self._system_prompt}")
 
     def duplicate(
         self,

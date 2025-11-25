@@ -5,8 +5,9 @@ from abi.integration.integration import (
 )
 from dataclasses import dataclass
 import requests
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from abi import logger
 
 
 @dataclass
@@ -67,15 +68,13 @@ class GitHubGraphqlIntegration(Integration):
             result = response.json()
 
             if "errors" in result:
-                raise IntegrationConnectionError(
-                    f"GraphQL query failed: {result['errors']}"
-                )
+                logger.error(f"GraphQL query failed: {result['errors']}")
+                return {"error": result['errors']}
 
             return result
-        except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(
-                f"Github GraphQL API request failed: {str(e)}"
-            )
+        except IntegrationConnectionError as e:
+            logger.error(f"Github GraphQL API request failed: {str(e)}")
+            return {"error": str(e)}
 
     def get_project_node_id(self, organization: str, number: int) -> Dict[str, Any]:
         """Get the node ID of an organization project.
@@ -231,7 +230,7 @@ class GitHubGraphqlIntegration(Integration):
         priorities = priority_field.get('options', [])
         return priorities
 
-    def get_project_fields(self, project_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
+    def get_project_fields(self, project_id: str) -> Dict[str, Any]:
         """Get information about project fields in a GitHub Project.
 
         Args:
@@ -482,8 +481,6 @@ class GitHubGraphqlIntegration(Integration):
                 "optionId": status_option_id,
             }
             status_result = self.execute_query(status_mutation, variables)
-            if isinstance(status_result, IntegrationConnectionError):
-                return status_result
 
         # Update priority field if provided
         if priority_field_id and priority_option_id:
@@ -508,8 +505,6 @@ class GitHubGraphqlIntegration(Integration):
                 "optionId": priority_option_id,
             }
             priority_result = self.execute_query(priority_mutation, variables)
-            if isinstance(priority_result, IntegrationConnectionError):
-                return priority_result
 
         # Update iteration field if provided
         if iteration_field_id and iteration_option_id:
@@ -534,10 +529,13 @@ class GitHubGraphqlIntegration(Integration):
                 "optionId": iteration_option_id,
             }
             iteration_result = self.execute_query(iteration_mutation, variables)
-            if isinstance(iteration_result, IntegrationConnectionError):
-                return iteration_result
 
-        return add_result
+        return {
+            "add_result": add_result,
+            "status_result": status_result,
+            "priority_result": priority_result,
+            "iteration_result": iteration_result,
+        }
 
 
 def as_tools(configuration: GitHubGraphqlIntegrationConfiguration):

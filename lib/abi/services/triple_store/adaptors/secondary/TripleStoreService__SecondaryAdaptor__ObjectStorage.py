@@ -4,6 +4,7 @@ from threading import Lock, Thread
 from typing import Any, Dict, List, Tuple
 
 import rdflib
+from abi import logger
 from abi.services.object_storage.ObjectStoragePort import (
     Exceptions as ObjectStorageExceptions,
 )
@@ -16,7 +17,6 @@ from abi.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     OntologyEvent,
 )
-from abi.utils.Logger import logger
 from abi.utils.Workers import Job, WorkerPool
 from rdflib import Graph, Node, URIRef, query
 

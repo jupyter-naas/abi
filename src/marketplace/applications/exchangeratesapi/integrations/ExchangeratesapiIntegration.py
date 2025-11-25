@@ -4,7 +4,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from pydantic import BaseModel, Field
 from typing import Dict
 from abi.services.cache.CacheFactory import CacheFactory
-from lib.abi.services.cache.CachePort import DataType
+from abi.services.cache.CachePort import DataType
 import requests
 
 cache = CacheFactory.CacheFS_find_storage(subpath="exchangeratesapi")
