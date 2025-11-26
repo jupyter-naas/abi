@@ -111,7 +111,7 @@ class LinkedInExportProfilePipeline(Pipeline):
         row_hash = create_hash_from_string(str(tuple(row)))
         existing_data_source_components: dict[str, URIRef] = get_identifiers(class_uri=DATA_SOURCE_COMPONENT)
         row_uri = existing_data_source_components.get(row_hash)
-        logger.debug("Step 3.1: Adding backing datasource component for row")
+        logger.debug("Adding backing datasource component for row")
         if row_uri is None:
             row_uri = ABI[str(uuid.uuid4())]
             existing_data_source_components[row_hash] = row_uri
