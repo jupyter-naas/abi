@@ -1,39 +1,42 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-from fastapi.openapi.utils import get_openapi
-from fastapi.security.oauth2 import OAuth2
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
-from fastapi.security.utils import get_authorization_scheme_param
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-from fastapi.middleware.cors import CORSMiddleware
-import subprocess
 import os
+import subprocess
+from typing import Annotated
+
 from abi import logger
-from src import modules
+
+# Docs
+from abi.apps.api.openapi_doc import API_LANDING_HTML, TAGS_METADATA
+from abi.engine.Engine import Engine
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import HTMLResponse
 
 # Authentication
 from fastapi.security import OAuth2PasswordRequestForm
-from typing import Annotated
+from fastapi.security.oauth2 import OAuth2
+from fastapi.security.utils import get_authorization_scheme_param
+from fastapi.staticfiles import StaticFiles
 
-# Docs
-from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
-from src import config
+engine = Engine()
+engine.load()
 
 # Init API
-TITLE = config.api_title
-DESCRIPTION = config.api_description
+TITLE = engine.configuration.api.title
+DESCRIPTION = engine.configuration.api.description
 app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
 
 # Set logo path
-logo_path = config.logo_path
+logo_path = engine.configuration.api.logo_path
 logo_name = os.path.basename(logo_path)
 
 # Set favicon path
-favicon_path = config.favicon_path
+favicon_path = engine.configuration.api.favicon_path
 favicon_name = os.path.basename(favicon_path)
 
-origins = config.cors_origins
+origins = engine.configuration.api.cors_origins
 
 logger.debug(f"CORS origins: {origins}")
 
@@ -187,12 +190,13 @@ def overridden_redoc():
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
+
 # Add agents to the API
 all_agents: list = []
-for module in modules:
+for module in engine.modules.values():
     for agent in module.agents:
         if agent is not None:
-            all_agents.append(agent)
+            all_agents.append(agent.New())
         else:
             logger.warning(f"Skipping {agent.name} agent (missing API key)")
 
@@ -212,7 +216,7 @@ def api():
 
     if os.environ.get("ENV") == "dev":
         uvicorn.run(
-            "src.api:app",
+            "abi.apps.api.api:app",
             host="0.0.0.0",
             port=9879,
             reload=os.environ.get("ENV") == "dev",
@@ -225,7 +229,7 @@ def api():
 
 if __name__ == "__main__":
     import sys
-    
+
     if "--test-init" in sys.argv:
         logger.info("✅ API initialization completed successfully")
         print("API_INIT_TEST_PASSED")

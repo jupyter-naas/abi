@@ -1,22 +1,27 @@
+from dataclasses import dataclass
+from enum import Enum
+from typing import Annotated, Any, Union
+
+from abi import logger
+from abi.services.triple_store.TripleStorePorts import (
+    ITripleStoreService,
+    OntologyEvent,
+)
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from abi.services.triple_store.TripleStorePorts import ITripleStoreService
+from fastapi import APIRouter
+from langchain_core.tools import BaseTool, StructuredTool
+from pydantic import Field
+from rdflib import OWL, RDF, RDFS, Graph, Literal, URIRef
+
+from src import services
 from src.core.abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
     ConvertOntologyGraphToYamlWorkflow,
     ConvertOntologyGraphToYamlWorkflowConfiguration,
     ConvertOntologyGraphToYamlWorkflowParameters,
 )
-from src import services
-from dataclasses import dataclass
-from pydantic import Field
-from abi import logger
-from fastapi import APIRouter
-from langchain_core.tools import StructuredTool, BaseTool
-from typing import Any, Union, Annotated
-from abi.services.triple_store.TripleStorePorts import OntologyEvent
-from rdflib import Graph, URIRef, RDFS, Literal, RDF, OWL
-from abi.utils.SPARQL import results_to_list, get_class_uri_from_individual_uri
-from enum import Enum
+from src.utils.SPARQL import get_class_uri_from_individual_uri, results_to_list
+
 
 @dataclass
 class CreateClassOntologyYamlWorkflowConfiguration(WorkflowConfiguration):
@@ -29,6 +34,7 @@ class CreateClassOntologyYamlWorkflowConfiguration(WorkflowConfiguration):
     triple_store: ITripleStoreService
     convert_ontology_graph_config: ConvertOntologyGraphToYamlWorkflowConfiguration
 
+
 class CreateClassOntologyYamlWorkflowParameters(WorkflowParameters):
     """Parameters for CreateOntologyYAML workflow execution.
 
@@ -40,10 +46,11 @@ class CreateClassOntologyYamlWorkflowParameters(WorkflowParameters):
         level (str): The level of the ontology (e.g., 'TOP_LEVEL', 'MID_LEVEL', 'DOMAIN', 'USE_CASE')
         display_relations_names (bool): Whether to display relation names in the visualization
     """
-    class_uri: Annotated[str, Field(
-        ...,
-        description="The URI of the class to convert to YAML"
-    )]
+
+    class_uri: Annotated[
+        str, Field(..., description="The URI of the class to convert to YAML")
+    ]
+
 
 class CreateClassOntologyYamlWorkflow(Workflow):
     """Workflow for converting ontology files to YAML and pushing them to a Naas workspace."""
@@ -56,7 +63,9 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             self.__configuration.convert_ontology_graph_config
         )
 
-    def trigger(self, event: OntologyEvent, triple: tuple[Any, Any, Any]) -> Union[str, None]:
+    def trigger(
+        self, event: OntologyEvent, triple: tuple[Any, Any, Any]
+    ) -> Union[str, None]:
         s, p, o = triple
         # logger.debug(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}")
         if (
@@ -82,7 +91,9 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             )
         return None
 
-    def graph_to_yaml(self, parameters: CreateClassOntologyYamlWorkflowParameters) -> str:
+    def graph_to_yaml(
+        self, parameters: CreateClassOntologyYamlWorkflowParameters
+    ) -> str:
         # Initialize graph
         graph = Graph()
         graph.bind("abi", "http://ontology.naas.ai/abi/")

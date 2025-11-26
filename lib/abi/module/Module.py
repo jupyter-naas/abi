@@ -124,6 +124,12 @@ class BaseModule:
         self.__agents = ModuleAgentLoader.load_agents(self.__class__)
 
     def on_initialized(self):
+        """
+        Called after all modules have been loaded and the engine is fully initialized.
+
+        Use this method to perform post-initialization steps that require other modules,
+        services, or ontologies to be available and loaded.
+        """
         logger.debug(f"on_initialized for module {self.__module__.split('.')[0]}")
 
     def on_unloaded(self):

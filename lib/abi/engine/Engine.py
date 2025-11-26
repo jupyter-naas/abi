@@ -21,6 +21,10 @@ class Engine(IEngine):
     __services: IEngine.Services
 
     @property
+    def configuration(self) -> EngineConfiguration:
+        return self.__configuration
+
+    @property
     def modules(self) -> Dict[str, BaseModule]:
         return self.__modules
 

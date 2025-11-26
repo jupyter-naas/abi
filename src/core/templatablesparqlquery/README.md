@@ -176,7 +176,7 @@ tools = get_tools()
 - `asyncio`: Asynchronous processing support
 
 ### Internal Modules
-- `abi.utils.SPARQL`: SPARQL result processing utilities
+- `src.utils.SPARQL`: SPARQL result processing utilities
 - `src.services`: Triple store service integration
 
 ### External Services

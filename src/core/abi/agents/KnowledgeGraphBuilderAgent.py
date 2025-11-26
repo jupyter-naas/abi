@@ -141,7 +141,9 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
     # Define model
-    from src.core.abi.models.default import model
+    from src.core.abi.models.default import get_model
+
+    model = get_model()
 
     # Use provided configuration or create default one
     if agent_configuration is None:
@@ -285,7 +287,9 @@ def create_agent(
         tools += Pipeline(Configuration(MODULE.engine.services.triple_store)).as_tools()
 
     # Add search organizations tools
-    from src.core.templatablesparqlquery import get_tools
+    templatable_sparql_query_module = ABIModule.get_instance().engine.modules[
+        "src.core.templatablesparqlquery"
+    ]
 
     ontology_tools: list = [
         "search_class",
@@ -297,7 +301,7 @@ def create_agent(
         "merge_individuals",
         "remove_individuals",
     ]
-    tools.extend(get_tools(ontology_tools))
+    tools.extend(templatable_sparql_query_module.get_tools(ontology_tools))
 
     return KnowledgeGraphBuilderAgent(
         name=NAME,

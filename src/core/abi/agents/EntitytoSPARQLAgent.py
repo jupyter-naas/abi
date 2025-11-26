@@ -146,7 +146,9 @@ def create_agent(
     ai_mode = MODULE.configuration.global_config.ai_mode
 
     if ai_mode == "airgap":
-        from src.core.abi.models.default import model
+        from src.core.abi.models.default import get_model
+
+        model = get_model()
     else:
         from src.core.chatgpt.models.o3_mini import model
 
