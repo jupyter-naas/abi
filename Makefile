@@ -320,7 +320,8 @@ chat-support-agent: deps
 
 # Start the main API server for local development
 api: deps
-	uv run src/api.py
+	# uv run src/api.py
+	uv run python -m abi.apps.api.api
 
 # Start production API server in Docker container
 api-prod: deps

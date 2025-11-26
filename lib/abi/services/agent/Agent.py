@@ -26,7 +26,9 @@ from typing import (
 import pydash as pd
 from abi.utils.Expose import Expose
 from abi.utils.Logger import logger
+from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, StructuredTool, Tool, tool
+from langgraph.prebuilt import InjectedState
 
 # Pydantic imports for schema validation (keep - it's already loaded by other modules)
 from pydantic import BaseModel, Field
@@ -39,11 +41,9 @@ from lib.abi.models.Model import ChatModel
 # Only import heavy modules for type checking
 if TYPE_CHECKING:
     from fastapi import APIRouter
-    from langchain_core.language_models import BaseChatModel
     from langchain_core.runnables import Runnable
     from langgraph.checkpoint.base import BaseCheckpointSaver
     from langgraph.graph.state import CompiledStateGraph
-    from langgraph.prebuilt import InjectedState
 
 from langchain_core.messages import (
     AIMessage,
@@ -222,6 +222,13 @@ class AgentConfiguration:
     )
     system_prompt: str = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
+    )
+
+
+class CompletionQuery(BaseModel):
+    prompt: str = Field(..., description="The prompt to send to the agent")
+    thread_id: str | int = Field(
+        ..., description="The thread ID to use for the conversation"
     )
 
 
@@ -1377,12 +1384,6 @@ AGENT SYSTEM PROMPT:
         name = name or self._name.capitalize().replace("_", " ")
         description = description or self._description
         description_stream = description_stream or self._description
-
-        class CompletionQuery(BaseModel):
-            prompt: str = Field(..., description="The prompt to send to the agent")
-            thread_id: str | int = Field(
-                ..., description="The thread ID to use for the conversation"
-            )
 
         @router.post(
             f"/{route_name}/completion" if route_name else "/completion",

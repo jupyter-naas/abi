@@ -1,15 +1,19 @@
-from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
-from abi.services.triple_store.TripleStorePorts import ITripleStoreService
-from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
-from pydantic import Field
-from typing import Annotated, Optional
-from rdflib import URIRef, Literal, Graph, XSD, RDFS, SKOS
-from abi.utils.Graph import URI_REGEX
-from fastapi import APIRouter
 from enum import Enum
+from typing import Annotated, Optional
+
 from abi import logger
-from src.utils.SPARQL import get_subject_graph
+from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
+from abi.utils.Graph import URI_REGEX
+from abi.utils.SPARQL import SPARQLUtils
+from fastapi import APIRouter
+from langchain_core.tools import BaseTool, StructuredTool
+from pydantic import Field
+from rdflib import RDFS, SKOS, XSD, Graph, Literal, URIRef
+
+from src.core.abi import ABIModule
+
 
 @dataclass
 class UpdateDataPropertyPipelineConfiguration(PipelineConfiguration):
@@ -18,23 +22,30 @@ class UpdateDataPropertyPipelineConfiguration(PipelineConfiguration):
     Attributes:
         triple_store (ITripleStoreService): The triple store service to use
     """
+
     triple_store: ITripleStoreService
 
+
 class UpdateDataPropertyPipelineParameters(PipelineParameters):
-    subject_uri: Annotated[str, Field(
-        description="Subject URI",
-        pattern=URI_REGEX
-    )]
-    predicate_uri: Annotated[str, Field(
-        description="Predicate URI",
-        pattern=r"^http.+$"
-    )]
-    object_new_value: Annotated[str, Field(
-        description="New value for the object",
-    )]
-    language: Optional[Annotated[Optional[str], Field(
-        description="Language of the object",
-    )]] = None
+    subject_uri: Annotated[str, Field(description="Subject URI", pattern=URI_REGEX)]
+    predicate_uri: Annotated[
+        str, Field(description="Predicate URI", pattern=r"^http.+$")
+    ]
+    object_new_value: Annotated[
+        str,
+        Field(
+            description="New value for the object",
+        ),
+    ]
+    language: Optional[
+        Annotated[
+            Optional[str],
+            Field(
+                description="Language of the object",
+            ),
+        ]
+    ] = None
+
 
 class UpdateDataPropertyPipeline(Pipeline):
     """Pipeline for updating a data property in the ontology."""
@@ -44,35 +55,48 @@ class UpdateDataPropertyPipeline(Pipeline):
     def __init__(self, configuration: UpdateDataPropertyPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
+        self.__sparql_utils = SPARQLUtils(
+            ABIModule.get_instance().engine.services.triple_store
+        )
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, UpdateDataPropertyPipelineParameters):
-            raise ValueError("Parameters must be of type UpdateDataPropertyPipelineParameters")
-        
-        graph_insert = Graph()  
+            raise ValueError(
+                "Parameters must be of type UpdateDataPropertyPipelineParameters"
+            )
+
+        graph_insert = Graph()
         graph_remove = Graph()
         subject_uri = URIRef(parameters.subject_uri)
         predicate_uri = URIRef(parameters.predicate_uri)
-        logger.info(f"Updating subject '{subject_uri}' with predicate '{predicate_uri}' and value '{parameters.object_new_value}'")
+        logger.info(
+            f"Updating subject '{subject_uri}' with predicate '{predicate_uri}' and value '{parameters.object_new_value}'"
+        )
 
         if isinstance(parameters.object_new_value, str):
             if parameters.language is not None:
-                object_new_value = Literal(parameters.object_new_value, lang=parameters.language)
+                object_new_value = Literal(
+                    parameters.object_new_value, lang=parameters.language
+                )
             else:
                 object_new_value = Literal(parameters.object_new_value)
         elif isinstance(parameters.object_new_value, float):
             object_new_value = Literal(parameters.object_new_value, datatype=XSD.float)
         elif isinstance(parameters.object_new_value, int):
-            object_new_value = Literal(parameters.object_new_value, datatype=XSD.integer)
+            object_new_value = Literal(
+                parameters.object_new_value, datatype=XSD.integer
+            )
         else:
             logger.error(f"Invalid object new value: {parameters.object_new_value}")
             return Graph()
 
-        graph = get_subject_graph(parameters.subject_uri)
+        graph = self.__sparql_utils.get_subject_graph(parameters.subject_uri)
         check_object_property = list(graph.triples((subject_uri, predicate_uri, None)))
         logger.info(f"Check object property: {len(check_object_property)}")
         if len(check_object_property) == 0:
-            logger.error(f"Property {parameters.predicate_uri} not found for subject {parameters.subject_uri}")
+            logger.error(
+                f"Property {parameters.predicate_uri} not found for subject {parameters.subject_uri}"
+            )
             return Graph()
         elif len(check_object_property) == 1 and predicate_uri != RDFS.label:
             property_value = graph.value(subject_uri, predicate_uri)
@@ -86,7 +110,9 @@ class UpdateDataPropertyPipeline(Pipeline):
             graph_insert.add((subject_uri, predicate_uri, object_new_value))
             graph_insert.add((subject_uri, SKOS.altLabel, object_new_value))
         else:
-            logger.error(f"Multiple values found for property {parameters.predicate_uri} for subject {parameters.subject_uri}")
+            logger.error(
+                f"Multiple values found for property {parameters.predicate_uri} for subject {parameters.subject_uri}"
+            )
             return Graph()
 
         # Save to triplestore
@@ -98,7 +124,7 @@ class UpdateDataPropertyPipeline(Pipeline):
             logger.info("✅ Removing data from triplestore:")
             logger.info(graph_remove.serialize(format="turtle"))
             self.__configuration.triple_store.remove(graph_remove)
-        return get_subject_graph(parameters.subject_uri)
+        return self.__sparql_utils.get_subject_graph(parameters.subject_uri)
 
     def as_tools(self) -> list[BaseTool]:
         return [
@@ -124,7 +150,8 @@ class UpdateDataPropertyPipeline(Pipeline):
         if tags is None:
             tags = []
         return None
-    
+
+
 if __name__ == "__main__":
     from src import services
 
@@ -132,16 +159,18 @@ if __name__ == "__main__":
     predicate_uri = str(RDFS.label)
     object_new_value = "Ford Motor Company"
     language = "en"
-    
+
     configuration = UpdateDataPropertyPipelineConfiguration(
         triple_store=services.triple_store_service
     )
-    
+
     pipeline = UpdateDataPropertyPipeline(configuration)
-    graph = pipeline.run(UpdateDataPropertyPipelineParameters(
-        subject_uri=subject_uri,
-        predicate_uri=predicate_uri,
-        object_new_value=object_new_value,
-        language=language,
-    ))
+    graph = pipeline.run(
+        UpdateDataPropertyPipelineParameters(
+            subject_uri=subject_uri,
+            predicate_uri=predicate_uri,
+            object_new_value=object_new_value,
+            language=language,
+        )
+    )
     logger.info(graph.serialize(format="turtle"))

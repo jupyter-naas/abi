@@ -1,14 +1,11 @@
-from lib.abi.models.Model import ChatModel
 from langchain_anthropic import ChatAnthropic
-from src import secret
 from pydantic import SecretStr
+
+from lib.abi.models.Model import ChatModel
+from src.core.claude import ABIModule
 
 MODEL_ID = "claude-opus-4-1-20250805"
 PROVIDER = "anthropic"
-
-api_key = secret.get("ANTHROPIC_API_KEY")
-if secret.get("OPENROUTER_API_KEY"):
-    api_key = secret.get("OPENROUTER_API_KEY")
 
 model: ChatModel = ChatModel(
     model_id=MODEL_ID,
@@ -17,9 +14,11 @@ model: ChatModel = ChatModel(
         model_name=MODEL_ID,
         temperature=0,
         max_retries=2,
-        api_key=SecretStr(api_key),
+        api_key=SecretStr(
+            ABIModule.get_instance().configuration.openrouter_api_key
+            or ABIModule.get_instance().configuration.anthropic_api_key
+        ),
         timeout=None,
-        stop=None
+        stop=None,
     ),
 )
-

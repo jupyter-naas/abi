@@ -29,6 +29,14 @@ class ServicesConfiguration(BaseModel):
     secret: SecretServiceConfiguration
 
 
+class ApiConfiguration(BaseModel):
+    title: str = "ABI API"
+    description: str = "API for ABI, your Artifical Business Intelligence"
+    logo_path: str = "assets/logo.png"
+    favicon_path: str = "assets/favicon.ico"
+    cors_origins: List[str] = ["http://localhost:9879"]
+
+
 class FirstPassConfiguration(BaseModel):
     """This is a first pass configuration that is used to load the secret service.
 
@@ -76,12 +84,9 @@ class EngineConfiguration(BaseModel):
     github_repository: str
     github_project_id: int
     triple_store_path: str
-    api_title: str
-    api_description: str
-    logo_path: str
-    favicon_path: str
     space_name: str
-    cors_origins: List[str]
+
+    api: ApiConfiguration
 
     services: ServicesConfiguration
 

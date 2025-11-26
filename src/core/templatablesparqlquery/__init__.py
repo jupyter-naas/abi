@@ -1,34 +1,36 @@
-from src.core.templatablesparqlquery.workflows.TemplatableSparqlQuery import load_workflows
+from abi.module.Module import BaseModule, ModuleConfiguration, ModuleDependencies
+from abi.services.triple_store.TripleStoreService import TripleStoreService
 
-workflows: list = []
-tools: list = []
-loaded = False
-
-def requirements():
-    return True
+from src.core.templatablesparqlquery.workflows.TemplatableSparqlQueryLoader import (
+    TemplatableSparqlQueryLoader,
+)
 
 
-def get_workflows():
-    return workflows
+class ABIModule(BaseModule):
+    __workflows: list = []
+    __tools: list = []
 
+    dependencies: ModuleDependencies = ModuleDependencies(
+        modules=[], services=[TripleStoreService]
+    )
 
-def get_tools(tool_names: list[str] = []):
-    global loaded
-    if not loaded:
-        load_tools()
-        loaded = True
+    class Configuration(ModuleConfiguration):
+        pass
 
-    if len(tool_names) == 0:
-        return tools
-    else:
-        return [tool for tool in tools if tool.name in tool_names]
+    def on_initialized(self):
+        self.__templatable_sparql_query_loader = TemplatableSparqlQueryLoader(
+            self.engine.services.triple_store
+        )
+        self.__workflows = self.__templatable_sparql_query_loader.load_workflows()
+        self.__tools = [
+            tool for workflow in self.__workflows for tool in workflow.as_tools()
+        ]
 
+    def get_workflows(self):
+        return self.__workflows
 
-def load_tools():
-    # logger.debug("Loading Intent Mapping workflows")
-    w = load_workflows()
-    workflows.extend(w)
-    [tools.extend(workflow.as_tools()) for workflow in w]
-    # logger.debug(f"Tools from intentmapping loaded: {len(tools)}")
-    # tool_names = sorted([tool.name for tool in tools])
-    # logger.debug(tool_names)
+    def get_tools(self, tool_names: list[str] = []):
+        if len(tool_names) == 0:
+            return self.__tools
+        else:
+            return [tool for tool in self.__tools if tool.name in tool_names]

@@ -10,6 +10,9 @@ from abi.services.agent.IntentAgent import (
 )
 from langchain_core.tools import tool
 
+from src.core.abi import ABIModule
+from src.core.abi.models.default import get_model
+
 NAME = "Abi"
 AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
@@ -130,7 +133,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model based on AI_MODE
-    from src.core.abi.models.default import model
+    model = get_model()
 
     # Define tools
     tools: list = []
@@ -147,8 +150,9 @@ You can browse the data and run queries there."""
 
     tools.append(open_knowledge_graph_explorer)
 
-    # Get tools
-    from src.core.templatablesparqlquery import get_tools
+    templatable_sparql_query_module = ABIModule.get_instance().engine.modules[
+        "src.core.templatablesparqlquery"
+    ]
 
     agent_recommendation_tools = [
         "find_business_proposal_agents",
@@ -158,7 +162,7 @@ You can browse the data and run queries there."""
         "find_fastest_agents",
         "find_cheapest_agents",
     ]
-    tools.extend(get_tools(agent_recommendation_tools))
+    tools.extend(templatable_sparql_query_module.get_tools(agent_recommendation_tools))
 
     shared_state = agent_shared_state or AgentSharedState(
         thread_id="0", supervisor_agent=NAME
@@ -170,20 +174,20 @@ You can browse the data and run queries there."""
 
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
-    from src.__modules__ import get_modules
 
-    modules = get_modules()
+    modules = ABIModule.get_instance().engine.modules.values()
     for module in modules:
         if hasattr(module, "agents"):
             for agent in module.agents:
                 if (
                     agent is not None
-                    and agent.name != "Abi"
-                    and not agent.name.endswith("Research")
+                    and agent != AbiAgent
+                    and (hasattr(agent, "NAME") and not agent.NAME.endswith("Research"))
                 ):  # exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
-                    agents.append(
-                        agent.duplicate(agent_queue, agent_shared_state=shared_state)
+                    new_agent = agent.New().duplicate(
+                        agent_queue, agent_shared_state=shared_state
                     )
+                    agents.append(new_agent)
 
     # Define intents
     intents: list = [

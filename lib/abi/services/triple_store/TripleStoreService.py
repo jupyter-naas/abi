@@ -1,21 +1,20 @@
+import base64
+import hashlib
+import io
+import os
+import uuid
+from typing import Callable, List, Tuple
+
+import pydash
+import rdflib
+from abi import logger
 from abi.services.triple_store.TripleStorePorts import (
-    ITripleStoreService,
     ITripleStorePort,
+    ITripleStoreService,
     OntologyEvent,
 )
-from rdflib import Graph, RDF, URIRef
-import rdflib
-from typing import Callable, List, Tuple
-import uuid
-import pydash
-import hashlib
-import os
-import io
-import base64
-from abi import logger
-
-
-from abi.utils.Workers import WorkerPool, Job
+from abi.utils.Workers import Job, WorkerPool
+from rdflib import RDF, Graph, URIRef
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -206,7 +205,7 @@ class TripleStoreService(ITripleStoreService):
     def load_schemas(self, filepaths: List[str]):
         # First build a cache of all schemas to speed up the process.
         schema_cache = Graph()
-        
+
         results = self.query("""
             PREFIX internal: <http://triple-store.internal#>
             SELECT ?schema ?filePath ?hash ?fileLastUpdateTime ?content
@@ -218,31 +217,45 @@ class TripleStoreService(ITripleStoreService):
                     internal:content ?content .
             }
         """)
-        
+
         for row in results:
             assert isinstance(row, rdflib.query.ResultRow)
             schema, filePath, hash, fileLastUpdateTime, content = row
-            schema_cache.add((schema, RDF.type, URIRef("http://triple-store.internal#Schema")))
-            schema_cache.add((schema, URIRef("http://triple-store.internal#filePath"), filePath))
-            schema_cache.add((schema, URIRef("http://triple-store.internal#hash"), hash))
-            schema_cache.add((schema, URIRef("http://triple-store.internal#fileLastUpdateTime"), fileLastUpdateTime))
-            schema_cache.add((schema, URIRef("http://triple-store.internal#content"), content))
-        
+            schema_cache.add(
+                (schema, RDF.type, URIRef("http://triple-store.internal#Schema"))
+            )
+            schema_cache.add(
+                (schema, URIRef("http://triple-store.internal#filePath"), filePath)
+            )
+            schema_cache.add(
+                (schema, URIRef("http://triple-store.internal#hash"), hash)
+            )
+            schema_cache.add(
+                (
+                    schema,
+                    URIRef("http://triple-store.internal#fileLastUpdateTime"),
+                    fileLastUpdateTime,
+                )
+            )
+            schema_cache.add(
+                (schema, URIRef("http://triple-store.internal#content"), content)
+            )
+
         for filepath in filepaths:
             self.load_schema(filepath, schema_cache)
-
 
     def load_schema(self, filepath: str, schema_cache: Graph | None = None):
         logger.debug(f"Loading schema: {filepath}")
         if schema_cache is not None:
+
             def _read_query_func(query: str):
                 return schema_cache.query(query)
+
             read_query_func = _read_query_func
         else:
             read_query_func = self.query
 
         try:
-
             query = f'''PREFIX internal: <http://triple-store.internal#>
             SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'''
             # logger.debug(f"Query: {query}")
@@ -262,9 +275,9 @@ class TripleStoreService(ITripleStoreService):
 
                 # Select * from subject
                 triples: rdflib.query.Result = read_query_func(
-                        f"""PREFIX internal: <http://triple-store.internal#>
+                    f"""PREFIX internal: <http://triple-store.internal#>
                         SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
-                    )
+                )
 
                 # Load schema into a dict
                 schema_dict = {}
@@ -272,8 +285,8 @@ class TripleStoreService(ITripleStoreService):
                     assert isinstance(row, rdflib.query.ResultRow)
                     p, o = row
 
-                    schema_dict[str(p).replace("http://triple-store.internal#", "")] = str(
-                        o
+                    schema_dict[str(p).replace("http://triple-store.internal#", "")] = (
+                        str(o)
                     )
 
                 # Get file last update time
@@ -283,7 +296,9 @@ class TripleStoreService(ITripleStoreService):
                 with open(filepath, "r") as file:
                     new_content = file.read()
 
-                new_content_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()
+                new_content_hash = hashlib.sha256(
+                    new_content.encode("utf-8")
+                ).hexdigest()
 
                 # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
                 if schema_dict["hash"] == new_content_hash:
@@ -346,7 +361,9 @@ class TripleStoreService(ITripleStoreService):
                     content = file.read()
 
                 # Compute base64 content
-                base64_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+                base64_content = base64.b64encode(content.encode("utf-8")).decode(
+                    "utf-8"
+                )
 
                 # Compute hash of content
                 content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()

@@ -1,6 +1,7 @@
 from typing import Generic, Type, TypeVar
 
-from abi.utils.SPARQL import results_to_list
+from abi.services.triple_store.TripleStoreService import TripleStoreService
+from abi.utils.SPARQL import SPARQLUtils
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
@@ -14,11 +15,13 @@ class GenericWorkflow(Generic[T]):
         description: str,
         sparql_template: str,
         arguments_model: Type[T],
+        triple_store_service: TripleStoreService,
     ):
         self.name = name
         self.description = description
         self.sparql_template = sparql_template
         self.arguments_model = arguments_model
+        self.triple_store_service = triple_store_service
 
     def run(self, parameters: T):
         try:
@@ -28,10 +31,9 @@ class GenericWorkflow(Generic[T]):
             template = Template(self.sparql_template)
             sparql_query = template.render(parameters.model_dump())
             # print(sparql_query)
-            from src import services
+            results = self.triple_store_service.query(sparql_query)
 
-            results = services.triple_store_service.query(sparql_query)
-            return results_to_list(results)
+            return SPARQLUtils(self.triple_store_service).results_to_list(results)
         except Exception as e:
             return [{"error": str(e)}]
 
