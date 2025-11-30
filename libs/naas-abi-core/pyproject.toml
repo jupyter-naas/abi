@@ -33,6 +33,9 @@ ssh = [
     "paramiko>=3.5.1,<4.0.0",
     "sshtunnel>=0.4.0",
 ]
+build = [
+    "uv>=0.9.13",
+]
 
 [project.scripts]
 abi = "abi.cli:main"
@@ -46,9 +49,6 @@ build-backend = "hatchling.build"
 allow-direct-references = true
 
 [dependency-groups]
-build = [
-    "uv>=0.9.13",
-]
 dev = [
     "python-semantic-release>=9.21.0",
 ]
