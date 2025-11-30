@@ -2,34 +2,129 @@ name: Release
 on:
   push:
     branches:
-      - main
       - dev
 
+permissions:
+  contents: read
+
 jobs:
+
   release:
-    name: Release
     runs-on: ubuntu-latest
+
+    env:
+      naas_abi_core_dir: libs/naas-abi-core
+      naas_abi_marketplace_dir: libs/naas-abi-marketplace
+      naas_abi_dir: libs/naas-abi
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+
+      # ------------------------------------------------------------------- #
+      # Note the use of different IDs to distinguish which submodule was    #
+      # identified to be released. The subsequent actions then reference    #
+      # their specific release ID to determine if a release occurred.       #
+      # ------------------------------------------------------------------- #
+
+      - name: Release naas-abi-core
+        id: release-naas-abi-core
+        uses: python-semantic-release/python-semantic-release@v10.5.2
         with:
-          fetch-depth: 0
-      - name: Setup Node.js
-        uses: actions/setup-node@v2
+          directory: ${{ env.naas_abi_core_dir }}
+          github_token: ${{ secrets.ACCESS_TOKEN }}
+
+      - name: Release naas-abi-marketplace
+        id: release-naas-abi-marketplace
+        uses: python-semantic-release/python-semantic-release@v10.5.2
         with:
-          node-version: 'lts/*'
-      - name: Install dependencies
-        run: |
-          cd .github \
-            && npm ci \
-            && cd .. \
-            && (rm package.json || true) \
-            && (rm package-lock.json || true) \
-            && ln -s .github/node_modules node_modules \
-            && ln -s .github/package.json package.json \
-            && ln -s .github/package-lock.json package-lock.json \
-            && ln -s .github/.releaserc .releaserc
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }} # Use this if you need to trigger CI/CD based on new release being published.
-        run: npx semantic-release
+          directory: ${{ env.naas_abi_marketplace_dir }}
+          github_token: ${{ secrets.ACCESS_TOKEN }}
+
+      - name: Release naas-abi
+        id: release-naas-abi
+        uses: python-semantic-release/python-semantic-release@v10.5.2
+        with:
+          directory: ${{ env.naas_abi_dir }}
+          github_token: ${{ secrets.ACCESS_TOKEN }}
+
+      - name: Publish | Upload naas-abi-core to GitHub Release Assets
+        uses: python-semantic-release/publish-action@v10.5.2
+        if: steps.release-naas-abi-core.outputs.released == 'true'
+        with:
+          directory: ${{ env.naas_abi_core_dir }}
+          github_token: ${{ secrets.ACCESS_TOKEN }}
+          tag: ${{ steps.release-naas-abi-core.outputs.tag }}
+
+      - name: Publish | Upload naas-abi-marketplace to GitHub Release Assets
+        uses: python-semantic-release/publish-action@v10.5.2
+        if: steps.release-naas-abi-marketplace.outputs.released == 'true'
+        with:
+          directory: ${{ env.naas_abi_marketplace_dir }}
+          github_token: ${{ secrets.ACCESS_TOKEN }}
+          tag: ${{ steps.release-naas-abi-marketplace.outputs.tag }}
+
+      - name: Publish | Upload naas-abi to GitHub Release Assets
+        uses: python-semantic-release/publish-action@v10.5.2
+        if: steps.release-naas-abi.outputs.released == 'true'
+        with:
+          directory: ${{ env.naas_abi_dir }}
+          github_token: ${{ secrets.ACCESS_TOKEN }}
+          tag: ${{ steps.release-naas-abi.outputs.tag }}
+
+      # ------------------------------------------------------------------- #
+      # Python Semantic Release is not responsible for publishing your      #
+      # python artifacts to PyPI. Use the official PyPA publish action      #
+      # instead. The following steps are an example but is not guaranteed   #
+      # to work as the action is not maintained by the                      #
+      # python-semantic-release team.                                       #
+      # ------------------------------------------------------------------- #
+
+      - name: Publish | Upload naas-abi-core to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # vX.X.X
+        if: steps.release-naas-abi-core.outputs.released == 'true'
+        with:
+          packages-dir: ${{ format('{}/dist', env.naas_abi_core_dir) }}
+          repository-url: https://pypi.org/p/naas-abi-core
+
+      - name: Publish | Upload naas-abi-marketplace to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # vX.X.X
+        if: steps.release-naas-abi-marketplace.outputs.released == 'true'
+        with:
+          packages-dir: ${{ format('{}/dist', env.naas_abi_marketplace_dir) }}
+          repository-url: https://pypi.org/p/naas-abi-marketplace
+
+
+      - name: Publish | Upload naas-abi to PyPI
+        uses: pypa/gh-action-pypi-publish@SHA1_HASH  # vX.X.X
+        if: steps.release-naas-abi.outputs.released == 'true'
+        with:
+          packages-dir: ${{ format('{}/dist', env.naas_abi_dir) }}
+          repository-url: https://pypi.org/p/naas-abi
+
+# jobs:
+#   release:
+#     name: Release
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v2
+#         with:
+#           fetch-depth: 0
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v2
+#         with:
+#           node-version: 'lts/*'
+#       - name: Install dependencies
+#         run: |
+#           cd .github \
+#             && npm ci \
+#             && cd .. \
+#             && (rm package.json || true) \
+#             && (rm package-lock.json || true) \
+#             && ln -s .github/node_modules node_modules \
+#             && ln -s .github/package.json package.json \
+#             && ln -s .github/package-lock.json package-lock.json \
+#             && ln -s .github/.releaserc .releaserc
+#       - name: Release
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }} # Use this if you need to trigger CI/CD based on new release being published.
+#         run: npx semantic-release
