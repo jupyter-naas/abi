@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.0-dev.4 (2025-11-30)
+
+### Bug Fixes
+
+- Working on ci
+  ([`ba918da`](https://github.com/jupyter-naas/abi/commit/ba918da13147636ec732f2aba3e2978046b93970))
+
+
 ## v1.0.0-dev.3 (2025-11-30)
 
 ### Bug Fixes
