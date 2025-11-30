@@ -66,8 +66,8 @@ build_command = """
     uv build
 """
 
-[tool.semantic_release.commit_parser_options]
-path_filters = ["."]
+# [tool.semantic_release.commit_parser_options]
+# path_filters = ["."]
 # scope_prefix = "naas-abi-core-"
 
 [tool.semantic_release.branches.dev]

@@ -32,8 +32,8 @@ build_command = """
     git add uv.lock
     uv build
 """
-[tool.semantic_release.commit_parser_options]
-path_filters = ["."]
+# [tool.semantic_release.commit_parser_options]
+# path_filters = ["."]
 # scope_prefix = "naas-abi-marketplace-"
 
 [tool.semantic_release.branches.dev]

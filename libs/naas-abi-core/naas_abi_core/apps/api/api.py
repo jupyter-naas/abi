@@ -228,12 +228,15 @@ def api():
         uvicorn.run(app, host="0.0.0.0", port=9879)
 
 
+def test_init():
+    logger.info("✅ API initialization completed successfully")
+    print("API_INIT_TEST_PASSED")
+
+
 if __name__ == "__main__":
     import sys
 
     if "--test-init" in sys.argv:
-        logger.info("✅ API initialization completed successfully")
-        print("API_INIT_TEST_PASSED")
+        test_init()
     else:
-        api()
         api()
