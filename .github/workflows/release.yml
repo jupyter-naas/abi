@@ -94,7 +94,7 @@ jobs:
 
 
       - name: Publish | Upload naas-abi to PyPI
-        uses: pypa/gh-action-pypi-publish@SHA1_HASH  # vX.X.X
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # vX.X.X
         if: steps.release-naas-abi.outputs.released == 'true'
         with:
           packages-dir: ${{ format('{}/dist', env.naas_abi_dir) }}
