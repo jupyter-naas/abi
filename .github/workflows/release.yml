@@ -100,14 +100,12 @@ jobs:
         if: steps.release-naas-abi-core.outputs.released == 'true'
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_core_dir) }}
-          repository-url: https://pypi.org/p/naas-abi-core/
 
       - name: Publish | Upload naas-abi-marketplace to PyPI
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # vX.X.X
         if: steps.release-naas-abi-marketplace.outputs.released == 'true'
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_marketplace_dir) }}
-          repository-url: https://pypi.org/p/naas-abi-marketplace/
 
 
       - name: Publish | Upload naas-abi to PyPI
@@ -115,4 +113,3 @@ jobs:
         if: steps.release-naas-abi.outputs.released == 'true'
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_dir) }}
-          repository-url: https://pypi.org/p/naas-abi/
