@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi"
-version = "1.0.0-dev.6"
+version = "1.0.0-dev.7"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10,<4"
