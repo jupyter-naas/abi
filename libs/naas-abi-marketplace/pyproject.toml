@@ -31,7 +31,7 @@ version_toml = ["pyproject.toml:project.version"]
 path_filters = ["."]
 scope_prefix = "naas-abi-marketplace-"
 
-[tool.semantic_release.branches.alpha-release]
-match = "^naas-abi-marketplace/[0-9]+-.+"
+[tool.semantic_release.branches.dev]
+match = "^dev"
 prerelease = true
-prerelease_token = "alpha"
+prerelease_token = "dev"
