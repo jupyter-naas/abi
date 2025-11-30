@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.0-dev.3 (2025-11-30)
+
+### Bug Fixes
+
+- Uv install
+  ([`c268208`](https://github.com/jupyter-naas/abi/commit/c268208bdcc69223fbb68114978211de7c161956))
+
+
 ## v1.0.0-dev.2 (2025-11-30)
 
 ### Bug Fixes
