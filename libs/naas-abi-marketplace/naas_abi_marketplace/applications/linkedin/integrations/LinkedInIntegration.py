@@ -435,7 +435,7 @@ class LinkedInIntegration(Integration):
         """
         if "/in/" in linkedin_url:
             return linkedin_url.rsplit("/in/")[-1].rsplit("/")[0]
-        return ""
+        return linkedin_url
 
     def get_profile_id(self, linkedin_url: str) -> str:
         """Extract profile ID from LinkedIn URL.
@@ -991,8 +991,10 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         )
 
     class GetProfilePostsFeedSchema(BaseModel):
-        profile_id: str = Field(
-            ..., description="LinkedIn profile URL", pattern=r"^ACoAA.+"
+        linkedin_url: str = Field(
+            ...,
+            description="LinkedIn profile URL",
+            pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+",
         )
         count: int = Field(
             1,
@@ -1083,8 +1085,8 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         StructuredTool(
             name="linkedin_get_profile_posts_feed",
             description="Get posts feed for a LinkedIn profile.",
-            func=lambda profile_id, count: integration.get_profile_posts_feed(
-                profile_id, count, return_cleaned_json=True
+            func=lambda linkedin_url, count: integration.get_profile_posts_feed(
+                linkedin_url, count, return_cleaned_json=True
             ),
             args_schema=GetProfilePostsFeedSchema,
         ),

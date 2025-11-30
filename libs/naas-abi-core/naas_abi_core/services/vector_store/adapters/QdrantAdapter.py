@@ -224,11 +224,13 @@ class QdrantAdapter(IVectorStorePort):
                 collection_name=collection_name, payload=new_payload, points=[vector_id]
             )
 
-    def delete_vectors(self, collection_name: str, vector_ids: List[str]) -> None:
+    def delete_vectors(self, collection_name: str, vector_ids: List) -> None:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
         point_ids = cast(List[Union[int, str, UUID]], vector_ids)
+
+        # Cast to satisfy mypy: list[str] is compatible with list[int | str | UUID | PointId]
         self.client.delete(
             collection_name=collection_name,
             points_selector=PointIdsList(points=point_ids),

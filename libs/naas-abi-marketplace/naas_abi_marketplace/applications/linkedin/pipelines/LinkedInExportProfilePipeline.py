@@ -8,16 +8,18 @@ from typing import Annotated
 import pandas as pd
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi.utils.SPARQL import get_identifiers, results_to_list
-from naas_abi.utils.Storage import save_csv, save_triples
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Graph import ABI, BFO, CCO
 from naas_abi_core.utils.String import create_hash_from_string
+from naas_abi_marketplace.applications.linkedin import ABIModule
 from naas_abi_marketplace.applications.linkedin.integrations.LinkedInExportIntegration import (
     LinkedInExportIntegration,
     LinkedInExportIntegrationConfiguration,
+)
+from naas_abi_marketplace.applications.linkedin.pipelines.BasePipeline import (
+    BasePipeline,
 )
 from pydantic import Field
 from rdflib import OWL, RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
@@ -63,13 +65,14 @@ class LinkedInExportProfilePipelineParameters(PipelineParameters):
     ] = "Profile.csv"
 
 
-class LinkedInExportProfilePipeline(Pipeline):
+class LinkedInExportProfilePipeline(Pipeline, BasePipeline):
     """Pipeline for importing data from Excel tables to the triple store."""
 
     __configuration: LinkedInExportProfilePipelineConfiguration
 
     def __init__(self, configuration: LinkedInExportProfilePipelineConfiguration):
         super().__init__(configuration)
+        BasePipeline.__init__(self)
         self.__configuration = configuration
         self.__linkedin_export_integration = LinkedInExportIntegration(
             configuration.linkedin_export_configuration
@@ -86,7 +89,7 @@ class LinkedInExportProfilePipeline(Pipeline):
         """Add a backing datasource to the graph."""
         # Create backing datasource
         data_source_hash = create_hash_from_string(f"{file_modified_at}_{file_path}")
-        existing_data_sources: dict[str, URIRef] = get_identifiers(
+        existing_data_sources: dict[str, URIRef] = self.sparql_utils.get_identifiers(
             class_uri=DATA_SOURCE
         )
         data_source_uri = existing_data_sources.get(data_source_hash)
@@ -138,11 +141,11 @@ class LinkedInExportProfilePipeline(Pipeline):
     ) -> tuple[Graph, URIRef]:
         """Add a backing datasource component to the graph."""
         row_hash = create_hash_from_string(str(tuple(row)))
-        existing_data_source_components: dict[str, URIRef] = get_identifiers(
-            class_uri=DATA_SOURCE_COMPONENT
+        existing_data_source_components: dict[str, URIRef] = (
+            self.sparql_utils.get_identifiers(class_uri=DATA_SOURCE_COMPONENT)
         )
         row_uri = existing_data_source_components.get(row_hash)
-        logger.debug("Step 3.1: Adding backing datasource component for row")
+        logger.debug("Adding backing datasource component for row")
         if row_uri is None:
             row_uri = ABI[str(uuid.uuid4())]
             existing_data_source_components[row_hash] = row_uri
@@ -174,8 +177,10 @@ class LinkedInExportProfilePipeline(Pipeline):
         linkedin_public_id = (
             linkedin_public_url.split("/in/")[1].split("/")[0].split("?")[0]
         )
-        linkedin_profile_page_uris: dict[str, URIRef] = get_identifiers(
-            property_uri=LINKEDIN.public_url, class_uri=LINKEDIN_PROFILE_PAGE
+        linkedin_profile_page_uris: dict[str, URIRef] = (
+            self.sparql_utils.get_identifiers(
+                property_uri=LINKEDIN.public_url, class_uri=LINKEDIN_PROFILE_PAGE
+            )
         )
         linkedin_profile_page_uri = linkedin_profile_page_uris.get(linkedin_public_url)
 
@@ -275,7 +280,7 @@ class LinkedInExportProfilePipeline(Pipeline):
             <{linkedin_profile_page_uri}> abi:isLinkedInPageOf ?personUri .
         }}
         """
-        existing_person_uris = results_to_list(
+        existing_person_uris = self.sparql_utils.results_to_list(
             self.__configuration.triple_store.query(sparql_query)
         )
         if existing_person_uris:
@@ -372,9 +377,13 @@ class LinkedInExportProfilePipeline(Pipeline):
         ttl_file_name = f"insert_{parameters.file_name.split('.')[0]}.ttl"
         if len(graph) > 0:
             # Save triples to file
-            save_triples(graph, log_dir_path, ttl_file_name, copy=False)
+            self.storage_utils.save_triples(
+                graph, log_dir_path, ttl_file_name, copy=False
+            )
             # Save Excel file
-            save_csv(df, log_dir_path, parameters.file_name, copy=False)
+            self.storage_utils.save_csv(
+                df, log_dir_path, parameters.file_name, copy=False
+            )
             # Save graph to triple store
             self.__configuration.triple_store.insert(graph)
         return graph
@@ -406,11 +415,16 @@ class LinkedInExportProfilePipeline(Pipeline):
 
 
 if __name__ == "__main__":
-    from naas_abi import services
+    from naas_abi_core.engine.Engine import Engine
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.linkedin"])
+
+    module: ABIModule = ABIModule.get_instance()
 
     pipeline = LinkedInExportProfilePipeline(
         LinkedInExportProfilePipelineConfiguration(
-            triple_store=services.triple_store_service,
+            triple_store=module.engine.services.triple_store,
             linkedin_export_configuration=LinkedInExportIntegrationConfiguration(
                 export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
             ),
