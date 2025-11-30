@@ -15,6 +15,9 @@ jobs:
       group: ${{ github.workflow }}-release-${{ github.ref_name }}
       cancel-in-progress: false
 
+    environment:
+      name: pypi
+
     env:
       naas_abi_core_dir: libs/naas-abi-core
       naas_abi_marketplace_dir: libs/naas-abi-marketplace
@@ -42,28 +45,28 @@ jobs:
         uses: python-semantic-release/python-semantic-release@v10.5.2
         with:
           directory: ${{ env.naas_abi_core_dir }}
-          github_token: ${{ secrets.ACCESS_TOKEN }}
+          github_token: ${{ secrets.M_ACCESS_TOKEN }}
 
       - name: Release naas-abi-marketplace
         id: release-naas-abi-marketplace
         uses: python-semantic-release/python-semantic-release@v10.5.2
         with:
           directory: ${{ env.naas_abi_marketplace_dir }}
-          github_token: ${{ secrets.ACCESS_TOKEN }}
+          github_token: ${{ secrets.M_ACCESS_TOKEN }}
 
       - name: Release naas-abi
         id: release-naas-abi
         uses: python-semantic-release/python-semantic-release@v10.5.2
         with:
           directory: ${{ env.naas_abi_dir }}
-          github_token: ${{ secrets.ACCESS_TOKEN }}
+          github_token: ${{ secrets.M_ACCESS_TOKEN }}
 
       - name: Publish | Upload naas-abi-core to GitHub Release Assets
         uses: python-semantic-release/publish-action@v10.5.2
         if: steps.release-naas-abi-core.outputs.released == 'true'
         with:
           directory: ${{ env.naas_abi_core_dir }}
-          github_token: ${{ secrets.ACCESS_TOKEN }}
+          github_token: ${{ secrets.M_ACCESS_TOKEN }}
           tag: ${{ steps.release-naas-abi-core.outputs.tag }}
 
       - name: Publish | Upload naas-abi-marketplace to GitHub Release Assets
@@ -71,7 +74,7 @@ jobs:
         if: steps.release-naas-abi-marketplace.outputs.released == 'true'
         with:
           directory: ${{ env.naas_abi_marketplace_dir }}
-          github_token: ${{ secrets.ACCESS_TOKEN }}
+          github_token: ${{ secrets.M_ACCESS_TOKEN }}
           tag: ${{ steps.release-naas-abi-marketplace.outputs.tag }}
 
       - name: Publish | Upload naas-abi to GitHub Release Assets
@@ -79,7 +82,7 @@ jobs:
         if: steps.release-naas-abi.outputs.released == 'true'
         with:
           directory: ${{ env.naas_abi_dir }}
-          github_token: ${{ secrets.ACCESS_TOKEN }}
+          github_token: ${{ secrets.M_ACCESS_TOKEN }}
           tag: ${{ steps.release-naas-abi.outputs.tag }}
 
       # ------------------------------------------------------------------- #
@@ -138,5 +141,5 @@ jobs:
 #             && ln -s .github/.releaserc .releaserc
 #       - name: Release
 #         env:
-#           GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }} # Use this if you need to trigger CI/CD based on new release being published.
+#           GITHUB_TOKEN: ${{ secrets.M_ACCESS_TOKEN }} # Use this if you need to trigger CI/CD based on new release being published.
 #         run: npx semantic-release
