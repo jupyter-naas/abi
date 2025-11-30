@@ -1,0 +1,17 @@
+[project]
+name = "naas-abi-marketplace"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10,<4"
+dependencies = [
+    "naas-abi-core",
+]
+
+[tool.uv.sources]
+naas-abi-core = { path = "../naas-abi-core", editable = true }
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.0",
+]

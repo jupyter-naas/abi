@@ -12,7 +12,7 @@ USER abi
 WORKDIR /app
 
 # Copy only the files needed for building
-ADD --chown=abi:abi ./lib/ /app/lib
+ADD --chown=abi:abi ./libs/ /app/libs
 ADD --chown=abi:abi ./src/ /app/src
 ADD --chown=abi:abi ./uv.lock /app/uv.lock
 ADD --chown=abi:abi ./pyproject.toml /app/pyproject.toml
@@ -52,7 +52,7 @@ USER abi
 WORKDIR /app
 
 # Copy only the necessary files from the builder stage
-COPY --from=builder --chown=abi:abi /app/lib /app/lib
+COPY --from=builder --chown=abi:abi /app/libs /app/libs
 COPY --from=builder --chown=abi:abi /app/src /app/src
 COPY --from=builder --chown=abi:abi /app/VERSION /app/VERSION
 COPY --from=builder --chown=abi:abi /app/.local /app/.local
@@ -74,4 +74,4 @@ ENV PATH="/app/.local/bin:$PATH"
 # Make sure uv is fully setup
 RUN uv sync --no-dev
 
-CMD ["uv", "run", "--no-dev", "src/api.py"]
+CMD ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.api.api"]

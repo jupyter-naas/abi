@@ -1,11 +1,12 @@
-from src import services
-from rdflib import RDFS, URIRef
-import pydash
-import os
-import urllib.parse
-from abi import logger
-import shutil
 import json
+import os
+import shutil
+import urllib.parse
+
+import pydash
+from naas_abi import services
+from naas_abi_core import logger
+from rdflib import RDFS, URIRef
 
 ONTOLOGY_DICT: dict[str, str] = {
     "abi": "http://ontology.naas.ai/abi/",
@@ -61,6 +62,7 @@ dc_terms: dict[str, str] = {
     "http://purl.org/dc/terms/rights": "rights",
     "http://purl.org/dc/terms/contributor": "contributor",
 }
+
 
 class OntologyDocs:
     def __init__(self):
@@ -184,12 +186,15 @@ class OntologyDocs:
 
     def load_classes(self):
         # We filter the classes from the ontology.
-        _onto_classes = sorted(self._.filter_(
-            self.onto,
-            lambda x: "http://www.w3.org/2002/07/owl#Class" in x["type"]
-            if "type" in x
-            else None,
-        ), key=lambda x: x["__id"])
+        _onto_classes = sorted(
+            self._.filter_(
+                self.onto,
+                lambda x: "http://www.w3.org/2002/07/owl#Class" in x["type"]
+                if "type" in x
+                else None,
+            ),
+            key=lambda x: x["__id"],
+        )
         logger.info(f"🔍 Found {len(_onto_classes)} classes in the ontology.")
 
         # We remove the subclassOf that are restrictions to keep it simple for now.
@@ -262,7 +267,7 @@ class OntologyDocs:
         # Handle None case
         if cls_id is None:
             return []
-        
+
         # If it's a leaf we return a dict with the class id and the operator.
         if "http" in cls_id:
             if rel_type is not None and rel_type in self.operators:
@@ -320,12 +325,24 @@ class OntologyDocs:
         if "domain" in x:
             x["domain"] = self._.map_(
                 x["domain"],
-                lambda x: x if (x is not None and "http" in x) else (self.get_linked_classes(x)[0] if self.get_linked_classes(x) else None),
+                lambda x: x
+                if (x is not None and "http" in x)
+                else (
+                    self.get_linked_classes(x)[0]
+                    if self.get_linked_classes(x)
+                    else None
+                ),
             )
         if "range" in x:
             x["range"] = self._.map_(
                 x["range"],
-                lambda x: x if (x is not None and "http" in x) else (self.get_linked_classes(x)[0] if self.get_linked_classes(x) else None),
+                lambda x: x
+                if (x is not None and "http" in x)
+                else (
+                    self.get_linked_classes(x)[0]
+                    if self.get_linked_classes(x)
+                    else None
+                ),
             )
         return x
 
@@ -787,14 +804,26 @@ class OntologyDocs:
                             ontology_slim_path = os.path.join(reference_dir, k)
                             if len(level_path.split("/")) < 3:
                                 continue
-                            if "Process boundary" in level_path or "Process profile" in level_path:
+                            if (
+                                "Process boundary" in level_path
+                                or "Process profile" in level_path
+                            ):
                                 continue
 
                             level_slim_path = "/".join(level_path.split("/")[1:3])
-                            for word in ["Specifically dependent continuant", "Independent continuant"]:
-                                if word in level_path and not level_path.endswith(word) and len(level_path.split("/")) > 3:
+                            for word in [
+                                "Specifically dependent continuant",
+                                "Independent continuant",
+                            ]:
+                                if (
+                                    word in level_path
+                                    and not level_path.endswith(word)
+                                    and len(level_path.split("/")) > 3
+                                ):
                                     slim_level = level_path.split("/")[3:4][0]
-                                    level_slim_path = level_slim_path.replace(word, slim_level)
+                                    level_slim_path = level_slim_path.replace(
+                                        word, slim_level
+                                    )
                                     break
                                 elif word in level_path and level_path.endswith(word):
                                     level_slim_path = None
@@ -803,9 +832,7 @@ class OntologyDocs:
                             abi_slim_path = os.path.join(
                                 ontology_slim_path, level_slim_path, f"{label_safe}.md"
                             )
-                            os.makedirs(
-                                os.path.dirname(abi_slim_path), exist_ok=True
-                            )
+                            os.makedirs(os.path.dirname(abi_slim_path), exist_ok=True)
                             shutil.copy(file_path, abi_slim_path)
                             logger.info(
                                 f"✅ {label.capitalize()} saved in {abi_slim_path}"
@@ -829,5 +856,6 @@ class OntologyDocs:
                                 f"✅ {label.capitalize()} saved in {file_foundry_path}"
                             )
 
-if __name__ == "__main__":  
+
+if __name__ == "__main__":
     OntologyDocs().rdf_to_md()

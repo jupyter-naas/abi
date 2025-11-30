@@ -1,9 +1,10 @@
-import inspect
-import pytest
-from pathlib import Path
 import importlib.util
+import inspect
 import sys
-from abi.workflow import Workflow
+from pathlib import Path
+
+import pytest
+from naas_abi_core.workflow import Workflow
 
 
 def get_workflow_classes():

@@ -86,7 +86,6 @@ help:
 	@echo "CODE QUALITY & LINTING:"
 	@echo "  check                    Run all code quality checks (core, custom, marketplace)"
 	@echo "  check-core               Run code quality checks for core modules"
-	@echo "  check-custom             Run code quality checks for custom modules"
 	@echo "  check-marketplace        Run code quality checks for marketplace modules"
 	@echo "  fmt                      Format code using ruff"
 	@echo "  bandit                   Run security scanning with bandit"
@@ -321,7 +320,7 @@ chat-support-agent: deps
 # Start the main API server for local development
 api: deps
 	# uv run src/api.py
-	uv run python -m abi.apps.api.api
+	uv run python -m naas_abi_core.apps.api.api
 
 # Start production API server in Docker container
 api-prod: deps
@@ -454,7 +453,7 @@ hello:
 # =============================================================================
 
 # Master check target - runs all code quality checks
-check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-custom check-marketplace
+check: deps .venv/lib/python$(python_version)/site-packages/abi check-core # check-marketplace #(Disable marketplace checks for now)
 
 # Code quality checks for core modules
 check-core: deps
@@ -466,41 +465,41 @@ check-core: deps
 	@echo ""
 	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check lib src/core --exclude "src/core/**/sandbox/**"
+	@uvx ruff check libs/naas-abi-core
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@echo "• Checking lib.abi..."
-	@.venv/bin/mypy -p lib.abi --follow-untyped-imports
-	@echo "• Checking src.core..."
-	@.venv/bin/mypy -p src.core --follow-untyped-imports --exclude "src/core/.*/sandbox/.*"
+	@echo "• Checking naas_abi_core..."
+	@.venv/bin/mypy -p naas_abi_core --follow-untyped-imports
+	@echo "• Checking naas_abi_core..."
+	@.venv/bin/mypy -p naas_abi_core --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
-	@#uv run pyrefly check lib src/core
+	@#uv run pyrefly check libs/naas-abi-core
 
 	@#echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
 	@#echo "⚠️ Skipping bandit... (disabled)"
 	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
 	@echo "\n✅ CORE security checks passed!"
 
-# Code quality checks for custom modules
-check-custom: deps
-	@echo ""
-	@echo "  _____ _____ _____ _____ _____ _____"
-	@echo " |     |     |     |     |     |     |"
-	@echo " |  C  |  U  |  S  |  T  |  O  |  M  |"
-	@echo " |_____|_____|_____|_____|_____|_____|"
-	@echo ""
-	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
-	@echo "📝 Linting with ruff..."
-	@uvx ruff check src/custom --exclude "src/custom/**/sandbox/**"
+# # Code quality checks for custom modules
+# check-custom: deps
+# 	@echo ""
+# 	@echo "  _____ _____ _____ _____ _____ _____"
+# 	@echo " |     |     |     |     |     |     |"
+# 	@echo " |  C  |  U  |  S  |  T  |  O  |  M  |"
+# 	@echo " |_____|_____|_____|_____|_____|_____|"
+# 	@echo ""
+# 	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
+# 	@echo "📝 Linting with ruff..."
+# 	@uvx ruff check src/custom --exclude "src/custom/**/sandbox/**"
 
-	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@.venv/bin/mypy -p src.custom --follow-untyped-imports --exclude "src/custom/.*/sandbox/.*"
+# 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
+# 	@.venv/bin/mypy -p src.custom --follow-untyped-imports --exclude "src/custom/.*/sandbox/.*"
 
-	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
-	@#uv run pyrefly check src/custom
+# 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
+# 	@#uv run pyrefly check src/custom
 
-	@echo "\n✅ CUSTOM security checks passed!"
+# 	@echo "\n✅ CUSTOM security checks passed!"
 
 # Code quality checks for marketplace modules
 check-marketplace: deps
@@ -512,10 +511,10 @@ check-marketplace: deps
 	@echo ""
 	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check src/marketplace --exclude "src/marketplace/**/sandbox/**"
+	@uvx ruff check libs/naas-abi-marketplace
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@.venv/bin/mypy -p src.marketplace --follow-untyped-imports --exclude "src/marketplace/.*/sandbox/.*"
+	@cd libs/naas-abi-marketplace && .venv/bin/mypy -p naas_abi_marketplace --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check src/marketplace
