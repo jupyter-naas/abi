@@ -1,14 +1,22 @@
-from naas_abi import secret
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
+from naas_abi_core.services.secret.Secret import Secret
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 
 
-def requirements():
-    li_at = secret.get("li_at")
-    JSESSIONID = secret.get("JSESSIONID")
-    linkedin_profile_url = secret.get("LINKEDIN_PROFILE_URL")
-    if (
-        li_at is not None
-        and JSESSIONID is not None
-        and linkedin_profile_url is not None
-    ):
-        return True
-    return False
+class ABIModule(BaseModule):
+    dependencies: ModuleDependencies = ModuleDependencies(
+        modules=[],
+        services=[ObjectStorageService, TripleStoreService, Secret],
+    )
+
+    class Configuration(ModuleConfiguration):
+        li_at: str
+        JSESSIONID: str
+        linkedin_profile_url: str
