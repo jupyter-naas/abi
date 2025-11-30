@@ -25,7 +25,7 @@ version_toml = ["pyproject.toml:project.version"]
 
 [tool.semantic_release.commit_parser_options]
 path_filters = ["."]
-scope_prefix = "naas-abi-"
+# scope_prefix = "naas-abi-"
 
 [tool.semantic_release.branches.dev]
 match = "^dev"
