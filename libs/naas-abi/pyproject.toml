@@ -9,6 +9,11 @@ dependencies = [
     "naas-abi-marketplace",
 ]
 
+[project.optional-dependencies]
+build = [
+    "uv>=0.9.13",
+]
+
 [tool.uv.sources]
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 naas-abi-marketplace = { path = "../naas-abi-marketplace", editable = true }
@@ -39,9 +44,6 @@ prerelease = true
 prerelease_token = "dev"
 
 [dependency-groups]
-build = [
-    "uv>=0.9.13",
-]
 dev = [
     "python-semantic-release>=9.21.0",
 ]

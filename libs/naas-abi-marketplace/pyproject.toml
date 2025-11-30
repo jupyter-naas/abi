@@ -11,10 +11,12 @@ dependencies = [
 [tool.uv.sources]
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 
-[dependency-groups]
+[project.optional-dependencies]
 build = [
     "uv>=0.9.13",
 ]
+
+[dependency-groups]
 dev = [
     "mypy>=1.19.0",
     "python-semantic-release>=9.21.0",
