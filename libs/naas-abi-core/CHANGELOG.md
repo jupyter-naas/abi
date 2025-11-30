@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.0-dev.9 (2025-11-30)
+
+### Bug Fixes
+
+- Working on api deployment
+  ([`8a803ba`](https://github.com/jupyter-naas/abi/commit/8a803bad5db9ed9d020d18245b3b6fbafda6bb2c))
+
+
 ## v1.0.0-dev.8 (2025-11-30)
 
 
