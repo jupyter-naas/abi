@@ -42,4 +42,3 @@ prerelease_token = "dev"
 dev = [
     "python-semantic-release>=9.21.0",
 ]
-
