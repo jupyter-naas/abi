@@ -40,3 +40,4 @@ path_filters = ["."]
 match = "^dev"
 prerelease = true
 prerelease_token = "dev"
+
