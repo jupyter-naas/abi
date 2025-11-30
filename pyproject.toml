@@ -7,7 +7,9 @@ requires-python = ">=3.10,<4"
 readme = "README.md"
 dependencies = [
     "pyyaml>=6.0.1,<7",
-    "abi[ssh]",
+    "naas-abi",
+    "naas-abi-core[ssh]",
+    "naas-abi-marketplace",
     "requests[socks]>=2.32.3,<3",
     "fastapi>=0.115.5,<0.116",
     "uvicorn[standard]>=0.32.1,<0.33",
@@ -80,11 +82,11 @@ dependencies = [
 ]
 
 [project.scripts]
-cli = "abi.cli:main"
+cli = "naas_abi_core.cli:main"
 abi = "src.cli:main"
-api = "src.api:api"
-mcp-server = "src.mcp_server:run"
-chat-arxiv-agent = "src.apps.terminal_agent.main:run_arxiv_agent"
+api = "naas_abi_core.apps.api.api:api"
+mcp-server = "naas_abi_core.apps.mcp_server:run"
+chat-arxiv-agent = "naas_abi_core.apps.terminal_agent.main:run_arxiv_agent"
 
 [dependency-groups]
 terminal-agent = [
@@ -121,7 +123,8 @@ log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(linen
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 
 [tool.uv.sources]
-abi = { path = "lib" , editable = true }
-
+naas-abi = { path = "libs/naas-abi" , editable = true }
+naas-abi-core = { path = "libs/naas-abi-core" , editable = true }
+naas-abi-marketplace = { path = "libs/naas-abi-marketplace" , editable = true }
 
 

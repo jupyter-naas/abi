@@ -1,8 +1,9 @@
-import pytest
 import tempfile
-from rdflib import Graph, URIRef, Literal
-from abi.services.triple_store.TripleStoreFactory import TripleStoreFactory
-from abi.services.triple_store.TripleStorePorts import OntologyEvent
+
+import pytest
+from naas_abi_core.services.triple_store.TripleStoreFactory import TripleStoreFactory
+from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
+from rdflib import Graph, Literal, URIRef
 
 
 @pytest.fixture

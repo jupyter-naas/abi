@@ -323,7 +323,6 @@ make ftest                 # Interactive test selector with fuzzy finder
 ```bash
 make check                 # Run all quality checks
 make check-core            # Check core modules
-make check-custom          # Check custom modules
 make check-marketplace     # Check marketplace modules
 make fmt                   # Format code with ruff
 make bandit                # Security scanning

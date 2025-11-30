@@ -141,8 +141,8 @@ services:
     ports:
       - 7879:80  # Oxigraph web interface - http://localhost:7878
     volumes:
-      - ./src/core/abi/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./src/core/abi/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
+      - ./libs/naas-abi/naas_abi/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./libs/naas-abi/naas_abi/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
     depends_on:
       - oxigraph
     networks:

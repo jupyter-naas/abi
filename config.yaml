@@ -23,30 +23,16 @@ global_config:
   ai_mode: "cloud"
 
 modules:
-  # - module: alice
-  #   enabled: true
-  #   config:
-  #     openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-  # - module: bob
-  #   enabled: true
-  # - module: chatgpt
-  #   enabled: true
-  #   config:
-  #     openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-  - module: src.core.abi
+  - module: naas_abi
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-  - module: src.core.chatgpt
+  - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-  - module: src.core.templatablesparqlquery
+  - module: naas_abi_core.modules.templatablesparqlquery
     enabled: true
-  - module: src.core.claude
-    enabled: false
-    config:
-      anthropic_api_key: "{{ secret.ANTHROPIC_API_KEY }}"
 
 services:
   secret:
@@ -59,9 +45,10 @@ services:
       config:
         base_path: "storage/object_store"
   triple_store:
-    ontology_adapter:
-      adapter: "oxigraph"
-      config: {}
+    triple_store_adapter:
+      adapter: "fs"
+      config:
+        store_path: "storage/triplestore"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"

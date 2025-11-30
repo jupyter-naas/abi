@@ -1,7 +1,7 @@
-from src import services
-from src.utils.Storage import save_triples
+from naas_abi import services
+from naas_abi.utils.Storage import save_triples
+from naas_abi_core import logger
 from rdflib import Graph, URIRef
-from abi import logger
 
 if __name__ == "__main__":
     # Create new graph for export

@@ -1,9 +1,10 @@
-import inspect
-import pytest
-from pathlib import Path
 import importlib.util
+import inspect
 import sys
-from abi.pipeline import Pipeline
+from pathlib import Path
+
+import pytest
+from naas_abi_core.pipeline import Pipeline
 
 
 def get_pipeline_classes():
