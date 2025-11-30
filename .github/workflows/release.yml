@@ -11,6 +11,9 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-release-${{ github.ref_name }}
+      cancel-in-progress: false
 
     env:
       naas_abi_core_dir: libs/naas-abi-core
@@ -18,6 +21,15 @@ jobs:
       naas_abi_dir: libs/naas-abi
 
     steps:
+
+      - name: Setup | Checkout Repository on Release Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Setup | Force release branch to be at workflow sha
+        run: |
+          git reset --hard ${{ github.sha }}
 
       # ------------------------------------------------------------------- #
       # Note the use of different IDs to distinguish which submodule was    #
