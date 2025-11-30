@@ -398,7 +398,7 @@ test-api: deps
 # Test API initialization with production secrets
 test-api-init: deps
 	@ echo "🔍 Testing API initialization with production secrets..."
-	@ uv run --no-dev src/api.py --test-init
+	@ uv run --no-dev python -m naas_abi_core.apps.api.test_init
 
 # Test API initialization in containerized environment
 test-api-init-container: build
@@ -409,7 +409,7 @@ test-api-init-container: build
 		-e NAAS_CREDENTIALS_JWT_TOKEN="${NAAS_CREDENTIALS_JWT_TOKEN}" \
 		-e OPENAI_API_KEY="${OPENAI_API_KEY}" \
 		-e GITHUB_ACCESS_TOKEN="${GITHUB_ACCESS_TOKEN}" \
-		abi:latest uv run --no-dev src/api.py --test-init
+		abi:latest uv run --no-dev python -m naas_abi_core.apps.api.test_init
 
 # Interactive test selector using fzf (fuzzy finder)
 q=''
