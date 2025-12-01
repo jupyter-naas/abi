@@ -1,6 +1,8 @@
 {
     "python.analysis.extraPaths": [
-        "./lib"
+        "./libs/naas-abi",
+        "./libs/naas-abi-core",
+        "./libs/naas-abi-marketplace",
     ],
     "[python]": {
         "editor.formatOnSave": true,
