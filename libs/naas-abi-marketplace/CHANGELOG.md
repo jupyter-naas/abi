@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.0.3-dev.1 (2025-12-01)
+
+### Bug Fixes
+
+- Working on fixing mypy check for core and naas-abi-marketplace linkedin
+  ([`fc11437`](https://github.com/jupyter-naas/abi/commit/fc11437fa5b655805327783016318416d17a0f1b))
+
+### Refactoring
+
+- Update linkedin and google search modules
+  ([`c1514b6`](https://github.com/jupyter-naas/abi/commit/c1514b6e49f56994e814814834574e4bb3357727))
+
+
 ## v1.0.2 (2025-12-01)
 
 ### Bug Fixes
