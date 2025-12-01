@@ -48,7 +48,7 @@ def workflow() -> CreatePresentationFromTemplateWorkflow:
 def test_workflow_name(workflow: CreatePresentationFromTemplateWorkflow):
     import os
 
-    from naas_abi.utils.Storage import get_json
+    from naas_abi_core.utils.Storage import get_json
 
     json_file_path = "datastore/powerpoint/presentations/tests/presentation_data.json"
     presentation_data = get_json(

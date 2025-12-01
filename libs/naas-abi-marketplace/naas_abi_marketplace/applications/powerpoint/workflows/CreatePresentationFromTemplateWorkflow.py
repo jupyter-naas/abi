@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi import config
-from naas_abi.utils.Storage import save_powerpoint_presentation
+from naas_abi_core.utils.Storage import save_powerpoint_presentation
 from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration

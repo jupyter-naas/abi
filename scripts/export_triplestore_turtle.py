@@ -1,5 +1,5 @@
 from naas_abi import services
-from naas_abi.utils.Storage import save_triples
+from naas_abi_core.utils.Storage import save_triples
 from naas_abi_core import logger
 from rdflib import Graph, URIRef
 

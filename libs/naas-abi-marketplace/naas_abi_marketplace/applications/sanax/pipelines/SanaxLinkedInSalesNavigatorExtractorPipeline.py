@@ -8,8 +8,8 @@ from typing import Annotated
 import pandas as pd
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi.utils.SPARQL import get_identifiers
-from naas_abi.utils.Storage import get_excel, save_excel, save_triples
+from naas_abi_core.utils.SPARQL import get_identifiers
+from naas_abi_core.utils.Storage import get_excel, save_excel, save_triples
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService

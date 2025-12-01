@@ -146,7 +146,7 @@ def test_sanax_linkedin_sales_navigator_extractor_pipeline(
     )
     file_name = "test.xlsx"
     sheet_name = "Sales Navigator Data"
-    from naas_abi.utils.Storage import save_excel
+    from naas_abi_core.utils.Storage import save_excel
 
     save_excel(test_data, dir_path, file_name, sheet_name)
 

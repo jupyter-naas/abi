@@ -6,8 +6,8 @@ from typing import Annotated, Any, Optional
 import requests
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import config
-from naas_abi.utils.SPARQL import get_subject_graph
+from naas_abi import ABIModule
+from naas_abi_core.utils.SPARQL import SPARQLUtils
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import (
@@ -32,6 +32,8 @@ class ImageURLtoAssetPipelineConfiguration(PipelineConfiguration):
 
     triple_store: ITripleStoreService
     naas_integration_config: NaasIntegrationConfiguration
+    workspace_id: str
+    storage_name: str
     data_store_path: str = "datastore/naas/assets"
 
 
@@ -43,9 +45,12 @@ class ImageURLtoAssetPipelineParameters(PipelineParameters):
         subject_uri (str): URI of the subject to add the image asset to
         predicate_uri (str): URI of the predicate to add the image asset to
     """
-
     image_url: Annotated[
-        str, Field(description="URL of the image to be added", pattern=r"https?:\/\S+")
+        str, 
+        Field(
+            description="URL of the image to be added",
+            pattern=r"https?:\/\S+",
+        ),
     ]
     subject_uri: Annotated[
         str,
@@ -54,7 +59,10 @@ class ImageURLtoAssetPipelineParameters(PipelineParameters):
         ),
     ]
     predicate_uri: Annotated[
-        str, Field(description="URI of the predicate to add the image asset to")
+        str,
+        Field(
+            description="URI of the predicate to add the image asset to",
+        ),
     ]
 
 
@@ -62,11 +70,15 @@ class ImageURLtoAssetPipeline(Pipeline):
     """Pipeline for adding a new image asset to the ontology."""
 
     __configuration: ImageURLtoAssetPipelineConfiguration
+    __sparql_utils: SPARQLUtils
 
     def __init__(self, configuration: ImageURLtoAssetPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(configuration.naas_integration_config)
+        self.__sparql_utils: SPARQLUtils = SPARQLUtils(
+            ABIModule.get_instance().engine.services.triple_store
+        )
 
     def trigger(
         self, event: OntologyEvent, ontology_name: str, triple: tuple[Any, Any, Any]
@@ -93,7 +105,7 @@ class ImageURLtoAssetPipeline(Pipeline):
         predicate = URIRef(parameters.predicate_uri)
 
         # Check existing objects for this subject/predicate
-        graph = get_subject_graph(parameters.subject_uri)
+        graph = self.__sparql_utils.get_subject_graph(parameters.subject_uri)
         objects = set(o for _, _, o in graph.triples((subject, predicate, None)))
 
         # Return if URL already exists
@@ -154,8 +166,8 @@ class ImageURLtoAssetPipeline(Pipeline):
         """Upload image to Storage and return the asset URL."""
         asset = self.__naas_integration.upload_asset(
             data=image_data,
-            workspace_id=config.workspace_id,
-            storage_name=config.storage_name,
+            workspace_id=self.__configuration.workspace_id,
+            storage_name=self.__configuration.storage_name,
             prefix=str(self.__configuration.data_store_path),
             object_name=str(file_name),
             visibility="public",
@@ -171,7 +183,7 @@ class ImageURLtoAssetPipeline(Pipeline):
     def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="image_url_to_asset",
+                name="naas_image_url_to_asset",
                 description="Download an image from a URL and add it as an asset to the ontology.",
                 func=lambda **kwargs: self.run(
                     ImageURLtoAssetPipelineParameters(**kwargs)
