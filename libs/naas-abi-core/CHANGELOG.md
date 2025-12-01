@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.2 (2025-12-01)
+
+### Bug Fixes
+
+- Working on fixing mcp-server
+  ([`69ba291`](https://github.com/jupyter-naas/abi/commit/69ba291474a171da1652a8769493d35f3d2d3843))
+
+
 ## v1.0.1 (2025-12-01)
 
 ### Bug Fixes
