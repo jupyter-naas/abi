@@ -236,7 +236,7 @@ def test_init():
 if __name__ == "__main__":
     import sys
 
-    if "--test-init" in sys.argv:
+    if "--test-init" in sys.argv or os.environ.get("TEST_INIT") == "true":
         test_init()
     else:
         api()

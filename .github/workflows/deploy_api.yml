@@ -61,7 +61,8 @@ jobs:
             -e NAAS_CREDENTIALS_JWT_TOKEN="$NAAS_CREDENTIALS_JWT_TOKEN" \
             -e OPENAI_API_KEY="$OPENAI_API_KEY" \
             -e GITHUB_ACCESS_TOKEN="$ACCESS_TOKEN" \
-            ghcr.io/${{ github.repository }}/abi:latest uv run --no-dev python -m naas_abi_core.apps.api.api --test_init
+            -e TEST_INIT="true" \
+            ghcr.io/${{ github.repository }}/abi:latest uv run --no-dev python -m naas_abi_core.apps.api.api
 
       - name: Push latest abi container
         env:
