@@ -5,11 +5,12 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import requests
-from naas_abi_core.utils.Storage import save_json
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_marketplace.applications.google_search import ABIModule
 
 cache = CacheFactory.CacheFS_find_storage(subpath="google_search")
 
@@ -28,7 +29,7 @@ class GoogleProgrammableSearchEngineIntegrationConfiguration(IntegrationConfigur
     api_key: str
     search_engine_id: str
     base_url: str = "https://www.googleapis.com/customsearch/v1"
-    data_store_path: str = "datastore/google_search"
+    datastore_path: str = ABIModule.get_instance().configuration.datastore_path
 
 
 class GoogleProgrammableSearchEngineIntegration(Integration):
@@ -38,12 +39,16 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
     """
 
     __configuration: GoogleProgrammableSearchEngineIntegrationConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(
         self, configuration: GoogleProgrammableSearchEngineIntegrationConfiguration
     ):
         super().__init__(configuration)
         self.__configuration = configuration
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
 
     @cache(
         lambda self, query, num_results: f"googlesearch_search_{query}_{num_results}",
@@ -94,9 +99,9 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
                 break  # Reached the last page
 
         query_clean = clean_string(query)
-        save_json(
+        self.__storage_utils.save_json(
             items,
-            os.path.join(self.__configuration.data_store_path, "queries", query_clean),
+            os.path.join(self.__configuration.datastore_path, "queries", query_clean),
             query_clean + ".json",
         )
         return items

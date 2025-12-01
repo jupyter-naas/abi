@@ -6,7 +6,7 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.Storage import save_json
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from naas_abi_marketplace.applications.google_search.integrations.GoogleProgrammableSearchEngineIntegration import (
@@ -14,6 +14,7 @@ from naas_abi_marketplace.applications.google_search.integrations.GoogleProgramm
     GoogleProgrammableSearchEngineIntegrationConfiguration,
 )
 from pydantic import Field
+from naas_abi_marketplace.applications.google_search import ABIModule
 
 
 @dataclass
@@ -27,7 +28,7 @@ class SearchLinkedInProfilePageWorkflowConfiguration(WorkflowConfiguration):
 
     integration_config: GoogleProgrammableSearchEngineIntegrationConfiguration
     pattern = r"https://.+\.linkedin\.[^/]+/in/[^?]+"
-    data_store_path: str = "datastore/google_search/linkedin_profile_pages"
+    datastore_path: str = os.path.join(ABIModule.get_instance().configuration.datastore_path, "linkedin_profile_pages")
 
 
 class SearchLinkedInProfilePageWorkflowParameters(WorkflowParameters):
@@ -48,11 +49,15 @@ class SearchLinkedInProfilePageWorkflowParameters(WorkflowParameters):
 
 class SearchLinkedInProfilePageWorkflow(Workflow):
     __configuration: SearchLinkedInProfilePageWorkflowConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: SearchLinkedInProfilePageWorkflowConfiguration):
         self.__configuration = configuration
         self.__integration = GoogleProgrammableSearchEngineIntegration(
             self.__configuration.integration_config
+        )
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
         )
 
     def search_linkedin_profile_page(
@@ -93,9 +98,9 @@ class SearchLinkedInProfilePageWorkflow(Workflow):
                         .get("src", None)
                     ),
                 }
-                save_json(
+                self.__storage_utils.save_json(
                     page_data,
-                    os.path.join(self.__configuration.data_store_path, profile_id),
+                    os.path.join(self.__configuration.datastore_path, profile_id),
                     f"{profile_id}.json",
                 )
                 data.append(page_data)

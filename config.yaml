@@ -25,14 +25,6 @@ modules:
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-  - module: naas_abi_core.modules.templatablesparqlquery
-    enabled: true
-  - module: naas_abi_marketplace.applications.naas  
-    enabled: true
-    config:
-      datastore_path: "datastore/naas"
-      naas_api_key: "{{ secret.NAAS_API_KEY }}"
-      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
 services:
   secret:
