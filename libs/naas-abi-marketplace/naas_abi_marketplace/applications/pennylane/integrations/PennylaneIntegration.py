@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import Dict, Optional
 
 import requests
-from naas_abi.utils.Storage import save_json
+from naas_abi_core.utils.Storage import save_json
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,

@@ -6,7 +6,7 @@ from typing import Annotated, Dict, List, Optional
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi import config
-from naas_abi.utils.Storage import save_json
+from naas_abi_core.utils.Storage import save_json
 from naas_abi_core import logger
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters

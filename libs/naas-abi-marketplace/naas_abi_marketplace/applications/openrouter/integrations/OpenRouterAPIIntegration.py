@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import requests
-from naas_abi.utils.Storage import save_json
+from naas_abi_core.utils.Storage import save_json
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
