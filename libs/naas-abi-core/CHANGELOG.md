@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.1 (2025-12-01)
+
+### Bug Fixes
+
+- Working on api tests in CI/CD
+  ([`5012a3b`](https://github.com/jupyter-naas/abi/commit/5012a3b4408f138d6e5c90a36c6f4d250f56af8a))
+
+
 ## v1.0.0 (2025-12-01)
 ## v1.0.0-dev.10 (2025-12-01)
 
