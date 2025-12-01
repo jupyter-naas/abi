@@ -34,6 +34,10 @@ build_command = """
 # path_filters = ["."]
 # scope_prefix = "naas-abi-"
 
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
 [tool.semantic_release.branches.dev]
 match = "^dev"
 prerelease = true
