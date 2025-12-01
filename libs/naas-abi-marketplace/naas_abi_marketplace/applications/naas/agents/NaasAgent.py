@@ -5,7 +5,6 @@ from naas_abi_core.services.agent.Agent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from naas_abi_core.module.Module import BaseModule
 from naas_abi_marketplace.applications.naas import ABIModule
 
 NAME = "Naas"
@@ -61,9 +60,10 @@ def create_agent(
         NaasIntegrationConfiguration,
         as_tools,
     )
+
     naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
     tools += as_tools(naas_integration_config)
-    
+
     # Define configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
