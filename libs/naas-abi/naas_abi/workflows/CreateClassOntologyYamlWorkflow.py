@@ -4,7 +4,7 @@ from typing import Annotated, Any, Union
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi.utils.SPARQL import get_class_uri_from_individual_uri, results_to_list
+from naas_abi_core.utils.SPARQL import get_class_uri_from_individual_uri, results_to_list
 from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
     ConvertOntologyGraphToYamlWorkflow,
     ConvertOntologyGraphToYamlWorkflowConfiguration,

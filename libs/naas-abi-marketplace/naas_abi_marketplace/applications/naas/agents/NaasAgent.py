@@ -1,15 +1,12 @@
 from typing import Optional
 
-from naas_abi import secret
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
-from naas_abi_marketplace.applications.naas.integrations import NaasIntegration
-from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
-    NaasIntegrationConfiguration,
-)
+from naas_abi_core.module.Module import BaseModule
+from naas_abi_marketplace.applications.naas import ABIModule
 
 NAME = "Naas"
 DESCRIPTION = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."
@@ -52,31 +49,33 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
-    # Init
-    tools: list = []
-    agents: list = []
+    # Init module
+    naas_api_key = ABIModule.get_instance().configuration.naas_api_key
 
-    # Set model
+    # Define model
     from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
-    # Set configuration
+    # Define tools
+    tools: list = []
+    from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
+        NaasIntegrationConfiguration,
+        as_tools,
+    )
+    naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
+    tools += as_tools(naas_integration_config)
+    
+    # Define configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
-
-    # Add tools
-    naas_integration_config = NaasIntegrationConfiguration(
-        api_key=secret.get("NAAS_API_KEY")
-    )
-    tools += NaasIntegration.as_tools(naas_integration_config)
 
     return NaasAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
-        agents=agents,
+        agents=[],
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,

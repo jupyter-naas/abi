@@ -45,3 +45,8 @@ prerelease = false
 match = "^dev"
 prerelease = true
 prerelease_token = "dev"
+
+[project.optional-dependencies]
+applications-powerpoint = [
+  "python-pptx>=1.0.2,<2"
+]

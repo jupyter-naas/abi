@@ -3,6 +3,10 @@
 <!-- version list -->
 
 ## v1.0.0 (2025-12-01)
+## v1.0.0-dev.10 (2025-12-01)
+
+
+## v1.0.0-dev.9 (2025-12-01)
 
 ### Bug Fixes
 
@@ -11,9 +15,6 @@
 
 - Configure release on main
   ([`fb32b93`](https://github.com/jupyter-naas/abi/commit/fb32b93ef0e3ce1b8bb291fda902a7a03c0f0646))
-
-
-## v1.0.0-dev.8 (2025-11-30)
 
 ### Bug Fixes
 

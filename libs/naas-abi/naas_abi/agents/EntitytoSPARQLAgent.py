@@ -756,7 +756,7 @@ If you find you missed entities, you can add it again in the message.
         """
         import uuid
 
-        from naas_abi.utils.Storage import save_json, save_text
+        from naas_abi_core.utils.Storage import save_json, save_text
         from naas_abi.workflows.GetObjectPropertiesFromClassWorkflow import (
             GetObjectPropertiesFromClassWorkflow,
             GetObjectPropertiesFromClassWorkflowConfiguration,
@@ -828,7 +828,7 @@ If you find you missed entities, you can add it again in the message.
         Returns:
             Command: Command to end the workflow with the generated SPARQL statement
         """
-        from naas_abi.utils.Storage import save_text
+        from naas_abi_core.utils.Storage import save_text
 
         # Create system message for SPARQL generation
         system_prompt = """# ROLE:
