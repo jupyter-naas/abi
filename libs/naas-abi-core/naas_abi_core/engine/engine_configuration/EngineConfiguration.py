@@ -79,13 +79,6 @@ class GlobalConfig(BaseModel):
 
 
 class EngineConfiguration(BaseModel):
-    workspace_id: str
-    storage_name: str
-    github_repository: str
-    github_project_id: int
-    triple_store_path: str
-    space_name: str
-
     api: ApiConfiguration
 
     services: ServicesConfiguration
