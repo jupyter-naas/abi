@@ -18,7 +18,7 @@ def pipeline() -> InsertDataSPARQLPipeline:
 
 
 def test_insert_data_sparql_pipeline(pipeline: InsertDataSPARQLPipeline):
-    from naas_abi.utils.SPARQL import results_to_list
+    from naas_abi_core.utils.SPARQL import results_to_list
     from rdflib import Literal, Namespace, URIRef
 
     sparql_statement = """

@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 import yfinance as yf
-from naas_abi.utils.Storage import save_json
+from naas_abi_core.utils.Storage import save_json
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import (
     Integration,

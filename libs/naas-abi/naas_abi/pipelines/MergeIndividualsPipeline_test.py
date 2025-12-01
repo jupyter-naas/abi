@@ -20,7 +20,7 @@ def test_merge_individuals_pipeline(pipeline: MergeIndividualsPipeline):
     import time
     from uuid import uuid4
 
-    from naas_abi.utils.SPARQL import get_subject_graph
+    from naas_abi_core.utils.SPARQL import get_subject_graph
     from naas_abi_core import logger, services
     from rdflib import OWL, RDF, RDFS, SKOS, Graph, Literal, Namespace, URIRef
 

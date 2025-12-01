@@ -25,7 +25,7 @@ def pipeline() -> AddIndividualPipeline:
 
 
 def test_add_individual_pipeline(pipeline: AddIndividualPipeline):
-    from naas_abi.utils.SPARQL import results_to_list
+    from naas_abi_core.utils.SPARQL import results_to_list
     from rdflib import OWL, RDF, RDFS, Literal, URIRef
 
     label = "Naas.ai"

@@ -21,7 +21,7 @@ def test_remove_individual_pipeline(pipeline: RemoveIndividualPipeline):
     from uuid import uuid4
 
     from naas_abi import services
-    from naas_abi.utils.SPARQL import get_subject_graph
+    from naas_abi_core.utils.SPARQL import get_subject_graph
     from rdflib import OWL, RDF, RDFS, Graph, Literal, Namespace, URIRef
 
     ABI = Namespace("http://ontology.naas.ai/abi/")

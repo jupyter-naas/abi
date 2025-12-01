@@ -7,7 +7,7 @@ from typing import Any, Dict, List, MutableMapping, Union
 
 import pydash as _
 import requests
-from naas_abi.utils.Storage import get_json, save_image, save_json
+from naas_abi_core.utils.Storage import get_json, save_image, save_json
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
