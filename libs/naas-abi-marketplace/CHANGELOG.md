@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.2 (2025-12-01)
+
+### Bug Fixes
+
+- Working on streamlit and mcp-server deployment
+  ([`54dcb99`](https://github.com/jupyter-naas/abi/commit/54dcb9941a582e1d2c7229acfce7e0f5da80e39f))
+
+
 ## v1.0.1 (2025-12-01)
 
 
