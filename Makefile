@@ -301,9 +301,11 @@ create-ontology: deps
 pull-request-description: deps
 	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run python -m src.cli PullRequestDescriptionAgent
 
-# Naas platform integration agent
 chat-naas-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli NaasAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.naas NaasAgent
+
+chat-powerpoint-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
 
 # Bodo data analysis agent
 chat-bodo-agent: deps
