@@ -2,9 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Any, Union
 
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.SPARQL import get_class_uri_from_individual_uri, results_to_list
 from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
     ConvertOntologyGraphToYamlWorkflow,
     ConvertOntologyGraphToYamlWorkflowConfiguration,
@@ -14,6 +12,11 @@ from naas_abi_core import logger, services
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
+)
+from naas_abi_core.utils.Expose import APIRouter
+from naas_abi_core.utils.SPARQL import (
+    get_class_uri_from_individual_uri,
+    results_to_list,
 )
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
@@ -203,6 +206,9 @@ class CreateClassOntologyYamlWorkflow(Workflow):
         description_stream: str = "",
         tags: list[str | Enum] | None = None,
     ) -> None:
+        if tags is None:
+            tags = []
+        return None
         if tags is None:
             tags = []
         return None

@@ -13,10 +13,18 @@ DEFAULT_MUTUAL_CONNECTIONS_PROFILE_ID = "ACoAAAJHE7sB5OxuKHuzguZ9L6lfDHqw--cdnJg
 
 @pytest.fixture
 def integration() -> LinkedInIntegration:
-    from naas_abi import secret
+    from naas_abi_core.engine.Engine import Engine
 
-    li_at: str = secret.get("li_at")
-    JSESSIONID: str = secret.get("JSESSIONID")
+    # We need to load the engine to load the module.
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.linkedin"])
+
+    from naas_abi_marketplace.applications.linkedin import ABIModule
+
+    module: ABIModule = ABIModule.get_instance()
+
+    li_at: str = module.configuration.li_at
+    JSESSIONID: str = module.configuration.JSESSIONID
     configuration = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
     return LinkedInIntegration(configuration)
 

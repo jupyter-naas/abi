@@ -12,6 +12,7 @@ OWNER = "openai"
 
 model: ChatModel = ChatModel(
     model_id=ID,
+    provider=OWNER,
     name=NAME,
     description=DESCRIPTION,
     image=IMAGE,

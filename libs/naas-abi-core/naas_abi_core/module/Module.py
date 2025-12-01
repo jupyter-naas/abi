@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Dict, List
+from typing import Dict, List, cast
 
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
@@ -13,6 +13,7 @@ from naas_abi_core.pipeline.pipeline import Pipeline
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.workflow.workflow import Workflow
 from pydantic import BaseModel, ConfigDict
+from typing_extensions import Generic, Self, TypeVar
 
 
 class ModuleDependencies:
@@ -46,13 +47,16 @@ class ModuleConfiguration(BaseModel):
     global_config: GlobalConfig
 
 
-class BaseModule:
+TConfig = TypeVar("TConfig", bound=ModuleConfiguration)
+
+
+class BaseModule(Generic[TConfig]):
     """Base interface class for ABI modules."""
 
-    _instances: Dict[type, "BaseModule"] = {}
+    _instances: Dict[type, Self] = {}
 
     _engine: EngineProxy
-    _configuration: ModuleConfiguration
+    _configuration: TConfig
     dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
 
     __ontologies: List[str] = []
@@ -61,7 +65,7 @@ class BaseModule:
     __workflows: List[Workflow] = []
     __pipelines: List[Pipeline] = []
 
-    def __init__(self, engine: EngineProxy, configuration: ModuleConfiguration):
+    def __init__(self, engine: EngineProxy, configuration: TConfig):
         assert isinstance(configuration, ModuleConfiguration), (
             "configuration must be an instance of ModuleConfiguration"
         )
@@ -76,7 +80,9 @@ class BaseModule:
             "BaseModule.Configuration must be a subclass of ModuleConfiguration"
         )
 
-        self._instances[self.__class__] = self
+        self_instance: Self = cast(Self, self)
+
+        self._instances[self.__class__] = self_instance
 
     @classmethod
     def get_dependencies(cls) -> List[str]:
@@ -84,7 +90,7 @@ class BaseModule:
         return getattr(cls, "dependencies", [])
 
     @classmethod
-    def get_instance(cls) -> "BaseModule":
+    def get_instance(cls) -> Self:
         if cls not in cls._instances:
             raise ValueError(f"Module {cls} not initialized")
         return cls._instances[cls]
@@ -94,7 +100,7 @@ class BaseModule:
         return self._engine
 
     @property
-    def configuration(self) -> ModuleConfiguration:
+    def configuration(self) -> TConfig:
         return self._configuration
 
     @property
@@ -242,4 +248,5 @@ class BaseModule:
 
 #     def on_initialized(self):
 #         if hasattr(self.imported_module, "on_initialized"):
+#             self.imported_module.on_initialized()
 #             self.imported_module.on_initialized()

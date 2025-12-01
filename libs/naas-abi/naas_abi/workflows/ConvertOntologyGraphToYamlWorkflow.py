@@ -4,10 +4,10 @@ from typing import Annotated, Dict, Optional
 
 import pydash as _
 import yaml
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi import config, logger
 from naas_abi.mappings import COLORS_NODES
+from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.OntologyYaml import OntologyYaml
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters

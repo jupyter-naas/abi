@@ -15,6 +15,7 @@ naas-abi-core = { path = "../naas-abi-core", editable = true }
 [dependency-groups]
 dev = [
     "mypy>=1.19.0",
+    "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",
 ]
 
@@ -49,4 +50,7 @@ prerelease_token = "dev"
 [project.optional-dependencies]
 applications-powerpoint = [
   "python-pptx>=1.0.2,<2"
+]
+linkedin = [
+    "pandas>=2.3.3",
 ]
