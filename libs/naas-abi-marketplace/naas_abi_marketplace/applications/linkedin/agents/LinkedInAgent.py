@@ -1,6 +1,5 @@
 from typing import Optional
 
-from naas_abi import secret
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -8,11 +7,13 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
+from naas_abi_core.module.Module import BaseModule
+from naas_abi_marketplace.applications.linkedin import ABIModule
 
 NAME = "LinkedIn"
 DESCRIPTION = "Access LinkedIn through your account."
 AVATAR_URL = "https://content.linkedin.com/content/dam/me/business/en-us/amp/brand-site/v2/bg/LI-Bug.svg.original.svg"
-SYSTEM_PROMPT = f"""<role>
+SYSTEM_PROMPT = """<role>
 You are a LinkedIn Professional Agent, an expert assistant specialized in LinkedIn data extraction, analysis, and professional networking insights. 
 </role>
 
@@ -23,7 +24,7 @@ You help users dig into LinkedIn data extraction to find the most relevant infor
 </objective>
 
 <context>
-You have access to profile of the user: {secret.get("LINKEDIN_PROFILE_URL")}.
+You have access to profile of the user: [LINKEDIN_PROFILE_URL].
 </context>
 
 <tools>
@@ -89,24 +90,30 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
-    # Set model
-    # Set tools
+    # Initialize module
+    module: BaseModule = ABIModule.get_instance()
+    li_at = module.configuration.li_at
+    JSESSIONID = module.configuration.JSESSIONID
+    linkedin_profile_url = module.configuration.linkedin_profile_url
+    google_custom_search_api_key = module.configuration.google_custom_search_api_key
+    google_custom_search_engine_id = module.configuration.google_custom_search_engine_id
+
+    # Define model
     from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+
+    # Define tools
+    tools: list = []
+
     from naas_abi_marketplace.applications.linkedin.integrations.LinkedInIntegration import (
         LinkedInIntegrationConfiguration,
+        as_tools,
     )
-
-    tools: list = []
-    li_at = secret.get("li_at")
-    JSESSIONID = secret.get("JSESSIONID")
     linkedin_integration_config = LinkedInIntegrationConfiguration(
-        li_at=li_at, JSESSIONID=JSESSIONID
-    )
-    from naas_abi_marketplace.applications.linkedin.integrations import (
-        LinkedInIntegration,
+        li_at=li_at, 
+        JSESSIONID=JSESSIONID,
     )
 
-    tools += LinkedInIntegration.as_tools(linkedin_integration_config)
+    tools += as_tools(linkedin_integration_config)
 
     from naas_abi_marketplace.applications.google_search.integrations.GoogleProgrammableSearchEngineIntegration import (
         GoogleProgrammableSearchEngineIntegrationConfiguration,
@@ -114,8 +121,8 @@ def create_agent(
 
     google_programmable_search_engine_integration_config = (
         GoogleProgrammableSearchEngineIntegrationConfiguration(
-            api_key=secret.get("GOOGLE_CUSTOM_SEARCH_API_KEY"),
-            search_engine_id=secret.get("GOOGLE_CUSTOM_SEARCH_ENGINE_ID"),
+            api_key=google_custom_search_api_key,
+            search_engine_id=google_custom_search_engine_id,
         )
     )
 
@@ -204,6 +211,9 @@ def create_agent(
     ]
     system_prompt = SYSTEM_PROMPT.replace(
         "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+    )
+    system_prompt = system_prompt.replace(
+        "[LINKEDIN_PROFILE_URL]", linkedin_profile_url
     )
 
     # Set configuration
