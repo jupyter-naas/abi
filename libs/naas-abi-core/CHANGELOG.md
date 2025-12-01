@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.0.0 (2025-12-01)
+
+### Bug Fixes
+
+- Adding authors and removing uneeded configuration
+  ([`c105454`](https://github.com/jupyter-naas/abi/commit/c105454bcb1ed1da88bda6ca23a05e9e3e9c1ed1))
+
+- Configure release on main
+  ([`fb32b93`](https://github.com/jupyter-naas/abi/commit/fb32b93ef0e3ce1b8bb291fda902a7a03c0f0646))
+
+
 ## v1.0.0-dev.9 (2025-11-30)
 
 ### Bug Fixes
