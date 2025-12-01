@@ -4,6 +4,7 @@ from naas_abi_core.module.Module import (
     ModuleDependencies,
 )
 from pydantic import model_validator
+from typing_extensions import Self
 
 
 class ABIModule(BaseModule):
@@ -26,7 +27,4 @@ class ABIModule(BaseModule):
                     "if AI_MODE is cloud, OPENAI_API_KEY and OPENROUTER_API_KEY must be provided"
                 )
             return self
-
-    @property
-    def instance(self) -> "ABIModule":
-        return self.get_instance()
+            return self

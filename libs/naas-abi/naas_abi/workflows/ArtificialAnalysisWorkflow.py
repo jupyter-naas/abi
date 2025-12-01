@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, Set
 
 import requests
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
+from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from pydantic import Field

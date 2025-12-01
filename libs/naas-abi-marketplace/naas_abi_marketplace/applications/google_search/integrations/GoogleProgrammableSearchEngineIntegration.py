@@ -5,11 +5,11 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import requests
-from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.applications.google_search import ABIModule
 
 cache = CacheFactory.CacheFS_find_storage(subpath="google_search")

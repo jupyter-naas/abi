@@ -1,4 +1,3 @@
-from naas_abi_core import logger
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,

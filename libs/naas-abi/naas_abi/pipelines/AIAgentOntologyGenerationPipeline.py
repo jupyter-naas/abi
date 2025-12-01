@@ -6,10 +6,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.utils.Expose import APIRouter
 from rdflib import Graph, Literal, Namespace
 
 ABI = Namespace("http://ontology.naas.ai/abi/")

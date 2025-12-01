@@ -3,9 +3,9 @@ from enum import Enum
 from typing import Annotated, Optional
 
 import pydash
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from pydantic import Field

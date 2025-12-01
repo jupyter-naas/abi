@@ -1,9 +1,10 @@
 from typing import Literal
 
 from naas_abi import ABIModule
+from naas_abi_core.models.Model import ChatModel
 
 
-def get_model():
+def get_model() -> ChatModel:
     ai_mode: Literal["cloud", "local", "airgap"] = (
         ABIModule.get_instance().configuration.global_config.ai_mode
     )
@@ -20,4 +21,5 @@ def get_model():
             model as cloud_model,
         )
 
+        return cloud_model
         return cloud_model

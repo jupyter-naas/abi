@@ -8,24 +8,29 @@ from threading import Lock
 from typing import Annotated
 
 import pandas as pd
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
-from naas_abi_core.pipeline import (Pipeline, PipelineConfiguration,
-                                    PipelineParameters)
-from naas_abi_core.services.triple_store.TripleStorePorts import \
-    ITripleStoreService
+from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
+from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.Graph import ABI, BFO, CCO
+from naas_abi_core.utils.String import create_hash_from_string
 from naas_abi_marketplace.applications.linkedin import ABIModule
 from naas_abi_marketplace.applications.linkedin.integrations.LinkedInExportIntegration import (
-    LinkedInExportIntegration, LinkedInExportIntegrationConfiguration)
+    LinkedInExportIntegration,
+    LinkedInExportIntegrationConfiguration,
+)
+
 # from src.utils.Storage import save_triples, save_csv
 # from src.utils.SPARQL import get_identifiers, results_to_list
-from naas_abi_marketplace.applications.linkedin.pipelines.BasePipeline import \
-    BasePipeline
+from naas_abi_marketplace.applications.linkedin.pipelines.BasePipeline import (
+    BasePipeline,
+)
 from naas_abi_marketplace.applications.linkedin.pipelines.LinkedInExportProfilePipeline import (
-    LinkedInExportProfilePipeline, LinkedInExportProfilePipelineConfiguration,
-    LinkedInExportProfilePipelineParameters)
+    LinkedInExportProfilePipeline,
+    LinkedInExportProfilePipelineConfiguration,
+    LinkedInExportProfilePipelineParameters,
+)
 from pydantic import Field
 from rdflib import OWL, RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 
@@ -647,4 +652,5 @@ if __name__ == "__main__":
             linkedin_public_url=linkedin_public_url
         )
     )
+    print(graph.serialize(format="turtle"))
     print(graph.serialize(format="turtle"))

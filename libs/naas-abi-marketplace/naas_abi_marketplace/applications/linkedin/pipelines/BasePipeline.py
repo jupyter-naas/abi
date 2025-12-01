@@ -7,8 +7,9 @@ class BasePipeline:
     sparql_utils: SPARQLUtils
     storage_utils: StorageUtils
 
-    def __init__(self):
+    def __init__(self) -> None:
         module: ABIModule = ABIModule.get_instance()
 
         self.sparql_utils = SPARQLUtils(module.engine.services.triple_store)
+        self.storage_utils = StorageUtils(module.engine.services.object_storage)
         self.storage_utils = StorageUtils(module.engine.services.object_storage)

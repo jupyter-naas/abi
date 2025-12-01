@@ -2,12 +2,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Optional
 
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi import ABIModule
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.Graph import URI_REGEX
 from naas_abi_core.utils.SPARQL import SPARQLUtils
 from pydantic import Field

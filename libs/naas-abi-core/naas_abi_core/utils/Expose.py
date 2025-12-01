@@ -4,8 +4,9 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from fastapi import APIRouter
+from fastapi import APIRouter
+
+if TYPE_CHECKING:    
     from langchain_core.tools import BaseTool
 
 
@@ -50,4 +51,5 @@ class Expose(ABC):
         Raises:
             NotImplementedError: If the concrete class does not implement this method
         """
+        raise NotImplementedError()
         raise NotImplementedError()

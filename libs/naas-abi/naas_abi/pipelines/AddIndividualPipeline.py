@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Optional
 
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi.workflows.SearchIndividualWorkflow import (
     SearchIndividualWorkflow,
@@ -13,6 +12,7 @@ from naas_abi.workflows.SearchIndividualWorkflow import (
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.utils.Expose import APIRouter
 from pydantic import Field
 from rdflib import DCTERMS, OWL, RDF, RDFS, Graph, Literal, Namespace, URIRef
 

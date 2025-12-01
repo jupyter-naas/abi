@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Any, Union
 
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi import ABIModule
 from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
@@ -14,6 +13,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
 )
+from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.Graph import URI_REGEX
 from naas_abi_core.utils.SPARQL import SPARQLUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration

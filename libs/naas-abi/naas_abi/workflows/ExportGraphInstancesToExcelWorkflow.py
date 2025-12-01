@@ -7,10 +7,10 @@ from io import BytesIO
 from typing import Annotated, Any, Optional
 
 import pandas as pd
-from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi import config, logger
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
