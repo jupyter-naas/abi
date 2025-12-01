@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    if: startsWith(github.event.release.tag_name, 'naas-abi-v')
+    # if: startsWith(github.event.release.tag_name, 'naas-abi-v')
     runs-on: ubuntu-latest
 
     steps:
