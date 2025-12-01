@@ -6,7 +6,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.Storage import save_json
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from naas_abi_marketplace.applications.google_search.integrations.GoogleProgrammableSearchEngineIntegration import (
@@ -14,6 +14,7 @@ from naas_abi_marketplace.applications.google_search.integrations.GoogleProgramm
     GoogleProgrammableSearchEngineIntegrationConfiguration,
 )
 from pydantic import Field
+from naas_abi_marketplace.applications.google_search import ABIModule
 
 
 @dataclass
@@ -27,7 +28,7 @@ class SearchLinkedInOrganizationPageWorkflowConfiguration(WorkflowConfiguration)
 
     integration_config: GoogleProgrammableSearchEngineIntegrationConfiguration
     pattern = r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"
-    data_store_path: str = "datastore/google_search/linkedin_organization_pages"
+    datastore_path: str = os.path.join(ABIModule.get_instance().configuration.datastore_path, "linkedin_organization_pages")
 
 
 class SearchLinkedInOrganizationPageWorkflowParameters(WorkflowParameters):
@@ -44,13 +45,17 @@ class SearchLinkedInOrganizationPageWorkflowParameters(WorkflowParameters):
 
 class SearchLinkedInOrganizationPageWorkflow(Workflow):
     __configuration: SearchLinkedInOrganizationPageWorkflowConfiguration
-
+    __storage_utils: StorageUtils
+    
     def __init__(
         self, configuration: SearchLinkedInOrganizationPageWorkflowConfiguration
     ):
         self.__configuration = configuration
         self.__integration = GoogleProgrammableSearchEngineIntegration(
             self.__configuration.integration_config
+        )
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
         )
 
     def search_linkedin_organization_page(
@@ -101,10 +106,10 @@ class SearchLinkedInOrganizationPageWorkflow(Workflow):
                             .get("src", None)
                         ),
                     }
-                    save_json(
+                    self.__storage_utils.save_json(
                         page_data,
                         os.path.join(
-                            self.__configuration.data_store_path.replace(
+                            self.__configuration.datastore_path.replace(
                                 "organization", organization_type
                             ),
                             organization_id,
