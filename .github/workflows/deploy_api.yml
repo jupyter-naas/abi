@@ -307,7 +307,7 @@ jobs:
           docker pull ghcr.io/${{ github.repository }}/abi:latest
           docker tag ghcr.io/${{ github.repository }}/abi:latest abi:latest
 
-          docker build -t mcp-server -f docker/images/Dockerfile.mcp .
+          docker build -t mcp-server -f libs/naas-abi-core/naas_abi_core/apps/mcp/Dockerfile.mcp .
 
           export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
 
