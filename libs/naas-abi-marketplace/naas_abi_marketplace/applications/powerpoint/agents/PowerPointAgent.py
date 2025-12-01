@@ -11,7 +11,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from naas_abi import config, secret, services
 from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import (
@@ -34,6 +33,8 @@ from naas_abi_marketplace.applications.powerpoint.workflows.CreatePresentationFr
     CreatePresentationFromTemplateWorkflowConfiguration,
     CreatePresentationFromTemplateWorkflowParameters,
 )
+from naas_abi_marketplace.applications.powerpoint import ABIModule
+
 
 NAME = "PowerPoint"
 DESCRIPTION = "An agent specialized in creating PowerPoint presentations."
@@ -141,18 +142,19 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
-    # Set model
-    from naas_abi_core.modules.templatablesparqlquery import get_tools
+    # Define model
     from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
-
+    
+    # Define tools
     tools: list = []
-    templates_tools = [
-        "powerpoint_search_presentation_by_name",
-        "powerpoint_get_slide_by_uri",
-        "powerpoint_get_shape_by_uri",
-        "powerpoint_get_all_text_content_by_presentation",
-    ]
-    tools += get_tools(templates_tools)
+    # from naas_abi_core.modules.templatablesparqlquery import get_tools
+    # templates_tools = [
+    #     "powerpoint_search_presentation_by_name",
+    #     "powerpoint_get_slide_by_uri",
+    #     "powerpoint_get_shape_by_uri",
+    #     "powerpoint_get_all_text_content_by_presentation",
+    # ]
+    # tools += get_tools(templates_tools)
 
     # Set configuration
     system_prompt = SYSTEM_PROMPT.replace(
@@ -170,16 +172,21 @@ def create_agent(
     template_path = (
         "src/marketplace/applications/powerpoint/templates/TemplateNaasPPT.pptx"
     )
+    module: ABIModule = ABIModule.get_instance()
+    workspace_id = module.configuration.workspace_id
+    storage_name = module.configuration.storage_name
     return PowerPointAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
+        datastore_path=datastore_path,
+        template_path=template_path,
+        workspace_id=workspace_id,
+        storage_name=storage_name,
         tools=tools,
         memory=MemorySaver(),
         state=agent_shared_state,
         configuration=agent_configuration,
-        datastore_path=datastore_path,
-        template_path=template_path,
     )
 
 
@@ -191,6 +198,8 @@ class PowerPointAgent(Agent):
         chat_model: BaseChatModel | ChatModel,
         datastore_path: str,
         template_path: str,
+        workspace_id: str,
+        storage_name: str,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver = MemorySaver(),
@@ -220,21 +229,23 @@ class PowerPointAgent(Agent):
             self.__template_name,
             datetime.now().strftime("%Y%m%d%H%M%S"),
         )
-
+        self.__workspace_id: str = workspace_id
+        self.__storage_name: str = storage_name
         self.__powerpoint_configuration = PowerPointIntegrationConfiguration(
             template_path=self.__template_path
         )
         self.__powerpoint_integration = PowerPointIntegration(
             self.__powerpoint_configuration
         )
+        self.__triple_store_service = ABIModule.get_instance().engine.services.triple_store
         self.__powerpoint_pipeline_configuration = (
             AddPowerPointPresentationPipelineConfiguration(
                 powerpoint_configuration=self.__powerpoint_configuration,
-                triple_store=services.triple_store_service,
+                triple_store=ABIModule.get_instance().engine.services.triple_store,
             )
         )
         self.__naas_configuration = NaasIntegrationConfiguration(
-            api_key=secret.get("NAAS_API_KEY")
+            api_key=ABIModule.get_instance().configuration.naas_api_key
         )
 
         self.__create_presentation_from_template_workflow = (
@@ -245,8 +256,8 @@ class PowerPointAgent(Agent):
                     naas_configuration=self.__naas_configuration,
                     pipeline_configuration=self.__powerpoint_pipeline_configuration,
                     datastore_path=self.__datastore_path,
-                    workspace_id=config.workspace_id,
-                    storage_name=config.storage_name,
+                    workspace_id=self.__workspace_id,
+                    storage_name=self.__storage_name,
                 )
             )
         )
@@ -494,7 +505,7 @@ Template shapes to reference:
         import json
 
         import pydash as _
-        from naas_abi.utils.Storage import save_json, save_text
+        from naas_abi_core.utils.Storage import save_json, save_text
         from naas_abi_core.utils.JSON import extract_json_from_completion
 
         logger.debug("📝 Converting markdown to JSON")

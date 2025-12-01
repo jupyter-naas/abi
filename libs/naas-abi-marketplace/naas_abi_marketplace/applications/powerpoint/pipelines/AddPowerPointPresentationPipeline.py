@@ -6,8 +6,8 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi.utils.SPARQL import get_identifier, get_subject_graph
-from naas_abi.utils.Storage import get_powerpoint_presentation
+from naas_abi_core.utils.SPARQL import get_identifier, get_subject_graph
+from naas_abi_core.utils.Storage import get_powerpoint_presentation
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
