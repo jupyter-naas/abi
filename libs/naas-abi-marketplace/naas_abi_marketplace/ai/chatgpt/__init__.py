@@ -4,7 +4,6 @@ from naas_abi_core.module.Module import (
     ModuleDependencies,
 )
 from pydantic import model_validator
-from typing_extensions import Self
 
 
 class ABIModule(BaseModule):

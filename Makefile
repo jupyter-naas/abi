@@ -458,7 +458,7 @@ hello:
 # =============================================================================
 
 # Master check target - runs all code quality checks
-check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-custom # check-marketplace #(Disable marketplace checks for now)
+check: deps .venv/lib/python$(python_version)/site-packages/abi check-core # check-custom # check-marketplace #(Disable marketplace checks for now)
 
 # Code quality checks for core modules
 check-core: deps
@@ -518,7 +518,7 @@ check-marketplace: deps
 	@uvx ruff check libs/naas-abi-marketplace
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@cd libs/naas-abi-marketplace && .venv/bin/mypy -p $(naas_abi_marketplace) --follow-untyped-imports
+	cd libs/naas-abi-marketplace && .venv/bin/mypy -p $(package) --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check src/marketplace

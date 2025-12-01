@@ -1,4 +1,3 @@
-from naas_abi_core import logger
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -22,13 +21,14 @@ class ABIModule(BaseModule):
         """
         Configuration example:
 
-        module: naas_abi_marketplace.applications.naas  
+        module: naas_abi_marketplace.applications.naas
         enabled: true
         config:
             datastore_path: "datastore/naas"
             naas_api_key: "{{ secret.NAAS_API_KEY }}"
             openai_api_key: "{{ secret.OPENAI_API_KEY }}"
         """
+
         datastore_path: str
         openai_api_key: str
         naas_api_key: str

@@ -21,6 +21,7 @@ from naas_abi_core.services.agent.Agent import (
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
+from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_marketplace.applications.powerpoint.integrations.PowerPointIntegration import (
     PowerPointIntegration,
     PowerPointIntegrationConfiguration,
@@ -33,8 +34,6 @@ from naas_abi_marketplace.applications.powerpoint.workflows.CreatePresentationFr
     CreatePresentationFromTemplateWorkflowConfiguration,
     CreatePresentationFromTemplateWorkflowParameters,
 )
-from naas_abi_marketplace.applications.powerpoint import ABIModule
-
 
 NAME = "PowerPoint"
 DESCRIPTION = "An agent specialized in creating PowerPoint presentations."
@@ -144,7 +143,7 @@ def create_agent(
 ) -> Agent:
     # Define model
     from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
-    
+
     # Define tools
     tools: list = []
     # from naas_abi_core.modules.templatablesparqlquery import get_tools
@@ -237,7 +236,9 @@ class PowerPointAgent(Agent):
         self.__powerpoint_integration = PowerPointIntegration(
             self.__powerpoint_configuration
         )
-        self.__triple_store_service = ABIModule.get_instance().engine.services.triple_store
+        self.__triple_store_service = (
+            ABIModule.get_instance().engine.services.triple_store
+        )
         self.__powerpoint_pipeline_configuration = (
             AddPowerPointPresentationPipelineConfiguration(
                 powerpoint_configuration=self.__powerpoint_configuration,
@@ -251,7 +252,7 @@ class PowerPointAgent(Agent):
         self.__create_presentation_from_template_workflow = (
             CreatePresentationFromTemplateWorkflow(
                 CreatePresentationFromTemplateWorkflowConfiguration(
-                    triple_store=services.triple_store_service,
+                    triple_store=ABIModule.get_instance().engine.services.triple_store,
                     powerpoint_configuration=self.__powerpoint_configuration,
                     naas_configuration=self.__naas_configuration,
                     pipeline_configuration=self.__powerpoint_pipeline_configuration,
@@ -505,8 +506,8 @@ Template shapes to reference:
         import json
 
         import pydash as _
-        from naas_abi_core.utils.Storage import save_json, save_text
         from naas_abi_core.utils.JSON import extract_json_from_completion
+        from naas_abi_core.utils.Storage import save_json, save_text
 
         logger.debug("📝 Converting markdown to JSON")
         # Get last messages

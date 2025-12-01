@@ -1,4 +1,3 @@
-from naas_abi_core import logger
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -32,6 +31,7 @@ class ABIModule(BaseModule):
             workspace_id: "{{ config.workspace_id }}"
             storage_name: "{{ config.storage_name }}"
         """
+
         datastore_path: str
         openai_api_key: str
         naas_api_key: str
