@@ -4,10 +4,9 @@ import os
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Dict, List, MutableMapping, Union
-
 import pydash as _
 import requests
-from naas_abi_core.utils.Storage import get_json, save_image, save_json
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
@@ -15,6 +14,7 @@ from naas_abi_core.integration.integration import (
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_marketplace.applications.linkedin import ABIModule
 
 cache = CacheFactory.CacheFS_find_storage(subpath="linkedin")
 
@@ -27,19 +27,20 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
         li_at (str): LinkedIn li_at cookie value for authentication
         JSESSIONID (str): LinkedIn JSESSIONID cookie value for authentication
         base_url (str): Base URL for LinkedIn API
-        data_store_path (str): Path to store cached data
+        datastore_path (str): Path to store cached data
     """
 
     li_at: str
     JSESSIONID: str
     base_url: str = "https://www.linkedin.com/voyager/api"
-    data_store_path: str = "datastore/linkedin"
+    datastore_path: str = ABIModule.get_instance().configuration.datastore_path
 
 
 class LinkedInIntegration(Integration):
     """LinkedIn API integration client focused on organization information."""
 
     __configuration: LinkedInIntegrationConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: LinkedInIntegrationConfiguration):
         """Initialize LinkedIn client with authentication cookies."""
@@ -47,6 +48,9 @@ class LinkedInIntegration(Integration):
         self.__configuration = configuration
         self.__configuration.JSESSIONID = self.__configuration.JSESSIONID.replace(
             '"', ""
+        )
+        self.__storage_utils: StorageUtils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
         )
 
         # Initialize cookies and headers
@@ -191,7 +195,7 @@ class LinkedInIntegration(Integration):
             filename = filename + "_cleaned.json"
         try:
             # Get existing data
-            final_data = get_json(prefix, filename)
+            final_data = self.__storage_utils.get_json(prefix, filename)
             if len(final_data) > 0:
                 return final_data
 
@@ -207,9 +211,9 @@ class LinkedInIntegration(Integration):
 
             # Flatten dict
             final_data = self._flatten_dict(parsed_data)
-            save_json(
+            self.__storage_utils.save_json(
                 final_data,
-                os.path.join(self.__configuration.data_store_path, prefix),
+                os.path.join(self.__configuration.datastore_path, prefix),
                 filename,
             )
             return final_data
@@ -278,7 +282,7 @@ class LinkedInIntegration(Integration):
                 urls.append(image_url)
                 response = requests.get(image_url)
                 if save_images and output_dir:
-                    save_image(
+                    self.__storage_utils.save_image(
                         response.content,
                         output_dir,
                         f"{entity_urn}_{key}_{file_url.split('/')[0]}.png",
@@ -304,20 +308,20 @@ class LinkedInIntegration(Integration):
             Dict: The saved data.
         """
         # Save response json
-        output_dir = os.path.join(self.__configuration.data_store_path, prefix)
-        save_json(data, output_dir, filename + ".json")
+        output_dir = os.path.join(self.__configuration.datastore_path, prefix)
+        self.__storage_utils.save_json(data, output_dir, filename + ".json")
 
         # Save dict data from response json in a separate file
         output_dir_data = os.path.join(output_dir, "data")
         data_dict = data.get("data", {})
-        if len(get_json(output_dir_data, f"{filename}_data.json")) == 0:
-            save_json(data_dict, output_dir_data, f"{filename}_data.json")
+        if len(self.__storage_utils.get_json(output_dir_data, f"{filename}_data.json")) == 0:
+            self.__storage_utils.save_json(data_dict, output_dir_data, f"{filename}_data.json")
 
         # Save dict included from response json in a separate file
         output_dir_included = os.path.join(output_dir, "included")
         included = data.get("included", [])
-        if len(get_json(output_dir_included, f"{filename}_included.json")) == 0:
-            save_json(included, output_dir_included, f"{filename}_included.json")
+        if len(self.__storage_utils.get_json(output_dir_included, f"{filename}_included.json")) == 0:
+            self.__storage_utils.save_json(included, output_dir_included, f"{filename}_included.json")
 
         if save_details:
             for include in included:
@@ -325,8 +329,8 @@ class LinkedInIntegration(Integration):
                 dict_label = dict_type.split(".")[-1].strip()
                 output_dir_dict_type = os.path.join(output_dir_included, dict_label)
                 entity_urn = include.get("entityUrn")
-                if len(get_json(output_dir_dict_type, f"{entity_urn}.json")) == 0:
-                    save_json(include, output_dir_dict_type, f"{entity_urn}.json")
+                if len(self.__storage_utils.get_json(output_dir_dict_type, f"{entity_urn}.json")) == 0:
+                    self.__storage_utils.save_json(include, output_dir_dict_type, f"{entity_urn}.json")
                 for key in [
                     "logo",
                     "backgroundImage",
@@ -338,7 +342,7 @@ class LinkedInIntegration(Integration):
                             include, key, output_dir_dict_type, save_images=save_details
                         )
                     else:
-                        save_json({}, output_dir_dict_type, f"{entity_urn}.json")
+                        self.__storage_utils.save_json({}, output_dir_dict_type, f"{entity_urn}.json")
         return data
 
     @cache(
@@ -958,9 +962,9 @@ class LinkedInIntegration(Integration):
                 "total_connections": total_connections,
                 "connections": entities,
             }
-            save_json(
+            self.__storage_utils.save_json(
                 final_data,
-                os.path.join(self.__configuration.data_store_path, prefix),
+                os.path.join(self.__configuration.datastore_path, prefix),
                 f"{profile_id}_final_data.json",
             )
             return final_data
