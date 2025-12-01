@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 
 # Copy application code
-COPY src/mcp_server.py ./
+COPY libs/naas-abi-core/naas_abi_core/apps/mcp/mcp_server.py ./
 # COPY lib/ ./lib/
 # COPY src/ ./src/
 COPY .env* ./
@@ -32,4 +32,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/ || exit 1
 
 # Run the MCP server
-CMD ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
+CMD ["python", "mcp_server.py"]
