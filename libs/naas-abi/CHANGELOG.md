@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.0-dev.10 (2025-11-30)
+
+### Bug Fixes
+
+- Trigger release
+  ([`681608b`](https://github.com/jupyter-naas/abi/commit/681608bc3c4732a800c3987521b8fb2637e4ad39))
+
+
 ## v1.0.0-dev.9 (2025-11-30)
 
 
