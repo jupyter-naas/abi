@@ -18,7 +18,6 @@ from naas_abi_core.services.object_storage.ObjectStorageFactory import (
 )
 from pydantic import BaseModel, Field
 
-LOGO_URL = "https://logo.clearbit.com/naas.ai"
 REGEX = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 
 
