@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.4-dev.2 (2025-12-02)
+
+### Bug Fixes
+
+- Github and support module
+  ([`8f113ea`](https://github.com/jupyter-naas/abi/commit/8f113ea071126a4ebd44e2aa22b26f55aa22bee3))
+
+
 ## v1.0.4-dev.1 (2025-12-01)
 
 
