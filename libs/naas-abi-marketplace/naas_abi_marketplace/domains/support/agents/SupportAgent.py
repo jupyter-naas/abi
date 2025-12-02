@@ -1,6 +1,5 @@
 from typing import Optional
 
-from naas_abi import config, secret
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -8,12 +7,12 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
+from naas_abi_marketplace.domains.support import ABIModule
 
 NAME = "Support"
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "Get user feedbacks to create tickets for support team in GitHub."
-SYSTEM_PROMPT = f"""
-<role>
+SYSTEM_PROMPT = """<role>
 You are a Support Agent focused on handling user feedbacks.
 </role>
 
@@ -23,7 +22,7 @@ Gather feedbacks from users and create tickets for support team.
 
 <context>
 You will receive messages from users.
-You are working with the GitHub repository: {config.github_repository}, {config.github_project_id}.
+You are working with the GitHub repository: [GITHUB_REPOSITORY], [GITHUB_PROJECT_ID].
 </context>
 
 <tasks>
@@ -47,7 +46,7 @@ You are working with the GitHub repository: {config.github_repository}, {config.
     - repository (): if specified in brief, use the `github_list_organization_repositories` tool to get the repository's information and assign the appropriate repository to the ticket. If not specified, use the default repository.
     ```
     ### Repository (change if specified in brief)
-    {config.github_repository} (default)
+    [GITHUB_REPOSITORY] (default)
 
     ### Title
     Title of the ticket.
@@ -91,8 +90,15 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
+    # Initialize module
+    module = ABIModule.get_instance()
+    github_project_id = module.configuration.github_project_id
+    default_repository = module.configuration.default_repository
+    github_access_token = module.configuration.github_access_token
+
     # Define model
-    from naas_abi_marketplace.domains.support.models.default import model
+    from naas_abi_marketplace.domains.support.models.default import get_model
+    model = get_model()
 
     # Define tools
     tools: list = []
@@ -116,8 +122,6 @@ def create_agent(
         ReportBugWorkflow,
         ReportBugWorkflowConfiguration,
     )
-
-    github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
     github_integration_config = GitHubIntegrationConfiguration(
         access_token=github_access_token
     )
@@ -212,16 +216,17 @@ def create_agent(
             intent_type=IntentType.TOOL,
             intent_target="feature_request",
         ),
-        Intent(
-            intent_value="Create an issue in GitHub",
-            intent_type=IntentType.TOOL,
-            intent_target="feature_request",
-        ),
     ]
 
     # Set configuration
     system_prompt = SYSTEM_PROMPT.replace(
         "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+    )
+    system_prompt = system_prompt.replace(
+        "[GITHUB_PROJECT_ID]", str(github_project_id)
+    )
+    system_prompt = system_prompt.replace(
+        "[GITHUB_REPOSITORY]", default_repository
     )
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=system_prompt)

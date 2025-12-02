@@ -1,6 +1,6 @@
 from typing import Literal
 
-from naas_abi import ABIModule
+from naas_abi_marketplace.applications.github import ABIModule
 from naas_abi_core.models.Model import ChatModel
 
 
