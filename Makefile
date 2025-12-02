@@ -301,6 +301,9 @@ create-ontology: deps
 pull-request-description: deps
 	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run python -m src.cli PullRequestDescriptionAgent
 
+chat-github-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.github GitHubAgent
+
 chat-linkedin-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.linkedin LinkedInAgent
 
@@ -310,13 +313,8 @@ chat-naas-agent: deps
 chat-powerpoint-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
 
-# Bodo data analysis agent
-chat-bodo-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli BodoAgent
-
-# Customer support specialized agent
 chat-support-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli SupportAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.domains.support SupportAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS
