@@ -9,7 +9,7 @@ dependencies = [
     # "pyyaml>=6.0.1,<7",
     "naas-abi",
     "naas-abi-core[all]",
-    "naas-abi-marketplace[applications-powerpoint]",
+    "naas-abi-marketplace[applications-powerpoint,ai-chatgpt]",
     # "requests[socks]>=2.32.3,<3",
     # "fastapi>=0.115.5,<0.116",
     # "uvicorn[standard]>=0.32.1,<0.33",
