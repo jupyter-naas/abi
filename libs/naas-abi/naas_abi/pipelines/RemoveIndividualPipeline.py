@@ -3,7 +3,8 @@ from enum import Enum
 from typing import Annotated, List
 
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import ABIModule, logger
+from naas_abi import ABIModule
+from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
