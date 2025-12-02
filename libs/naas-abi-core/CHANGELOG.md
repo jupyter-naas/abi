@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.6 (2025-12-02)
+
+### Bug Fixes
+
+- Working on abi cli
+  ([`e1c11a1`](https://github.com/jupyter-naas/abi/commit/e1c11a15a80403fdb1992faa4dcb035fbaf9b5c0))
+
+
 ## v1.0.5 (2025-12-02)
 
 ### Bug Fixes
