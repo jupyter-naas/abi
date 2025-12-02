@@ -50,8 +50,8 @@ all = [
     "naas-abi-core[qdrant]",
 ]
 [project.scripts]
-abi = "abi.cli:main"
-onto2py = "abi.utils.onto2py.__main__:main"
+abi = "naas_abi_core.cli:main"
+onto2py = "naas_abi_core.utils.onto2py.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
