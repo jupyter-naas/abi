@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.5 (2025-12-02)
+
+### Bug Fixes
+
+- Working on dependencies
+  ([`cfb492f`](https://github.com/jupyter-naas/abi/commit/cfb492f5f1604d405ff0221d505e90101614d59e))
+
+
 ## v1.0.4 (2025-12-02)
 
 ### Bug Fixes
