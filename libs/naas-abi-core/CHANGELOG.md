@@ -8,6 +8,15 @@
 
 - Update release commit parser option
   ([`6eabfd8`](https://github.com/jupyter-naas/abi/commit/6eabfd8f61681240a1974affd377b983bd7885a9))
+## v1.0.4-dev.2 (2025-12-02)
+
+
+## v1.0.4-dev.1 (2025-12-02)
+
+### Bug Fixes
+
+- **naas_abi_core**: Working on dependencies
+  ([`54ad989`](https://github.com/jupyter-naas/abi/commit/54ad9896794cf831e503aef22170a0b0485e9e31))
 
 
 ## v1.0.3-dev.1 (2025-12-01)
