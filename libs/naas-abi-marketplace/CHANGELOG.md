@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.5 (2025-12-02)
+
+### Bug Fixes
+
+- Update release commit parser option
+  ([`6eabfd8`](https://github.com/jupyter-naas/abi/commit/6eabfd8f61681240a1974affd377b983bd7885a9))
+
+
 ## v1.0.4-dev.1 (2025-12-01)
 ## v1.0.4 (2025-12-01)
 
