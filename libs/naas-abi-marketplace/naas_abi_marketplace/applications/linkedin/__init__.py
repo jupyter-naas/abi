@@ -16,7 +16,7 @@ class _Configuration(ModuleConfiguration):
     module: naas_abi_marketplace.applications.linkedin
     enabled: true
     config:
-        datastore_path: "datastore/linkedin"
+        datastore_path: "linkedin"
         li_at: "{{ secret.li_at }}"
         JSESSIONID: "{{ secret.JSESSIONID }}"
         linkedin_profile_url: "https://www.linkedin.com/in/your-profile-id/"
