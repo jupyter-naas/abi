@@ -2,7 +2,7 @@ import datetime
 import json
 import os
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, MutableMapping, Union
 import pydash as _
 import requests
@@ -15,6 +15,7 @@ from naas_abi_core.integration.integration import (
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_marketplace.applications.linkedin import ABIModule
+
 
 cache = CacheFactory.CacheFS_find_storage(subpath="linkedin")
 
@@ -33,7 +34,7 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
     li_at: str
     JSESSIONID: str
     base_url: str = "https://www.linkedin.com/voyager/api"
-    datastore_path: str = ABIModule.get_instance().configuration.datastore_path
+    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
 
 class LinkedInIntegration(Integration):
@@ -903,7 +904,8 @@ class LinkedInIntegration(Integration):
         self,
         profile_id: str,
         start: int = 0,
-        current_company_id: str = "",
+        current_company_id: str | None = None,
+        connection_distance: str = "F",
         return_cleaned_json: bool = False,
     ) -> Dict:
         """Get mutual connections for a LinkedIn profile.
@@ -912,10 +914,16 @@ class LinkedInIntegration(Integration):
         Args:
             profile_id (str): LinkedIn profile ID.
             start (int, optional): Start index for pagination. Defaults to 0.
-            current_company_id (str, optional): LinkedIn company ID. Defaults to "".
+            current_company_id (str, optional): LinkedIn company ID. Defaults to None.
+            connection_distance (str, optional): Connection distance. 
+               Defaults to "F" for "First Degree", "S" for "Second Degree", "O" for "Others".
             return_cleaned_json (bool, optional): Whether to return cleaned JSON data. Defaults to False.
         """
-        prefix = os.path.join("get_mutual_connexions", profile_id)
+        prefix = os.path.join("get_mutual_connexions", profile_id, connection_distance)
+        if current_company_id is None:
+            current_company_id = ""
+        else:
+            prefix = os.path.join(prefix, current_company_id)
 
         # Full URL with query parameters directly embedded
         endpoint = (
@@ -926,7 +934,7 @@ class LinkedInIntegration(Integration):
             "query:(flagshipSearchIntent:SEARCH_SRP,"
             f"queryParameters:List((key:connectionOf,value:List({profile_id})),"
             f"(key:currentCompany,value:List({current_company_id})),"
-            "(key:network,value:List(F)),"
+            f"(key:network,value:List({connection_distance})),"
             "(key:resultType,value:List(PEOPLE))),"
             "includeFiltersInResponse:false))"
         )
