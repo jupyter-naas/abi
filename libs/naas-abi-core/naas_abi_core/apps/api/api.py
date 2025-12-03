@@ -16,6 +16,7 @@ from fastapi.security.oauth2 import OAuth2
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
 from naas_abi_core import logger
+from importlib.resources import files
 
 # Docs
 from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML, TAGS_METADATA
@@ -49,8 +50,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount the static directory
-app.mount("/static", StaticFiles(directory="assets"), name="static")
+
+static_dir = os.path.join(os.path.dirname(str(files("naas_abi_core"))), "assets")
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
 
 
 # Custom OAuth2 class that accepts query parameter
