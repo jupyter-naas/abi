@@ -474,7 +474,7 @@ check-core: deps
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
-	@.venv/bin/mypy -p naas_abi_core --follow-untyped-imports
+	@cd libs/naas-abi-core && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi-core
