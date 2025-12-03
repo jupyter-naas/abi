@@ -49,5 +49,5 @@ main.add_command(chat)
 main.add_command(new)
 main.add_command(init)
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+main()

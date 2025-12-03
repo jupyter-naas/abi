@@ -95,3 +95,8 @@ match = "^dev"
 prerelease = true
 prerelease_token = "dev"
 
+[tool.hatch.build.targets.wheel.force-include]
+"assets" = "assets"
+
+[tool.hatch.build.targets.sdist.force-include]
+"assets" = "assets"
