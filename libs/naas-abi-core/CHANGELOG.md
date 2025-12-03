@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.0.7 (2025-12-03)
+
+### Bug Fixes
+
+- Working on embedding assets in the release
+  ([`9737428`](https://github.com/jupyter-naas/abi/commit/97374285cb3c79ed03399859c58b8cac6373627d))
+
+- **marketplace**: Convert applications.pubmed to a real module
+  ([`b9ac395`](https://github.com/jupyter-naas/abi/commit/b9ac395c0e90980fb19379d40ae5017efcf06d1d))
+
+
 ## v1.0.6 (2025-12-02)
 
 ### Bug Fixes
