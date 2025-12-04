@@ -223,47 +223,82 @@ local-build: deps
 	@ docker compose build
 
 # =============================================================================
-# CORE AGENTS
+# CHAT WITH CORE AGENTS
 # =============================================================================
 
 agent=AbiAgent
 # Generic chat command - allows specifying agent via agent=AgentName parameter
 chat: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli $(agent)
+	@ LOG_LEVEL=DEBUG uv run cli chat $(module_name) $(agent_name)
 
 # Main ABI agent - the primary conversational AI interface
 chat-abi-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli AbiAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi AbiAgent
+
+# =============================================================================
+# CHAT WITH MARKETPLACE AI AGENTS
+# =============================================================================
 
 chat-chatgpt-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli ChatGPTAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.chatgpt ChatGPTAgent
 
 chat-claude-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli ClaudeAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.claude ClaudeAgent
 
 chat-deepseek-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli DeepSeekAgent
+	@ LOG_LEVEL=DEBUG uv run cli chat naas_abi_marketplace.ai.deepseek DeepSeekAgent
 
 chat-gemini-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli GeminiAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.gemini GeminiAgent
 
 chat-gemma-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli GemmaAgent
+	@ LOG_LEVEL=DEBUG uv run cli chat naas_abi_marketplace.ai.gemma GemmaAgent
 
 chat-grok-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli GrokAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.grok GrokAgent
 
 chat-llama-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli LlamaAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.llama LlamaAgent
 
 chat-mistral-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli MistralAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.mistral MistralAgent
 
 chat-perplexity-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli PerplexityAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.perplexity PerplexityAgent
 
 chat-qwen-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli QwenAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.qwen QwenAgent
+
+# =============================================================================
+# CHAT WITH MARKETPLACE APPLICATIONS AGENTS
+# =============================================================================
+
+# Generate pull request description using AI agent
+pull-request-description: deps
+	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run python -m src.cli PullRequestDescriptionAgent
+
+chat-github-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.github GitHubAgent
+
+chat-google-search-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_search GoogleSearchAgent
+
+chat-linkedin-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.linkedin LinkedInAgent
+
+chat-naas-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.naas NaasAgent
+
+chat-powerpoint-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
+
+# =============================================================================
+# CHAT WITH MARKETPLACE DOMAINS AGENTS
+# =============================================================================
+
+chat-support-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.domains.support SupportAgent
+
 
 # =============================================================================
 # MODULE AND COMPONENT CREATION
@@ -293,31 +328,6 @@ create-pipeline: deps
 create-ontology: deps
 	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-ontology
 
-# =============================================================================
-# CHAT WITH MARKETPLACE AGENTS
-# =============================================================================
-
-# Generate pull request description using AI agent
-pull-request-description: deps
-	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run python -m src.cli PullRequestDescriptionAgent
-
-chat-github-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.github GitHubAgent
-
-chat-google-search-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_search GoogleSearchAgent
-
-chat-linkedin-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.linkedin LinkedInAgent
-
-chat-naas-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.naas NaasAgent
-
-chat-powerpoint-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
-
-chat-support-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.domains.support SupportAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS

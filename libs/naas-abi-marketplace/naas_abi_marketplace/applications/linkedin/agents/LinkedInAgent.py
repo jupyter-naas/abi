@@ -7,8 +7,6 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from naas_abi_core.module.Module import BaseModule
-from naas_abi_marketplace.applications.linkedin import ABIModule
 
 NAME = "LinkedIn"
 DESCRIPTION = "Access LinkedIn through your account."
@@ -86,12 +84,16 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Initialize module
-    module: BaseModule = ABIModule.get_instance()
+    from naas_abi_marketplace.applications.linkedin import ABIModule
+    module = ABIModule.get_instance()
     li_at = module.configuration.li_at
     JSESSIONID = module.configuration.JSESSIONID
     linkedin_profile_url = module.configuration.linkedin_profile_url
-    google_custom_search_api_key = module.configuration.google_custom_search_api_key
-    google_custom_search_engine_id = module.configuration.google_custom_search_engine_id
+
+    # Get google custom search api key and engine id
+    from naas_abi_marketplace.applications.google_search import ABIModule as GoogleSearchABIModule
+    google_custom_search_api_key = GoogleSearchABIModule.get_instance().configuration.google_custom_search_api_key
+    google_custom_search_engine_id = GoogleSearchABIModule.get_instance().configuration.google_custom_search_engine_id
 
     # Define model
     from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model

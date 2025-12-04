@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Annotated, Dict, List, Optional
 from fastapi import APIRouter
@@ -35,11 +35,11 @@ class ReportBugWorkflowConfiguration(WorkflowConfiguration):
     """
     github_integration_config: GitHubIntegrationConfiguration
     github_graphql_integration_config: GitHubGraphqlIntegrationConfiguration
-    data_store_path: str = ABIModule.get_instance().configuration.datastore_path
-    project_node_id: str = ABIModule.get_instance().configuration.project_node_id
-    status_field_id: str = ABIModule.get_instance().configuration.status_field_id
-    priority_field_id: str = ABIModule.get_instance().configuration.priority_field_id
-    iteration_field_id: str = ABIModule.get_instance().configuration.iteration_field_id
+    data_store_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    project_node_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.project_node_id)
+    status_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.status_field_id)
+    priority_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.priority_field_id)
+    iteration_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.iteration_field_id)
 
 
 class ReportBugParameters(WorkflowParameters):

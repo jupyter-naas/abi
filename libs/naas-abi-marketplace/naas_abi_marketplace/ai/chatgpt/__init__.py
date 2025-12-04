@@ -10,3 +10,4 @@ class ABIModule(BaseModule):
 
     class Configuration(ModuleConfiguration):
         openai_api_key: str
+        openrouter_api_key: str | None = None
