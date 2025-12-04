@@ -99,6 +99,7 @@ Note: This creates production-ready image concepts. The descriptions can be used
 - Follow ethical guidelines in all interactions
 - Avoid generating harmful, biased, or misleading content
 - Maintain professional boundaries while being approachable"""
+
 SUGGESTIONS: list = [
     {
         "label": "Analyze Code",
@@ -124,14 +125,14 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
     # Define model
-    from naas_abi.core.gemini.models.google_gemini_2_5_flash import model
+    from naas_abi_marketplace.ai.gemini.models.google_gemini_2_5_flash import model
 
     # Init
     tools: list = []
     agents: list = []
 
     # Import workflow here to avoid circular imports
-    from naas_abi.core.gemini.workflows.ImageGenerationStorageWorkflow import (
+    from naas_abi_marketplace.ai.gemini.workflows.ImageGenerationStorageWorkflow import (
         ImageGenerationStorageWorkflow,
         ImageGenerationStorageWorkflowConfiguration,
     )
