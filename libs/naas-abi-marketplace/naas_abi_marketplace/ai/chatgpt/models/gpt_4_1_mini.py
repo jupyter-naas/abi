@@ -14,8 +14,7 @@ model: ChatModel = ChatModel(
         model=MODEL_ID,
         temperature=0,
         api_key=SecretStr(
-            ABIModule.get_instance().configuration.openrouter_api_key
-            or ABIModule.get_instance().configuration.openai_api_key
+            ABIModule.get_instance().configuration.openai_api_key
         ),
     ),
 )
