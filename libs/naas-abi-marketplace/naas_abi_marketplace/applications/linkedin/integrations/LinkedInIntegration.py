@@ -14,6 +14,7 @@ from naas_abi_core.integration.integration import (
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core import logger
 from naas_abi_marketplace.applications.linkedin import ABIModule
 
 
@@ -33,6 +34,7 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
 
     li_at: str
     JSESSIONID: str
+    linkedin_url: str
     base_url: str = "https://www.linkedin.com/voyager/api"
     datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
@@ -372,51 +374,81 @@ class LinkedInIntegration(Integration):
                 params=params,
             )
             response.raise_for_status()
-            if response.content:
-                return response.json()
-            return {}
+            return response.json()
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"LinkedIn API request failed: {str(e)}")
+            return {
+                "error": f"LinkedIn API request failed: {str(e)}",
+                "request_data": {
+                    "url": url,
+                    "headers": self.headers,
+                    "cookies": self.cookies,
+                    "params": params,
+                },
+                "response_data": {
+                    "status_code": response.status_code,
+                    "text": response.text,
+                },
+            }
 
-    def get_organization_public_id(self, url: str) -> str:
-        """Extract organization ID from LinkedIn URL.
+    def get_organization_id_from_url(self, url: str) -> Dict[str, str]:
+        """Get organization ID from LinkedIn organization URL.
 
         Handles company, school and showcase pages.
-        """
-        if "/company/" in url:
-            return url.rsplit("/company/")[-1].rsplit("/")[0]
-        elif "/school/" in url:
-            return url.rsplit("/school/")[-1].rsplit("/")[0]
-        elif "/showcase/" in url:
-            return url.rsplit("/showcase/")[-1].rsplit("/")[0]
-        else:
-            raise ValueError(f"Invalid LinkedIn URL: {url}")
-
-    def get_organization_id(self, linkedin_url: str) -> str:
-        """Get organization ID from LinkedIn public ID.
 
         Args:
-            linkedin_url (str): LinkedIn organization URL.
+            url (str): LinkedIn organization URL (e.g., "https://www.linkedin.com/company/naas-ai/")
+
+        Returns:
+            str: Organization ID
         """
-        data = self.get_organization_info(linkedin_url)
+        if "/company/" in url:
+            org_id = url.rsplit("/company/")[-1].rsplit("/")[0]
+        elif "/school/" in url:
+            org_id = url.rsplit("/school/")[-1].rsplit("/")[0]
+        elif "/showcase/" in url:
+            org_id = url.rsplit("/showcase/")[-1].rsplit("/")[0]
+        else:
+            return {
+                "error": f"LinkedIn organization URL '{url}' not recognized. Must contain /company/, /school/ or /showcase/ in the URL",
+            }
+        return {"result": org_id}
+
+    def get_organization_id(self, url: str) -> Dict[str, str]:
+        """Get organization ID from LinkedIn organization data.
+
+        Args:
+            url (str): LinkedIn organization URL.
+        """
+        data = self.get_organization_info(url)
         elements = data.get("data", {}).get("*elements", [])
         if not elements:
-            raise ValueError(f"No organization found for URL: {linkedin_url}")
-        return elements[0].replace("urn:li:fs_normalized_company:", "")
+            return {
+                "error": f"LinkedIn organization ID not found for URL '{url}'",
+            }
+        return {"result": elements[0].replace("urn:li:fs_normalized_company:", "")}
 
     def get_organization_info(
-        self, linkedin_url: str, return_cleaned_json: bool = False
+        self, 
+        url: str, 
+        return_cleaned_json: bool = False
     ) -> Dict:
         """Get detailed information about a LinkedIn organization using LinkedIn's native API.
 
         Args:
-            linkedin_url (str): LinkedIn organization URL (e.g., "https://www.linkedin.com/company/naas-ai/")
+            url (str): LinkedIn organization URL (e.g., "https://www.linkedin.com/company/naas-ai/")
 
         Returns:
             Dict: Raw organization data from LinkedIn API
         """
         # Get organization ID
-        org_id = self.get_organization_public_id(linkedin_url)
+        org_id_result = self.get_organization_id_from_url(url)
+        if org_id_result.get("error"):
+            return org_id_result
+        
+        org_id = org_id_result.get("result")
+        if not org_id:
+            return {"error": f"LinkedIn organization ID is empty for URL '{url}'"}
+
         prefix = os.path.join("get_organization_info", org_id)
 
         # Set up parameters for the request
@@ -433,21 +465,48 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, org_id, data)
         return data
 
-    def get_profile_public_id(self, linkedin_url: str) -> str:
-        """Extract profile ID from LinkedIn URL.
+    def get_profile_id_from_url(self, url: str) -> Dict[str, str]:
+        """Extract profile ID from LinkedIn profile URL.
 
         Handles profile URLs with or without the /in/ prefix.
-        """
-        if "/in/" in linkedin_url:
-            return linkedin_url.rsplit("/in/")[-1].rsplit("/")[0]
-        return linkedin_url
 
-    def get_profile_id(self, linkedin_url: str) -> str:
-        """Extract profile ID from LinkedIn URL.
+        Args:
+            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
 
-        Handles profile URLs with or without the /in/ prefix.
+        Returns:
+            Dict: Profile ID
         """
-        data = self.get_profile_top_card(linkedin_url)
+        if "/in/" in url:
+            return {"result": url.rsplit("/in/")[-1].rsplit("/")[0]}
+        return {"error": f"LinkedIn profile URL '{url}' not recognized. Must contain /in/ in the URL"}
+    
+    def get_profile_public_id(self, url: str) -> Dict[str, str]:
+        """Get profile public ID / public identifier from LinkedIn profile data.
+
+        Args:
+            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+
+        Returns:
+            str: Profile public ID / public identifier
+        """
+        data = self.get_profile_top_card(url)
+        elements = data.get('data', {}).get('data', {}).get('identityDashProfilesByMemberIdentity', {}).get('*elements', [])
+        if not elements:
+            return {"error": f"LinkedIn profile public ID not found for URL '{url}'"}
+        entity_urn = elements[0]
+        data_entity = _.find(data.get('included', []), lambda x: x.get('entityUrn') == entity_urn)
+        return {"result": data_entity.get('publicIdentifier') if data_entity else ""}
+
+    def get_profile_id(self, url: str) -> Dict[str, str]:
+        """Get profile ID from LinkedIn profile data.
+
+        Args:
+            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+
+        Returns:
+            str: Profile ID starting with AcoAA
+        """
+        data = self.get_profile_top_card(url)
         elements = (
             data.get("data", {})
             .get("data", {})
@@ -455,24 +514,36 @@ class LinkedInIntegration(Integration):
             .get("*elements", [])
         )
         if not elements:
-            raise ValueError("No profile found")
-        return elements[0].replace("urn:li:fsd_profile:", "")
+            logger.warning(f"No profile found for URL: {url}")
+            return {"error": f"LinkedIn profile ID not found for URL '{url}'"}
+        return {"result": elements[0].replace("urn:li:fsd_profile:", "")}
 
     def get_profile_top_card(
-        self, linkedin_url: str, return_cleaned_json: bool = False
+        self, 
+        url: str, 
+        return_cleaned_json: bool = False
     ) -> Dict:
-        """Get profile top card information for a LinkedIn profile.
+        """Get profile top card information for a LinkedIn profil url.
 
         Args:
-            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
 
         Returns:
             Dict: Raw profile top card data from LinkedIn API
         """
         # Get profile ID
-        profile_id = self.get_profile_public_id(linkedin_url)
+        profile_id_result = self.get_profile_id_from_url(url)
+        if profile_id_result.get("error"):
+            return profile_id_result
+        
+        profile_id = profile_id_result.get("result")
+        if not profile_id:
+            return {"error": f"LinkedIn profile ID is empty for URL '{url}'"}
+        
+        if profile_id.startswith('AcoAA'):
+            return {"error": f"LinkedIn profile ID '{profile_id}' starts with AcoAA. LinkedIn profile URL is not valid: {url}"}
+        
         prefix = os.path.join("get_profile_top_card", profile_id)
-
         endpoint = f"/graphql?variables=(vanityName:{profile_id})&queryId=voyagerIdentityDashProfiles.0bc93b66ba223b9d30d1cb5c05ff031a"
         data = self._make_request(method="GET", endpoint=endpoint)
         self.__save_json(prefix, profile_id, data)
@@ -482,7 +553,7 @@ class LinkedInIntegration(Integration):
 
     def get_profile_data(
         self,
-        linkedin_url: str,
+        url: str,
         profile_type: str = "skills",
         locale: str = "en_US",
         return_cleaned_json: bool = False,
@@ -490,16 +561,27 @@ class LinkedInIntegration(Integration):
         """Get profile skills for a LinkedIn profile.
 
         Args:
-            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
 
         Returns:
             Dict: Raw profile skills data from LinkedIn API
         """
         # Get profile ID
-        profile_id = self.get_profile_id(linkedin_url)
-        profile_public_id = self.get_profile_public_id(linkedin_url)
+        profile_id_result = self.get_profile_id(url)
+        if profile_id_result.get("error"):
+            return profile_id_result
+        profile_id = profile_id_result.get("result")
+        if not profile_id:
+            return {"error": f"LinkedIn profile ID is empty for URL '{url}'"}
+        
+        profile_public_id_result = self.get_profile_public_id(url)
+        if profile_public_id_result.get("error"):
+            return profile_public_id_result
+        profile_public_id = profile_public_id_result.get("result")
+        if not profile_public_id:
+            return {"error": f"LinkedIn profile public ID is empty for URL '{url}'"}
+        
         prefix = os.path.join("get_profile_data", profile_public_id, profile_type)
-
         endpoint = f"/graphql?variables=(profileUrn:urn%3Ali%3Afsd_profile%3A{profile_id},sectionType:{profile_type},locale:{locale})&queryId=voyagerIdentityDashProfileComponents.c5d4db426a0f8247b8ab7bc1d660775a"
         data = self._make_request(method="GET", endpoint=endpoint)
         self.__save_json(prefix, profile_id, data)
@@ -508,50 +590,52 @@ class LinkedInIntegration(Integration):
         return data
 
     def get_profile_skills(
-        self, linkedin_url: str, return_cleaned_json: bool = False
+        self, url: str, return_cleaned_json: bool = False
     ) -> Dict:
         """Get profile skills for a LinkedIn profile.
 
         Args:
-            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
 
         Returns:
             Dict: Raw profile skills data from LinkedIn API
         """
         return self.get_profile_data(
-            linkedin_url, profile_type="skills", return_cleaned_json=return_cleaned_json
+            url, 
+            profile_type="skills", 
+            return_cleaned_json=return_cleaned_json
         )
 
     def get_profile_experience(
-        self, linkedin_url: str, return_cleaned_json: bool = False
+        self, url: str, return_cleaned_json: bool = False
     ) -> Dict:
         """Get profile experience for a LinkedIn profile.
 
         Args:
-            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
 
         Returns:
             Dict: Raw profile experience data from LinkedIn API
         """
         return self.get_profile_data(
-            linkedin_url,
+            url,
             profile_type="experience",
             return_cleaned_json=return_cleaned_json,
         )
 
     def get_profile_education(
-        self, linkedin_url: str, return_cleaned_json: bool = False
+        self, url: str, return_cleaned_json: bool = False
     ) -> Dict:
         """Get profile experience for a LinkedIn profile.
 
         Args:
-            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
 
         Returns:
             Dict: Raw profile experience data from LinkedIn API
         """
         return self.get_profile_data(
-            linkedin_url,
+            url,
             profile_type="education",
             return_cleaned_json=return_cleaned_json,
         )
@@ -570,7 +654,7 @@ class LinkedInIntegration(Integration):
 
     def get_profile_posts_feed(
         self,
-        linkedin_url: str,
+        url: str,
         start: int = 0,
         count: int = 1,
         pagination_token: str | None = None,
@@ -586,9 +670,19 @@ class LinkedInIntegration(Integration):
         Returns:
             Dict: Raw posts feed data from LinkedIn API
         """
-        # Get profile ID from URL
-        profile_id = self.get_profile_id(linkedin_url)
-        profile_public_id = self.get_profile_public_id(linkedin_url)
+        profile_id_result = self.get_profile_id(url)
+        if profile_id_result.get("error"):
+            return profile_id_result
+        profile_id = profile_id_result.get("result")
+        if not profile_id:
+            return {"error": f"LinkedIn profile ID is empty for URL '{url}'"}
+        
+        profile_public_id_result = self.get_profile_public_id(url)
+        if profile_public_id_result.get("error"):
+            return profile_public_id_result
+        profile_public_id = profile_public_id_result.get("result")
+        if not profile_public_id:
+            return {"error": f"LinkedIn profile public ID is empty for URL '{url}'"}
 
         endpoint = f"/graphql?includeWebMetadata=true&variables=(start:{start},count:{count},profileUrn:urn%3Ali%3Afsd_profile%3A{profile_id})&queryId=voyagerFeedDashProfileUpdates.80d5abb3cd25edff72c093a5db696079"
         data = self._make_request(method="GET", endpoint=endpoint)
@@ -627,30 +721,36 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, filename, data)
         return data
 
-    def get_activity_id_from_url(self, linkedin_url: str) -> str:
+    def get_activity_id_from_url(self, url: str) -> Dict:
         """Extract activity ID from LinkedIn URL.
 
         Handles activity URLs with or without the -activity- or :activity: prefix.
         """
-        if "-activity-" in linkedin_url:
-            return linkedin_url.split("-activity-")[-1].split("-")[0]
-        elif ":activity:" in linkedin_url:
-            return linkedin_url.split(":activity:")[-1].split("/")[0]
-        return ""
+        if "-activity-" in url:
+            return {"result": url.split("-activity-")[-1].split("-")[0]}
+        elif ":activity:" in url:
+            return {"result": url.split(":activity:")[-1].split("/")[0]}
+        return {"error": f"LinkedIn activity ID not found for URL '{url}'"}
 
     def get_post_stats(
-        self, linkedin_url: str, return_cleaned_json: bool = False
+        self, url: str, return_cleaned_json: bool = False
     ) -> Dict:
         """Get activity for a LinkedIn activity.
 
         Args:
-            linkedin_url (str): LinkedIn activity URL. It must contain -activity- in the URL.
+            url (str): LinkedIn activity URL. It must contain -activity- in the URL.
 
         Returns:
             Dict: Raw post stats data from LinkedIn API
         """
         # Get activity ID
-        activity_id = self.get_activity_id_from_url(linkedin_url)
+        activity_id_result = self.get_activity_id_from_url(url)
+        if activity_id_result.get("error"):
+            return activity_id_result
+        activity_id = activity_id_result.get("result")
+        if not activity_id:
+            return {"error": f"LinkedIn activity ID is empty for URL '{url}'"}
+        
         prefix = os.path.join("get_post_stats", activity_id)
 
         endpoint = f"/feed/updates/urn:li:activity:{activity_id}"
@@ -662,7 +762,7 @@ class LinkedInIntegration(Integration):
 
     def get_post_reactions(
         self,
-        linkedin_url: str,
+        url: str,
         start: int = 0,
         count: int = 100,
         limit: int = -1,
@@ -677,7 +777,13 @@ class LinkedInIntegration(Integration):
             limit (int, optional): Maximum number of reactions to return. Defaults to -1 (no limit).
         """
         # Get activity ID
-        activity_id = self.get_activity_id_from_url(linkedin_url)
+        activity_id_result = self.get_activity_id_from_url(url)
+        if activity_id_result.get("error"):
+            return activity_id_result
+        activity_id = activity_id_result.get("result")
+        if not activity_id:
+            return {"error": f"LinkedIn activity ID is empty for URL '{url}'"}
+        
         prefix = os.path.join("get_post_reactions", activity_id)
         filename = f"post_reactions_{activity_id}_{start}_{count}"
 
@@ -738,7 +844,7 @@ class LinkedInIntegration(Integration):
 
     def get_post_comments(
         self,
-        linkedin_url: str,
+        url: str,
         start: int = 0,
         count: int = 100,
         limit: int = -1,
@@ -747,14 +853,20 @@ class LinkedInIntegration(Integration):
         """Get comments for a LinkedIn post.
 
         Args:
-            linkedin_url (str): LinkedIn post URL.
+            url (str): LinkedIn post URL.
             start (int, optional): Start index for pagination. Defaults to 0.
             count (int, optional): Number of comments to fetch per request. Defaults to 100.
             limit (int, optional): Maximum number of comments to return. Defaults to -1 (no limit).
             return_cleaned_json (bool, optional): Whether to return cleaned JSON. Defaults to False.
         """
         # Get activity ID
-        activity_id = self.get_activity_id_from_url(linkedin_url)
+        activity_id_result = self.get_activity_id_from_url(url)
+        if activity_id_result.get("error"):
+            return activity_id_result
+        activity_id = activity_id_result.get("result")
+        if not activity_id:
+            return {"error": f"LinkedIn activity ID is empty for URL '{url}'"}
+        
         prefix = os.path.join("get_post_comments", activity_id)
         filename = f"post_comments_{activity_id}_{start}_{count}"
 
@@ -818,23 +930,29 @@ class LinkedInIntegration(Integration):
 
     def get_post_reposts(
         self,
-        linkedin_url: str,
+        url: str,
         start: int = 0,
         count: int = 100,
         limit: int = -1,
         return_cleaned_json: bool = False,
     ) -> Dict:
-        """Get reposts for a LinkedIn post.
+        """Get reposts for a LinkedIn activity.
 
         Args:
-            repost_id (str): LinkedIn repost ID (stored in shareUrn in get_post_stats).
+            url (str): LinkedIn post URL.
             start (int, optional): Start index for pagination. Defaults to 0.
             count (int, optional): Number of reposts to fetch per request. Defaults to 100.
             limit (int, optional): Maximum number of reposts to return. Defaults to -1 (no limit).
             return_cleaned_json (bool, optional): Whether to return cleaned JSON. Defaults to False.
         """
         # Get activity ID
-        activity_id = self.get_activity_id_from_url(linkedin_url)
+        activity_id_result = self.get_activity_id_from_url(url)
+        if activity_id_result.get("error"):
+            return activity_id_result
+        activity_id = activity_id_result.get("result")
+        if not activity_id:
+            return {"error": f"LinkedIn activity ID is empty for URL '{url}'"}
+        
         prefix = os.path.join("get_post_reposts", activity_id)
         filename = f"post_repost_{activity_id}_{start}_{count}"
 
@@ -902,28 +1020,68 @@ class LinkedInIntegration(Integration):
 
     def get_mutual_connexions(
         self,
-        profile_id: str,
-        start: int = 0,
-        current_company_id: str | None = None,
+        profile_url: str,
+        organization_url: str | None = None,
         connection_distance: str = "F",
+        start: int = 0,
         return_cleaned_json: bool = False,
     ) -> Dict:
-        """Get mutual connections for a LinkedIn profile.
+        """Get mutual connections for a LinkedIn activity.
         It will return the total number of connections and the first 10 profiles.
 
         Args:
-            profile_id (str): LinkedIn profile ID.
+            profile_url (str): LinkedIn profile URL.
+            organization_url (str, optional): LinkedIn organization URL to filter the mutual connections.
+            connection_distance (str, optional): Connection distance. 
+               Defaults to "F" for "First Degree", "S" for "Second Degree", "O" for "Others".
             start (int, optional): Start index for pagination. Defaults to 0.
-            current_company_id (str, optional): LinkedIn company ID. Defaults to None.
             connection_distance (str, optional): Connection distance. 
                Defaults to "F" for "First Degree", "S" for "Second Degree", "O" for "Others".
             return_cleaned_json (bool, optional): Whether to return cleaned JSON data. Defaults to False.
         """
-        prefix = os.path.join("get_mutual_connexions", profile_id, connection_distance)
-        if current_company_id is None:
-            current_company_id = ""
+        # Get me
+        my_profile_id_result = self.get_profile_id_from_url(self.__configuration.linkedin_url)
+        if my_profile_id_result.get("error"):
+            return my_profile_id_result
+        my_profile_id = my_profile_id_result.get("result")
+        if not my_profile_id:
+            return {"error": f"LinkedIn profile ID is empty for URL '{self.__configuration.linkedin_url}'"}
+        
+        # Get profile ID
+        profile_id_result = self.get_profile_id(profile_url)
+        if profile_id_result.get("error"):
+            return profile_id_result
+        profile_id = profile_id_result.get("result")
+        if not profile_id:
+            return {"error": f"LinkedIn profile ID is empty for URL '{profile_url}'"}
+
+        # Get profile public ID
+        profile_public_id_result = self.get_profile_public_id(profile_url)
+        if profile_public_id_result.get("error"):
+            return profile_public_id_result
+        profile_public_id = profile_public_id_result.get("result")
+        if not profile_public_id:
+            return {"error": f"LinkedIn profile public ID is empty for URL '{profile_url}'"}
+        
+        prefix = os.path.join("get_mutual_connexions", my_profile_id, profile_public_id, connection_distance)
+
+        if organization_url is not None:
+            organization_id_result = self.get_organization_id(organization_url)
+            if organization_id_result.get("error"):
+                return organization_id_result
+            organization_id = organization_id_result.get("result")
+            if not organization_id:
+                return {"error": f"LinkedIn organization ID is empty for URL '{organization_url}'"}
+            organization_public_id_result = self.get_organization_id_from_url(organization_url)
+            if organization_public_id_result.get("error"):
+                return organization_public_id_result
+            organization_public_id = organization_public_id_result.get("result")
+            if not organization_public_id:
+                return {"error": f"LinkedIn organization public ID is empty for URL '{organization_url}'"}
+            prefix = os.path.join(prefix, organization_public_id)
         else:
-            prefix = os.path.join(prefix, current_company_id)
+            organization_id = ""
+            prefix = os.path.join(prefix, "_all")
 
         # Full URL with query parameters directly embedded
         endpoint = (
@@ -933,7 +1091,7 @@ class LinkedInIntegration(Integration):
             "origin:FACETED_SEARCH,"
             "query:(flagshipSearchIntent:SEARCH_SRP,"
             f"queryParameters:List((key:connectionOf,value:List({profile_id})),"
-            f"(key:currentCompany,value:List({current_company_id})),"
+            f"(key:currentCompany,value:List({organization_id})),"
             f"(key:network,value:List({connection_distance})),"
             "(key:resultType,value:List(PEOPLE))),"
             "includeFiltersInResponse:false))"
@@ -973,7 +1131,7 @@ class LinkedInIntegration(Integration):
             self.__storage_utils.save_json(
                 final_data,
                 os.path.join(self.__configuration.datastore_path, prefix),
-                f"{profile_id}_final_data.json",
+                f"{profile_public_id}_final_data.json",
             )
             return final_data
         return data
@@ -981,29 +1139,31 @@ class LinkedInIntegration(Integration):
 
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
-    from typing import Annotated
-
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
+    from typing import Annotated, Optional
 
     integration = LinkedInIntegration(configuration)
 
+    class GetMeSchema(BaseModel):
+        pass
+
     class GetOrganizationInfoSchema(BaseModel):
-        linkedin_url: str = Field(
+        url: str = Field(
             ...,
             description="LinkedIn organization URL",
             pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
         )
 
     class GetProfileSchema(BaseModel):
-        linkedin_url: str = Field(
+        url: str = Field(
             ...,
             description="LinkedIn profile URL",
             pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+",
         )
 
     class GetProfilePostsFeedSchema(BaseModel):
-        linkedin_url: str = Field(
+        url: str = Field(
             ...,
             description="LinkedIn profile URL",
             pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+",
@@ -1014,127 +1174,123 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         )
 
     class GetActivitySchema(BaseModel):
-        linkedin_url: str = Field(
+        url: str = Field(
             ...,
             description="LinkedIn activity ID extracted from the URL",
         )
 
     class GetMutualConnectionsSchema(BaseModel):
-        profile_id: Annotated[
+        profile_url: Annotated[
             str,
             Field(
                 ...,
                 description=(
-                    "LinkedIn profile ID of the person you want to get mutual connections. "
-                    "If you don't have the profile ID, use the linkedin_get_profile_id tool to get it."
+                    "LinkedIn profile URL of the person you want to get mutual connections."
                 ),
-                pattern=r"^ACoAA.+",
+                pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+",
             ),
         ]
-        current_company_id: Annotated[
+        connection_distance: Annotated[
+            str,
+            Field(
+                description="Connection distance. F for First Degree, S for Second Degree, O for Others.",
+                pattern=r"^[FSO]$",
+            ),
+        ] = "F"
+        organization_url: Optional[Annotated[
             str,
             Field(
                 description=(
-                    "LinkedIn company ID to filter the mutual connections. "
-                    "If you don't have the company ID, use the linkedin_get_organization_id tool to get it."
+                    "LinkedIn organization URL to filter the mutual connections."
                 ),
+                pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
             ),
-        ]
+        ]] = None
+
 
     return [
         StructuredTool(
-            name="linkedin_get_organization_id",
-            description="Get LinkedIn organization ID for a LinkedIn organization.",
-            func=lambda linkedin_url: integration.get_organization_id(linkedin_url),
-            args_schema=GetOrganizationInfoSchema,
+            name="linkedin_get_me",
+            description="Get your own LinkedIn profile information.",
+            func=lambda: integration.get_profile_top_card(integration.__configuration.linkedin_url),
+            args_schema=GetMeSchema,
         ),
         StructuredTool(
             name="linkedin_get_organization_info",
             description="Get organization information for a LinkedIn organization.",
-            func=lambda linkedin_url: integration.get_organization_info(
-                linkedin_url, return_cleaned_json=True
+            func=lambda url: integration.get_organization_info(
+                url, return_cleaned_json=True
             ),
             args_schema=GetOrganizationInfoSchema,
         ),
         StructuredTool(
-            name="linkedin_get_profile_id",
-            description="Get LinkedIn unique profile ID for a LinkedIn profile starting with AcoAA.",
-            func=lambda linkedin_url: integration.get_profile_id(linkedin_url),
-            args_schema=GetProfileSchema,
-        ),
-        StructuredTool(
             name="linkedin_get_profile_top_card",
             description="Get profile top card for a LinkedIn profile, meaning the quick overview information of the profile.",
-            func=lambda linkedin_url: integration.get_profile_top_card(
-                linkedin_url, return_cleaned_json=True
+            func=lambda url: integration.get_profile_top_card(
+                url, return_cleaned_json=True
             ),
             args_schema=GetProfileSchema,
         ),
         StructuredTool(
             name="linkedin_get_profile_skills",
             description="Get profile skills for a LinkedIn profile.",
-            func=lambda linkedin_url: integration.get_profile_skills(
-                linkedin_url, return_cleaned_json=True
+            func=lambda url: integration.get_profile_skills(
+                url, return_cleaned_json=True
             ),
             args_schema=GetProfileSchema,
         ),
         StructuredTool(
             name="linkedin_get_profile_experience",
             description="Get profile experience for a LinkedIn profile.",
-            func=lambda linkedin_url: integration.get_profile_experience(
-                linkedin_url, return_cleaned_json=True
+            func=lambda url: integration.get_profile_experience(
+                url, return_cleaned_json=True
             ),
             args_schema=GetProfileSchema,
         ),
         StructuredTool(
             name="linkedin_get_profile_education",
             description="Get profile education for a LinkedIn profile.",
-            func=lambda linkedin_url: integration.get_profile_education(
-                linkedin_url, return_cleaned_json=True
+            func=lambda url: integration.get_profile_education(
+                url, return_cleaned_json=True
             ),
             args_schema=GetProfileSchema,
         ),
         StructuredTool(
             name="linkedin_get_profile_posts_feed",
             description="Get posts feed for a LinkedIn profile.",
-            func=lambda linkedin_url, count: integration.get_profile_posts_feed(
-                linkedin_url, count, return_cleaned_json=True
+            func=lambda url, count: integration.get_profile_posts_feed(
+                url, count, return_cleaned_json=True
             ),
             args_schema=GetProfilePostsFeedSchema,
         ),
         StructuredTool(
             name="linkedin_get_post_comments",
             description="Get comments for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.get_post_comments(
-                linkedin_url, return_cleaned_json=True
+            func=lambda url: integration.get_post_comments(
+                url, return_cleaned_json=True
             ),
             args_schema=GetActivitySchema,
         ),
         StructuredTool(
             name="linkedin_get_post_reactions",
             description="Get reactions for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.get_post_reactions(
-                linkedin_url, return_cleaned_json=True
+            func=lambda url: integration.get_post_reactions(
+                url, return_cleaned_json=True
             ),
             args_schema=GetActivitySchema,
         ),
         StructuredTool(
             name="linkedin_get_post_reposts",
             description="Get reposts for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.get_post_reposts(
-                linkedin_url, return_cleaned_json=True
+            func=lambda url: integration.get_post_reposts(
+                url, return_cleaned_json=True
             ),
             args_schema=GetActivitySchema,
         ),
         StructuredTool(
             name="linkedin_get_mutual_connexions",
             description="Get mutual connections for a LinkedIn profile.",
-            func=lambda profile_id,
-            current_company_id: integration.get_mutual_connexions(
-                profile_id=profile_id,
-                current_company_id=current_company_id,
-                return_cleaned_json=True,
-            ),
+            func=lambda **kwargs: integration.get_mutual_connexions(**kwargs, return_cleaned_json=True),
             args_schema=GetMutualConnectionsSchema,
         ),
     ]

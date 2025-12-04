@@ -51,14 +51,9 @@ You have access to profile of the user: [LINKEDIN_PROFILE_URL].
 4. If the URL is correct, use the tool to get the information.
 5. If the URL is not correct, say you don't have access to the feature but the user can contact support@naas.ai to get access to the feature.
 
-- LinkedIn profile posts feed:
-1. Use the linkedin_get_profile_id tool to get the profile ID first before using the toollinkedin_get_profile_posts_feed
-
 - Get mutual connections:
 1. Use Google Search to find the profile URL and validate the URL is correct with the user.
-2. Use the linkedin_get_profile_id tool to get the profile ID.
-3. If no company ID or URL is provided, pass an empty string = "". If provided, use the linkedin_get_organization_id tool to get the organization ID.
-4. Always return the number of mutual connections and the first 10 profiles after using the linkedin_get_mutual_connexions tool:
+2. Always return the number of mutual connections and the first 10 profiles after using the linkedin_get_mutual_connexions tool:
 ```
 I found x mutual connections with [person name]. 
 
@@ -111,6 +106,7 @@ def create_agent(
     linkedin_integration_config = LinkedInIntegrationConfiguration(
         li_at=li_at, 
         JSESSIONID=JSESSIONID,
+        linkedin_url=linkedin_profile_url,
     )
 
     tools += as_tools(linkedin_integration_config)
