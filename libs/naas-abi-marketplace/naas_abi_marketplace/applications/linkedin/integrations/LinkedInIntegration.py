@@ -1144,9 +1144,6 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
 
     integration = LinkedInIntegration(configuration)
 
-    class GetMeSchema(BaseModel):
-        pass
-
     class GetOrganizationInfoSchema(BaseModel):
         url: str = Field(
             ...,
@@ -1208,12 +1205,6 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
 
 
     return [
-        StructuredTool(
-            name="linkedin_get_me",
-            description="Get your own LinkedIn profile information.",
-            func=lambda: integration.get_profile_top_card(integration.__configuration.linkedin_url),
-            args_schema=GetMeSchema,
-        ),
         StructuredTool(
             name="linkedin_get_organization_info",
             description="Get organization information for a LinkedIn organization.",

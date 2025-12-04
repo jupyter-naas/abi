@@ -25,8 +25,7 @@ class ABIModule(BaseModule):
         module: naas_abi_marketplace.domains.support
         enabled: true
         config:
-            datastore_path: "datastore/support"
-            github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
+            datastore_path: "support"
             default_repository: "jupyter-naas/abi"
             github_project_id: 12
             project_node_id: "PVT_kwDOBESWNM4AKRt3"
@@ -35,13 +34,10 @@ class ABIModule(BaseModule):
             status_option_id: "97363483"
             priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
             priority_option_id: "4fb76f2d"
-            openai_api_key: "{{ secret.OPENAI_API_KEY }}"
         """
         datastore_path: str
-        github_access_token: str
         default_repository: str
         github_project_id: int
-        openai_api_key: str
         project_node_id: str
         iteration_field_id: str
         status_field_id: str

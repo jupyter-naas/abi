@@ -7,7 +7,6 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from naas_abi_marketplace.domains.support import ABIModule
 
 NAME = "Support"
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
@@ -91,10 +90,14 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Initialize module
+    from naas_abi_marketplace.domains.support import ABIModule
     module = ABIModule.get_instance()
     github_project_id = module.configuration.github_project_id
     default_repository = module.configuration.default_repository
-    github_access_token = module.configuration.github_access_token
+
+    # Get github access token
+    from naas_abi_marketplace.applications.github import ABIModule as GitHubABIModule
+    github_access_token = GitHubABIModule.get_instance().configuration.github_access_token
 
     # Define model
     from naas_abi_marketplace.domains.support.models.default import get_model

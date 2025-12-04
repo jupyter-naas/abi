@@ -24,10 +24,8 @@ class ABIModule(BaseModule):
         module: naas_abi_marketplace.applications.github
         enabled: true
         config:
-            datastore_path: "datastore/support"
+            datastore_path: "github"
             github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
-            openai_api_key: "{{ secret.OPENAI_API_KEY }}"
         """
         datastore_path: str
         github_access_token: str
-        openai_api_key: str
