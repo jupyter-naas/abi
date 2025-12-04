@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.4-dev.3 (2025-12-03)
+
+### Bug Fixes
+
+- Use field from database to get engine config
+  ([`0bd63ba`](https://github.com/jupyter-naas/abi/commit/0bd63ba245d75d6da351b80b05f2b89183ac68df))
+
+
 ## v1.0.4-dev.2 (2025-12-02)
 
 ### Bug Fixes
