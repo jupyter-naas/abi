@@ -10,7 +10,6 @@ from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
-    IntegrationConnectionError,
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
