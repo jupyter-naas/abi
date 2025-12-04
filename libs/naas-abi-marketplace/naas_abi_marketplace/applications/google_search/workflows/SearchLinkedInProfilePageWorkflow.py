@@ -1,6 +1,6 @@
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Annotated, Optional
 
@@ -28,7 +28,7 @@ class SearchLinkedInProfilePageWorkflowConfiguration(WorkflowConfiguration):
 
     integration_config: GoogleProgrammableSearchEngineIntegrationConfiguration
     pattern = r"https://.+\.linkedin\.[^/]+/in/[^?]+"
-    datastore_path: str = os.path.join(ABIModule.get_instance().configuration.datastore_path, "linkedin_profile_pages")
+    datastore_path: str = field(default_factory=lambda: os.path.join(ABIModule.get_instance().configuration.datastore_path, "linkedin_profile_pages"))
 
 
 class SearchLinkedInProfilePageWorkflowParameters(WorkflowParameters):
