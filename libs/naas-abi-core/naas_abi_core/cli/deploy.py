@@ -115,7 +115,10 @@ class NaasDeployer:
             f"docker build -t {image_name} . --platform linux/amd64", shell=True
         )
 
-    def deploy(self):
+    def env_list_to_dict(self, env: list[str]) -> dict:
+        return {env_var.split("=", 1)[0]: env_var.split("=", 1)[1] for env_var in env}
+
+    def deploy(self, env: list[str]):
         registry = self.naas_api_client.create_registry(
             self.configuration.deploy.space_name
         )
@@ -145,6 +148,7 @@ class NaasDeployer:
 
         image_name_with_sha = f"{image_name.replace(':' + uid, '')}@{image_sha}"
 
+
         self.naas_api_client.create_space(
             Space(
                 name=self.configuration.deploy.space_name,
@@ -155,7 +159,7 @@ class NaasDeployer:
                         port=9879,
                         cpu="1",
                         memory="1Gi",
-                        env={
+                        env=self.env_list_to_dict(env) | {
                             "NAAS_API_KEY": self.configuration.deploy.naas_api_key,
                             "ENV": "prod",
                         },
@@ -182,7 +186,8 @@ class NaasDeployer:
 
 
 @deploy.command("naas")
-def naas():
+@click.option("-e", "--env", multiple=True, help="Environment variables to set (e.g. -e FOO=BAR -e BAZ=QUX)")
+def naas(env: list[str]):
     configuration: EngineConfiguration = EngineConfiguration.load_configuration()
 
     if configuration.deploy is None:
@@ -191,4 +196,4 @@ def naas():
         )
 
     deployer = NaasDeployer(configuration)
-    deployer.deploy()
+    deployer.deploy(env)
