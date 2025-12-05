@@ -119,6 +119,7 @@ class NaasDeployer:
         return {env_var.split("=", 1)[0]: env_var.split("=", 1)[1] for env_var in env}
 
     def deploy(self, env: list[str]):
+        
         registry = self.naas_api_client.create_registry(
             self.configuration.deploy.space_name
         )
@@ -159,10 +160,11 @@ class NaasDeployer:
                         port=9879,
                         cpu="1",
                         memory="1Gi",
-                        env=self.env_list_to_dict(env) | {
-                            "NAAS_API_KEY": self.configuration.deploy.naas_api_key,
-                            "ENV": "prod",
-                        },
+                        # env=self.env_list_to_dict(env) | {
+                        #     "NAAS_API_KEY": self.configuration.deploy.naas_api_key,
+                        #     "ENV": "prod",
+                        # },
+                        env=self.configuration.deploy.env | self.env_list_to_dict(env),
                     )
                 ],
             )
