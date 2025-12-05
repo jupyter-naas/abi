@@ -14,7 +14,7 @@
 # Default target with help display
 log_level=ERROR
 default: deps local-up airgap
-	@ LOG_LEVEL=$(log_level) uv run python -m src.cli AbiAgent
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi AbiAgent
 
 # Main help documentation - displays all available commands organized by category
 help:
@@ -36,16 +36,11 @@ help:
 	@echo "  lock                     Update dependency lock files"
 	@echo "  local-build              Build all Docker containers defined in docker-compose.yml"
 	@echo ""
-	@echo "MODULE AND COMPONENT CREATION:"
-	@echo "  create-module            Create a new module from template with guided setup"
-	@echo "  create-agent             Create a new agent from template with path validation"
-	@echo "  create-integration       Create a new integration from template"
-	@echo "  create-workflow          Create a new workflow from template"
-	@echo "  create-pipeline          Create a new pipeline from template"
-	@echo "  create-ontology          Create a new ontology from template"
+	@echo "CHAT & AGENT COMMANDS:"
+	@echo "  chat                     Start generic chat (default agent: AbiAgent, override: agent=AgentName)"
+	@echo "  chat-abi-agent           Start the main ABI conversational agent"
 	@echo ""
-	@echo "CHAT WITH CORE AGENTS:"
-	@echo "  chat-abi-agent           Start the main ABI agent (default target)"
+	@echo "MARKETPLACE AI AGENTS:"
 	@echo "  chat-chatgpt-agent       Start ChatGPT-based agent"
 	@echo "  chat-claude-agent        Start Claude-based agent"
 	@echo "  chat-deepseek-agent      Start DeepSeek-based agent"
@@ -57,10 +52,16 @@ help:
 	@echo "  chat-perplexity-agent    Start Perplexity-based agent"
 	@echo "  chat-qwen-agent          Start Qwen-based agent"
 	@echo ""
-	@echo "CHAT WITH MARKETPLACE AGENTS:"
-	@echo "  pull-request-description Generate pull request descriptions using AI"
-	@echo "  chat-naas-agent          Start the Naas platform integration agent"
-	@echo "  chat-support-agent       Start the customer support specialized agent"
+	@echo "MARKETPLACE APPLICATION AGENTS:"
+	@echo "  chat-github-agent        Start GitHub integration agent"
+	@echo "  chat-google-search-agent Start Google Search integration agent"
+	@echo "  chat-linkedin-agent      Start LinkedIn integration agent"
+	@echo "  chat-naas-agent          Start Naas platform integration agent"
+	@echo "  chat-powerpoint-agent    Start PowerPoint integration agent"
+	@echo "  pull-request-description Generate pull request description using AI"
+	@echo ""
+	@echo "MARKETPLACE DOMAIN AGENTS:"
+	@echo "  chat-support-agent       Start customer support specialized agent"
 	@echo ""
 	@echo "DEVELOPMENT SERVERS & TOOLS:"
 	@echo "  api                      Start API server for local development (port 9879)"
@@ -273,10 +274,6 @@ chat-qwen-agent: deps
 # CHAT WITH MARKETPLACE APPLICATIONS AGENTS
 # =============================================================================
 
-# Generate pull request description using AI agent
-pull-request-description: deps
-	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run python -m src.cli PullRequestDescriptionAgent
-
 chat-github-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.github GitHubAgent
 
@@ -292,41 +289,16 @@ chat-naas-agent: deps
 chat-powerpoint-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
 
+pull-request-description: deps
+	@ echo "generate the pull request description please."
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.git PullRequestDescriptionAgent
+
 # =============================================================================
 # CHAT WITH MARKETPLACE DOMAINS AGENTS
 # =============================================================================
 
 chat-support-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.domains.support SupportAgent
-
-
-# =============================================================================
-# MODULE AND COMPONENT CREATION
-# =============================================================================
-
-# Create a new module from template
-create-module: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-module
-
-# Create a new agent from template
-create-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-agent
-
-# Create a new integration from template
-create-integration: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-integration
-
-# Create a new workflow from template
-create-workflow: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-workflow
-
-# Create a new pipeline from template
-create-pipeline: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-pipeline
-
-# Create a new ontology from template
-create-ontology: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-ontology
 
 
 # =============================================================================
