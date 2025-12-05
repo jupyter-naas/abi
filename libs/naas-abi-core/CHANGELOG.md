@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.0 (2025-12-05)
+
+### Features
+
+- Make it possible to add env var using cli deploy
+  ([`eb32c8d`](https://github.com/jupyter-naas/abi/commit/eb32c8d9613ecbddb3a891f25db0a5bc3498b258))
+
+
 ## v1.0.8 (2025-12-05)
 
 
