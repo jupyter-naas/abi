@@ -7,7 +7,7 @@ from .init import init
 from .module import module
 from .new import new
 from .secret import secrets
-
+from .deploy import deploy
 # from dotenv import load_dotenv
 
 # load_dotenv()
@@ -48,6 +48,7 @@ main.add_command(agent)
 main.add_command(chat)
 main.add_command(new)
 main.add_command(init)
+main.add_command(deploy)
 
 # if __name__ == "__main__":
 main()
