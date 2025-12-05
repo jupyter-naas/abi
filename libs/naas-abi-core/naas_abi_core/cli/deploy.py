@@ -178,9 +178,6 @@ class NaasDeployer:
 - Image: {image_name_with_sha}
 - URL: https://{self.configuration.deploy.space_name}.default.space.naas.ai
 
-```json
-{json.dumps(space, indent=4)}
-```
                                  """)
         )
 
