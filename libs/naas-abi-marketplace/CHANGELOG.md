@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.7 (2025-12-03)
+
+### Bug Fixes
+
+- **marketplace**: Convert applications.pubmed to a real module
+  ([`ac36df3`](https://github.com/jupyter-naas/abi/commit/ac36df34157bd1b77f7c166dd08231b324e2fc92))
+
+
 ## v1.0.6 (2025-12-02)
 
 ### Bug Fixes
