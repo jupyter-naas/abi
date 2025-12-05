@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.2 (2025-12-05)
+
+### Bug Fixes
+
+- Make it possible to define env secrets from config.yaml
+  ([`d9903cf`](https://github.com/jupyter-naas/abi/commit/d9903cfecac03df40a6f3076c7ff44229c0c12cd))
+
+
 ## v1.1.1 (2025-12-05)
 
 
