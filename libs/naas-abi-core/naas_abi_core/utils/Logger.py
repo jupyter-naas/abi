@@ -9,4 +9,4 @@ def reconfigure(level: str = "DEBUG"):
     logger.add(sys.stderr, level=level)
 
 
-reconfigure(os.environ.get("LOG_LEVEL", "DEBUG"))
+reconfigure(os.environ.get("LOG_LEVEL", "ERROR"))

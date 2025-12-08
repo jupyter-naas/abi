@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-marketplace"
-version = "1.1.0-dev.2"
+version = "1.0.7"
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
@@ -34,8 +34,8 @@ build_command = """
     git add uv.lock
     uv build
 """
-# [tool.semantic_release.commit_parser_options]
-# path_filters = ["."]
+[tool.semantic_release.commit_parser_options]
+path_filters = ["."]
 # scope_prefix = "naas-abi-marketplace-"
 
 [tool.semantic_release.branches.main]
@@ -56,4 +56,10 @@ applications-linkedin = [
 ]
 applications-powerpoint = [
   "python-pptx>=1.0.2,<2"
+]
+ai-chatgpt = [
+    "pdfplumber>=0.11.8",
+]
+applications-pubmed = [
+    "ratelimit>=2.2.1",
 ]
