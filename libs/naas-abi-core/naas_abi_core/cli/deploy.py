@@ -1,4 +1,3 @@
-import json
 import subprocess
 from uuid import uuid4
 
@@ -103,6 +102,7 @@ class NaasDeployer:
     image_name: str
 
     naas_api_client: NaasAPIClient
+    configuration: EngineConfiguration
 
     def __init__(self, configuration: EngineConfiguration):
         self.configuration = configuration
@@ -119,7 +119,14 @@ class NaasDeployer:
         return {env_var.split("=", 1)[0]: env_var.split("=", 1)[1] for env_var in env}
 
     def deploy(self, env: list[str]):
-        
+        if self.configuration.deploy is None:
+            logger.error(
+                "Deploy configuration not found in the yaml configuration file. Please add a deploy section to the configuration file."
+            )
+            raise ValueError(
+                "Deploy configuration not found in the yaml configuration file. Please add a deploy section to the configuration file."
+            )
+
         registry = self.naas_api_client.create_registry(
             self.configuration.deploy.space_name
         )
@@ -149,7 +156,6 @@ class NaasDeployer:
 
         image_name_with_sha = f"{image_name.replace(':' + uid, '')}@{image_sha}"
 
-
         self.naas_api_client.create_space(
             Space(
                 name=self.configuration.deploy.space_name,
@@ -170,7 +176,7 @@ class NaasDeployer:
             )
         )
 
-        space = self.naas_api_client.get_space(self.configuration.deploy.space_name)
+        self.naas_api_client.get_space(self.configuration.deploy.space_name)
 
         Console().print(
             Markdown(f"""
@@ -185,7 +191,12 @@ class NaasDeployer:
 
 
 @deploy.command("naas")
-@click.option("-e", "--env", multiple=True, help="Environment variables to set (e.g. -e FOO=BAR -e BAZ=QUX)")
+@click.option(
+    "-e",
+    "--env",
+    multiple=True,
+    help="Environment variables to set (e.g. -e FOO=BAR -e BAZ=QUX)",
+)
 def naas(env: list[str]):
     configuration: EngineConfiguration = EngineConfiguration.load_configuration()
 
