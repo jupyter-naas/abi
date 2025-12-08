@@ -1,122 +1,50 @@
-from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter
-from langchain_openai import ChatOpenAI
-from naas_abi import secret
-from naas_abi_core import logger
-from naas_abi_core.services.agent.Agent import (
-    Agent,
+from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
+    Intent,
+    IntentAgent,
+    IntentType,
 )
-from pydantic import SecretStr
+from naas_abi_marketplace.applications.github import ABIModule
 
 NAME = "GitHub"
-MODEL = "gpt-4o"
-TEMPERATURE = 0
 AVATAR_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
-DESCRIPTION = "A GitHub Agent that helps you interact with GitHub through its REST API and GraphQL API."
-SYSTEM_PROMPT = """
-## Role
-You are a comprehensive GitHub Agent with expertise in GitHub repository management, issue tracking, project management, and collaboration workflows. You serve as a knowledgeable assistant for all GitHub-related tasks, providing guidance and executing actions through GitHub's REST API and GraphQL API.
+DESCRIPTION = "Helps you interact with GitHub through its REST API and GraphQL API."
+SYSTEM_PROMPT = """<role>
+You are a GitHub Agent with expertise in repository management, issue tracking, project management, and collaboration workflows.
+</role>
 
-## Objective
-Your primary goal is to help users effectively manage their GitHub repositories, issues, pull requests, projects, and collaboration workflows. You should provide accurate, helpful responses and execute requested actions efficiently while maintaining best practices for GitHub operations.
+<objective>
+Help users effectively manage their GitHub repositories, issues, pull requests, projects, and collaboration workflows.
+</objective>
 
-## Context
-You have access to a comprehensive set of GitHub tools covering:
-- Repository management (create, update, delete, list repositories)
-- Issue management (create, update, list, comment on issues)
-- Pull request operations (create pull requests)
-- Project management (GitHub Projects V2 with GraphQL)
-- User and organization management
-- Repository secrets management
-- Assignee management
-- Repository activity tracking
-- Contributor management
+<context>
+You have access to GitHub tools for GitHub operations.
+</context>
 
-You can work with both user repositories and organization repositories, and you have access to both REST API and GraphQL API endpoints for optimal functionality.
+<tasks>
+- Analyze user requests and identify required GitHub operations
+- Validate input parameters before executing any tool
+- Execute GitHub operations using appropriate tools
+- Provide clear, informative responses about completed actions
+</tasks>
 
-## Tools
-You have access to the following tool categories:
+<tools>
+[TOOLS]
+</tools>
 
-### Repository Tools
-- github_create_repository: Create and configure new repositories for users or organizations
-- github_get_repository: Get detailed information about a specific repository
-- github_list_repositories: List all repositories in an organization
+<operating_guidelines>
+- Validate that all required parameters are provided and valid before using tool.
+- Use descriptive titles and detailed descriptions when creating issues or pull requests
+- Provide clear, concise responses with relevant information from tool responses
+</operating_guidelines>
 
-### Issue Tools  
-- github_create_issue: Create new issues with title, body, labels and assignees
-- github_get_issue: Get details about a specific issue including comments
-- github_update_issue: Update issue properties like status, labels and assignees
-
-### Pull Request Tools
-- github_create_pr: Create pull requests between branches with title and description
-
-### Project Tools
-- github_project_details: Get project configuration, fields and items
-- github_add_to_project: Add issues to projects and set field values
-
-### Secret Tools
-- github_manage_secrets: Create, update, delete and list repository secrets
-
-### User Tools
-- github_get_user: Get detailed information about GitHub users
-
-## Tasks
-When a user makes a request, follow these steps:
-
-1. **Analyze the Request**: Understand what the user wants to accomplish
-2. **Identify Required Tools**: Determine which GitHub tools are needed
-3. **Validate Inputs**: Ensure all required parameters are provided and valid
-4. **Execute Actions**: Use the appropriate tools to complete the task
-5. **Provide Feedback**: Give clear, informative responses about what was accomplished
-
-## Operating Guidelines
-
-### General Approach
-- Always validate input parameters before executing any tool
-- Provide clear, concise responses with relevant information
-- When creating issues or pull requests, use descriptive titles and detailed descriptions
-- Follow GitHub best practices for repository and issue management
-
-### Error Handling
-- If a tool execution fails, explain the error clearly and suggest alternatives
-- Validate repository names in the format "owner/repo"
-- Check permissions before attempting operations that require specific access levels
-
-### Response Format
-- Be informative but concise
-- Include relevant details from tool responses
-- Provide actionable next steps when appropriate
-- Use markdown formatting for better readability
-
-### Security Considerations
-- Never expose sensitive information like access tokens
-- Handle repository secrets securely
-- Respect repository privacy settings
-
-## Constraints
+<constraints>
 - Only use the provided GitHub tools - do not make assumptions about external APIs
-- Always validate repository names in the correct format (owner/repo)
-- Respect GitHub API rate limits and best practices
 - Do not attempt operations beyond the scope of the available tools
-- Maintain professional communication standards
-- Do not expose or manipulate sensitive authentication information
-
-### Input Validation Rules
-- Repository names must be in "owner/repo" format
-- Issue numbers must be integers
-- Usernames must be valid GitHub usernames
-- Project numbers must be integers
-- All required fields must be provided before tool execution
-
-### Off-Topic Areas
-- Do not provide general programming advice unrelated to GitHub operations
-- Do not attempt to access or modify system files outside of GitHub
-- Do not provide financial or legal advice
-- Do not attempt to bypass GitHub security measures or rate limits
+</constraints>
 """
 SUGGESTIONS: list = []
 
@@ -124,69 +52,194 @@ SUGGESTIONS: list = []
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Agent:
+) -> IntentAgent:
     # Init
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
-    )
+    module = ABIModule.get_instance()
+    github_access_token = module.configuration.github_access_token
 
-    # Use provided configuration or create default one
+    # Define model
+    from naas_abi_marketplace.applications.github.models.default import get_model
+    model = get_model()
+
+    # Define tools
+    tools: list = []
+    from naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
+        GitHubGraphqlIntegrationConfiguration,
+        as_tools as GitHubGraphqlIntegration_tools,
+    )
+    from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
+        GitHubIntegrationConfiguration,
+        as_tools as GitHubIntegration_tools,
+    )
+    github_integration_config = GitHubIntegrationConfiguration(
+        access_token=github_access_token
+    )
+    tools += GitHubIntegration_tools(github_integration_config)
+    github_graphql_integration_config = GitHubGraphqlIntegrationConfiguration(
+        access_token=github_access_token
+    )
+    tools += GitHubGraphqlIntegration_tools(github_graphql_integration_config)
+
+    # Define intents
+    intents: list = [
+        Intent(
+            intent_value="Get details about a GitHub user",
+            intent_type=IntentType.TOOL,
+            intent_target="github_get_user_details"
+        ),
+        Intent(
+            intent_value="Create a new repository for the user",
+            intent_type=IntentType.TOOL,
+            intent_target="github_create_user_repository"
+        ),
+        Intent(
+            intent_value="Get details about a GitHub repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_get_repository_details"
+        ),
+        Intent(
+            intent_value="List repositories for the specified organization in GitHub",
+            intent_type=IntentType.TOOL,
+            intent_target="github_list_organization_repositories"
+        ),
+        Intent(
+            intent_value="Create a new repository for an organization",
+            intent_type=IntentType.TOOL,
+            intent_target="github_create_organization_repository"
+        ),
+        Intent(
+            intent_value="Update a repository for an organization",
+            intent_type=IntentType.TOOL,
+            intent_target="github_update_organization_repository"
+        ),
+        Intent(
+            intent_value="Delete a repository for an organization",
+            intent_type=IntentType.TOOL,
+            intent_target="github_delete_organization_repository"
+        ),
+        Intent(
+            intent_value="Get a list of activities for the specified repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_list_repository_activities"
+        ),
+        Intent(
+            intent_value="Get a list of contributors for the specified repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_get_repository_contributors"
+        ),
+        Intent(
+            intent_value="Create an issue in the specified repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_create_issue"
+        ),
+        Intent(
+            intent_value="Get an issue from a repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_get_issue"
+        ),
+        Intent(
+            intent_value="Get issues from a repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_list_issues"
+        ),
+        Intent(
+            intent_value="Get comments on an issue or pull request",
+            intent_type=IntentType.TOOL,
+            intent_target="github_list_issue_comments"
+        ),
+        Intent(
+            intent_value="Get a comment on an issue or pull request",
+            intent_type=IntentType.TOOL,
+            intent_target="github_get_issue_comment"
+        ),
+        Intent(
+            intent_value="Update a comment on an issue or pull request",
+            intent_type=IntentType.TOOL,
+            intent_target="github_update_issue_comment"
+        ),
+        Intent(
+            intent_value="Delete a comment on an issue or pull request",
+            intent_type=IntentType.TOOL,
+            intent_target="github_delete_issue_comment"
+        ),
+        Intent(
+            intent_value="Create a comment on an issue or pull request",
+            intent_type=IntentType.TOOL,
+            intent_target="github_create_issue_comment"
+        ),
+        Intent(
+            intent_value="Create a pull request in the specified repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_create_pull_request"
+        ),
+        Intent(
+            intent_value="Get a list of assignees for the specified repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_list_assignees"
+        ),
+        Intent(
+            intent_value="Check if a user can be assigned to a specific issue",
+            intent_type=IntentType.TOOL,
+            intent_target="github_check_assignee_permission"
+        ),
+        Intent(
+            intent_value="Add assignees to an issue",
+            intent_type=IntentType.TOOL,
+            intent_target="github_add_assignees_to_issue"
+        ),
+        Intent(
+            intent_value="Remove assignees from an issue",
+            intent_type=IntentType.TOOL,
+            intent_target="github_remove_assignees_from_issue"
+        ),
+        Intent(
+            intent_value="List all secrets available in a GitHub repository without revealing their encrypted values",
+            intent_type=IntentType.TOOL,
+            intent_target="github_list_repository_secrets"
+        ),
+        Intent(
+            intent_value="Get a secret from a GitHub repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_get_repository_secret"
+        ),
+        Intent(
+            intent_value="Create or update a secret in a GitHub repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_create_or_update_repository_secret"
+        ),
+        Intent(
+            intent_value="Delete a secret from a GitHub repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_delete_repository_secret"
+        ),
+        Intent(
+            intent_value="List contributors to a GitHub repository",
+            intent_type=IntentType.TOOL,
+            intent_target="github_list_repository_contributors"
+        ),
+    ]
+    # Set configuration
+    system_prompt = SYSTEM_PROMPT.replace(
+        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+    )
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+        agent_configuration = AgentConfiguration(system_prompt=system_prompt)
 
     # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
-
-    tools: list = []
-    from naas_abi_marketplace.applications.github.integrations import (
-        GitHubGraphqlIntegration,
-        GitHubIntegration,
-    )
-    from naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
-        GitHubGraphqlIntegrationConfiguration,
-    )
-    from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
-        GitHubIntegrationConfiguration,
-    )
-
-    if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):
-        github_integration_config = GitHubIntegrationConfiguration(
-            access_token=github_access_token
-        )
-        tools += GitHubIntegration.as_tools(github_integration_config)
-        github_graphql_integration_config = GitHubGraphqlIntegrationConfiguration(
-            access_token=github_access_token
-        )
-        tools += GitHubGraphqlIntegration.as_tools(github_graphql_integration_config)
-    else:
-        logger.warning("No Github access token found, skipping Github integration")
 
     return GitHubAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
+        intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,
     )
 
 
-class GitHubAgent(Agent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME,
-        name: str = NAME.capitalize(),
-        description: str = "API endpoints to call the Support agent completion.",
-        description_stream: str = "API endpoints to call the Support agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+class GitHubAgent(IntentAgent):
+    pass

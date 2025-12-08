@@ -19,14 +19,10 @@ global_config:
 modules:
   - module: naas_abi
     enabled: true
-    config:
-      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-  - module: naas_abi_core.modules.templatablesparqlquery
-    enabled: true
 
 services:
   secret:

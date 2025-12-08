@@ -1,17 +1,17 @@
 from typing import Literal
 
-from naas_abi_marketplace.domains.support import ABIModule
+from naas_abi_marketplace.applications.github import ABIModule
 from naas_abi_core.models.Model import ChatModel
 
 
 def get_model() -> ChatModel:
-    from naas_abi_marketplace.ai.chatgpt import ABIModule as ChatGPTABIModule
     ai_mode: Literal["cloud", "local", "airgap"] = (
         ABIModule.get_instance().configuration.global_config.ai_mode
     )
     if (
         ai_mode == "airgap"
-        or not ChatGPTABIModule.get_instance().configuration.openai_api_key
+        or not ABIModule.get_instance().configuration.openai_api_key
+        and not ABIModule.get_instance().configuration.openrouter_api_key
     ):
         from naas_abi.models.airgap_qwen import model as airgap_model
 

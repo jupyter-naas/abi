@@ -15,20 +15,21 @@ class ABIModule(BaseModule):
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_marketplace.ai.claude#soft",
-            "naas_abi_core.modules.templatablesparqlquery",
+            # "naas_abi_core.modules.templatablesparqlquery",
         ],
         services=[Secret, TripleStoreService, ObjectStorageService],
     )
 
     class Configuration(ModuleConfiguration):
-        openai_api_key: str
-        anthropic_api_key: str | None = None
+        pass
+        # openai_api_key: str | None = None
+        # anthropic_api_key: str | None = None
 
-    def on_initialized(self):
-        if (
-            self.configuration.anthropic_api_key is not None
-            and "naas_abi_marketplace.ai.claude" not in self.engine.modules
-        ):
-            raise ValueError(
-                "anthropic_api_key is provided but naas_abi_marketplace.ai.claude is not available"
-            )
+    # def on_initialized(self):
+    #     if (
+    #         self.configuration.anthropic_api_key is not None
+    #         and "naas_abi_marketplace.ai.claude" not in self.engine.modules
+    #     ):
+    #         raise ValueError(
+    #             "anthropic_api_key is provided but naas_abi_marketplace.ai.claude is not available"
+    #         )

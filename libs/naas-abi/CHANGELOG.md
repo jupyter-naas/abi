@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v1.0.6-dev.1 (2025-12-08)
+
+
+## v1.0.3-dev.2 (2025-12-04)
+
+### Bug Fixes
+
+- Use dependencies and not configuration from module
+  ([`71e4f10`](https://github.com/jupyter-naas/abi/commit/71e4f102c4a7a5f16ba4d344a5ca878efea8ffe0))
+
+
+## v1.0.3-dev.1 (2025-12-02)
+
+### Bug Fixes
+
+- Github and support module
+  ([`8f113ea`](https://github.com/jupyter-naas/abi/commit/8f113ea071126a4ebd44e2aa22b26f55aa22bee3))
 ## v1.0.5 (2025-12-02)
 
 ### Bug Fixes

@@ -149,19 +149,19 @@ You can browse the data and run queries there."""
 
     tools.append(open_knowledge_graph_explorer)
 
-    templatable_sparql_query_module = ABIModule.get_instance().engine.modules[
-        "naas_abi_core.modules.templatablesparqlquery"
-    ]
+    # templatable_sparql_query_module = ABIModule.get_instance().engine.modules[
+    #     "naas_abi_core.modules.templatablesparqlquery"
+    # ]
 
-    agent_recommendation_tools = [
-        "find_business_proposal_agents",
-        "find_coding_agents",
-        "find_math_agents",
-        "find_best_value_agents",
-        "find_fastest_agents",
-        "find_cheapest_agents",
-    ]
-    tools.extend(templatable_sparql_query_module.get_tools(agent_recommendation_tools))
+    # agent_recommendation_tools = [
+    #     "find_business_proposal_agents",
+    #     "find_coding_agents",
+    #     "find_math_agents",
+    #     "find_best_value_agents",
+    #     "find_fastest_agents",
+    #     "find_cheapest_agents",
+    # ]
+    # tools.extend(templatable_sparql_query_module.get_tools(agent_recommendation_tools))
 
     shared_state = agent_shared_state or AgentSharedState(
         thread_id="0", supervisor_agent=NAME
