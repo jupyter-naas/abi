@@ -1,10 +1,12 @@
-from naas_abi import secret
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
 
 
-def requirements():
-    ai_mode = secret.get("AI_MODE")
-    google_api_key = secret.get("GOOGLE_API_KEY")
-    openrouter_api_key = secret.get("OPENROUTER_API_KEY")
-    if ai_mode == "cloud" and (google_api_key or openrouter_api_key):
-        return True
-    return False
+class ABIModule(BaseModule):
+    dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
+
+    class Configuration(ModuleConfiguration):
+        gemini_api_key: str

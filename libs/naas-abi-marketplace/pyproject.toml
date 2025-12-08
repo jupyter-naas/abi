@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-marketplace"
-version = "1.0.7"
+version = "1.1.0-dev.3"
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
@@ -48,11 +48,14 @@ prerelease = true
 prerelease_token = "dev"
 
 [project.optional-dependencies]
+applications-googlesearch = [
+    "beautifulsoup4>=4.12.0",
+]
+applications-linkedin = [
+    "pandas>=2.3.3",
+]
 applications-powerpoint = [
   "python-pptx>=1.0.2,<2"
-]
-linkedin = [
-    "pandas>=2.3.3",
 ]
 ai-chatgpt = [
     "pdfplumber>=0.11.8",

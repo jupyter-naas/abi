@@ -1,12 +1,10 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Annotated, Dict, List, Optional
-
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import config
-from naas_abi_core.utils.Storage import save_json
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
@@ -19,6 +17,7 @@ from naas_abi_marketplace.applications.github.integrations.GitHubIntegration imp
     GitHubIntegrationConfiguration,
 )
 from pydantic import Field
+from naas_abi_marketplace.domains.support import ABIModule
 
 
 @dataclass
@@ -28,15 +27,19 @@ class ReportBugWorkflowConfiguration(WorkflowConfiguration):
     Attributes:
         github_integration_config: Configuration for GitHub REST API
         github_graphql_integration_config: Configuration for GitHub GraphQL API
+        data_store_path: Path to store cached data
+        project_node_id: ID of the project to create the bug report in
+        status_field_id: ID of the status field to create the bug report in
+        priority_field_id: ID of the priority field to create the bug report in
+        iteration_field_id: ID of the iteration field to create the bug report in
     """
-
     github_integration_config: GitHubIntegrationConfiguration
     github_graphql_integration_config: GitHubGraphqlIntegrationConfiguration
-    data_store_path: str = "datastore/support"
-    project_node_id: str = "PVT_kwDOBESWNM4AKRt3"
-    status_field_id: str = "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
-    priority_field_id: str = "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
-    iteration_field_id: str = "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
+    data_store_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    project_node_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.project_node_id)
+    status_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.status_field_id)
+    priority_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.priority_field_id)
+    iteration_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.iteration_field_id)
 
 
 class ReportBugParameters(WorkflowParameters):
@@ -45,40 +48,67 @@ class ReportBugParameters(WorkflowParameters):
     Attributes:
         issue_title: Title of the bug report
         issue_body: Body content of the bug report
+        repo_name: Name of the repository to create the bug report in
+        assignees: Assignees of the bug report
+        labels: Labels of the bug report
+        priority_id: ID of the priority of the bug report
+        status_id: ID of the status of the bug report
     """
-
-    issue_title: Annotated[str, Field(..., description="The title of the bug report")]
+    issue_title: Annotated[
+        str, 
+        Field(
+            ..., 
+            description="The title of the bug report"
+        )
+    ]
     issue_body: Annotated[
         str,
         Field(
-            ..., description="The description of the bug, including steps to reproduce"
+            ..., 
+            description="The description of the bug, including steps to reproduce"
         ),
     ]
     repo_name: Annotated[
         str,
         Field(
-            config.github_repository,
+            ABIModule.get_instance().configuration.default_repository,
             description="The name of the repository to create the bug report in",
         ),
     ]
+    labels: Annotated[
+        list,
+        Field(
+            ["bug"],
+            description="The labels of the bug report"
+        )
+    ]
+    priority_id: Annotated[
+            str, 
+            Field(
+                ABIModule.get_instance().configuration.priority_option_id,
+                description="The ID of the priority of the bug report"
+            )
+    ]
+    status_id: Annotated[
+        str, 
+        Field(
+            ABIModule.get_instance().configuration.status_option_id,
+            description="The ID of the status of the bug report"
+        )
+    ]
     assignees: Optional[
-        Annotated[list, Field(description="The assignees of the bug report")]
+        Annotated[
+            list,
+            Field(description="The assignees of the bug report")
+        ]
     ] = []
-    labels: Optional[
-        Annotated[list, Field(description="The labels of the bug report")]
-    ] = ["bug"]
-    priority_id: Optional[
-        Annotated[str, Field(description="The ID of the priority of the bug report")]
-    ] = "4fb76f2d"
-    status_id: Optional[
-        Annotated[str, Field(description="The ID of the status of the bug report")]
-    ] = "97363483"
 
 
 class ReportBugWorkflow(Workflow):
     """Workflow class that handles bug report creation."""
 
     __configuration: ReportBugWorkflowConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: ReportBugWorkflowConfiguration):
         self.__configuration = configuration
@@ -87,6 +117,9 @@ class ReportBugWorkflow(Workflow):
         )
         self.__github_graphql_integration = GitHubGraphqlIntegration(
             self.__configuration.github_graphql_integration_config
+        )
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
         )
 
     def report_bug(self, parameters: ReportBugParameters) -> Dict:
@@ -108,7 +141,7 @@ class ReportBugWorkflow(Workflow):
         )
         issue_repository_url = issue.get("repository_url", "")
         issue_path = issue_repository_url.split("https://api.github.com/repos/")[-1]
-        save_json(
+        self.__storage_utils.save_json(
             issue,
             os.path.join(self.__configuration.data_store_path, issue_path, "issues"),
             f"{issue.get('number')}.json",
@@ -127,7 +160,7 @@ class ReportBugWorkflow(Workflow):
             priority_option_id=parameters.priority_id,
             iteration_option_id=iteration_option_id,
         )
-        save_json(
+        self.__storage_utils.save_json(
             issue_graphql,
             os.path.join(self.__configuration.data_store_path, issue_path, "issues"),
             f"{issue.get('number')}_graphql.json",
@@ -142,8 +175,8 @@ class ReportBugWorkflow(Workflow):
         """
         return [
             StructuredTool(
-                name="report_bug",
-                description="Report a bug to the support team.",
+                name="support_bug_report",
+                description="Create a new bug report (GitHub) issue.",
                 func=lambda **kwargs: self.report_bug(ReportBugParameters(**kwargs)),
                 args_schema=ReportBugParameters,
             ),
