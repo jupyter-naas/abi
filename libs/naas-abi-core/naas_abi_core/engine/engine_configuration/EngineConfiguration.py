@@ -20,7 +20,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreSe
 from naas_abi_core.services.secret.Secret import Secret
 from pydantic import BaseModel, model_validator
 from typing_extensions import Literal
-
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import DeployConfiguration
 
 class ServicesConfiguration(BaseModel):
     object_storage: ObjectStorageServiceConfiguration
@@ -80,6 +80,8 @@ class GlobalConfig(BaseModel):
 
 class EngineConfiguration(BaseModel):
     api: ApiConfiguration
+    
+    deploy: DeployConfiguration | None = None
 
     services: ServicesConfiguration
 

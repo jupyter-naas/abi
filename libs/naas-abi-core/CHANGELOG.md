@@ -2,6 +2,61 @@
 
 <!-- version list -->
 
+## v1.1.2 (2025-12-05)
+
+### Bug Fixes
+
+- Make it possible to define env secrets from config.yaml
+  ([`d9903cf`](https://github.com/jupyter-naas/abi/commit/d9903cfecac03df40a6f3076c7ff44229c0c12cd))
+
+
+## v1.1.1 (2025-12-05)
+
+
+## v1.1.0 (2025-12-05)
+
+### Features
+
+- Make it possible to add env var using cli deploy
+  ([`eb32c8d`](https://github.com/jupyter-naas/abi/commit/eb32c8d9613ecbddb3a891f25db0a5bc3498b258))
+
+
+## v1.0.8 (2025-12-05)
+
+
+## v1.0.7 (2025-12-03)
+
+### Bug Fixes
+
+- Working on embedding assets in the release
+  ([`9737428`](https://github.com/jupyter-naas/abi/commit/97374285cb3c79ed03399859c58b8cac6373627d))
+
+- **marketplace**: Convert applications.pubmed to a real module
+  ([`b9ac395`](https://github.com/jupyter-naas/abi/commit/b9ac395c0e90980fb19379d40ae5017efcf06d1d))
+
+
+## v1.0.6 (2025-12-02)
+
+### Bug Fixes
+
+- Working on abi cli
+  ([`e1c11a1`](https://github.com/jupyter-naas/abi/commit/e1c11a15a80403fdb1992faa4dcb035fbaf9b5c0))
+
+
+## v1.0.5 (2025-12-02)
+
+### Bug Fixes
+
+- Working on dependencies
+  ([`cfb492f`](https://github.com/jupyter-naas/abi/commit/cfb492f5f1604d405ff0221d505e90101614d59e))
+
+
+## v1.0.4 (2025-12-02)
+
+### Bug Fixes
+
+- Update release commit parser option
+  ([`6eabfd8`](https://github.com/jupyter-naas/abi/commit/6eabfd8f61681240a1974affd377b983bd7885a9))
 ## v1.0.4-dev.2 (2025-12-02)
 
 

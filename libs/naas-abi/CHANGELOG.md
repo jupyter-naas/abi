@@ -16,6 +16,23 @@
 
 - Github and support module
   ([`8f113ea`](https://github.com/jupyter-naas/abi/commit/8f113ea071126a4ebd44e2aa22b26f55aa22bee3))
+## v1.0.5 (2025-12-02)
+
+### Bug Fixes
+
+- Working on dependencies
+  ([`cfb492f`](https://github.com/jupyter-naas/abi/commit/cfb492f5f1604d405ff0221d505e90101614d59e))
+
+
+## v1.0.4 (2025-12-02)
+
+
+## v1.0.3 (2025-12-02)
+
+### Bug Fixes
+
+- Update release commit parser option
+  ([`6eabfd8`](https://github.com/jupyter-naas/abi/commit/6eabfd8f61681240a1974affd377b983bd7885a9))
 
 
 ## v1.0.2-dev.1 (2025-12-01)
