@@ -13,7 +13,7 @@ model: ChatModel = ChatModel(
     model=ChatGoogleGenerativeAI(
         model=MODEL_ID,
         api_key=SecretStr(
-            ABIModule.get_instance().configuration.google_ai_api_key
+            ABIModule.get_instance().configuration.gemini_api_key
         ),
     ),
 )
