@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.3-dev.1 (2025-12-08)
+
+### Bug Fixes
+
+- Linting errors
+  ([`fe8c0a4`](https://github.com/jupyter-naas/abi/commit/fe8c0a4b8969bf70eb5aebe83e060a4771298638))
+
+
 ## v1.1.2 (2025-12-05)
 
 ### Bug Fixes
