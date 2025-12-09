@@ -14,16 +14,13 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
-            "naas_abi_marketplace.ai.claude#soft",
-            # "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_core.modules.templatablesparqlquery",
         ],
         services=[Secret, TripleStoreService, ObjectStorageService],
     )
 
     class Configuration(ModuleConfiguration):
-        pass
-        # openai_api_key: str | None = None
-        # anthropic_api_key: str | None = None
+        datastore_path: str = "abi"
 
     # def on_initialized(self):
     #     if (
