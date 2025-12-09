@@ -1,5 +1,5 @@
 import pytest
-from naas_abi.core.gemini.agents.GeminiAgent import create_agent
+from naas_abi_marketplace.ai.gemini.agents.GeminiAgent import create_agent
 
 
 @pytest.fixture
