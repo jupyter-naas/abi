@@ -23,6 +23,19 @@ modules:
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  - module: naas_abi_marketplace.ai.gemini
+    enabled: true
+    config:
+      gemini_api_key: "{{ secret.GEMINI_API_KEY }}"
+  - module: naas_abi_marketplace.applications.google_search
+    enabled: true
+    config:
+      google_api_key: "{{ secret.GOOGLE_API_KEY }}"
+      google_search_engine_id: "{{ secret.GOOGLE_SEARCH_ENGINE_ID }}"
+  - module: naas_abi_marketplace.domains.support
+    enabled: true
+    config:
+      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
 
 services:
   secret:
