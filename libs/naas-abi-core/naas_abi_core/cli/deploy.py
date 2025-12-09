@@ -1,4 +1,3 @@
-import json
 import subprocess
 from uuid import uuid4
 
@@ -170,7 +169,7 @@ class NaasDeployer:
             )
         )
 
-        space = self.naas_api_client.get_space(self.configuration.deploy.space_name)
+        self.naas_api_client.get_space(self.configuration.deploy.space_name)
 
         Console().print(
             Markdown(f"""
