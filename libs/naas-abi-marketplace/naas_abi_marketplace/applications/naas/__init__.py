@@ -24,11 +24,7 @@ class ABIModule(BaseModule):
         module: naas_abi_marketplace.applications.naas
         enabled: true
         config:
-            datastore_path: "datastore/naas"
             naas_api_key: "{{ secret.NAAS_API_KEY }}"
-            openai_api_key: "{{ secret.OPENAI_API_KEY }}"
         """
-
-        datastore_path: str
-        openai_api_key: str
         naas_api_key: str
+        datastore_path: str = "naas"

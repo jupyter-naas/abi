@@ -24,8 +24,7 @@ class ABIModule(BaseModule):
         module: naas_abi_marketplace.applications.hubspot
         enabled: true
         config:
-            datastore_path: "hubspot"
             hubspot_access_token: "{{ secret.HUBSPOT_ACCESS_TOKEN }}"
         """
-        datastore_path: str
         hubspot_access_token: str
+        datastore_path: str = "hubspot"
