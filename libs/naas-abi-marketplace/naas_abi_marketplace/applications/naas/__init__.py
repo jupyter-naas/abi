@@ -29,6 +29,6 @@ class ABIModule(BaseModule):
             storage_name: "{{ secret.STORAGE_NAME }}"
         """
         naas_api_key: str
-        workspace_id: str
-        storage_name: str
+        workspace_id: str | None = None
+        storage_name: str | None = None
         datastore_path: str = "naas"
