@@ -25,6 +25,10 @@ class ABIModule(BaseModule):
         enabled: true
         config:
             naas_api_key: "{{ secret.NAAS_API_KEY }}"
+            workspace_id: "{{ secret.WORKSPACE_ID }}"
+            storage_name: "{{ secret.STORAGE_NAME }}"
         """
         naas_api_key: str
+        workspace_id: str
+        storage_name: str
         datastore_path: str = "naas"
