@@ -32,6 +32,18 @@ modules:
     config:
       google_api_key: "{{ secret.GOOGLE_API_KEY }}"
       google_search_engine_id: "{{ secret.GOOGLE_SEARCH_ENGINE_ID }}"
+  - module: naas_abi_marketplace.applications.linkedin
+    enabled: true
+    config:
+      li_at: "{{ secret.li_at }}"
+      JSESSIONID: "{{ secret.JSESSIONID }}"
+      linkedin_profile_url: "{{ secret.LINKEDIN_PROFILE_URL }}"
+  - module: naas_abi_marketplace.applications.naas
+    enabled: true
+    config:
+      naas_api_key: "{{ secret.NAAS_API_KEY }}"
+      workspace_id: "{{ secret.WORKSPACE_ID }}"
+      storage_name: "{{ secret.STORAGE_NAME }}"
   - module: naas_abi_marketplace.domains.support
     enabled: true
     config:
