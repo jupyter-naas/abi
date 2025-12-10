@@ -457,7 +457,7 @@ check-core: deps
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
-	@cd libs/naas-abi-core && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports
+	@cd libs/naas-abi-core && uv run mypy -p naas_abi_core --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi-core
@@ -480,7 +480,7 @@ check-custom: deps
 	@uvx ruff check libs/naas-abi
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
+	@cd libs/naas-abi && uv sync --all-extras && uv run mypy -p naas_abi --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi
@@ -501,7 +501,7 @@ check-marketplace: deps
 	@uvx ruff check libs/naas-abi-marketplace
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	cd libs/naas-abi-marketplace && .venv/bin/mypy -p $(package) --follow-untyped-imports
+	cd libs/naas-abi-marketplace && uv run mypy -p $(package) --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check src/marketplace
