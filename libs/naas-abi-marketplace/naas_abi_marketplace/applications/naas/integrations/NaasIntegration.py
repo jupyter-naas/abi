@@ -30,8 +30,8 @@ class NaasIntegrationConfiguration(IntegrationConfiguration):
     """
 
     api_key: str
-    workspace_id: str
-    storage_name: str
+    workspace_id: str | None = None
+    storage_name: str | None = None
     base_url: str = "https://api.naas.ai"
 
 
@@ -725,10 +725,14 @@ class NaasIntegration(Integration):
     ) -> Dict:
         # Init
         asset: dict = {}
-        if workspace_id is None:
+        if workspace_id is None and self.__configuration.workspace_id is not None:
             workspace_id = self.__configuration.workspace_id
-        if storage_name is None:
+        else:
+            return {"error": "workspace_id must be provided"}
+        if storage_name is None and self.__configuration.storage_name is not None:
             storage_name = self.__configuration.storage_name
+        else:
+            return {"error": "storage_name must be provided"}
 
         # Init storage service Naas
         naas_storage: ObjectStorageService = (
