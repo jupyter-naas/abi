@@ -32,6 +32,7 @@ class ABIModule(BaseModule[_Configuration]):
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_marketplace.applications.google_search",
+            "naas_abi_marketplace.applications.naas",
         ],
         services=[ObjectStorageService, TripleStoreService],
     )
