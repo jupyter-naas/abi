@@ -6,7 +6,6 @@ from pydantic import SecretStr
 MODEL_ID = "sonar-reasoning"
 PROVIDER = "perplexity"
 
-
 model: ChatModel = ChatModel(
     model_id=MODEL_ID,
     provider=PROVIDER,
