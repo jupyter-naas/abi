@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     # if: startsWith(github.event.release.tag_name, 'naas-abi-v')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
 
     steps:
       - name: Checkout repository
