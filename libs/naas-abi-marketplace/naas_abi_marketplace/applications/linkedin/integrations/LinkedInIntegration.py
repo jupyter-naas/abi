@@ -1474,6 +1474,12 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
                 description="Location to filter the people.",
             ),
         ]] = None
+        limit: Optional[Annotated[
+            int,
+            Field(
+                description="Maximum number of people to return.",
+            )
+        ]] = 1000
 
     return [
         StructuredTool(
