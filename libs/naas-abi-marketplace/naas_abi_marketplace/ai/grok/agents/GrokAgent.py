@@ -1,5 +1,4 @@
 from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
