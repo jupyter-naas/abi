@@ -14,7 +14,7 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
-            "naas_abi_core.modules.templatablesparqlquery",
+            # "naas_abi_core.modules.templatablesparqlquery",
         ],
         services=[Secret, TripleStoreService, ObjectStorageService],
     )

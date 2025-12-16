@@ -40,7 +40,6 @@ class GetObjectPropertiesFromClassWorkflowParameters(WorkflowParameters):
         Field(
             ...,
             description="URI of the class to get object properties for",
-            example="http://purl.obolibrary.org/obo/BFO_0000040",
             pattern="^http.*",
         ),
     ]
@@ -237,6 +236,7 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
         """Check if the given URI is a class in the ontology."""
         uri_ref = URIRef(uri)
         # Check if it's declared as an OWL Class
+        print(self.graph.serialize(format="turtle"))
         return (uri_ref, RDF.type, OWL.Class) in self.graph
 
     def _class_matches_domain(self, class_uri, domains):
@@ -371,11 +371,18 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
 
 
 if __name__ == "__main__":
-    from naas_abi_core import logger, services
+    from naas_abi_core import logger
+    from naas_abi import ABIModule
+    from naas_abi_core.engine.Engine import Engine
+
+    engine = Engine()
+    engine.load(module_names=[
+        "naas_abi"
+    ])
 
     workflow = GetObjectPropertiesFromClassWorkflow(
         GetObjectPropertiesFromClassWorkflowConfiguration(
-            triple_store=services.triple_store_service
+            triple_store=ABIModule.get_instance().engine.services.triple_store
         )
     )
     class_uri = "http://purl.obolibrary.org/obo/BFO_0000015"
