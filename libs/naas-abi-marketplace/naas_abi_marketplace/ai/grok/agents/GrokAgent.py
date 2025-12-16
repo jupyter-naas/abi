@@ -59,7 +59,7 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
 ) -> IntentAgent:
     # Define model
-    from naas_abi.core.grok.models.grok_4 import model
+    from naas_abi_marketplace.ai.grok.models.grok_4 import model
 
     # Define tools
     tools: list = []
