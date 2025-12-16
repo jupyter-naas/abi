@@ -1,4 +1,4 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_marketplace.ai.gemini import ABIModule
 from pydantic import SecretStr
