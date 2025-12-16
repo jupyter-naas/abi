@@ -1,5 +1,4 @@
 from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -71,7 +70,7 @@ def create_agent(
     # Define tools
     tools: list = []
     from naas_abi import secret
-    from naas_abi.core.perplexity.integrations.PerplexityIntegration import (
+    from naas_abi_marketplace.ai.perplexity.integrations.PerplexityIntegration import (
         PerplexityIntegrationConfiguration,
         as_tools,
     )
