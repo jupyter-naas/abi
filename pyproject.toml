@@ -15,6 +15,7 @@ dependencies = [
     "naas-abi-marketplace[ai-grok]",
     "naas-abi-marketplace[ai-mistral]",
     "naas-abi-marketplace[ai-perplexity]",
+    "naas-abi-marketplace[applications-algolia]",
     "naas-abi-marketplace[applications-googlesearch]",
     "naas-abi-marketplace[applications-linkedin]",
     "naas-abi-marketplace[applications-powerpoint]",

@@ -53,6 +53,8 @@ help:
 	@echo "  chat-qwen-agent          Start Qwen-based agent"
 	@echo ""
 	@echo "MARKETPLACE APPLICATION AGENTS:"
+	@echo "  chat-agicap-agent        Start Agicap integration agent"
+	@echo "  chat-algolia-agent       Start Algolia integration agent"
 	@echo "  chat-github-agent        Start GitHub integration agent"
 	@echo "  chat-google-search-agent Start Google Search integration agent"
 	@echo "  chat-linkedin-agent      Start LinkedIn integration agent"
@@ -273,6 +275,12 @@ chat-qwen-agent: deps
 # =============================================================================
 # CHAT WITH MARKETPLACE APPLICATIONS AGENTS
 # =============================================================================
+
+chat-agicap-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.agicap AgicapAgent
+
+chat-algolia-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.algolia AlgoliaAgent
 
 chat-github-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.github GitHubAgent

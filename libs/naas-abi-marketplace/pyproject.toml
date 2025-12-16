@@ -66,6 +66,9 @@ ai-perplexity = [
 ai-mistral = [
     "langchain-mistralai>=0.2.11",
 ]
+applications-algolia = [
+    "algoliasearch>=4.35.0"
+]
 applications-googlesearch = [
     "beautifulsoup4>=4.12.0",
 ]
