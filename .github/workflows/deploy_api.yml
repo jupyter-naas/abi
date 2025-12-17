@@ -12,7 +12,7 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -186,7 +186,7 @@ jobs:
           exit 1
 
   streamlit-demo:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     env:
       REGISTRY_NAME: ${{ github.event.repository.name }}-demo-streamlit
     steps:
@@ -260,7 +260,7 @@ jobs:
            || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
 
   mcp-server:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     needs: build  # Wait for API to be deployed first
     env:
       REGISTRY_NAME: ${{ github.event.repository.name }}-mcp-server
