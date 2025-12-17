@@ -23,6 +23,7 @@ class ModuleAgentLoader:
                     agent_module_path = (
                         f"{class_.__module__}.agents.{file.replace('.py', '')}"
                     )
+                    logger.debug(f"Importing agent module from {agent_module_path}")
                     agent_module = importlib.import_module(agent_module_path)
                     for key, value in agent_module.__dict__.items():
                         if (
