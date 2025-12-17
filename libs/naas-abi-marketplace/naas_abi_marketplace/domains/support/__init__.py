@@ -25,7 +25,6 @@ class ABIModule(BaseModule):
         module: naas_abi_marketplace.domains.support
         enabled: true
         config:
-            datastore_path: "support"
             default_repository: "jupyter-naas/abi"
             github_project_id: 12
             project_node_id: "PVT_kwDOBESWNM4AKRt3"
@@ -35,7 +34,6 @@ class ABIModule(BaseModule):
             priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
             priority_option_id: "4fb76f2d"
         """
-        datastore_path: str
         default_repository: str
         github_project_id: int
         project_node_id: str
@@ -44,3 +42,4 @@ class ABIModule(BaseModule):
         status_option_id: str
         priority_field_id: str
         priority_option_id: str
+        datastore_path: str = "support"

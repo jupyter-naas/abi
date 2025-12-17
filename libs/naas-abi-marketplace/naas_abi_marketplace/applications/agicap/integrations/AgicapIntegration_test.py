@@ -7,15 +7,22 @@ from naas_abi_marketplace.applications.agicap.integrations.AgicapIntegration imp
 
 @pytest.fixture
 def integration() -> AgicapIntegration:
-    from naas_abi import secret
+    from naas_abi_marketplace.applications.agicap import ABIModule
+    module = ABIModule.get_instance()
+    agicap_username = module.configuration.agicap_username
+    agicap_password = module.configuration.agicap_password
+    agicap_client_id = module.configuration.agicap_client_id
+    agicap_client_secret = module.configuration.agicap_client_secret
+    agicap_api_token = module.configuration.agicap_api_token
+    agicap_bearer_token = module.configuration.agicap_bearer_token
 
     configuration = AgicapIntegrationConfiguration(
-        username=secret.get("AGICAP_USERNAME"),
-        password=secret.get("AGICAP_PASSWORD"),
-        client_id=secret.get("AGICAP_CLIENT_ID"),
-        client_secret=secret.get("AGICAP_CLIENT_SECRET"),
-        api_token=secret.get("AGICAP_API_TOKEN"),
-        bearer_token=secret.get("AGICAP_BEARER_TOKEN"),
+        username=agicap_username,
+        password=agicap_password,
+        client_id=agicap_client_id,
+        client_secret=agicap_client_secret,
+        api_token=agicap_api_token,
+        bearer_token=agicap_bearer_token,
     )
     return AgicapIntegration(configuration)
 

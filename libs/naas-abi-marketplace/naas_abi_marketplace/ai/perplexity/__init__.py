@@ -1,15 +1,31 @@
-from naas_abi import secret
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 
 
-def requirements():
-    ai_mode = secret.get("AI_MODE")
-    openai_api_key = secret.get("OPENAI_API_KEY")
-    openrouter_api_key = secret.get("OPENROUTER_API_KEY")
-    perplexity_api_key = secret.get("PERPLEXITY_API_KEY")
-    if (
-        ai_mode == "cloud"
-        and (openai_api_key or openrouter_api_key)
-        and perplexity_api_key
-    ):
-        return True
-    return False
+class ABIModule(BaseModule):
+    dependencies: ModuleDependencies = ModuleDependencies(
+        modules=[],
+        services=[ObjectStorageService],
+    )
+
+    class Configuration(ModuleConfiguration):
+        """
+        Configuration example:
+
+        module: naas_abi_marketplace.ai.perplexity
+        enabled: true
+        config:
+            perplexity_api_key: "{{ secret.PERPLEXITY_API_KEY }}"
+            openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+            openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+        """
+        perplexity_api_key: str
+        openai_api_key: str | None = None
+        openrouter_api_key: str | None = None
+        datastore_path: str = "perplexity"

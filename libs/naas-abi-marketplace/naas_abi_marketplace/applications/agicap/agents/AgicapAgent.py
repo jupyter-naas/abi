@@ -1,7 +1,4 @@
 from typing import Optional
-
-from langchain_openai import ChatOpenAI
-from naas_abi import secret
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -9,80 +6,42 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from pydantic import SecretStr
 
 NAME = "Agicap"
 DESCRIPTION = "Expert cash flow management and financial analysis agent with access to Agicap Integration tools."
-MODEL = "gpt-4.1-mini"
-TEMPERATURE = 0.3
 AVATAR_URL = "https://logo.clearbit.com/agicap.com"
-
-SYSTEM_PROMPT = """# ROLE
+SYSTEM_PROMPT = """<role>
 You are Agicap, an expert financial analyst and cash flow management specialist. You possess deep expertise in:
+</role>
 
-# OBJECTIVE
+<objective>
 Help users access data in Agicap and perform financial analysis on the data.
+</objective>
 
-# CONTEXT
-You operate as a professional financial analyst with access to Agicap data.
+<context>
+You operate within a secure environment with authenticated access to Agicap through configured credentials.
+</context>
 
-# TASKS
-- Retrieve financial data from Agicap
-- Perform financial analysis on retrieved data
+<tools>
+[TOOLS]
+</tools>
 
-# TOOLS
-You have access to the following Agicap integration tools:
-- agicap_list_companies: Get list of accessible companies with their IDs
-- agicap_get_company_accounts: Get all accounts with their IDs for a company
-- agicap_get_transactions: Get all transactions for a specific account
-- agicap_get_balance: Get account balance information (consolidated if no account specified)
-- agicap_get_debts: Get company debt information
-
-# OPERATING GUIDELINES
+<operating_guidelines>
 1. Company Context: Always start by using `agicap_list_companies` to understand available companies
 2. Account Discovery: Use `agicap_get_company_accounts` to identify relevant accounts for analysis
 3. Data Integrity: Verify calculations and cross-reference multiple sources
 4. Privacy: Respect data confidentiality and highlight any data inconsistencies
 5. Business Focus: Transform raw financial data into strategic business intelligence
+</operating_guidelines>
 
-# CONSTRAINTS
+<constraints>
 - Always provide context (tool responses, analysis, etc.) in your final response
 - Flag any data inconsistencies or potential errors
 - Maintain strict data accuracy and validation
+</constraints>
 """
 
-SUGGESTIONS: list = [
-    {
-        "label": "💰 Analyse de trésorerie",
-        "description": "Obtenir un aperçu complet de la trésorerie",
-        "prompt": "Peux-tu analyser ma situation de trésorerie actuelle ?",
-    },
-    {
-        "label": "📊 Tableau de bord financier",
-        "description": "Créer un tableau de bord avec les KPIs clés",
-        "prompt": "Crée un tableau de bord financier avec les indicateurs clés",
-    },
-    {
-        "label": "🔍 Analyse des transactions",
-        "description": "Analyser les transactions récentes",
-        "prompt": "Analyse mes transactions récentes et identifie les tendances",
-    },
-    {
-        "label": "⚠️ Alertes de risque",
-        "description": "Identifier les risques de liquidité",
-        "prompt": "Identifie les risques potentiels dans ma trésorerie",
-    },
-    {
-        "label": "📈 Prévisions de trésorerie",
-        "description": "Établir des prévisions à court terme",
-        "prompt": "Établis des prévisions de trésorerie pour les 30 prochains jours",
-    },
-    {
-        "label": "💳 Suivi des dettes",
-        "description": "Analyser la situation d'endettement",
-        "prompt": "Analyse ma situation d'endettement et propose des optimisations",
-    },
-]
+SUGGESTIONS: list = []
 
 
 def create_agent(
@@ -98,32 +57,31 @@ def create_agent(
     Returns:
         IntentAgent: Configured Agicap agent or None if API keys are missing
     """
-    # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
-    )
+    # Initialize module
+    from naas_abi_marketplace.applications.agicap import ABIModule
+    module = ABIModule.get_instance()
+    agicap_username = module.configuration.agicap_username
+    agicap_password = module.configuration.agicap_password
+    agicap_bearer_token = module.configuration.agicap_bearer_token
+    agicap_client_id = module.configuration.agicap_client_id
+    agicap_client_secret = module.configuration.agicap_client_secret
+    agicap_api_token = module.configuration.agicap_api_token
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
+    # Define model
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
-    # Configure Agicap integration
+    # Set tools
     from naas_abi_marketplace.applications.agicap.integrations.AgicapIntegration import (
         AgicapIntegrationConfiguration,
         as_tools,
     )
-
     agicap_integration_config = AgicapIntegrationConfiguration(
-        username=secret.get("AGICAP_USERNAME"),
-        password=secret.get("AGICAP_PASSWORD"),
-        bearer_token=secret.get("AGICAP_BEARER_TOKEN"),
-        client_id=secret.get("AGICAP_CLIENT_ID"),
-        client_secret=secret.get("AGICAP_CLIENT_SECRET"),
-        api_token=secret.get("AGICAP_API_TOKEN"),
+        username=agicap_username,
+        password=agicap_password,
+        bearer_token=agicap_bearer_token,
+        client_id=agicap_client_id,
+        client_secret=agicap_client_secret,
+        api_token=agicap_api_token,
     )
     tools = as_tools(agicap_integration_config)
 
@@ -209,6 +167,15 @@ def create_agent(
             intent_target="agicap_get_debts",
         ),
     ]
+
+    # Set configuration
+    system_prompt = SYSTEM_PROMPT.replace(
+        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+    )
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(system_prompt=system_prompt)
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id="0")
 
     return AgicapAgent(
         name=NAME,

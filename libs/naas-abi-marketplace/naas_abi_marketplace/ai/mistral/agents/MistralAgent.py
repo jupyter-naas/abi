@@ -1,5 +1,4 @@
 from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -43,7 +42,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    from naas_abi.core.mistral.models.mistral_large_2411 import model
+    from naas_abi_marketplace.ai.mistral.models.mistral_large_2411 import model
 
     # Define tools
     tools: list = []

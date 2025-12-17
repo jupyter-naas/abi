@@ -1,10 +1,27 @@
-from naas_abi import secret
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 
 
-def requirements():
-    ai_mode = secret.get("AI_MODE")
-    xai_api_key = secret.get("XAI_API_KEY")
-    openrouter_api_key = secret.get("OPENROUTER_API_KEY")
-    if ai_mode == "cloud" and (xai_api_key or openrouter_api_key):
-        return True
-    return False
+class ABIModule(BaseModule):
+    dependencies: ModuleDependencies = ModuleDependencies(
+        modules=[],
+        services=[ObjectStorageService],
+    )
+
+    class Configuration(ModuleConfiguration):
+        """
+        Configuration example:
+
+        module: naas_abi_marketplace.ai.grok
+        enabled: true
+        config:
+            xai_api_key: "{{ secret.XAI_API_KEY }}"
+        """
+        xai_api_key: str
+        datastore_path: str = "grok"

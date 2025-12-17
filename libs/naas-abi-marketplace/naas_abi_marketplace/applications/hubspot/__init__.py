@@ -13,21 +13,18 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
-            "naas_abi_marketplace.applications.naas",
         ],
-        services=[TripleStoreService, ObjectStorageService],
+        services=[ObjectStorageService, TripleStoreService],
     )
 
     class Configuration(ModuleConfiguration):
         """
         Configuration example:
 
-        module: naas_abi_marketplace.applications.powerpoint
+        module: naas_abi_marketplace.applications.hubspot
         enabled: true
         config:
-            workspace_id: "{{ config.workspace_id }}"
-            storage_name: "{{ config.storage_name }}"
+            hubspot_access_token: "{{ secret.HUBSPOT_ACCESS_TOKEN }}"
         """
-        workspace_id: str
-        storage_name: str
-        datastore_path: str = "powerpoint"
+        hubspot_access_token: str
+        datastore_path: str = "hubspot"

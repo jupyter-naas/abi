@@ -1,5 +1,4 @@
 import pytest
-from naas_abi_marketplace.ai.chatgpt import ABIModule
 from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIResponsesIntegration import (
     OpenAIResponsesIntegration,
     OpenAIResponsesIntegrationConfiguration,
@@ -7,9 +6,18 @@ from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIResponsesIntegration imp
 
 
 @pytest.fixture
-def integration(module: ABIModule) -> OpenAIResponsesIntegration:
+def integration() -> OpenAIResponsesIntegration:
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.ai.chatgpt import ABIModule
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.ai.chatgpt"])
+
+    module = ABIModule.get_instance()
+    openai_api_key = module.configuration.openai_api_key
+
     configuration = OpenAIResponsesIntegrationConfiguration(
-        api_key=module.configuration.openai_api_key,
+        api_key=openai_api_key,
     )
     return OpenAIResponsesIntegration(configuration)
 
@@ -17,13 +25,20 @@ def integration(module: ABIModule) -> OpenAIResponsesIntegration:
 def test_web_search(integration: OpenAIResponsesIntegration):
     from datetime import datetime
 
-    query = "What's the news today? Start with the date in the format YYYY-MM-DD."
+    query = """
+    What's the news today? You must start your response with the date in the format YYYY-MM-DD.
+    Example: Here are the news of the day: 2025-09-25: ...
+    """
     response = integration.search_web(
-        query=query, search_context_size="medium", return_text=True
+        query=query,
+        search_context_size="medium",
+        return_text=True,
     )
 
     assert response is not None, response
-    assert datetime.now().strftime("%Y-%m-%d") in response, response
+    assert isinstance(response, dict), response
+    assert "content" in response, response
+    assert datetime.now().strftime("%Y-%m-%d") in response["content"], response["content"]
 
 
 def test_analyze_image(integration: OpenAIResponsesIntegration):
@@ -31,9 +46,10 @@ def test_analyze_image(integration: OpenAIResponsesIntegration):
     response = integration.analyze_image(image_urls=[image_url], return_text=True)
 
     assert response is not None, response
-    assert isinstance(response, str), response
-    assert "boardwalk" in response, response
-    assert "landscape" in response, response
+    assert isinstance(response, dict), response
+    assert "content" in response, response
+    assert "boardwalk" in response["content"].lower(), response["content"]
+    assert "landscape" in response["content"].lower(), response["content"]
 
 
 def test_analyze_pdf(integration: OpenAIResponsesIntegration):
@@ -41,7 +57,8 @@ def test_analyze_pdf(integration: OpenAIResponsesIntegration):
     response = integration.analyze_pdf(pdf_url=pdf_url, return_text=True)
 
     assert response is not None, response
-    assert isinstance(response, str), response
-    assert "accor" in response.lower(), response
-    assert "2023" in response, response
-    assert "impact report" in response.lower(), response
+    assert isinstance(response, dict), response
+    assert "content" in response, response
+    assert "accor" in response["content"].lower(), response["content"]
+    assert "2023" in response["content"], response["content"]
+    assert "impact report" in response["content"].lower(), response["content"]

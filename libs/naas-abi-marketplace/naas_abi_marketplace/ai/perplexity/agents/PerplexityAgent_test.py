@@ -3,7 +3,7 @@ import pytest
 
 @pytest.fixture
 def agent():
-    from naas_abi.core.perplexity.agents.PerplexityAgent import create_agent
+    from naas_abi_marketplace.ai.perplexity.agents.PerplexityAgent import create_agent
 
     return create_agent()
 

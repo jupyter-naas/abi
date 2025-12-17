@@ -16,15 +16,14 @@ class _Configuration(ModuleConfiguration):
     module: naas_abi_marketplace.applications.linkedin
     enabled: true
     config:
-        datastore_path: "linkedin"
         li_at: "{{ secret.li_at }}"
         JSESSIONID: "{{ secret.JSESSIONID }}"
         linkedin_profile_url: "https://www.linkedin.com/in/your-profile-id/"
     """
-    datastore_path: str
     li_at: str
     JSESSIONID: str
     linkedin_profile_url: str
+    datastore_path: str = "linkedin"
 
 
 class ABIModule(BaseModule[_Configuration]):
@@ -33,6 +32,7 @@ class ABIModule(BaseModule[_Configuration]):
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_marketplace.applications.google_search",
+            "naas_abi_marketplace.applications.naas",
         ],
         services=[ObjectStorageService, TripleStoreService],
     )

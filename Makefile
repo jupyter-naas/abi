@@ -53,6 +53,8 @@ help:
 	@echo "  chat-qwen-agent          Start Qwen-based agent"
 	@echo ""
 	@echo "MARKETPLACE APPLICATION AGENTS:"
+	@echo "  chat-agicap-agent        Start Agicap integration agent"
+	@echo "  chat-algolia-agent       Start Algolia integration agent"
 	@echo "  chat-github-agent        Start GitHub integration agent"
 	@echo "  chat-google-search-agent Start Google Search integration agent"
 	@echo "  chat-linkedin-agent      Start LinkedIn integration agent"
@@ -274,6 +276,12 @@ chat-qwen-agent: deps
 # CHAT WITH MARKETPLACE APPLICATIONS AGENTS
 # =============================================================================
 
+chat-agicap-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.agicap AgicapAgent
+
+chat-algolia-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.algolia AlgoliaAgent
+
 chat-github-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.github GitHubAgent
 
@@ -457,7 +465,7 @@ check-core: deps
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
-	@cd libs/naas-abi-core && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports
+	@cd libs/naas-abi-core && uv run mypy -p naas_abi_core --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi-core
@@ -480,7 +488,7 @@ check-custom: deps
 	@uvx ruff check libs/naas-abi
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
+	@cd libs/naas-abi && uv sync --all-extras && uv run mypy -p naas_abi --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi
@@ -501,7 +509,7 @@ check-marketplace: deps
 	@uvx ruff check libs/naas-abi-marketplace
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	cd libs/naas-abi-marketplace && .venv/bin/mypy -p $(package) --follow-untyped-imports
+	cd libs/naas-abi-marketplace && uv run mypy -p $(package) --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check src/marketplace

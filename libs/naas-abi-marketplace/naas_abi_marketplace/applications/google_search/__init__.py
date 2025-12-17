@@ -24,10 +24,9 @@ class ABIModule(BaseModule):
         module: naas_abi_marketplace.applications.google_search
         enabled: true
         config:
-            datastore_path: "google_search"
             google_custom_search_api_key: "{{ secret.GOOGLE_CUSTOM_SEARCH_API_KEY }}"
             google_custom_search_engine_id: "{{ secret.GOOGLE_CUSTOM_SEARCH_ENGINE_ID }}"
         """
-        datastore_path: str
         google_custom_search_api_key: str
         google_custom_search_engine_id: str
+        datastore_path: str = "google_search"
