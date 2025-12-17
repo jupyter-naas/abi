@@ -1,8 +1,11 @@
 import os
+
+# from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI  # using the OpenAI LLM class as wrapper
 from pydantic import SecretStr
-from dotenv import load_dotenv
-load_dotenv()
+
+# load_dotenv()
+
 
 class ChatOpenRouter(ChatOpenAI):
     def __init__(self, model_name: str, **kwargs):
