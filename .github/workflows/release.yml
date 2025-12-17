@@ -25,6 +25,7 @@ jobs:
       naas_abi_core_dir: libs/naas-abi-core
       naas_abi_marketplace_dir: libs/naas-abi-marketplace
       naas_abi_dir: libs/naas-abi
+      naas_abi_cli_dir: libs/naas-abi-cli
 
     steps:
 
@@ -64,6 +65,13 @@ jobs:
           directory: ${{ env.naas_abi_dir }}
           github_token: ${{ secrets.M_ACCESS_TOKEN }}
 
+      - name: Release naas-abi-cli
+        id: release-naas-abi-cli
+        uses: python-semantic-release/python-semantic-release@v10.5.2
+        with:
+          directory: ${{ env.naas_abi_cli_dir }}
+          github_token: ${{ secrets.M_ACCESS_TOKEN }}
+
       - name: Publish | Upload naas-abi-core to GitHub Release Assets
         uses: python-semantic-release/publish-action@v10.5.2
         if: steps.release-naas-abi-core.outputs.released == 'true'
@@ -87,6 +95,14 @@ jobs:
           directory: ${{ env.naas_abi_dir }}
           github_token: ${{ secrets.M_ACCESS_TOKEN }}
           tag: ${{ steps.release-naas-abi.outputs.tag }}
+
+      - name: Publish | Upload naas-abi-cli to GitHub Release Assets
+        uses: python-semantic-release/publish-action@v10.5.2
+        if: steps.release-naas-abi-cli.outputs.released == 'true'
+        with:
+          directory: ${{ env.naas_abi_cli_dir }}
+          github_token: ${{ secrets.M_ACCESS_TOKEN }}
+          tag: ${{ steps.release-naas-abi-cli.outputs.tag }}
 
       # ------------------------------------------------------------------- #
       # Python Semantic Release is not responsible for publishing your      #
@@ -114,3 +130,9 @@ jobs:
         if: steps.release-naas-abi.outputs.released == 'true'
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_dir) }}
+
+      - name: Publish | Upload naas-abi-cli to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # vX.X.X
+        if: steps.release-naas-abi-cli.outputs.released == 'true'
+        with:
+          packages-dir: ${{ format('{0}/dist', env.naas_abi_cli_dir) }}
