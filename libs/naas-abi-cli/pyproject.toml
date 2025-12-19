@@ -57,11 +57,11 @@ match = "^dev"
 prerelease = true
 prerelease_token = "dev"
 
-# [tool.hatch.build.targets.wheel.force-include]
-# "assets" = "assets"
+[tool.hatch.build.targets.wheel]
+force-include = { "naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml" }
 
-# [tool.hatch.build.targets.sdist.force-include]
-# "assets" = "assets"
+[tool.hatch.build.targets.sdist]
+force-include = { "naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml" }
 
 [tool.uv.sources]
 naas-abi = { path = "../naas-abi",  editable = true }
