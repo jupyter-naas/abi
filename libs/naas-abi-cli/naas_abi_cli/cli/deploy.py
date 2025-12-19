@@ -1,17 +1,15 @@
-import json
 import subprocess
 from uuid import uuid4
 
 import click
 import requests
-from pydantic import BaseModel
-from rich.console import Console
-from rich.markdown import Markdown
-
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
+from pydantic import BaseModel
+from rich.console import Console
+from rich.markdown import Markdown
 
 
 @click.group("deploy")
@@ -107,7 +105,11 @@ class NaasDeployer:
     def __init__(self, configuration: EngineConfiguration):
         self.configuration = configuration
         self.image_name = str(uuid4())
-        assert configuration.deploy is not None
+        if configuration.deploy is None:
+            # Fail fast with a clear, user-facing error instead of an assertion.
+            raise click.ClickException(
+                "Deploy configuration is missing; please add a deploy section before running this command."
+            )
         self.naas_api_client = NaasAPIClient(configuration.deploy.naas_api_key)
 
     def docker_build(self, image_name: str):
@@ -115,11 +117,24 @@ class NaasDeployer:
             f"docker build -t {image_name} . --platform linux/amd64", shell=True
         )
 
-    def env_list_to_dict(self, env: list[str]) -> dict:
-        return {env_var.split("=", 1)[0]: env_var.split("=", 1)[1] for env_var in env}
+    @staticmethod
+    def env_list_to_dict(env: list[str]) -> dict:
+        env_dict: dict[str, str] = {}
+        for env_var in env:
+            if "=" not in env_var:
+                raise click.ClickException(
+                    f"Invalid environment variable '{env_var}'. Expected format KEY=VALUE."
+                )
+            key, value = env_var.split("=", 1)
+            if not key:
+                raise click.ClickException(
+                    f"Invalid environment variable '{env_var}'. Missing key before '='."
+                )
+            env_dict[key] = value
+        return env_dict
 
     def deploy(self, env: list[str]):
-        
+        assert self.configuration.deploy is not None
         registry = self.naas_api_client.create_registry(
             self.configuration.deploy.space_name
         )
@@ -149,7 +164,6 @@ class NaasDeployer:
 
         image_name_with_sha = f"{image_name.replace(':' + uid, '')}@{image_sha}"
 
-
         self.naas_api_client.create_space(
             Space(
                 name=self.configuration.deploy.space_name,
@@ -170,7 +184,7 @@ class NaasDeployer:
             )
         )
 
-        space = self.naas_api_client.get_space(self.configuration.deploy.space_name)
+        self.naas_api_client.get_space(self.configuration.deploy.space_name)
 
         Console().print(
             Markdown(f"""
@@ -185,7 +199,12 @@ class NaasDeployer:
 
 
 @deploy.command("naas")
-@click.option("-e", "--env", multiple=True, help="Environment variables to set (e.g. -e FOO=BAR -e BAZ=QUX)")
+@click.option(
+    "-e",
+    "--env",
+    multiple=True,
+    help="Environment variables to set (e.g. -e FOO=BAR -e BAZ=QUX)",
+)
 def naas(env: list[str]):
     configuration: EngineConfiguration = EngineConfiguration.load_configuration()
 
@@ -193,6 +212,7 @@ def naas(env: list[str]):
         logger.error(
             "Deploy configuration not found in the yaml configuration file. Please add a deploy section to the configuration file."
         )
+        raise click.ClickException("Missing deploy configuration; aborting.")
 
     deployer = NaasDeployer(configuration)
     deployer.deploy(env)

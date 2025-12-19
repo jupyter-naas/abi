@@ -3,16 +3,17 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Tuple
 
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-from .Embeddings import EMBEDDINGS_MODELS_DIMENSIONS_MAP, embeddings_batch
+from .Embeddings import EMBEDDINGS_MODELS_DIMENSIONS_MAP
 from .Embeddings import _model_name as embeddings_model_name
 from .Embeddings import embeddings as embeddings
+from .Embeddings import embeddings_batch
 from .VectorStore import VectorStore
 
-load_dotenv()
+# load_dotenv()
 
 
 class IntentScope(Enum):

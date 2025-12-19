@@ -13,6 +13,7 @@ dependencies = [
     "naas-abi-marketplace[applications-linkedin]",
     "naas-abi-marketplace[applications-powerpoint]",
     "naas-abi-marketplace[ai-chatgpt]",
+    "naas-abi-cli"
     # "requests[socks]>=2.32.3,<3",
     # "fastapi>=0.115.5,<0.116",
     # "uvicorn[standard]>=0.32.1,<0.33",
@@ -84,7 +85,7 @@ dependencies = [
 ]
 
 [project.scripts]
-cli = "naas_abi_core.cli:main"
+cli = "naas_abi_cli.cli:main"
 #abi = "src.cli:main"
 api = "naas_abi_core.apps.api.api:api"
 mcp-server = "naas_abi_core.apps.mcp_server:run"
@@ -128,5 +129,6 @@ log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 naas-abi = { path = "libs/naas-abi" , editable = true }
 naas-abi-core = { path = "libs/naas-abi-core" , editable = true }
 naas-abi-marketplace = { path = "libs/naas-abi-marketplace" , editable = true }
+naas-abi-cli = { path = "libs/naas-abi-cli" , editable = true }
 
 

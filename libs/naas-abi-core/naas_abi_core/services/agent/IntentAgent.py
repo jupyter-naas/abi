@@ -13,6 +13,7 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
+from spacy.cli import download as spacy_download
 
 from .Agent import Agent, AgentConfiguration, AgentSharedState, create_checkpointer
 from .beta.IntentMapper import Intent, IntentMapper, IntentScope, IntentType
@@ -23,7 +24,14 @@ _nlp = None
 def get_nlp():
     global _nlp
     if _nlp is None:
-        _nlp = spacy.load("en_core_web_sm")
+        try:
+            _nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            logger.warning(
+                "Downloading spacy model en_core_web_sm as it is not installed. This is a one time operation and can take a few seconds to complete based on your internet connection speed."
+            )
+            spacy_download("en_core_web_sm")
+            _nlp = spacy.load("en_core_web_sm")
     return _nlp
 
 

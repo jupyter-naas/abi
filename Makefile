@@ -381,7 +381,7 @@ test-abi: deps
 
 # Run API-specific tests
 test-api: deps
-	@ uv run python -m pytest src/api_test.py -v -s
+	@ uv run python -m pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v -s
 
 # Test API initialization with production secrets
 test-api-init: deps
@@ -453,11 +453,18 @@ check-core: deps
 	@echo ""
 	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi-core
+	@uvx ruff check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
-	@cd libs/naas-abi-core && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports
+	@cd libs/naas-abi-core && uv sync --all-extras && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports
+
+	@echo "• Checking naas_abi_cli..."
+	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports
+
+	@echo "• Checking naas_abi..."
+	@#@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
+	@echo "\n⚠️ Skipping libs/naas_abi type analysis (disabled) WE NEED TO REMEDIATE THIS\n"
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi-core
