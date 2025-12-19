@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.7 (2025-12-19)
+
+### Bug Fixes
+
+- Inject naas_abi_core.modules.templatablesparqlquery by default
+  ([`b6dc785`](https://github.com/jupyter-naas/abi/commit/b6dc78519e71afb46dd2ffc401539fab19fb865f))
+
+
 ## v1.0.6 (2025-12-08)
 
 
