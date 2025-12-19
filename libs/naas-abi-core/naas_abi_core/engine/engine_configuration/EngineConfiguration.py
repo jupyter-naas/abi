@@ -23,7 +23,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreSe
 from naas_abi_core.services.secret.Secret import Secret
 from pydantic import BaseModel, model_validator
 from rich.prompt import Prompt
-from typing_extensions import Literal
+from typing_extensions import Literal, Self
 
 
 class ServicesConfiguration(BaseModel):
@@ -92,6 +92,24 @@ class EngineConfiguration(BaseModel):
     global_config: GlobalConfig
 
     modules: List[ModuleConfig]
+
+    def ensure_default_modules(self) -> None:
+        if not any(
+            m.path == "naas_abi_core.modules.templatablesparqlquery"
+            for m in self.modules
+        ):
+            self.modules.append(
+                ModuleConfig(
+                    module="naas_abi_core.modules.templatablesparqlquery",
+                    enabled=True,
+                    config={},
+                )
+            )
+
+    @model_validator(mode="after")
+    def validate_modules(self) -> Self:
+        self.ensure_default_modules()
+        return self
 
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "EngineConfiguration":
