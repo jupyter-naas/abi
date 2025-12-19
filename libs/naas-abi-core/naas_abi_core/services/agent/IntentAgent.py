@@ -13,7 +13,6 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
-from naas_abi_core.utils.Logger import logger
 from spacy.cli import download as spacy_download
 
 from .Agent import Agent, AgentConfiguration, AgentSharedState, create_checkpointer
