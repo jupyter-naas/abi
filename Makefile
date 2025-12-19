@@ -381,7 +381,7 @@ test-abi: deps
 
 # Run API-specific tests
 test-api: deps
-	@ uv run python -m pytest src/api_test.py -v -s
+	@ uv run python -m pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v -s
 
 # Test API initialization with production secrets
 test-api-init: deps
