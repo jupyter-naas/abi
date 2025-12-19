@@ -27,4 +27,3 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
         for key in self.secrets.keys():
             secrets[str(key)] = str(self.secrets.get(key))
         return secrets
-        return secrets

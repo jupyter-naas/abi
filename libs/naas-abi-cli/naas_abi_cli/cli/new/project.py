@@ -12,8 +12,7 @@ from .new import new
 @new.command("project")
 @click.argument("project-name", default=os.path.basename(os.getcwd()))
 @click.argument("project-path", default=os.getcwd())
-@click.option("--force", is_flag=True, help="Overwrite existing folder")
-def new_project(project_name: str, project_path: str, force: bool):
+def new_project(project_name: str, project_path: str):
     # Resolve relative segments (., ..) and user home (~) to a normalized absolute path.
     project_path = os.path.abspath(os.path.expanduser(project_path))
 
@@ -24,17 +23,8 @@ def new_project(project_name: str, project_path: str, force: bool):
     if not os.path.exists(project_path):
         os.makedirs(project_path, exist_ok=True)
     elif len(os.listdir(project_path)) > 0:
-        if not force:
-            print(f"Folder {project_path} already exists and is not empty.")
-            response = click.confirm(
-                "Do you want to continue and overwrite the existing folder? All content will be removed.",
-                default=False,
-                abort=True,
-            )
-            if not response:
-                return
-        shutil.rmtree(project_path)
-        os.makedirs(project_path, exist_ok=True)
+        print(f"Folder {project_path} already exists and is not empty.")
+        exit(1)
 
     copier = Copier(
         templates_path=os.path.join(

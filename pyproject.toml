@@ -13,6 +13,7 @@ dependencies = [
     "naas-abi-marketplace[applications-linkedin]",
     "naas-abi-marketplace[applications-powerpoint]",
     "naas-abi-marketplace[ai-chatgpt]",
+    "naas-abi-cli"
     # "requests[socks]>=2.32.3,<3",
     # "fastapi>=0.115.5,<0.116",
     # "uvicorn[standard]>=0.32.1,<0.33",
@@ -92,7 +93,7 @@ chat-arxiv-agent = "naas_abi_core.apps.terminal_agent.main:run_arxiv_agent"
 
 [dependency-groups]
 terminal-agent = [
-    "langchain-anthropic>=0.3.0,<0.4",
+    "langchain-anthropic>=0.3.0,<0.4    ",
     "langchain-openai>=0.3.3,<0.4",
     "rich>=13.9.4,<14",
 ]
@@ -128,5 +129,6 @@ log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 naas-abi = { path = "libs/naas-abi" , editable = true }
 naas-abi-core = { path = "libs/naas-abi-core" , editable = true }
 naas-abi-marketplace = { path = "libs/naas-abi-marketplace" , editable = true }
+naas-abi-cli = { path = "libs/naas-abi-cli" , editable = true }
 
 
