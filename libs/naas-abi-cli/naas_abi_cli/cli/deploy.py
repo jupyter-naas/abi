@@ -117,8 +117,21 @@ class NaasDeployer:
             f"docker build -t {image_name} . --platform linux/amd64", shell=True
         )
 
-    def env_list_to_dict(self, env: list[str]) -> dict:
-        return {env_var.split("=", 1)[0]: env_var.split("=", 1)[1] for env_var in env}
+    @staticmethod
+    def env_list_to_dict(env: list[str]) -> dict:
+        env_dict: dict[str, str] = {}
+        for env_var in env:
+            if "=" not in env_var:
+                raise click.ClickException(
+                    f"Invalid environment variable '{env_var}'. Expected format KEY=VALUE."
+                )
+            key, value = env_var.split("=", 1)
+            if not key:
+                raise click.ClickException(
+                    f"Invalid environment variable '{env_var}'. Missing key before '='."
+                )
+            env_dict[key] = value
+        return env_dict
 
     def deploy(self, env: list[str]):
         assert self.configuration.deploy is not None
