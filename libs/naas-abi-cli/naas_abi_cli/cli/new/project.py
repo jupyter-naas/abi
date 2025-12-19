@@ -10,9 +10,14 @@ from .new import new
 
 
 @new.command("project")
-@click.argument("project-name", default=os.path.basename(os.getcwd()))
-@click.argument("project-path", default=os.getcwd())
-def new_project(project_name: str, project_path: str):
+@click.argument("project-name", required=False, default=None)
+@click.argument("project-path", required=False, default=None)
+def new_project(project_name: str | None, project_path: str | None):
+    # Defaults must be evaluated at runtime so they reflect the caller's CWD.
+    if project_name is None:
+        project_name = os.path.basename(os.getcwd())
+    if project_path is None:
+        project_path = os.getcwd()
     # Resolve relative segments (., ..) and user home (~) to a normalized absolute path.
     project_path = os.path.abspath(os.path.expanduser(project_path))
 

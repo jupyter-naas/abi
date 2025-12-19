@@ -105,7 +105,11 @@ class NaasDeployer:
     def __init__(self, configuration: EngineConfiguration):
         self.configuration = configuration
         self.image_name = str(uuid4())
-        assert configuration.deploy is not None
+        if configuration.deploy is None:
+            # Fail fast with a clear, user-facing error instead of an assertion.
+            raise click.ClickException(
+                "Deploy configuration is missing; please add a deploy section before running this command."
+            )
         self.naas_api_client = NaasAPIClient(configuration.deploy.naas_api_key)
 
     def docker_build(self, image_name: str):
@@ -195,6 +199,7 @@ def naas(env: list[str]):
         logger.error(
             "Deploy configuration not found in the yaml configuration file. Please add a deploy section to the configuration file."
         )
+        raise click.ClickException("Missing deploy configuration; aborting.")
 
     deployer = NaasDeployer(configuration)
     deployer.deploy(env)
