@@ -10,8 +10,9 @@ class Copier:
     values: dict
 
     def __init__(self, templates_path: str, destination_path: str):
-        self.templates_path = templates_path
-        self.destination_path = destination_path
+        # Normalize paths to avoid double-joining relative segments during recursion.
+        self.templates_path = os.path.abspath(templates_path)
+        self.destination_path = os.path.abspath(destination_path)
 
     def template_file_to_file(
         self, template_path: str, values: dict, destination_path: str
@@ -30,7 +31,7 @@ class Copier:
     def copy(self, values: dict, templates_path: str | None = None):
         if templates_path is None:
             templates_path = self.templates_path
-        else:
+        elif not os.path.isabs(templates_path):
             templates_path = os.path.join(self.templates_path, templates_path)
 
         relative_templates_path = os.path.relpath(

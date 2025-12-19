@@ -1,4 +1,5 @@
 import os
+import sys
 from io import StringIO
 from typing import List
 
@@ -131,6 +132,10 @@ class EngineConfiguration(BaseModel):
                     return 0
                 secret = self.secret_service.get(name)
                 if secret is None:
+                    if not sys.stdin.isatty():
+                        raise ValueError(
+                            f"Secret '{name}' not found and no TTY available to prompt. Please provide it via the configured secret service or environment."
+                        )
                     value = Prompt.ask(
                         f"[bold yellow]Secret '{name}' not found.[/bold yellow] Please enter the value for [cyan]{name}[/cyan]",
                         password=False,

@@ -24,7 +24,7 @@ jobs:
 
       - name: Deploy
         env:
-          NAAS_API_KEY: ${{ secrets.NAAS_API_KEY }}
+          NAAS_API_KEY: ${{ '{{ secrets.NAAS_API_KEY }}' }}
           ENV: prod
         run: |
             cd abi
