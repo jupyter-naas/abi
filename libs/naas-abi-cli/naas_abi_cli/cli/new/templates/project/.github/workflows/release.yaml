@@ -27,6 +27,5 @@ jobs:
           NAAS_API_KEY: ${{ '{{ secrets.NAAS_API_KEY }}' }}
           ENV: prod
         run: |
-            cd {{ project_name }}
             uv sync --no-dev
             uv run python -m naas_abi_cli.cli deploy naas
