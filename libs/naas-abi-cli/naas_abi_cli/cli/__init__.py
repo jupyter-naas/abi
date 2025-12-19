@@ -42,17 +42,19 @@ def main():
     # Check how the project is being runned.
     if os.getenv("LOCAL_UV_RAN") is None:
         if "pyproject.toml" in os.listdir(os.getcwd()):
-            if "naas-abi" in open("pyproject.toml").read():
-                arguments = (
-                    "uv run --active python -m naas_abi_cli.cli".split(" ")
-                    + sys.argv[1:]
-                )
-                subprocess.run(
-                    arguments,
-                    cwd=os.getcwd(),
-                    env={**os.environ, "LOCAL_UV_RAN": "true"},
-                )
-                return
+            with open("pyproject.toml", "r") as file:
+                if "naas-abi" in file.read():
+                    arguments = (
+                        "uv run --active python -m naas_abi_cli.cli".split(" ")
+                        + sys.argv[1:]
+                    )
+                    subprocess.run(
+                        arguments,
+                        cwd=os.getcwd(),
+                        env={**os.environ, "LOCAL_UV_RAN": "true"},
+                    )
+                    
+                    return
     _main()
 
 

@@ -7,9 +7,3 @@ requires-python = ">=3.12"
 dependencies = [
     "naas-abi-cli"
 ]
-
-[tool.uv.sources]
-naas-abi-cli = { path = "/Users/maximejublou/dev/naas/abis/719-setup-new-project-on-cli/libs/naas-abi-cli", editable = true }
-naas-abi-core = { path = "/Users/maximejublou/dev/naas/abis/719-setup-new-project-on-cli/libs/naas-abi-core", editable = true }
-naas-abi = { path = "/Users/maximejublou/dev/naas/abis/719-setup-new-project-on-cli/libs/naas-abi", editable = true }
-naas-abi-marketplace = { path = "/Users/maximejublou/dev/naas/abis/719-setup-new-project-on-cli/libs/naas-abi-marketplace", editable = true }

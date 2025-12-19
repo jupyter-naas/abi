@@ -96,6 +96,7 @@ class EngineConfiguration(BaseModel):
     def ensure_default_modules(self) -> None:
         if not any(
             m.path == "naas_abi_core.modules.templatablesparqlquery"
+            or m.module == "naas_abi_core.modules.templatablesparqlquery"
             for m in self.modules
         ):
             self.modules.append(
@@ -184,9 +185,6 @@ class EngineConfiguration(BaseModel):
             )
 
 
-if __name__ == "__main__":
-    config = EngineConfiguration.load_configuration()
-    print(config)
 if __name__ == "__main__":
     config = EngineConfiguration.load_configuration()
     print(config)
