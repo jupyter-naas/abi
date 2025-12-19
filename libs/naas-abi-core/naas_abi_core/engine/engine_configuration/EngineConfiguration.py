@@ -1,10 +1,14 @@
 import os
+import sys
 from io import StringIO
 from typing import List
 
 import yaml
 from jinja2 import Template
 from naas_abi_core import logger
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
+    DeployConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
     ObjectStorageServiceConfiguration,
 )
@@ -19,8 +23,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreSe
 )
 from naas_abi_core.services.secret.Secret import Secret
 from pydantic import BaseModel, model_validator
-from typing_extensions import Literal
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import DeployConfiguration
+from rich.prompt import Prompt
+from typing_extensions import Literal, Self
+
 
 class ServicesConfiguration(BaseModel):
     object_storage: ObjectStorageServiceConfiguration
@@ -80,7 +85,7 @@ class GlobalConfig(BaseModel):
 
 class EngineConfiguration(BaseModel):
     api: ApiConfiguration
-    
+
     deploy: DeployConfiguration | None = None
 
     services: ServicesConfiguration
@@ -88,6 +93,25 @@ class EngineConfiguration(BaseModel):
     global_config: GlobalConfig
 
     modules: List[ModuleConfig]
+
+    def ensure_default_modules(self) -> None:
+        if not any(
+            m.path == "naas_abi_core.modules.templatablesparqlquery"
+            or m.module == "naas_abi_core.modules.templatablesparqlquery"
+            for m in self.modules
+        ):
+            self.modules.append(
+                ModuleConfig(
+                    module="naas_abi_core.modules.templatablesparqlquery",
+                    enabled=True,
+                    config={},
+                )
+            )
+
+    @model_validator(mode="after")
+    def validate_modules(self) -> Self:
+        self.ensure_default_modules()
+        return self
 
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "EngineConfiguration":
@@ -108,7 +132,16 @@ class EngineConfiguration(BaseModel):
                     return 0
                 secret = self.secret_service.get(name)
                 if secret is None:
-                    raise ValueError(f"Secret {name} not found")
+                    if not sys.stdin.isatty():
+                        raise ValueError(
+                            f"Secret '{name}' not found and no TTY available to prompt. Please provide it via the configured secret service or environment."
+                        )
+                    value = Prompt.ask(
+                        f"[bold yellow]Secret '{name}' not found.[/bold yellow] Please enter the value for [cyan]{name}[/cyan]",
+                        password=False,
+                    )
+                    self.secret_service.set(name, value)
+                    return value
                 return secret
 
             def get(self, key, default=None):

@@ -56,7 +56,6 @@ openrouter = [
     "langchain-openai>=0.3.35",
 ]
 [project.scripts]
-abi = "naas_abi_core.cli:main"
 onto2py = "naas_abi_core.utils.onto2py.__main__:main"
 
 [build-system]
