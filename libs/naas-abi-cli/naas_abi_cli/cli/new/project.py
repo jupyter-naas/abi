@@ -1,8 +1,8 @@
 import os
-import shutil
 import subprocess
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -47,6 +47,7 @@ def new_project(project_name: str, project_path: str):
             "naas-abi-core[all]",
             "naas-abi-marketplace[ai-chatgpt]",
             "naas-abi",
+            "naas-abi-cli",
         ],
         cwd=project_path,
         check=True,
