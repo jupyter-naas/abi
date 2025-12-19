@@ -1,0 +1,45 @@
+
+auto_publish:
+  enabled: true # Enable automatic publishing of agents to workspace
+  exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
+  default_agent: "Abi" # Which agent to set as default in workspace
+
+api:
+  title: "ABI API"
+  description: "API for ABI, your Artifical Business Intelligence"
+  logo_path: "assets/logo.png"
+  favicon_path: "assets/favicon.ico"
+  cors_origins:
+    - "http://localhost:9879"
+
+
+global_config:
+  ai_mode: "cloud"
+
+modules:
+  - module: naas_abi
+    enabled: true
+  - module: naas_abi_marketplace.ai.chatgpt
+    enabled: true
+    config:
+      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
+services:
+  secret:
+    secret_adapters:
+      - adapter: "dotenv"
+        config: {}
+  object_storage:
+    object_storage_adapter:
+      adapter: "fs"
+      config:
+        base_path: "storage/object_store"
+  triple_store:
+    triple_store_adapter:
+      adapter: "fs"
+      config:
+        store_path: "storage/triplestore"
+  vector_store:
+    vector_store_adapter:
+      adapter: "qdrant"
+      config: {}
