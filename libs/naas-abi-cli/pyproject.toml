@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-cli"
-version = "0.0.1"
+version = "1.0.0"
 description = "Abi cli allowing you to build your AI system."
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 requires-python = ">=3.10,<4"
@@ -64,8 +64,8 @@ prerelease_token = "dev"
 # "assets" = "assets"
 
 [tool.uv.sources]
-naas-abi = { path = "../naas-abi" , editable = true }
-naas-abi-core = { path = "../naas-abi-core" , editable = true }
-naas-abi-marketplace = { path = "../naas-abi-marketplace" , editable = true }
+naas-abi = { path = "../naas-abi",  editable = true }
+naas-abi-core = { path = "../naas-abi-core",  editable = true }
+naas-abi-marketplace = { path = "../naas-abi-marketplace",  editable = true }
 
 
