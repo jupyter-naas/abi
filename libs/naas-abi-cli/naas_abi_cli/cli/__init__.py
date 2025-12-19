@@ -43,7 +43,7 @@ def main():
     if os.getenv("LOCAL_UV_RAN") is None:
         if "pyproject.toml" in os.listdir(os.getcwd()):
             with open("pyproject.toml", "r") as file:
-                if "naas-abi" in file.read():
+                if "naas-abi-cli" in file.read():
                     arguments = (
                         "uv run --active python -m naas_abi_cli.cli".split(" ")
                         + sys.argv[1:]
@@ -53,7 +53,7 @@ def main():
                         cwd=os.getcwd(),
                         env={**os.environ, "LOCAL_UV_RAN": "true"},
                     )
-                    
+
                     return
     _main()
 

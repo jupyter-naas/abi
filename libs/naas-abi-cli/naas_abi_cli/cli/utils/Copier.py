@@ -33,8 +33,13 @@ class Copier:
         else:
             templates_path = os.path.join(self.templates_path, templates_path)
 
-        target_path = os.path.join(
-            self.destination_path, templates_path.lstrip(self.templates_path)
+        relative_templates_path = os.path.relpath(
+            templates_path, start=self.templates_path
+        )
+        target_path = (
+            self.destination_path
+            if relative_templates_path == "."
+            else os.path.join(self.destination_path, relative_templates_path)
         )
 
         for file in os.listdir(templates_path):
