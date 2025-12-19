@@ -1,0 +1,1 @@
+Run workflow with common core ontology: `uv run src/custom/ontology-triple-embedding/workflows/OTEWorkflow.py -o https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/heads/develop/src/cco-merged/CommonCoreOntologiesMerged.ttl -f turtle`

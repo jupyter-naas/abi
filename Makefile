@@ -409,7 +409,7 @@ dtest: deps
 	@ uv run python -m pytest $(shell find lib src tests -type d | fzf -q $(q)) $(args)
 
 frun: deps
-	@ uv run $(shell find lib src tests -name '*.py' -type f | fzf -q $(q)) $(args)
+	uv run $(shell find lib src tests -name '*.py' -type f | fzf -q $(q)) $(args)
 
 # TTL_FILES := $(wildcard src/*/*/ontologies/*.ttl src/marketplace/*/*/ontologies/*.ttl)
 TTL_FILES := $(shell find src -name '*.ttl')

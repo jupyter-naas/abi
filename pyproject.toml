@@ -112,6 +112,11 @@ dev = [
 
 
 
+[tool.uv.workspace]
+members = [
+    "src/custom/ontology-triple-embedding",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
