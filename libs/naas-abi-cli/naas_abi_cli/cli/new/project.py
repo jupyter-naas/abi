@@ -16,7 +16,8 @@ def new_project(project_name: str, project_path: str):
     # Resolve relative segments (., ..) and user home (~) to a normalized absolute path.
     project_path = os.path.abspath(os.path.expanduser(project_path))
 
-    if not project_path.endswith(project_name):
+    # Ensure the last path component matches the project name, not just the suffix.
+    if os.path.basename(os.path.normpath(project_path)) != project_name:
         project_path = os.path.join(project_path, project_name)
     print(project_path)
 

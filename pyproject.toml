@@ -93,7 +93,7 @@ chat-arxiv-agent = "naas_abi_core.apps.terminal_agent.main:run_arxiv_agent"
 
 [dependency-groups]
 terminal-agent = [
-    "langchain-anthropic>=0.3.0,<0.4    ",
+    "langchain-anthropic>=0.3.0,<0.4",
     "langchain-openai>=0.3.3,<0.4",
     "rich>=13.9.4,<14",
 ]

@@ -52,6 +52,7 @@ def main():
                         arguments,
                         cwd=os.getcwd(),
                         env={**os.environ, "LOCAL_UV_RAN": "true"},
+                        check=True,
                     )
 
                     return
