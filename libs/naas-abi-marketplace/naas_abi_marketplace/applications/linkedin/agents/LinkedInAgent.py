@@ -100,6 +100,15 @@ def create_agent(
 
     # Define tools
     tools: list = []
+    from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
+    naas_api_key = NaasABIModule.get_instance().configuration.naas_api_key
+
+    from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
+        NaasIntegrationConfiguration,
+    )
+    naas_integration_config = NaasIntegrationConfiguration(
+        api_key=naas_api_key,
+    )
 
     from naas_abi_marketplace.applications.linkedin.integrations.LinkedInIntegration import (
         LinkedInIntegrationConfiguration,
@@ -109,6 +118,7 @@ def create_agent(
         li_at=li_at, 
         JSESSIONID=JSESSIONID,
         linkedin_url=linkedin_profile_url,
+        naas_integration_config=naas_integration_config,
     )
 
     tools += as_tools(linkedin_integration_config)
