@@ -40,7 +40,7 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
     li_at: str
     JSESSIONID: str
     linkedin_url: str
-    naas_integration_config: NaasIntegrationConfiguration
+    naas_integration_config: NaasIntegrationConfiguration | None = None
     base_url: str = "https://www.linkedin.com/voyager/api"
     datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
@@ -50,6 +50,7 @@ class LinkedInIntegration(Integration):
 
     __configuration: LinkedInIntegrationConfiguration
     __storage_utils: StorageUtils
+    __naas_integration: NaasIntegration | None = None
 
     def __init__(self, configuration: LinkedInIntegrationConfiguration):
         """Initialize LinkedIn client with authentication cookies."""
@@ -58,7 +59,8 @@ class LinkedInIntegration(Integration):
         self.__configuration.JSESSIONID = self.__configuration.JSESSIONID.replace(
             '"', ""
         )
-        self.__naas_integration: NaasIntegration = NaasIntegration(self.__configuration.naas_integration_config)
+        if self.__configuration.naas_integration_config:
+            self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
         self.__storage_utils: StorageUtils = StorageUtils(
             ABIModule.get_instance().engine.services.object_storage
         )
@@ -1134,13 +1136,16 @@ class LinkedInIntegration(Integration):
         excel_buffer = BytesIO()
         df.to_excel(excel_buffer, index=False, sheet_name=sheet_name)
         excel_buffer.seek(0)
-        asset = self.__naas_integration.upload_asset(
-            data=excel_buffer.getvalue(),
-            prefix=os.path.join(self.__configuration.datastore_path, prefix),
-            object_name=file_name,
-            return_url=True,
-        )
-        return asset.get("asset_url", "")
+        if self.__naas_integration: 
+            asset = self.__naas_integration.upload_asset(
+                data=excel_buffer.getvalue(),
+                prefix=os.path.join(self.__configuration.datastore_path, prefix),
+                object_name=file_name,
+                return_url=True,
+            )
+            return asset.get("asset_url", "")
+        else:
+            return os.path.join(self.__configuration.datastore_path, prefix, file_name)
     
     @cache(
         lambda self, profile_url, organization_url, connection_distance: profile_url + "_" + connection_distance + "_" + (str(organization_url) if organization_url else "all"),
