@@ -2,13 +2,14 @@ import hashlib
 import os
 
 import requests
-from dotenv import load_dotenv
+
+# from dotenv import load_dotenv
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from pydantic import SecretStr
 from tqdm import tqdm
 
-load_dotenv()
+# load_dotenv()
 
 
 cache = CacheFactory.CacheFS_find_storage(subpath="intent_mapping")

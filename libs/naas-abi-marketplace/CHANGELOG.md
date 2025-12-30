@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.0 (2025-12-19)
+
+### Features
+
+- Workin on naas-abi-cli
+  ([`16cd62d`](https://github.com/jupyter-naas/abi/commit/16cd62d77879d94c83fae9218bd451c1909554e4))
+
+
 ## v1.1.0 (2025-12-08)
 
 
