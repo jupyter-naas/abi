@@ -3,11 +3,17 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 # from pydantic import model_validator
 
 
 class ABIModule(BaseModule):
-    dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
+    dependencies: ModuleDependencies = ModuleDependencies(
+        modules=[],
+        services=[ObjectStorageService],
+    )
 
     class Configuration(ModuleConfiguration):
         """
