@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.3.0 (2025-12-30)
+
+### Bug Fixes
+
+- Error import pycogs2
+  ([`721d986`](https://github.com/jupyter-naas/abi/commit/721d986bd7ed93e98fc76711d0291c01d555cf05))
+
+- Missing object storage
+  ([`019eddc`](https://github.com/jupyter-naas/abi/commit/019eddcfdd68b5bdf80ecdcf662f8d58afd2a036))
+
+### Refactoring
+
+- Init file ai modules local
+  ([`c32d564`](https://github.com/jupyter-naas/abi/commit/c32d56405e8da57958926abe9860369cea948913))
+
+
 ## v1.2.0 (2025-12-19)
 
 ### Features
