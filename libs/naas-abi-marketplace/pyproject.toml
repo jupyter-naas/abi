@@ -112,7 +112,8 @@ applications-openrouter = []
 applications-openweathermap = []
 applications-pennylane = []
 applications-postgres = [
-  "psycopg2==2.9.11"
+    "psycopg2-binary>=2.9.10,<3",
+    "types-psycopg2>=2.9.21.20251012",
 ]
 applications-powerpoint = [
   "python-pptx>=1.0.2,<2"
