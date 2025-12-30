@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.1 (2025-12-30)
+
+### Bug Fixes
+
+- Remove unused lib
+  ([`2915153`](https://github.com/jupyter-naas/abi/commit/29151531fe660c4f942cbf54047830995b75167c))
+
+
 ## v1.3.0 (2025-12-30)
 
 ### Bug Fixes
