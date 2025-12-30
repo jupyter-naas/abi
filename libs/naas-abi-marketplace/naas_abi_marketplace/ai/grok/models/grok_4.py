@@ -1,5 +1,5 @@
 from langchain_xai import ChatXAI
-from naas_abi import secret
+from naas_abi_marketplace.ai.grok import ABIModule
 from naas_abi_core.models.Model import ChatModel
 from pydantic import SecretStr
 
@@ -14,9 +14,6 @@ IMAGE = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOv3K6RevHQCscoWP
 DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
 CONTEXT_WINDOW = 200000
 
-api_key = secret.get("XAI_API_KEY")
-if secret.get("OPENROUTER_API_KEY"):
-    api_key = secret.get("OPENROUTER_API_KEY")
 
 model: ChatModel = ChatModel(
     model_id=MODEL_ID,
@@ -29,7 +26,7 @@ model: ChatModel = ChatModel(
         model=MODEL_ID,
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS,
-        api_key=SecretStr(api_key),
+        api_key=SecretStr(ABIModule.get_instance().configuration.xai_api_key),
         # Enable Live Search for real-time information
         search_parameters={
             "mode": SEARCH_MODE,

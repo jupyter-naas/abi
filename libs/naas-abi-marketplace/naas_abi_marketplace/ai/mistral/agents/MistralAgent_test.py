@@ -1,5 +1,5 @@
 import pytest
-from naas_abi.core.mistral.agents.MistralAgent import create_agent
+from naas_abi_marketplace.ai.mistral.agents.MistralAgent import create_agent
 
 
 @pytest.fixture

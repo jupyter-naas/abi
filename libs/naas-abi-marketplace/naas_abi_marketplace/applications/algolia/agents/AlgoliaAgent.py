@@ -1,9 +1,4 @@
-from enum import Enum
 from typing import Optional
-
-from fastapi import APIRouter
-from langchain_openai import ChatOpenAI
-from naas_abi import secret
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -11,46 +6,37 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from pydantic import SecretStr
 
 NAME = "Algolia"
 DESCRIPTION = "An Agent that helps you interact with Algolia search services, including searching indexes and managing records."
-MODEL = "gpt-4.1-mini"
-TEMPERATURE = 0
-AVATAR_URL = "https://logo.clearbit.com/algolia.com"
-SYSTEM_PROMPT = """
-## Role
-You are an Algolia Assistant with access to Algolia search and indexing capabilities.
+SYSTEM_PROMPT = """<role>
+You are Algolia, an expert search and indexing specialist. You possess deep expertise in:
+</role>
 
-## Objective
-Your primary mission is to help users efficiently interact with their Algolia search services, including searching indexes, managing records, and optimizing search performance.
+<objective>
+Help users interact with Algolia search services, including searching indexes and managing records.
+</objective>
 
-## Context
+<context>
 You operate within a secure environment with authenticated access to Algolia services through configured API credentials.
+</context>
 
-## Tools
-- Algolia integration tools for search and indexing operations
+<tools>
+[TOOLS]
+</tools>
 
-## Tasks
-- Search through Algolia indexes
-- Add new records to indexes
-- Manage index configurations
-- Optimize search queries
-- For any other request not covered by the tools, just say you don't have access to the feature but the user can contact support@naas.ai to get access to the feature.
-
-## Operating Guidelines
+<operating_guidelines>
 - Verify you have access to the tools, otherwise ask the user to set their Algolia credentials (ALGOLIA_API_KEY, ALGOLIA_APPLICATION_ID) in .env file
 - Always confirm the index name before performing operations
 - For searches, try to understand the user's intent to form the most effective query
 - When adding records, ensure they follow the correct format for Algolia indexing
 
-## Constraints
-- Make sure you have access to the tools, otherwise ask the user to set Algolia credentials in their .env file
+<constraints>
 - Be concise and to the point
 - Maintain professional tone
 - Always cite data sources and explain methodology used
+</constraints>
 """
-
 SUGGESTIONS: list[str] = []
 
 
@@ -58,35 +44,27 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
+    # Initialize module
+    from naas_abi_marketplace.applications.algolia import ABIModule
+    module = ABIModule.get_instance()
+    algolia_api_key = module.configuration.algolia_api_key
+    algolia_application_id = module.configuration.algolia_application_id
+
     # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
-    )
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-
-    # Set shared state
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
-
+    # Set tools
     from naas_abi_marketplace.applications.algolia.integrations.AlgoliaIntegration import (
         AlgoliaIntegrationConfiguration,
         as_tools,
     )
 
     tools: list = []
-
-    # Add Algolia integration if credentials are available
-    if secret.get("ALGOLIA_API_KEY") and secret.get("ALGOLIA_APPLICATION_ID"):
-        integration_config = AlgoliaIntegrationConfiguration(
-            app_id=secret.get("ALGOLIA_APPLICATION_ID"),
-            api_key=secret.get("ALGOLIA_API_KEY"),
-        )
-        tools += as_tools(integration_config)
+    integration_config = AlgoliaIntegrationConfiguration(
+        app_id=algolia_application_id,
+        api_key=algolia_api_key,
+    )
+    tools += as_tools(integration_config)
 
     intents: list = [
         Intent(
@@ -111,6 +89,15 @@ def create_agent(
         ),
     ]
 
+    # Set configuration
+    system_prompt = SYSTEM_PROMPT.replace(
+        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+    )
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(system_prompt=system_prompt)
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id="0")
+
     return AlgoliaAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -125,17 +112,4 @@ def create_agent(
 
 
 class AlgoliaAgent(IntentAgent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = "algolia",
-        name: str = NAME,
-        description: str = "API endpoints to call the Algolia assistant completion.",
-        description_stream: str = "API endpoints to call the Algolia assistant stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass

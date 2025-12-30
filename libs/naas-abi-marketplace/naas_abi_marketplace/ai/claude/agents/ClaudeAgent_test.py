@@ -1,5 +1,5 @@
 import pytest
-from naas_abi.core.claude.agents.ClaudeAgent import create_agent
+from naas_abi_marketplace.ai.claude.agents.ClaudeAgent import create_agent
 
 
 @pytest.fixture
