@@ -8,9 +8,10 @@ from typing import Annotated
 import pandas as pd
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.SPARQL import get_identifiers
-from naas_abi_core.utils.Storage import get_excel, save_excel, save_triples
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
+from naas_abi_marketplace.applications.sanax import ABIModule
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Graph import ABI, BFO, CCO
@@ -63,12 +64,17 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
     """Pipeline for importing data from Excel tables to the triple store."""
 
     __configuration: SanaxLinkedInSalesNavigatorExtractorPipelineConfiguration
+    __sparql_utils: SPARQLUtils
+    __storage_utils: StorageUtils
 
     def __init__(
         self, configuration: SanaxLinkedInSalesNavigatorExtractorPipelineConfiguration
     ):
         super().__init__(configuration)
         self.__configuration = configuration
+        module = ABIModule.get_instance()
+        self.__sparql_utils = SPARQLUtils(module.engine.services.triple_store)
+        self.__storage_utils = StorageUtils(module.engine.services.object_storage)
 
     def _parse_time_duration(self, duration_str: str) -> int | None:
         """
@@ -165,7 +171,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
         sheet_name = parameters.sheet_name
 
         try:
-            df = get_excel(
+            df = self.__storage_utils.get_excel(
                 dir_path,
                 file_name,
                 sheet_name=sheet_name,
@@ -257,7 +263,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
         logger.debug(f"File modified at: {file_datetime}")
 
         # Get unique identifiers
-        unique_identifiers: dict[str, URIRef] = get_identifiers()
+        unique_identifiers: dict[str, URIRef] = self.__sparql_utils.get_identifiers()
         logger.debug(f"Unique identifiers: {len(unique_identifiers)}")
 
         # Create backing datasource
@@ -289,27 +295,27 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
         # Step 3: Processing rows from Excel file
         logger.debug("Step 3: Processing rows")
         count_row: int = 0
-        linkedin_profile_page_uris: dict[str, URIRef] = get_identifiers(
+        linkedin_profile_page_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
             class_uri=LINKEDIN_PROFILE_PAGE
         )
         logger.debug(
             f"- Existing LinkedIn profile page: {len(linkedin_profile_page_uris)}"
         )
-        person_uris: dict[str, URIRef] = get_identifiers(RDFS.label, class_uri=PERSON)
+        person_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(RDFS.label, class_uri=PERSON)
         logger.debug(f"- Existing Person: {len(person_uris)}")
-        position_uris: dict[str, URIRef] = get_identifiers(class_uri=POSITION)
+        position_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(class_uri=POSITION)
         logger.debug(f"- Existing Positions: {len(position_uris)}")
-        organization_uris: dict[str, URIRef] = get_identifiers(
+        organization_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
             RDFS.label, class_uri=ORGANIZATION
         )
         logger.debug(f"- Existing Organization: {len(organization_uris)}")
-        linkedin_company_page_uris: dict[str, URIRef] = get_identifiers(
+        linkedin_company_page_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
             class_uri=LINKEDIN_COMPANY_PAGE
         )
         logger.debug(
             f"- Existing LinkedIn company page: {len(linkedin_company_page_uris)}"
         )
-        location_uris: dict[str, URIRef] = get_identifiers(class_uri=LOCATION)
+        location_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(class_uri=LOCATION)
         logger.debug(f"- Existing Location: {len(location_uris)}")
         if self.__configuration.limit is not None:
             df = df[: self.__configuration.limit]
@@ -671,9 +677,9 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
         ttl_file_name = f"insert_{file_name.split('.')[0]}_{parameters.sheet_name}.ttl"
         if len(graph) > 0:
             # Save triples to file
-            save_triples(graph, log_dir_path, ttl_file_name, copy=False)
+            self.__storage_utils.save_triples(graph, log_dir_path, ttl_file_name, copy=False)
             # Save Excel file
-            save_excel(
+            self.__storage_utils.save_excel(
                 df, log_dir_path, excel_file_name, parameters.sheet_name, copy=False
             )
             # Save graph to triple store
