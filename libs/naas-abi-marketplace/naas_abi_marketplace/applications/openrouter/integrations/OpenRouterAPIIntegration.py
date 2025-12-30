@@ -1,15 +1,16 @@
 import datetime
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import requests
-from naas_abi_core.utils.Storage import save_json
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
+from naas_abi_marketplace.applications.openrouter import ABIModule
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 
@@ -28,7 +29,7 @@ class OpenRouterAPIIntegrationConfiguration(IntegrationConfiguration):
 
     api_key: str
     base_url: str = "https://openrouter.ai/api/v1"
-    datastore_path: str = "datastore/openrouter"
+    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
 
 class OpenRouterAPIIntegration(Integration):
@@ -49,11 +50,13 @@ class OpenRouterAPIIntegration(Integration):
     """
 
     __configuration: OpenRouterAPIIntegrationConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: OpenRouterAPIIntegrationConfiguration):
         """Initialize OpenRouter API client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
+        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
 
         self.headers = {
             "Authorization": f"Bearer {self.__configuration.api_key}",
@@ -182,7 +185,7 @@ class OpenRouterAPIIntegration(Integration):
         """
         response = self._make_request("GET", "/models", params=params)
         models = response.get("data", []) if isinstance(response, dict) else []
-        save_json(
+        self.__storage_utils.save_json(
             models,
             os.path.join(self.__configuration.datastore_path, "models", "_all"),
             "models.json",
@@ -199,7 +202,7 @@ class OpenRouterAPIIntegration(Integration):
             owners[owner].append(model)
 
         for owner, owner_models in owners.items():
-            save_json(
+            self.__storage_utils.save_json(
                 owner_models,
                 os.path.join(self.__configuration.datastore_path, "models", owner),
                 "models.json",
