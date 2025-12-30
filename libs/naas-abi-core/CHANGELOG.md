@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v1.2.0 (2025-12-19)
+
+### Bug Fixes
+
+- Inject naas_abi_core.modules.templatablesparqlquery by default
+  ([`b6dc785`](https://github.com/jupyter-naas/abi/commit/b6dc78519e71afb46dd2ffc401539fab19fb865f))
+
+- Review
+  ([`6301a5f`](https://github.com/jupyter-naas/abi/commit/6301a5fcda63875b2748a625727903f236772966))
+
+- Review
+  ([`1ad319b`](https://github.com/jupyter-naas/abi/commit/1ad319ba2e47463ab84cabf7edbd2b721b053e3b))
+
+### Chores
+
+- Remove comments
+  ([`05868ff`](https://github.com/jupyter-naas/abi/commit/05868ff0c60ccb3e7da46cdd8903d207622d5e8c))
+
+- Remove duplicate logger
+  ([`8438450`](https://github.com/jupyter-naas/abi/commit/84384505a88b9645e56628b39bfda8da054792cc))
+
+### Features
+
+- Workin on naas-abi-cli
+  ([`16cd62d`](https://github.com/jupyter-naas/abi/commit/16cd62d77879d94c83fae9218bd451c1909554e4))
+
+
 ## v1.1.2 (2025-12-05)
 
 ### Bug Fixes
