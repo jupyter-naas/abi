@@ -1,5 +1,4 @@
 from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -7,7 +6,6 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from naas_abi_marketplace.applications.zoho import ABIModule
 
 NAME = "Zoho"
 DESCRIPTION = "Helps you interact with Zoho for business applications and CRM operations."
@@ -48,9 +46,6 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
-    # Init
-    module = ABIModule.get_instance()
-
     # Define model
     from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
 

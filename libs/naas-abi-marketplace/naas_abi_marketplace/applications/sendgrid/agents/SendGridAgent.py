@@ -50,12 +50,19 @@ def create_agent(
 ) -> IntentAgent:
     # Init
     module = ABIModule.get_instance()
+    api_key = module.configuration.sendgrid_api_key
 
     # Define model
     from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
 
     # Define tools (none initially)
     tools: list = []
+    from naas_abi_marketplace.applications.sendgrid.integrations.SendGridIntegration import (
+        as_tools,
+        SendGridIntegrationConfiguration,
+    )
+    integration_config = SendGridIntegrationConfiguration(api_key=api_key)
+    tools += as_tools(integration_config)
 
     # Define intents
     intents: list = [
