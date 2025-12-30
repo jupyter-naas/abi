@@ -18,7 +18,7 @@ class ABIModule(BaseModule):
         """
         Configuration example:
 
-        module: naas_abi_marketplace.applications.agicap
+        module: naas_abi_marketplace.applications.algolia
         enabled: true
         config:
             algolia_api_key: "{{ secret.ALGOLIA_API_KEY }}"
