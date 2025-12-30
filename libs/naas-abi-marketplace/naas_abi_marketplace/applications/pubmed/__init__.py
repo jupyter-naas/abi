@@ -1,11 +1,24 @@
-from naas_abi_core.module.Module import BaseModule, ModuleConfiguration, ModuleDependencies
-
-class _Configuration(ModuleConfiguration):
-    pass
-
-class ABIModule(BaseModule[_Configuration]):
-    Configuration = _Configuration
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
+class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=["naas_abi_marketplace.ai.chatgpt"],
-        services=[],
+        services=[ObjectStorageService],
     )
+
+    class Configuration(ModuleConfiguration):
+        """
+        Configuration example:
+
+        module: naas_abi_marketplace.applications.pubmed
+        enabled: true
+        config:
+            datastore_path: "pubmed"
+        """
+        datastore_path: str = "pubmed"
