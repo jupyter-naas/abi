@@ -1,16 +1,17 @@
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Dict, Optional
 
 import requests
-from naas_abi_core.utils.Storage import save_json
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
+from naas_abi_marketplace.applications.pennylane import ABIModule
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 
@@ -28,7 +29,7 @@ class PennylaneIntegrationConfiguration(IntegrationConfiguration):
 
     api_key: str
     base_url: str = "https://app.pennylane.com/api/external"
-    data_store_path: str = "datastore/pennylane"
+    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
 
 class PennylaneIntegration(Integration):
@@ -39,11 +40,13 @@ class PennylaneIntegration(Integration):
     """
 
     __configuration: PennylaneIntegrationConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: PennylaneIntegrationConfiguration):
         """Initialize Pennylane client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
+        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
 
         self.headers = {
             "Authorization": f"Bearer {self.__configuration.api_key}",
@@ -125,9 +128,9 @@ class PennylaneIntegration(Integration):
         file_name = "list_customers.json"
         if filter_str:
             file_name = f"list_customers_{filter_str}.json"
-        save_json(
+        self.__storage_utils.save_json(
             customers,
-            os.path.join(self.__configuration.data_store_path, "list_customers"),
+            os.path.join(self.__configuration.datastore_path, "list_customers"),
             file_name,
         )
         return customers
@@ -147,11 +150,11 @@ class PennylaneIntegration(Integration):
             Dict: Customer details
         """
         prefix = os.path.join(
-            self.__configuration.data_store_path, "get_customer", customer_id
+            self.__configuration.datastore_path, "get_customer", customer_id
         )
         file_name = f"{customer_id}.json"
         customer = self._make_request(f"v2/customers/{customer_id}")
-        save_json(customer, prefix, file_name)
+        self.__storage_utils.save_json(customer, prefix, file_name)
         return customer
 
     def list_customer_invoices(
@@ -202,10 +205,10 @@ class PennylaneIntegration(Integration):
         file_name = "list_customer_invoices.json"
         if filter_str:
             file_name = f"list_customer_invoices_{filter_str}.json"
-        save_json(
+        self.__storage_utils.save_json(
             invoices,
             os.path.join(
-                self.__configuration.data_store_path, "list_customer_invoices"
+                self.__configuration.datastore_path, "list_customer_invoices"
             ),
             file_name,
         )
@@ -226,11 +229,11 @@ class PennylaneIntegration(Integration):
             Dict: Invoice details
         """
         prefix = os.path.join(
-            self.__configuration.data_store_path, "get_customer_invoice", invoice_id
+            self.__configuration.datastore_path, "get_customer_invoice", invoice_id
         )
         file_name = f"{invoice_id}.json"
         invoice = self._make_request(f"v2/customer_invoices/{invoice_id}")
-        save_json(invoice, prefix, file_name)
+        self.__storage_utils.save_json(invoice, prefix, file_name)
         return invoice
 
     @cache(
@@ -244,12 +247,12 @@ class PennylaneIntegration(Integration):
             f"v2/customer_invoices/{invoice_id}/categories"
         )
         prefix = os.path.join(
-            self.__configuration.data_store_path,
+            self.__configuration.datastore_path,
             "get_customer_invoice_categories",
             invoice_id,
         )
         file_name = f"{invoice_id}.json"
-        save_json(invoice_categories, prefix, file_name)
+        self.__storage_utils.save_json(invoice_categories, prefix, file_name)
         return invoice_categories
 
     def list_categories(
@@ -280,9 +283,9 @@ class PennylaneIntegration(Integration):
         file_name = "list_categories.json"
         if filter_str:
             file_name = f"list_categories_{filter_str}.json"
-        save_json(
+        self.__storage_utils.save_json(
             categories,
-            os.path.join(self.__configuration.data_store_path, "list_categories"),
+            os.path.join(self.__configuration.datastore_path, "list_categories"),
             file_name,
         )
         return categories
@@ -293,9 +296,9 @@ class PennylaneIntegration(Integration):
             "limit": 100,
         }
         category_groups = self._get_all_items("v2/category_groups", params=params)
-        save_json(
+        self.__storage_utils.save_json(
             category_groups,
-            os.path.join(self.__configuration.data_store_path, "list_category_groups"),
+            os.path.join(self.__configuration.datastore_path, "list_category_groups"),
             "list_category_groups.json",
         )
         return category_groups
@@ -322,10 +325,10 @@ class PennylaneIntegration(Integration):
         file_name = "list_bank_transactions.json"
         if filter_str:
             file_name = f"list_bank_transactions_{filter_str}.json"
-        save_json(
+        self.__storage_utils.save_json(
             bank_transactions,
             os.path.join(
-                self.__configuration.data_store_path, "list_bank_transactions"
+                self.__configuration.datastore_path, "list_bank_transactions"
             ),
             file_name,
         )
