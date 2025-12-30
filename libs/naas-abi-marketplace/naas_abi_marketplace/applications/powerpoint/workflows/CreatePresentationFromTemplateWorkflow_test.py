@@ -1,5 +1,5 @@
 import pytest
-from naas_abi import config, secret, services
+from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
@@ -20,10 +20,16 @@ TEMPLATE_PATH = "src/marketplace/applications/powerpoint/templates/TemplateNaasP
 
 @pytest.fixture
 def workflow() -> CreatePresentationFromTemplateWorkflow:
-    datastore_path = "datastore/powerpoint/presentations/test"
-    triple_store_service = services.triple_store_service
+    from naas_abi_core.engine.Engine import Engine
+    
+    # We need to load the engine to load the module.
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.powerpoint", "naas_abi_marketplace.applications.naas"])
+    
+    module = ABIModule.get_instance()
+    triple_store_service = module.engine.services.triple_store
     naas_configuration = NaasIntegrationConfiguration(
-        api_key=secret.get("NAAS_API_KEY")
+        api_key=module.engine.services.secret.get("NAAS_API_KEY") or ""
     )
     powerpoint_configuration = PowerPointIntegrationConfiguration(
         template_path=TEMPLATE_PATH
@@ -38,9 +44,9 @@ def workflow() -> CreatePresentationFromTemplateWorkflow:
             powerpoint_configuration=powerpoint_configuration,
             naas_configuration=naas_configuration,
             pipeline_configuration=pipeline_configuration,
-            datastore_path=datastore_path,
-            workspace_id=config.workspace_id,
-            storage_name=config.storage_name,
+            datastore_path="datastore/powerpoint/presentations/test",
+            workspace_id=module.configuration.workspace_id,
+            storage_name=module.configuration.storage_name,
         )
     )
 
@@ -48,10 +54,12 @@ def workflow() -> CreatePresentationFromTemplateWorkflow:
 def test_workflow_name(workflow: CreatePresentationFromTemplateWorkflow):
     import os
 
-    from naas_abi_core.utils.Storage import get_json
+    from naas_abi_core.utils.StorageUtils import StorageUtils
+    from naas_abi_marketplace.applications.powerpoint import ABIModule
 
     json_file_path = "datastore/powerpoint/presentations/tests/presentation_data.json"
-    presentation_data = get_json(
+    storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+    presentation_data = storage_utils.get_json(
         os.path.dirname(json_file_path), os.path.basename(json_file_path)
     )
 

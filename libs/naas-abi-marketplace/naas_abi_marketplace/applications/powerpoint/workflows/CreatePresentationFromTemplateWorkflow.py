@@ -1,16 +1,16 @@
 import json
 import os
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from io import BytesIO
 from typing import Any, Dict, List
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import config
-from naas_abi_core.utils.Storage import save_powerpoint_presentation
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
+from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
@@ -47,8 +47,8 @@ class CreatePresentationFromTemplateWorkflowConfiguration(WorkflowConfiguration)
     naas_configuration: NaasIntegrationConfiguration
     pipeline_configuration: AddPowerPointPresentationPipelineConfiguration
     datastore_path: str = "datastore/powerpoint/presentations"
-    workspace_id: str = config.workspace_id
-    storage_name: str = config.storage_name
+    workspace_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.workspace_id)
+    storage_name: str = field(default_factory=lambda: ABIModule.get_instance().configuration.storage_name)
 
 
 class CreatePresentationFromTemplateWorkflowParameters(WorkflowParameters):
@@ -73,6 +73,7 @@ class CreatePresentationFromTemplateWorkflowParameters(WorkflowParameters):
 
 class CreatePresentationFromTemplateWorkflow(Workflow):
     __configuration: CreatePresentationFromTemplateWorkflowConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(
         self, configuration: CreatePresentationFromTemplateWorkflowConfiguration
@@ -90,6 +91,7 @@ class CreatePresentationFromTemplateWorkflow(Workflow):
                 triple_store=self.__configuration.triple_store,
             )
         )
+        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
 
     def create_presentation(
         self, parameters: CreatePresentationFromTemplateWorkflowParameters
@@ -169,7 +171,7 @@ class CreatePresentationFromTemplateWorkflow(Workflow):
                 continue
 
         # Save presentation to storage
-        save_powerpoint_presentation(
+        self.__storage_utils.save_powerpoint_presentation(
             presentation,
             self.__configuration.datastore_path,
             presentation_name,

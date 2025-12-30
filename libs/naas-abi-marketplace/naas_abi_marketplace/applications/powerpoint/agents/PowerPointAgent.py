@@ -2,7 +2,6 @@ import os
 from datetime import datetime
 from queue import Queue
 from typing import Any, Callable, Optional, Union
-
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.tools import BaseTool, Tool
@@ -18,6 +17,7 @@ from naas_abi_core.services.agent.Agent import (
     AgentConfiguration,
     AgentSharedState,
 )
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
@@ -239,6 +239,7 @@ class PowerPointAgent(Agent):
         self.__triple_store_service = (
             ABIModule.get_instance().engine.services.triple_store
         )
+        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
         self.__powerpoint_pipeline_configuration = (
             AddPowerPointPresentationPipelineConfiguration(
                 powerpoint_configuration=self.__powerpoint_configuration,
@@ -507,7 +508,6 @@ Template shapes to reference:
 
         import pydash as _
         from naas_abi_core.utils.JSON import extract_json_from_completion
-        from naas_abi_core.utils.Storage import save_json, save_text
 
         logger.debug("📝 Converting markdown to JSON")
         # Get last messages
@@ -545,7 +545,7 @@ Template shapes to reference:
 
             # Extract markdown content between ```markdown tags
             markdown_blocks = content.split("```markdown")[1].split("```")[0].strip()
-            save_text(
+            self.__storage_utils.save_text(
                 markdown_blocks,
                 self.__datastore_path,
                 "markdown_blocks.txt",
@@ -632,7 +632,7 @@ Template shapes to reference:
 
             presentation_data["slides_data"] = slides_data
 
-        save_json(
+        self.__storage_utils.save_json(
             presentation_data,
             self.__datastore_path,
             "presentation_data.json",
@@ -739,6 +739,8 @@ High
             event_queue=queue,
             datastore_path=self.__datastore_path,
             template_path=self.__template_path,
+            workspace_id=self.__workspace_id,
+            storage_name=self.__storage_name,
         )
 
         return new_agent
