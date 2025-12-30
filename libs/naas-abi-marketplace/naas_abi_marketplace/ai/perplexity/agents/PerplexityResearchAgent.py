@@ -1,5 +1,4 @@
 from typing import Optional
-
 from langchain_core.messages import ChatMessage, ToolMessage
 from naas_abi_core.services.agent.Agent import (
     Agent,
@@ -48,7 +47,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Define model
-    from naas_abi.core.perplexity.models.sonar_pro import model
+    from naas_abi_marketplace.ai.perplexity.models.sonar_pro import model
 
     # Set configuration
     if agent_configuration is None:

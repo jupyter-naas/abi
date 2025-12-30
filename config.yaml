@@ -23,6 +23,31 @@ modules:
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  - module: naas_abi_marketplace.ai.gemini
+    enabled: true
+    config:
+      gemini_api_key: "{{ secret.GEMINI_API_KEY }}"
+  - module: naas_abi_marketplace.applications.google_search
+    enabled: true
+    config:
+      google_api_key: "{{ secret.GOOGLE_API_KEY }}"
+      google_search_engine_id: "{{ secret.GOOGLE_SEARCH_ENGINE_ID }}"
+  - module: naas_abi_marketplace.applications.linkedin
+    enabled: true
+    config:
+      li_at: "{{ secret.li_at }}"
+      JSESSIONID: "{{ secret.JSESSIONID }}"
+      linkedin_profile_url: "{{ secret.LINKEDIN_PROFILE_URL }}"
+  - module: naas_abi_marketplace.applications.naas
+    enabled: true
+    config:
+      naas_api_key: "{{ secret.NAAS_API_KEY }}"
+      workspace_id: "{{ secret.WORKSPACE_ID }}"
+      storage_name: "{{ secret.STORAGE_NAME }}"
+  - module: naas_abi_marketplace.domains.support
+    enabled: true
+    config:
+      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
 
 services:
   secret:

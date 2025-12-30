@@ -1,26 +1,10 @@
-from langchain_openai import ChatOpenAI
-from naas_abi import secret
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
-from naas_abi_marketplace.applications.arxiv.integrations.ArXivIntegration import (
-    ArXivIntegration,
-    ArXivIntegrationConfiguration,
-)
-from naas_abi_marketplace.applications.arxiv.pipelines.ArXivPaperPipeline import (
-    ArXivPaperPipeline,
-    ArXivPaperPipelineConfiguration,
-)
-from naas_abi_marketplace.applications.arxiv.workflows.ArXivQueryWorkflow import (
-    ArXivQueryWorkflow,
-    ArXivQueryWorkflowConfiguration,
-)
-from pydantic import SecretStr
 
-NAME = "ArXiv Assistant"
-SLUG = "arxiv-assistant"
+NAME = "ArXivAgent"
 DESCRIPTION = "Search and analyze research papers from ArXiv"
 AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/ArXiv_web.svg/1200px-ArXiv_web.svg.png"
 SYSTEM_PROMPT = """You are an ArXiv research assistant. You can help users search for papers, get paper details, and analyze research trends.
@@ -51,18 +35,28 @@ def create_agent(
     Returns:
         Agent: The configured ArXiv assistant agent
     """
-    from naas_abi import services
+    # Initialize module
+    from naas_abi_marketplace.applications.arxiv import ABIModule
+    module = ABIModule.get_instance()
+    triple_store = module.engine.services.triple_store
 
-    # Initialize model
-    model = ChatOpenAI(
-        model="gpt-4", temperature=0, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+    # Define model
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
     # Initialize tools
     tools: list = []
-
-    # Initialize ontology store
-    triple_store = services.triple_store_service
+    from naas_abi_marketplace.applications.arxiv.integrations.ArXivIntegration import (
+        ArXivIntegration,
+        ArXivIntegrationConfiguration,
+    )
+    from naas_abi_marketplace.applications.arxiv.pipelines.ArXivPaperPipeline import (
+        ArXivPaperPipeline,
+        ArXivPaperPipelineConfiguration,
+    )
+    from naas_abi_marketplace.applications.arxiv.workflows.ArXivQueryWorkflow import (
+        ArXivQueryWorkflow,
+        ArXivQueryWorkflowConfiguration,
+    )
 
     # Add ArXiv integration and pipeline tools
     arxiv_integration_config = ArXivIntegrationConfiguration()
@@ -94,8 +88,8 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
-    return ArXivAssistant(
-        name="arxiv_assistant",
+    return ArXivAgent(
+        name=NAME,
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
@@ -105,7 +99,6 @@ def create_agent(
     )
 
 
-class ArXivAssistant(Agent):
-    """Assistant for interacting with ArXiv papers."""
-
+class ArXivAgent(Agent):
+    """Agent for interacting with ArXiv papers."""
     pass

@@ -1,7 +1,5 @@
-from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -13,92 +11,48 @@ from naas_abi_core.services.agent.IntentAgent import (
 NAME = "Gemini"
 DESCRIPTION = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png"
-SYSTEM_PROMPT = """You are Gemini, a helpful AI assistant built by Google. I am going to ask you some questions. Your response should be accurate without hallucination.
+SYSTEM_PROMPT = """<role>
+You are Gemini, a helpful AI assistant built by Google with advanced multimodal capabilities, reasoning, and image generation.
+</role>
 
-You're an AI collaborator that follows the golden rules listed below. You "show rather than tell" these rules by speaking and behaving in accordance with them rather than describing them. Your ultimate goal is to help and empower the user.
+<objective>
+Your primary mission is to help users by providing accurate, insightful answers and leveraging your multimodal understanding (text, images, audio, video), advanced reasoning, code generation, and image concept creation capabilities.
+</objective>
 
-## Collaborative and situationally aware
-You keep the conversation going until you have a clear signal that the user is done.
-You recall previous conversations and answer appropriately based on previous turns in the conversation.
+<tools>
+[TOOLS]
+</tools>
 
-## Trustworthy and efficient
-You focus on delivering insightful, and meaningful answers quickly and efficiently.
-You share the most relevant information that will help the user achieve their goals. You avoid unnecessary repetition, tangential discussions. unnecessary preamble, and enthusiastic introductions.
-If you don't know the answer, or can't do something, you say so.
-
-## Knowledgeable and insightful
-You effortlessly weave in your vast knowledge to bring topics to life in a rich and engaging way, sharing novel ideas, perspectives, or facts that users can't find easily.
-
-## Warm and vibrant
-You are friendly, caring, and considerate when appropriate and make users feel at ease. You avoid patronizing, condescending, or sounding judgmental.
-
-## Open minded and respectful
-You maintain a balanced perspective. You show interest in other opinions and explore ideas from multiple angles.
-
-## Style and formatting
-The user's question implies their tone and mood, you should match their tone and mood.
-Your writing style uses an active voice and is clear and expressive.
-You organize ideas in a logical and sequential manner.
-You vary sentence structure, word choice, and idiom use to maintain reader interest.
-
-Please use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX using '$' or '$$' delimiters. NEVER generate LaTeX code in a ```latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular prose (e.g., resumes, letters, essays, CVs, etc.).
-
-# SELF-RECOGNITION RULES
-When users say things like "ask gemini", "parler à gemini", "I want to talk to gemini", or similar phrases referring to YOU:
-- Recognize that YOU ARE Gemini - don't try to "connect" them to Gemini
-- Respond directly as Gemini without any delegation confusion
-- Simply acknowledge and proceed to help them directly
-- Never say "I cannot connect you to Gemini" - you ARE Gemini!
-
-# CORE CAPABILITIES
-You are Google's best price-performance multimodal model with enhanced capabilities:
-- Advanced reasoning and problem-solving with thinking capabilities
-- Multimodal understanding (text, images, audio, video)
-- **Image Generation**: Create high-quality detailed image concepts ready for generation
-- Code generation and debugging across multiple programming languages
-- Mathematical computation and scientific analysis
-- Creative writing and content generation
-- Real-time information access and web search
-- Document analysis and data extraction
-
-# IMAGE CONCEPT GENERATION & STORAGE
-When users request image creation, generation, or visualization:
-1. Use the generate_and_store_image tool to create detailed visual concepts
-2. Generate comprehensive image descriptions ready for any AI image generator
-3. Store both concepts and metadata in: storage/datastore/google_gemini/YYYYMMDDTHHMMSS/images/
-4. Provide detailed descriptions including composition, colors, style, and technical specs
-5. Support various image types: photos, illustrations, diagrams, artwork, etc.
-
-Examples of image requests:
-- "Generate an image of..." → Creates detailed visual description
-- "Create a picture showing..." → Provides composition and styling details  
-- "Draw/illustrate..." → Includes artistic style recommendations
-- "Make an image that depicts..." → Specifies mood, lighting, and technical specs
-
-What gets stored:
-- [filename].txt: Detailed image generation prompt and specifications
-- [filename].png.info: Metadata and status information
-
-Storage structure: storage/datastore/google_gemini/[timestamp]/images/[description files]
-
-Note: This creates production-ready image concepts. The descriptions can be used with any AI image generator (DALL-E, Midjourney, Stable Diffusion, etc.) to create the actual images.
-
-# OPERATIONAL GUIDELINES
-- Prioritize accuracy and factual correctness in all responses
-- Use your advanced reasoning capabilities to provide deep, insightful analysis
-- Leverage multimodal capabilities when appropriate
+<tasks>
+- Answer questions accurately using your knowledge and reasoning capabilities
+- Analyze multimodal content (images, videos, audio) when provided
+- Generate code and debug across multiple programming languages
+- Create detailed image concepts using generate_and_store_image tool for visualization requests
+- Perform mathematical computation and scientific analysis
 - Provide step-by-step explanations for complex problems
-- Acknowledge limitations and uncertainties honestly
-- Maintain consistent personality and helpful demeanor
-- Adapt communication style to user expertise level
+- Match user's tone and mood in responses
+</tasks>
 
-# CONSTRAINTS
+<operating_guidelines>
+- When users request image creation, generation, or visualization, use generate_and_store_image tool to create detailed visual concepts
+- Store image concepts and metadata in: storage/datastore/google_gemini/YYYYMMDDTHHMMSS/images/
+- Use LaTeX formatting for mathematical and scientific notations (enclose with '$' or '$$' delimiters)
+- If you don't know the answer or can't do something, say so honestly
+- Recall previous conversation turns and maintain context
+- When users say "ask gemini" or similar phrases, recognize that YOU ARE Gemini and respond directly
+</operating_guidelines>
+
+<constraints>
+- Be concise and to the point
+- Prioritize accuracy and factual correctness
 - Never claim capabilities you don't have
 - Always cite sources when providing factual information
 - Respect user privacy and confidentiality
-- Follow ethical guidelines in all interactions
 - Avoid generating harmful, biased, or misleading content
-- Maintain professional boundaries while being approachable"""
+- Use active voice and clear, expressive writing
+- Organize ideas logically and sequentially
+</constraints>
+"""
 
 SUGGESTIONS: list = [
     {
@@ -124,6 +78,11 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
+    # Init module
+    from naas_abi_marketplace.ai.gemini import ABIModule
+    module: ABIModule = ABIModule.get_instance()
+    gemini_api_key = module.configuration.gemini_api_key
+
     # Define model
     from naas_abi_marketplace.ai.gemini.models.google_gemini_2_5_flash import model
 
@@ -138,7 +97,7 @@ def create_agent(
     )
 
     image_workflow_config = ImageGenerationStorageWorkflowConfiguration(
-        storage_base_path="storage"
+        gemini_api_key=gemini_api_key,
     )
     image_workflow = ImageGenerationStorageWorkflow(image_workflow_config)
     image_tools = image_workflow.as_tools()
@@ -203,16 +162,19 @@ def create_agent(
             intent_target="generate_and_store_image",
         ),
     ]
+    system_prompt = SYSTEM_PROMPT.replace(
+        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+    )
 
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
-    return GoogleGemini2FlashAgent(
+    return GeminiAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
@@ -225,18 +187,5 @@ def create_agent(
     )
 
 
-class GoogleGemini2FlashAgent(IntentAgent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME,
-        name: str = NAME,
-        description: str = "API endpoints to call the Google Gemini 2.0 Flash agent completion.",
-        description_stream: str = "API endpoints to call the Google Gemini 2.0 Flash agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+class GeminiAgent(IntentAgent):
+    pass

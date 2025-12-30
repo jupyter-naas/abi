@@ -15,7 +15,11 @@ from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core import logger
 from naas_abi_marketplace.applications.linkedin import ABIModule
-
+import time
+from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
+    NaasIntegrationConfiguration,
+    NaasIntegration,
+)
 
 cache = CacheFactory.CacheFS_find_storage(subpath="linkedin")
 
@@ -27,6 +31,8 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
     Attributes:
         li_at (str): LinkedIn li_at cookie value for authentication
         JSESSIONID (str): LinkedIn JSESSIONID cookie value for authentication
+        profile_url (str): LinkedIn profile URL to use for the integration.
+        naas_integration_config (NaasIntegrationConfiguration): Configuration for Naas integration.
         base_url (str): Base URL for LinkedIn API
         datastore_path (str): Path to store cached data
     """
@@ -34,6 +40,7 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
     li_at: str
     JSESSIONID: str
     linkedin_url: str
+    naas_integration_config: NaasIntegrationConfiguration | None = None
     base_url: str = "https://www.linkedin.com/voyager/api"
     datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
@@ -43,6 +50,7 @@ class LinkedInIntegration(Integration):
 
     __configuration: LinkedInIntegrationConfiguration
     __storage_utils: StorageUtils
+    __naas_integration: NaasIntegration | None = None
 
     def __init__(self, configuration: LinkedInIntegrationConfiguration):
         """Initialize LinkedIn client with authentication cookies."""
@@ -51,6 +59,8 @@ class LinkedInIntegration(Integration):
         self.__configuration.JSESSIONID = self.__configuration.JSESSIONID.replace(
             '"', ""
         )
+        if self.__configuration.naas_integration_config:
+            self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
         self.__storage_utils: StorageUtils = StorageUtils(
             ABIModule.get_instance().engine.services.object_storage
         )
@@ -67,6 +77,16 @@ class LinkedInIntegration(Integration):
             "csrf-token": self.__configuration.JSESSIONID,
             "x-restli-protocol-version": "2.0.0",
         }
+
+        self.profile_url = self.__configuration.linkedin_url
+        profile_public_id_result = self.get_profile_public_id(self.profile_url)
+        public_id_error = profile_public_id_result.get("error")
+        if public_id_error:
+            raise Exception(f"Failed to fetch LinkedIn profile public ID for URL '{self.profile_url}': {public_id_error}")
+        profile_public_id = profile_public_id_result.get("result")
+        if not profile_public_id:
+            raise Exception(f"LinkedIn profile public ID is empty for URL '{self.profile_url}'")
+        self.profile_public_id = profile_public_id
 
     def _flatten_dict(
         self, data: Union[Dict, Any], parent_key: str = "", sep: str = "_"
@@ -350,6 +370,10 @@ class LinkedInIntegration(Integration):
     @cache(
         lambda self, method, endpoint, params: method
         + "_"
+        + self.cookies.get("li_at")
+        + "_"
+        + self.cookies.get("JSESSIONID")
+        + "_"
         + endpoint
         + ("_".join(f"{k}_{v}" for k, v in params.items()) if params else ""),
         cache_type=DataType.JSON,
@@ -494,7 +518,29 @@ class LinkedInIntegration(Integration):
             return {"error": f"LinkedIn profile public ID not found for URL '{url}'"}
         entity_urn = elements[0]
         data_entity = _.find(data.get('included', []), lambda x: x.get('entityUrn') == entity_urn)
-        return {"result": data_entity.get('publicIdentifier') if data_entity else ""}
+        public_identifier = data_entity.get('publicIdentifier') if data_entity else None
+        if public_identifier:
+            return {"result": public_identifier}
+        
+        # If not found, get from overflowActionsResolutionResults
+        try:
+            overflow_actions = data_entity.get('profileStatefulProfileActions', {}).get('overflowActionsResolutionResults', []) if data_entity else []
+            share_url = None
+            for action in overflow_actions:
+                if action.get("shareProfileUrlViaMessage"):
+                    share_url = action["shareProfileUrlViaMessage"]
+                    break
+            if not share_url:
+                for action in overflow_actions:
+                    if action.get("shareProfileUrl"):
+                        share_url = action["shareProfileUrl"]
+                        break
+            share_url_result = self.get_profile_id_from_url(share_url)
+            if share_url_result.get("error"):
+                return share_url_result
+            return {"result": share_url_result.get("result", "")}
+        except Exception:
+            return {"error": f"LinkedIn profile public ID not found for URL '{url}'"}
 
     def get_profile_id(self, url: str) -> Dict[str, str]:
         """Get profile ID from LinkedIn profile data.
@@ -1016,36 +1062,118 @@ class LinkedInIntegration(Integration):
         if return_cleaned_json:
             return self.clean_json(prefix, filename, all_data)
         return all_data
+    
+    def __get_people_results(self, cleaned_data: dict, entities: list) -> list:
+        """Get people results from LinkedIn data.
 
+        Args:
+            cleaned_data (dict): Cleaned LinkedIn data.
+        """
+        for entity in cleaned_data.get(
+            "com.linkedin.voyager.dash.search.EntityResultViewModel", []
+        ):
+            navigation_url = _.get(entity, "navigationUrl")
+            profile_url = navigation_url.split("?")[0]
+            public_id = profile_url.split("/")[-1]
+            profile_id = navigation_url.split("miniProfile%3")[1]
+            entities.append(
+                {
+                    "id": profile_id,
+                    "public_id": public_id,
+                    "name": _.get(entity, "title.text"),
+                    "headline": _.get(entity, "primarySubtitle.text"),
+                    "location": _.get(entity, "secondarySubtitle.text"),
+                    "profile_url": profile_url,
+                    "profile_picture": _.get(
+                        entity,
+                        "image.attributes[0].detailData.nonEntityProfilePicture.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment",
+                    ),
+                    "connection_degree": _.get(
+                        entity, "entityCustomTrackingInfo.memberDistance"
+                    ),
+                }
+            )
+        return entities
+    
+    def __export_excel(
+        self, 
+        entities: list, 
+        prefix: str,
+        file_name: str, 
+        sheet_name: str = "EXPORT_LINKEDIN",
+        linkedin_profile_id: str | None = None,
+        connections_distance: str | None = None,
+        linkedin_organization_id: str | None = None,
+    ) -> str:
+        """Export entities to Excel.
+
+        Args:
+            entities (list): List of entities to export.
+            filename (str): Filename to export the Excel file.
+        """
+        import pandas as pd
+        from io import BytesIO
+
+        if len(entities) == 0:
+            return ""
+
+        df = pd.DataFrame(entities)
+        df["init_profile_id"] = self.profile_public_id
+        if linkedin_profile_id:
+            df["linkedin_profile_id_parameter"] = linkedin_profile_id
+        if connections_distance:
+            df["connections_distance_parameter"] = connections_distance
+        if linkedin_organization_id:
+            df["linkedin_organization_id_parameter"] = linkedin_organization_id
+
+        self.__storage_utils.save_excel(
+            df,
+            os.path.join(self.__configuration.datastore_path, prefix),
+            file_name,
+            sheet_name,
+            copy=False,
+        )
+        excel_buffer = BytesIO()
+        df.to_excel(excel_buffer, index=False, sheet_name=sheet_name)
+        excel_buffer.seek(0)
+        if self.__naas_integration: 
+            asset = self.__naas_integration.upload_asset(
+                data=excel_buffer.getvalue(),
+                prefix=os.path.join(self.__configuration.datastore_path, prefix),
+                object_name=file_name,
+                return_url=True,
+            )
+            return asset.get("asset_url", "")
+        else:
+            return os.path.join(self.__configuration.datastore_path, prefix, file_name)
+    
+    @cache(
+        lambda self, profile_url, organization_url, connection_distance: profile_url + "_" + connection_distance + "_" + (str(organization_url) if organization_url else "all"),
+        cache_type=DataType.JSON,
+        ttl=datetime.timedelta(days=1),
+    )
     def get_mutual_connexions(
         self,
         profile_url: str,
-        organization_url: str | None = None,
         connection_distance: str = "F",
+        organization_url: str | None = None,
         start: int = 0,
-        return_cleaned_json: bool = False,
+        count: int = 50,
+        limit: int = 1000,
+        query_id: str = "voyagerSearchDashClusters.ef3d0937fb65bd7812e32e5a85028e79",
     ) -> Dict:
-        """Get mutual connections for a LinkedIn activity.
-        It will return the total number of connections and the first 10 profiles.
+        """Get mutual connections for a LinkedIn profile.
+        It will return the total number of connections and the connections.
 
         Args:
             profile_url (str): LinkedIn profile URL.
+            connection_distance (str, optional): Connection distance. Defaults to "F" for "First Degree", "S" for "Second Degree", "O" for "Others".
             organization_url (str, optional): LinkedIn organization URL to filter the mutual connections.
-            connection_distance (str, optional): Connection distance. 
-               Defaults to "F" for "First Degree", "S" for "Second Degree", "O" for "Others".
             start (int, optional): Start index for pagination. Defaults to 0.
-            connection_distance (str, optional): Connection distance. 
-               Defaults to "F" for "First Degree", "S" for "Second Degree", "O" for "Others".
-            return_cleaned_json (bool, optional): Whether to return cleaned JSON data. Defaults to False.
+            count (int, optional): Number of connections to fetch per request. Defaults to 50.
+            limit (int, optional): Maximum number of connections to return. Defaults to 1000.
+            query_id (str, optional): Query ID generated by LinkedIn to use for the request. We can't generate it ourselves so it might needs to be updated if LinkedIn rotates it.
         """
-        # Get me
-        my_profile_id_result = self.get_profile_id_from_url(self.__configuration.linkedin_url)
-        if my_profile_id_result.get("error"):
-            return my_profile_id_result
-        my_profile_id = my_profile_id_result.get("result")
-        if not my_profile_id:
-            return {"error": f"LinkedIn profile ID is empty for URL '{self.__configuration.linkedin_url}'"}
-        
         # Get profile ID
         profile_id_result = self.get_profile_id(profile_url)
         if profile_id_result.get("error"):
@@ -1062,7 +1190,8 @@ class LinkedInIntegration(Integration):
         if not profile_public_id:
             return {"error": f"LinkedIn profile public ID is empty for URL '{profile_url}'"}
         
-        prefix = os.path.join("get_mutual_connexions", my_profile_id, profile_public_id, connection_distance)
+        prefix = os.path.join("get_mutual_connexions", self.profile_public_id, profile_public_id, connection_distance)
+        filename = f"get_mutual_connexions_{profile_public_id}_{connection_distance}"
 
         if organization_url is not None:
             organization_id_result = self.get_organization_id(organization_url)
@@ -1078,62 +1207,186 @@ class LinkedInIntegration(Integration):
             if not organization_public_id:
                 return {"error": f"LinkedIn organization public ID is empty for URL '{organization_url}'"}
             prefix = os.path.join(prefix, organization_public_id)
+            filename += f"_{organization_public_id}"
+        else:
+            organization_id = ""
+            organization_public_id = ""
+            prefix = os.path.join(prefix, "_all")
+
+        final_filename = filename
+        entities: list = []
+        while True:
+            print(f"Getting mutual connections for profile '{profile_url}' with connection distance '{connection_distance}' starting from {start} and count {count}")
+            endpoint = (
+                "/graphql?"
+                f"queryId={query_id}&"
+                f"variables=(start:{str(start)},count:{str(count)},"
+                "origin:FACETED_SEARCH,"
+                "query:(flagshipSearchIntent:SEARCH_SRP,"
+                f"queryParameters:List((key:connectionOf,value:List({profile_id})),"
+                f"(key:currentCompany,value:List({organization_id})),"
+                f"(key:network,value:List({connection_distance})),"
+                "(key:resultType,value:List(PEOPLE))),"
+                "includeFiltersInResponse:false))"
+            )
+            data = self._make_request(method="GET", endpoint=endpoint)
+            self.__save_json(os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data)
+            cleaned_data = self.clean_json(os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data)
+            entities = self.__get_people_results(cleaned_data, entities)
+
+            total_connections = _.get(
+                data, "data.data.searchDashClustersByAll.metadata.totalResultCount", 0
+            )
+            print(f"Total connections: {total_connections}")
+            print(f"Entities found: {len(entities)}")
+            if start + count >= total_connections or len(entities) >= limit:
+                break
+            print(f"Found {len(entities)} connections out of {total_connections}")
+            time.sleep(1)
+            start += count
+
+        final_data = {
+            "total_connections": total_connections,
+            "connections_returned": len(entities),
+            "connections": entities,
+        }
+        self.__storage_utils.save_json(
+            final_data,
+            os.path.join(self.__configuration.datastore_path, prefix),
+            final_filename + ".json",
+        )
+        print(f"Exporting Excel for profile '{profile_url}' with connection distance '{connection_distance}' and organization '{organization_url}'")
+        excel_url = self.__export_excel(
+            entities, 
+            prefix, 
+            f"{self.profile_public_id}_{final_filename}.xlsx",
+            linkedin_profile_id=profile_public_id,
+            connections_distance=connection_distance,
+            linkedin_organization_id=organization_public_id,
+        )
+        print("Downloading Excel file from URL: ", excel_url)
+        final_data["excel_url"] = excel_url
+        return final_data
+
+    
+    @cache(
+        lambda self, connection_distance, organization_url: connection_distance + "_" + organization_url,
+        cache_type=DataType.JSON,
+        ttl=datetime.timedelta(days=1),
+    )
+    def search_people(
+        self,
+        connection_distance: str = "F",
+        organization_url: str | None = None,
+        location: str | None = None,
+        start: int = 0,
+        count: int = 50,
+        limit: int = 1000,
+        query_id: str = "voyagerSearchDashClusters.c0f8645a22a6347486d76d5b9d985fd7",
+    ) -> Dict:
+        """Search for people on LinkedIn.
+        It will return the total number of people found and the people.
+
+        Args:
+            connection_distance (str, optional): Connection distance. Defaults to "F" for First Degree, "S" for Second Degree, "O" for Others.
+            organization_url (str, optional): LinkedIn organization URL to filter the people.
+            location (str, optional): Location to filter the people.
+            start (int, optional): Start index for pagination. Defaults to 0.
+            count (int, optional): Number of people to fetch per request. Defaults to 50.
+            limit (int, optional): Maximum number of people to return. Defaults to 1000.
+            query_id (str, optional): Query ID generated by LinkedIn to use for the request. We can't generate it ourselves so it might needs to be updated if LinkedIn rotates it.
+        """
+        prefix = os.path.join("search_people", self.profile_public_id, connection_distance)
+        filename = f"search_people_{connection_distance}"
+
+        # Get organization ID
+        if organization_url is not None:
+            organization_id_result = self.get_organization_id(organization_url)
+            if organization_id_result.get("error"):
+                return organization_id_result
+            organization_id = organization_id_result.get("result")
+            if not organization_id:
+                return {"error": f"LinkedIn organization ID is empty for URL '{organization_url}'"}
+            organization_public_id_result = self.get_organization_id_from_url(organization_url)
+            if organization_public_id_result.get("error"):
+                return organization_public_id_result
+            organization_public_id = organization_public_id_result.get("result")
+            if not organization_public_id:
+                return {"error": f"LinkedIn organization public ID is empty for URL '{organization_url}'"}
+            prefix = os.path.join(prefix, organization_public_id)
+            filename += f"_{organization_public_id}"
         else:
             organization_id = ""
             prefix = os.path.join(prefix, "_all")
 
-        # Full URL with query parameters directly embedded
-        endpoint = (
-            "/graphql?"
-            "queryId=voyagerSearchDashClusters.c0f8645a22a6347486d76d5b9d985fd7&"
-            f"variables=(start:{str(start)},"
-            "origin:FACETED_SEARCH,"
-            "query:(flagshipSearchIntent:SEARCH_SRP,"
-            f"queryParameters:List((key:connectionOf,value:List({profile_id})),"
-            f"(key:currentCompany,value:List({organization_id})),"
-            f"(key:network,value:List({connection_distance})),"
-            "(key:resultType,value:List(PEOPLE))),"
-            "includeFiltersInResponse:false))"
-        )
-        data = self._make_request(method="GET", endpoint=endpoint)
-        self.__save_json(prefix, profile_id, data)
-        if return_cleaned_json:
-            cleaned_data = self.clean_json(prefix, profile_id, data)
+        # Get location ID
+        location_id: str = ""
+        if location is not None:
+            MAPPING_LOCATION_TO_ID: dict[str, str] = {
+                "France": "105015875",
+            }
+            location_id_from_map = MAPPING_LOCATION_TO_ID.get(location)
+            if not location_id_from_map:
+                print(f"Location '{location}' not found in mapping")
+            else:
+                location_id = location_id_from_map
+                prefix = os.path.join(prefix, location_id)
+                filename += f"_{location_id}"
+
+        final_filename = filename
+        entities: list = []
+        while True:
+            print(f"Searching for people with connection distance '{connection_distance}' starting from {start} and count {count}")
+            endpoint = (
+                "/graphql?"
+                f"queryId={query_id}&"
+                f"variables=(start:{str(start)},count:{str(count)},"
+                "origin:FACETED_SEARCH,"
+                "query:(flagshipSearchIntent:SEARCH_SRP,"
+                f"queryParameters:List((key:network,value:List({connection_distance})),"
+                f"(key:currentCompany,value:List({organization_id})),"
+                f"(key:geoUrn,value:List({location_id})),"
+                "(key:resultType,value:List(PEOPLE))),"
+                "includeFiltersInResponse:false))"
+            )
+            data = self._make_request(method="GET", endpoint=endpoint)
+            self.__save_json(os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data)
+            cleaned_data = self.clean_json(os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data)
+            entities = self.__get_people_results(cleaned_data, entities)
+
             total_connections = _.get(
                 data, "data.data.searchDashClustersByAll.metadata.totalResultCount", 0
             )
-            # Extract only relevant entity information
-            entities = []
-            for entity in cleaned_data.get(
-                "com.linkedin.voyager.dash.search.EntityResultViewModel", []
-            ):
-                entities.append(
-                    {
-                        "name": _.get(entity, "title.text"),
-                        "headline": _.get(entity, "primarySubtitle.text"),
-                        "location": _.get(entity, "secondarySubtitle.text"),
-                        "profile_url": _.get(entity, "navigationUrl"),
-                        "profile_picture": _.get(
-                            entity,
-                            "image.attributes[0].detailData.nonEntityProfilePicture.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment",
-                        ),
-                        "connection_degree": _.get(
-                            entity, "entityCustomTrackingInfo.memberDistance"
-                        ),
-                    }
-                )
+            print(f"Total connections: {total_connections}")
+            print(f"Entities found: {len(entities)}")
+            if start + count >= total_connections or len(entities) >= limit:
+                break
+            print(f"Found {len(entities)} connections out of {total_connections}")
+            time.sleep(1)
+            start += count
 
-            final_data = {
-                "total_connections": total_connections,
-                "connections": entities,
-            }
-            self.__storage_utils.save_json(
-                final_data,
-                os.path.join(self.__configuration.datastore_path, prefix),
-                f"{profile_public_id}_final_data.json",
-            )
-            return final_data
-        return data
+        final_data = {
+            "total_connections": total_connections,
+            "connections_returned": len(entities),
+            "connections": entities,
+        }
+        self.__storage_utils.save_json(
+            final_data,
+            os.path.join(self.__configuration.datastore_path, prefix),
+            final_filename,
+        )
+
+        print(f"Exporting Excel for people with connection distance '{connection_distance}' starting from {start} and count {count}")
+        excel_url = self.__export_excel(
+            entities, 
+            prefix, 
+            f"{self.profile_public_id}_{final_filename}.xlsx",
+            connections_distance=connection_distance,
+            linkedin_organization_id=organization_public_id,
+        )
+        print("Downloading Excel file from URL: ", excel_url)
+        final_data["excel_url"] = excel_url
+        return final_data
 
 
 def as_tools(configuration: LinkedInIntegrationConfiguration):
@@ -1203,6 +1456,35 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             ),
         ]] = None
 
+    class SearchPeopleSchema(BaseModel):
+        connection_distance: Annotated[
+            str,
+            Field(
+                description="Connection distance. F for First Degree, S for Second Degree, O for Others.",
+                pattern=r"^[FSO]$",
+            ),
+        ] = "F"
+        organization_url: Optional[Annotated[
+            str,
+            Field(
+                description=(
+                    "LinkedIn organization URL to filter the people."
+                ),
+                pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
+            ),
+        ]] = None
+        location: Optional[Annotated[
+            str,
+            Field(
+                description="Location to filter the people.",
+            ),
+        ]] = None
+        limit: Optional[Annotated[
+            int,
+            Field(
+                description="Maximum number of people to return.",
+            )
+        ]] = 1000
 
     return [
         StructuredTool(
@@ -1280,7 +1562,13 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         StructuredTool(
             name="linkedin_get_mutual_connexions",
             description="Get mutual connections for a LinkedIn profile.",
-            func=lambda **kwargs: integration.get_mutual_connexions(**kwargs, return_cleaned_json=True),
+            func=lambda **kwargs: integration.get_mutual_connexions(**kwargs),
             args_schema=GetMutualConnectionsSchema,
+        ),
+        StructuredTool(
+            name="linkedin_search_people",
+            description="Search for people on LinkedIn.",
+            func=lambda **kwargs: integration.search_people(**kwargs),
+            args_schema=SearchPeopleSchema,
         ),
     ]

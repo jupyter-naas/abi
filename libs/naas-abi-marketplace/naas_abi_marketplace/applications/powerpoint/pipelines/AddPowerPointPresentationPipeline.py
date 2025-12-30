@@ -6,9 +6,10 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.SPARQL import get_identifier, get_subject_graph
-from naas_abi_core.utils.Storage import get_powerpoint_presentation
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
+from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Graph import URI_REGEX
@@ -70,6 +71,8 @@ class AddPowerPointPresentationPipeline(Pipeline):
     """Pipeline for adding a presentation to the ontology."""
 
     __configuration: AddPowerPointPresentationPipelineConfiguration
+    __sparql_utils: SPARQLUtils
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: AddPowerPointPresentationPipelineConfiguration):
         super().__init__(configuration)
@@ -77,6 +80,9 @@ class AddPowerPointPresentationPipeline(Pipeline):
         self.__powerpoint_integration = PowerPointIntegration(
             configuration.powerpoint_configuration
         )
+        module = ABIModule.get_instance()
+        self.__sparql_utils = SPARQLUtils(module.engine.services.triple_store)
+        self.__storage_utils = StorageUtils(module.engine.services.object_storage)
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, AddPowerPointPresentationPipelineParameters):
@@ -91,7 +97,7 @@ class AddPowerPointPresentationPipeline(Pipeline):
             )
         else:
             presentation = Presentation(
-                get_powerpoint_presentation(
+                self.__storage_utils.get_powerpoint_presentation(
                     os.path.dirname(parameters.storage_path),
                     os.path.basename(parameters.storage_path),
                 )
@@ -148,10 +154,10 @@ class AddPowerPointPresentationPipeline(Pipeline):
 
         # Add objects if not exists
         presentation_hash = create_hash_from_string(identifier)
-        presentation_uri = get_identifier(presentation_hash, type=ABI.unique_id)
+        presentation_uri = self.__sparql_utils.get_identifier(presentation_hash, type=ABI.unique_id)
         if presentation_uri is not None:
             logger.info(f"🛑 Presentation already exists: {presentation_uri}")
-            return get_subject_graph(presentation_uri, depth=2)
+            return self.__sparql_utils.get_subject_graph(presentation_uri, depth=2)
 
         presentation_uri = ABI[str(uuid.uuid4())]
         graph.add((presentation_uri, RDF.type, OWL.NamedIndividual))

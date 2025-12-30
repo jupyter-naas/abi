@@ -1,5 +1,4 @@
 from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -70,17 +69,17 @@ def create_agent(
 
     # Define tools
     tools: list = []
-    from naas_abi import secret
-    from naas_abi.core.perplexity.integrations.PerplexityIntegration import (
+    from naas_abi_marketplace.ai.perplexity.integrations.PerplexityIntegration import (
         PerplexityIntegrationConfiguration,
         as_tools,
     )
+    from naas_abi_marketplace.ai.perplexity import ABIModule
 
     base_url = "https://api.perplexity.ai"
-    api_key = secret.get("PERPLEXITY_API_KEY")
-    if secret.get("OPENROUTER_API_KEY"):
+    api_key = ABIModule.get_instance().configuration.perplexity_api_key
+    if api_key:
         base_url = "https://openrouter.ai/api/v1"
-        api_key = secret.get("OPENROUTER_API_KEY")
+        api_key = ABIModule.get_instance().configuration.openrouter_api_key
 
     integration_config = PerplexityIntegrationConfiguration(
         api_key=api_key,
