@@ -2,6 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
 
+class SecretAuthenticationError(Exception):
+    pass
+
+
 class ISecretAdapter(ABC):
     @abstractmethod
     def get(self, key: str, default: Any = None) -> str | Any | None:
@@ -37,4 +41,5 @@ class ISecretService(ABC):
 
     @abstractmethod
     def list(self) -> Dict[str, str | None]:
+        raise NotImplementedError()
         raise NotImplementedError()
