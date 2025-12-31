@@ -131,6 +131,7 @@ class EngineConfiguration(BaseModel):
                 if self.secret_service is None:
                     return 0
                 secret = self.secret_service.get(name)
+                print(self.secret_service.list())
                 if secret is None:
                     if not sys.stdin.isatty():
                         raise ValueError(
@@ -157,7 +158,7 @@ class EngineConfiguration(BaseModel):
         # Here we can now template the yaml by using `yaml_content` and the secret service.
         # Using Jinja2 template engine.
 
-        logger.debug("Yaml content: {yaml_content}")
+        logger.debug(f"Yaml content: {yaml_content}")
 
         template = Template(yaml_content)
         templated_yaml = template.render(secret=SecretServiceWrapper(secret_service))
@@ -178,16 +179,18 @@ class EngineConfiguration(BaseModel):
         if configuration_yaml is not None:
             return cls.from_yaml_content(configuration_yaml)
 
-        logger.debug(f"Loading configuration from {os.getenv('ENV')}")
-
         if os.path.exists(f"config.{os.getenv('ENV')}.yaml"):
-            return cls.from_yaml(f"config.{os.getenv('ENV')}.yaml")
+            config_file = f"config.{os.getenv('ENV')}.yaml"
         elif os.path.exists("config.yaml"):
-            return cls.from_yaml("config.yaml")
+            config_file = "config.yaml"
         else:
             raise FileNotFoundError(
                 "Configuration file not found. Please create a config.yaml file or config.{env}.yaml file."
             )
+
+        logger.debug(f"Loading configuration from {config_file}")
+
+        return cls.from_yaml(config_file)
 
 
 if __name__ == "__main__":
