@@ -1,7 +1,7 @@
 from typing import Literal
 
-from naas_abi_marketplace.applications.github import ABIModule
 from naas_abi_core.models.Model import ChatModel
+from naas_abi_marketplace.applications.github import ABIModule
 
 
 def get_model() -> ChatModel:
@@ -13,7 +13,7 @@ def get_model() -> ChatModel:
         or not ABIModule.get_instance().configuration.openai_api_key
         and not ABIModule.get_instance().configuration.openrouter_api_key
     ):
-        from naas_abi.models.airgap_qwen import model as airgap_model
+        from naas_abi_marketplace.ai.qwen.models.qwen3_8b import model as airgap_model
 
         return airgap_model
     else:

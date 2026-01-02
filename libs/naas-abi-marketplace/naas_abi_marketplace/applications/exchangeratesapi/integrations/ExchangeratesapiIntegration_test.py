@@ -1,5 +1,4 @@
 import pytest
-from naas_abi import secret
 from naas_abi_marketplace.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration import (
     ExchangeratesapiIntegration,
     ExchangeratesapiIntegrationConfiguration,
@@ -8,8 +7,13 @@ from naas_abi_marketplace.applications.exchangeratesapi.integrations.Exchangerat
 
 @pytest.fixture
 def integration() -> ExchangeratesapiIntegration:
+    from naas_abi_marketplace.applications.exchangeratesapi import ABIModule
+
+    module = ABIModule.get_instance()
+    exchangeratesapi_api_key = module.configuration.exchangeratesapi_api_key
+
     configuration = ExchangeratesapiIntegrationConfiguration(
-        api_key=secret.get("EXCHANGERATESAPI_API_KEY")
+        api_key=exchangeratesapi_api_key,
     )
     return ExchangeratesapiIntegration(configuration)
 
