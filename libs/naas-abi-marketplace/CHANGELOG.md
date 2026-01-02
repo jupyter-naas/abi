@@ -2,6 +2,46 @@
 
 <!-- version list -->
 
+## v1.3.3 (2026-01-02)
+
+### Bug Fixes
+
+- Add dagster dep
+  ([`6d54b7c`](https://github.com/jupyter-naas/abi/commit/6d54b7ce3a3a593ea6141935ea03ecadb6dcda72))
+
+- Error import secret from naas_abi
+  ([`9d0dcd4`](https://github.com/jupyter-naas/abi/commit/9d0dcd4ea02baea3ad2a4d6a2c75c9d8c709d091))
+
+- Error mypy marketplace & ai modules
+  ([`890b76e`](https://github.com/jupyter-naas/abi/commit/890b76e1072b445b9af52c8e7504099b39386638))
+
+- Error mypy marketplace & ai modules
+  ([`710bb73`](https://github.com/jupyter-naas/abi/commit/710bb739a6affca3df764481b8521ce36a58e59b))
+
+- Github default model
+  ([`a97ebd1`](https://github.com/jupyter-naas/abi/commit/a97ebd19724754d0d023b3e77fa0c41877b65194))
+
+- Move export graph workflow to naas module
+  ([`8537e0b`](https://github.com/jupyter-naas/abi/commit/8537e0b75ed9a606c31f15473946e844f1c076e5))
+
+- Naas_api
+  ([`5e23740`](https://github.com/jupyter-naas/abi/commit/5e23740f2da6572a0a6e38ec8f5e21672315d0d6))
+
+- Pennylane agent
+  ([`973124a`](https://github.com/jupyter-naas/abi/commit/973124a077c0caacee16d150a9b40fb38c161ebc))
+
+- Templatable sparql query
+  ([`bc73926`](https://github.com/jupyter-naas/abi/commit/bc73926a2dca407da84ce674446d02e3e4285ba7))
+
+### Refactoring
+
+- Lint file
+  ([`ee26b8d`](https://github.com/jupyter-naas/abi/commit/ee26b8d6b2102ca66b52100ae5f2a7e34838dfcc))
+
+- Move workflows ontology yaml to naas module
+  ([`2ef60a6`](https://github.com/jupyter-naas/abi/commit/2ef60a6f8b4ac398d4b33bf8ee18c3904d26707e))
+
+
 ## v1.3.2 (2026-01-02)
 
 ### Bug Fixes
