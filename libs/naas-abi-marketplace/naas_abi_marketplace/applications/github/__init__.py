@@ -26,5 +26,6 @@ class ABIModule(BaseModule):
         config:
             github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
         """
+
         github_access_token: str
         datastore_path: str = "github"

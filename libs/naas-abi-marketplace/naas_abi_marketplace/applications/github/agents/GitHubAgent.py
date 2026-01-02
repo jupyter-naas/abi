@@ -58,9 +58,7 @@ def create_agent(
     github_access_token = module.configuration.github_access_token
 
     # Define model
-    from naas_abi_marketplace.applications.github.models.default import get_model
-
-    model = get_model()
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
     # Define tools
     tools: list = []

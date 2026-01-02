@@ -1,15 +1,10 @@
-# from naas_abi import secret
 from typing import Optional
 
-from langchain_openai import ChatOpenAI  # noqa: F401
-from naas_abi import ABIModule
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
-
-MODULE: ABIModule = ABIModule.get_instance()
 
 NAME: str = "Knowledge_Graph_Builder"
 AVATAR_URL: str = "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Rdf_logo.svg/1200px-Rdf_logo.svg.png"
@@ -148,13 +143,9 @@ def create_agent(
 
     model = get_model()
 
-    # Use provided configuration or create default one
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+    from naas_abi import ABIModule
 
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
+    MODULE: ABIModule = ABIModule.get_instance()
 
     # Init tools
     tools: list = []
@@ -290,9 +281,9 @@ def create_agent(
         tools += Pipeline(Configuration(MODULE.engine.services.triple_store)).as_tools()
 
     # Add search organizations tools
-    templatable_sparql_query_module = ABIModule.get_instance().engine.modules[
-        "naas_abi_core.modules.templatablesparqlquery"
-    ]
+    from naas_abi_core.modules.templatablesparqlquery import (
+        ABIModule as TemplatableSparqlQueryABIModule,
+    )
 
     ontology_tools: list = [
         "search_class",
@@ -304,7 +295,18 @@ def create_agent(
         "merge_individuals",
         "remove_individuals",
     ]
-    tools.extend(templatable_sparql_query_module.get_tools(ontology_tools))
+    sparql_query_tools_list = TemplatableSparqlQueryABIModule.get_instance().get_tools(
+        ontology_tools
+    )
+    tools += sparql_query_tools_list
+
+    # Use provided configuration or create default one
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
+    # Use provided shared state or create new one
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState()
 
     return KnowledgeGraphBuilderAgent(
         name=NAME,
