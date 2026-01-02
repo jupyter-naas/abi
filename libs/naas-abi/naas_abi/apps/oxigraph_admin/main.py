@@ -6,7 +6,6 @@ Provides terminal-based management and monitoring for Oxigraph triple store
 import subprocess
 
 import requests
-from naas_abi import services
 from naas_abi.apps.oxigraph_admin.terminal_style import (
     clear_screen,
     get_user_input,
@@ -17,6 +16,7 @@ from naas_abi.apps.oxigraph_admin.terminal_style import (
     print_success_message,
     print_welcome_message,
 )
+from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from rich.console import Console
 from rich.table import Table
 
@@ -24,9 +24,9 @@ console = Console()
 
 
 class OxigraphAdmin:
-    def __init__(self):
+    def __init__(self, triple_store_service: ITripleStoreService):
         self.oxigraph_url = "http://localhost:7878"
-        self.triple_store_service = services.triple_store_service
+        self.triple_store_service = triple_store_service
         self.query_templates = self._init_query_templates()
 
     def _init_query_templates(self):
@@ -384,7 +384,10 @@ SELECT ?entity ?label ?type WHERE {
 
 
 def main():
-    admin = OxigraphAdmin()
+    from naas_abi import ABIModule
+
+    triple_store_service = ABIModule.get_instance().engine.services.triple_store
+    admin = OxigraphAdmin(triple_store_service)
     admin.run()
 
 

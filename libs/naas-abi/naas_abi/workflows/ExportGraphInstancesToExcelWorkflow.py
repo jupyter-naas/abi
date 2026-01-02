@@ -8,7 +8,8 @@ from typing import Annotated, Any, Optional
 
 import pandas as pd
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import config, logger
+from naas_abi import ABIModule
+from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
@@ -407,8 +408,8 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
             buffer.close()
             asset = self.__naas_integration.upload_asset(
                 data=excel_data,
-                workspace_id=config.workspace_id,
-                storage_name=config.storage_name,
+                workspace_id=ABIModule.get_instance().configuration.workspace_id,
+                storage_name=ABIModule.get_instance().configuration.storage_name,
                 prefix=local_dir_path,
                 object_name=str(parameters.excel_file_name),
                 visibility="public",

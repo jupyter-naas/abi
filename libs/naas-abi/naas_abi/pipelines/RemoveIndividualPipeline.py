@@ -147,7 +147,11 @@ class RemoveIndividualPipeline(Pipeline):
 
 
 if __name__ == "__main__":
-    from naas_abi import services
+    from naas_abi_core.engine.Engine import Engine
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi"])
+    triple_store_service = ABIModule.get_instance().engine.services.triple_store
 
     uris_to_remove = [
         "http://ontology.naas.ai/abi/example-uri-1",
@@ -155,7 +159,7 @@ if __name__ == "__main__":
     ]
 
     configuration = RemoveIndividualPipelineConfiguration(
-        triple_store=services.triple_store_service
+        triple_store=triple_store_service
     )
 
     pipeline = RemoveIndividualPipeline(configuration)

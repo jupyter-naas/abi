@@ -1,18 +1,20 @@
 import pytest
-from naas_abi import services
+from naas_abi import ABIModule
 from naas_abi.pipelines.RemoveIndividualPipeline import (
     RemoveIndividualPipeline,
     RemoveIndividualPipelineConfiguration,
     RemoveIndividualPipelineParameters,
 )
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+
+triple_store_service = ABIModule.get_instance().engine.services.triple_store
+sparql_utils = SPARQLUtils(triple_store_service)
 
 
 @pytest.fixture
 def pipeline() -> RemoveIndividualPipeline:
     return RemoveIndividualPipeline(
-        RemoveIndividualPipelineConfiguration(
-            triple_store=services.triple_store_service
-        )
+        RemoveIndividualPipelineConfiguration(triple_store=triple_store_service)
     )
 
 
@@ -20,8 +22,6 @@ def test_remove_individual_pipeline(pipeline: RemoveIndividualPipeline):
     import time
     from uuid import uuid4
 
-    from naas_abi import services
-    from naas_abi_core.utils.SPARQL import get_subject_graph
     from rdflib import OWL, RDF, RDFS, Graph, Literal, Namespace, URIRef
 
     ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -42,7 +42,7 @@ def test_remove_individual_pipeline(pipeline: RemoveIndividualPipeline):
             ),
         )
     )
-    services.triple_store_service.insert(graph)
+    triple_store_service.insert(graph)
     time.sleep(3)
 
     # Run pipeline to remove triples
@@ -54,5 +54,5 @@ def test_remove_individual_pipeline(pipeline: RemoveIndividualPipeline):
     assert graph is not None, graph.serialize(format="turtle")
 
     # Check if uri is removed in triplestore
-    graph = get_subject_graph(str(uri), 1)
+    graph = sparql_utils.get_subject_graph(str(uri), 1)
     assert len(graph) == 0, graph.serialize(format="turtle")
