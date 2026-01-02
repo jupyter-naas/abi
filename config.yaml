@@ -85,7 +85,7 @@ services:
       - adapter: "naas"
         config:
           naas_api_key: "{{ secret.NAAS_API_KEY }}"
-          naas_api_url: "{{ secret.NAAS_API_URL }}"
+          naas_api_url: "https://api.naas.ai"
   object_storage:
     object_storage_adapter:
       adapter: "naas"
