@@ -947,7 +947,7 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         aws_secret_access_key: str,
         db_instance_identifier: str,
         bastion_host: str,
-        bastion_port: int,
+        bastion_port: int | str,
         bastion_user: str,
         bastion_private_key: str,
         default_graph_name: URIRef = NEPTUNE_DEFAULT_GRAPH_NAME,
@@ -965,7 +965,7 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
             aws_secret_access_key (str): AWS secret key for Neptune authentication
             db_instance_identifier (str): Neptune database instance identifier
             bastion_host (str): Hostname or IP address of the bastion host
-            bastion_port (int): SSH port on the bastion host (typically 22)
+            bastion_port (int | str): SSH port on the bastion host (typically 22)
             bastion_user (str): SSH username for bastion host authentication
             bastion_private_key (str): Complete SSH private key content as a string
             default_graph_name (URIRef, optional): Default named graph URI
@@ -1002,6 +1002,16 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         )
 
         assert isinstance(bastion_host, str)
+        if not isinstance(bastion_port, int):
+            # This block is added because the "naas" secret adapter does not always manage int values:
+            # it may provide 'bastion_port' as a string; convert it to int if needed.
+            if isinstance(bastion_port, str):
+                try:
+                    bastion_port = int(bastion_port)
+                except ValueError:
+                    raise ValueError(
+                        f"bastion_port must be an int or a string convertible to int, got string: {bastion_port!r}"
+                    )
         assert isinstance(bastion_port, int)
         assert isinstance(bastion_user, str)
         assert isinstance(bastion_private_key, str)
