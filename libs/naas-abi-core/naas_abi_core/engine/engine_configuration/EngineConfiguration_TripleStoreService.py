@@ -28,6 +28,7 @@ class OxigraphAdapterConfiguration(BaseModel):
         oxigraph_url: "http://localhost:7878"
         timeout: 60
     """
+
     oxigraph_url: str = "http://localhost:7878"
     timeout: int = 60
 
@@ -38,11 +39,12 @@ class AWSNeptuneAdapterConfiguration(BaseModel):
     triple_store_adapter:
       adapter: "aws_neptune"
       config:
-        aws_region_name: "eu-west-3"
+        aws_region_name: "{{ secret.AWS_REGION }}"
         aws_access_key_id: "{{ secret.AWS_ACCESS_KEY_ID }}"
         aws_secret_access_key: "{{ secret.AWS_SECRET_ACCESS_KEY }}"
-        db_instance_identifier: "{{ secret.DB_INSTANCE_IDENTIFIER }}"
+        db_instance_identifier: "{{ secret.AWS_NEPTUNE_DB_INSTANCE_IDENTIFIER }}"
     """
+
     aws_region_name: str
     aws_access_key_id: str
     aws_secret_access_key: str
@@ -55,15 +57,16 @@ class AWSNeptuneSSHTunnelAdapterConfiguration(AWSNeptuneAdapterConfiguration):
     triple_store_adapter:
       adapter: "aws_neptune_sshtunnel"
       config:
-        aws_region_name: "eu-west-3"
+        aws_region_name: "{{ secret.AWS_REGION }}"
         aws_access_key_id: "{{ secret.AWS_ACCESS_KEY_ID }}"
         aws_secret_access_key: "{{ secret.AWS_SECRET_ACCESS_KEY }}"
-        db_instance_identifier: "{{ secret.DB_INSTANCE_IDENTIFIER }}"   
-        bastion_host: "bastion.example.com"
-        bastion_port: 22
-        bastion_user: "ubuntu"
-        bastion_private_key: "{{ secret.BASTION_PRIVATE_KEY }}"
+        db_instance_identifier: "{{ secret.AWS_NEPTUNE_DB_INSTANCE_IDENTIFIER }}"
+        bastion_host: "{{ secret.AWS_BASTION_HOST }}"
+        bastion_port: "{{ secret.AWS_BASTION_PORT }}"
+        bastion_user: "{{ secret.AWS_BASTION_USER }}"
+        bastion_private_key: "{{ secret.AWS_BASTION_PRIVATE_KEY }}"
     """
+
     bastion_host: str
     bastion_port: int
     bastion_user: str
@@ -79,6 +82,7 @@ class TripleStoreAdapterFilesystemConfiguration(BaseModel):
         store_path: "storage/triplestore"
         triples_path: "triples"
     """
+
     store_path: str
     triples_path: str = "triples"
 
@@ -92,6 +96,7 @@ class TripleStoreAdapterObjectStorageConfiguration(BaseModel):
         object_storage_service: *object_storage_service
         triples_prefix: "triples"
     """
+
     object_storage_service: ObjectStorageServiceConfiguration
     triples_prefix: str = "triples"
 

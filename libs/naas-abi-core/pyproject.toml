@@ -32,6 +32,8 @@ dependencies = [
     "pandas>=2.3.3",
     "pillow>=12.0.0",
     "docker>=7.1.0",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-paramiko>=4.0.0.20250822",
 ]
 
 [project.optional-dependencies]
