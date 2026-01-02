@@ -61,7 +61,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    from naas_abi.core.gemma.models.gemma3_4b import model
+    from naas_abi_marketplace.ai.gemma.models.gemma3_4b import model
 
     # Define tools
     tools: list = []

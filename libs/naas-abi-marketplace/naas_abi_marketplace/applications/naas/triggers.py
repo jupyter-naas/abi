@@ -23,6 +23,7 @@ import os
 
 from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
+from naas_abi_marketplace.applications.naas import ABIModule
 
 
 def is_production_mode():
@@ -36,7 +37,6 @@ def create_class_ontology_yaml():
         logger.debug("Skipping class ontology YAML trigger - not in production mode")
         return None
 
-    from naas_abi_marketplace.applications.naas import ABIModule
     from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
@@ -81,7 +81,6 @@ def create_individual_ontology_yaml():
         )
         return None
 
-    from naas_abi import ABIModule
     from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )

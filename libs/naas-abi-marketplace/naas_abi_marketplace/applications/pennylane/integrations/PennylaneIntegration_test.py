@@ -1,17 +1,20 @@
 from datetime import datetime, timedelta
 
 import pytest
-from naas_abi import secret
 from naas_abi_core import logger
+from naas_abi_marketplace.applications.pennylane import ABIModule
 from naas_abi_marketplace.applications.pennylane.integrations.PennylaneIntegration import (
     PennylaneIntegration,
     PennylaneIntegrationConfiguration,
 )
 
+module = ABIModule.get_instance()
+pennylane_api_token = module.configuration.pennylane_api_token
 
-@pytest.fixture(params=["PENNYLANE_API_TOKEN_FLEXOFFICE", "PENNYLANE_API_TOKEN_VLRT"])
-def pennylane_integration(request) -> PennylaneIntegration:
-    configuration = PennylaneIntegrationConfiguration(api_key=secret.get(request.param))
+
+@pytest.fixture
+def pennylane_integration() -> PennylaneIntegration:
+    configuration = PennylaneIntegrationConfiguration(api_key=pennylane_api_token)
     return PennylaneIntegration(configuration)
 
 
