@@ -3,25 +3,23 @@ from enum import Enum
 from typing import Annotated, Any, Union
 
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
-    ConvertOntologyGraphToYamlWorkflow,
-    ConvertOntologyGraphToYamlWorkflowConfiguration,
-    ConvertOntologyGraphToYamlWorkflowParameters,
-)
-from naas_abi_core import logger, services
+from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
 )
 from naas_abi_core.utils.Expose import APIRouter
-from naas_abi_core.utils.SPARQL import (
-    get_class_uri_from_individual_uri,
-    results_to_list,
-)
+from naas_abi_core.utils.SPARQL import SPARQLUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
+from naas_abi_marketplace.applications.naas.workflows.ConvertOntologyGraphToYamlWorkflow import (
+    ConvertOntologyGraphToYamlWorkflow,
+    ConvertOntologyGraphToYamlWorkflowConfiguration,
+    ConvertOntologyGraphToYamlWorkflowParameters,
+)
 from pydantic import Field
 from rdflib import OWL, RDF, RDFS, Graph, Literal, URIRef
+from rdflib.query import ResultRow
 
 
 @dataclass
@@ -57,11 +55,15 @@ class CreateClassOntologyYamlWorkflow(Workflow):
     """Workflow for converting ontology files to YAML and pushing them to a Naas workspace."""
 
     __configuration: CreateClassOntologyYamlWorkflowConfiguration
+    __sparql_utils: SPARQLUtils
 
     def __init__(self, configuration: CreateClassOntologyYamlWorkflowConfiguration):
         self.__configuration = configuration
         self.__convert_ontology_graph_workflow = ConvertOntologyGraphToYamlWorkflow(
             self.__configuration.convert_ontology_graph_config
+        )
+        self.__sparql_utils: SPARQLUtils = SPARQLUtils(
+            self.__configuration.triple_store
         )
 
     def trigger(
@@ -78,7 +80,7 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             return None
 
         # Get class type from URI
-        class_uri = get_class_uri_from_individual_uri(s)
+        class_uri = self.__sparql_utils.get_class_uri_from_individual_uri(s)
         class_uri_triggers = [
             "https://www.commoncoreontologies.org/ont00001262",  # Person
             "https://www.commoncoreontologies.org/ont00000443",  # Commercial Organization
@@ -109,8 +111,8 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             <{parameters.class_uri}> skos:definition ?definition .
         }}
         """
-        results = services.triple_store_service.query(query)
-        result_list = results_to_list(results)
+        results = self.__configuration.triple_store.query(query)
+        result_list = self.__sparql_utils.results_to_list(results)
         if result_list:
             ontology_label = result_list[0]["label"]
             ontology_description = result_list[0]["definition"]
@@ -129,12 +131,13 @@ class CreateClassOntologyYamlWorkflow(Workflow):
         }}
         ORDER BY ?subject ?predicate
         """
-        results = services.triple_store_service.query(query)
+        results = self.__configuration.triple_store.query(query)
         list_uri = []
         # Add triples to graph
         for row in results:
-            subject = URIRef(row.get("subject"))
-            predicate = URIRef(row.get("predicate"))
+            assert isinstance(row, ResultRow)
+            subject = URIRef(str(row.get("subject")))
+            predicate = URIRef(str(row.get("predicate")))
             obj = row.get("object")
 
             # Add triple to graph
@@ -162,16 +165,27 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             }}
             ORDER BY ?object
             """
-            results = services.triple_store_service.query(query)
+            results = self.__configuration.triple_store.query(query)
 
             # Add object properties to graph
             for row in results:
+                assert isinstance(row, ResultRow)
                 graph.add(
-                    (URIRef(row.get("object")), RDF.type, URIRef(row.get("type")))
+                    (
+                        URIRef(str(row.get("object"))),
+                        RDF.type,
+                        URIRef(str(row.get("type"))),
+                    )
                 )
-                graph.add((URIRef(row.get("object")), RDF.type, OWL.NamedIndividual))
                 graph.add(
-                    (URIRef(row.get("object")), RDFS.label, Literal(row.get("label")))
+                    (URIRef(str(row.get("object"))), RDF.type, OWL.NamedIndividual)
+                )
+                graph.add(
+                    (
+                        URIRef(str(row.get("object"))),
+                        RDFS.label,
+                        Literal(str(row.get("label"))),
+                    )
                 )
 
         # Convert graph to YAML & push to Naas workspace

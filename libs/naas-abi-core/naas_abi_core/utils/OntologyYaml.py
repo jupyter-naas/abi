@@ -2,15 +2,17 @@ import copy
 import random
 
 import pydash as _
-from naas_abi import services
 from rdflib import OWL, RDF, RDFS, Graph, URIRef
 
 from naas_abi_core import logger
+from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 
 
 class OntologyYaml:
-    def __init__(self):
-        pass
+    __triple_store_service: ITripleStoreService
+
+    def __init__(self, triple_store_service: ITripleStoreService):
+        self.__triple_store_service = triple_store_service
 
     @staticmethod
     def rdf_to_yaml(
@@ -50,7 +52,7 @@ class Translator:
         self.mapping_oprop = {}
 
         # Init ontology schemas
-        consolidated = services.triple_store_service.get_schema_graph()
+        consolidated = self.__triple_store_service.get_schema_graph()
         schema_graph = Graph()
 
         # Filter for desired types

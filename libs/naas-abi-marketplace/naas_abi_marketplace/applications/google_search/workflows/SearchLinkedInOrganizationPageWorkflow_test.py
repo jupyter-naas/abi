@@ -1,5 +1,5 @@
 import pytest
-from naas_abi import secret
+from naas_abi_marketplace.applications.google_search import ABIModule
 from naas_abi_marketplace.applications.google_search.integrations.GoogleProgrammableSearchEngineIntegration import (
     GoogleProgrammableSearchEngineIntegrationConfiguration,
 )
@@ -9,12 +9,16 @@ from naas_abi_marketplace.applications.google_search.workflows.SearchLinkedInOrg
     SearchLinkedInOrganizationPageWorkflowParameters,
 )
 
+module = ABIModule.get_instance()
+google_custom_search_api_key = module.configuration.google_custom_search_api_key
+google_custom_search_engine_id = module.configuration.google_custom_search_engine_id
+
 
 @pytest.fixture
 def workflow() -> SearchLinkedInOrganizationPageWorkflow:
     integration_configuration = GoogleProgrammableSearchEngineIntegrationConfiguration(
-        api_key=secret.get("GOOGLE_CUSTOM_SEARCH_API_KEY"),
-        search_engine_id=secret.get("GOOGLE_CUSTOM_SEARCH_ENGINE_ID"),
+        api_key=google_custom_search_api_key,
+        search_engine_id=google_custom_search_engine_id,
     )
     workflow_configuration = SearchLinkedInOrganizationPageWorkflowConfiguration(
         integration_config=integration_configuration

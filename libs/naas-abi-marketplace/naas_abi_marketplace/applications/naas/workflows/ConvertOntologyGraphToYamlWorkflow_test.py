@@ -1,13 +1,20 @@
 import pytest
-from naas_abi import secret
-from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
+from naas_abi_core import logger
+from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
+from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
+    NaasIntegration,
+    NaasIntegrationConfiguration,
+)
+from naas_abi_marketplace.applications.naas.workflows.ConvertOntologyGraphToYamlWorkflow import (
     ConvertOntologyGraphToYamlWorkflow,
     ConvertOntologyGraphToYamlWorkflowConfiguration,
     ConvertOntologyGraphToYamlWorkflowParameters,
 )
-from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
-    NaasIntegration,
-    NaasIntegrationConfiguration,
+
+naas_module = NaasABIModule.get_instance()
+triple_store_service = NaasABIModule.get_instance().engine.services.triple_store
+naas_integration = NaasIntegration(
+    NaasIntegrationConfiguration(api_key=naas_module.configuration.naas_api_key)
 )
 
 
@@ -15,7 +22,7 @@ from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import 
 def workflow() -> ConvertOntologyGraphToYamlWorkflow:
     return ConvertOntologyGraphToYamlWorkflow(
         ConvertOntologyGraphToYamlWorkflowConfiguration(
-            NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY"))
+            NaasIntegrationConfiguration(api_key=naas_module.configuration.naas_api_key)
         )
     )
 
@@ -26,7 +33,6 @@ def test_convert_ontology_graph_to_yaml_workflow(
     import time
     from uuid import uuid4
 
-    from naas_abi import config, logger, services
     from rdflib import OWL, RDF, RDFS, Graph, Literal, Namespace, URIRef
 
     ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -47,7 +53,7 @@ def test_convert_ontology_graph_to_yaml_workflow(
             ),
         )
     )
-    services.triple_store_service.insert(graph)
+    triple_store_service.insert(graph)
     time.sleep(3)
 
     # Run workflow
@@ -65,14 +71,14 @@ def test_convert_ontology_graph_to_yaml_workflow(
     )
 
     # Remove graph
-    services.triple_store_service.remove(graph)
+    triple_store_service.remove(graph)
 
     # Remove ontology
     naas_integration = NaasIntegration(
-        NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY"))
+        NaasIntegrationConfiguration(api_key=naas_module.configuration.naas_api_key)
     )
     result = naas_integration.delete_ontology(
-        workspace_id=config.workspace_id, ontology_id=ontology_id
+        workspace_id=naas_module.configuration.workspace_id, ontology_id=ontology_id
     )
     logger.info(f"Removed ontology: {result}")
     assert result is not None, result

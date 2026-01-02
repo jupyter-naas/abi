@@ -43,6 +43,7 @@ ssh = [
 ]
 aws = [
     "boto3>=1.38.19,<2",
+    "boto3-stubs>=1.42.19"
 ]
 qdrant = [
     "qdrant-client>=1.14.3",

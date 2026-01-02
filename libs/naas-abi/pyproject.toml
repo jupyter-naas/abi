@@ -1,7 +1,7 @@
 [project]
 name = "naas-abi"
 version = "1.0.8"
-description = "Add your description here"
+description = "Multi-agent orchestrator and knowledge graph management system for AI orchestration, providing comprehensive coordination of specialized AI agents and semantic data management capabilities"
 readme = "README.md"
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 requires-python = ">=3.10,<4"
@@ -47,5 +47,11 @@ prerelease_token = "dev"
 [dependency-groups]
 dev = [
     "mypy>=1.19.0",
+    "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",
 ]
+
+[tool.mypy]
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "../naas-abi-marketplace"

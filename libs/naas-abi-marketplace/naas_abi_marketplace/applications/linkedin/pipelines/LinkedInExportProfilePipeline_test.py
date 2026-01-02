@@ -1,5 +1,4 @@
 import pytest
-from naas_abi import services
 from naas_abi_marketplace.applications.linkedin.integrations.LinkedInExportIntegration import (
     LinkedInExportIntegrationConfiguration,
 )
@@ -12,8 +11,13 @@ from naas_abi_marketplace.applications.linkedin.pipelines.LinkedInExportProfileP
 
 @pytest.fixture
 def pipeline():
+    from naas_abi_marketplace.applications.linkedin import ABIModule
+
+    module = ABIModule.get_instance()
+    triple_store_service = module.engine.services.triple_store
+
     pipeline_configuration = LinkedInExportProfilePipelineConfiguration(
-        triple_store=services.triple_store_service,
+        triple_store=triple_store_service,
         linkedin_export_configuration=LinkedInExportIntegrationConfiguration(
             export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
         ),

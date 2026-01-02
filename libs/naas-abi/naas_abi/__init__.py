@@ -14,13 +14,28 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
-            # "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_marketplace.ai.qwen#soft",
+            "naas_abi_marketplace.applications.naas#soft",
         ],
         services=[Secret, TripleStoreService, ObjectStorageService],
     )
 
     class Configuration(ModuleConfiguration):
+        """
+        Configuration example:
+
+        module: naas_abi
+        enabled: true
+        config:
+            datastore_path: "abi"
+            workspace_id: "{{ secret.WORKSPACE_ID }}"
+            storage_name: "{{ secret.STORAGE_NAME }}"
+        """
+
         datastore_path: str = "abi"
+        workspace_id: str | None = None
+        storage_name: str | None = None
 
     # def on_initialized(self):
     #     if (

@@ -1,19 +1,22 @@
 import asyncio
 
 import pytest
+from naas_abi_marketplace.applications.algolia import ABIModule
 from naas_abi_marketplace.applications.algolia.integrations.AlgoliaIntegration import (
     AlgoliaIntegration,
     AlgoliaIntegrationConfiguration,
 )
 
+module = ABIModule.get_instance()
+algolia_application_id = module.configuration.algolia_application_id
+algolia_api_key = module.configuration.algolia_api_key
+
 
 @pytest.fixture
 def integration() -> AlgoliaIntegration:
-    from naas_abi import secret
-
     configuration = AlgoliaIntegrationConfiguration(
-        app_id=secret.get("ALGOLIA_APPLICATION_ID"),
-        api_key=secret.get("ALGOLIA_API_KEY"),
+        app_id=algolia_application_id,
+        api_key=algolia_api_key,
     )
     return AlgoliaIntegration(configuration)
 

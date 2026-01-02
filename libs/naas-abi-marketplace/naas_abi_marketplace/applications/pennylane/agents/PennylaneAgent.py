@@ -1,22 +1,9 @@
-from enum import Enum
-from typing import Optional
-
-from fastapi import APIRouter
-from langchain_openai import ChatOpenAI
-from naas_abi import secret
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
     MemorySaver,
 )
-from naas_abi_marketplace.applications.pennylane.integrations import (
-    PennylaneIntegration,
-)
-from naas_abi_marketplace.applications.pennylane.integrations.PennylaneIntegration import (
-    PennylaneIntegrationConfiguration,
-)
-from pydantic import SecretStr
 
 NAME = "Pennylane"
 DESCRIPTION = "A Pennylane Agent for managing accounting and financial operations."
@@ -39,11 +26,19 @@ def create_agent(
     agents: list = []
 
     # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+
+    # Add integration based on available credentials
+    from naas_abi_marketplace.applications.pennylane import ABIModule
+    from naas_abi_marketplace.applications.pennylane.integrations.PennylaneIntegration import (
+        PennylaneIntegrationConfiguration,
+        as_tools,
     )
+
+    module = ABIModule.get_instance()
+    pennylane_api_token = module.configuration.pennylane_api_token
+    integration_config = PennylaneIntegrationConfiguration(api_key=pennylane_api_token)
+    tools += as_tools(integration_config)
 
     # Set configuration
     if agent_configuration is None:
@@ -51,37 +46,17 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Add integration based on available credentials
-    if secret.get("PENNYLANE_API_TOKEN"):
-        integration_config = PennylaneIntegrationConfiguration(
-            api_key=secret.get("PENNYLANE_API_TOKEN")
-        )
-        tools += PennylaneIntegration.as_tools(integration_config)
-
-        return PennylaneAgent(
-            name=NAME,
-            description=DESCRIPTION,
-            chat_model=model,
-            tools=tools,
-            agents=agents,
-            state=agent_shared_state,
-            configuration=agent_configuration,
-            memory=MemorySaver(),
-        )
+    return PennylaneAgent(
+        name=NAME,
+        description=DESCRIPTION,
+        chat_model=model,
+        tools=tools,
+        agents=agents,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )
 
 
 class PennylaneAgent(Agent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME,
-        name: str = NAME.capitalize().replace("_", " "),
-        description: str = "API endpoints to call the Naas agent completion.",
-        description_stream: str = "API endpoints to call the Naas agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass

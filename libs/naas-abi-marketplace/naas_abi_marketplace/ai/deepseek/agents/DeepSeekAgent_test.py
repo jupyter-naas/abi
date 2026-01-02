@@ -1,5 +1,5 @@
 import pytest
-from naas_abi.core.deepseek.agents.DeepSeekAgent import create_agent
+from naas_abi_marketplace.ai.deepseek.agents.DeepSeekAgent import create_agent
 
 
 @pytest.fixture

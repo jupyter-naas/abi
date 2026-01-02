@@ -92,7 +92,9 @@ applications-bodo = [
 applications-datagouv = []
 applications-exchangeratesapi = []
 applications-git = []
-applications-github = []
+applications-github = [
+    "pynacl>=1.5.0,<2"
+]
 applications-gmail = []
 applications-google-calendar = []
 applications-google-drive = []
@@ -120,6 +122,10 @@ applications-powerpoint = [
 ]
 applications-pubmed = [
     "ratelimit>=2.2.1",
+    "dagster>=1.11.12",
+    "dagster-webserver>=1.11.12",
+    "dagster-postgres>=0.27.12",
+    "dagster-aws>=0.27.12"
 ]
 applications-sanax = []
 applications-sendgrid = []
