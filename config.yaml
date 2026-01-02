@@ -1,4 +1,3 @@
-
 auto_publish:
   enabled: true # Enable automatic publishing of agents to workspace
   exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
@@ -12,7 +11,6 @@ api:
   cors_origins:
     - "http://localhost:9879"
 
-
 global_config:
   ai_mode: "cloud"
 
@@ -23,15 +21,40 @@ modules:
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  - module: naas_abi_marketplace.ai.claude
+    enabled: true
+    config:
+      anthropic_api_key: "{{ secret.ANTHROPIC_API_KEY }}"
+  - module: naas_abi_marketplace.ai.mistral
+    enabled: true
+    config:
+      mistral_api_key: "{{ secret.MISTRAL_API_KEY }}"
   - module: naas_abi_marketplace.ai.gemini
     enabled: true
     config:
       gemini_api_key: "{{ secret.GEMINI_API_KEY }}"
+  - module: naas_abi_marketplace.ai.grok
+    enabled: true
+    config:
+      xai_api_key: "{{ secret.XAI_API_KEY }}"
+  - module: naas_abi_marketplace.applications.algolia
+    enabled: true
+    config:
+      algolia_api_key: "{{ secret.ALGOLIA_API_KEY }}"
+      algolia_application_id: "{{ secret.ALGOLIA_APPLICATION_ID }}"
+  - module: naas_abi_marketplace.applications.github
+    enabled: true
+    config:
+      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
   - module: naas_abi_marketplace.applications.google_search
     enabled: true
     config:
-      google_api_key: "{{ secret.GOOGLE_API_KEY }}"
-      google_search_engine_id: "{{ secret.GOOGLE_SEARCH_ENGINE_ID }}"
+      google_custom_search_api_key: "{{ secret.GOOGLE_CUSTOM_SEARCH_API_KEY }}"
+      google_custom_search_engine_id: "{{ secret.GOOGLE_CUSTOM_SEARCH_ENGINE_ID }}"
+  - module: naas_abi_marketplace.applications.hubspot
+    enabled: true
+    config:
+      hubspot_access_token: "{{ secret.HUBSPOT_ACCESS_TOKEN }}"
   - module: naas_abi_marketplace.applications.linkedin
     enabled: true
     config:
@@ -42,28 +65,47 @@ modules:
     enabled: true
     config:
       naas_api_key: "{{ secret.NAAS_API_KEY }}"
-      workspace_id: "{{ secret.WORKSPACE_ID }}"
-      storage_name: "{{ secret.STORAGE_NAME }}"
+      workspace_id: "{{ secret.NAAS_WORKSPACE_ID }}"
+      storage_name: "{{ secret.NAAS_STORAGE_NAME }}"
   - module: naas_abi_marketplace.domains.support
     enabled: true
     config:
-      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
+      default_repository: "jupyter-naas/abi"
+      github_project_id: 12
+      project_node_id: "PVT_kwDOBESWNM4AKRt3"
+      iteration_field_id: "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
+      status_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
+      status_option_id: "97363483"
+      priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
+      priority_option_id: "4fb76f2d"
 
 services:
   secret:
     secret_adapters:
-      - adapter: "dotenv"
-        config: {}
+      - adapter: "naas"
+        config:
+          naas_api_key: "{{ secret.NAAS_API_KEY }}"
+          naas_api_url: "{{ secret.NAAS_API_URL }}"
   object_storage:
     object_storage_adapter:
-      adapter: "fs"
+      adapter: "naas"
       config:
-        base_path: "storage/object_store"
+        naas_api_key: "{{ secret.NAAS_API_KEY }}"
+        workspace_id: "{{ secret.NAAS_WORKSPACE_ID }}"
+        storage_name: "{{ secret.NAAS_STORAGE_NAME }}"
+        base_prefix: "datastore"
   triple_store:
     triple_store_adapter:
-      adapter: "fs"
+      adapter: "aws_neptune_sshtunnel"
       config:
-        store_path: "storage/triplestore"
+        aws_region_name: "{{ secret.AWS_REGION }}"
+        aws_access_key_id: "{{ secret.AWS_ACCESS_KEY_ID }}"
+        aws_secret_access_key: "{{ secret.AWS_SECRET_ACCESS_KEY }}"
+        db_instance_identifier: "{{ secret.AWS_NEPTUNE_DB_INSTANCE_IDENTIFIER }}"
+        bastion_host: "{{ secret.AWS_BASTION_HOST }}"
+        bastion_port: "{{ secret.AWS_BASTION_PORT }}"
+        bastion_user: "{{ secret.AWS_BASTION_USER }}"
+        bastion_private_key: "{{ secret.AWS_BASTION_PRIVATE_KEY }}"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
