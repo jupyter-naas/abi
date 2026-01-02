@@ -8,11 +8,11 @@ from typing import Annotated, Any, Optional
 
 import pandas as pd
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import ABIModule
 from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
+from naas_abi_marketplace.applications.naas import ABIModule
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,

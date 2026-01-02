@@ -1,19 +1,18 @@
 import pytest
-from naas_abi import ABIModule
-from naas_abi.workflows.ExportGraphInstancesToExcelWorkflow import (
-    ExportGraphInstancesToExcelWorkflow,
-    ExportGraphInstancesToExcelWorkflowConfiguration,
-    ExportGraphInstancesToExcelWorkflowParameters,
-)
 from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
+)
+from naas_abi_marketplace.applications.naas.workflows.ExportGraphInstancesToExcelWorkflow import (
+    ExportGraphInstancesToExcelWorkflow,
+    ExportGraphInstancesToExcelWorkflowConfiguration,
+    ExportGraphInstancesToExcelWorkflowParameters,
 )
 
 naas_module = NaasABIModule.get_instance()
 naas_api_key = naas_module.configuration.naas_api_key
 
-triple_store_service = ABIModule.get_instance().engine.services.triple_store
+triple_store_service = NaasABIModule.get_instance().engine.services.triple_store
 naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
 
 

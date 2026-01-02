@@ -145,7 +145,6 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
     # Set model
-    # Define model based on AI_MODE
     from naas_abi.models.default import get_model
 
     model = get_model()
