@@ -3,12 +3,6 @@ from enum import Enum
 from typing import Annotated, Any, Union
 
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import ABIModule
-from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
-    ConvertOntologyGraphToYamlWorkflow,
-    ConvertOntologyGraphToYamlWorkflowConfiguration,
-    ConvertOntologyGraphToYamlWorkflowParameters,
-)
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
@@ -18,6 +12,11 @@ from naas_abi_core.utils.Graph import URI_REGEX
 from naas_abi_core.utils.SPARQL import SPARQLUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
+from naas_abi_marketplace.applications.naas.workflows.ConvertOntologyGraphToYamlWorkflow import (
+    ConvertOntologyGraphToYamlWorkflow,
+    ConvertOntologyGraphToYamlWorkflowConfiguration,
+    ConvertOntologyGraphToYamlWorkflowParameters,
+)
 from pydantic import Field
 from rdflib import RDFS, Graph, Literal, URIRef
 
@@ -75,9 +74,7 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
         self.__convert_ontology_graph_workflow = ConvertOntologyGraphToYamlWorkflow(
             self.__configuration.convert_ontology_graph_config
         )
-        self.__sparql_utils: SPARQLUtils = SPARQLUtils(
-            ABIModule.get_instance().engine.services.triple_store
-        )
+        self.__sparql_utils = SPARQLUtils(self.__configuration.triple_store)
 
     def trigger(
         self, event: OntologyEvent, triple: tuple[Any, Any, Any]

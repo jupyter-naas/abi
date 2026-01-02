@@ -1,17 +1,22 @@
 import pytest
+from naas_abi import ABIModule
 from naas_abi.workflows.GetObjectPropertiesFromClassWorkflow import (
     GetObjectPropertiesFromClassWorkflow,
     GetObjectPropertiesFromClassWorkflowConfiguration,
     GetObjectPropertiesFromClassWorkflowParameters,
 )
-from naas_abi_core import logger, services
+from naas_abi_core import logger
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+
+triple_store_service = ABIModule.get_instance().engine.services.triple_store
+sparql_utils = SPARQLUtils(triple_store_service)
 
 
 @pytest.fixture
 def workflow() -> GetObjectPropertiesFromClassWorkflow:
     return GetObjectPropertiesFromClassWorkflow(
         GetObjectPropertiesFromClassWorkflowConfiguration(
-            triple_store=services.triple_store_service
+            triple_store=triple_store_service
         )
     )
 

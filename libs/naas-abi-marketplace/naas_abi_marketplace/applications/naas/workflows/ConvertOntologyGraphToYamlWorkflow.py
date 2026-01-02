@@ -5,16 +5,17 @@ from typing import Annotated, Dict, Optional
 import pydash as _
 import yaml
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import config, logger
-from naas_abi.mappings import COLORS_NODES
+from naas_abi_core import logger
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.OntologyYaml import OntologyYaml
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
+from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
+from naas_abi_marketplace.applications.naas.mappings import COLORS_NODES
 from pydantic import Field
 from rdflib import Graph
 from yaml import Dumper
@@ -80,11 +81,15 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
     """Workflow for converting ontology graph to YAML."""
 
     __configuration: ConvertOntologyGraphToYamlWorkflowConfiguration
+    __ontology_yaml: OntologyYaml
 
     def __init__(self, configuration: ConvertOntologyGraphToYamlWorkflowConfiguration):
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(
             self.__configuration.naas_integration_config
+        )
+        self.__ontology_yaml = OntologyYaml(
+            NaasABIModule.get_instance().engine.services.triple_store
         )
 
     def graph_to_yaml(
@@ -102,8 +107,8 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
         # Upload asset to Naas
         asset = self.__naas_integration.upload_asset(
             data=parameters.graph.encode("utf-8"),  # Use the original turtle string
-            workspace_id=config.workspace_id,
-            storage_name=config.storage_name,
+            workspace_id=NaasABIModule.get_instance().configuration.workspace_id,
+            storage_name=NaasABIModule.get_instance().configuration.storage_name,
             prefix="assets",
             object_name=str(parameters.label + ".ttl"),
             visibility="public",
@@ -121,7 +126,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
 
         # Convert to YAML
         try:
-            yaml_data = OntologyYaml.rdf_to_yaml(
+            yaml_data = self.__ontology_yaml.rdf_to_yaml(
                 g,
                 display_relations_names=parameters.display_relations_names,
                 class_colors_mapping=parameters.class_colors_mapping,
@@ -132,7 +137,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
 
         # Initialize parameters
         if yaml_data is not None:
-            workspace_id = config.workspace_id
+            workspace_id = NaasABIModule.get_instance().configuration.workspace_id
             onto_label = parameters.label
             onto_description = parameters.description
             onto_logo_url = parameters.logo_url

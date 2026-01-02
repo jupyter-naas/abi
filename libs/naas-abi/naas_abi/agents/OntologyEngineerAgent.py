@@ -1,18 +1,12 @@
 from typing import Optional
 
-from langchain_openai import ChatOpenAI  # noqa: F401
-from naas_abi import ABIModule
-
-# from naas_abi import secret
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
 
-MODULE: ABIModule = ABIModule.get_instance()
-
-NAME = "Ontology_Engineer_Agent"
+NAME = "Ontology_Engineer"
 DESCRIPTION = "A agent that helps users understand BFO Ontology and transform text into ontologies."
 SYSTEM_PROMPT = """
 # ROLE: 
@@ -69,15 +63,10 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
-    # Set model based on AI_MODE
-    ai_mode = MODULE.configuration.global_config.ai_mode
+    # Set model
+    from naas_abi.models.default import get_model
 
-    if ai_mode == "airgap":
-        from naas_abi.models.default import get_model
-
-        model = get_model()
-    else:
-        from naas_abi_marketplace.ai.chatgpt.models.o3_mini import model
+    model = get_model()
 
     # Use provided configuration or create default one
     if agent_configuration is None:

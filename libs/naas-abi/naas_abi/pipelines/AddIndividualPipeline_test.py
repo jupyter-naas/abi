@@ -1,5 +1,5 @@
 import pytest
-from naas_abi import services
+from naas_abi import ABIModule
 from naas_abi.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,
@@ -8,16 +8,20 @@ from naas_abi.pipelines.AddIndividualPipeline import (
 from naas_abi.workflows.SearchIndividualWorkflow import (
     SearchIndividualWorkflowConfiguration,
 )
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+
+triple_store_service = ABIModule.get_instance().engine.services.triple_store
+sparql_utils = SPARQLUtils(triple_store_service)
 
 
 @pytest.fixture
 def pipeline() -> AddIndividualPipeline:
     search_individual_workflow_configuration = SearchIndividualWorkflowConfiguration(
-        triple_store=services.triple_store_service
+        triple_store=triple_store_service
     )
     pipeline = AddIndividualPipeline(
         configuration=AddIndividualPipelineConfiguration(
-            triple_store=services.triple_store_service,
+            triple_store=triple_store_service,
             search_individual_configuration=search_individual_workflow_configuration,
         )
     )
@@ -25,7 +29,6 @@ def pipeline() -> AddIndividualPipeline:
 
 
 def test_add_individual_pipeline(pipeline: AddIndividualPipeline):
-    from naas_abi_core.utils.SPARQL import results_to_list
     from rdflib import OWL, RDF, RDFS, Literal, URIRef
 
     label = "Naas.ai"
@@ -45,7 +48,7 @@ def test_add_individual_pipeline(pipeline: AddIndividualPipeline):
     )
 
     # Remove graph
-    services.triple_store_service.remove(graph)
+    triple_store_service.remove(graph)
 
     # Check triples are removed from the triple store
     sparql_query = """
@@ -61,6 +64,6 @@ def test_add_individual_pipeline(pipeline: AddIndividualPipeline):
     }
     """
     sparql_query = sparql_query.replace("{{individual_uri}}", str(individual_uri))
-    results = services.triple_store_service.query(sparql_query)
-    results_list = results_to_list(results)
+    results = triple_store_service.query(sparql_query)
+    results_list = sparql_utils.results_to_list(results)
     assert results_list is None, results_list

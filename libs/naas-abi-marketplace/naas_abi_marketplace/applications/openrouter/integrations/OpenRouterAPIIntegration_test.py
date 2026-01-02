@@ -1,17 +1,17 @@
 import pytest
+from naas_abi_marketplace.applications.openrouter import ABIModule
 from naas_abi_marketplace.applications.openrouter.integrations.OpenRouterAPIIntegration import (
     OpenRouterAPIIntegration,
     OpenRouterAPIIntegrationConfiguration,
 )
 
+module = ABIModule.get_instance()
+openrouter_api_key = module.configuration.openrouter_api_key
+
 
 @pytest.fixture
 def integration() -> OpenRouterAPIIntegration:
-    from naas_abi import secret
-
-    configuration = OpenRouterAPIIntegrationConfiguration(
-        api_key=secret.get("OPENROUTER_API_KEY")
-    )
+    configuration = OpenRouterAPIIntegrationConfiguration(api_key=openrouter_api_key)
     return OpenRouterAPIIntegration(configuration)
 
 

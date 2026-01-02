@@ -1,8 +1,6 @@
 from typing import Optional
 
 from langchain_core.tools import tool
-from naas_abi import ABIModule
-from naas_abi.models.default import get_model
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -132,6 +130,8 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model based on AI_MODE
+    from naas_abi.models.default import get_model
+
     model = get_model()
 
     # Define tools
@@ -149,19 +149,22 @@ You can browse the data and run queries there."""
 
     tools.append(open_knowledge_graph_explorer)
 
-    # templatable_sparql_query_module = ABIModule.get_instance().engine.modules[
-    #     "naas_abi_core.modules.templatablesparqlquery"
-    # ]
+    from naas_abi_core.modules.templatablesparqlquery import (
+        ABIModule as TemplatableSparqlQueryABIModule,
+    )
 
-    # agent_recommendation_tools = [
-    #     "find_business_proposal_agents",
-    #     "find_coding_agents",
-    #     "find_math_agents",
-    #     "find_best_value_agents",
-    #     "find_fastest_agents",
-    #     "find_cheapest_agents",
-    # ]
-    # tools.extend(templatable_sparql_query_module.get_tools(agent_recommendation_tools))
+    agent_recommendation_tools = [
+        "find_business_proposal_agents",
+        "find_coding_agents",
+        "find_math_agents",
+        "find_best_value_agents",
+        "find_fastest_agents",
+        "find_cheapest_agents",
+    ]
+    sparql_query_tools_list = TemplatableSparqlQueryABIModule.get_instance().get_tools(
+        agent_recommendation_tools
+    )
+    tools += sparql_query_tools_list
 
     shared_state = agent_shared_state or AgentSharedState(
         thread_id="0", supervisor_agent=NAME
@@ -173,6 +176,7 @@ You can browse the data and run queries there."""
 
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
+    from naas_abi import ABIModule
 
     modules = ABIModule.get_instance().engine.modules.values()
     for module in modules:

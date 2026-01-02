@@ -21,8 +21,9 @@
 
 import os
 
-from naas_abi_core import logger, secret, services
+from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
+from naas_abi_marketplace.applications.naas import ABIModule
 
 
 def is_production_mode():
@@ -39,17 +40,16 @@ def create_class_ontology_yaml():
     from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
-
-    from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
+    from naas_abi_marketplace.applications.naas.workflows.ConvertOntologyGraphToYamlWorkflow import (
         ConvertOntologyGraphToYamlWorkflowConfiguration,
     )
-    from naas_abi.workflows.CreateClassOntologyYamlWorkflow import (
+    from naas_abi_marketplace.applications.naas.workflows.CreateClassOntologyYamlWorkflow import (
         CreateClassOntologyYamlWorkflow,
         CreateClassOntologyYamlWorkflowConfiguration,
     )
 
     # Get secrets
-    naas_api_key = secret.get("NAAS_API_KEY")
+    naas_api_key = ABIModule.get_instance().engine.services.secret.get("NAAS_API_KEY")
     if naas_api_key is None:
         logger.error("NAAS_API_KEY is not set")
         return None
@@ -63,7 +63,8 @@ def create_class_ontology_yaml():
     )
     workflow = CreateClassOntologyYamlWorkflow(
         CreateClassOntologyYamlWorkflowConfiguration(
-            services.triple_store_service, convert_ontology_graph_config
+            ABIModule.get_instance().engine.services.triple_store,
+            convert_ontology_graph_config,
         )
     )
 
@@ -83,17 +84,16 @@ def create_individual_ontology_yaml():
     from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
-
-    from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
+    from naas_abi_marketplace.applications.naas.workflows.ConvertOntologyGraphToYamlWorkflow import (
         ConvertOntologyGraphToYamlWorkflowConfiguration,
     )
-    from naas_abi.workflows.CreateIndividualOntologyYamlWorkflow import (
+    from naas_abi_marketplace.applications.naas.workflows.CreateIndividualOntologyYamlWorkflow import (
         CreateIndividualOntologyYamlWorkflow,
         CreateIndividualOntologyYamlWorkflowConfiguration,
     )
 
     # Get secrets
-    naas_api_key = secret.get("NAAS_API_KEY")
+    naas_api_key = ABIModule.get_instance().engine.services.secret.get("NAAS_API_KEY")
     if naas_api_key is None:
         logger.error("NAAS_API_KEY is not set")
         return None
@@ -107,7 +107,8 @@ def create_individual_ontology_yaml():
     )
     workflow = CreateIndividualOntologyYamlWorkflow(
         CreateIndividualOntologyYamlWorkflowConfiguration(
-            services.triple_store_service, convert_ontology_graph_config
+            ABIModule.get_instance().engine.services.triple_store,
+            convert_ontology_graph_config,
         )
     )
 

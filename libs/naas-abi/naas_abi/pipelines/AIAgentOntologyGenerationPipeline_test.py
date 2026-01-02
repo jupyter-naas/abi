@@ -1,19 +1,20 @@
 import json
 
 import pytest
+from naas_abi import ABIModule
 from naas_abi.pipelines.AIAgentOntologyGenerationPipeline import (
     AIAgentOntologyGenerationConfiguration,
     AIAgentOntologyGenerationParameters,
     AIAgentOntologyGenerationPipeline,
 )
 
+triple_store_service = ABIModule.get_instance().engine.services.triple_store
+
 
 @pytest.fixture
 def pipeline() -> AIAgentOntologyGenerationPipeline:
-    from naas_abi import services
-
     pipeline_configuration = AIAgentOntologyGenerationConfiguration(
-        triple_store=services.triple_store,
+        triple_store=triple_store_service,
         datastore_path="storage/datastore/test/ai_agent_ontology_generation",
         source_datastore_path="storage/datastore/test/artificial_analysis_workflow",
     )

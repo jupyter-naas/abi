@@ -1,5 +1,4 @@
 import pytest
-from naas_abi import secret
 from naas_abi_core import logger
 from naas_abi_marketplace.applications.sendgrid.integrations.SendGridIntegration import (
     SendGridIntegration,
@@ -9,8 +8,13 @@ from naas_abi_marketplace.applications.sendgrid.integrations.SendGridIntegration
 
 @pytest.fixture
 def integration() -> SendGridIntegration:
+    from naas_abi_marketplace.applications.sendgrid import ABIModule
+
+    module = ABIModule.get_instance()
+    sendgrid_api_key = module.configuration.sendgrid_api_key
+
     configuration = SendGridIntegrationConfiguration(
-        api_key=secret.get("SENDGRID_API_KEY"),
+        api_key=sendgrid_api_key,
     )
     return SendGridIntegration(configuration)
 

@@ -1,26 +1,33 @@
 import pytest
-from naas_abi import secret, services
-from naas_abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
-    ConvertOntologyGraphToYamlWorkflowConfiguration,
-)
-from naas_abi.workflows.CreateIndividualOntologyYamlWorkflow import (
-    CreateIndividualOntologyYamlWorkflow,
-    CreateIndividualOntologyYamlWorkflowConfiguration,
-    CreateIndividualOntologyYamlWorkflowParameters,
-)
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
+from naas_abi_marketplace.applications.naas.workflows.ConvertOntologyGraphToYamlWorkflow import (
+    ConvertOntologyGraphToYamlWorkflowConfiguration,
+)
+from naas_abi_marketplace.applications.naas.workflows.CreateIndividualOntologyYamlWorkflow import (
+    CreateIndividualOntologyYamlWorkflow,
+    CreateIndividualOntologyYamlWorkflowConfiguration,
+    CreateIndividualOntologyYamlWorkflowParameters,
+)
+
+naas_module = NaasABIModule.get_instance()
+naas_api_key = naas_module.configuration.naas_api_key
+
+triple_store_service = NaasABIModule.get_instance().engine.services.triple_store
+sparql_utils = SPARQLUtils(triple_store_service)
 
 
 @pytest.fixture
 def workflow() -> CreateIndividualOntologyYamlWorkflow:
     return CreateIndividualOntologyYamlWorkflow(
         CreateIndividualOntologyYamlWorkflowConfiguration(
-            services.triple_store_service,
+            triple_store_service,
             ConvertOntologyGraphToYamlWorkflowConfiguration(
-                NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY"))
+                NaasIntegrationConfiguration(api_key=naas_api_key)
             ),
         )
     )
@@ -32,8 +39,7 @@ def test_create_individual_ontology_yaml_workflow(
     import time
     from uuid import uuid4
 
-    from naas_abi import config, logger, services
-    from naas_abi_core.utils.SPARQL import get_subject_graph
+    from naas_abi_core import logger
     from rdflib import OWL, RDF, RDFS, Graph, Literal, Namespace, URIRef
 
     ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -54,7 +60,7 @@ def test_create_individual_ontology_yaml_workflow(
             ),
         )
     )
-    services.triple_store_service.insert(graph)
+    triple_store_service.insert(graph)
     time.sleep(3)
 
     # Run workflow
@@ -63,7 +69,7 @@ def test_create_individual_ontology_yaml_workflow(
     )
 
     # Check if ontology id is set
-    graph = get_subject_graph(str(uri), 1)
+    graph = sparql_utils.get_subject_graph(str(uri), 1)
     naas_ontology_id = list(
         graph.triples(
             (None, URIRef("http://ontology.naas.ai/abi/naas_ontology_id"), None)
@@ -72,15 +78,15 @@ def test_create_individual_ontology_yaml_workflow(
     assert str(ontology_id) == str(naas_ontology_id), ontology_id
 
     # Remove graph
-    services.triple_store_service.remove(graph)
+    triple_store_service.remove(graph)
 
     # Remove ontology
     if ontology_id:
         naas_integration = NaasIntegration(
-            NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY"))
+            NaasIntegrationConfiguration(api_key=naas_api_key)
         )
         result = naas_integration.delete_ontology(
-            workspace_id=config.workspace_id, ontology_id=ontology_id
+            workspace_id=naas_module.configuration.workspace_id, ontology_id=ontology_id
         )
         logger.info(f"Removed ontology: {result}")
         assert result is not None, result

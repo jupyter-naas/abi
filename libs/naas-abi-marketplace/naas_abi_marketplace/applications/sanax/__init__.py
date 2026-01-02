@@ -11,7 +11,11 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
-        modules=[],
+        modules=[
+            "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_marketplace.ai.chatgpt",
+            "naas_abi_marketplace.ai.qwen#soft",
+        ],
         services=[TripleStoreService, ObjectStorageService],
     )
 
@@ -24,4 +28,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "sanax"
         """
+
         datastore_path: str = "sanax"

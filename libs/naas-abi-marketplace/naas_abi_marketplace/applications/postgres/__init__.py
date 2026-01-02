@@ -10,7 +10,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
-        modules=[],
+        modules=["naas_abi_marketplace.ai.chatgpt"],
         services=[ObjectStorageService],
     )
 
@@ -27,6 +27,7 @@ class ABIModule(BaseModule):
             postgres_host: "{{ secret.POSTGRES_HOST }}"
             postgres_port: "{{ secret.POSTGRES_PORT }}"
         """
+
         postgres_user: str
         postgres_password: str
         postgres_dbname: str

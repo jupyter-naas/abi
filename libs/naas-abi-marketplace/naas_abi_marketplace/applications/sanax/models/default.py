@@ -1,13 +1,11 @@
-from naas_abi import secret
 from naas_abi_core.models.Model import ChatModel
+from naas_abi_marketplace.applications.sanax import ABIModule
 
 model: ChatModel
-airgap_model: ChatModel
-cloud_model: ChatModel
-ai_mode = secret.get("AI_MODE")
+ai_mode = ABIModule.get_instance().configuration.global_config.ai_mode
 
 if ai_mode == "airgap":
-    from naas_abi.models.airgap_qwen import model as airgap_model
+    from naas_abi_marketplace.ai.qwen.models.qwen3_8b import model as airgap_model
 
     model = airgap_model
 else:
