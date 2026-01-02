@@ -68,7 +68,9 @@ def create_agent(
     from naas_abi_core import logger
 
     # First, let's get the template tools that will be available
-    from naas_abi_core.modules.templatablesparqlquery import get_tools
+    from naas_abi_core.modules.templatablesparqlquery import (
+        ABIModule as TemplatableSparqlQueryABIModule,
+    )
     from naas_abi_marketplace.applications.sanax.models.default import model
     from pydantic import BaseModel, Field
 
@@ -93,11 +95,13 @@ def create_agent(
         "sanax_get_people_with_oldest_job_starts",
         "sanax_get_people_with_longest_tenure",
     ]
-    template_tools_list = get_tools(templates_tools)
+    sparql_query_tools_list = TemplatableSparqlQueryABIModule.get_instance().get_tools(
+        templates_tools
+    )
 
     # Create a dictionary to map tool names to tool instances
     tools_by_name = {}
-    for tool in template_tools_list:
+    for tool in sparql_query_tools_list:
         tools_by_name[tool.name] = tool
 
     class CountSchema(BaseModel):
@@ -179,7 +183,7 @@ def create_agent(
     tools: list = [count_items_tool]
 
     # Add the template tools to the tools list
-    tools += template_tools_list
+    tools += sparql_query_tools_list
 
     # Define agents
     agents: list = []
