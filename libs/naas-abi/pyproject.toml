@@ -47,5 +47,6 @@ prerelease_token = "dev"
 [dependency-groups]
 dev = [
     "mypy>=1.19.0",
+    "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",
 ]

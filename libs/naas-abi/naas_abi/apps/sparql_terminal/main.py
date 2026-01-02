@@ -1,4 +1,3 @@
-from naas_abi import services
 from naas_abi.apps.sparql_terminal.terminal_style import (
     clear_screen,
     get_user_input,
@@ -9,11 +8,12 @@ from naas_abi.apps.sparql_terminal.terminal_style import (
     print_system_message,
     print_welcome_message,
 )
+from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 
 
 class SPARQLTerminal:
-    def __init__(self):
-        self.triple_store_service = services.triple_store_service
+    def __init__(self, triple_store_service: ITripleStoreService):
+        self.triple_store_service = triple_store_service
 
     def execute_query(self, query):
         """Execute a SPARQL query and return the results"""
@@ -60,7 +60,10 @@ class SPARQLTerminal:
 
 
 def main():
-    terminal = SPARQLTerminal()
+    from naas_abi import ABIModule
+
+    triple_store_service = ABIModule.get_instance().engine.services.triple_store
+    terminal = SPARQLTerminal(triple_store_service)
     terminal.run()
 
 

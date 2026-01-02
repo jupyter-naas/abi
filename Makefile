@@ -601,7 +601,7 @@ hello:
 # =============================================================================
 
 # Master check target - runs all code quality checks
-check: deps .venv/lib/python$(python_version)/site-packages/abi check-core # check-custom # check-marketplace #(Disable marketplace checks for now)
+check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-marketplace
 
 # Code quality checks for core modules
 check-core: deps
@@ -623,8 +623,7 @@ check-core: deps
 	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports
 
 	@echo "• Checking naas_abi..."
-	@#@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
-	@echo "\n⚠️ Skipping libs/naas_abi type analysis (disabled) WE NEED TO REMEDIATE THIS\n"
+	@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi-core
@@ -633,26 +632,6 @@ check-core: deps
 	@#echo "⚠️ Skipping bandit... (disabled)"
 	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
 	@echo "\n✅ CORE security checks passed!"
-
-# Code quality checks for custom modules
-check-custom: deps
-	@echo ""
-	@echo "  _____ _____ _____ _____ _____ _____"
-	@echo " |     |     |     |     |     |     |"
-	@echo " |  C  |  U  |  S  |  T  |  O  |  M  |"
-	@echo " |_____|_____|_____|_____|_____|_____|"
-	@echo ""
-	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
-	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi
-
-	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@cd libs/naas-abi && uv sync --all-extras && uv run mypy -p naas_abi --follow-untyped-imports
-
-	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
-	@#uv run pyrefly check libs/naas-abi
-
-	@echo "\n✅ CUSTOM security checks passed!"
 
 # Code quality checks for marketplace modules
 package=naas_abi_marketplace
@@ -678,8 +657,8 @@ check-marketplace: deps
 		--exclude 'naas_abi_marketplace/.*/sandbox' \
 		--follow-untyped-imports
 
-	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
-	@#uv run pyrefly check src/marketplace
+	@# echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@# uv sync --all-extras && uv run pyrefly check libs/naas-abi-marketplace/naas_abi_marketplace/applications \
 
 	@echo "\n✅ MARKETPLACE security checks passed!"
 

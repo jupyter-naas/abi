@@ -63,19 +63,8 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
-    # Set model based on AI_MODE
-    from naas_abi import ABIModule
-
-    MODULE: ABIModule = ABIModule.get_instance()
-
-    ai_mode = MODULE.configuration.global_config.ai_mode
-
-    if ai_mode == "airgap":
-        from naas_abi.models.default import get_model
-
-        model = get_model()
-    else:
-        from naas_abi_marketplace.ai.chatgpt.models.o3_mini import model
+    # Set model
+    from naas_abi_marketplace.ai.chatgpt.models.o3_mini import model
 
     # Use provided configuration or create default one
     if agent_configuration is None:

@@ -1,18 +1,19 @@
 import pytest
+from naas_abi import ABIModule
 from naas_abi.workflows.SearchIndividualWorkflow import (
     SearchIndividualWorkflow,
     SearchIndividualWorkflowConfiguration,
     SearchIndividualWorkflowParameters,
 )
 
+triple_store_service = ABIModule.get_instance().engine.services.triple_store
+
 
 @pytest.fixture
 def search_individual_workflow() -> SearchIndividualWorkflow:
-    from naas_abi import services
-
     # Configurations
     search_individual_workflow_configuration = SearchIndividualWorkflowConfiguration(
-        triple_store=services.triple_store_service
+        triple_store=triple_store_service
     )
 
     # Workflow
@@ -28,7 +29,6 @@ def test_search_individual_workflow(
 ):
     from uuid import uuid4
 
-    from naas_abi import services
     from naas_abi_core.utils.Graph import TEST
     from rdflib import OWL, RDFS, Graph, Literal, URIRef
 
@@ -50,7 +50,7 @@ def test_search_individual_workflow(
     )
     graph.add((TEST[node_id], RDFS.label, Literal(node_id)))
 
-    services.triple_store_service.insert(graph)
+    triple_store_service.insert(graph)
 
     # Test
     result = search_individual_workflow.search_individual(
@@ -66,7 +66,7 @@ def test_search_individual_workflow(
     assert len(result) == 1, result
     assert result[0]["label"] == node_id, result[0]
 
-    services.triple_store_service.remove(graph)
+    triple_store_service.remove(graph)
 
     # Test
     result = search_individual_workflow.search_individual(

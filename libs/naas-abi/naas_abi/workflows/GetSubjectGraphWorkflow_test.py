@@ -1,9 +1,14 @@
 import pytest
+from naas_abi import ABIModule
 from naas_abi.workflows.GetSubjectGraphWorkflow import (
     GetSubjectGraphWorkflow,
     GetSubjectGraphWorkflowConfiguration,
     GetSubjectGraphWorkflowParameters,
 )
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+
+triple_store_service = ABIModule.get_instance().engine.services.triple_store
+sparql_utils = SPARQLUtils(triple_store_service)
 
 
 @pytest.fixture
@@ -24,7 +29,7 @@ def test_get_subject_graph_workflow(
 ):
     from uuid import uuid4
 
-    from naas_abi_core import logger, services
+    from naas_abi_core import logger
     from naas_abi_core.utils.Graph import TEST
     from rdflib import OWL, RDFS, Graph, Literal, URIRef
 
@@ -48,7 +53,7 @@ def test_get_subject_graph_workflow(
     )
     graph.add((uri, RDFS.label, Literal(node_id)))
 
-    services.triple_store_service.insert(graph)
+    triple_store_service.insert(graph)
 
     result = get_subject_graph_workflow.get_subject_graph(
         GetSubjectGraphWorkflowParameters(
@@ -59,7 +64,7 @@ def test_get_subject_graph_workflow(
     assert isinstance(result, str), result
     assert result != "", result
 
-    services.triple_store_service.remove(graph)
+    triple_store_service.remove(graph)
 
     # Test
     result = get_subject_graph_workflow.get_subject_graph(
