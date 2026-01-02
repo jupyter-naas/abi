@@ -64,7 +64,9 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
     # Set model
-    from naas_abi_marketplace.ai.chatgpt.models.o3_mini import model
+    from naas_abi.models.default import get_model
+
+    model = get_model()
 
     # Use provided configuration or create default one
     if agent_configuration is None:
