@@ -1,5 +1,5 @@
 import pytest
-from naas_abi.core.llama.agents.LlamaAgent import create_agent
+from naas_abi_marketplace.ai.llama.agents.LlamaAgent import create_agent
 
 
 @pytest.fixture

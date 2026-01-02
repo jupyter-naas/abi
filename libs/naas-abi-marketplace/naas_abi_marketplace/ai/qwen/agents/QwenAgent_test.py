@@ -1,5 +1,5 @@
 import pytest
-from naas_abi.core.qwen.agents.QwenAgent import create_agent
+from naas_abi_marketplace.ai.qwen.agents.QwenAgent import create_agent
 
 
 @pytest.fixture

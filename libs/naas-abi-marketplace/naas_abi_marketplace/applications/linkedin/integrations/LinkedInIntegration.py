@@ -1,24 +1,25 @@
 import datetime
 import json
 import os
+import time
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, MutableMapping, Union
+
 import pydash as _
 import requests
-from naas_abi_core.utils.StorageUtils import StorageUtils
+from naas_abi_core import logger
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
-from naas_abi_core import logger
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.applications.linkedin import ABIModule
-import time
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
-    NaasIntegrationConfiguration,
     NaasIntegration,
+    NaasIntegrationConfiguration,
 )
 
 cache = CacheFactory.CacheFS_find_storage(subpath="linkedin")
@@ -42,7 +43,9 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
     linkedin_url: str
     naas_integration_config: NaasIntegrationConfiguration | None = None
     base_url: str = "https://www.linkedin.com/voyager/api"
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class LinkedInIntegration(Integration):
@@ -60,7 +63,9 @@ class LinkedInIntegration(Integration):
             '"', ""
         )
         if self.__configuration.naas_integration_config:
-            self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
+            self.__naas_integration = NaasIntegration(
+                self.__configuration.naas_integration_config
+            )
         self.__storage_utils: StorageUtils = StorageUtils(
             ABIModule.get_instance().engine.services.object_storage
         )
@@ -82,10 +87,14 @@ class LinkedInIntegration(Integration):
         profile_public_id_result = self.get_profile_public_id(self.profile_url)
         public_id_error = profile_public_id_result.get("error")
         if public_id_error:
-            raise Exception(f"Failed to fetch LinkedIn profile public ID for URL '{self.profile_url}': {public_id_error}")
+            raise Exception(
+                f"Failed to fetch LinkedIn profile public ID for URL '{self.profile_url}': {public_id_error}"
+            )
         profile_public_id = profile_public_id_result.get("result")
         if not profile_public_id:
-            raise Exception(f"LinkedIn profile public ID is empty for URL '{self.profile_url}'")
+            raise Exception(
+                f"LinkedIn profile public ID is empty for URL '{self.profile_url}'"
+            )
         self.profile_public_id = profile_public_id
 
     def _flatten_dict(
@@ -336,14 +345,28 @@ class LinkedInIntegration(Integration):
         # Save dict data from response json in a separate file
         output_dir_data = os.path.join(output_dir, "data")
         data_dict = data.get("data", {})
-        if len(self.__storage_utils.get_json(output_dir_data, f"{filename}_data.json")) == 0:
-            self.__storage_utils.save_json(data_dict, output_dir_data, f"{filename}_data.json")
+        if (
+            len(self.__storage_utils.get_json(output_dir_data, f"{filename}_data.json"))
+            == 0
+        ):
+            self.__storage_utils.save_json(
+                data_dict, output_dir_data, f"{filename}_data.json"
+            )
 
         # Save dict included from response json in a separate file
         output_dir_included = os.path.join(output_dir, "included")
         included = data.get("included", [])
-        if len(self.__storage_utils.get_json(output_dir_included, f"{filename}_included.json")) == 0:
-            self.__storage_utils.save_json(included, output_dir_included, f"{filename}_included.json")
+        if (
+            len(
+                self.__storage_utils.get_json(
+                    output_dir_included, f"{filename}_included.json"
+                )
+            )
+            == 0
+        ):
+            self.__storage_utils.save_json(
+                included, output_dir_included, f"{filename}_included.json"
+            )
 
         if save_details:
             for include in included:
@@ -351,8 +374,17 @@ class LinkedInIntegration(Integration):
                 dict_label = dict_type.split(".")[-1].strip()
                 output_dir_dict_type = os.path.join(output_dir_included, dict_label)
                 entity_urn = include.get("entityUrn")
-                if len(self.__storage_utils.get_json(output_dir_dict_type, f"{entity_urn}.json")) == 0:
-                    self.__storage_utils.save_json(include, output_dir_dict_type, f"{entity_urn}.json")
+                if (
+                    len(
+                        self.__storage_utils.get_json(
+                            output_dir_dict_type, f"{entity_urn}.json"
+                        )
+                    )
+                    == 0
+                ):
+                    self.__storage_utils.save_json(
+                        include, output_dir_dict_type, f"{entity_urn}.json"
+                    )
                 for key in [
                     "logo",
                     "backgroundImage",
@@ -364,7 +396,9 @@ class LinkedInIntegration(Integration):
                             include, key, output_dir_dict_type, save_images=save_details
                         )
                     else:
-                        self.__storage_utils.save_json({}, output_dir_dict_type, f"{entity_urn}.json")
+                        self.__storage_utils.save_json(
+                            {}, output_dir_dict_type, f"{entity_urn}.json"
+                        )
         return data
 
     @cache(
@@ -451,9 +485,7 @@ class LinkedInIntegration(Integration):
         return {"result": elements[0].replace("urn:li:fs_normalized_company:", "")}
 
     def get_organization_info(
-        self, 
-        url: str, 
-        return_cleaned_json: bool = False
+        self, url: str, return_cleaned_json: bool = False
     ) -> Dict:
         """Get detailed information about a LinkedIn organization using LinkedIn's native API.
 
@@ -467,7 +499,7 @@ class LinkedInIntegration(Integration):
         org_id_result = self.get_organization_id_from_url(url)
         if org_id_result.get("error"):
             return org_id_result
-        
+
         org_id = org_id_result.get("result")
         if not org_id:
             return {"error": f"LinkedIn organization ID is empty for URL '{url}'"}
@@ -501,8 +533,10 @@ class LinkedInIntegration(Integration):
         """
         if "/in/" in url:
             return {"result": url.rsplit("/in/")[-1].rsplit("/")[0]}
-        return {"error": f"LinkedIn profile URL '{url}' not recognized. Must contain /in/ in the URL"}
-    
+        return {
+            "error": f"LinkedIn profile URL '{url}' not recognized. Must contain /in/ in the URL"
+        }
+
     def get_profile_public_id(self, url: str) -> Dict[str, str]:
         """Get profile public ID / public identifier from LinkedIn profile data.
 
@@ -513,18 +547,31 @@ class LinkedInIntegration(Integration):
             str: Profile public ID / public identifier
         """
         data = self.get_profile_top_card(url)
-        elements = data.get('data', {}).get('data', {}).get('identityDashProfilesByMemberIdentity', {}).get('*elements', [])
+        elements = (
+            data.get("data", {})
+            .get("data", {})
+            .get("identityDashProfilesByMemberIdentity", {})
+            .get("*elements", [])
+        )
         if not elements:
             return {"error": f"LinkedIn profile public ID not found for URL '{url}'"}
         entity_urn = elements[0]
-        data_entity = _.find(data.get('included', []), lambda x: x.get('entityUrn') == entity_urn)
-        public_identifier = data_entity.get('publicIdentifier') if data_entity else None
+        data_entity = _.find(
+            data.get("included", []), lambda x: x.get("entityUrn") == entity_urn
+        )
+        public_identifier = data_entity.get("publicIdentifier") if data_entity else None
         if public_identifier:
             return {"result": public_identifier}
-        
+
         # If not found, get from overflowActionsResolutionResults
         try:
-            overflow_actions = data_entity.get('profileStatefulProfileActions', {}).get('overflowActionsResolutionResults', []) if data_entity else []
+            overflow_actions = (
+                data_entity.get("profileStatefulProfileActions", {}).get(
+                    "overflowActionsResolutionResults", []
+                )
+                if data_entity
+                else []
+            )
             share_url = None
             for action in overflow_actions:
                 if action.get("shareProfileUrlViaMessage"):
@@ -535,7 +582,9 @@ class LinkedInIntegration(Integration):
                     if action.get("shareProfileUrl"):
                         share_url = action["shareProfileUrl"]
                         break
-            share_url_result = self.get_profile_id_from_url(share_url)
+            share_url_result = (
+                self.get_profile_id_from_url(share_url) if share_url else None
+            )
             if share_url_result.get("error"):
                 return share_url_result
             return {"result": share_url_result.get("result", "")}
@@ -563,11 +612,7 @@ class LinkedInIntegration(Integration):
             return {"error": f"LinkedIn profile ID not found for URL '{url}'"}
         return {"result": elements[0].replace("urn:li:fsd_profile:", "")}
 
-    def get_profile_top_card(
-        self, 
-        url: str, 
-        return_cleaned_json: bool = False
-    ) -> Dict:
+    def get_profile_top_card(self, url: str, return_cleaned_json: bool = False) -> Dict:
         """Get profile top card information for a LinkedIn profil url.
 
         Args:
@@ -580,14 +625,16 @@ class LinkedInIntegration(Integration):
         profile_id_result = self.get_profile_id_from_url(url)
         if profile_id_result.get("error"):
             return profile_id_result
-        
+
         profile_id = profile_id_result.get("result")
         if not profile_id:
             return {"error": f"LinkedIn profile ID is empty for URL '{url}'"}
-        
-        if profile_id.startswith('AcoAA'):
-            return {"error": f"LinkedIn profile ID '{profile_id}' starts with AcoAA. LinkedIn profile URL is not valid: {url}"}
-        
+
+        if profile_id.startswith("AcoAA"):
+            return {
+                "error": f"LinkedIn profile ID '{profile_id}' starts with AcoAA. LinkedIn profile URL is not valid: {url}"
+            }
+
         prefix = os.path.join("get_profile_top_card", profile_id)
         endpoint = f"/graphql?variables=(vanityName:{profile_id})&queryId=voyagerIdentityDashProfiles.0bc93b66ba223b9d30d1cb5c05ff031a"
         data = self._make_request(method="GET", endpoint=endpoint)
@@ -618,14 +665,14 @@ class LinkedInIntegration(Integration):
         profile_id = profile_id_result.get("result")
         if not profile_id:
             return {"error": f"LinkedIn profile ID is empty for URL '{url}'"}
-        
+
         profile_public_id_result = self.get_profile_public_id(url)
         if profile_public_id_result.get("error"):
             return profile_public_id_result
         profile_public_id = profile_public_id_result.get("result")
         if not profile_public_id:
             return {"error": f"LinkedIn profile public ID is empty for URL '{url}'"}
-        
+
         prefix = os.path.join("get_profile_data", profile_public_id, profile_type)
         endpoint = f"/graphql?variables=(profileUrn:urn%3Ali%3Afsd_profile%3A{profile_id},sectionType:{profile_type},locale:{locale})&queryId=voyagerIdentityDashProfileComponents.c5d4db426a0f8247b8ab7bc1d660775a"
         data = self._make_request(method="GET", endpoint=endpoint)
@@ -634,9 +681,7 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, profile_id, data)
         return data
 
-    def get_profile_skills(
-        self, url: str, return_cleaned_json: bool = False
-    ) -> Dict:
+    def get_profile_skills(self, url: str, return_cleaned_json: bool = False) -> Dict:
         """Get profile skills for a LinkedIn profile.
 
         Args:
@@ -646,9 +691,7 @@ class LinkedInIntegration(Integration):
             Dict: Raw profile skills data from LinkedIn API
         """
         return self.get_profile_data(
-            url, 
-            profile_type="skills", 
-            return_cleaned_json=return_cleaned_json
+            url, profile_type="skills", return_cleaned_json=return_cleaned_json
         )
 
     def get_profile_experience(
@@ -721,7 +764,7 @@ class LinkedInIntegration(Integration):
         profile_id = profile_id_result.get("result")
         if not profile_id:
             return {"error": f"LinkedIn profile ID is empty for URL '{url}'"}
-        
+
         profile_public_id_result = self.get_profile_public_id(url)
         if profile_public_id_result.get("error"):
             return profile_public_id_result
@@ -777,9 +820,7 @@ class LinkedInIntegration(Integration):
             return {"result": url.split(":activity:")[-1].split("/")[0]}
         return {"error": f"LinkedIn activity ID not found for URL '{url}'"}
 
-    def get_post_stats(
-        self, url: str, return_cleaned_json: bool = False
-    ) -> Dict:
+    def get_post_stats(self, url: str, return_cleaned_json: bool = False) -> Dict:
         """Get activity for a LinkedIn activity.
 
         Args:
@@ -795,7 +836,7 @@ class LinkedInIntegration(Integration):
         activity_id = activity_id_result.get("result")
         if not activity_id:
             return {"error": f"LinkedIn activity ID is empty for URL '{url}'"}
-        
+
         prefix = os.path.join("get_post_stats", activity_id)
 
         endpoint = f"/feed/updates/urn:li:activity:{activity_id}"
@@ -828,7 +869,7 @@ class LinkedInIntegration(Integration):
         activity_id = activity_id_result.get("result")
         if not activity_id:
             return {"error": f"LinkedIn activity ID is empty for URL '{url}'"}
-        
+
         prefix = os.path.join("get_post_reactions", activity_id)
         filename = f"post_reactions_{activity_id}_{start}_{count}"
 
@@ -911,7 +952,7 @@ class LinkedInIntegration(Integration):
         activity_id = activity_id_result.get("result")
         if not activity_id:
             return {"error": f"LinkedIn activity ID is empty for URL '{url}'"}
-        
+
         prefix = os.path.join("get_post_comments", activity_id)
         filename = f"post_comments_{activity_id}_{start}_{count}"
 
@@ -997,7 +1038,7 @@ class LinkedInIntegration(Integration):
         activity_id = activity_id_result.get("result")
         if not activity_id:
             return {"error": f"LinkedIn activity ID is empty for URL '{url}'"}
-        
+
         prefix = os.path.join("get_post_reposts", activity_id)
         filename = f"post_repost_{activity_id}_{start}_{count}"
 
@@ -1062,7 +1103,7 @@ class LinkedInIntegration(Integration):
         if return_cleaned_json:
             return self.clean_json(prefix, filename, all_data)
         return all_data
-    
+
     def __get_people_results(self, cleaned_data: dict, entities: list) -> list:
         """Get people results from LinkedIn data.
 
@@ -1094,12 +1135,12 @@ class LinkedInIntegration(Integration):
                 }
             )
         return entities
-    
+
     def __export_excel(
-        self, 
-        entities: list, 
+        self,
+        entities: list,
         prefix: str,
-        file_name: str, 
+        file_name: str,
         sheet_name: str = "EXPORT_LINKEDIN",
         linkedin_profile_id: str | None = None,
         connections_distance: str | None = None,
@@ -1111,8 +1152,9 @@ class LinkedInIntegration(Integration):
             entities (list): List of entities to export.
             filename (str): Filename to export the Excel file.
         """
-        import pandas as pd
         from io import BytesIO
+
+        import pandas as pd
 
         if len(entities) == 0:
             return ""
@@ -1136,7 +1178,7 @@ class LinkedInIntegration(Integration):
         excel_buffer = BytesIO()
         df.to_excel(excel_buffer, index=False, sheet_name=sheet_name)
         excel_buffer.seek(0)
-        if self.__naas_integration: 
+        if self.__naas_integration:
             asset = self.__naas_integration.upload_asset(
                 data=excel_buffer.getvalue(),
                 prefix=os.path.join(self.__configuration.datastore_path, prefix),
@@ -1146,9 +1188,13 @@ class LinkedInIntegration(Integration):
             return asset.get("asset_url", "")
         else:
             return os.path.join(self.__configuration.datastore_path, prefix, file_name)
-    
+
     @cache(
-        lambda self, profile_url, organization_url, connection_distance: profile_url + "_" + connection_distance + "_" + (str(organization_url) if organization_url else "all"),
+        lambda self, profile_url, organization_url, connection_distance: profile_url
+        + "_"
+        + connection_distance
+        + "_"
+        + (str(organization_url) if organization_url else "all"),
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(days=1),
     )
@@ -1188,9 +1234,16 @@ class LinkedInIntegration(Integration):
             return profile_public_id_result
         profile_public_id = profile_public_id_result.get("result")
         if not profile_public_id:
-            return {"error": f"LinkedIn profile public ID is empty for URL '{profile_url}'"}
-        
-        prefix = os.path.join("get_mutual_connexions", self.profile_public_id, profile_public_id, connection_distance)
+            return {
+                "error": f"LinkedIn profile public ID is empty for URL '{profile_url}'"
+            }
+
+        prefix = os.path.join(
+            "get_mutual_connexions",
+            self.profile_public_id,
+            profile_public_id,
+            connection_distance,
+        )
         filename = f"get_mutual_connexions_{profile_public_id}_{connection_distance}"
 
         if organization_url is not None:
@@ -1199,13 +1252,19 @@ class LinkedInIntegration(Integration):
                 return organization_id_result
             organization_id = organization_id_result.get("result")
             if not organization_id:
-                return {"error": f"LinkedIn organization ID is empty for URL '{organization_url}'"}
-            organization_public_id_result = self.get_organization_id_from_url(organization_url)
+                return {
+                    "error": f"LinkedIn organization ID is empty for URL '{organization_url}'"
+                }
+            organization_public_id_result = self.get_organization_id_from_url(
+                organization_url
+            )
             if organization_public_id_result.get("error"):
                 return organization_public_id_result
             organization_public_id = organization_public_id_result.get("result")
             if not organization_public_id:
-                return {"error": f"LinkedIn organization public ID is empty for URL '{organization_url}'"}
+                return {
+                    "error": f"LinkedIn organization public ID is empty for URL '{organization_url}'"
+                }
             prefix = os.path.join(prefix, organization_public_id)
             filename += f"_{organization_public_id}"
         else:
@@ -1216,7 +1275,9 @@ class LinkedInIntegration(Integration):
         final_filename = filename
         entities: list = []
         while True:
-            print(f"Getting mutual connections for profile '{profile_url}' with connection distance '{connection_distance}' starting from {start} and count {count}")
+            print(
+                f"Getting mutual connections for profile '{profile_url}' with connection distance '{connection_distance}' starting from {start} and count {count}"
+            )
             endpoint = (
                 "/graphql?"
                 f"queryId={query_id}&"
@@ -1230,8 +1291,12 @@ class LinkedInIntegration(Integration):
                 "includeFiltersInResponse:false))"
             )
             data = self._make_request(method="GET", endpoint=endpoint)
-            self.__save_json(os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data)
-            cleaned_data = self.clean_json(os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data)
+            self.__save_json(
+                os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data
+            )
+            cleaned_data = self.clean_json(
+                os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data
+            )
             entities = self.__get_people_results(cleaned_data, entities)
 
             total_connections = _.get(
@@ -1255,10 +1320,12 @@ class LinkedInIntegration(Integration):
             os.path.join(self.__configuration.datastore_path, prefix),
             final_filename + ".json",
         )
-        print(f"Exporting Excel for profile '{profile_url}' with connection distance '{connection_distance}' and organization '{organization_url}'")
+        print(
+            f"Exporting Excel for profile '{profile_url}' with connection distance '{connection_distance}' and organization '{organization_url}'"
+        )
         excel_url = self.__export_excel(
-            entities, 
-            prefix, 
+            entities,
+            prefix,
             f"{self.profile_public_id}_{final_filename}.xlsx",
             linkedin_profile_id=profile_public_id,
             connections_distance=connection_distance,
@@ -1268,9 +1335,10 @@ class LinkedInIntegration(Integration):
         final_data["excel_url"] = excel_url
         return final_data
 
-    
     @cache(
-        lambda self, connection_distance, organization_url: connection_distance + "_" + organization_url,
+        lambda self, connection_distance, organization_url: connection_distance
+        + "_"
+        + organization_url,
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(days=1),
     )
@@ -1296,7 +1364,9 @@ class LinkedInIntegration(Integration):
             limit (int, optional): Maximum number of people to return. Defaults to 1000.
             query_id (str, optional): Query ID generated by LinkedIn to use for the request. We can't generate it ourselves so it might needs to be updated if LinkedIn rotates it.
         """
-        prefix = os.path.join("search_people", self.profile_public_id, connection_distance)
+        prefix = os.path.join(
+            "search_people", self.profile_public_id, connection_distance
+        )
         filename = f"search_people_{connection_distance}"
 
         # Get organization ID
@@ -1306,13 +1376,19 @@ class LinkedInIntegration(Integration):
                 return organization_id_result
             organization_id = organization_id_result.get("result")
             if not organization_id:
-                return {"error": f"LinkedIn organization ID is empty for URL '{organization_url}'"}
-            organization_public_id_result = self.get_organization_id_from_url(organization_url)
+                return {
+                    "error": f"LinkedIn organization ID is empty for URL '{organization_url}'"
+                }
+            organization_public_id_result = self.get_organization_id_from_url(
+                organization_url
+            )
             if organization_public_id_result.get("error"):
                 return organization_public_id_result
             organization_public_id = organization_public_id_result.get("result")
             if not organization_public_id:
-                return {"error": f"LinkedIn organization public ID is empty for URL '{organization_url}'"}
+                return {
+                    "error": f"LinkedIn organization public ID is empty for URL '{organization_url}'"
+                }
             prefix = os.path.join(prefix, organization_public_id)
             filename += f"_{organization_public_id}"
         else:
@@ -1336,7 +1412,9 @@ class LinkedInIntegration(Integration):
         final_filename = filename
         entities: list = []
         while True:
-            print(f"Searching for people with connection distance '{connection_distance}' starting from {start} and count {count}")
+            print(
+                f"Searching for people with connection distance '{connection_distance}' starting from {start} and count {count}"
+            )
             endpoint = (
                 "/graphql?"
                 f"queryId={query_id}&"
@@ -1350,8 +1428,12 @@ class LinkedInIntegration(Integration):
                 "includeFiltersInResponse:false))"
             )
             data = self._make_request(method="GET", endpoint=endpoint)
-            self.__save_json(os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data)
-            cleaned_data = self.clean_json(os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data)
+            self.__save_json(
+                os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data
+            )
+            cleaned_data = self.clean_json(
+                os.path.join(prefix, "pages"), f"{filename}_{start}_{count}.json", data
+            )
             entities = self.__get_people_results(cleaned_data, entities)
 
             total_connections = _.get(
@@ -1376,10 +1458,12 @@ class LinkedInIntegration(Integration):
             final_filename,
         )
 
-        print(f"Exporting Excel for people with connection distance '{connection_distance}' starting from {start} and count {count}")
+        print(
+            f"Exporting Excel for people with connection distance '{connection_distance}' starting from {start} and count {count}"
+        )
         excel_url = self.__export_excel(
-            entities, 
-            prefix, 
+            entities,
+            prefix,
             f"{self.profile_public_id}_{final_filename}.xlsx",
             connections_distance=connection_distance,
             linkedin_organization_id=organization_public_id,
@@ -1391,9 +1475,10 @@ class LinkedInIntegration(Integration):
 
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
+    from typing import Annotated, Optional
+
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
-    from typing import Annotated, Optional
 
     integration = LinkedInIntegration(configuration)
 
@@ -1446,15 +1531,17 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
                 pattern=r"^[FSO]$",
             ),
         ] = "F"
-        organization_url: Optional[Annotated[
-            str,
-            Field(
-                description=(
-                    "LinkedIn organization URL to filter the mutual connections."
+        organization_url: Optional[
+            Annotated[
+                str,
+                Field(
+                    description=(
+                        "LinkedIn organization URL to filter the mutual connections."
+                    ),
+                    pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
                 ),
-                pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
-            ),
-        ]] = None
+            ]
+        ] = None
 
     class SearchPeopleSchema(BaseModel):
         connection_distance: Annotated[
@@ -1464,27 +1551,31 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
                 pattern=r"^[FSO]$",
             ),
         ] = "F"
-        organization_url: Optional[Annotated[
-            str,
-            Field(
-                description=(
-                    "LinkedIn organization URL to filter the people."
+        organization_url: Optional[
+            Annotated[
+                str,
+                Field(
+                    description=("LinkedIn organization URL to filter the people."),
+                    pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
                 ),
-                pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
-            ),
-        ]] = None
-        location: Optional[Annotated[
-            str,
-            Field(
-                description="Location to filter the people.",
-            ),
-        ]] = None
-        limit: Optional[Annotated[
-            int,
-            Field(
-                description="Maximum number of people to return.",
-            )
-        ]] = 1000
+            ]
+        ] = None
+        location: Optional[
+            Annotated[
+                str,
+                Field(
+                    description="Location to filter the people.",
+                ),
+            ]
+        ] = None
+        limit: Optional[
+            Annotated[
+                int,
+                Field(
+                    description="Maximum number of people to return.",
+                ),
+            ]
+        ] = 1000
 
     return [
         StructuredTool(

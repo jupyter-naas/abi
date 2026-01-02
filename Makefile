@@ -665,10 +665,18 @@ check-marketplace: deps
 	@echo ""
 	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi-marketplace --exclude libs/naas-abi-marketplace/naas_abi_marketplace/domains --exclude libs/naas-abi-marketplace/naas_abi_marketplace/__demo__
+	@uvx ruff check libs/naas-abi-marketplace \
+		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/domains \
+		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/__demo__ \
+		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/sandbox
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	cd libs/naas-abi-marketplace && uv sync --all-extras && uv run mypy -p $(package) --exclude naas_abi_marketplace/domains --exclude naas_abi_marketplace/__demo__ --follow-untyped-imports
+	cd libs/naas-abi-marketplace && uv sync --all-extras && uv run mypy -p $(package) \
+		--exclude 'naas_abi_marketplace/domains' \
+		--exclude 'naas_abi_marketplace/__demo__' \
+		--exclude 'naas_abi_marketplace/sandbox' \
+		--exclude 'naas_abi_marketplace/.*/sandbox' \
+		--follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check src/marketplace
