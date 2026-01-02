@@ -693,11 +693,23 @@ trivy-container-scan: build
 
 # Add dependency to the main project
 add: deps
-	uv add $(dep) && uv lock
+	uv add $(dep)
 
 # Add dependency to the abi library
-abi-add: deps
-	cd lib && uv add $(dep) && uv lock
+add-abi: deps
+	cd libs/naas-abi && uv add $(dep)
+
+# Add dependency to the naas-abi-cli library
+add-cli: deps
+	cd libs/naas-abi-cli && uv add $(dep)
+
+# Add dependency to the naas-abi-core library
+add-core: deps
+	cd libs/naas-abi-core && uv add $(dep)
+
+# Add dependency to the naas-abi-marketplace library
+add-marketplace: deps
+	cd libs/naas-abi-marketplace && uv add $(dep)
 
 # =============================================================================
 # DOCKER BUILD COMMANDS

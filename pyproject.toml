@@ -105,7 +105,6 @@ dependencies = [
     # "dagster-aws>=0.27.12",
     # "bodo>=2025.10",
     # "pandas-stubs>=2.3.2.250926",
-    # "types-pyyaml>=6.0.12.20250915",
 ]
 
 [project.scripts]
