@@ -190,8 +190,17 @@ class EngineConfiguration(BaseModel):
         if configuration_yaml is not None:
             return cls.from_yaml_content(configuration_yaml)
 
-        if os.path.exists(f"config.{os.getenv('ENV')}.yaml"):
-            config_file = f"config.{os.getenv('ENV')}.yaml"
+        # Get ENV value
+        from dotenv import dotenv_values
+
+        env = os.getenv("ENV")
+        if not env:
+            env = dotenv_values().get("ENV")
+
+        # First we check the environment variable.
+        if os.path.exists(f"config.{env}.yaml"):
+            config_file = f"config.{env}.yaml"
+        # If the config.{env}.yaml file is not found, we check the config.yaml file.
         elif os.path.exists("config.yaml"):
             config_file = "config.yaml"
         else:
