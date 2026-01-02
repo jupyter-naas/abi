@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-01-02)
+
+### Bug Fixes
+
+- Add default logo api
+  ([`0036796`](https://github.com/jupyter-naas/abi/commit/0036796586ac904879f4dd1fa4a40a400bd0e4ef))
+
+- Error aws neptune
+  ([`76ffc39`](https://github.com/jupyter-naas/abi/commit/76ffc39a0d9408a68d39bf704172c4ff5f5d98c3))
+
+- Remove connections from api doc
+  ([`4f629bf`](https://github.com/jupyter-naas/abi/commit/4f629bf0df5e3f3df30453f2531879301b05252d))
+
+### Features
+
+- Add boto3-stubs
+  ([`47dccd1`](https://github.com/jupyter-naas/abi/commit/47dccd144ab4811c1c4e481287b39026d07bb7ec))
+
+### Refactoring
+
+- Move workflows ontology yaml to naas module
+  ([`b4e8e9f`](https://github.com/jupyter-naas/abi/commit/b4e8e9fd738a338c462c9df2525e043cfdf5095d))
+
+
 ## v1.3.0 (2026-01-02)
 
 ### Bug Fixes
