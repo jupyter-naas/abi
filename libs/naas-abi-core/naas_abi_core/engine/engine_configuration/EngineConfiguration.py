@@ -129,7 +129,22 @@ class EngineConfiguration(BaseModel):
 
             def __getattr__(self, name):
                 if self.secret_service is None:
-                    return 0
+                    # This rule is used only when doing the first pass configuration to load the secret service.
+
+                    # First priority is to check the environment variables.
+                    if name in os.environ:
+                        return os.environ.get(name)
+                    else:
+                        # If the environment variable is not found, we check the .env file. ONLY FOR THE FIRST PASS CONFIGURATION.
+                        from dotenv import dotenv_values
+
+                        secrets = dotenv_values()
+                        if name in secrets:
+                            return secrets.get(name)
+                        else:
+                            return f"Secret '{name}' not found while loading the secret service. Please provide it via the environment variables or .env file."
+                elif name in os.environ:
+                    return os.environ.get(name)
                 secret = self.secret_service.get(name)
                 if secret is None:
                     if not sys.stdin.isatty():
@@ -144,9 +159,6 @@ class EngineConfiguration(BaseModel):
                     return value
                 return secret
 
-            def get(self, key, default=None):
-                return 0
-
         first_pass_data = yaml.safe_load(
             StringIO(Template(yaml_content).render(secret=SecretServiceWrapper()))
         )
@@ -157,12 +169,10 @@ class EngineConfiguration(BaseModel):
         # Here we can now template the yaml by using `yaml_content` and the secret service.
         # Using Jinja2 template engine.
 
-        logger.debug("Yaml content: {yaml_content}")
+        logger.debug(f"Yaml content: {yaml_content}")
 
         template = Template(yaml_content)
         templated_yaml = template.render(secret=SecretServiceWrapper(secret_service))
-
-        logger.debug(f"Templated yaml: {templated_yaml}")
 
         data = yaml.safe_load(StringIO(templated_yaml))
 
@@ -178,16 +188,27 @@ class EngineConfiguration(BaseModel):
         if configuration_yaml is not None:
             return cls.from_yaml_content(configuration_yaml)
 
-        logger.debug(f"Loading configuration from {os.getenv('ENV')}")
+        # Get ENV value
+        from dotenv import dotenv_values
 
-        if os.path.exists(f"config.{os.getenv('ENV')}.yaml"):
-            return cls.from_yaml(f"config.{os.getenv('ENV')}.yaml")
+        env = os.getenv("ENV")
+        if not env:
+            env = dotenv_values().get("ENV")
+
+        # First we check the environment variable.
+        if os.path.exists(f"config.{env}.yaml"):
+            config_file = f"config.{env}.yaml"
+        # If the config.{env}.yaml file is not found, we check the config.yaml file.
         elif os.path.exists("config.yaml"):
-            return cls.from_yaml("config.yaml")
+            config_file = "config.yaml"
         else:
             raise FileNotFoundError(
                 "Configuration file not found. Please create a config.yaml file or config.{env}.yaml file."
             )
+
+        logger.debug(f"Loading configuration from {config_file}")
+
+        return cls.from_yaml(config_file)
 
 
 if __name__ == "__main__":

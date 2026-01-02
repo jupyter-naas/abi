@@ -12,6 +12,17 @@ from pydantic import BaseModel, model_validator
 
 
 class VectorStoreAdapterQdrantConfiguration(BaseModel):
+    """Qdrant vector store adapter configuration.
+
+    vector_store_adapter:
+      adapter: "qdrant"
+      config:
+        host: "{{ secret.QDRANT_HOST }}"
+        port: "{{ secret.QDRANT_PORT }}"
+        api_key: "{{ secret.QDRANT_API_KEY }}"
+        https: "{{ secret.QDRANT_HTTPS }}"
+        timeout: "{{ secret.QDRANT_TIMEOUT }}"
+    """
     host: str = "localhost"
     port: int = 6333
     api_key: str | None = None

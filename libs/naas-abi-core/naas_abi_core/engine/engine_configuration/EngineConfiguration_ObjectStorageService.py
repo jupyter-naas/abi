@@ -17,18 +17,46 @@ from typing_extensions import Self
 
 
 class ObjectStorageAdapterFSConfiguration(BaseModel):
+    """Object storage adapter filesystem configuration.
+
+    object_storage_adapter:
+      adapter: "fs"
+      config:
+        base_path: "storage/datastore"
+    """
     base_path: str
 
 
 class ObjectStorageAdapterS3Configuration(BaseModel):
+    """Object storage adapter S3 configuration.
+
+    object_storage_adapter:
+      adapter: "s3"
+      config:
+        bucket_name: "my-bucket"
+        base_prefix: "my-prefix"
+        access_key_id: "{{ secret.AWS_ACCESS_KEY_ID }}"
+        secret_access_key: "{{ secret.AWS_SECRET_ACCESS_KEY }}"
+        session_token: "{{ secret.AWS_SESSION_TOKEN }}"
+    """
     bucket_name: str
+    base_prefix: str
     access_key_id: str
     secret_access_key: str
-    base_prefix: str
     session_token: str | None = None
 
 
 class ObjectStorageAdapterNaasConfiguration(BaseModel):
+    """Object storage adapter Naas configuration.
+
+    object_storage_adapter:
+      adapter: "naas"
+      config:
+        naas_api_key: "{{ secret.NAAS_API_KEY }}"
+        workspace_id: "{{ secret.WORKSPACE_ID }}"
+        storage_name: "{{ secret.STORAGE_NAME }}"
+        base_prefix: "my-prefix"
+    """
     naas_api_key: str
     workspace_id: str
     storage_name: str
