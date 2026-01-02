@@ -1,5 +1,3 @@
-from typing import Optional
-
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -61,17 +59,4 @@ def create_agent(
 
 
 class PennylaneAgent(Agent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME,
-        name: str = NAME.capitalize().replace("_", " "),
-        description: str = "API endpoints to call the Naas agent completion.",
-        description_stream: str = "API endpoints to call the Naas agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass
