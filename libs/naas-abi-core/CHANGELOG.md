@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-01-02)
+
+### Bug Fixes
+
+- Get env value from .env if not in env
+  ([`b984252`](https://github.com/jupyter-naas/abi/commit/b98425297e596142ee39ece11f6542ed713e4d4e))
+
+- Improve config first pass loading for secret service
+  ([`f598e79`](https://github.com/jupyter-naas/abi/commit/f598e7995e7984a6bbe51e1a7e8a4a34de121968))
+
+- Missing f string + display config file name in debug
+  ([`17e4bac`](https://github.com/jupyter-naas/abi/commit/17e4bac2541642aa97fe5f59522c6cbc578c60fa))
+
+- Remove duplicated logger
+  ([`7e9ffb8`](https://github.com/jupyter-naas/abi/commit/7e9ffb81023126fe56c3150aba12e885260956a8))
+
+- Update package management & add types-pyyaml
+  ([`5a66600`](https://github.com/jupyter-naas/abi/commit/5a666002264744f571015ac45eef3e583b458f40))
+
+### Documentation
+
+- Add docstring
+  ([`76766b9`](https://github.com/jupyter-naas/abi/commit/76766b9acafee1d0dc5b2ee32057b0c3e5a0ba75))
+
+### Features
+
+- Test adaptors dotenv & naas
+  ([`d3b7204`](https://github.com/jupyter-naas/abi/commit/d3b7204f663f4ed969446db8475d97197227336b))
+
+
 ## v1.2.1 (2025-12-30)
 
 
