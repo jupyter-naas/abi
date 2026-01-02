@@ -583,7 +583,9 @@ class LinkedInIntegration(Integration):
                         share_url = action["shareProfileUrl"]
                         break
             share_url_result = (
-                self.get_profile_id_from_url(share_url) if share_url else None
+                self.get_profile_id_from_url(share_url)
+                if share_url
+                else {"error": "No share URL found"}
             )
             if share_url_result.get("error"):
                 return share_url_result
