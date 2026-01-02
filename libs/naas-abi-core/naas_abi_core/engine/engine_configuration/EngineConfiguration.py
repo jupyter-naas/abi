@@ -174,8 +174,6 @@ class EngineConfiguration(BaseModel):
         template = Template(yaml_content)
         templated_yaml = template.render(secret=SecretServiceWrapper(secret_service))
 
-        logger.debug(f"Templated yaml: {templated_yaml}")
-
         data = yaml.safe_load(StringIO(templated_yaml))
 
         logger.debug(f"Data: {data}")
