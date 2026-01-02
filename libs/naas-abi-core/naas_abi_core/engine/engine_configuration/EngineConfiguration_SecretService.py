@@ -18,7 +18,38 @@ if TYPE_CHECKING:
     )
 
 
+class DotenvSecretConfiguration(BaseModel):
+    """Dotenv secret configuration.
+
+    secret_adapters:
+      - adapter: "dotenv"
+        config: {}
+    """
+    pass
+
+
+class NaasSecretConfiguration(BaseModel):
+    """Naas secret configuration.
+
+    secret_adapters:
+      - adapter: "naas"
+        config:
+          naas_api_key: "{{ secret.NAAS_API_KEY }}"
+          naas_api_url: "https://api.naas.ai"
+    """
+    naas_api_key: str
+    naas_api_url: str
+
+
 class Base64SecretConfiguration(BaseModel):
+    """Base64 secret configuration.
+
+    secret_adapters:
+      - adapter: "base64"
+        config:
+          secret_adapter: *secret_adapter
+          base64_secret_key: "{{ secret.BASE64_SECRET_KEY }}"
+    """
     secret_adapter: "SecretAdapterConfiguration"
     base64_secret_key: str
 
@@ -28,15 +59,6 @@ class Base64SecretConfiguration(BaseModel):
         )
 
         return Base64Secret(self.secret_adapter.load(), self.base64_secret_key)
-
-
-class NaasSecretConfiguration(BaseModel):
-    naas_api_key: str
-    naas_api_url: str
-
-
-class DotenvSecretConfiguration(BaseModel):
-    pass
 
 
 class SecretAdapterConfiguration(GenericLoader):

@@ -5,7 +5,6 @@ from naas_abi_core.services.agent.Agent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from pydantic import SecretStr
 
 NAME = "Pull_Request_Description_Agent"
 DESCRIPTION = "A agent to generate a description for a pull request"
@@ -30,21 +29,10 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
-        )
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
+    # Set model
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
-    from langchain_openai import ChatOpenAI
-    from naas_abi import secret
-
-    model = ChatOpenAI(
-        model="gpt-4o", temperature=0, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
-
+    # Define tools
     def git_diff() -> str:
         """
         Get the git diff and the branch name
@@ -84,19 +72,6 @@ def create_agent(
         )
         return "Pull request description stored in `pull_request_description.md`"
 
-    # def store_pull_request_description_to_clipboard() -> str:
-    #     """
-    #     Store the pull request description in the clipboard.
-    #     """
-    #     import os
-    #     import pyperclip # type: ignore
-
-    #     file_path = os.path.join("storage", "datastore", "git", "pull_request_description.md")
-    #     with open(file_path, "r") as f:
-    #         description = f.read()
-    #     pyperclip.copy(description)
-    #     return "Pull request description stored in the clipboard"
-
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
 
@@ -119,13 +94,15 @@ def create_agent(
             func=lambda description: store_pull_request_description(description),
             args_schema=PullRequestDescriptionSchema,
         ),
-        # StructuredTool(
-        #     name="store_pull_request_description_to_clipboard",
-        #     description="Store the pull request description in the clipboard.",
-        #     func=lambda: store_pull_request_description_to_clipboard(),
-        #     args_schema=EmptySchema,
-        # ),
     ]
+
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT,
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id="0")
 
     return PullRequestDescriptionAgent(
         name=NAME,
@@ -133,9 +110,9 @@ def create_agent(
         chat_model=model,
         tools=tools,
         agents=[],
-        configuration=AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
-        ),
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=None,
     )
 
 
