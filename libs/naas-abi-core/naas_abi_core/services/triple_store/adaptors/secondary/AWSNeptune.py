@@ -251,7 +251,10 @@ class AWSNeptune(ITripleStorePort):
 
         self.neptune_port = cluster_endpoints[0]["Endpoint"]["Port"]
 
-        self.credentials = self.session.get_credentials()
+        credentials = self.session.get_credentials()
+        if credentials is None:
+            raise ValueError("Failed to get credentials from session")
+        self.credentials = credentials
 
         self.neptune_sparql_url = (
             f"https://{self.neptune_sparql_endpoint}:{self.neptune_port}/sparql"
@@ -290,6 +293,9 @@ class AWSNeptune(ITripleStorePort):
         """
         request = AWSRequest(
             method=method, url=url, data=data, params=params, headers=headers
+        )
+        assert self.credentials is not None, (
+            "Credentials must be set during initialization"
         )
         SigV4Auth(
             self.credentials, "neptune-db", region_name=self.aws_region_name
