@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.2 (2026-01-02)
+
+### Bug Fixes
+
+- Make pr description git
+  ([`94490ae`](https://github.com/jupyter-naas/abi/commit/94490ae6095e30c12a8990c7a7893b34e30a3834))
+
+
 ## v1.3.1 (2025-12-30)
 
 ### Bug Fixes
