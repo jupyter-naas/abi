@@ -6,14 +6,13 @@ from typing import Annotated, Any, Optional
 import requests
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import ABIModule
-from naas_abi_core.utils.SPARQL import SPARQLUtils
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
 )
+from naas_abi_core.utils.SPARQL import SPARQLUtils
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
@@ -45,8 +44,9 @@ class ImageURLtoAssetPipelineParameters(PipelineParameters):
         subject_uri (str): URI of the subject to add the image asset to
         predicate_uri (str): URI of the predicate to add the image asset to
     """
+
     image_url: Annotated[
-        str, 
+        str,
         Field(
             description="URL of the image to be added",
             pattern=r"https?:\/\S+",
@@ -76,9 +76,7 @@ class ImageURLtoAssetPipeline(Pipeline):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(configuration.naas_integration_config)
-        self.__sparql_utils: SPARQLUtils = SPARQLUtils(
-            ABIModule.get_instance().engine.services.triple_store
-        )
+        self.__sparql_utils = SPARQLUtils(self.__configuration.triple_store)
 
     def trigger(
         self, event: OntologyEvent, ontology_name: str, triple: tuple[Any, Any, Any]

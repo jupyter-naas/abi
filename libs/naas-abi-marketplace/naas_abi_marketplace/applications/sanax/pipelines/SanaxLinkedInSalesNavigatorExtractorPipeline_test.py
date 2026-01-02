@@ -1,17 +1,20 @@
 import pytest
-from naas_abi import services
+from naas_abi_marketplace.applications.sanax import ABIModule
 from naas_abi_marketplace.applications.sanax.pipelines.SanaxLinkedInSalesNavigatorExtractorPipeline import (
     SanaxLinkedInSalesNavigatorExtractorPipeline,
     SanaxLinkedInSalesNavigatorExtractorPipelineConfiguration,
     SanaxLinkedInSalesNavigatorExtractorPipelineParameters,
 )
 
+module = ABIModule.get_instance()
+triple_store_service = module.engine.services.triple_store
+
 
 @pytest.fixture
 def pipeline() -> SanaxLinkedInSalesNavigatorExtractorPipeline:
     return SanaxLinkedInSalesNavigatorExtractorPipeline(
         configuration=SanaxLinkedInSalesNavigatorExtractorPipelineConfiguration(
-            triple_store=services.triple_store_service
+            triple_store=triple_store_service
         )
     )
 
@@ -149,7 +152,9 @@ def test_sanax_linkedin_sales_navigator_extractor_pipeline(
     from naas_abi_core.utils.StorageUtils import StorageUtils
     from naas_abi_marketplace.applications.sanax import ABIModule
 
-    storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+    storage_utils = StorageUtils(
+        ABIModule.get_instance().engine.services.object_storage
+    )
     storage_utils.save_excel(test_data, dir_path, file_name, sheet_name)
 
     # Run pipeline with test data
