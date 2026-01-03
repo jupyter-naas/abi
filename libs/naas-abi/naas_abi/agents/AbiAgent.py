@@ -177,16 +177,21 @@ You can browse the data and run queries there."""
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
     from naas_abi import ABIModule
+    from naas_abi_core import logger
 
     modules = ABIModule.get_instance().engine.modules.values()
-    for module in modules:
+    for module in sorted(modules, key=lambda x: x.__class__.__module__):
+        logger.info(f"🔍 Checking module: {module.__class__.__module__}")
         if hasattr(module, "agents"):
             for agent in module.agents:
                 if (
                     agent is not None
-                    and agent != AbiAgent
-                    and (hasattr(agent, "NAME") and not agent.NAME.endswith("Research"))
-                ):  # exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
+                    and hasattr(agent.New(), "name")
+                    and not agent.New().name.endswith("Research")
+                ):
+                    logger.info(
+                        f"🤖 Adding agent: {agent.New().name} as sub-agent of {NAME}"
+                    )
                     new_agent = agent.New().duplicate(
                         agent_queue, agent_shared_state=shared_state
                     )
