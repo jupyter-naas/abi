@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.10 (2026-01-03)
+
+### Bug Fixes
+
+- Add agents from dependency modules
+  ([`ecfb4f3`](https://github.com/jupyter-naas/abi/commit/ecfb4f34a79e66bba18728c589a3108dd859bc5d))
+
+
 ## v1.0.9 (2026-01-02)
 
 ### Bug Fixes
