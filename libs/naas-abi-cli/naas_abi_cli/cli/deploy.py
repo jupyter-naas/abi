@@ -1,3 +1,4 @@
+import os
 import subprocess
 from uuid import uuid4
 
@@ -117,23 +118,7 @@ class NaasDeployer:
             f"docker build -t {image_name} . --platform linux/amd64", shell=True
         )
 
-    @staticmethod
-    def env_list_to_dict(env: list[str]) -> dict:
-        env_dict: dict[str, str] = {}
-        for env_var in env:
-            if "=" not in env_var:
-                raise click.ClickException(
-                    f"Invalid environment variable '{env_var}'. Expected format KEY=VALUE."
-                )
-            key, value = env_var.split("=", 1)
-            if not key:
-                raise click.ClickException(
-                    f"Invalid environment variable '{env_var}'. Missing key before '='."
-                )
-            env_dict[key] = value
-        return env_dict
-
-    def deploy(self, env: list[str]):
+    def deploy(self):
         assert self.configuration.deploy is not None
         registry = self.naas_api_client.create_registry(
             self.configuration.deploy.space_name
@@ -174,11 +159,7 @@ class NaasDeployer:
                         port=9879,
                         cpu="1",
                         memory="1Gi",
-                        # env=self.env_list_to_dict(env) | {
-                        #     "NAAS_API_KEY": self.configuration.deploy.naas_api_key,
-                        #     "ENV": "prod",
-                        # },
-                        env=self.configuration.deploy.env | self.env_list_to_dict(env),
+                        env=self.configuration.deploy.env,
                     )
                 ],
             )
@@ -202,10 +183,14 @@ class NaasDeployer:
 @click.option(
     "-e",
     "--env",
-    multiple=True,
-    help="Environment variables to set (e.g. -e FOO=BAR -e BAZ=QUX)",
+    type=str,
+    default="prod",
+    help="Environment to use (default: prod). This is used to know which configuration file to load. (config.prod.yaml, config.yaml, ...)",
 )
-def naas(env: list[str]):
+def naas(env: str):
+    # Set the ENV environment variable for the EngineConfiguration.load_configuration() to load the correct configuration file.
+    os.environ["ENV"] = env
+
     configuration: EngineConfiguration = EngineConfiguration.load_configuration()
 
     if configuration.deploy is None:
@@ -215,4 +200,4 @@ def naas(env: list[str]):
         raise click.ClickException("Missing deploy configuration; aborting.")
 
     deployer = NaasDeployer(configuration)
-    deployer.deploy(env)
+    deployer.deploy()
