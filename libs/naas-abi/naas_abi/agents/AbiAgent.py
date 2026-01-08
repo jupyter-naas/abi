@@ -184,11 +184,10 @@ You can browse the data and run queries there."""
         logger.info(f"🔍 Checking module: {module.__class__.__module__}")
         if hasattr(module, "agents"):
             for agent in module.agents:
-                if (
-                    agent is not None
-                    and hasattr(agent.New(), "name")
-                    and not agent.New().name.endswith("Research")
-                ):
+                if agent is not None and agent.__name__ not in [
+                    "ChatGPTResponsesAgent",
+                    "PerplexityResearchAgent",
+                ]:
                     logger.info(
                         f"🤖 Adding agent: {agent.New().name} as sub-agent of {NAME}"
                     )
