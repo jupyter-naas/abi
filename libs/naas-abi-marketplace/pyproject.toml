@@ -6,8 +6,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
-    "naas-abi-core>=1.0.0-dev.1",
+    "naas-abi-core>=1.4.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/jupyter-naas/abi"
+Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace"
 
 [tool.uv.sources]
 naas-abi-core = { path = "../naas-abi-core", editable = true }
