@@ -35,7 +35,7 @@ dependencies = [
     "types-pyyaml>=6.0.12.20250915",
     "types-paramiko>=4.0.0.20250822",
 ]
-license = "MIT license"
+license = "MIT License"
 
 [project.urls]
 Homepage = "https://github.com/jupyter-naas/abi"
