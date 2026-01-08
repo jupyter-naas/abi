@@ -10,6 +10,7 @@ dependencies = [
     "naas-abi-marketplace>=1.3.3",
     "thefuzz>=0.22.1",
 ]
+license = "MIT license"
 
 [project.urls]
 Homepage = "https://github.com/jupyter-naas/abi"
