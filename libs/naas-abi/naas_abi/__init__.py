@@ -13,10 +13,12 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
-            "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_marketplace.ai.qwen#soft",
+            "naas_abi_marketplace.applications.github#soft",
             "naas_abi_marketplace.applications.naas#soft",
+            "naas_abi_marketplace.domains.support#soft",
         ],
         services=[Secret, TripleStoreService, ObjectStorageService],
     )
