@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.4.1 (2026-01-08)
+
+### Bug Fixes
+
+- Add project urls in pyproject.toml
+  ([`c155efa`](https://github.com/jupyter-naas/abi/commit/c155efa2a794b44312eb90ae19ab1c0da402d3ef))
+
+
 ## v1.4.0 (2026-01-08)
 
 
