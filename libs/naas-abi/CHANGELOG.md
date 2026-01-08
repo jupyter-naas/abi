@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.0.11 (2026-01-08)
+
+### Bug Fixes
+
+- Exclude agents from name
+  ([`524944e`](https://github.com/jupyter-naas/abi/commit/524944ead7ebb3dfb6db70ac5c1978a5f6c648ad))
+
+### Refactoring
+
+- Add applications modules as soft
+  ([`afe93a4`](https://github.com/jupyter-naas/abi/commit/afe93a42fb1a603f48f331ff74181f45c2941d07))
+
+- Add support and github module to abi init as soft
+  ([`1f283db`](https://github.com/jupyter-naas/abi/commit/1f283db8ed540a7681a64d98c28c33c9920ad6ff))
+
+
 ## v1.0.10 (2026-01-03)
 
 ### Bug Fixes
