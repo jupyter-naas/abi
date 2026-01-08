@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-01-08)
+
+### Features
+
+- Add README.md to cli
+  ([`00c4b50`](https://github.com/jupyter-naas/abi/commit/00c4b50f7eeef7170a52fa9a91c025befde13299))
+
+
 ## v1.2.0 (2026-01-07)
 
 
