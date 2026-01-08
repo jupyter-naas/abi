@@ -128,28 +128,23 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
     class SearchWebSchema(BaseModel):
         question: str = Field(..., description="The question to ask Perplexity AI")
         user_location: Optional[
-            Annotated[
-                str, Field("FR", description="The user location to use for the search")
-            ]
-        ]
+            Annotated[str, Field(description="The user location to use for the search")]
+        ] = "FR"
         search_context_size: Optional[
             Annotated[
                 str,
                 Field(
-                    "medium",
                     description="The search context size to use for the search",
                     pattern="^(low|medium|high)$",
                 ),
             ]
-        ]
+        ] = "medium"
 
     class AdvancedSearchSchema(BaseModel):
         question: str = Field(..., description="The question to ask Perplexity AI")
         user_location: Optional[
-            Annotated[
-                str, Field("FR", description="The user location to use for the search")
-            ]
-        ]
+            Annotated[str, Field(description="The user location to use for the search")]
+        ] = "FR"
 
     return [
         StructuredTool(

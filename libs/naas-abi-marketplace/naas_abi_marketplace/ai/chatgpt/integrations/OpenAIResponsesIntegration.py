@@ -1,19 +1,19 @@
 import io
+import os
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
+
 import pdfplumber
 import requests
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_core.models.Model import OPENROUTER_MODEL_MAPPING
-from pydantic import BaseModel, Field
-from naas_abi_marketplace.ai.chatgpt import ABIModule
-from naas_abi_core.utils.StorageUtils import StorageUtils
-import os
-from datetime import datetime, timedelta
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
-
+from naas_abi_core.utils.StorageUtils import StorageUtils
+from naas_abi_marketplace.ai.chatgpt import ABIModule
+from pydantic import BaseModel, Field
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openai_responses")
 
@@ -31,7 +31,9 @@ class OpenAIResponsesIntegrationConfiguration(IntegrationConfiguration):
     api_key: str
     model: str = "gpt-4.1-mini"
     base_url: str = "https://api.openai.com/v1/responses"
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class OpenAIResponsesIntegration(Integration):
@@ -51,10 +53,16 @@ class OpenAIResponsesIntegration(Integration):
             self.model = OPENROUTER_MODEL_MAPPING[self.__configuration.model]
         else:
             self.model = self.__configuration.model
-        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
 
     @cache(
-        lambda self, method, endpoint, params, json: f"{method}_{endpoint}_{str(params)}_{str(json)}",
+        lambda self,
+        method,
+        endpoint,
+        params,
+        json: f"{method}_{endpoint}_{str(params)}_{str(json)}",
         cache_type=DataType.PICKLE,
         ttl=timedelta(days=1),
     )
@@ -82,7 +90,7 @@ class OpenAIResponsesIntegration(Integration):
             return {"error": str(e), "text": response.text if response else None}
 
     def search_web(
-        self, 
+        self,
         query: str,
         search_context_size: str = "medium",
         return_text: bool = False,
@@ -106,12 +114,14 @@ class OpenAIResponsesIntegration(Integration):
             "input": query,
         }
         response = self._make_request(method="POST", json=payload)
-        output_dir = os.path.join(self.__configuration.datastore_path, "responses", "web_search", self.model)
+        output_dir = os.path.join(
+            self.__configuration.datastore_path, "responses", "web_search", self.model
+        )
         self.__storage_utils.save_json(
-            response, 
-            output_dir, 
-            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{search_context_size}.json", 
-            copy=False
+            response,
+            output_dir,
+            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{search_context_size}.json",
+            copy=False,
         )
 
         if return_text:
@@ -197,7 +207,10 @@ class OpenAIResponsesIntegration(Integration):
                     "content": [
                         {"type": "input_text", "text": user_prompt},
                         *[
-                            {"type": "input_image", "image": {"url": url, "detail": detail}}
+                            {
+                                "type": "input_image",
+                                "image": {"url": url, "detail": detail},
+                            }
                             for url in image_urls
                         ],
                     ],
@@ -205,12 +218,17 @@ class OpenAIResponsesIntegration(Integration):
             ],
         }
         response = self._make_request(method="POST", json=payload)
-        output_dir = os.path.join(self.__configuration.datastore_path, "responses", "analyze_image", self.model)
+        output_dir = os.path.join(
+            self.__configuration.datastore_path,
+            "responses",
+            "analyze_image",
+            self.model,
+        )
         self.__storage_utils.save_json(
-            response, 
-            output_dir, 
-            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{detail}.json", 
-            copy=False
+            response,
+            output_dir,
+            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{detail}.json",
+            copy=False,
         )
 
         if return_text:
@@ -267,14 +285,16 @@ class OpenAIResponsesIntegration(Integration):
         # Build payload
         payload = {"model": self.model, "input": messages}
         response = self._make_request(method="POST", json=payload)
-        output_dir = os.path.join(self.__configuration.datastore_path, "responses", "analyze_pdf", self.model)
-        self.__storage_utils.save_json(
-            response, 
-            output_dir, 
-            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}.json", 
-            copy=False
+        output_dir = os.path.join(
+            self.__configuration.datastore_path, "responses", "analyze_pdf", self.model
         )
-        
+        self.__storage_utils.save_json(
+            response,
+            output_dir,
+            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}.json",
+            copy=False,
+        )
+
         # Extract text and annotations from output
         if return_text:
             text = ""
@@ -315,44 +335,37 @@ class OpenAIResponsesIntegration(Integration):
 
 
 def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
-    from langchain_core.tools import StructuredTool
     from typing import Annotated
+
+    from langchain_core.tools import StructuredTool
 
     integration = OpenAIResponsesIntegration(configuration)
 
     class SearchWebSchema(BaseModel):
-        query: Annotated[
-            str, 
-            Field(..., description="The query to search the web")
-        ]
+        query: Annotated[str, Field(..., description="The query to search the web")]
         search_context_size: Annotated[
-            str, 
-            Field(default="medium", description="The search context size", pattern="^(low|medium|high)$")
+            str,
+            Field(description="The search context size", pattern="^(low|medium|high)$"),
         ] = "medium"
         return_text: Annotated[
-            bool, 
-            Field(default=True, description="Whether to return the text content")
+            bool, Field(default=True, description="Whether to return the text content")
         ] = True
 
     class AnalyzeImageSchema(BaseModel):
         image_urls: Annotated[
-            list[str], 
-            Field(..., description="The URLs of the images to analyze")
+            list[str], Field(..., description="The URLs of the images to analyze")
         ]
-        user_prompt: Annotated[
-            str, 
-            Field(description="The user prompt to use")
-        ] = "Describe this image:"
+        user_prompt: Annotated[str, Field(description="The user prompt to use")] = (
+            "Describe this image:"
+        )
 
     class AnalyzePdfSchema(BaseModel):
         pdf_url: Annotated[
-            str, 
-            Field(..., description="The URL of the PDF document to analyze")
+            str, Field(..., description="The URL of the PDF document to analyze")
         ]
-        user_prompt: Annotated[
-            str, 
-            Field(description="The user prompt to use")
-        ] = "Describe this PDF document:"
+        user_prompt: Annotated[str, Field(description="The user prompt to use")] = (
+            "Describe this PDF document:"
+        )
 
     return [
         StructuredTool(
