@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.3.4 (2026-01-08)
+
+### Bug Fixes
+
+- Add project urls in pyproject.toml
+  ([`c155efa`](https://github.com/jupyter-naas/abi/commit/c155efa2a794b44312eb90ae19ab1c0da402d3ef))
+
+- Warning errors field pydantic
+  ([`385e4a5`](https://github.com/jupyter-naas/abi/commit/385e4a55a5b8f3208e8eea55fad92c87672b4569))
+
+### Documentation
+
+- Add README.md to naas-abi-marketplace
+  ([`8556b8f`](https://github.com/jupyter-naas/abi/commit/8556b8f328f173ae854479311894047d12f91471))
+
+
 ## v1.3.3 (2026-01-02)
 
 ### Bug Fixes
