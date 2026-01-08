@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.4.1 (2026-01-08)
+
+### Bug Fixes
+
+- Add project urls in pyproject.toml
+  ([`c155efa`](https://github.com/jupyter-naas/abi/commit/c155efa2a794b44312eb90ae19ab1c0da402d3ef))
+
+### Documentation
+
+- Add README.md to naas-abi-core
+  ([`dc42682`](https://github.com/jupyter-naas/abi/commit/dc4268204d14a396945b34ad5f3bac38fbf7a7cb))
+
+
 ## v1.4.0 (2026-01-02)
 
 ### Bug Fixes
