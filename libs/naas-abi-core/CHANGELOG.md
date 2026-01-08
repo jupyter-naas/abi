@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.4.2 (2026-01-08)
+
+### Bug Fixes
+
+- Pandas-stubs lib version
+  ([`343d981`](https://github.com/jupyter-naas/abi/commit/343d981689c044c87c89ce2bf3fc1d5065acde55))
+
+- Tipo license
+  ([`f639213`](https://github.com/jupyter-naas/abi/commit/f639213b6c680d211c9618737842f01b51a65f8d))
+
+- Tipo license
+  ([`0269100`](https://github.com/jupyter-naas/abi/commit/0269100ca7d2d338d1f68be0717be6e981cc8eac))
+
+
 ## v1.4.1 (2026-01-08)
 
 ### Bug Fixes
