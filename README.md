@@ -43,28 +43,79 @@
 
 ## Quick Start
 
+### Setup Project
+
 ```bash
-git clone https://github.com/jupyter-naas/abi.git
-cd abi
-make
+# Install abi cli in your local
+pip install naas-abi-cli
+
+# Create new project
+abi new project your-project-name
+
+# Go to your project
+cd your-project-name
 ```
 
-**What happens:**
-1. **Auto-infrastructure** - Docker Desktop, PostgreSQL, Oxigraph, and AI models start automatically
-2. **Setup wizard** - Choose your AI mode (Airgap/Local/Cloud) and configure preferences  
-3. **ABI chat** - Your AI SuperAssistant that routes to the best model for each task
+**What happens?**
 
-**Chat interface:**
-- **Natural conversation** - Just talk to ABI, it routes to the best agent automatically
-- **Agent routing** - `@claude help me analyze` or `ask qwen to code this`
-- **Commands** - `/?` (help), `/reset` (fresh start), `/exit` (end session)
-- **Direct agents** - `make chat agent=ClaudeAgent` to bypass ABI routing
+1. **Creates your project folder** - Sets up a new directory with your project name in the current location. The folder must be empty or not exist.
+2. **Generates project files** - Copies all necessary starter files including configuration, Docker setup, and Python package structure customized with your project name.
+3. **Installs dependencies** - Automatically installs all required packages (`naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, and `naas-abi-cli`) so your project is ready to use.
 
-**Services running:**
-- **Oxigraph** (Knowledge Graph): http://localhost:7878
-- **YasGUI** (SPARQL Editor): http://localhost:3000  
-- **PostgreSQL** (Agent Memory): localhost:5432
-- **Dagster** (Orchestration): http://localhost:3001
+### Start Chatting
+
+```bash
+# Start chatting
+abi chat
+```
+
+**What happens?**
+
+1. **Loads your project module** - Initializes the ABI engine and loads your project's module (defaults to `naas_abi` module with `AbiAgent`)
+2. **Starts interactive terminal** - Launches a chat interface where you can have natural conversations with the AI agent
+3. **Saves conversations** - Automatically logs all conversations to `storage/datastore/interfaces/terminal_agent/` for later reference
+
+
+> 💡 For demo purposes, we use the OpenAI API key, so you don’t need Docker Desktop running to start chatting. You can also use your OpenRouter API key.
+
+
+### Deploy API
+
+```bash
+# Deploy your ABI project to Naas
+abi deploy naas
+```
+
+**What happens?**
+
+1. **Builds Docker image** - Creates a Docker image of your ABI project for deployment
+2. **Pushes to Naas registry** - Uploads the image to your Naas container registry
+3. **Creates/updates space** - Deploys your application as a containerized service on Naas infrastructure
+4. **Exposes API endpoint** - Makes your ABI REST API available at `https://{space-name}.default.space.naas.ai`
+
+
+> ⚠️ **Requires Naas subscription** - This command deploys your ABI project to Naas cloud infrastructure. You need a Naas API key and subscription to use this feature.
+
+
+### Local Services (Configurable with Docker & `config.yaml`)
+
+**Core Services:**
+- **PostgreSQL** (Agent Memory): `localhost:5432` - Stores agent conversation history and persistent memory
+- **Oxigraph** (Knowledge Graph): `http://localhost:7878` - RDF triple store for semantic reasoning
+- **Oxigraph Proxy** (Web Interface): `http://localhost:7879` - Web-based admin interface for the knowledge graph
+- **Qdrant** (Vector Store): `http://localhost:6333` - Vector database for embeddings and semantic search
+
+**Development Tools:**
+- **YasGUI** (SPARQL Editor): `http://localhost:3000` - Interactive SPARQL query editor for exploring the knowledge graph
+- **Dagster** (Orchestration): `http://localhost:3001` - Workflow orchestration and data pipeline management UI
+- **MinIO** (Object Storage): `http://localhost:9000` (API), `http://localhost:9001` (Console) - S3-compatible storage for Dagster logs
+
+**ABI Application:**
+- **ABI REST API**: `http://localhost:9879` - REST API endpoint for ABI services
+- **Streamlit UI**: `http://localhost:8501` - Web interface for ABI (when running in container mode)
+
+> ℹ️ All of these are set up automatically if Docker is running, but you can adjust their configuration and enabled modules in `config.yaml` to fit your needs.
+
 
 ## Overview
 
