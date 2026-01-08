@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.3.5 (2026-01-08)
+
+### Bug Fixes
+
+- Tipo license
+  ([`f639213`](https://github.com/jupyter-naas/abi/commit/f639213b6c680d211c9618737842f01b51a65f8d))
+
+- Tipo license
+  ([`0269100`](https://github.com/jupyter-naas/abi/commit/0269100ca7d2d338d1f68be0717be6e981cc8eac))
+
+
 ## v1.3.4 (2026-01-08)
 
 ### Bug Fixes
