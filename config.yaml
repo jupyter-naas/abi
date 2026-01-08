@@ -33,6 +33,10 @@ modules:
     enabled: true
     config:
       mistral_api_key: "{{ secret.MISTRAL_API_KEY }}"
+  - module: naas_abi_marketplace.ai.perplexity
+    enabled: true
+    config:
+      perplexity_api_key: "{{ secret.PERPLEXITY_API_KEY }}"
   - module: naas_abi_marketplace.ai.gemini
     enabled: true
     config:
