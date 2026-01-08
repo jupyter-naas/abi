@@ -10,6 +10,7 @@ dependencies = [
     "naas-abi-core[qdrant]>=1.4.0",
     "naas-abi-marketplace[ai-chatgpt]>=1.3.3",
 ]
+license = "MIT license"
 
 [project.scripts]
 abi = "naas_abi_cli.cli:main"
