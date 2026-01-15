@@ -1,3 +1,12 @@
+deploy:
+  workspace_id: "your_workspace_id"
+  space_name: "your_project_name-abi-api"
+  naas_api_key: "{{ secret.NAAS_API_KEY }}"
+  env:
+    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
+    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
+    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
+
 
 auto_publish:
   enabled: true # Enable automatic publishing of agents to workspace
@@ -33,7 +42,7 @@ services:
     object_storage_adapter:
       adapter: "fs"
       config:
-        base_path: "storage/object_store"
+        base_path: "storage/datastore"
   triple_store:
     triple_store_adapter:
       adapter: "fs"

@@ -24,8 +24,8 @@ class ABIModule(BaseModule):
         module: naas_abi_marketplace.applications.github
         enabled: true
         config:
-            datastore_path: "github"
             github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
         """
-        datastore_path: str
+
         github_access_token: str
+        datastore_path: str = "github"

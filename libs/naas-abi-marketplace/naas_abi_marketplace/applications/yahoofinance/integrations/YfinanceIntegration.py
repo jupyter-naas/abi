@@ -1,12 +1,12 @@
 import datetime
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List
-
 import pandas as pd
-import yfinance as yf
-from naas_abi_core.utils.Storage import save_json
+import yfinance as yf  # type: ignore
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
+from naas_abi_marketplace.applications.yahoofinance import ABIModule
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
@@ -14,7 +14,7 @@ from naas_abi_core.integration.integration import (
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
-from yahooquery import search
+from yahooquery import search  # type: ignore
 
 cache = CacheFactory.CacheFS_find_storage(subpath="yahoofinance")
 
@@ -27,7 +27,7 @@ class YfinanceIntegrationConfiguration(IntegrationConfiguration):
         data_store_path (str): Path to store cached financial data
     """
 
-    data_store_path: str = "datastore/yahoofinance/yfinance"
+    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
 
 class YfinanceIntegration(Integration):
@@ -48,10 +48,12 @@ class YfinanceIntegration(Integration):
     """
 
     __configuration: YfinanceIntegrationConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: YfinanceIntegrationConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
+        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
 
     def _result_df_to_dict(self, result: pd.DataFrame | None) -> List[Dict]:
         """Convert DataFrame to dictionary format with proper indexing.
@@ -150,8 +152,8 @@ class YfinanceIntegration(Integration):
             Any: The saved data
         """
         try:
-            output_dir = os.path.join(self.__configuration.data_store_path, prefix)
-            save_json(data, output_dir, filename)
+            output_dir = os.path.join(self.__configuration.datastore_path, prefix)
+            self.__storage_utils.save_json(data, output_dir, filename)
             return data
         except Exception as e:
             logger.error(f"Error saving data to {prefix}/{filename}: {e}")

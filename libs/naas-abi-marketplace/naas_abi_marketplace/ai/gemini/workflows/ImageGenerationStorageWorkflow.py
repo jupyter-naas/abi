@@ -1,31 +1,31 @@
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Optional
-
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi import secret
 from naas_abi_core import logger
-from naas_abi_core.services.object_storage.ObjectStorageFactory import (
-    ObjectStorageFactory,
-)
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
-from pydantic import Field
+from pydantic import Field 
+from naas_abi_marketplace.ai.gemini import ABIModule
+from naas_abi_core.utils.StorageUtils import StorageUtils
+import requests
+import os
 
 
 @dataclass
 class ImageGenerationStorageWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for ImageGenerationStorage workflow."""
-
-    storage_base_path: str = "storage"
+    gemini_api_key: str = field(default_factory=lambda: ABIModule.get_instance().configuration.gemini_api_key)
+    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    model: str = "imagen-4.0-generate-preview-06-06"
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 class ImageGenerationStorageWorkflowParameters(WorkflowParameters):
     """Parameters for ImageGenerationStorage workflow."""
-
     prompt: Annotated[
         str,
         Field(
@@ -58,12 +58,17 @@ class ImageGenerationStorageWorkflow(Workflow):
     """Workflow for generating images and storing them in organized folder structure."""
 
     __configuration: ImageGenerationStorageWorkflowConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: ImageGenerationStorageWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
+        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.headers = {
+            "Content-Type": "application/json"
+        }
 
-    def generate_and_store_image(
+    def generate_image(
         self, parameters: ImageGenerationStorageWorkflowParameters
     ) -> dict:
         """
@@ -75,20 +80,8 @@ class ImageGenerationStorageWorkflow(Workflow):
         try:
             logger.info(f"🎨 Generating image with Imagen 4.0: {parameters.prompt}")
 
-            # Get API key
-            api_key = secret.get("GOOGLE_API_KEY", "")
-            if not api_key:
-                raise Exception(
-                    "Google API key not found - please configure GOOGLE_API_KEY"
-                )
-
-            # Import requests here to avoid dependency issues
-            import requests
-
             # Imagen 4.0 API endpoint (restore original working config)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-preview-06-06:predict?key={api_key}"
-
-            headers = {"Content-Type": "application/json"}
+            url = f"{self.__configuration.base_url}/{self.__configuration.model}:predict?key={self.__configuration.gemini_api_key}"
 
             # Imagen API payload
             payload = {
@@ -103,7 +96,7 @@ class ImageGenerationStorageWorkflow(Workflow):
 
             # Call Imagen 4.0 API
             logger.info("🔥 Calling Google Imagen 4.0...")
-            response = requests.post(url, json=payload, headers=headers)
+            response = requests.post(url, json=payload, headers=self.headers)
 
             if response.status_code != 200:
                 # Handle specific error cases for better user experience
@@ -164,21 +157,15 @@ class ImageGenerationStorageWorkflow(Workflow):
 
             # Create timestamp folder structure
             timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-            module_folder = "google_gemini"
-            folder_path = (
-                f"datastore/{module_folder}/{timestamp}/{parameters.folder_name}"
-            )
-
-            # Initialize storage service
-            storage_service = ObjectStorageFactory.ObjectStorageServiceFS__find_storage(
-                self.__configuration.storage_base_path
+            folder_path = os.path.join(
+                self.__configuration.datastore_path,
+                "generate_images",
             )
 
             # Generate smart filename from prompt if using default
             if parameters.file_name == "generated_image.png":
                 # Extract key words from prompt for filename
                 import re
-
                 prompt_words = re.findall(
                     r"\b[a-zA-Z]{3,}\b", parameters.prompt.lower()
                 )
@@ -189,12 +176,13 @@ class ImageGenerationStorageWorkflow(Workflow):
                 file_name = parameters.file_name or "generated_image.png"
                 if not file_name.endswith((".png", ".jpg", ".jpeg", ".webp")):
                     file_name = f"{file_name}.png"
+            file_name = f"{timestamp}_{file_name}"
 
             # Use the original image bytes for storage
             image_bytes = generated_image_data
 
             # Store the generated image
-            storage_service.put_object(folder_path, file_name, image_bytes)
+            self.__storage_utils.save_image(image_bytes, folder_path, file_name)
             logger.info(f"✅ Image saved: {file_name}")
 
             # Create simple prompt file
@@ -206,24 +194,15 @@ class ImageGenerationStorageWorkflow(Workflow):
             )
 
             # Store only the prompt
-            storage_service.put_object(
-                folder_path, prompt_file, parameters.prompt.encode("utf-8")
-            )
+            self.__storage_utils.save_text(parameters.prompt, folder_path, prompt_file)
 
-            full_path = (
-                f"{self.__configuration.storage_base_path}/{folder_path}/{file_name}"
-            )
-            prompt_path = (
-                f"{self.__configuration.storage_base_path}/{folder_path}/{prompt_file}"
-            )
-
-            logger.info(f"✅ Image successfully generated and stored at: {full_path}")
+            logger.info(f"✅ Image successfully generated and stored at: {folder_path}/{file_name}")
 
             return {
                 "success": True,
                 "message": f"🎨 Image generated! Files: {file_name} & {prompt_file}",
-                "image_path": full_path,
-                "prompt_path": prompt_path,
+                "image_path": f"{folder_path}/{file_name}",
+                "prompt_path": f"{folder_path}/{prompt_file}",
                 "folder": f"{folder_path}",
                 "files": [file_name, prompt_file],
                 "timestamp": timestamp,
@@ -241,11 +220,9 @@ class ImageGenerationStorageWorkflow(Workflow):
     def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="generate_and_store_image",
-                description="Generate an image from a text prompt using Google Imagen 4.0 Preview and automatically store it in organized timestamped folders",
-                func=lambda **kwargs: self.generate_and_store_image(
-                    ImageGenerationStorageWorkflowParameters(**kwargs)
-                ),
+                name="gemini_generate_image",
+                description="Generate an image from a text prompt using Google Imagen 4.0 Preview",
+                func=lambda **kwargs: self.generate_image(ImageGenerationStorageWorkflowParameters(**kwargs)),
                 args_schema=ImageGenerationStorageWorkflowParameters,
             )
         ]

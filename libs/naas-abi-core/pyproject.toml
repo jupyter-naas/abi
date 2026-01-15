@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-core"
-version = "1.2.0"
+version = "1.4.2"
 description = "Abi framework allowing you to build your AI system."
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 requires-python = ">=3.10,<4"
@@ -32,7 +32,14 @@ dependencies = [
     "pandas>=2.3.3",
     "pillow>=12.0.0",
     "docker>=7.1.0",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-paramiko>=4.0.0.20250822",
 ]
+license = { text = "MIT License" }
+
+[project.urls]
+Homepage = "https://github.com/jupyter-naas/abi"
+Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-core"
 
 [project.optional-dependencies]
 ssh = [
@@ -41,6 +48,7 @@ ssh = [
 ]
 aws = [
     "boto3>=1.38.19,<2",
+    "boto3-stubs>=1.42.19"
 ]
 qdrant = [
     "qdrant-client>=1.14.3",

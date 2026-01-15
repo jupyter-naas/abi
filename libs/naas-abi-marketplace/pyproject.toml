@@ -1,13 +1,18 @@
 [project]
 name = "naas-abi-marketplace"
-version = "1.2.0"
+version = "1.3.5"
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
-    "naas-abi-core>=1.0.0-dev.1",
+    "naas-abi-core>=1.4.0",
 ]
+license = { text = "MIT License" }
+
+[project.urls]
+Homepage = "https://github.com/jupyter-naas/abi"
+Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace"
 
 [tool.uv.sources]
 naas-abi-core = { path = "../naas-abi-core", editable = true }
@@ -48,18 +53,91 @@ prerelease = true
 prerelease_token = "dev"
 
 [project.optional-dependencies]
+ai-chatgpt = [
+    "pdfplumber>=0.11.8",
+]
+ai-claude = [
+    "langchain-anthropic>=0.3.17",
+]
+ai-deepseek = [
+    "langchain-ollama>=0.3.4",
+]
+ai-gemini = [
+    "langchain-google-genai>=2.1.4",
+]
+ai-gemma = [
+    "langchain-ollama>=0.3.4",
+]
+ai-grok = [
+    "langchain-xai>=0.2.5",
+]
+ai-llama = [
+    "langchain-ollama>=0.3.4",
+]
+ai-mistral = [
+    "langchain-mistralai>=0.2.11",
+]
+ai-perplexity = [
+    "langchain-perplexity>=0.1.2",
+]
+ai-qwen = [
+    "langchain-ollama>=0.3.4",
+]
+applications-agicap = []
+applications-airtable = []
+applications-algolia = [
+    "algoliasearch>=4.35.0"
+]
+applications-arxiv = [
+    "arxiv>=2.1.3,<3"
+]
+applications-bodo = [
+    "boto3>=1.38.19,<2"
+]
+applications-datagouv = []
+applications-exchangeratesapi = []
+applications-git = []
+applications-github = [
+    "pynacl>=1.5.0,<2"
+]
+applications-gmail = []
+applications-google-calendar = []
+applications-google-drive = []
+applications-google-sheets = []
 applications-googlesearch = [
     "beautifulsoup4>=4.12.0",
 ]
+applications-hubspot = []
 applications-linkedin = [
     "pandas>=2.3.3",
+]
+applications-naas = []
+applications-nebari = []
+applications-newsapi = []
+applications-notion = []
+applications-openrouter = []
+applications-openweathermap = []
+applications-pennylane = []
+applications-postgres = [
+    "psycopg2-binary>=2.9.10,<3",
+    "types-psycopg2>=2.9.21.20251012",
 ]
 applications-powerpoint = [
   "python-pptx>=1.0.2,<2"
 ]
-ai-chatgpt = [
-    "pdfplumber>=0.11.8",
-]
 applications-pubmed = [
     "ratelimit>=2.2.1",
+    "dagster>=1.11.12",
+    "dagster-webserver>=1.11.12",
+    "dagster-postgres>=0.27.12",
+    "dagster-aws>=0.27.12"
+]
+applications-sanax = []
+applications-sendgrid = []
+applications-sharepoint = []
+applications-spotify = []
+applications-worldbank = []
+applications-yahoofinance = [
+    "yfinance==0.2.66",
+    "yahooquery==2.4.1"
 ]

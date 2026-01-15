@@ -1,18 +1,20 @@
 import pytest
-from naas_abi import services
+from naas_abi import ABIModule
 from naas_abi.pipelines.MergeIndividualsPipeline import (
     MergeIndividualsPipeline,
     MergeIndividualsPipelineConfiguration,
     MergeIndividualsPipelineParameters,
 )
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+
+triple_store_service = ABIModule.get_instance().engine.services.triple_store
+sparql_utils = SPARQLUtils(triple_store_service)
 
 
 @pytest.fixture
 def pipeline() -> MergeIndividualsPipeline:
     return MergeIndividualsPipeline(
-        MergeIndividualsPipelineConfiguration(
-            triple_store=services.triple_store_service
-        )
+        MergeIndividualsPipelineConfiguration(triple_store=triple_store_service)
     )
 
 
@@ -20,8 +22,7 @@ def test_merge_individuals_pipeline(pipeline: MergeIndividualsPipeline):
     import time
     from uuid import uuid4
 
-    from naas_abi_core.utils.SPARQL import get_subject_graph
-    from naas_abi_core import logger, services
+    from naas_abi_core import logger
     from rdflib import OWL, RDF, RDFS, SKOS, Graph, Literal, Namespace, URIRef
 
     ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -68,7 +69,7 @@ def test_merge_individuals_pipeline(pipeline: MergeIndividualsPipeline):
     )
 
     logger.info("Inserting triples to triplestore")
-    services.triple_store_service.insert(graph)
+    triple_store_service.insert(graph)
     time.sleep(3)
 
     # Run pipeline to merge individuals
@@ -90,9 +91,9 @@ def test_merge_individuals_pipeline(pipeline: MergeIndividualsPipeline):
     )
 
     # Check if uri_to_merge is removed in triplestore
-    graph = get_subject_graph(str(uri_to_merge), 1)
+    graph = sparql_utils.get_subject_graph(str(uri_to_merge), 1)
     assert len(graph) == 0, graph.serialize(format="turtle")
 
     # Remove graphs
-    services.triple_store_service.remove(graph_merged)
+    triple_store_service.remove(graph_merged)
     time.sleep(3)

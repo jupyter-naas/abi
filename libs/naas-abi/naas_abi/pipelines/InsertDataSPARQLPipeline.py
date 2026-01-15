@@ -163,7 +163,11 @@ class InsertDataSPARQLPipeline(Pipeline):
 
 
 if __name__ == "__main__":
-    from naas_abi import services
+    from naas_abi_core.engine.Engine import Engine
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi"])
+    triple_store_service = engine.services.triple_store
 
     sparql_statement = """
     PREFIX abi: <http://ontology.naas.ai/abi/>
@@ -184,9 +188,7 @@ if __name__ == "__main__":
     }
     """
     pipeline = InsertDataSPARQLPipeline(
-        InsertDataSPARQLPipelineConfiguration(
-            triple_store=services.triple_store_service
-        )
+        InsertDataSPARQLPipelineConfiguration(triple_store=triple_store_service)
     )
     # result = pipeline.get_sparql_from_text(InsertDataSPARQLPipelineParameters(sparql_statement=sparql_statement))
     # logger.info(result)

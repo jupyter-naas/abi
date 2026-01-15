@@ -226,13 +226,17 @@ class MergeIndividualsPipeline(Pipeline):
 
 
 if __name__ == "__main__":
-    from naas_abi import services
+    from naas_abi_core.engine.Engine import Engine
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi"])
+    triple_store_service = ABIModule.get_instance().engine.services.triple_store
 
     uri_to_keep = "http://ontology.naas.ai/abi/69a231b9-e87a-4503-8f80-a530ed8eaa4b"  # URI that will remain
     uri_to_merge = "http://ontology.naas.ai/abi/4f92bbdd-e710-4e43-9480-9b6cd6d9af80"  # URI that will be merged and removed
 
     configuration = MergeIndividualsPipelineConfiguration(
-        triple_store=services.triple_store_service
+        triple_store=triple_store_service
     )
 
     pipeline = MergeIndividualsPipeline(configuration)

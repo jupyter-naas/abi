@@ -1,5 +1,7 @@
 import io
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 import pdfplumber
@@ -7,7 +9,13 @@ import requests
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_core.models.Model import OPENROUTER_MODEL_MAPPING
+from naas_abi_core.services.cache.CacheFactory import CacheFactory
+from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.utils.StorageUtils import StorageUtils
+from naas_abi_marketplace.ai.chatgpt import ABIModule
 from pydantic import BaseModel, Field
+
+cache = CacheFactory.CacheFS_find_storage(subpath="openai_responses")
 
 
 @dataclass
@@ -23,12 +31,16 @@ class OpenAIResponsesIntegrationConfiguration(IntegrationConfiguration):
     api_key: str
     model: str = "gpt-4.1-mini"
     base_url: str = "https://api.openai.com/v1/responses"
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class OpenAIResponsesIntegration(Integration):
     """Workflow for performing web searches using OpenAI."""
 
     __configuration: OpenAIResponsesIntegrationConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: OpenAIResponsesIntegrationConfiguration):
         super().__init__(configuration)
@@ -41,7 +53,19 @@ class OpenAIResponsesIntegration(Integration):
             self.model = OPENROUTER_MODEL_MAPPING[self.__configuration.model]
         else:
             self.model = self.__configuration.model
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
 
+    @cache(
+        lambda self,
+        method,
+        endpoint,
+        params,
+        json: f"{method}_{endpoint}_{str(params)}_{str(json)}",
+        cache_type=DataType.PICKLE,
+        ttl=timedelta(days=1),
+    )
     def _make_request(
         self,
         method: str,
@@ -63,11 +87,14 @@ class OpenAIResponsesIntegration(Integration):
             return response.json()
         except Exception as e:
             logger.error(f"Error executing OpenAI web search: {str(e)}")
-            return str(e)
+            return {"error": str(e), "text": response.text if response else None}
 
     def search_web(
-        self, query: str, search_context_size: str = "medium", return_text: bool = False
-    ) -> Dict | str:
+        self,
+        query: str,
+        search_context_size: str = "medium",
+        return_text: bool = False,
+    ) -> Dict:
         """Execute the web search workflow.
 
         Args:
@@ -87,6 +114,16 @@ class OpenAIResponsesIntegration(Integration):
             "input": query,
         }
         response = self._make_request(method="POST", json=payload)
+        output_dir = os.path.join(
+            self.__configuration.datastore_path, "responses", "web_search", self.model
+        )
+        self.__storage_utils.save_json(
+            response,
+            output_dir,
+            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{search_context_size}.json",
+            copy=False,
+        )
+
         if return_text:
             # Extract text content and annotations from first message with valid content
             for item in response.get("output", []):
@@ -115,11 +152,11 @@ class OpenAIResponsesIntegration(Integration):
                     #         url = annotation.get('url', '')
                     #         annotation_text += f"- [{title}]({url})\n"
 
-                    return text_content + annotation_text
+                    return {"content": text_content + annotation_text}
 
             # No valid content found
             logger.warning("No valid text content found in response")
-            return ""
+            return {"content": "No valid text content found in response"}
 
         return response
 
@@ -129,7 +166,7 @@ class OpenAIResponsesIntegration(Integration):
         user_prompt: str = "Describe this image:",
         detail: str = "auto",
         return_text: bool = False,
-    ) -> Dict | str:
+    ) -> Dict:
         """Analyze an image using OpenAI Responses.
 
         Args:
@@ -170,7 +207,10 @@ class OpenAIResponsesIntegration(Integration):
                     "content": [
                         {"type": "input_text", "text": user_prompt},
                         *[
-                            {"type": "input_image", "image_url": url, "detail": detail}
+                            {
+                                "type": "input_image",
+                                "image": {"url": url, "detail": detail},
+                            }
                             for url in image_urls
                         ],
                     ],
@@ -178,6 +218,18 @@ class OpenAIResponsesIntegration(Integration):
             ],
         }
         response = self._make_request(method="POST", json=payload)
+        output_dir = os.path.join(
+            self.__configuration.datastore_path,
+            "responses",
+            "analyze_image",
+            self.model,
+        )
+        self.__storage_utils.save_json(
+            response,
+            output_dir,
+            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{detail}.json",
+            copy=False,
+        )
 
         if return_text:
             try:
@@ -185,17 +237,17 @@ class OpenAIResponsesIntegration(Integration):
                 for item in response.get("output", []):
                     if item.get("type") == "message":
                         content = item.get("content", [])
-                        if content and isinstance(content[0], dict):
+                        if len(content) > 0 and isinstance(content[0], dict):
                             text = content[0].get("text")
                             if text:
-                                return text
+                                return {"content": text}
 
                 # If no valid text content found
                 logger.warning("No valid text content found in response")
-                return "No valid text content found in response"
+                return {"content": "No valid text content found in response"}
             except Exception as e:
                 logger.error(f"Error parsing response: {str(e)}")
-                return str(e)
+                return {"error": str(e), "content": None}
         return response
 
     def analyze_pdf(
@@ -232,8 +284,16 @@ class OpenAIResponsesIntegration(Integration):
 
         # Build payload
         payload = {"model": self.model, "input": messages}
-
         response = self._make_request(method="POST", json=payload)
+        output_dir = os.path.join(
+            self.__configuration.datastore_path, "responses", "analyze_pdf", self.model
+        )
+        self.__storage_utils.save_json(
+            response,
+            output_dir,
+            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}.json",
+            copy=False,
+        )
 
         # Extract text and annotations from output
         if return_text:
@@ -266,57 +326,66 @@ class OpenAIResponsesIntegration(Integration):
                         f"- [{a.get('title', '')}]({a.get('url', '')})"
                         for a in unique_annotations
                     )
-                return text
+                return {"content": text}
             except Exception as e:
                 logger.error(f"Error extracting text from output: {str(e)}")
-                return str(e)
+                return {"error": str(e)}
 
         return response
 
 
 def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
+    from typing import Annotated
+
     from langchain_core.tools import StructuredTool
 
     integration = OpenAIResponsesIntegration(configuration)
 
     class SearchWebSchema(BaseModel):
-        query: str = Field(..., description="The query to search the web")
+        query: Annotated[str, Field(..., description="The query to search the web")]
+        search_context_size: Annotated[
+            str,
+            Field(description="The search context size", pattern="^(low|medium|high)$"),
+        ] = "medium"
+        return_text: Annotated[
+            bool, Field(default=True, description="Whether to return the text content")
+        ] = True
 
     class AnalyzeImageSchema(BaseModel):
-        image_urls: list[str] = Field(
-            ..., description="The URLs of the images to analyze"
+        image_urls: Annotated[
+            list[str], Field(..., description="The URLs of the images to analyze")
+        ]
+        user_prompt: Annotated[str, Field(description="The user prompt to use")] = (
+            "Describe this image:"
         )
-        user_prompt: str = Field(..., description="The user prompt to use")
 
     class AnalyzePdfSchema(BaseModel):
-        pdf_url: str = Field(..., description="The URL of the PDF document to analyze")
-        user_prompt: str = Field(..., description="The user prompt to use")
+        pdf_url: Annotated[
+            str, Field(..., description="The URL of the PDF document to analyze")
+        ]
+        user_prompt: Annotated[str, Field(description="The user prompt to use")] = (
+            "Describe this PDF document:"
+        )
 
     return [
         StructuredTool(
             name="chatgpt_search_web",
             description="Search the web",
-            func=lambda query: integration.search_web(
-                query=query, search_context_size="medium", return_text=True
-            ),
+            func=lambda **kwargs: integration.search_web(**kwargs),
             args_schema=SearchWebSchema,
             return_direct=True,
         ),
         StructuredTool(
             name="chatgpt_analyze_image",
             description="Analyze an image from URL",
-            func=lambda image_urls, user_prompt: integration.analyze_image(
-                image_urls=image_urls, user_prompt=user_prompt, return_text=True
-            ),
+            func=lambda **kwargs: integration.analyze_image(**kwargs),
             args_schema=AnalyzeImageSchema,
             return_direct=True,
         ),
         StructuredTool(
             name="chatgpt_analyze_pdf",
             description="Analyze a PDF document from URL",
-            func=lambda pdf_url, user_prompt: integration.analyze_pdf(
-                pdf_url=pdf_url, user_prompt=user_prompt, return_text=True
-            ),
+            func=lambda **kwargs: integration.analyze_pdf(**kwargs),
             args_schema=AnalyzePdfSchema,
             return_direct=True,
         ),

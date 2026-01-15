@@ -1,5 +1,5 @@
 import pytest
-from naas_abi import services
+from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_marketplace.applications.powerpoint.integrations.PowerPointIntegration import (
     PowerPointIntegrationConfiguration,
 )
@@ -8,6 +8,9 @@ from naas_abi_marketplace.applications.powerpoint.pipelines.AddPowerPointPresent
     AddPowerPointPresentationPipelineConfiguration,
     AddPowerPointPresentationPipelineParameters,
 )
+
+module = ABIModule.get_instance()
+triple_store_service = module.engine.services.triple_store
 
 
 @pytest.fixture
@@ -18,7 +21,7 @@ def pipeline() -> AddPowerPointPresentationPipeline:
     return AddPowerPointPresentationPipeline(
         AddPowerPointPresentationPipelineConfiguration(
             powerpoint_configuration=powerpoint_configuration,
-            triple_store=services.triple_store_service,
+            triple_store=triple_store_service,
         )
     )
 

@@ -25,7 +25,14 @@ def integration() -> LinkedInIntegration:
 
     li_at: str = module.configuration.li_at
     JSESSIONID: str = module.configuration.JSESSIONID
-    configuration = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+    linkedin_url: str = module.configuration.linkedin_profile_url
+    datastore_path: str = module.configuration.datastore_path
+    configuration = LinkedInIntegrationConfiguration(
+        li_at=li_at,
+        JSESSIONID=JSESSIONID,
+        linkedin_url=linkedin_url,
+        datastore_path=datastore_path,
+    )
     return LinkedInIntegration(configuration)
 
 
@@ -68,7 +75,7 @@ def test_clean_json(integration: LinkedInIntegration):
 def test_get_organization_public_id(integration: LinkedInIntegration):
     """Test extracting organization public ID from LinkedIn URL."""
     # Test company URL
-    result = integration.get_organization_public_id(DEFAULT_COMPANY_URL)
+    result = integration.get_organization_id_from_url(DEFAULT_COMPANY_URL)
     assert result == "naas-ai", result
 
 

@@ -1,5 +1,5 @@
 import pytest
-from naas_abi.core.grok.agents.GrokAgent import create_agent
+from naas_abi_marketplace.ai.grok.agents.GrokAgent import create_agent
 
 
 @pytest.fixture

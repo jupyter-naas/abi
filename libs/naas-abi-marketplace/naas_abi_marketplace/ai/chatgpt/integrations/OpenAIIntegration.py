@@ -1,13 +1,16 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Dict, List, Optional
-
 from langchain_core.tools import StructuredTool
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from openai import OpenAI
 from pydantic import BaseModel, Field
+from naas_abi_marketplace.ai.chatgpt import ABIModule
+from naas_abi_core.utils.StorageUtils import StorageUtils
+import os
+
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openai")
 
@@ -21,6 +24,7 @@ class OpenAIIntegrationConfiguration(IntegrationConfiguration):
     """
 
     api_key: str
+    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
 
 class OpenAIIntegration(Integration):
@@ -35,46 +39,53 @@ class OpenAIIntegration(Integration):
     """
 
     __configuration: OpenAIIntegrationConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: OpenAIIntegrationConfiguration):
         """Initialize OpenAI client with configuration."""
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__client = OpenAI(api_key=self.__configuration.api_key)
+        self.__openai = OpenAI(api_key=self.__configuration.api_key)
+        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
 
+    @cache(lambda self: "list_models", cache_type=DataType.PICKLE, ttl=timedelta(days=1))
     def list_models(self) -> Dict:
         """List available models."""
-        models_page = self.__client.models.list()
-        return {"models": [model.model_dump() for model in models_page.data]}
+        models = self.__openai.models.list()
+        output_dir = os.path.join(self.__configuration.datastore_path, "models", "_all")
+        data = [model.model_dump() for model in models.data]
+        self.__storage_utils.save_json(data, output_dir, "models.json")
+        return {"models": data}
 
+    @cache(lambda self, model_id: f"retrieve_model_{model_id}", cache_type=DataType.PICKLE, ttl=timedelta(days=1))
+    def retrieve_model(self, model_id: str) -> Dict:
+        """Retrieve a specific model."""
+        model = self.__openai.models.retrieve(model_id)
+        output_dir = os.path.join(self.__configuration.datastore_path, "models", model_id)
+        self.__storage_utils.save_json(model.model_dump(), output_dir, f"{model_id}_info.json")
+        return model.model_dump()
+    
     @cache(
-        lambda self, model_id: f"retrieve_model_{model_id}",
+        lambda self, prompt, system_prompt, messages, model, temperature: f"{prompt}_{system_prompt}_{messages}_{model}_{temperature}",
         cache_type=DataType.PICKLE,
         ttl=timedelta(days=1),
     )
-    def retrieve_model(self, model_id: str) -> Dict:
-        """Retrieve a specific model."""
-        model = self.__client.models.retrieve(model_id)
-        return model.model_dump()
-
     def create_chat_completion(
         self,
         prompt: Optional[str] = None,
-        system_prompt: Optional[str] = None,
+        system_prompt: str = "You are a helpful assistant.",
         messages: List[Dict[str, str]] = [],
-        model: Optional[str] = "o3-mini",
+        model: str = "o3-mini",
         temperature: float = 0.3,
-        response_format: Optional[str] = None,
-    ) -> Optional[str]:
+    ) -> Dict:
         """Create a chat completion using OpenAI's API.
 
         Args:
-            messages (List[Dict[str, str]]): List of message dictionaries with role and content
             prompt (Optional[str]): Prompt to use, defaults to None
-            system_prompt (Optional[str]): System prompt to use, defaults to None
-            model (Optional[str]): Model ID to use, defaults to gpt-4o
-            temperature (float): Sampling temperature between 0 and 2, defaults to 0.7
-            response_format (Optional[str]): Response format to use, defaults to None
+            system_prompt (str): System prompt to use, defaults to "You are a helpful assistant."
+            messages (List[Dict[str, str]]): List of message dictionaries with role and content
+            model (Optional[str]): Model ID to use, defaults to o3-mini
+            temperature (float): Sampling temperature between 0 and 2, defaults to 0.3
 
         Returns:
             Dict: API response containing the completion
@@ -85,53 +96,29 @@ class OpenAIIntegration(Integration):
                 {"role": "user", "content": prompt},
             ]
 
-        # Ensure model is not None
-        if model is None:
-            model = "o3-mini"
-
         # Create completion with proper error handling
         if model.startswith("o"):
-            completion = self.__client.chat.completions.create(
+            completion = self.__openai.chat.completions.create(
                 messages=messages,  # type: ignore
                 model=model,
             )
         else:
-            completion = self.__client.chat.completions.create(
+            completion = self.__openai.chat.completions.create(
                 messages=messages,  # type: ignore
                 model=model,
                 temperature=temperature,
             )
-        return completion.choices[0].message.content
-
-    def create_chat_completion_beta(
-        self,
-        prompt: str,
-        system_prompt: str,
-        model: str = "o3-mini",
-        response_format: Optional[BaseModel] = None,
-    ) -> Optional[str]:
-        """Create a chat completion beta with structured output using OpenAI's API.
-
-        Args:
-            prompt (str): Prompt to use
-            system_prompt (str): System prompt to use
-            model (str): Model ID to use, defaults to gpt-4o
-            response_format (BaseModel): Response format to use
-
-        Returns:
-            Dict: API response containing the completion
-        """
-        messages = [
-            {"role": "developer", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ]
-
-        completion = self.__client.beta.chat.completions.parse(
-            messages=messages,  # type: ignore
-            model=model,
-            response_format=response_format,  # type: ignore
-        )
-        return completion.choices[0].message.content
+        if (
+            hasattr(completion, "choices") and 
+            len(completion.choices) > 0 and 
+            hasattr(completion.choices[0], "message") and 
+            hasattr(completion.choices[0].message, "content")
+        ):
+            output_dir = os.path.join(self.__configuration.datastore_path, "completions", model)
+            self.__storage_utils.save_json(dict(completion), output_dir, f"{model}_{temperature}.json")
+            content = completion.choices[0].message.content
+            return {"content": content}
+        return {}
 
 
 def as_tools(configuration: OpenAIIntegrationConfiguration):
@@ -149,15 +136,6 @@ def as_tools(configuration: OpenAIIntegrationConfiguration):
         system_prompt: str = Field(description="The system prompt to use")
         model: str = Field(description="The model to use")
         temperature: float = Field(description="The temperature to use")
-        response_format: str = Field(description="The response format to use")
-
-    class CreateChatCompletionBetaSchema(BaseModel):
-        prompt: str = Field(description="The prompt to use")
-        system_prompt: str = Field(description="The system prompt to use")
-        model: str = Field(description="The model to use")
-        response_format: Optional[BaseModel] = Field(
-            description="The response format to use"
-        )
 
     return [
         StructuredTool(
@@ -177,11 +155,5 @@ def as_tools(configuration: OpenAIIntegrationConfiguration):
             description="Create a chat completion using OpenAI's API",
             func=lambda **kwargs: integration.create_chat_completion(**kwargs),
             args_schema=CreateChatCompletionSchema,
-        ),
-        StructuredTool(
-            name="openai_create_chat_completion_beta",
-            description="Create a chat completion beta using OpenAI's API.",
-            func=lambda **kwargs: integration.create_chat_completion_beta(**kwargs),
-            args_schema=CreateChatCompletionBetaSchema,
         ),
     ]

@@ -2,7 +2,10 @@ from typing import Any, Dict
 
 import requests
 from naas_abi_core import logger
-from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
+from naas_abi_core.services.secret.SecretPorts import (
+    ISecretAdapter,
+    SecretAuthenticationError,
+)
 
 NAAS_API_URL = "https://api.naas.ai"
 
@@ -27,6 +30,10 @@ class NaasSecret(ISecretAdapter):
         except requests.exceptions.HTTPError as _:
             if response.status_code == 404:
                 logger.debug(f"Secret {key} not found")
+            elif response.status_code == 401:
+                error_message = f"Authentication error on '{NAAS_API_URL}' with NAAS_API_KEY '{self.naas_api_key}'"
+                logger.error(error_message)
+                raise SecretAuthenticationError(error_message)
             else:
                 logger.error(f"Error getting secret {key}: {response.status_code}")
             return default
