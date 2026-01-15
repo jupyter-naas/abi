@@ -182,7 +182,9 @@ def on_ai_message(message: Any, agent_name: str) -> None:
     print("\r" + " " * 15 + "\r", end="", flush=True)
 
     from rich.markdown import Markdown
-
+    if not isinstance(message.content, str):
+        message.content = str(message.content)
+        
     # Filter out think tags and their content
     think_content = re.findall(r"<think>.*?</think>", message.content, flags=re.DOTALL)
 

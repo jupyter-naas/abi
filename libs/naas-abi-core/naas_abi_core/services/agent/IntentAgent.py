@@ -15,7 +15,7 @@ from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
 from spacy.cli import download as spacy_download
 
-from .Agent import Agent, AgentConfiguration, AgentSharedState, create_checkpointer
+from .Agent import Agent, AgentConfiguration, AgentSharedState, create_checkpointer, ABIAgentState
 from .beta.IntentMapper import Intent, IntentMapper, IntentScope, IntentType
 
 _nlp = None
@@ -394,7 +394,7 @@ DEV_INTENTS: list = [
 ]
 
 
-class IntentState(MessagesState):
+class IntentState(ABIAgentState):
     """State class for intent-based conversations.
 
     Extends MessagesState to include intent mapping information that tracks
@@ -475,7 +475,24 @@ class IntentAgent(Agent):
             threshold_neighbor (float, optional): Maximum score difference for similar intents.
                 Defaults to 0.05.
         """
+        
+        
+        @tool(return_direct=True)
+        def list_available_agents() -> str:
+            """Displays a formatted list of all available agents."""
+            return "\n".join([agent.name for agent in self._agents])
+        
+        tools.append(list_available_agents)
+        
         # Add default intents while avoiding duplicates
+        intents.append(
+            Intent(
+                intent_value="agents",
+                intent_type=IntentType.TOOL,
+                intent_target="list_available_agents",
+            )
+        )
+        
         intent_values = {
             (intent.intent_value, intent.intent_type, intent.intent_target)
             for intent in intents
@@ -539,8 +556,11 @@ class IntentAgent(Agent):
         """
         graph = StateGraph(IntentState)
 
+        graph.add_node(self.render_system_prompt)
+        graph.add_edge(START, "render_system_prompt")
+
         graph.add_node(self.current_active_agent)
-        graph.add_edge(START, "current_active_agent")
+        graph.add_edge("render_system_prompt", "current_active_agent")
 
         graph.add_node(self.continue_conversation)
 
@@ -1107,8 +1127,8 @@ Last user message: "{last_human_message.content}"
             for intent in intents:
                 intents_str += f"-Mapped intent: `{intent['intent'].intent_value}`, tool to call: `{intent['intent'].intent_target}`\n"
 
-            if "<intents_rules>" not in self._system_prompt:
-                updated_system_prompt = f"""{self._system_prompt}
+            if "<intents_rules>" not in state["system_prompt"]:
+                updated_system_prompt = f"""{state["system_prompt"]}
 
 <intents_rules>
 Everytime a user is sending a message, a system is trying to map the prompt/message to an intent or a list of intents using a vector search.
@@ -1131,12 +1151,11 @@ If you endup with a single intent which is of type TOOL, you must call this tool
                     return f"{match.group(1)}\n{intents_str}\n{match.group(3)}"
 
                 updated_system_prompt = re.sub(
-                    pattern, replace, self._system_prompt, flags=re.DOTALL
+                    pattern, replace, state["system_prompt"], flags=re.DOTALL
                 )
 
-            self._system_prompt = updated_system_prompt
-            self.set_system_prompt(self._system_prompt)
-            logger.debug(f"Injected in system prompt: {self._system_prompt}")
+            logger.debug(f"Injected in system prompt: {updated_system_prompt}")
+            return Command(update={"system_prompt": updated_system_prompt})
 
     def duplicate(
         self,
