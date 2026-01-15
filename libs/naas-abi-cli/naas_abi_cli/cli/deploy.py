@@ -85,6 +85,10 @@ class NaasAPIClient:
 
         if response.status_code == 409:
             return self.update_space(space)
+        elif response.status_code == 402:
+            raise click.ClickException(
+                "You must have an active subscription to create a space on naas.ai."
+            )
 
         response.raise_for_status()
         return response.json()
