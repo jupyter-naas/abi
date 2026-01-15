@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.4.3 (2026-01-15)
+
+### Bug Fixes
+
+- Handle payment required for space creation
+  ([`265fa48`](https://github.com/jupyter-naas/abi/commit/265fa48e71976465843f4a0676fe7571f06dab8f))
+
+
 ## v1.4.2 (2026-01-08)
 
 ### Bug Fixes
