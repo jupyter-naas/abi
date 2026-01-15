@@ -151,6 +151,11 @@ class NaasDeployer:
             .decode("utf-8")
         )
 
+        if image_sha is None or image_sha == "":
+            raise click.ClickException(
+                "Failed to get image SHA. Please check if the image is correctly built and pushed to the registry."
+            )
+
         image_name_with_sha = f"{image_name.replace(':' + uid, '')}@{image_sha}"
 
         self.naas_api_client.create_space(
