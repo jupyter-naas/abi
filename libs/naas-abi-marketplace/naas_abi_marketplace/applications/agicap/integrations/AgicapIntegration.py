@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import Annotated, Dict, List, Optional
-
 import requests
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import (

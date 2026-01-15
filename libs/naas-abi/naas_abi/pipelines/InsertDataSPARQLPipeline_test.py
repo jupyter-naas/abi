@@ -1,24 +1,27 @@
 import pytest
-from naas_abi import services
+from naas_abi import ABIModule
 from naas_abi.pipelines.InsertDataSPARQLPipeline import (
     InsertDataSPARQLPipeline,
     InsertDataSPARQLPipelineConfiguration,
     InsertDataSPARQLPipelineParameters,
 )
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+
+triple_store_service = ABIModule.get_instance().engine.services.triple_store
+sparql_utils = SPARQLUtils(triple_store_service)
 
 
 @pytest.fixture
 def pipeline() -> InsertDataSPARQLPipeline:
     pipeline = InsertDataSPARQLPipeline(
         configuration=InsertDataSPARQLPipelineConfiguration(
-            triple_store=services.triple_store_service
+            triple_store=triple_store_service
         )
     )
     return pipeline
 
 
 def test_insert_data_sparql_pipeline(pipeline: InsertDataSPARQLPipeline):
-    from naas_abi_core.utils.SPARQL import results_to_list
     from rdflib import Literal, Namespace, URIRef
 
     sparql_statement = """
@@ -54,7 +57,7 @@ def test_insert_data_sparql_pipeline(pipeline: InsertDataSPARQLPipeline):
     ), graph.serialize(format="turtle")
 
     # Remove graph
-    services.triple_store_service.remove(graph)
+    triple_store_service.remove(graph)
 
     # Check triples are removed from the triple store
     sparql_query = """
@@ -69,8 +72,8 @@ def test_insert_data_sparql_pipeline(pipeline: InsertDataSPARQLPipeline):
         FILTER(?s = abi:john || ?s = abi:jane)
     }
     """
-    results = services.triple_store_service.query(sparql_query)
-    results_list = results_to_list(results)
+    results = triple_store_service.query(sparql_query)
+    results_list = sparql_utils.results_to_list(results)
     assert results_list is None, results_list
 
 

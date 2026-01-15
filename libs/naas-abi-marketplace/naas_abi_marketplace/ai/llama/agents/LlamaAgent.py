@@ -45,7 +45,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    from naas_abi.core.llama.models.llama_3_3_70b import model
+    from naas_abi_marketplace.ai.llama.models.llama_3_3_70b import model
 
     # Define tools
     tools: list = []

@@ -53,11 +53,51 @@ help:
 	@echo "  chat-qwen-agent          Start Qwen-based agent"
 	@echo ""
 	@echo "MARKETPLACE APPLICATION AGENTS:"
+	@echo "  chat-agicap-agent        Start Agicap integration agent"
+	@echo "  chat-airtable-agent      Start Airtable integration agent"
+	@echo "  chat-algolia-agent       Start Algolia integration agent"
+	@echo "  chat-arxiv-agent         Start ArXiv integration agent"
+	@echo "  chat-aws-agent           Start AWS integration agent"
+	@echo "  chat-bodo-agent          Start Bodo integration agent"
+	@echo "  chat-datagouv-agent      Start DataGouv integration agent"
+	@echo "  chat-exchangeratesapi-agent Start ExchangeRatesAPI integration agent"
 	@echo "  chat-github-agent        Start GitHub integration agent"
+	@echo "  chat-gmail-agent          Start Gmail integration agent"
+	@echo "  chat-google-analytics-agent Start Google Analytics integration agent"
+	@echo "  chat-google-calendar-agent Start Google Calendar integration agent"
+	@echo "  chat-google-drive-agent   Start Google Drive integration agent"
+	@echo "  chat-google-maps-agent   Start Google Maps integration agent"
 	@echo "  chat-google-search-agent Start Google Search integration agent"
+	@echo "  chat-google-sheets-agent  Start Google Sheets integration agent"
+	@echo "  chat-hubspot-agent        Start HubSpot integration agent"
+	@echo "  chat-instagram-agent     Start Instagram integration agent"
 	@echo "  chat-linkedin-agent      Start LinkedIn integration agent"
+	@echo "  chat-mercury-agent       Start Mercury integration agent"
 	@echo "  chat-naas-agent          Start Naas platform integration agent"
+	@echo "  chat-nebari-agent        Start Nebari integration agent"
+	@echo "  chat-newsapi-agent        Start NewsAPI integration agent"
+	@echo "  chat-notion-agent        Start Notion integration agent"
+	@echo "  chat-openalex-agent      Start OpenAlex integration agent"
+	@echo "  chat-openrouter-agent    Start OpenRouter integration agent"
+	@echo "  chat-openweathermap-agent Start OpenWeatherMap integration agent"
+	@echo "  chat-pennylane-agent     Start Pennylane integration agent"
+	@echo "  chat-postgres-agent      Start PostgreSQL integration agent"
 	@echo "  chat-powerpoint-agent    Start PowerPoint integration agent"
+	@echo "  chat-pubmed-agent        Start PubMed integration agent"
+	@echo "  chat-qonto-agent         Start Qonto integration agent"
+	@echo "  chat-salesforce-agent    Start Salesforce integration agent"
+	@echo "  chat-sanax-agent         Start Sanax integration agent"
+	@echo "  chat-sendgrid-agent      Start SendGrid integration agent"
+	@echo "  chat-sharepoint-agent    Start SharePoint integration agent"
+	@echo "  chat-slack-agent         Start Slack integration agent"
+	@echo "  chat-spotify-agent       Start Spotify integration agent"
+	@echo "  chat-stripe-agent        Start Stripe integration agent"
+	@echo "  chat-twilio-agent        Start Twilio integration agent"
+	@echo "  chat-whatsapp-business-agent Start WhatsApp Business integration agent"
+	@echo "  chat-worldbank-agent     Start World Bank integration agent"
+	@echo "  chat-yahoofinance-agent  Start Yahoo Finance integration agent"
+	@echo "  chat-youtube-agent       Start YouTube integration agent"
+	@echo "  chat-zoho-agent          Start Zoho integration agent"
 	@echo "  pull-request-description Generate pull request description using AI"
 	@echo ""
 	@echo "MARKETPLACE DOMAIN AGENTS:"
@@ -274,6 +314,12 @@ chat-qwen-agent: deps
 # CHAT WITH MARKETPLACE APPLICATIONS AGENTS
 # =============================================================================
 
+chat-agicap-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.agicap AgicapAgent
+
+chat-algolia-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.algolia AlgoliaAgent
+
 chat-github-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.github GitHubAgent
 
@@ -288,6 +334,120 @@ chat-naas-agent: deps
 
 chat-powerpoint-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
+
+chat-aws-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.aws AWSAgent
+
+chat-arxiv-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.arxiv ArXivAgent
+
+chat-bodo-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.bodo BodoAgent
+
+chat-exchangeratesapi-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.exchangeratesapi ExchangeRatesAPIAgent
+
+chat-sendgrid-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.sendgrid SendGridAgent
+
+chat-openrouter-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.openrouter OpenRouterAgent
+
+chat-hubspot-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.hubspot HubSpotAgent
+
+chat-airtable-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.airtable AirtableAgent
+
+chat-gmail-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.gmail GmailAgent
+
+chat-google-calendar-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_calendar GoogleCalendarAgent
+
+chat-google-drive-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_drive GoogleDriveAgent
+
+chat-google-sheets-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_sheets GoogleSheetsAgent
+
+chat-google-maps-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_maps GoogleMapsAgent
+
+chat-google-analytics-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_analytics GoogleAnalyticsAgent
+
+chat-instagram-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.instagram InstagramAgent
+
+chat-mercury-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.mercury MercuryAgent
+
+chat-nebari-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.nebari NebariAgent
+
+chat-notion-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.notion NotionAgent
+
+chat-newsapi-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.newsapi NewsAPIAgent
+
+chat-openweathermap-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.openweathermap OpenWeatherMapAgent
+
+chat-openalex-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.openalex OpenAlexAgent
+
+chat-pennylane-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.pennylane PennylaneAgent
+
+chat-postgres-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.postgres PostgresAgent
+
+chat-pubmed-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.pubmed PubMedAgent
+
+chat-qonto-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.qonto QontoAgent
+
+chat-salesforce-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.salesforce SalesforceAgent
+
+chat-sanax-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.sanax SanaxAgent
+
+chat-sharepoint-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.sharepoint SharePointAgent
+
+chat-slack-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.slack SlackAgent
+
+chat-spotify-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.spotify SpotifyAgent
+
+chat-stripe-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.stripe StripeAgent
+
+chat-twilio-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.twilio TwilioAgent
+
+chat-whatsapp-business-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.whatsapp_business WhatsAppBusinessAgent
+
+chat-worldbank-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.worldbank WorldBankAgent
+
+chat-yahoofinance-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.yahoofinance YfinanceAgent
+
+chat-youtube-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.youtube YouTubeAgent
+
+chat-zoho-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.zoho ZohoAgent
+
+chat-datagouv-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.datagouv DataGouvAgent
 
 pull-request-description: deps
 	@ echo "generate the pull request description please."
@@ -308,7 +468,7 @@ chat-support-agent: deps
 # Start the main API server for local development
 api: deps
 	# uv run src/api.py
-	uv run python -m naas_abi_core.apps.api.api
+	@ LOG_LEVEL=DEBUG uv run python -m naas_abi_core.apps.api.api
 
 # Start production API server in Docker container
 api-prod: deps
@@ -441,7 +601,7 @@ hello:
 # =============================================================================
 
 # Master check target - runs all code quality checks
-check: deps .venv/lib/python$(python_version)/site-packages/abi check-core # check-custom # check-marketplace #(Disable marketplace checks for now)
+check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-marketplace
 
 # Code quality checks for core modules
 check-core: deps
@@ -463,8 +623,7 @@ check-core: deps
 	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports
 
 	@echo "• Checking naas_abi..."
-	@#@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
-	@echo "\n⚠️ Skipping libs/naas_abi type analysis (disabled) WE NEED TO REMEDIATE THIS\n"
+	@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
 
 	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi-core
@@ -473,26 +632,6 @@ check-core: deps
 	@#echo "⚠️ Skipping bandit... (disabled)"
 	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
 	@echo "\n✅ CORE security checks passed!"
-
-# Code quality checks for custom modules
-check-custom: deps
-	@echo ""
-	@echo "  _____ _____ _____ _____ _____ _____"
-	@echo " |     |     |     |     |     |     |"
-	@echo " |  C  |  U  |  S  |  T  |  O  |  M  |"
-	@echo " |_____|_____|_____|_____|_____|_____|"
-	@echo ""
-	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
-	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi
-
-	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
-
-	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
-	@#uv run pyrefly check libs/naas-abi
-
-	@echo "\n✅ CUSTOM security checks passed!"
 
 # Code quality checks for marketplace modules
 package=naas_abi_marketplace
@@ -505,13 +644,21 @@ check-marketplace: deps
 	@echo ""
 	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi-marketplace
+	@uvx ruff check libs/naas-abi-marketplace \
+		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/domains \
+		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/__demo__ \
+		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/sandbox
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	cd libs/naas-abi-marketplace && .venv/bin/mypy -p $(package) --follow-untyped-imports
+	cd libs/naas-abi-marketplace && uv sync --all-extras && uv run mypy -p $(package) \
+		--exclude 'naas_abi_marketplace/domains' \
+		--exclude 'naas_abi_marketplace/__demo__' \
+		--exclude 'naas_abi_marketplace/sandbox' \
+		--exclude 'naas_abi_marketplace/.*/sandbox' \
+		--follow-untyped-imports
 
-	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
-	@#uv run pyrefly check src/marketplace
+	@# echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@# uv sync --all-extras && uv run pyrefly check libs/naas-abi-marketplace/naas_abi_marketplace/applications \
 
 	@echo "\n✅ MARKETPLACE security checks passed!"
 
@@ -533,11 +680,23 @@ trivy-container-scan: build
 
 # Add dependency to the main project
 add: deps
-	uv add $(dep) && uv lock
+	uv add $(dep)
 
 # Add dependency to the abi library
-abi-add: deps
-	cd lib && uv add $(dep) && uv lock
+add-abi: deps
+	cd libs/naas-abi && uv add $(dep)
+
+# Add dependency to the naas-abi-cli library
+add-cli: deps
+	cd libs/naas-abi-cli && uv add $(dep)
+
+# Add dependency to the naas-abi-core library
+add-core: deps
+	cd libs/naas-abi-core && uv add $(dep)
+
+# Add dependency to the naas-abi-marketplace library
+add-marketplace: deps
+	cd libs/naas-abi-marketplace && uv add $(dep)
 
 # =============================================================================
 # DOCKER BUILD COMMANDS

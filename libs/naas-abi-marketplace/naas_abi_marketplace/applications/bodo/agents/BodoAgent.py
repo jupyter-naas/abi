@@ -1,24 +1,12 @@
-from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter
-from langchain_core.tools import BaseTool, Tool
-from langchain_openai import ChatOpenAI
-from naas_abi import secret
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
-from naas_abi_marketplace.__demo__.workflows.ExecutePythonCodeWorkflow import (
-    ExecutePythonCodeWorkflow,
-    ExecutePythonCodeWorkflowConfiguration,
-)
-from pydantic import SecretStr
 
 NAME = "BodoAgent"
-MODEL = "gpt-4o"
-TEMPERATURE = 0
 DESCRIPTION = "An agent that can analyze large data with Bodo DataFrames"
 # TODO: Add avatar
 AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
@@ -44,22 +32,20 @@ When a user asks a question involving data (e.g., describing a dataset, computin
 
 Your responses should be short, factual, and focused on analytical insights rather than speculation.
 """
-SUGGESTIONS = ["Summarize this CSV file: /path/to/file.csv"]
+SUGGESTIONS = [
+    {
+        "label": "Summarize CSV",
+        "value": "Summarize this CSV file: /path/to/file.csv",
+    }
+]
 
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
-    # Init
-    tools: list[Tool | BaseTool | Agent] = []
-
     # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
-    )
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
     # Set configuration
     if agent_configuration is None:
@@ -68,6 +54,12 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id="0")
 
     # Add tools
+    tools: list = []
+    from naas_abi_marketplace.__demo__.workflows.ExecutePythonCodeWorkflow import (
+        ExecutePythonCodeWorkflow,
+        ExecutePythonCodeWorkflowConfiguration,
+    )
+
     config = ExecutePythonCodeWorkflowConfiguration(timeout=600, allow_imports=True)
     tools += ExecutePythonCodeWorkflow(config).as_tools()
 
@@ -79,20 +71,8 @@ def create_agent(
         agents=[],
         state=agent_shared_state,
         configuration=agent_configuration,
-        # memory is automatically configured based on POSTGRES_URL environment variable
     )
 
 
 class BodoAgent(Agent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME,
-        name: str = NAME,
-        description: str = "API endpoints to call the Bodo agent completion.",
-        description_stream: str = "API endpoints to call the Bodo agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ):
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass

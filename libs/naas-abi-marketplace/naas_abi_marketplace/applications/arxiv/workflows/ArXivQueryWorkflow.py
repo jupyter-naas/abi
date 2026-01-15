@@ -3,7 +3,6 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional
-
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.utils.Graph import ABIGraph

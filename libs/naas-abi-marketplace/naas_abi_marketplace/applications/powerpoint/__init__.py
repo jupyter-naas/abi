@@ -25,15 +25,9 @@ class ABIModule(BaseModule):
         module: naas_abi_marketplace.applications.powerpoint
         enabled: true
         config:
-            datastore_path: "datastore/powerpoint"
-            openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-            naas_api_key: "{{ secret.NAAS_API_KEY }}"
             workspace_id: "{{ config.workspace_id }}"
             storage_name: "{{ config.storage_name }}"
         """
-
-        datastore_path: str
-        openai_api_key: str
-        naas_api_key: str
         workspace_id: str
         storage_name: str
+        datastore_path: str = "powerpoint"

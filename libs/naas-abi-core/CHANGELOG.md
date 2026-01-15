@@ -2,6 +2,90 @@
 
 <!-- version list -->
 
+## v1.4.2 (2026-01-08)
+
+### Bug Fixes
+
+- Pandas-stubs lib version
+  ([`343d981`](https://github.com/jupyter-naas/abi/commit/343d981689c044c87c89ce2bf3fc1d5065acde55))
+
+- Tipo license
+  ([`f639213`](https://github.com/jupyter-naas/abi/commit/f639213b6c680d211c9618737842f01b51a65f8d))
+
+- Tipo license
+  ([`0269100`](https://github.com/jupyter-naas/abi/commit/0269100ca7d2d338d1f68be0717be6e981cc8eac))
+
+
+## v1.4.1 (2026-01-08)
+
+### Bug Fixes
+
+- Add project urls in pyproject.toml
+  ([`c155efa`](https://github.com/jupyter-naas/abi/commit/c155efa2a794b44312eb90ae19ab1c0da402d3ef))
+
+### Documentation
+
+- Add README.md to naas-abi-core
+  ([`dc42682`](https://github.com/jupyter-naas/abi/commit/dc4268204d14a396945b34ad5f3bac38fbf7a7cb))
+
+
+## v1.4.0 (2026-01-02)
+
+### Bug Fixes
+
+- Add default logo api
+  ([`0036796`](https://github.com/jupyter-naas/abi/commit/0036796586ac904879f4dd1fa4a40a400bd0e4ef))
+
+- Error aws neptune
+  ([`76ffc39`](https://github.com/jupyter-naas/abi/commit/76ffc39a0d9408a68d39bf704172c4ff5f5d98c3))
+
+- Remove connections from api doc
+  ([`4f629bf`](https://github.com/jupyter-naas/abi/commit/4f629bf0df5e3f3df30453f2531879301b05252d))
+
+### Features
+
+- Add boto3-stubs
+  ([`47dccd1`](https://github.com/jupyter-naas/abi/commit/47dccd144ab4811c1c4e481287b39026d07bb7ec))
+
+### Refactoring
+
+- Move workflows ontology yaml to naas module
+  ([`b4e8e9f`](https://github.com/jupyter-naas/abi/commit/b4e8e9fd738a338c462c9df2525e043cfdf5095d))
+
+
+## v1.3.0 (2026-01-02)
+
+### Bug Fixes
+
+- Get env value from .env if not in env
+  ([`b984252`](https://github.com/jupyter-naas/abi/commit/b98425297e596142ee39ece11f6542ed713e4d4e))
+
+- Improve config first pass loading for secret service
+  ([`f598e79`](https://github.com/jupyter-naas/abi/commit/f598e7995e7984a6bbe51e1a7e8a4a34de121968))
+
+- Missing f string + display config file name in debug
+  ([`17e4bac`](https://github.com/jupyter-naas/abi/commit/17e4bac2541642aa97fe5f59522c6cbc578c60fa))
+
+- Remove duplicated logger
+  ([`7e9ffb8`](https://github.com/jupyter-naas/abi/commit/7e9ffb81023126fe56c3150aba12e885260956a8))
+
+- Update package management & add types-pyyaml
+  ([`5a66600`](https://github.com/jupyter-naas/abi/commit/5a666002264744f571015ac45eef3e583b458f40))
+
+### Documentation
+
+- Add docstring
+  ([`76766b9`](https://github.com/jupyter-naas/abi/commit/76766b9acafee1d0dc5b2ee32057b0c3e5a0ba75))
+
+### Features
+
+- Test adaptors dotenv & naas
+  ([`d3b7204`](https://github.com/jupyter-naas/abi/commit/d3b7204f663f4ed969446db8475d97197227336b))
+
+
+## v1.2.1 (2025-12-30)
+
+
 ## v1.2.0 (2025-12-19)
 
 ### Bug Fixes

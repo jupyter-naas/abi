@@ -1,5 +1,4 @@
 import pytest
-from naas_abi import secret, services
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
@@ -12,12 +11,25 @@ from naas_abi_marketplace.applications.naas.pipelines.ImageURLtoAssetPipeline im
 
 @pytest.fixture
 def image_url_to_asset_pipeline() -> ImageURLtoAssetPipeline:
+    from naas_abi_marketplace.applications.naas import ABIModule
+
+    module = ABIModule.get_instance()
+    naas_api_key = module.configuration.naas_api_key
+    workspace_id = module.configuration.workspace_id
+    storage_name = module.configuration.storage_name
+    datastore_path = module.configuration.datastore_path
+    triple_store_service = module.engine.services.triple_store
+
     # Configuration
-    api_key = secret.get("NAAS_API_KEY")
-    naas_integration_config = NaasIntegrationConfiguration(api_key=api_key)
+    naas_integration_config = NaasIntegrationConfiguration(
+        api_key=naas_api_key, workspace_id=workspace_id, storage_name=storage_name
+    )
     pipeline_config = ImageURLtoAssetPipelineConfiguration(
         naas_integration_config=naas_integration_config,
-        triple_store=services.triple_store_service,
+        triple_store=triple_store_service,
+        workspace_id=workspace_id,
+        storage_name=storage_name,
+        data_store_path=datastore_path,
     )
     pipeline = ImageURLtoAssetPipeline(pipeline_config)
     return pipeline
@@ -26,6 +38,11 @@ def image_url_to_asset_pipeline() -> ImageURLtoAssetPipeline:
 def test_image_url_to_asset_pipeline(
     image_url_to_asset_pipeline: ImageURLtoAssetPipeline,
 ):
+    from naas_abi_marketplace.applications.naas import ABIModule
+
+    module = ABIModule.get_instance()
+    triple_store_service = module.engine.services.triple_store
+
     from uuid import uuid4
 
     from naas_abi_core.utils.Graph import ABI, TEST
@@ -56,7 +73,7 @@ def test_image_url_to_asset_pipeline(
         )
     )
     graph.add((subject_uri, RDFS.label, Literal(node_id)))
-    services.triple_store_service.insert(graph)
+    triple_store_service.insert(graph)
 
     predicate_uri = "http://ontology.naas.ai/abi/logo"
     parameters = ImageURLtoAssetPipelineParameters(
@@ -76,4 +93,4 @@ def test_image_url_to_asset_pipeline(
     )
 
     # Remove graph
-    services.triple_store_service.remove(result)
+    triple_store_service.remove(result)

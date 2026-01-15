@@ -1,6 +1,5 @@
 import pytest
-from naas_abi import secret
-from naas_abi.core.perplexity.integrations.PerplexityIntegration import (
+from naas_abi_marketplace.ai.perplexity.integrations.PerplexityIntegration import (
     PerplexityIntegration,
     PerplexityIntegrationConfiguration,
 )
@@ -8,8 +7,13 @@ from naas_abi.core.perplexity.integrations.PerplexityIntegration import (
 
 @pytest.fixture
 def perplexity_integration() -> PerplexityIntegration:
+    from naas_abi_marketplace.ai.perplexity import ABIModule
+
+    module = ABIModule.get_instance()
+    perplexity_api_key = module.configuration.perplexity_api_key
+
     configuration = PerplexityIntegrationConfiguration(
-        api_key=secret.get("PERPLEXITY_API_KEY"),
+        api_key=perplexity_api_key,
     )
     return PerplexityIntegration(configuration)
 

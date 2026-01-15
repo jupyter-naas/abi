@@ -1,11 +1,9 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List
-
 from algoliasearch.search.client import SearchClient
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
-
-LOGO_URL = "https://logo.clearbit.com/algolia.com"
+from naas_abi_marketplace.applications.algolia import ABIModule
 
 
 @dataclass
@@ -15,11 +13,12 @@ class AlgoliaIntegrationConfiguration(IntegrationConfiguration):
     Attributes:
         app_id (str): Algolia Application ID
         api_key (str): Algolia Admin API Key
+        datastore_path (str): Path to the datastore for the integration
     """
 
     app_id: str
     api_key: str
-
+    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
 
 class AlgoliaIntegration(Integration):
     """Algolia integration client.

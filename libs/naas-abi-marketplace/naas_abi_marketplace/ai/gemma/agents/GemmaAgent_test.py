@@ -1,5 +1,5 @@
 import pytest
-from naas_abi.core.gemma.agents.GemmaAgent import create_agent
+from naas_abi_marketplace.ai.gemma.agents.GemmaAgent import create_agent
 
 
 @pytest.fixture

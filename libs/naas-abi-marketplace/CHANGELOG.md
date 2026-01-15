@@ -2,6 +2,105 @@
 
 <!-- version list -->
 
+## v1.3.5 (2026-01-08)
+
+### Bug Fixes
+
+- Tipo license
+  ([`f639213`](https://github.com/jupyter-naas/abi/commit/f639213b6c680d211c9618737842f01b51a65f8d))
+
+- Tipo license
+  ([`0269100`](https://github.com/jupyter-naas/abi/commit/0269100ca7d2d338d1f68be0717be6e981cc8eac))
+
+
+## v1.3.4 (2026-01-08)
+
+### Bug Fixes
+
+- Add project urls in pyproject.toml
+  ([`c155efa`](https://github.com/jupyter-naas/abi/commit/c155efa2a794b44312eb90ae19ab1c0da402d3ef))
+
+- Warning errors field pydantic
+  ([`385e4a5`](https://github.com/jupyter-naas/abi/commit/385e4a55a5b8f3208e8eea55fad92c87672b4569))
+
+### Documentation
+
+- Add README.md to naas-abi-marketplace
+  ([`8556b8f`](https://github.com/jupyter-naas/abi/commit/8556b8f328f173ae854479311894047d12f91471))
+
+
+## v1.3.3 (2026-01-02)
+
+### Bug Fixes
+
+- Add dagster dep
+  ([`6d54b7c`](https://github.com/jupyter-naas/abi/commit/6d54b7ce3a3a593ea6141935ea03ecadb6dcda72))
+
+- Error import secret from naas_abi
+  ([`9d0dcd4`](https://github.com/jupyter-naas/abi/commit/9d0dcd4ea02baea3ad2a4d6a2c75c9d8c709d091))
+
+- Error mypy marketplace & ai modules
+  ([`890b76e`](https://github.com/jupyter-naas/abi/commit/890b76e1072b445b9af52c8e7504099b39386638))
+
+- Error mypy marketplace & ai modules
+  ([`710bb73`](https://github.com/jupyter-naas/abi/commit/710bb739a6affca3df764481b8521ce36a58e59b))
+
+- Github default model
+  ([`a97ebd1`](https://github.com/jupyter-naas/abi/commit/a97ebd19724754d0d023b3e77fa0c41877b65194))
+
+- Move export graph workflow to naas module
+  ([`8537e0b`](https://github.com/jupyter-naas/abi/commit/8537e0b75ed9a606c31f15473946e844f1c076e5))
+
+- Naas_api
+  ([`5e23740`](https://github.com/jupyter-naas/abi/commit/5e23740f2da6572a0a6e38ec8f5e21672315d0d6))
+
+- Pennylane agent
+  ([`973124a`](https://github.com/jupyter-naas/abi/commit/973124a077c0caacee16d150a9b40fb38c161ebc))
+
+- Templatable sparql query
+  ([`bc73926`](https://github.com/jupyter-naas/abi/commit/bc73926a2dca407da84ce674446d02e3e4285ba7))
+
+### Refactoring
+
+- Lint file
+  ([`ee26b8d`](https://github.com/jupyter-naas/abi/commit/ee26b8d6b2102ca66b52100ae5f2a7e34838dfcc))
+
+- Move workflows ontology yaml to naas module
+  ([`2ef60a6`](https://github.com/jupyter-naas/abi/commit/2ef60a6f8b4ac398d4b33bf8ee18c3904d26707e))
+
+
+## v1.3.2 (2026-01-02)
+
+### Bug Fixes
+
+- Make pr description git
+  ([`94490ae`](https://github.com/jupyter-naas/abi/commit/94490ae6095e30c12a8990c7a7893b34e30a3834))
+
+
+## v1.3.1 (2025-12-30)
+
+### Bug Fixes
+
+- Remove unused lib
+  ([`2915153`](https://github.com/jupyter-naas/abi/commit/29151531fe660c4f942cbf54047830995b75167c))
+
+
+## v1.3.0 (2025-12-30)
+
+### Bug Fixes
+
+- Error import pycogs2
+  ([`721d986`](https://github.com/jupyter-naas/abi/commit/721d986bd7ed93e98fc76711d0291c01d555cf05))
+
+- Missing object storage
+  ([`019eddc`](https://github.com/jupyter-naas/abi/commit/019eddcfdd68b5bdf80ecdcf662f8d58afd2a036))
+
+### Refactoring
+
+- Init file ai modules local
+  ([`c32d564`](https://github.com/jupyter-naas/abi/commit/c32d56405e8da57958926abe9860369cea948913))
+
+
 ## v1.2.0 (2025-12-19)
 
 ### Features

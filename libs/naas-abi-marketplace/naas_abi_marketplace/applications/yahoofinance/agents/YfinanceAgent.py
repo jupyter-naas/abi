@@ -1,7 +1,5 @@
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
-from naas_abi import secret
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -9,15 +7,12 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from pydantic import SecretStr
 
 NAME = "YahooFinance"
 DESCRIPTION = "Expert financial analyst agent specialized in stock market research, sector analysis, and financial data interpretation using Yahoo Finance."
 AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/yahoo_finance_logo.png"
 )
-MODEL = "gpt-4.1-mini"
-TEMPERATURE = 0
 SYSTEM_PROMPT = """# ROLE
 You are a Yahoo Finance data specialist focused on retrieving and analyzing financial data through the yfinance API tools.
 
@@ -65,11 +60,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Deine model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
-    )
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
     # Initialize Yahoo Finance integration tools
     from naas_abi_marketplace.applications.yahoofinance.integrations.YfinanceIntegration import (

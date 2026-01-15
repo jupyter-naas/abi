@@ -2,7 +2,6 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
-
 import jwt
 import pydash
 import requests
@@ -18,8 +17,6 @@ from naas_abi_core.services.object_storage.ObjectStorageFactory import (
 )
 from pydantic import BaseModel, Field
 
-REGEX = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-
 
 @dataclass
 class NaasIntegrationConfiguration(IntegrationConfiguration):
@@ -27,10 +24,14 @@ class NaasIntegrationConfiguration(IntegrationConfiguration):
 
     Attributes:
         api_key (str): Naas API key for authentication
-        base_url (str): Base URL for Naas API
+        workspace_id (str): Workspace ID for the integration
+        storage_name (str): Storage name for the integration
+        base_url (str): Base URL for the integration
     """
 
     api_key: str
+    workspace_id: str | None = None
+    storage_name: str | None = None
     base_url: str = "https://api.naas.ai"
 
 
@@ -712,10 +713,10 @@ class NaasIntegration(Integration):
     def upload_asset(
         self,
         data: bytes,
-        workspace_id: str,
-        storage_name: str,
         prefix: str,
         object_name: str,
+        workspace_id: Optional[str] = None,
+        storage_name: Optional[str] = None,
         visibility: str = "public",
         content_disposition: str = "inline",
         password: Optional[str | None] = None,
@@ -724,7 +725,16 @@ class NaasIntegration(Integration):
     ) -> Dict:
         # Init
         asset: dict = {}
+        if workspace_id is None and self.__configuration.workspace_id is not None:
+            workspace_id = self.__configuration.workspace_id
+        else:
+            return {"error": "workspace_id must be provided"}
+        if storage_name is None and self.__configuration.storage_name is not None:
+            storage_name = self.__configuration.storage_name
+        else:
+            return {"error": "storage_name must be provided"}
 
+        # Init storage service Naas
         naas_storage: ObjectStorageService = (
             ObjectStorageFactory.ObjectStorageServiceNaas(
                 self.__configuration.api_key,
@@ -732,9 +742,6 @@ class NaasIntegration(Integration):
                 storage_name=storage_name,
             )
         )
-
-        naas_storage.put_object(prefix=prefix, key=object_name, content=data)
-
         naas_storage.put_object(prefix=prefix, key=object_name, content=data)
 
         request_data = {
@@ -840,6 +847,8 @@ def as_tools(configuration: NaasIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
 
     integration = NaasIntegration(configuration)
+
+    REGEX = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 
     class CreateWorkspaceSchema(BaseModel):
         name: str = Field(..., description="Name of the workspace")

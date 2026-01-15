@@ -1,9 +1,21 @@
-from naas_abi import services
-from naas_abi_core.utils.Storage import save_triples
+from dotenv import load_dotenv
 from naas_abi_core import logger
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from rdflib import Graph, URIRef
+from rdflib.query import ResultRow
+
+load_dotenv()
+
 
 if __name__ == "__main__":
+    from naas_abi_core.engine.Engine import Engine
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi"])
+    triple_store_service = engine.services.triple_store
+
+    storage_utils = StorageUtils(storage_service=engine.services.object_storage)
+
     # Create new graph for export
     export_graph = Graph()
 
@@ -20,12 +32,13 @@ if __name__ == "__main__":
     """
 
     # Execute query and add results to export graph
-    results = services.triple_store_service.query(sparql_query)
+    results = triple_store_service.query(sparql_query)
     for row in results:
-        s, p, o = row
+        assert isinstance(row, ResultRow)
+        s, p, o = row["s"], row["p"], row["o"]
         export_graph.add((URIRef(s), URIRef(p), o))
 
     # Save exported graph
-    dir_path = "datastore/triplestore/export/turtle"
-    save_triples(export_graph, dir_path, "graph_instances_export.ttl")
+    dir_path = "triplestore/export/turtle"
+    storage_utils.save_triples(export_graph, dir_path, "graph_instances_export.ttl")
     logger.info(f"💾 Graph exported to {dir_path}/graph_instances_export.ttl")

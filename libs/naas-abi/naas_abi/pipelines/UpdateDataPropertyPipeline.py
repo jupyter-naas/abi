@@ -152,7 +152,11 @@ class UpdateDataPropertyPipeline(Pipeline):
 
 
 if __name__ == "__main__":
-    from naas_abi import services
+    from naas_abi_core.engine.Engine import Engine
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi"])
+    triple_store_service = engine.services.triple_store
 
     subject_uri = "http://ontology.naas.ai/abi/1b765700-9fa1-4e1d-9496-108445aafb34"
     predicate_uri = str(RDFS.label)
@@ -160,7 +164,7 @@ if __name__ == "__main__":
     language = "en"
 
     configuration = UpdateDataPropertyPipelineConfiguration(
-        triple_store=services.triple_store_service
+        triple_store=triple_store_service
     )
 
     pipeline = UpdateDataPropertyPipeline(configuration)

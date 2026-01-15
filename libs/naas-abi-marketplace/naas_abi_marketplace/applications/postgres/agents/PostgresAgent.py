@@ -1,9 +1,5 @@
-from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter
-from langchain_openai import ChatOpenAI
-from naas_abi import secret
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -11,7 +7,6 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from pydantic import SecretStr
 
 NAME = "PostgreSQL"
 DESCRIPTION = "A PostgreSQL Assistant for managing database operations."
@@ -57,11 +52,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
     # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
-    )
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
     # Set configuration
     if agent_configuration is None:
@@ -74,28 +65,20 @@ def create_agent(
     tools: list = []
 
     # Add integration based on available credentials
+    from naas_abi_marketplace.applications.postgres import ABIModule
     from naas_abi_marketplace.applications.postgres.integrations.PostgresIntegration import (
         PostgresIntegrationConfiguration,
         as_tools,
     )
 
-    if all(
-        secret.get(key)
-        for key in [
-            "POSTGRES_HOST",
-            "POSTGRES_DB",
-            "POSTGRES_USER",
-            "POSTGRES_PASSWORD",
-        ]
-    ):
-        integration_config = PostgresIntegrationConfiguration(
-            host=secret.get("POSTGRES_HOST"),
-            port=int(secret.get("POSTGRES_PORT", "5432")),
-            database=secret.get("POSTGRES_DB"),
-            user=secret.get("POSTGRES_USER"),
-            password=secret.get("POSTGRES_PASSWORD"),
-        )
-        tools += as_tools(integration_config)
+    integration_config = PostgresIntegrationConfiguration(
+        host=ABIModule.get_instance().configuration.postgres_host,
+        port=int(ABIModule.get_instance().configuration.postgres_port),
+        database=ABIModule.get_instance().configuration.postgres_dbname,
+        user=ABIModule.get_instance().configuration.postgres_user,
+        password=ABIModule.get_instance().configuration.postgres_password,
+    )
+    tools += as_tools(integration_config)
 
     intents: list = [
         Intent(
@@ -129,17 +112,4 @@ def create_agent(
 
 
 class PostgresAgent(IntentAgent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = "postgres",
-        name: str = NAME,
-        description: str = "API endpoints to call the PostgreSQL assistant completion.",
-        description_stream: str = "API endpoints to call the PostgreSQL assistant stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass

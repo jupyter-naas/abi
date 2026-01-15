@@ -5,15 +5,12 @@ from typing import Any, Callable, Optional, Union
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.tools import BaseTool, Tool
-from langchain_openai import ChatOpenAI  # noqa: F401
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from naas_abi import ABIModule
-
-# from naas_abi import secret
 from naas_abi_core.engine.EngineProxy import ServicesProxy
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import (
@@ -21,6 +18,7 @@ from naas_abi_core.services.agent.Agent import (
     AgentConfiguration,
     AgentSharedState,
 )
+from naas_abi_core.utils.StorageUtils import StorageUtils
 
 MODULE: ABIModule = ABIModule.get_instance()
 SERVICES: ServicesProxy = MODULE.engine.services
@@ -146,15 +144,10 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
-    # Set model based on AI_MODE
-    ai_mode = MODULE.configuration.global_config.ai_mode
+    # Set model
+    from naas_abi.models.default import get_model
 
-    if ai_mode == "airgap":
-        from naas_abi.models.default import get_model
-
-        model = get_model()
-    else:
-        from naas_abi_marketplace.ai.chatgpt.models.o3_mini import model
+    model = get_model()
 
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
@@ -191,6 +184,15 @@ class EntityExtractionState(MessagesState):
 
 
 class EntitytoSPARQLAgent(Agent):
+    """
+    Agent for entity to SPARQL conversion.
+
+    Attributes:
+        __storage_utils (StorageUtils): Storage utilities for saving data.
+    """
+
+    __storage_utils: StorageUtils
+
     def __init__(
         self,
         name: str,
@@ -216,6 +218,9 @@ class EntitytoSPARQLAgent(Agent):
         )
 
         self.datastore_path = f"datastore/ontology/entities_to_sparql/{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
 
     def entity_extract(self, state: EntityExtractionState) -> Command:
         """
@@ -756,7 +761,6 @@ If you find you missed entities, you can add it again in the message.
         """
         import uuid
 
-        from naas_abi_core.utils.Storage import save_json, save_text
         from naas_abi.workflows.GetObjectPropertiesFromClassWorkflow import (
             GetObjectPropertiesFromClassWorkflow,
             GetObjectPropertiesFromClassWorkflowConfiguration,
@@ -796,14 +800,16 @@ If you find you missed entities, you can add it again in the message.
 
         # Save data to storage
         last_last_message_content_str = str(state["messages"][-2].content)
-        save_text(
+        self.__storage_utils.save_text(
             last_last_message_content_str,
             self.datastore_path,
             "init_text.txt",
             copy=False,
         )
-        save_json(entities, self.datastore_path, "entities.json", copy=False)
-        save_json(
+        self.__storage_utils.save_json(
+            entities, self.datastore_path, "entities.json", copy=False
+        )
+        self.__storage_utils.save_json(
             object_properties, self.datastore_path, "object_properties.json", copy=False
         )
 
@@ -828,7 +834,6 @@ If you find you missed entities, you can add it again in the message.
         Returns:
             Command: Command to end the workflow with the generated SPARQL statement
         """
-        from naas_abi_core.utils.Storage import save_text
 
         # Create system message for SPARQL generation
         system_prompt = """# ROLE:
@@ -910,7 +915,7 @@ INSERT DATA {
 
         # Save SPARQL statement to storage
         response_content_str = str(response.content) if response.content else ""
-        save_text(
+        self.__storage_utils.save_text(
             response_content_str, self.datastore_path, "insert_data.sparql", copy=False
         )
 
