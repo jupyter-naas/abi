@@ -47,7 +47,7 @@
 
 ```bash
 # Install abi cli in your local
-pip install naas-abi-cli
+uv tool install naas-abi-cli --force --upgrade
 
 # Create new project
 abi new project your-project-name
