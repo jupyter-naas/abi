@@ -3,9 +3,8 @@ from naas_abi_core.models.Model import ChatModel
 from naas_abi_marketplace.ai.chatgpt import ABIModule
 from pydantic import SecretStr
 
-MODEL_ID = "gpt-4.1-mini"
+MODEL_ID = "gpt-5.1"
 PROVIDER = "openai"
-
 
 model: ChatModel = ChatModel(
     model_id=MODEL_ID,
@@ -13,10 +12,6 @@ model: ChatModel = ChatModel(
     model=ChatOpenAI(
         model=MODEL_ID,
         temperature=0,
-        # Network resilience: OpenAI/HTTP can transiently disconnect (esp. in long-lived agents).
-        # These settings reduce "Server disconnected without sending a response" crashes.
-        timeout=120,
-        max_retries=3,
         api_key=SecretStr(ABIModule.get_instance().configuration.openai_api_key),
     ),
 )
