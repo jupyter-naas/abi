@@ -38,7 +38,7 @@ bfo:BFO_0000015 a owl:Class ;
         ] ,
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000066 ; # occurs in
-          owl:allValuesFrom bfo:BFO_0000040  # material entity
+          owl:allValuesFrom bfo:BFO_0000029  # site
         ] ,
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000059 ; # concretizes
