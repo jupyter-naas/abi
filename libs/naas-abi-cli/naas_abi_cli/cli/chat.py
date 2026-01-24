@@ -3,14 +3,14 @@ from naas_abi_core import logger
 
 
 @click.command("chat")
-@click.argument("module-name", type=str, default=None)
-@click.argument("agent-name", type=str, default=None)
-def chat(module_name: str | None, agent_name: str | None):
+@click.argument("module-name", type=str, default="")
+@click.argument("agent-name", type=str, default="")
+def chat(module_name: str = "", agent_name: str = ""):
     from naas_abi_core.engine.Engine import Engine
 
     engine = Engine()
 
-    if module_name is None and agent_name is None:
+    if module_name == "" and agent_name == "":
         module_name, agent_name = engine.configuration.default_agent.split(" ")
 
     engine.load(module_names=[module_name])

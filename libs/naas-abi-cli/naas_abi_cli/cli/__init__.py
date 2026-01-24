@@ -48,12 +48,15 @@ def main():
                         "uv run --active python -m naas_abi_cli.cli".split(" ")
                         + sys.argv[1:]
                     )
-                    subprocess.run(
-                        arguments,
-                        cwd=os.getcwd(),
-                        env={**os.environ, "LOCAL_UV_RAN": "true"},
-                        check=True,
-                    )
+                    try:
+                        subprocess.run(
+                            arguments,
+                            cwd=os.getcwd(),
+                            env={**os.environ, "LOCAL_UV_RAN": "true"},
+                            check=True,
+                        )
+                    except Exception:
+                        pass
 
                     return
     _main()
