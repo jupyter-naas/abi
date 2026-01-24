@@ -6,3 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
 ]
+
+
+# [tool.uv.sources]
+# naas-abi = { path = ".abi/libs/naas-abi",  editable = true }
+# naas-abi-core = { path = ".abi/libs/naas-abi-core",  editable = true }
+# naas-abi-marketplace = { path = ".abi/libs/naas-abi-marketplace",  editable = true }
