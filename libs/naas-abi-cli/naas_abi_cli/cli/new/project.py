@@ -2,7 +2,6 @@ import os
 import subprocess
 
 import click
-
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -24,7 +23,6 @@ def new_project(project_name: str | None, project_path: str | None):
     # Ensure the last path component matches the project name, not just the suffix.
     if os.path.basename(os.path.normpath(project_path)) != project_name:
         project_path = os.path.join(project_path, project_name)
-    print(project_path)
 
     if not os.path.exists(project_path):
         os.makedirs(project_path, exist_ok=True)
@@ -42,6 +40,7 @@ def new_project(project_name: str | None, project_path: str | None):
         values={
             "project_name": project_name,
             "project_name_snake": project_name.replace("-", "_"),
+            "project_name_pascal": project_name.replace("-", "").capitalize(),
         }
     )
 
