@@ -38,6 +38,9 @@ modules:
   - module: {{ project_name_snake }}
     enabled: true
 
+# Comment default_agent to talk to naas_abi AbiAgent by default
+default_agent: "{{ project_name_snake }} {{project_name_pascal}}Agent"
+
 {% raw %}
 services:
   secret:

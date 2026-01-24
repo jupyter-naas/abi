@@ -94,6 +94,8 @@ class EngineConfiguration(BaseModel):
 
     modules: List[ModuleConfig]
 
+    default_agent: str = "naas_abi AbiAgent"
+
     def ensure_default_modules(self) -> None:
         if not any(
             m.path == "naas_abi_core.modules.templatablesparqlquery"
