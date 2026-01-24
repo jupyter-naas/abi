@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-01-24)
+
+### Bug Fixes
+
+- Naas-abi-cli release
+  ([`25e669f`](https://github.com/jupyter-naas/abi/commit/25e669f95dc64f689f1d134d89845bad055333b6))
+
+### Features
+
+- Working on improving project initialization
+  ([`e7063bb`](https://github.com/jupyter-naas/abi/commit/e7063bb63a7d3b553f159861fb3e1c545e7d8849))
+
+
 ## v1.4.4 (2026-01-15)
 
 

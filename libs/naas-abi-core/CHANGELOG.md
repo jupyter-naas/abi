@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-01-24)
+
+### Features
+
+- Working on improving project initialization
+  ([`e7063bb`](https://github.com/jupyter-naas/abi/commit/e7063bb63a7d3b553f159861fb3e1c545e7d8849))
+
+
 ## v1.5.1 (2026-01-16)
 
 
