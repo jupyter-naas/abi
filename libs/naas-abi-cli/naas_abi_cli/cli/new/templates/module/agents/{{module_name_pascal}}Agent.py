@@ -6,10 +6,10 @@ from naas_abi_core.services.agent.Agent import (
     AgentSharedState,
 )
 
-NAME = "{{module_name_snake}} Agent"
+NAME = "{{module_name_pascal}}Agent"
 DESCRIPTION = "An helpful agent that can help you with your tasks."
 SYSTEM_PROMPT = """
-You are {{module_name_snake}} Agent.
+You are {{module_name_pascal}}Agent.
 """
 
 
