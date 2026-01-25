@@ -6,10 +6,10 @@ from naas_abi_core.services.agent.Agent import (
     AgentSharedState,
 )
 
-NAME = "{{project_name_snake}} Agent"
+NAME = "{{module_name_snake}} Agent"
 DESCRIPTION = "An helpful agent that can help you with your tasks."
 SYSTEM_PROMPT = """
-You are {{project_name_snake}} Agent.
+You are {{module_name_snake}} Agent.
 """
 
 
@@ -17,7 +17,7 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
-    #from {{project_name_snake}} import ABIModule
+    #from {{module_name_snake}} import ABIModule
     
     # Set model
     from naas_abi_marketplace.ai.chatgpt.models.gpt_5 import model as chatgpt_model
@@ -36,7 +36,7 @@ def create_agent(
 
     agents: list = []
 
-    return {{project_name_pascal}}Agent(
+    return {{module_name_pascal}}Agent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
@@ -48,5 +48,5 @@ def create_agent(
     )
 
 
-class {{project_name_pascal}}Agent(Agent):
+class {{module_name_pascal}}Agent(Agent):
     pass
