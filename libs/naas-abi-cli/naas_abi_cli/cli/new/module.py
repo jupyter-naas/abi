@@ -18,7 +18,7 @@ def _new_module(module_name: str, module_path: str = "."):
     new_module(module_name, module_path)
 
 
-def new_module(module_name: str, module_path: str = "."):
+def new_module(module_name: str, module_path: str = ".", quiet: bool = False):
     module_name = sanitize_module_name(module_name)
 
     if module_path == ".":
@@ -46,3 +46,10 @@ def new_module(module_name: str, module_path: str = "."):
             "module_name_pascal": module_name.replace("-", "").capitalize(),
         }
     )
+
+    if not quiet:
+        print(f"\nModule '{module_name}' has been created at:\n  {module_path}\n")
+        print("To enable this module, add the following to your config.yaml:\n")
+        print("modules:")
+        print(f"  - path: {module_path}")
+        print("    enabled: true\n")

@@ -46,7 +46,7 @@ def new_project(project_name: str | None, project_path: str | None):
     )
 
     # Calling new_module to create the module in the src folder
-    new_module(project_name, os.path.join(project_path, "src"))
+    new_module(project_name, os.path.join(project_path, "src"), quiet=True)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     subprocess.run(
