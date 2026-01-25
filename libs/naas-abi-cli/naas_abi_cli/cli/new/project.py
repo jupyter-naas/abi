@@ -5,6 +5,7 @@ import click
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
+from .module import new_module
 from .new import new
 
 
@@ -43,6 +44,9 @@ def new_project(project_name: str | None, project_path: str | None):
             "project_name_pascal": project_name.replace("-", "").capitalize(),
         }
     )
+
+    # Calling new_module to create the module in the src folder
+    new_module(project_name, os.path.join(project_path, "src"))
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     subprocess.run(
