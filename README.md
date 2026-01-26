@@ -27,14 +27,20 @@
 **System:**
 - **Python 3.10+** - Core runtime (auto-installed via uv)
 - **uv package manager** - Fast Python installer ([auto-setup instructions](https://docs.astral.sh/uv/getting-started/installation/))
-- **Docker Desktop** - Auto-starts if not running (macOS/Linux)
 - **Git** - For cloning the repository
 
-**Hardware:**
-- **8GB+ RAM** - For local AI models and knowledge graph
-- **10GB+ disk space** - For Docker images and models
+**Hardware (Minimal - Cloud AI Mode):**
+- **2GB+ RAM** - For basic Python runtime and CLI operations
+- **500MB disk space** - For project files and Python dependencies
 
-**Optional (for cloud modes):**
+**Hardware (Full - Local/Docker Mode):**
+- **8GB+ RAM** - For local AI models and knowledge graph services
+- **10GB+ disk space** - For Docker images, containers, and local models
+- **Docker Desktop** - Required for local services (PostgreSQL, Oxigraph, Qdrant, etc.)
+
+> 💡 **Quick Start Tip**: You can get started immediately with just cloud AI providers (OpenAI, Anthropic, etc.) without Docker. Local services are only needed for advanced features like knowledge graphs and local AI models.
+
+**AI Provider API Keys (at least one):**
 - OpenRouter API key
 - OpenAI API key
 - Anthropic API key  
@@ -43,17 +49,27 @@
 
 ## Quick Start
 
-### Setup Project
+### Prerequisites
+
+Before you begin, make sure you have `uv` installed. Get it from [Astral](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
-# Install abi cli in your local
-pip install naas-abi-cli
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-# Create new project
-abi new project your-project-name
+### Install ABI CLI
 
-# Go to your project
-cd your-project-name
+```bash
+uv tool install naas-abi-cli --force
+```
+
+This installs the `abi` command-line tool globally on your system.
+
+### Create Your First Project
+
+```bash
+abi new project my-ai-project && cd my-ai-project && abi chat
 ```
 
 **What happens?**
@@ -61,23 +77,33 @@ cd your-project-name
 1. **Creates your project folder** - Sets up a new directory with your project name in the current location. The folder must be empty or not exist.
 2. **Generates project files** - Copies all necessary starter files including configuration, Docker setup, and Python package structure customized with your project name.
 3. **Installs dependencies** - Automatically installs all required packages (`naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, and `naas-abi-cli`) so your project is ready to use.
+4. **Starts interactive chat** - The `abi chat` command launches an interactive terminal where you can have natural conversations with the AI agent.
 
-### Start Chatting
+> 💡 For demo purposes, we use the OpenAI API key, so you don't need Docker Desktop running to start chatting. You can also use your OpenRouter API key.
+
+### Add New Modules to Your Project
+
+Once your project is created, you can add new modules to extend functionality:
 
 ```bash
-# Start chatting
-abi chat
+abi new module my-module-name
 ```
 
 **What happens?**
 
-1. **Loads your project module** - Initializes the ABI engine and loads your project's module (defaults to `naas_abi` module with `AbiAgent`)
-2. **Starts interactive terminal** - Launches a chat interface where you can have natural conversations with the AI agent
-3. **Saves conversations** - Automatically logs all conversations to `storage/datastore/interfaces/terminal_agent/` for later reference
+1. **Creates module structure** - Sets up a new module directory with all necessary files and boilerplate code.
+2. **Configures dependencies** - Automatically updates your project configuration to recognize the new module.
+3. **Ready for development** - Your module is immediately available for customization and integration with your agents.
 
+### Start Chatting (from existing project)
 
-> 💡 For demo purposes, we use the OpenAI API key, so you don’t need Docker Desktop running to start chatting. You can also use your OpenRouter API key.
+If you already have a project set up and want to chat:
 
+```bash
+abi chat
+```
+
+This command loads your project's module (defaults to `naas_abi` module with `AbiAgent`) and starts an interactive chat session. All conversations are automatically saved to `storage/datastore/interfaces/terminal_agent/` for later reference.
 
 ### Deploy API
 

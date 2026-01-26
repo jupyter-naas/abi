@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.14 (2026-01-26)
+
+### Bug Fixes
+
+- CICD checks
+  ([`1cc9a0d`](https://github.com/jupyter-naas/abi/commit/1cc9a0d8aa9e5b89c06269f11b8437d3a60d2c23))
+
+
 ## v1.0.13 (2026-01-08)
 
 ### Bug Fixes

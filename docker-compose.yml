@@ -162,7 +162,7 @@ services:
     ports:
       - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
     environment:
-      - DEFAULT_SPARQL_ENDPOINT=http://oxigraph:7879/query  # Points to Oxigraph via Docker network
+      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:7879/query  # Points to Oxigraph via Docker network
     depends_on:
       - oxigraph
     networks:

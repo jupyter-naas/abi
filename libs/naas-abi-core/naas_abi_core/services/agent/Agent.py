@@ -183,6 +183,10 @@ class AgentSharedState:
         self._requesting_help = requesting_help
 
 
+class ABIAgentState(MessagesState):
+    system_prompt: str
+
+
 @dataclass
 class Event:
     payload: Any = field()
@@ -219,9 +223,16 @@ class AgentConfiguration:
     on_ai_message: Callable[[AnyMessage, str], None] = field(
         default_factory=lambda: lambda _, __: None
     )
-    system_prompt: str = field(
+    system_prompt: str | Callable[[list[AnyMessage]], str] = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
     )
+
+    def get_system_prompt(self, messages: list[AnyMessage]) -> str:
+        return (
+            self.system_prompt(messages)
+            if callable(self.system_prompt)
+            else self.system_prompt
+        )
 
 
 class CompletionQuery(BaseModel):
@@ -244,7 +255,6 @@ class Agent(Expose):
     Attributes:
         _name (str): Unique identifier for the agent
         _description (str): Human-readable description of the agent's purpose
-        _system_prompt (str): System prompt that defines the agent's behavior
         _chat_model (BaseChatModel): The underlying language model with tool binding
         _chat_model_with_tools (Runnable): Language model configured with available tools
         _tools (list[Union[Tool, Agent]]): Original list of provided tools and agents
@@ -262,7 +272,6 @@ class Agent(Expose):
 
     _name: str
     _description: str
-    _system_prompt: str
 
     _chat_model: BaseChatModel
     _chat_model_with_tools: Runnable[
@@ -338,7 +347,6 @@ class Agent(Expose):
         logger.debug(f"Initializing agent: {name}")
         self._name = name
         self._description = description
-        self._system_prompt = configuration.system_prompt
         self._state = state
         self._original_tools = tools
         self._original_agents = agents
@@ -614,13 +622,6 @@ class Agent(Expose):
         return tools
 
     @property
-    def system_prompt(self) -> str:
-        return self._system_prompt
-
-    def set_system_prompt(self, system_prompt: str):
-        self._system_prompt = system_prompt
-
-    @property
     def structured_tools(self) -> list[Tool | BaseTool]:
         return self._structured_tools
 
@@ -688,11 +689,18 @@ class Agent(Expose):
     def as_tools(self, parent_graph: bool = False) -> list[BaseTool]:
         return [make_handoff_tool(agent=self, parent_graph=parent_graph)]
 
+    def render_system_prompt(self, state: ABIAgentState) -> Command:
+        system_prompt = self._configuration.get_system_prompt(state["messages"])
+        return Command(update={"system_prompt": system_prompt})
+
     def build_graph(self, patcher: Optional[Callable] = None):
-        graph = StateGraph(MessagesState)
+        graph = StateGraph(ABIAgentState)
+
+        graph.add_node(self.render_system_prompt)
+        graph.add_edge(START, "render_system_prompt")
 
         graph.add_node(self.current_active_agent)
-        graph.add_edge(START, "current_active_agent")
+        graph.add_edge("render_system_prompt", "current_active_agent")
 
         graph.add_node(self.continue_conversation)
 
@@ -710,11 +718,11 @@ class Agent(Expose):
 
         self.graph = graph.compile(checkpointer=self._checkpointer)
 
-    def get_last_human_message(self, state: MessagesState) -> Any | None:
+    def get_last_human_message(self, state: ABIAgentState) -> Any | None:
         """Get the appropriate human message based on AI message context.
 
         Args:
-            state (MessagesState): Current conversation state
+            state (ABIAgentState): Current conversation state
 
         Returns:
             Any | None: The relevant human message
@@ -743,11 +751,11 @@ class Agent(Expose):
                 state["messages"][::-1], lambda m: isinstance(m, HumanMessage)
             )
 
-    def current_active_agent(self, state: MessagesState) -> Command:
+    def current_active_agent(self, state: ABIAgentState) -> Command:
         """Goto the current active agent.
 
         Args:
-            state (MessagesState): Current conversation state
+            state (ABIAgentState): Current conversation state
 
         Returns:
             Command: Command to goto the current active agent
@@ -804,9 +812,10 @@ class Agent(Expose):
 
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with agent '{self.name}'")
+        updated_system_prompt = state["system_prompt"]
         if (
             self.state.supervisor_agent != self.name
-            and "SUPERVISOR SYSTEM PROMPT" not in self._system_prompt
+            and "SUPERVISOR SYSTEM PROMPT" not in state["system_prompt"]
         ):
             # This agent is a subagent with a supervisor
             subagent_prompt = f"""
@@ -836,14 +845,14 @@ Your supervisor will help ensure you operate effectively within your role while 
 
 SUBAGENT SYSTEM PROMPT:
 
-{self._system_prompt}
+{state["system_prompt"]}
 """
-            self.set_system_prompt(subagent_prompt)
+            updated_system_prompt = subagent_prompt
 
         if (
             self.state.supervisor_agent == self.name
             and os.getenv("ENV") == "dev"
-            and "DEVELOPPER SYSTEM PROMPT" not in self._system_prompt
+            and "DEVELOPPER SYSTEM PROMPT" not in state["system_prompt"]
         ):
             dev_prompt = f"""
 DEVELOPPER SYSTEM PROMPT:
@@ -854,23 +863,29 @@ For any questions/commands related to the project, use tool: `read_makefile` to 
 
 AGENT SYSTEM PROMPT:
 
-{self._system_prompt}
+{state["system_prompt"]}
 """
 
-            self.set_system_prompt(dev_prompt)
+            updated_system_prompt = dev_prompt
 
-        if "CURRENT_DATE" not in self._system_prompt:
+        if "CURRENT_DATE" not in state["system_prompt"]:
             from datetime import datetime
 
             current_date_str = f"CURRENT_DATE: The current date is {datetime.now().strftime('%Y-%m-%d')}\n"
-            self._system_prompt = self._system_prompt + "\n" + current_date_str
-            self.set_system_prompt(self._system_prompt)
-            return Command(goto="current_active_agent")
+            # self._system_prompt = self._system_prompt + "\n" + current_date_str
+            updated_system_prompt = updated_system_prompt + "\n" + current_date_str
+            return Command(
+                goto="current_active_agent",
+                update={"system_prompt": updated_system_prompt},
+            )
 
         # logger.debug(f"💬 System prompt: {self._system_prompt}")
-        return Command(goto="continue_conversation")
+        return Command(
+            goto="continue_conversation",
+            update={"system_prompt": updated_system_prompt},
+        )
 
-    def continue_conversation(self, state: MessagesState) -> Command:
+    def continue_conversation(self, state: ABIAgentState) -> Command:
         return Command(goto="call_model")
 
     def handle_openai_response_v1(self, response: BaseMessage) -> Command:
@@ -935,16 +950,16 @@ AGENT SYSTEM PROMPT:
 
     def call_model(
         self,
-        state: MessagesState,
+        state: ABIAgentState,
     ) -> Command[Literal["call_tools", "__end__"]]:
         self._state.set_current_active_agent(self.name)
         logger.debug(f"🧠 Calling model on current active agent: {self.name}")
 
         # Inserting system prompt before messages.
         messages = state["messages"]
-        if self._system_prompt:
+        if state["system_prompt"]:
             messages = [
-                SystemMessage(content=self._system_prompt),
+                SystemMessage(content=state["system_prompt"]),
             ] + messages
         logger.debug(f"Messages before calling model: {messages}")
 
@@ -975,7 +990,7 @@ AGENT SYSTEM PROMPT:
 
         return Command(goto="__end__", update={"messages": [response]})
 
-    def call_tools(self, state: MessagesState) -> list[Command]:
+    def call_tools(self, state: ABIAgentState) -> list[Command]:
         # Check if messages are present in the state.
         if (
             "messages" not in state

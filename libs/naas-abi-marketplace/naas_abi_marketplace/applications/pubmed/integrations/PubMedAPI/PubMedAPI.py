@@ -17,7 +17,7 @@ from naas_abi_marketplace.applications.pubmed.ontologies.PubMed import (
     PubMedPaperSummary,
 )
 from ratelimit import limits
-
+from .PubMedCentralDownloader import PubMedCentralDownloader
 cache: CacheService = CacheFactory.CacheFS_find_storage(subpath="pubmed")
 
 PUB_MED_RATE_LIMIT_NUMBER = 3
@@ -537,3 +537,9 @@ class PubMedIntegration(Integration):
         if max_results is not None:
             unique_ids = unique_ids[:max_results]
         return self._summaries(unique_ids)
+
+    def download_pubmed_central_pdf(self, pmcid: str) -> str:
+        """Download a PDF from PubMed Central using it's PMCID"""
+        pubmed_central_downloader = PubMedCentralDownloader()
+        return pubmed_central_downloader.open_pmc_pdf_stream(pmcid)
+

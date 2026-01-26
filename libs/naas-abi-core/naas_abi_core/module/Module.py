@@ -70,6 +70,7 @@ class BaseModule(Generic[TConfig]):
             "configuration must be an instance of ModuleConfiguration"
         )
         logger.debug(f"Initializing module {self.__module__.split('.')[0]}")
+        self.module_path = self.__module__.split(".")[0]
         self._engine = engine
         self._configuration = configuration
 
