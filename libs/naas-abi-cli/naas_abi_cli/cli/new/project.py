@@ -2,17 +2,19 @@ import os
 import subprocess
 
 import click
-
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
+from .module import new_module
 from .new import new
+from .utils import to_kebab_case, to_pascal_case, to_snake_case
 
 
 @new.command("project")
 @click.argument("project-name", required=False, default=None)
 @click.argument("project-path", required=False, default=None)
 def new_project(project_name: str | None, project_path: str | None):
+    project_name = to_kebab_case(project_name)
     # Defaults must be evaluated at runtime so they reflect the caller's CWD.
     if project_name is None:
         project_name = os.path.basename(os.getcwd())
@@ -24,7 +26,6 @@ def new_project(project_name: str | None, project_path: str | None):
     # Ensure the last path component matches the project name, not just the suffix.
     if os.path.basename(os.path.normpath(project_path)) != project_name:
         project_path = os.path.join(project_path, project_name)
-    print(project_path)
 
     if not os.path.exists(project_path):
         os.makedirs(project_path, exist_ok=True)
@@ -41,9 +42,13 @@ def new_project(project_name: str | None, project_path: str | None):
     copier.copy(
         values={
             "project_name": project_name,
-            "project_name_snake": project_name.replace("-", "_"),
+            "project_name_snake": to_snake_case(project_name),
+            "project_name_pascal": to_pascal_case(project_name),
         }
     )
+
+    # Calling new_module to create the module in the src folder
+    new_module(project_name, os.path.join(project_path, "src"), quiet=True)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     subprocess.run(

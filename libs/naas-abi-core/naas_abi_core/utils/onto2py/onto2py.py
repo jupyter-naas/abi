@@ -349,6 +349,7 @@ def generate_python_code(classes: Dict[str, ClassInfo],
         "    \"\"\"Base class for all RDF entities with URI and namespace management\"\"\"",
         "    _namespace: ClassVar[str] = \"http://example.org/instance/\"",
         "    _uri: str = \"\"",
+        "    _object_properties: ClassVar[set[str]] = set()",
         "    ",
         "    model_config = {",
         "        'arbitrary_types_allowed': True,",
@@ -381,9 +382,12 @@ def generate_python_code(classes: Dict[str, ClassInfo],
         "        if hasattr(self, '_class_uri'):",
         "            g.add((subject, RDF.type, URIRef(self._class_uri)))",
         "        ",
+        "        object_props = getattr(self, '_object_properties', set())",
+        "        ",
         "        # Add properties",
         "        if hasattr(self, '_property_uris'):",
         "            for prop_name, prop_uri in self._property_uris.items():",
+        "                is_object_prop = prop_name in object_props",
         "                prop_value = getattr(self, prop_name, None)",
         "                if prop_value is not None:",
         "                    if isinstance(prop_value, list):",
@@ -392,12 +396,16 @@ def generate_python_code(classes: Dict[str, ClassInfo],
         "                                # Add triples from related object",
         "                                g += item.rdf()",
         "                                g.add((subject, URIRef(prop_uri), URIRef(item._uri)))",
+        "                            elif is_object_prop and isinstance(item, (str, URIRef)):",
+        "                                g.add((subject, URIRef(prop_uri), URIRef(str(item))))",
         "                            else:",
         "                                g.add((subject, URIRef(prop_uri), Literal(item)))",
         "                    elif hasattr(prop_value, 'rdf'):",
         "                        # Add triples from related object",
         "                        g += prop_value.rdf()",
         "                        g.add((subject, URIRef(prop_uri), URIRef(prop_value._uri)))",
+        "                    elif is_object_prop and isinstance(prop_value, (str, URIRef)):",
+        "                        g.add((subject, URIRef(prop_uri), URIRef(str(prop_value))))",
         "                    else:",
         "                        g.add((subject, URIRef(prop_uri), Literal(prop_value)))",
         "        ",
@@ -541,8 +549,16 @@ def generate_class_code(class_info: ClassInfo) -> List[str]:
     else:
         lines.append("    _property_uris: ClassVar[dict] = {}")
 
-    if class_info.property_uris:
-        lines.append("")
+    object_prop_names = sorted(
+        {prop.name for prop in properties_list if prop.property_type == "object"}
+    )
+    if object_prop_names:
+        names = ", ".join(f"'{name}'" for name in object_prop_names)
+        lines.append(f"    _object_properties: ClassVar[set[str]] = {{{names}}}")
+    else:
+        lines.append("    _object_properties: ClassVar[set[str]] = set()")
+
+    lines.append("")
 
     # Add properties grouped by type for readability
     data_properties = sorted(
@@ -592,10 +608,11 @@ def generate_property_code(prop: PropertyInfo) -> str:
     # Determine type annotation and Pydantic Field
     if prop.property_type == 'object' and prop.range_class:
         if prop.cardinality == 'multiple':
-            type_annotation = f"List[{prop.range_class}]"
+            type_annotation = f"List[Union[str, {prop.range_class}]]"
             default_value = "Field(default_factory=list)"
         else:
-            type_annotation = f"Optional[{prop.range_class}]" if not prop.required else prop.range_class
+            inner = f"Union[str, {prop.range_class}]"
+            type_annotation = f"Optional[{inner}]" if not prop.required else inner
             default_value = "Field(default=None)" if not prop.required else "Field(...)"
     elif prop.property_type == 'data' and prop.datatype:
         if prop.cardinality == 'multiple':

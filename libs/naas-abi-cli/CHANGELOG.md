@@ -2,6 +2,56 @@
 
 <!-- version list -->
 
+## v1.9.1 (2026-01-26)
+
+### Bug Fixes
+
+- CICD checks
+  ([`1cc9a0d`](https://github.com/jupyter-naas/abi/commit/1cc9a0d8aa9e5b89c06269f11b8437d3a60d2c23))
+
+
+## v1.9.0 (2026-01-25)
+
+
+## v1.8.1 (2026-01-25)
+
+
+## v1.8.0 (2026-01-25)
+
+
+## v1.7.0 (2026-01-25)
+
+
+## v1.6.1 (2026-01-24)
+
+
+## v1.6.0 (2026-01-24)
+
+
+## v1.5.0 (2026-01-24)
+
+### Bug Fixes
+
+- Naas-abi-cli release
+  ([`25e669f`](https://github.com/jupyter-naas/abi/commit/25e669f95dc64f689f1d134d89845bad055333b6))
+
+### Features
+
+- Working on improving project initialization
+  ([`e7063bb`](https://github.com/jupyter-naas/abi/commit/e7063bb63a7d3b553f159861fb3e1c545e7d8849))
+
+
+## v1.4.4 (2026-01-15)
+
+
+## v1.4.3 (2026-01-15)
+
+### Bug Fixes
+
+- Handle payment required for space creation
+  ([`265fa48`](https://github.com/jupyter-naas/abi/commit/265fa48e71976465843f4a0676fe7571f06dab8f))
+
+
 ## v1.4.2 (2026-01-08)
 
 ### Bug Fixes

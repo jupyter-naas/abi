@@ -1,15 +1,18 @@
 import click
-
 from naas_abi_core import logger
 
 
 @click.command("chat")
-@click.argument("module-name", type=str, required=True, default="naas_abi")
-@click.argument("agent-name", type=str, required=True, default="AbiAgent")
-def chat(module_name: str, agent_name: str):
+@click.argument("module-name", type=str, default="")
+@click.argument("agent-name", type=str, default="")
+def chat(module_name: str = "", agent_name: str = ""):
     from naas_abi_core.engine.Engine import Engine
 
     engine = Engine()
+
+    if module_name == "" and agent_name == "":
+        module_name, agent_name = engine.configuration.default_agent.split(" ")
+
     engine.load(module_names=[module_name])
 
     from naas_abi_core.apps.terminal_agent.main import run_agent
