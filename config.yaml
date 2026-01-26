@@ -74,7 +74,10 @@ modules:
     config:
       naas_api_key: "{{ secret.NAAS_API_KEY }}"
       workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
-      storage_name: "abi"
+      storage_name: "abi
+  - module: naas_abi_marketplace.domains.ontology_engineer
+    enabled: true
+    config: {}
   - module: naas_abi_marketplace.domains.support
     enabled: true
     config:
