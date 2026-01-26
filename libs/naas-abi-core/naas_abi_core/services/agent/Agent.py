@@ -185,7 +185,7 @@ class AgentSharedState:
 
 @dataclass
 class Event:
-    payload: Any
+    payload: Any = field()
 
 
 @dataclass
