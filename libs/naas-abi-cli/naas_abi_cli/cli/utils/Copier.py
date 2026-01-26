@@ -2,12 +2,12 @@ import os
 import shutil
 
 import jinja2
-import rich
 from jinja2 import Environment, meta
+from rich.prompt import Prompt
 
 
 class ValueProvider(dict):
-    def collect_values(self, template_string: str) -> dict:
+    def collect_values(self, template_string: str) -> None:
         env = Environment()  # add your filters/tests if you use them
         ast = env.parse(template_string)
         needed = meta.find_undeclared_variables(ast)
@@ -15,7 +15,7 @@ class ValueProvider(dict):
         for name in sorted(needed):
             if name in self:
                 continue
-            self[name] = rich.prompt.Prompt.ask(f"Enter value for '{name}'")
+            self[name] = Prompt.ask(f"Enter value for '{name}'")
 
 
 class Copier:

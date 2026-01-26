@@ -182,8 +182,9 @@ class AgentSharedState:
     def set_requesting_help(self, requesting_help: bool):
         self._requesting_help = requesting_help
 
+
 class ABIAgentState(MessagesState):
-    system_prompt: str = Field(default="")
+    system_prompt: str
 
 
 @dataclass
@@ -227,7 +228,11 @@ class AgentConfiguration:
     )
 
     def get_system_prompt(self, messages: list[AnyMessage]) -> str:
-        return self.system_prompt(messages) if callable(self.system_prompt) else self.system_prompt
+        return (
+            self.system_prompt(messages)
+            if callable(self.system_prompt)
+            else self.system_prompt
+        )
 
 
 class CompletionQuery(BaseModel):
@@ -867,12 +872,18 @@ AGENT SYSTEM PROMPT:
             from datetime import datetime
 
             current_date_str = f"CURRENT_DATE: The current date is {datetime.now().strftime('%Y-%m-%d')}\n"
-            #self._system_prompt = self._system_prompt + "\n" + current_date_str
+            # self._system_prompt = self._system_prompt + "\n" + current_date_str
             updated_system_prompt = updated_system_prompt + "\n" + current_date_str
-            return Command(goto="current_active_agent", update={"system_prompt": updated_system_prompt})
+            return Command(
+                goto="current_active_agent",
+                update={"system_prompt": updated_system_prompt},
+            )
 
         # logger.debug(f"💬 System prompt: {self._system_prompt}")
-        return Command(goto="continue_conversation", update={"system_prompt": updated_system_prompt})
+        return Command(
+            goto="continue_conversation",
+            update={"system_prompt": updated_system_prompt},
+        )
 
     def continue_conversation(self, state: ABIAgentState) -> Command:
         return Command(goto="call_model")

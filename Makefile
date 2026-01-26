@@ -620,7 +620,7 @@ check-core: deps
 	@cd libs/naas-abi-core && uv sync --all-extras && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports
 
 	@echo "• Checking naas_abi_cli..."
-	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports
+	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports --exclude "naas_abi_cli/cli/new/templates"
 
 	@echo "• Checking naas_abi..."
 	@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
