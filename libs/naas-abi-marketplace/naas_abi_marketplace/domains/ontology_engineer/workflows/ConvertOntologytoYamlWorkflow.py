@@ -223,6 +223,9 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                 group = get_group_from_class_hierarchy(class_uri, full_graph)
                 if group is None:
                     group = "UNKNOWN"
+                    logger.warning(
+                        f"Could not determine group for class - URI: {class_uri}, Name: {name}"
+                    )
 
                 # Extract relationships from unique_relationships
                 relations = []
