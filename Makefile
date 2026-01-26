@@ -613,7 +613,7 @@ check-core: deps
 	@echo ""
 	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi
+	@uvx ruff check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi --exclude "libs/naas-abi-cli/naas_abi_cli/cli/new/templates"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
