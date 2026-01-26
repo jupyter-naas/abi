@@ -63,7 +63,7 @@ This installs the `abi` command-line tool globally on your system.
 ### Create Your First Project
 
 ```bash
-abi new project my-ai-project && cd my-ai-project && make chat
+abi new project my-ai-project && cd my-ai-project && abi chat
 ```
 
 **What happens?**
@@ -71,7 +71,7 @@ abi new project my-ai-project && cd my-ai-project && make chat
 1. **Creates your project folder** - Sets up a new directory with your project name in the current location. The folder must be empty or not exist.
 2. **Generates project files** - Copies all necessary starter files including configuration, Docker setup, and Python package structure customized with your project name.
 3. **Installs dependencies** - Automatically installs all required packages (`naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, and `naas-abi-cli`) so your project is ready to use.
-4. **Starts interactive chat** - The `make chat` command launches an interactive terminal where you can have natural conversations with the AI agent.
+4. **Starts interactive chat** - The `abi chat` command launches an interactive terminal where you can have natural conversations with the AI agent.
 
 > 💡 For demo purposes, we use the OpenAI API key, so you don't need Docker Desktop running to start chatting. You can also use your OpenRouter API key.
 
