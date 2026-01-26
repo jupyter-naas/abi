@@ -43,17 +43,27 @@
 
 ## Quick Start
 
-### Setup Project
+### Prerequisites
+
+Before you begin, make sure you have `uv` installed. Get it from [Astral](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
-# Install abi cli in your local
-uv tool install naas-abi-cli --force --upgrade
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-# Create new project
-abi new project your-project-name
+### Install ABI CLI
 
-# Go to your project
-cd your-project-name
+```bash
+uv tool install naas-abi-cli --force
+```
+
+This installs the `abi` command-line tool globally on your system.
+
+### Create Your First Project
+
+```bash
+abi new project my-ai-project && cd my-ai-project && make chat
 ```
 
 **What happens?**
@@ -61,23 +71,33 @@ cd your-project-name
 1. **Creates your project folder** - Sets up a new directory with your project name in the current location. The folder must be empty or not exist.
 2. **Generates project files** - Copies all necessary starter files including configuration, Docker setup, and Python package structure customized with your project name.
 3. **Installs dependencies** - Automatically installs all required packages (`naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, and `naas-abi-cli`) so your project is ready to use.
+4. **Starts interactive chat** - The `make chat` command launches an interactive terminal where you can have natural conversations with the AI agent.
 
-### Start Chatting
+> 💡 For demo purposes, we use the OpenAI API key, so you don't need Docker Desktop running to start chatting. You can also use your OpenRouter API key.
+
+### Add New Modules to Your Project
+
+Once your project is created, you can add new modules to extend functionality:
 
 ```bash
-# Start chatting
-abi chat
+abi new module my-module-name
 ```
 
 **What happens?**
 
-1. **Loads your project module** - Initializes the ABI engine and loads your project's module (defaults to `naas_abi` module with `AbiAgent`)
-2. **Starts interactive terminal** - Launches a chat interface where you can have natural conversations with the AI agent
-3. **Saves conversations** - Automatically logs all conversations to `storage/datastore/interfaces/terminal_agent/` for later reference
+1. **Creates module structure** - Sets up a new module directory with all necessary files and boilerplate code.
+2. **Configures dependencies** - Automatically updates your project configuration to recognize the new module.
+3. **Ready for development** - Your module is immediately available for customization and integration with your agents.
 
+### Start Chatting (from existing project)
 
-> 💡 For demo purposes, we use the OpenAI API key, so you don’t need Docker Desktop running to start chatting. You can also use your OpenRouter API key.
+If you already have a project set up and want to chat:
 
+```bash
+abi chat
+```
+
+This command loads your project's module (defaults to `naas_abi` module with `AbiAgent`) and starts an interactive chat session. All conversations are automatically saved to `storage/datastore/interfaces/terminal_agent/` for later reference.
 
 ### Deploy API
 
