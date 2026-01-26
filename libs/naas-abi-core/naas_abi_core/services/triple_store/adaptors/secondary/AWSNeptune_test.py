@@ -1,10 +1,12 @@
 from typing import Any
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from dotenv import load_dotenv
 from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
     AWSNeptune,
     AWSNeptuneSSHTunnel,
+    DEFAULT_CHUNK_SIZE,
 )
 
 load_dotenv()
@@ -282,3 +284,201 @@ def test_AWSNeptune(aws_neptune):
         assert str(s) == f"{prefix}s", subject_graph
         assert str(p) == f"{prefix}p", subject_graph
         assert str(o) == f"{prefix}o", subject_graph
+
+
+# Unit tests for chunking functionality
+
+
+def test_chunk_graph(aws_neptune: AWSNeptune):
+    """Test that _chunk_graph splits a graph into appropriately sized chunks."""
+    import rdflib
+    
+    # Create a graph with more triples than the chunk size
+    graph = rdflib.Graph()
+    num_triples = DEFAULT_CHUNK_SIZE * 2 + 100  # 2.5 chunks worth
+    
+    for i in range(num_triples):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    # Chunk the graph
+    chunks = aws_neptune._chunk_graph(graph, chunk_size=DEFAULT_CHUNK_SIZE)
+    
+    # Verify we get the expected number of chunks
+    assert len(chunks) == 3, f"Expected 3 chunks, got {len(chunks)}"
+    
+    # Verify chunk sizes
+    assert len(chunks[0]) == DEFAULT_CHUNK_SIZE
+    assert len(chunks[1]) == DEFAULT_CHUNK_SIZE
+    assert len(chunks[2]) == 100
+    
+    # Verify all triples are accounted for
+    total_triples = sum(len(chunk) for chunk in chunks)
+    assert total_triples == num_triples
+
+
+def test_should_use_chunking_small_graph(aws_neptune: AWSNeptune):
+    """Test that small graphs don't trigger chunking."""
+    import rdflib
+    
+    graph = rdflib.Graph()
+    # Add just a few triples
+    for i in range(10):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    should_chunk = aws_neptune._should_use_chunking(graph)
+    assert not should_chunk, "Small graph should not trigger chunking"
+
+
+def test_should_use_chunking_large_graph(aws_neptune: AWSNeptune):
+    """Test that large graphs trigger chunking."""
+    import rdflib
+    
+    graph = rdflib.Graph()
+    # Add more triples than the threshold
+    for i in range(DEFAULT_CHUNK_SIZE + 100):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    should_chunk = aws_neptune._should_use_chunking(graph)
+    assert should_chunk, "Large graph should trigger chunking"
+
+
+def test_generate_temp_graph_name(aws_neptune: AWSNeptune):
+    """Test that temporary graph names are unique."""
+    name1 = aws_neptune._generate_temp_graph_name()
+    name2 = aws_neptune._generate_temp_graph_name()
+    
+    assert name1 != name2, "Temporary graph names should be unique"
+    assert str(name1).startswith("http://aws.amazon.com/neptune/temp/graph/")
+    assert str(name2).startswith("http://aws.amazon.com/neptune/temp/graph/")
+
+
+@pytest.mark.skipif(
+    True,  # Skip by default as it requires Neptune instance
+    reason="Integration test - requires Neptune instance",
+)
+def test_insert_with_chunking_integration(aws_neptune: AWSNeptune):
+    """Integration test for chunked insert with real Neptune instance."""
+    import uuid
+    import rdflib
+    
+    # Create a large graph
+    graph = rdflib.Graph()
+    test_uuid = uuid.uuid4()
+    num_triples = DEFAULT_CHUNK_SIZE * 2 + 100
+    
+    for i in range(num_triples):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/chunking_test/{test_uuid}/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/chunking_test/{test_uuid}/predicate"),
+                rdflib.URIRef(f"https://test.com/chunking_test/{test_uuid}/object_{i}"),
+            )
+        )
+    
+    # Create a test graph
+    test_graph_name = rdflib.URIRef(f"https://test.com/chunking_test/{test_uuid}")
+    
+    try:
+        # Insert using chunking
+        aws_neptune._insert_with_chunking(graph, test_graph_name)
+        
+        # Verify all triples were inserted
+        result = aws_neptune.query(
+            f"SELECT (COUNT(*) as ?count) WHERE {{ GRAPH <{str(test_graph_name)}> {{ ?s ?p ?o }} }}"
+        )
+        count = list(result)[0][0]
+        assert int(count) == num_triples, f"Expected {num_triples} triples, found {count}"
+        
+    finally:
+        # Cleanup
+        try:
+            aws_neptune.drop_graph(test_graph_name)
+        except Exception as e:
+            print(f"Cleanup failed: {e}")
+
+
+def test_chunk_graph_preserves_namespaces(aws_neptune: AWSNeptune):
+    """Test that chunking preserves namespace bindings."""
+    import rdflib
+    
+    graph = rdflib.Graph()
+    graph.bind("test", "https://test.com/")
+    graph.bind("custom", "https://custom.org/")
+    
+    # Add triples spanning multiple chunks
+    for i in range(DEFAULT_CHUNK_SIZE + 100):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://custom.org/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    chunks = aws_neptune._chunk_graph(graph)
+    
+    # Verify each chunk has the namespace bindings
+    for chunk in chunks:
+        namespaces = dict(chunk.namespaces())
+        assert "test" in namespaces
+        assert "custom" in namespaces
+        assert str(namespaces["test"]) == "https://test.com/"
+        assert str(namespaces["custom"]) == "https://custom.org/"
+
+
+def test_chunk_graph_skips_blank_nodes(aws_neptune: AWSNeptune):
+    """Test that chunking properly skips blank nodes."""
+    import rdflib
+    
+    graph = rdflib.Graph()
+    
+    # Add regular triples
+    for i in range(10):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    # Add blank node triples (should be skipped)
+    bnode = rdflib.BNode()
+    graph.add(
+        (
+            bnode,
+            rdflib.URIRef("https://test.com/predicate"),
+            rdflib.URIRef("https://test.com/object"),
+        )
+    )
+    graph.add(
+        (
+            rdflib.URIRef("https://test.com/subject"),
+            rdflib.URIRef("https://test.com/predicate"),
+            bnode,
+        )
+    )
+    
+    chunks = aws_neptune._chunk_graph(graph)
+    
+    # Should only have the 10 regular triples, blank nodes skipped
+    total_triples = sum(len(chunk) for chunk in chunks)
+    assert total_triples == 10, f"Expected 10 triples (blank nodes skipped), got {total_triples}"
