@@ -27,14 +27,20 @@
 **System:**
 - **Python 3.10+** - Core runtime (auto-installed via uv)
 - **uv package manager** - Fast Python installer ([auto-setup instructions](https://docs.astral.sh/uv/getting-started/installation/))
-- **Docker Desktop** - Auto-starts if not running (macOS/Linux)
 - **Git** - For cloning the repository
 
-**Hardware:**
-- **8GB+ RAM** - For local AI models and knowledge graph
-- **10GB+ disk space** - For Docker images and models
+**Hardware (Minimal - Cloud AI Mode):**
+- **2GB+ RAM** - For basic Python runtime and CLI operations
+- **500MB disk space** - For project files and Python dependencies
 
-**Optional (for cloud modes):**
+**Hardware (Full - Local/Docker Mode):**
+- **8GB+ RAM** - For local AI models and knowledge graph services
+- **10GB+ disk space** - For Docker images, containers, and local models
+- **Docker Desktop** - Required for local services (PostgreSQL, Oxigraph, Qdrant, etc.)
+
+> 💡 **Quick Start Tip**: You can get started immediately with just cloud AI providers (OpenAI, Anthropic, etc.) without Docker. Local services are only needed for advanced features like knowledge graphs and local AI models.
+
+**AI Provider API Keys (at least one):**
 - OpenRouter API key
 - OpenAI API key
 - Anthropic API key  
