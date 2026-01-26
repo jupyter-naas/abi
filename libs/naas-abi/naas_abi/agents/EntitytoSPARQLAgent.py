@@ -8,12 +8,12 @@ from langchain_core.tools import BaseTool, Tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
-from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from naas_abi import ABIModule
 from naas_abi_core.engine.EngineProxy import ServicesProxy
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import (
+    ABIAgentState,
     Agent,
     AgentConfiguration,
     AgentSharedState,
@@ -168,7 +168,7 @@ def create_agent(
     )
 
 
-class EntityExtractionState(MessagesState):
+class EntityExtractionState(ABIAgentState):
     """State class for entity extraction conversations.
 
     Extends MessagesState to include entity extraction information that tracks
@@ -930,9 +930,9 @@ INSERT DATA {
         This node is used to call the model to extract the entities from the last message.
         """
         messages = state["messages"]
-        if self._system_prompt:
+        if state["system_prompt"]:
             messages = [
-                SystemMessage(content=self._system_prompt),
+                SystemMessage(content=state["system_prompt"]),
             ] + messages
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
