@@ -1,12 +1,15 @@
 from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch, call
 
 import pytest
+import requests
 from dotenv import load_dotenv
 from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
     AWSNeptune,
     AWSNeptuneSSHTunnel,
     DEFAULT_CHUNK_SIZE,
+    MAX_RETRY_ATTEMPTS,
+    QueryType,
 )
 
 load_dotenv()
@@ -482,3 +485,242 @@ def test_chunk_graph_skips_blank_nodes(aws_neptune: AWSNeptune):
     # Should only have the 10 regular triples, blank nodes skipped
     total_triples = sum(len(chunk) for chunk in chunks)
     assert total_triples == 10, f"Expected 10 triples (blank nodes skipped), got {total_triples}"
+
+
+# Tests for retry mechanism
+
+
+def test_retry_chunk_operation_success_first_try(aws_neptune: AWSNeptune):
+    """Test that retry mechanism succeeds on first attempt."""
+    import rdflib
+    
+    graph = rdflib.Graph()
+    graph.add(
+        (
+            rdflib.URIRef("https://test.com/subject"),
+            rdflib.URIRef("https://test.com/predicate"),
+            rdflib.URIRef("https://test.com/object"),
+        )
+    )
+    
+    graph_name = rdflib.URIRef("https://test.com/test_graph")
+    
+    with patch.object(aws_neptune, 'submit_query') as mock_submit:
+        mock_submit.return_value = Mock(status_code=200)
+        
+        result = aws_neptune._retry_chunk_operation(
+            chunk_index=1,
+            chunk=graph,
+            query_type=QueryType.INSERT_DATA,
+            graph_name=graph_name,
+            max_attempts=3
+        )
+        
+        assert result is True
+        assert mock_submit.call_count == 1
+
+
+def test_retry_chunk_operation_success_after_retries(aws_neptune: AWSNeptune):
+    """Test that retry mechanism succeeds after failures."""
+    import rdflib
+    
+    graph = rdflib.Graph()
+    graph.add(
+        (
+            rdflib.URIRef("https://test.com/subject"),
+            rdflib.URIRef("https://test.com/predicate"),
+            rdflib.URIRef("https://test.com/object"),
+        )
+    )
+    
+    graph_name = rdflib.URIRef("https://test.com/test_graph")
+    
+    with patch.object(aws_neptune, 'submit_query') as mock_submit:
+        # Fail twice, then succeed
+        mock_submit.side_effect = [
+            requests.exceptions.HTTPError("500 Server Error"),
+            requests.exceptions.HTTPError("500 Server Error"),
+            Mock(status_code=200)
+        ]
+        
+        with patch('time.sleep'):  # Skip actual sleep delays in tests
+            result = aws_neptune._retry_chunk_operation(
+                chunk_index=1,
+                chunk=graph,
+                query_type=QueryType.INSERT_DATA,
+                graph_name=graph_name,
+                max_attempts=3
+            )
+        
+        assert result is True
+        assert mock_submit.call_count == 3
+
+
+def test_retry_chunk_operation_all_retries_fail(aws_neptune: AWSNeptune):
+    """Test that retry mechanism fails after max attempts."""
+    import rdflib
+    
+    graph = rdflib.Graph()
+    graph.add(
+        (
+            rdflib.URIRef("https://test.com/subject"),
+            rdflib.URIRef("https://test.com/predicate"),
+            rdflib.URIRef("https://test.com/object"),
+        )
+    )
+    
+    graph_name = rdflib.URIRef("https://test.com/test_graph")
+    
+    with patch.object(aws_neptune, 'submit_query') as mock_submit:
+        # Fail all attempts
+        mock_submit.side_effect = requests.exceptions.HTTPError("500 Server Error")
+        
+        with patch('time.sleep'):  # Skip actual sleep delays in tests
+            result = aws_neptune._retry_chunk_operation(
+                chunk_index=1,
+                chunk=graph,
+                query_type=QueryType.DELETE_DATA,
+                graph_name=graph_name,
+                max_attempts=3
+            )
+        
+        assert result is False
+        assert mock_submit.call_count == 3
+
+
+def test_remove_with_chunking_retry_mechanism(aws_neptune: AWSNeptune):
+    """Test that chunked removal uses retry mechanism."""
+    import rdflib
+    
+    # Create a graph with multiple triples
+    graph = rdflib.Graph()
+    for i in range(10):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    graph_name = rdflib.URIRef("https://test.com/test_graph")
+    
+    with patch.object(aws_neptune, '_retry_chunk_operation') as mock_retry:
+        mock_retry.return_value = True  # All chunks succeed
+        
+        # Should not raise exception
+        aws_neptune._remove_with_chunking(
+            triples=graph,
+            graph_name=graph_name,
+            chunk_size=5
+        )
+        
+        # Should have called retry for each chunk (10 triples / 5 per chunk = 2 chunks)
+        assert mock_retry.call_count == 2
+
+
+def test_remove_with_chunking_handles_partial_failure(aws_neptune: AWSNeptune):
+    """Test that partial failures are detected and reported."""
+    import rdflib
+    
+    # Create a graph with multiple triples
+    graph = rdflib.Graph()
+    for i in range(10):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    graph_name = rdflib.URIRef("https://test.com/test_graph")
+    
+    with patch.object(aws_neptune, '_retry_chunk_operation') as mock_retry:
+        # First chunk succeeds, second fails
+        mock_retry.side_effect = [True, False]
+        
+        # Should raise RuntimeError for failed chunks
+        with pytest.raises(RuntimeError) as exc_info:
+            aws_neptune._remove_with_chunking(
+                triples=graph,
+                graph_name=graph_name,
+                chunk_size=5
+            )
+        
+        assert "Failed to remove 1 chunks" in str(exc_info.value)
+        assert "[2]" in str(exc_info.value)  # Chunk index 2 failed
+
+
+def test_insert_with_chunking_uses_retry(aws_neptune: AWSNeptune):
+    """Test that chunked insert uses retry mechanism."""
+    import rdflib
+    
+    # Create a large graph
+    graph = rdflib.Graph()
+    for i in range(10):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    graph_name = rdflib.URIRef("https://test.com/test_graph")
+    
+    with patch.object(aws_neptune, '_retry_chunk_operation') as mock_retry, \
+         patch.object(aws_neptune, 'add_graph_to_graph') as mock_add, \
+         patch.object(aws_neptune, 'drop_graph') as mock_drop:
+        
+        mock_retry.return_value = True  # All chunks succeed
+        
+        # Should not raise exception
+        aws_neptune._insert_with_chunking(
+            triples=graph,
+            graph_name=graph_name,
+            chunk_size=5
+        )
+        
+        # Should have called retry for each chunk
+        assert mock_retry.call_count == 2
+        # Should have merged temp graph
+        assert mock_add.call_count == 1
+        # Should have cleaned up temp graph
+        assert mock_drop.call_count == 1
+
+
+def test_insert_with_chunking_rollback_on_failure(aws_neptune: AWSNeptune):
+    """Test that failed inserts trigger rollback."""
+    import rdflib
+    
+    # Create a graph
+    graph = rdflib.Graph()
+    for i in range(10):
+        graph.add(
+            (
+                rdflib.URIRef(f"https://test.com/subject_{i}"),
+                rdflib.URIRef(f"https://test.com/predicate"),
+                rdflib.URIRef(f"https://test.com/object_{i}"),
+            )
+        )
+    
+    graph_name = rdflib.URIRef("https://test.com/test_graph")
+    
+    with patch.object(aws_neptune, '_retry_chunk_operation') as mock_retry, \
+         patch.object(aws_neptune, 'drop_graph') as mock_drop:
+        
+        # First chunk succeeds, second fails
+        mock_retry.side_effect = [True, False]
+        
+        # Should raise RuntimeError and trigger rollback
+        with pytest.raises(RuntimeError) as exc_info:
+            aws_neptune._insert_with_chunking(
+                triples=graph,
+                graph_name=graph_name,
+                chunk_size=5
+            )
+        
+        assert "Failed to insert 1" in str(exc_info.value)
+        # Should have attempted cleanup (twice: in except and finally blocks)
+        assert mock_drop.call_count >= 1

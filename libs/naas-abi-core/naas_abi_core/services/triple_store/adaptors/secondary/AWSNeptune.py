@@ -65,9 +65,10 @@ License: MIT
 import logging
 import socket
 import tempfile
+import time
 import uuid
 from io import StringIO
-from typing import TYPE_CHECKING, Any, List, Tuple, overload
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, overload
 
 import boto3
 import botocore
@@ -101,6 +102,11 @@ NEPTUNE_DEFAULT_GRAPH_NAME: URIRef = URIRef(
 # Chunking configuration
 DEFAULT_CHUNK_SIZE = 5000  # Number of triples per chunk
 DEFAULT_MAX_PAYLOAD_SIZE = 1_000_000  # 1MB payload size limit
+
+# Retry configuration
+MAX_RETRY_ATTEMPTS = 3  # Maximum number of retry attempts per chunk
+RETRY_BACKOFF_BASE = 2  # Base for exponential backoff (seconds)
+RETRY_BACKOFF_MAX = 30  # Maximum backoff time (seconds)
 
 logger = logging.getLogger(__name__)
 
@@ -848,25 +854,35 @@ class AWSNeptune(ITripleStorePort):
         return URIRef(f"http://aws.amazon.com/neptune/temp/graph/{temp_id}")
 
     def _insert_with_chunking(
-        self, triples: Graph, graph_name: URIRef, chunk_size: int = DEFAULT_CHUNK_SIZE
+        self, 
+        triples: Graph, 
+        graph_name: URIRef, 
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        max_retry_attempts: int = MAX_RETRY_ATTEMPTS
     ):
         """
         Insert a large graph using chunking with atomic commit via temporary graph.
 
-        This method implements transactional safety for large inserts:
+        This method implements transactional safety for large inserts with retry logic:
         1. Create a temporary named graph
-        2. Insert all chunks into the temporary graph
+        2. Insert all chunks into the temporary graph (with retry on failure)
         3. If all succeed, merge temp graph into target graph atomically
         4. Clean up temporary graph
-        5. If any chunk fails, rollback by dropping temp graph
+        5. If any chunk fails after retries, rollback by dropping temp graph
+
+        The retry mechanism includes:
+        - Exponential backoff between retries (2s, 4s, 8s, ...)
+        - Configurable maximum retry attempts per chunk
+        - Automatic rollback if any chunk fails permanently
 
         Args:
             triples (Graph): RDFLib Graph containing triples to insert
             graph_name (URIRef): Target named graph URI
             chunk_size (int): Number of triples per chunk
+            max_retry_attempts (int): Maximum retry attempts per chunk
 
         Raises:
-            requests.exceptions.HTTPError: If any chunk insert fails
+            requests.exceptions.HTTPError: If any chunk insert fails after all retries
         """
         temp_graph = self._generate_temp_graph_name()
         chunks = self._chunk_graph(triples, chunk_size)
@@ -877,11 +893,33 @@ class AWSNeptune(ITripleStorePort):
         )
         
         try:
-            # Insert all chunks into temporary graph
+            # Insert all chunks into temporary graph with retry
+            failed_chunks: Dict[int, Graph] = {}
+            
             for i, chunk in enumerate(chunks, 1):
                 logger.debug(f"Inserting chunk {i}/{len(chunks)} ({len(chunk)} triples)")
-                query = self.graph_to_query(chunk, QueryType.INSERT_DATA, temp_graph)
-                self.submit_query({QueryMode.UPDATE.value: query})
+                
+                success = self._retry_chunk_operation(
+                    chunk_index=i,
+                    chunk=chunk,
+                    query_type=QueryType.INSERT_DATA,
+                    graph_name=temp_graph,
+                    max_attempts=max_retry_attempts
+                )
+                
+                if not success:
+                    failed_chunks[i] = chunk
+            
+            # Check if all chunks succeeded
+            if failed_chunks:
+                failed_count = len(failed_chunks)
+                failed_triple_count = sum(len(chunk) for chunk in failed_chunks.values())
+                
+                raise RuntimeError(
+                    f"Failed to insert {failed_count}/{len(chunks)} chunks "
+                    f"({failed_triple_count} triples) into temp graph after {max_retry_attempts} attempts. "
+                    f"Failed chunk indices: {sorted(failed_chunks.keys())}"
+                )
             
             logger.info(f"All {len(chunks)} chunks inserted successfully into temp graph")
             
@@ -908,29 +946,90 @@ class AWSNeptune(ITripleStorePort):
             except Exception as cleanup_error:
                 logger.warning(f"Failed to clean up temp graph: {cleanup_error}")
 
+    def _retry_chunk_operation(
+        self,
+        chunk_index: int,
+        chunk: Graph,
+        query_type: QueryType,
+        graph_name: URIRef,
+        max_attempts: int = MAX_RETRY_ATTEMPTS,
+    ) -> bool:
+        """
+        Retry a chunk operation with exponential backoff.
+
+        Args:
+            chunk_index (int): Index of the chunk (for logging)
+            chunk (Graph): RDFLib Graph chunk to process
+            query_type (QueryType): Type of operation (INSERT_DATA or DELETE_DATA)
+            graph_name (URIRef): Target named graph URI
+            max_attempts (int): Maximum number of retry attempts
+
+        Returns:
+            bool: True if operation succeeded, False if all retries failed
+        """
+        for attempt in range(1, max_attempts + 1):
+            try:
+                query = self.graph_to_query(chunk, query_type, graph_name)
+                self.submit_query({QueryMode.UPDATE.value: query})
+                
+                if attempt > 1:
+                    logger.info(
+                        f"Chunk {chunk_index} succeeded on retry attempt {attempt}/{max_attempts}"
+                    )
+                return True
+                
+            except Exception as e:
+                if attempt < max_attempts:
+                    # Calculate exponential backoff with max cap
+                    backoff_time = min(
+                        RETRY_BACKOFF_BASE ** (attempt - 1),
+                        RETRY_BACKOFF_MAX
+                    )
+                    logger.warning(
+                        f"Chunk {chunk_index} failed (attempt {attempt}/{max_attempts}): {e}. "
+                        f"Retrying in {backoff_time}s..."
+                    )
+                    time.sleep(backoff_time)
+                else:
+                    logger.error(
+                        f"Chunk {chunk_index} failed after {max_attempts} attempts: {e}"
+                    )
+                    return False
+        
+        return False
+
     def _remove_with_chunking(
-        self, triples: Graph, graph_name: URIRef, chunk_size: int = DEFAULT_CHUNK_SIZE
+        self, 
+        triples: Graph, 
+        graph_name: URIRef, 
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        max_retry_attempts: int = MAX_RETRY_ATTEMPTS
     ):
         """
-        Remove a large graph using chunking with atomic commit via temporary graph.
+        Remove a large graph using chunking with retry mechanism.
 
-        This method implements transactional safety for large removes:
-        1. Create a temporary named graph with triples to keep
-        2. Clear the target graph
-        3. Add back the triples from temporary graph (target - removed)
-        4. If any step fails, attempt to restore from temp graph
+        This method implements chunked removal with automatic retry logic:
+        1. Split triples into manageable chunks
+        2. Attempt to delete each chunk
+        3. For failed chunks, retry with exponential backoff
+        4. Track and report any permanently failed chunks
 
-        Note: This approach reconstructs the graph, which may not be ideal for
-        very large graphs. For simple chunked removal without atomicity,
-        we chunk the DELETE operations directly.
+        The retry mechanism includes:
+        - Exponential backoff between retries (2s, 4s, 8s, ...)
+        - Configurable maximum retry attempts per chunk
+        - Detailed logging of retry attempts and failures
+
+        Note: This approach uses simple chunking without temp graph
+        (temp graph approach for removal would require fetching all data first).
 
         Args:
             triples (Graph): RDFLib Graph containing triples to remove
             graph_name (URIRef): Target named graph URI
             chunk_size (int): Number of triples per chunk
+            max_retry_attempts (int): Maximum retry attempts per chunk
 
         Raises:
-            requests.exceptions.HTTPError: If any chunk remove fails
+            RuntimeError: If any chunks fail after all retry attempts
         """
         chunks = self._chunk_graph(triples, chunk_size)
         
@@ -939,26 +1038,49 @@ class AWSNeptune(ITripleStorePort):
             f"(~{chunk_size} triples/chunk) from graph {graph_name}"
         )
         
-        # For removal, we use simple chunking without temp graph
-        # (temp graph approach for removal would require fetching all data first)
-        failed_chunks = []
+        # Track chunk operation results
+        failed_chunks: Dict[int, Graph] = {}
+        successful_chunks = 0
         
+        # First pass: attempt to remove all chunks
         for i, chunk in enumerate(chunks, 1):
-            try:
-                logger.debug(f"Removing chunk {i}/{len(chunks)} ({len(chunk)} triples)")
-                query = self.graph_to_query(chunk, QueryType.DELETE_DATA, graph_name)
-                self.submit_query({QueryMode.UPDATE.value: query})
-            except Exception as e:
-                logger.error(f"Failed to remove chunk {i}/{len(chunks)}: {e}")
-                failed_chunks.append(i)
+            logger.debug(f"Removing chunk {i}/{len(chunks)} ({len(chunk)} triples)")
+            
+            success = self._retry_chunk_operation(
+                chunk_index=i,
+                chunk=chunk,
+                query_type=QueryType.DELETE_DATA,
+                graph_name=graph_name,
+                max_attempts=max_retry_attempts
+            )
+            
+            if success:
+                successful_chunks += 1
+            else:
+                failed_chunks[i] = chunk
         
+        # Report results
         if failed_chunks:
+            failed_count = len(failed_chunks)
+            failed_triple_count = sum(len(chunk) for chunk in failed_chunks.values())
+            
+            logger.error(
+                f"Removal incomplete: {failed_count}/{len(chunks)} chunks failed "
+                f"({failed_triple_count} triples not removed) after {max_retry_attempts} attempts. "
+                f"Failed chunk indices: {sorted(failed_chunks.keys())}"
+            )
+            
             raise RuntimeError(
-                f"Failed to remove {len(failed_chunks)} chunks: {failed_chunks}. "
-                f"Some triples may have been removed."
+                f"Failed to remove {failed_count} chunks after {max_retry_attempts} retry attempts. "
+                f"Chunk indices: {sorted(failed_chunks.keys())}. "
+                f"{successful_chunks} chunks were successfully removed, "
+                f"but {failed_triple_count} triples remain in the graph."
             )
         
-        logger.info(f"Successfully removed {len(triples)} triples from {graph_name}")
+        logger.info(
+            f"Successfully removed all {len(triples)} triples from {graph_name} "
+            f"({len(chunks)} chunks, {successful_chunks} successful)"
+        )
 
     # Graph management
 
