@@ -138,6 +138,8 @@ abi deploy naas
 
 **ABI Application:**
 - **ABI REST API**: `http://localhost:9879` - REST API endpoint for ABI services
+  - Standard ABI endpoints: `/agents/{agent}/completion`, `/workflows/*`
+  - **OpenAI-compatible API**: `/v1/chat/completions`, `/v1/models` - [Learn more](docs/api/openai-compatibility.md)
 - **Streamlit UI**: `http://localhost:8501` - Web interface for ABI (when running in container mode)
 
 > ℹ️ All of these are set up automatically if Docker is running, but you can adjust their configuration and enabled modules in `config.yaml` to fit your needs.
@@ -355,15 +357,33 @@ Moreover, this project is built with international standards and regulatory fram
 
 ### 🌐 **Multiple Interfaces**
 - **Terminal**: Interactive chat with any agent
-- **REST API**: HTTP endpoints for all agents and workflows  
+- **REST API**: HTTP endpoints for all agents and workflows
+- **OpenAI-Compatible API**: Standard OpenAI endpoints (`/v1/chat/completions`, `/v1/models`) - works with OpenWebUI, LangChain, and any OpenAI client
 - **MCP Protocol**: Integration with Claude Desktop and VS Code
 - **Web UI**: Knowledge graph explorer and SPARQL editor
 
-**Other interfaces:**
+**Start interfaces:**
 ```bash
 make api                # REST API (http://localhost:9879)
+                        # Includes OpenAI-compatible endpoints at /v1/*
 make oxigraph-explorer  # Knowledge graph browser
 ```
+
+**Use with OpenWebUI:**
+```bash
+# Start ABI API
+make api
+
+# Run OpenWebUI (separate terminal)
+docker run -d -p 3000:8080 \
+  -e OPENAI_API_BASE_URLS="http://host.docker.internal:9879/v1" \
+  -e OPENAI_API_KEYS="$ABI_API_KEY" \
+  ghcr.io/open-webui/open-webui:main
+
+# Open http://localhost:3000 and select an ABI agent
+```
+
+📖 [OpenAI API Documentation](docs/api/openai-compatibility.md) | [OpenWebUI Setup Guide](docs/guides/openwebui-setup.md)
 
 ## Research & Development
 
