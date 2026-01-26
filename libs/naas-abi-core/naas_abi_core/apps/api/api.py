@@ -214,6 +214,12 @@ app.include_router(agents_router)
 app.include_router(pipelines_router)
 app.include_router(workflows_router)
 
+# Include OpenAI-compatible API router
+from naas_abi_core.apps.api.openai_api import create_openai_router
+
+openai_router = create_openai_router(engine, is_token_valid)
+app.include_router(openai_router)
+
 
 def api():
     import uvicorn
