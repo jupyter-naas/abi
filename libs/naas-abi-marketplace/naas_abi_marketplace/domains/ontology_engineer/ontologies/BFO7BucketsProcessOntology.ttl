@@ -59,7 +59,8 @@ bfo:BFO_0000199 a owl:ObjectProperty ;
     rdfs:label "occupies temporal region"@en ;
     skos:definition "p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"@en .
 
-bfo:BFO_0000056 a owl:ObjectProperty ;
+bfo:BFO_0000057 a owl:ObjectProperty ;
+    owl:inverseOf bfo:BFO_0000056 ;
     rdfs:label "has participant"@en ;
     skos:definition "p has participant c =Def c participates in p"@en .
 
