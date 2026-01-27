@@ -30,38 +30,38 @@ linkedin:ActOfConnection a owl:Class ;
     rdfs:subClassOf cco:ont00000433  , # act of association
         [ a owl:Restriction ;
           owl:onProperty linkedin:connectedAt ; # connected at
-          owl:allValuesFrom linkedin:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty linkedin:connectedAt ; # connected at
           owl:someValuesFrom linkedin:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000057 ; # has participant
+          owl:onProperty linkedin:connectedAt ; # connected at
+          owl:allValuesFrom linkedin:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty linkedin:involvesAgent ; # involves agent
           owl:allValuesFrom [ a owl:Class ;
             owl:intersectionOf (
               [ a owl:Restriction ;
-                owl:onProperty bfo:BFO_0000057 ;
+                owl:onProperty linkedin:involvesAgent ;
                 owl:cardinality "2"^^xsd:nonNegativeInteger ;
                 owl:onClass cco:ont00001262 # Person
               ]
               [ a owl:Restriction ;
-                owl:onProperty bfo:BFO_0000057 ;
+                owl:onProperty linkedin:hasAssociatedQuality ;
                 owl:allValuesFrom [ a owl:Class ;
                   owl:unionOf (
                     linkedin:CurrentJobPosition
                     linkedin:CurrentOrganization
                     linkedin:CurrentPublicUrl
-                    linkedin:CurrentEmailAddress
+                    linkedin:EmailAddress
                   )
                 ]
               ]
               [ a owl:Restriction ;
-                owl:onProperty bfo:BFO_0000057 ;
+                owl:onProperty linkedin:involvesAgent ;
                 owl:allValuesFrom cco:ont00001180 # Organization
               ]
               [ a owl:Restriction ;
-                owl:onProperty bfo:BFO_0000057 ;
+                owl:onProperty linkedin:involvesAgent ;
                 owl:someValuesFrom cco:ont00001180 # Organization
               ]
             )
@@ -69,7 +69,7 @@ linkedin:ActOfConnection a owl:Class ;
         ] ,
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000066 ; # occurs in
-          owl:allValuesFrom linkedin:UserSite # site
+          owl:allValuesFrom linkedin:Location # site
         ] ,
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000059 ; # concretizes
@@ -93,10 +93,17 @@ linkedin:connectedAt a owl:ObjectProperty ;
     skos:definition "Relates an act of connection to the specific temporal entity at which that act of connection occurs or is realized."@en ;
     skos:example "John and Jane were connected on LinkedIn at 2025-01-01T00:00:00.000Z."@en .
 
-bfo:BFO_0000057 a owl:ObjectProperty ;
-    rdfs:label "has participant"@en ;
-    skos:definition "p has participant c =Def c participates in p"@en .
-    
+linkedin:involvesAgent a owl:ObjectProperty ;
+    rdfs:label "involves agent"@en ;
+    owl:inverseOf linkedin:agentInvolvedIn ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    skos:definition "Relates an event (such as an act of connection) to an agent (person or organization) involved in it. If an event involves agent x, then x is actively participating or is otherwise involved in the event."@en .
+
+linkedin:hasAssociatedQuality a owl:ObjectProperty ;
+    rdfs:label "has associated LinkedIn quality"@en ;
+    skos:definition "Relates a process (such as an act of connection) to a LinkedIn quality (such as CurrentJobPosition, CurrentOrganization, CurrentPublicUrl, or EmailAddress) that inheres in a participant of the process. This property is used to associate any LinkedIn quality with a process, emphasizing that the quality is relevant to or contextualizes the process, even if it is not a direct participant but is borne by one."@en ;
+    skos:example "A LinkedIn connection event may have associated LinkedIn quality the current public URL of one of the persons involved, representing their profile at the time of the event."@en .
+
 bfo:BFO_0000066 a owl:ObjectProperty ;
   owl:inverseOf bfo:BFO_0000183 ;
   rdfs:label "occurs in"@en ;
@@ -123,12 +130,12 @@ cco:ont00001262 a owl:Class ;
     rdfs:subClassOf cco:ont00000562,  # independent continuant
     [
         a owl:Restriction ;
-        owl:onProperty bfo:BFO_0000056 ; # participates in
-        owl:allValuesFrom bfo:BFO_0000015 # process
-    ]
+        owl:onProperty linkedin:agentInvolvedIn ; # agent involved in
+        owl:allValuesFrom linkedin:ActOfConnection # process
+    ] ,
     [ a owl:Restriction ;
-        owl:onProperty bfo:BFO_0000171 ; # located in
-        owl:allValuesFrom bfo:BFO_0000029  # site
+        owl:onProperty linkedin:locatedIn ; # located in
+        owl:allValuesFrom linkedin:Location  # site
     ] ,
     [ a owl:Restriction ;
         owl:onProperty linkedin:isOwnerOf ;
@@ -159,12 +166,12 @@ cco:ont00001180 rdf:type owl:Class ;
     rdfs:label "Organization"@en ;
     rdfs:subClassOf cco:ont00000300 ,
     [ a owl:Restriction ;
-        owl:onProperty bfo:BFO_0000056 ; # participates in
-        owl:allValuesFrom bfo:BFO_0000015 # process
+        owl:onProperty linkedin:agentInvolvedIn ; # agent involved in
+        owl:allValuesFrom linkedin:ActOfConnection # process
     ] ,
     [ a owl:Restriction ;
-        owl:onProperty bfo:BFO_0000171 ; # located in
-        owl:allValuesFrom bfo:BFO_0000029  # site
+        owl:onProperty linkedin:locatedIn ; # located in
+        owl:allValuesFrom linkedin:Location  # site
     ] ,
     [ a owl:Restriction ;
         owl:onProperty linkedin:isOwnerOf ;
@@ -175,14 +182,20 @@ cco:ont00001180 rdf:type owl:Class ;
         owl:allValuesFrom linkedin:CurrentOrganization  # LinkedIn Current Organization
     ] .
 
-bfo:BFO_0000056 a owl:ObjectProperty ;
-    owl:inverseOf bfo:BFO_0000057 ;
-    rdfs:label "participates in"@en ;
-    skos:definition "(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"@en .
+linkedin:agentInvolvedIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    rdfs:label "agent involved in"@en ;
+    owl:inverseOf linkedin:involvesAgent ;
+    skos:definition "Relates an agent (person or organization) to an event in which the agent is involved or participates."@en ;
+    skos:example "John Doe (a person) is involved in the act of connection between him and Jane Smith (another person) on LinkedIn on 23 Oct 2025, meaning that John Doe is actively participating in the connection event."@en .
 
-bfo:BFO_0000171 a owl:ObjectProperty ;
-    rdfs:label "located in"@en ;
-    skos:definition "b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t"@en .
+linkedin:locatedIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000171 ; # located in
+    rdfs:label "is located in"@en ;
+    rdfs:domain cco:ont00001262 ; # Person
+    rdfs:range linkedin:Location ; # LinkedIn User Site
+    skos:definition "A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile."@en ;
+    skos:example "Olivia Alexander (a person) is located in 'Unknown User Site'."@en .
 
 linkedin:hasCurrentJobPosition a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
@@ -239,13 +252,12 @@ linkedin:isOwnerOf a owl:ObjectProperty ;
     skos:definition "b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information."@en ;
     skos:example "John Doe is the owner of his LinkedIn profile page, which contains his professional information and connections."@en .
 
-# Site (WHERE) : LinkedIn Platform Server Site by User IP
-linkedin:UserSite a owl:Class ;
-    rdfs:label "LinkedIn User Site"@en ;
-    skos:definition "The physical location of the LinkedIn platform servers serving the user, which may be region-specific and determined based on the user's IP address."@en ;
-    skos:example "For a user in Europe with IP address mapped to Frankfurt, the LinkedIn User Site is located in Germany; for a user in the US, the user site is in Virginia or California."@en ;
-    rdfs:subClassOf bfo:BFO_0000029 ; # site
-    rdfs:comment "The specific physical server location serving a user on LinkedIn can be inferred based on the geographical mapping of the user's IP address at the time of connection. Different users may be served by different physical sites based on system routing and network topology at LinkedIn."@en .
+# Site (WHERE) : LinkedIn Location
+linkedin:Location a owl:Class ;
+    rdfs:label "LinkedIn Location"@en ;
+    skos:definition "The physical location of a LinkedIn user."@en ;
+    skos:example "Germany, France, United States, etc."@en ;
+    rdfs:subClassOf bfo:BFO_0000029 . # Site
 
 # Generically dependent continuant (HOW WE KNOW): LinkedIn Profile Page
 linkedin:ProfilePage a owl:Class ;
@@ -259,12 +271,11 @@ linkedin:ProfilePage a owl:Class ;
         owl:onProperty bfo:BFO_0000058 ; # is concretized by
         owl:allValuesFrom [ a owl:Class ;
             owl:unionOf ( 
-                bfo:BFO_0000015  # process
                 linkedin:ActOfConnection  # Act of connection
                 linkedin:CurrentJobPosition  # Current position
                 linkedin:CurrentOrganization  # Current organization
                 linkedin:CurrentPublicUrl  # Current public URL
-                linkedin:CurrentEmailAddress  # Current email address
+                linkedin:EmailAddress  # Current email address
                 linkedin:ConnectionRole  # Connection Role
             )
         ]
@@ -390,14 +401,14 @@ linkedin:actOfConnection_jeremy_ravenel_olivia_alexander a owl:NamedIndividual ;
     rdf:type linkedin:ActOfConnection ;
     rdfs:label "Act of connection between Jeremy Ravenel and Olivia Alexander on LinkedIn"@en ;
     linkedin:connectedAt linkedin:dateTime_20251023 ;
-    bfo:BFO_0000057 linkedin:person_jeremy_ravenel , 
+    linkedin:involvesAgent linkedin:person_jeremy_ravenel , 
                      linkedin:person_olivia_alexander , 
-                     linkedin:commercialOrganization_linkedin ,
-                     linkedin:currentPosition_olivia_alexander ,
+                     linkedin:commercialOrganization_linkedin ; # involves agent (2 Persons + Organization)
+    linkedin:hasAssociatedQuality linkedin:currentPosition_olivia_alexander ,
                      linkedin:currentOrganization_olivia_alexander ,
                      linkedin:currentPublicUrl_olivia_alexander ,
-                     linkedin:currentEmailAddress_olivia_alexander ; # has participant (2 Persons + Organization + Qualities)
-    bfo:BFO_0000066 linkedin:userSite_default ; # occurs in
+                     linkedin:currentEmailAddress_olivia_alexander ; # has associated quality
+    bfo:BFO_0000066 linkedin:userSite_olivia_alexander ; # occurs in
     bfo:BFO_0000059 linkedin:connectionsExportFile_20251023 , linkedin:profilePage_olivia_alexander ; # concretizes
     bfo:BFO_0000055 linkedin:connectionRole_jeremy_ravenel , linkedin:connectionRole_olivia_alexander . # realizes
 
@@ -424,15 +435,15 @@ linkedin:commercialOrganization_linkedin a owl:NamedIndividual ;
 linkedin:person_jeremy_ravenel a owl:NamedIndividual ;
     rdf:type cco:ont00001262 ; # Person
     rdfs:label "Jeremy Ravenel"@en ;
-    bfo:BFO_0000171 linkedin:userSite_default ; # located in
+    bfo:BFO_0000171 linkedin:userSite_jeremy_ravenel ; # located in
     linkedin:hasConnectionRole linkedin:connectionRole_jeremy_ravenel .
 
 linkedin:userSite_jeremy_ravenel a owl:NamedIndividual ;
-    rdf:type linkedin:UserSite ;
+    rdf:type linkedin:Location ;
     rdfs:label "Unknown User Site"@en .
 
 linkedin:userSite_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:UserSite ;
+    rdf:type linkedin:Location ;
     rdfs:label "Unknown User Site"@en .
 
 linkedin:connectionsExportFile_20251023 a owl:NamedIndividual ;
