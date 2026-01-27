@@ -57,7 +57,7 @@ bfo:BFO_0000199 a owl:ObjectProperty ;
     rdfs:label "occupies temporal region"@en ;
     skos:definition "p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"@en .
 
-bfo:BFO_0000057 a owl:ObjectProperty ;
+bfo:BFO_0000056 a owl:ObjectProperty ;
     rdfs:label "has participant"@en ;
     skos:definition "p has participant c =Def c participates in p"@en .
 
@@ -87,6 +87,16 @@ bfo:BFO_0000040 a owl:Class ;
     skos:definition "(Elucidation) A material entity is an independent continuant has some portion of matter as continuant part"@en ;
     skos:example "A human being; the undetached arm of a human being; an aggregate of human beings"@en ;
     rdfs:subClassOf bfo:BFO_0000004 ,  # independent continuant
+        [
+          a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000115 ; # has member part
+          owl:allValuesFrom bfo:BFO_0000040  # material entity
+        ],
+        [
+          a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000056 ; # participates in
+          owl:allValuesFrom bfo:BFO_0000015  # process
+        ],
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000171 ; # located in
           owl:allValuesFrom bfo:BFO_0000029  # site
@@ -113,6 +123,15 @@ bfo:BFO_0000040 a owl:Class ;
           owl:allValuesFrom bfo:BFO_0000015  # process
         ] .
 
+bfo:BFO_0000115 a owl:ObjectProperty ;
+    rdfs:label "has member part"@en ;
+    skos:definition "b has member part c =Def c member part of b"@en .
+
+bfo:BFO_0000056 a owl:ObjectProperty ;
+    owl:inverseOf bfo:BFO_0000057 ;
+    rdfs:label "participates in"@en ;
+    skos:definition "(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"@en .
+
 bfo:BFO_0000171 a owl:ObjectProperty ;
     rdfs:label "located in"@en ;
     skos:definition "b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t"@en .
@@ -131,11 +150,6 @@ bfo:BFO_0000127 a owl:ObjectProperty ;
     owl:inverseOf bfo:BFO_0000218 ;
     rdfs:label "material basis of"@en ;
     skos:definition "b material basis of c =Def c has material basis b"@en .
-
-bfo:BFO_0000056 a owl:ObjectProperty ;
-    owl:inverseOf bfo:BFO_0000057 ;
-    rdfs:label "participates in"@en ;
-    skos:definition "(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"@en .
 
 # Site (WHERE)
 bfo:BFO_0000029 a owl:Class ;
@@ -183,12 +197,12 @@ bfo:BFO_0000019 a owl:Class ;
     skos:example "The colour of a tomato; the ambient temperature of this portion of air; the length of the circumference of your waist; the shape of your nose; the shape of your nostril; the mass of this piece of gold"@en ;
     rdfs:subClassOf bfo:BFO_0000020 ,  # specifically dependent continuant
         [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000059 ; # concretizes
-          owl:someValuesFrom bfo:BFO_0000031  # generically dependent continuant
-        ] ,
-        [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000056 ; # participates in
           owl:someValuesFrom bfo:BFO_0000015  # process
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ; # concretizes
+          owl:someValuesFrom bfo:BFO_0000031  # generically dependent continuant
         ] ,
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000197 ; # inheres in
