@@ -31,9 +31,10 @@ bfo:BFO_0000015 a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000057 ; # has participant
           owl:allValuesFrom [ a owl:Class ;
-              owl:unionOf ( bfo:BFO_0000040  # material entity
-                          bfo:BFO_0000019  # quality
-                          )
+              owl:unionOf ( 
+                bfo:BFO_0000040  # material entity
+                bfo:BFO_0000019  # quality
+              )
           ]
         ] ,
         [ a owl:Restriction ;
@@ -47,9 +48,10 @@ bfo:BFO_0000015 a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000055 ; # realizes
           owl:someValuesFrom [ a owl:Class ;
-              owl:unionOf ( bfo:BFO_0000023  # role
-                            bfo:BFO_0000016  # disposition
-                          )
+              owl:unionOf ( 
+                bfo:BFO_0000023  # role
+                bfo:BFO_0000016  # disposition
+              )
           ]
         ] .
   
@@ -108,10 +110,11 @@ bfo:BFO_0000040 a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000196 ; # bearer of
           owl:allValuesFrom [ a owl:Class ;
-              owl:unionOf ( bfo:BFO_0000019  # quality
-                          bfo:BFO_0000023    # role
-                          bfo:BFO_0000016    # disposition
-                          )
+              owl:unionOf ( 
+                bfo:BFO_0000019  # quality
+                bfo:BFO_0000023    # role
+                bfo:BFO_0000016    # disposition
+              )
           ]
         ] ,
         [ a owl:Restriction ;
