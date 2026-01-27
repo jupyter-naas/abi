@@ -1,6 +1,7 @@
-from typing import cast
 import concurrent.futures
 import os
+import tempfile
+from typing import List, cast
 
 from langchain_core.tools import BaseTool, Tool
 from naas_abi_core.models.Model import ChatModel
@@ -8,20 +9,19 @@ from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
-    tool
+    tool,
 )
 from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+from naas_abi_marketplace.applications.pubmed import ABIModule
+from naas_abi_marketplace.applications.pubmed.integrations.PubMedAPI.PubMedAPI import (
+    PubMedAPIConfiguration,
+    PubMedIntegration,
+)
 from naas_abi_marketplace.applications.pubmed.pipelines.PubMedPipeline import (
     PubMedPipeline,
     PubMedPipelineConfiguration,
 )
-from naas_abi_marketplace.applications.pubmed.integrations.PubMedAPI.PubMedAPI import (
-    PubMedIntegration,
-    PubMedAPIConfiguration,
-)
-from naas_abi_marketplace.applications.pubmed import ABIModule
-import tempfile
-from typing import List
+
 NAME = "PubMedAgent"
 DESCRIPTION = "PubMedAgent is an agent that can search for papers in PubMed."
 SYSTEM_PROMPT = """You are a PubMed Agent aimed to help users search for papers in PubMed.
@@ -32,6 +32,7 @@ You must always display the request results as a Markdown table.
 
 class PubMedAgent(Agent):
     pass
+
 
 @tool(description="Download a PDF from PubMed Central using it's PMCID")
 def download_pdf(pmcids: List[str]) -> str:
@@ -56,6 +57,7 @@ def download_pdf(pmcids: List[str]) -> str:
 
     return "PDFs downloaded and saved."
 
+
 def create_agent() -> PubMedAgent:
     pipeline = PubMedPipeline(PubMedPipelineConfiguration())
     tools = pipeline.as_tools()
@@ -64,7 +66,8 @@ def create_agent() -> PubMedAgent:
         name=NAME,
         description=DESCRIPTION,
         chat_model=cast(ChatModel, model).model,
-        tools=cast(list[Tool | BaseTool | Agent], [cast(BaseTool, t) for t in tools]) + [download_pdf],
+        tools=cast(list[Tool | BaseTool | Agent], [cast(BaseTool, t) for t in tools])
+        + [download_pdf],
         agents=[],
         state=AgentSharedState(thread_id=str(__import__("uuid").uuid4().hex)),
         configuration=AgentConfiguration(system_prompt=SYSTEM_PROMPT),
