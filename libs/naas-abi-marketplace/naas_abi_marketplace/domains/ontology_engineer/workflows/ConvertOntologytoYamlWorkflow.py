@@ -20,6 +20,11 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
+from naas_abi_marketplace.applications.naas.workflows.CreateWorkspaceOntologyWorkflow import (
+    CreateWorkspaceOntologyWorkflow,
+    CreateWorkspaceOntologyWorkflowConfiguration,
+    CreateWorkspaceOntologyWorkflowParameters,
+)
 from naas_abi_marketplace.domains.ontology_engineer.utils.graph import (
     get_class_id_prefix,
     get_group_from_class_hierarchy,
@@ -35,7 +40,7 @@ GROUP_TO_STYLE: dict = {
     "WHAT": {
         "shape": "diamond",
         "color": "purple",
-        "image": "https://api.naas.ai/workspace/96ce7ee7-e5f5-4bca-acf9-9d5d41317f81/asset/88fb7cc7-091b-4f9f-93f0-33d1f7cafaa9/object",
+        # "image": "https://api.naas.ai/workspace/96ce7ee7-e5f5-4bca-acf9-9d5d41317f81/asset/88fb7cc7-091b-4f9f-93f0-33d1f7cafaa9/object",
     },
     "WHEN": {"shape": "diamond", "color": "#d63384"},
     "WHO": {"shape": "diamond", "color": "#0d6efd"},
@@ -55,6 +60,7 @@ class ConvertOntologytoYamlWorkflowConfiguration(WorkflowConfiguration):
         default_output_dir (Optional[str]): Default output directory for YAML files
     """
 
+    create_workspace_ontology_config: CreateWorkspaceOntologyWorkflowConfiguration
     default_output_dir: Optional[str] = None
 
 
@@ -85,6 +91,20 @@ class ConvertOntologytoYamlWorkflowParameters(WorkflowParameters):
             description="Optional list of additional ontology paths/URLs to import",
         ),
     ] = None
+    publish_to_workspace: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Whether to publish the ontology to a workspace. If True, the ontology will be published to a workspace using the CreateWorkspaceOntologyWorkflow.",
+        ),
+    ] = False
+    ontology_name: Annotated[
+        str,
+        Field(
+            default="New Ontology",
+            description="The name of the ontology to publish to the workspace.",
+        ),
+    ] = "New Ontology"
 
 
 class ConvertOntologytoYamlWorkflow(Workflow):
@@ -98,6 +118,9 @@ class ConvertOntologytoYamlWorkflow(Workflow):
     ):
         super().__init__(configuration)
         self.__configuration = configuration
+        self.__create_workspace_ontology_workflow = CreateWorkspaceOntologyWorkflow(
+            self.__configuration.create_workspace_ontology_config
+        )
 
     def convert_ontology_to_yaml(
         self, parameters: ConvertOntologytoYamlWorkflowParameters
@@ -295,7 +318,7 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                 # Use existing NamedIndividuals if available, otherwise generate one as fallback
                 individuals_for_class = named_individuals.get(class_uri, [])
 
-                if individuals_for_class:
+                if total_individuals > 0:
                     # Use existing NamedIndividuals
                     for individual_uri in individuals_for_class:
                         # Get individual label
@@ -475,6 +498,16 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                 )
 
             logger.info("YAML saved successfully!")
+
+            if parameters.publish_to_workspace:
+                self.__create_workspace_ontology_workflow.create_or_update_workspace_ontology(
+                    CreateWorkspaceOntologyWorkflowParameters(
+                        yaml_data=yaml_data,
+                        label=parameters.ontology_name,
+                        level="USE_CASE",
+                        description=f"Ontology generated from: {turtle_path}",
+                    )
+                )
             return str(yaml_path)
         except Exception as e:
             error_msg = f"Error converting ontology to YAML: {str(e)}"
@@ -490,7 +523,7 @@ class ConvertOntologytoYamlWorkflow(Workflow):
         """
         return [
             StructuredTool(
-                name="convert_ontology_to_yaml",
+                name="convert_ontology_to_yaml_and_publish_to_workspace",
                 description="Convert a Turtle ontology file to YAML format.",
                 func=lambda **kwargs: self.convert_ontology_to_yaml(
                     ConvertOntologytoYamlWorkflowParameters(**kwargs)
@@ -520,23 +553,46 @@ if __name__ == "__main__":
     Convert Turtle ontology files to Pyvis network visualization and/or YAML format.
 
     Examples:
-        # Convert to YAML only
+        # Convert to YAML only and publish to workspace
         uv run python libs/naas-abi-marketplace/naas_abi_marketplace/domains/ontology-engineer/workflows/ConvertOntologytoYamlWorkflow.py
     """
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
+    from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
+        NaasIntegrationConfiguration,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.naas"])
+    module = NaasABIModule.get_instance()
+    workspace_id = module.configuration.workspace_id
+    storage_name = module.configuration.storage_name
+    create_workspace_ontology_config = CreateWorkspaceOntologyWorkflowConfiguration(
+        naas_integration_config=NaasIntegrationConfiguration(
+            api_key=engine.services.secret.get("NAAS_API_KEY"),
+            workspace_id=workspace_id,
+            storage_name=storage_name,
+        )
+    )
     turtle_path = "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl"
     imported_ontologies = [
         "libs/naas-abi-marketplace/naas_abi_marketplace/domains/ontology_engineer/ontologies/BFO7BucketsProcessOntology.ttl",
         "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/imports/LinkedInOntology.ttl",
     ]
+    ontology_name = "Act of Connections on LinkedIn"
 
     # Create workflow configuration and instance
-    configuration = ConvertOntologytoYamlWorkflowConfiguration()
+    configuration = ConvertOntologytoYamlWorkflowConfiguration(
+        create_workspace_ontology_config=create_workspace_ontology_config
+    )
     workflow = ConvertOntologytoYamlWorkflow(configuration)
 
     # Create parameters
     parameters = ConvertOntologytoYamlWorkflowParameters(
         turtle_path=turtle_path,
         imported_ontologies=imported_ontologies,
+        publish_to_workspace=True,
+        ontology_name=ontology_name,
     )
 
     # Execute workflow
