@@ -30,11 +30,11 @@ linkedin:ActOfConnection a owl:Class ;
     rdfs:subClassOf cco:ont00000433  , # act of association
         [ a owl:Restriction ;
           owl:onProperty linkedin:connectedAt ; # connected at
-          owl:someValuesFrom linkedin:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
+          owl:someValuesFrom abi:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
         ] ,
         [ a owl:Restriction ;
           owl:onProperty linkedin:connectedAt ; # connected at
-          owl:allValuesFrom linkedin:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
+          owl:allValuesFrom abi:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
         ] ,
         [ a owl:Restriction ;
           owl:onProperty linkedin:involvesAgent ; # involves agent
@@ -44,17 +44,6 @@ linkedin:ActOfConnection a owl:Class ;
                 owl:onProperty linkedin:involvesAgent ;
                 owl:cardinality "2"^^xsd:nonNegativeInteger ;
                 owl:onClass cco:ont00001262 # Person
-              ]
-              [ a owl:Restriction ;
-                owl:onProperty linkedin:hasAssociatedQuality ;
-                owl:allValuesFrom [ a owl:Class ;
-                  owl:unionOf (
-                    linkedin:CurrentJobPosition
-                    linkedin:CurrentOrganization
-                    linkedin:CurrentPublicUrl
-                    linkedin:EmailAddress
-                  )
-                ]
               ]
               [ a owl:Restriction ;
                 owl:onProperty linkedin:involvesAgent ;
@@ -81,6 +70,17 @@ linkedin:ActOfConnection a owl:Class ;
           ]
         ] ,
         [ a owl:Restriction ;
+            owl:onProperty linkedin:hasAssociatedQuality ;
+            owl:allValuesFrom [ a owl:Class ;
+                owl:unionOf (
+                    linkedin:CurrentJobPosition
+                    linkedin:CurrentOrganization
+                    linkedin:CurrentPublicUrl
+                    linkedin:EmailAddress
+                )
+            ] # LinkedIn quality
+        ] ,
+        [ a owl:Restriction ;
           owl:onProperty bfo:BFO_0000055 ; # realizes
           owl:allValuesFrom linkedin:ConnectionRole  # Connections Role
         ] .
@@ -89,7 +89,7 @@ linkedin:connectedAt a owl:ObjectProperty ;
     rdfs:label "connected at"@en ;
     rdfs:subPropertyOf bfo:BFO_0000199 ; # occupies temporal region
     rdfs:domain cco:ont00000434 ; # Act of association
-    rdfs:range linkedin:ISO8601UTCDateTime ; # ISO 8601 UTC DateTime
+    rdfs:range abi:ISO8601UTCDateTime ; # ISO 8601 UTC DateTime
     skos:definition "Relates an act of connection to the specific temporal entity at which that act of connection occurs or is realized."@en ;
     skos:example "John and Jane were connected on LinkedIn at 2025-01-01T00:00:00.000Z."@en .
 
@@ -118,7 +118,7 @@ bfo:BFO_0000055 a owl:ObjectProperty ;
     skos:definition "(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"@en .
 
 # Temporal region (WHEN): ISO 8601 UTC DateTime
-linkedin:ISO8601UTCDateTime a owl:Class ;
+abi:ISO8601UTCDateTime a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000203 ; # Temporal instant
     rdfs:label "ISO 8601 UTC DateTime" ;
     skos:definition "A Temporal Instant specified according to the ISO 8601 standard format with UTC timezone, representing a specific point in time." ;
@@ -295,6 +295,11 @@ linkedin:ConnectionsExportFile a owl:Class ;
         owl:allValuesFrom cco:ont00001180  # Commercial Organization
     ] .
 
+bfo:BFO_0000058 a owl:ObjectProperty ;
+    owl:inverseOf bfo:BFO_0000059 ;
+    rdfs:label "is concretized by"@en ;
+    skos:definition "c is concretized by b =Def b concretizes c"@en .
+
 linkedin:isOwnedBy a owl:ObjectProperty ;
     rdfs:label "is owned by"@en ;
     rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on (or choose another relevant superproperty if needed)
@@ -413,7 +418,7 @@ linkedin:actOfConnection_jeremy_ravenel_olivia_alexander a owl:NamedIndividual ;
     bfo:BFO_0000055 linkedin:connectionRole_jeremy_ravenel , linkedin:connectionRole_olivia_alexander . # realizes
 
 linkedin:dateTime_20251023 a owl:NamedIndividual ;
-    rdf:type linkedin:ISO8601UTCDateTime ;
+    rdf:type abi:ISO8601UTCDateTime ;
     rdfs:label "2025-10-23T00:00:00.000Z"@en .
 
 linkedin:person_olivia_alexander a owl:NamedIndividual ;
