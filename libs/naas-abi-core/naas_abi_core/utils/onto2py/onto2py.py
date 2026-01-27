@@ -25,6 +25,9 @@ class PropertyInfo:
     cardinality: Optional[str] = None  # 'single', 'multiple', 'exactly_one', etc.
     required: bool = False
     description: Optional[str] = None  # skos:definition
+    default_value: Optional[str] = (
+        None  # Default value expression (e.g., "datetime.now()")
+    )
 
 
 @dataclass
@@ -526,6 +529,9 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
     # Inherit properties from parent classes
     inherit_parent_properties(classes)
 
+    # Add required metadata properties (rdfs:label, dcterms:created, dcterms:creator) to all classes
+    add_metadata_properties(g, classes)
+
     # Generate Python code
     return generate_python_code(classes, properties)
 
@@ -733,6 +739,79 @@ def inherit_parent_properties(classes: Dict[str, ClassInfo]):
                 existing_prop_names.add(inherited_prop.name)
 
 
+def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
+    """Add required metadata properties (dcterms:created, dcterms:creator) to all classes"""
+    from rdflib.namespace import DCTERMS, RDFS
+
+    # Extract property names
+    label_prop_name = extract_property_name(RDFS.label, g)
+    if not label_prop_name:
+        label_prop_name = "label"
+
+    created_prop_name = extract_property_name(DCTERMS.created, g)
+    if not created_prop_name:
+        created_prop_name = "created"
+
+    creator_prop_name = extract_property_name(DCTERMS.creator, g)
+    if not creator_prop_name:
+        creator_prop_name = "creator"
+
+    label_prop_uri = str(RDFS.label)
+    created_prop_uri = str(DCTERMS.created)
+    creator_prop_uri = str(DCTERMS.creator)
+
+    # Add these properties to all classes if they don't already exist
+    for class_info in classes.values():
+        existing_prop_names = {prop.name for prop in class_info.properties}
+
+        # Add rdfs:label (data property - string) - mandatory
+        if label_prop_name not in existing_prop_names:
+            label_prop = PropertyInfo(
+                name=label_prop_name,
+                property_type="data",
+                datatype="str",
+                description="Label of the resource.",
+                required=True,  # Mandatory property
+            )
+            class_info.properties.append(label_prop)
+            class_info.property_uris[label_prop_name] = label_prop_uri
+
+        # Add dcterms:created (data property - date/time) - mandatory
+        if created_prop_name not in existing_prop_names:
+            created_prop = PropertyInfo(
+                name=created_prop_name,
+                property_type="data",
+                datatype="datetime.datetime",
+                description="Date of creation of the resource.",
+                default_value="datetime.datetime.now()",
+                required=True,  # Mandatory property
+            )
+            class_info.properties.append(created_prop)
+            class_info.property_uris[created_prop_name] = created_prop_uri
+
+        # Add dcterms:creator (object property - Agent) - mandatory
+        if creator_prop_name not in existing_prop_names:
+            creator_prop = PropertyInfo(
+                name=creator_prop_name,
+                property_type="data",
+                range_class="str",  # Will be Union[str, Agent] if Agent class exists
+                description="An entity responsible for making the resource.",
+                default_value="os.environ.get('USER')",
+                required=True,  # Mandatory property
+            )
+            # Check if Agent class exists in classes
+            agent_uris = [
+                uri
+                for uri, cls in classes.items()
+                if cls.name == "Agent" or "agent" in cls.name.lower()
+            ]
+            if agent_uris:
+                # Use the first Agent class found
+                creator_prop.range_class = classes[agent_uris[0]].name
+            class_info.properties.append(creator_prop)
+            class_info.property_uris[creator_prop_name] = creator_prop_uri
+
+
 def apply_linting(code: str) -> str:
     """Apply ruff formatting to the generated code"""
     try:
@@ -787,6 +866,8 @@ def generate_python_code(
     needs_list = False
     needs_any = False
     needs_union = False
+    needs_datetime = False
+    needs_os = False
 
     # Check all properties to see what types are needed
     for class_info in classes.values():
@@ -799,6 +880,14 @@ def generate_python_code(
                 prop.property_type == "object" and not prop.range_class
             ):
                 needs_any = True
+            if (
+                prop.property_type == "data"
+                and prop.datatype
+                and "datetime" in prop.datatype
+            ):
+                needs_datetime = True
+            if prop.default_value and "os.environ" in prop.default_value:
+                needs_os = True
 
     # Build typing imports
     typing_imports = ["Optional", "ClassVar"]
@@ -816,80 +905,91 @@ def generate_python_code(
         f"from typing import {typing_import_str}",
         "from pydantic import BaseModel, Field",
         "import uuid",
-        "from rdflib import Graph, URIRef, Literal",
-        "from rdflib.namespace import RDF",
-        "",
-        "# Generated classes from TTL file",
-        "",
-        "# Base class for all RDF entities",
-        "class RDFEntity(BaseModel):",
-        '    """Base class for all RDF entities with URI and namespace management"""',
-        '    _namespace: ClassVar[str] = "http://example.org/instance/"',
-        '    _uri: str = ""',
-        "    _object_properties: ClassVar[set[str]] = set()",
-        "    ",
-        "    model_config = {",
-        "        'arbitrary_types_allowed': True,",
-        "        'extra': 'forbid'",
-        "    }",
-        "    ",
-        "    def __init__(self, **kwargs):",
-        "        uri = kwargs.pop('_uri', None)",
-        "        super().__init__(**kwargs)",
-        "        if uri is not None:",
-        "            self._uri = uri",
-        "        elif not self._uri:",
-        '            self._uri = f"{self._namespace}{uuid.uuid4()}"',
-        "    ",
-        "    @classmethod",
-        "    def set_namespace(cls, namespace: str):",
-        '        """Set the namespace for generating URIs"""',
-        "        cls._namespace = namespace",
-        "        ",
-        "    def rdf(self, subject_uri: str | None = None) -> Graph:",
-        '        """Generate RDF triples for this instance"""',
-        "        g = Graph()",
-        "        ",
-        "        # Use stored URI or provided subject_uri",
-        "        if subject_uri is None:",
-        "            subject_uri = self._uri",
-        "        subject = URIRef(subject_uri)",
-        "        ",
-        "        # Add class type",
-        "        if hasattr(self, '_class_uri'):",
-        "            g.add((subject, RDF.type, URIRef(self._class_uri)))",
-        "        ",
-        "        object_props: set[str] = getattr(self, '_object_properties', set())",
-        "        ",
-        "        # Add properties",
-        "        if hasattr(self, '_property_uris'):",
-        "            for prop_name, prop_uri in self._property_uris.items():",
-        "                is_object_prop = prop_name in object_props",
-        "                prop_value = getattr(self, prop_name, None)",
-        "                if prop_value is not None:",
-        "                    if isinstance(prop_value, list):",
-        "                        for item in prop_value:",
-        "                            if hasattr(item, 'rdf'):",
-        "                                # Add triples from related object",
-        "                                g += item.rdf()",
-        "                                g.add((subject, URIRef(prop_uri), URIRef(item._uri)))",
-        "                            elif is_object_prop and isinstance(item, (str, URIRef)):",
-        "                                g.add((subject, URIRef(prop_uri), URIRef(str(item))))",
-        "                            else:",
-        "                                g.add((subject, URIRef(prop_uri), Literal(item)))",
-        "                    elif hasattr(prop_value, 'rdf'):",
-        "                        # Add triples from related object",
-        "                        g += prop_value.rdf()",
-        "                        g.add((subject, URIRef(prop_uri), URIRef(prop_value._uri)))",
-        "                    elif is_object_prop and isinstance(prop_value, (str, URIRef)):",
-        "                        g.add((subject, URIRef(prop_uri), URIRef(str(prop_value))))",
-        "                    else:",
-        "                        g.add((subject, URIRef(prop_uri), Literal(prop_value)))",
-        "        ",
-        "        return g",
-        "",
-        "",
     ]
+
+    if needs_datetime:
+        code_lines.append("import datetime")
+
+    if needs_os:
+        code_lines.append("import os")
+
+    code_lines.extend(
+        [
+            "from rdflib import Graph, URIRef, Literal",
+            "from rdflib.namespace import RDF",
+            "",
+            "# Generated classes from TTL file",
+            "",
+            "# Base class for all RDF entities",
+            "class RDFEntity(BaseModel):",
+            '    """Base class for all RDF entities with URI and namespace management"""',
+            '    _namespace: ClassVar[str] = "http://example.org/instance/"',
+            '    _uri: str = ""',
+            "    _object_properties: ClassVar[set[str]] = set()",
+            "    ",
+            "    model_config = {",
+            "        'arbitrary_types_allowed': True,",
+            "        'extra': 'forbid'",
+            "    }",
+            "    ",
+            "    def __init__(self, **kwargs):",
+            "        uri = kwargs.pop('_uri', None)",
+            "        super().__init__(**kwargs)",
+            "        if uri is not None:",
+            "            self._uri = uri",
+            "        elif not self._uri:",
+            '            self._uri = f"{self._namespace}{uuid.uuid4()}"',
+            "    ",
+            "    @classmethod",
+            "    def set_namespace(cls, namespace: str):",
+            '        """Set the namespace for generating URIs"""',
+            "        cls._namespace = namespace",
+            "        ",
+            "    def rdf(self, subject_uri: str | None = None) -> Graph:",
+            '        """Generate RDF triples for this instance"""',
+            "        g = Graph()",
+            "        ",
+            "        # Use stored URI or provided subject_uri",
+            "        if subject_uri is None:",
+            "            subject_uri = self._uri",
+            "        subject = URIRef(subject_uri)",
+            "        ",
+            "        # Add class type",
+            "        if hasattr(self, '_class_uri'):",
+            "            g.add((subject, RDF.type, URIRef(self._class_uri)))",
+            "        ",
+            "        object_props: set[str] = getattr(self, '_object_properties', set())",
+            "        ",
+            "        # Add properties",
+            "        if hasattr(self, '_property_uris'):",
+            "            for prop_name, prop_uri in self._property_uris.items():",
+            "                is_object_prop = prop_name in object_props",
+            "                prop_value = getattr(self, prop_name, None)",
+            "                if prop_value is not None:",
+            "                    if isinstance(prop_value, list):",
+            "                        for item in prop_value:",
+            "                            if hasattr(item, 'rdf'):",
+            "                                # Add triples from related object",
+            "                                g += item.rdf()",
+            "                                g.add((subject, URIRef(prop_uri), URIRef(item._uri)))",
+            "                            elif is_object_prop and isinstance(item, (str, URIRef)):",
+            "                                g.add((subject, URIRef(prop_uri), URIRef(str(item))))",
+            "                            else:",
+            "                                g.add((subject, URIRef(prop_uri), Literal(item)))",
+            "                    elif hasattr(prop_value, 'rdf'):",
+            "                        # Add triples from related object",
+            "                        g += prop_value.rdf()",
+            "                        g.add((subject, URIRef(prop_uri), URIRef(prop_value._uri)))",
+            "                    elif is_object_prop and isinstance(prop_value, (str, URIRef)):",
+            "                        g.add((subject, URIRef(prop_uri), URIRef(str(prop_value))))",
+            "                    else:",
+            "                        g.add((subject, URIRef(prop_uri), Literal(prop_value)))",
+            "        ",
+            "        return g",
+            "",
+            "",
+        ]
+    )
 
     # Sort classes to handle inheritance properly
     sorted_classes = topological_sort_classes(classes)
@@ -1120,8 +1220,10 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
         else:
             # No range class specified
             fallback_type = "Any" if has_any_import else "object"
-            type_annotation = f"Optional[{fallback_type}]"
-            default_value = "Field()"
+            type_annotation = (
+                f"Optional[{fallback_type}]" if not prop.required else fallback_type
+            )
+            default_value = "Field(...)" if prop.required else "Field()"
     elif prop.property_type == "data" and prop.datatype:
         if prop.cardinality == "multiple":
             type_annotation = f"List[{prop.datatype}]"
@@ -1134,8 +1236,74 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
     else:
         # Use Any if imported, otherwise use object as fallback
         fallback_type = "Any" if has_any_import else "object"
-        type_annotation = f"Optional[{fallback_type}]"
-        default_value = "Field()"
+        type_annotation = (
+            f"Optional[{fallback_type}]" if not prop.required else fallback_type
+        )
+        default_value = "Field(...)" if prop.required else "Field()"
+
+    # Handle default value if specified
+    if prop.default_value:
+        # For required properties with defaults, keep them as non-Optional
+        # For optional properties with defaults, make them Optional
+        # BUT: if prop.required is True, never make it Optional
+        if prop.required:
+            # Required properties stay as-is (non-Optional)
+            pass
+        elif not type_annotation.startswith(
+            "Optional["
+        ) and not type_annotation.startswith("List["):
+            # Make it optional if it's not already and not required
+            type_annotation = f"Optional[{type_annotation}]"
+
+        # Use Field(value, ...) syntax for default values (not Field(default=value, ...))
+        if default_value == "Field()":
+            default_value = f"Field({prop.default_value})"
+        elif default_value == "Field(...)":
+            # Required field with default - use Field(value, ...)
+            default_value = f"Field({prop.default_value})"
+        elif "Field(default_factory=list)" in default_value:
+            # Can't have both default_factory and default, keep default_factory
+            pass
+        else:
+            # Replace existing default with the specified one
+            if "default=" in default_value:
+                # Remove existing default= and add new value directly
+                import re
+
+                default_value = re.sub(r",?\s*default=[^,)]*", "", default_value)
+                # Insert the default value at the beginning of Field(...)
+                if default_value.startswith("Field("):
+                    # Extract what's after Field(
+                    rest = default_value[5:]
+                    if rest.startswith(")"):
+                        default_value = f"Field({prop.default_value})"
+                    else:
+                        default_value = (
+                            f"Field({prop.default_value}, {rest.lstrip(', ')}"
+                        )
+                else:
+                    # Only remove the final closing parenthesis
+                    if default_value.endswith(")"):
+                        default_value = default_value[:-1] + f", {prop.default_value})"
+                    else:
+                        default_value = default_value + f", {prop.default_value})"
+            elif "default_factory=" in default_value:
+                # Can't mix default_factory with default value
+                pass
+            else:
+                # Add default value at the beginning
+                if default_value.startswith("Field("):
+                    rest = default_value[5:]
+                    if rest.startswith(")"):
+                        default_value = f"Field({prop.default_value})"
+                    else:
+                        default_value = (
+                            f"Field({prop.default_value}, {rest.lstrip(', ')}"
+                        )
+                else:
+                    default_value = (
+                        default_value.rstrip(")") + f", {prop.default_value})"
+                    )
 
     # Add description if available
     if prop.description:
@@ -1143,14 +1311,21 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
         description = prop.description.replace('"', '\\"')
         if default_value == "Field()":
             default_value = f'Field(description="{description}")'
+        elif default_value.startswith("Field(") and "description=" not in default_value:
+            # Add description to existing Field - only remove the final closing parenthesis
+            if default_value.endswith(")"):
+                default_value = default_value[:-1] + f', description="{description}")'
+            else:
+                default_value = default_value + f', description="{description}")'
         elif default_value == "Field(...)":
             default_value = f'Field(..., description="{description}")'
         elif "Field(default_factory=list)" in default_value:
             default_value = f'Field(default_factory=list, description="{description}")'
         else:
-            # For other cases, add description
-            default_value = (
-                default_value.rstrip(")") + f', description="{description}")'
-            )
+            # For other cases, add description - only remove the final closing parenthesis
+            if default_value.endswith(")"):
+                default_value = default_value[:-1] + f', description="{description}")'
+            else:
+                default_value = default_value + f', description="{description}")'
 
     return f"{prop.name}: {type_annotation} = {default_value}"
