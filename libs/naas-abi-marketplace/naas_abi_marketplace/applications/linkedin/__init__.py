@@ -57,6 +57,8 @@ class ABIModule(BaseModule[_Configuration]):
             return
 
         for ttl_file in ttl_files:
+            if "Queries.ttl" in ttl_file:
+                continue
             try:
                 logger.debug(f"Converting {ttl_file} to Python")
                 python_code = onto2py(ttl_file)
