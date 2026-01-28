@@ -42,6 +42,7 @@ class ClassInfo:
     property_uris: Dict[str, str] = field(
         default_factory=dict
     )  # Maps property name to URI
+    label: Optional[str] = None  # rdfs:label
 
 
 def extract_class_name_from_label(label: str) -> Optional[str]:
@@ -385,6 +386,7 @@ def extract_restriction_properties(
                             existing_prop.range_classes.append(cls)
         else:
             # Create new property from restriction
+            # Properties from OWL restrictions are optional unless explicitly constrained
             prop_info = PropertyInfo(
                 name=prop_name,
                 property_type="object",  # Restrictions are typically object properties
@@ -395,6 +397,7 @@ def extract_restriction_properties(
                 if len(unique_range_classes) == 1
                 else None,
                 description=get_property_description(g, prop_uri),
+                required=False,  # Explicitly set to False - restrictions don't imply required
             )
             class_info.properties.append(prop_info)
             class_info.property_uris[prop_name] = str(prop_uri)
@@ -442,6 +445,7 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
                 parent_classes=[],
                 properties=[],
                 description=get_description(g, cls),
+                label=get_label(g, cls),
             )
 
     # Find all RDFS classes (if not already OWL classes)
@@ -458,6 +462,7 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
                     parent_classes=[],
                     properties=[],
                     description=get_description(g, cls),
+                    label=get_label(g, cls),
                 )
 
     # Extract inheritance relationships and OWL restrictions
@@ -515,8 +520,13 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
                 if prop_info.name in existing_props:
                     existing_prop = existing_props[prop_info.name]
                     # Merge stronger constraints if the duplicate carries them.
-                    if prop_info.required and not existing_prop.required:
+                    # Only mark as required if BOTH are required (conservative approach)
+                    # This prevents properties from being incorrectly marked as required
+                    if prop_info.required and existing_prop.required:
                         existing_prop.required = True
+                    else:
+                        # If either is not required, keep it optional (safer default)
+                        existing_prop.required = False
                     if prop_info.cardinality and not existing_prop.cardinality:
                         existing_prop.cardinality = prop_info.cardinality
                     if prop_info.description and not existing_prop.description:
@@ -534,6 +544,16 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
 
     # Generate Python code
     return generate_python_code(classes, properties)
+
+
+def get_label(g: rdflib.Graph, resource) -> Optional[str]:
+    """Get rdfs:label for a resource"""
+    RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
+
+    for label in g.objects(resource, RDFS.label):
+        return str(label)
+
+    return None
 
 
 def get_description(g: rdflib.Graph, resource) -> Optional[str]:
@@ -784,7 +804,7 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
                 datatype="datetime.datetime",
                 description="Date of creation of the resource.",
                 default_value="datetime.datetime.now()",
-                required=True,  # Mandatory property
+                required=True,  # Mandatory property with default
             )
             class_info.properties.append(created_prop)
             class_info.property_uris[created_prop_name] = created_prop_uri
@@ -794,20 +814,11 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
             creator_prop = PropertyInfo(
                 name=creator_prop_name,
                 property_type="data",
-                range_class="str",  # Will be Union[str, Agent] if Agent class exists
+                range_class="str",
                 description="An entity responsible for making the resource.",
                 default_value="os.environ.get('USER')",
-                required=True,  # Mandatory property
+                required=True,  # Mandatory property with default
             )
-            # Check if Agent class exists in classes
-            agent_uris = [
-                uri
-                for uri, cls in classes.items()
-                if cls.name == "Agent" or "agent" in cls.name.lower()
-            ]
-            if agent_uris:
-                # Use the first Agent class found
-                creator_prop.range_class = classes[agent_uris[0]].name
             class_info.properties.append(creator_prop)
             class_info.property_uris[creator_prop_name] = creator_prop_uri
 
@@ -890,7 +901,7 @@ def generate_python_code(
                 needs_os = True
 
     # Build typing imports
-    typing_imports = ["Optional", "ClassVar"]
+    typing_imports = ["Annotated", "Optional", "ClassVar"]
     if needs_list:
         typing_imports.append("List")
     if needs_union:
@@ -915,15 +926,16 @@ def generate_python_code(
 
     code_lines.extend(
         [
-            "from rdflib import Graph, URIRef, Literal",
-            "from rdflib.namespace import RDF",
+            "from rdflib import Graph, URIRef, Literal, Namespace",
+            "from rdflib.namespace import RDF, RDFS, OWL, XSD, DCTERMS",
             "",
-            "# Generated classes from TTL file",
-            "",
+            "BFO = Namespace('http://purl.obolibrary.org/obo/')",
+            "ABI = Namespace('http://ontology.naas.ai/abi/')",
+            "CCO = Namespace('https://www.commoncoreontologies.org/')",
             "# Base class for all RDF entities",
             "class RDFEntity(BaseModel):",
             '    """Base class for all RDF entities with URI and namespace management"""',
-            '    _namespace: ClassVar[str] = "http://example.org/instance/"',
+            '    _namespace: ClassVar[str] = "http://ontology.naas.ai/abi/"',
             '    _uri: str = ""',
             "    _object_properties: ClassVar[set[str]] = set()",
             "    ",
@@ -948,6 +960,13 @@ def generate_python_code(
             "    def rdf(self, subject_uri: str | None = None) -> Graph:",
             '        """Generate RDF triples for this instance"""',
             "        g = Graph()",
+            "        g.bind('cco', CCO)",
+            "        g.bind('bfo', BFO)",
+            "        g.bind('abi', ABI)",
+            "        g.bind('rdfs', RDFS)",
+            "        g.bind('rdf', RDF)",
+            "        g.bind('owl', OWL)",
+            "        g.bind('xsd', XSD)",
             "        ",
             "        # Use stored URI or provided subject_uri",
             "        if subject_uri is None:",
@@ -1097,8 +1116,15 @@ def generate_class_code(
     for prop in class_info.properties:
         if prop.name in unique_props:
             existing = unique_props[prop.name]
-            if prop.required and not existing.required:
+            # Only mark as required if BOTH are required (more conservative approach)
+            # This prevents properties from restrictions from being incorrectly marked as required
+            if prop.required and existing.required:
                 existing.required = True
+            elif not prop.required and not existing.required:
+                existing.required = False
+            # If one is required and one isn't, keep it as optional (safer default)
+            else:
+                existing.required = False
             if prop.cardinality and not existing.cardinality:
                 existing.cardinality = prop.cardinality
             continue
@@ -1128,6 +1154,12 @@ def generate_class_code(
     # Add class-specific metadata
     lines.append(f"    _class_uri: ClassVar[str] = '{class_info.uri}'")
 
+    # Add _name property with rdfs:label
+    class_label = class_info.label if class_info.label else class_info.name
+    # Escape single quotes in the label
+    class_label_escaped = class_label.replace("'", "\\'")
+    lines.append(f"    _name: ClassVar[str] = '{class_label_escaped}'")
+
     # Add property URI mapping
     if class_info.property_uris:
         prop_uris_dict = ", ".join(
@@ -1152,10 +1184,7 @@ def generate_class_code(
     lines.append("")
 
     # Add properties grouped by type for readability
-    data_properties = sorted(
-        (prop for prop in properties_list if prop.property_type == "data"),
-        key=lambda prop: prop.name,
-    )
+    data_properties = [prop for prop in properties_list if prop.property_type == "data"]
     object_properties = sorted(
         (prop for prop in properties_list if prop.property_type == "object"),
         key=lambda prop: prop.name,
@@ -1193,139 +1222,74 @@ def generate_class_code(
 
 
 def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> str:
-    """Generate code for a single property"""
+    """Generate code for a single property using Annotated"""
 
-    # Determine type annotation and Pydantic Field
+    # Determine base type annotation (without Optional or Annotated)
     if prop.property_type == "object":
         # Check for multiple range classes (from unionOf)
         if prop.range_classes:
-            # Multiple classes from union
+            # Multiple classes from union - no 'str' option, only classes
             union_types = ", ".join(prop.range_classes)
             if prop.cardinality == "multiple":
-                type_annotation = f"List[Union[str, {union_types}]]"
-                default_value = "Field(default_factory=list)"
+                base_type = f"List[Union[{union_types}]]"
             else:
-                inner = f"Union[str, {union_types}]"
-                type_annotation = f"Optional[{inner}]" if not prop.required else inner
-                default_value = "Field(...)" if prop.required else "Field()"
+                base_type = f"Union[{union_types}]"
         elif prop.range_class:
-            # Single class
+            # Single class - no 'str' option, only the class
             if prop.cardinality == "multiple":
-                type_annotation = f"List[Union[str, {prop.range_class}]]"
-                default_value = "Field(default_factory=list)"
+                base_type = f"List[{prop.range_class}]"
             else:
-                inner = f"Union[str, {prop.range_class}]"
-                type_annotation = f"Optional[{inner}]" if not prop.required else inner
-                default_value = "Field(...)" if prop.required else "Field()"
+                base_type = prop.range_class
         else:
             # No range class specified
-            fallback_type = "Any" if has_any_import else "object"
-            type_annotation = (
-                f"Optional[{fallback_type}]" if not prop.required else fallback_type
-            )
-            default_value = "Field(...)" if prop.required else "Field()"
+            base_type = "Any" if has_any_import else "object"
     elif prop.property_type == "data" and prop.datatype:
         if prop.cardinality == "multiple":
-            type_annotation = f"List[{prop.datatype}]"
-            default_value = "Field(default_factory=list)"
+            base_type = f"List[{prop.datatype}]"
         else:
-            type_annotation = (
-                f"Optional[{prop.datatype}]" if not prop.required else prop.datatype
-            )
-            default_value = "Field(...)" if prop.required else "Field()"
+            base_type = prop.datatype
     else:
         # Use Any if imported, otherwise use object as fallback
-        fallback_type = "Any" if has_any_import else "object"
-        type_annotation = (
-            f"Optional[{fallback_type}]" if not prop.required else fallback_type
-        )
-        default_value = "Field(...)" if prop.required else "Field()"
+        base_type = "Any" if has_any_import else "object"
 
-    # Handle default value if specified
-    if prop.default_value:
-        # For required properties with defaults, keep them as non-Optional
-        # For optional properties with defaults, make them Optional
-        # BUT: if prop.required is True, never make it Optional
-        if prop.required:
-            # Required properties stay as-is (non-Optional)
-            pass
-        elif not type_annotation.startswith(
-            "Optional["
-        ) and not type_annotation.startswith("List["):
-            # Make it optional if it's not already and not required
-            type_annotation = f"Optional[{type_annotation}]"
-
-        # Use Field(value, ...) syntax for default values (not Field(default=value, ...))
-        if default_value == "Field()":
-            default_value = f"Field({prop.default_value})"
-        elif default_value == "Field(...)":
-            # Required field with default - use Field(value, ...)
-            default_value = f"Field({prop.default_value})"
-        elif "Field(default_factory=list)" in default_value:
-            # Can't have both default_factory and default, keep default_factory
-            pass
-        else:
-            # Replace existing default with the specified one
-            if "default=" in default_value:
-                # Remove existing default= and add new value directly
-                import re
-
-                default_value = re.sub(r",?\s*default=[^,)]*", "", default_value)
-                # Insert the default value at the beginning of Field(...)
-                if default_value.startswith("Field("):
-                    # Extract what's after Field(
-                    rest = default_value[5:]
-                    if rest.startswith(")"):
-                        default_value = f"Field({prop.default_value})"
-                    else:
-                        default_value = (
-                            f"Field({prop.default_value}, {rest.lstrip(', ')}"
-                        )
-                else:
-                    # Only remove the final closing parenthesis
-                    if default_value.endswith(")"):
-                        default_value = default_value[:-1] + f", {prop.default_value})"
-                    else:
-                        default_value = default_value + f", {prop.default_value})"
-            elif "default_factory=" in default_value:
-                # Can't mix default_factory with default value
-                pass
-            else:
-                # Add default value at the beginning
-                if default_value.startswith("Field("):
-                    rest = default_value[5:]
-                    if rest.startswith(")"):
-                        default_value = f"Field({prop.default_value})"
-                    else:
-                        default_value = (
-                            f"Field({prop.default_value}, {rest.lstrip(', ')}"
-                        )
-                else:
-                    default_value = (
-                        default_value.rstrip(")") + f", {prop.default_value})"
-                    )
-
-    # Add description if available
+    # Build Field annotation with description if available
+    field_args = []
     if prop.description:
         # Escape quotes in description
         description = prop.description.replace('"', '\\"')
-        if default_value == "Field()":
-            default_value = f'Field(description="{description}")'
-        elif default_value.startswith("Field(") and "description=" not in default_value:
-            # Add description to existing Field - only remove the final closing parenthesis
-            if default_value.endswith(")"):
-                default_value = default_value[:-1] + f', description="{description}")'
-            else:
-                default_value = default_value + f', description="{description}")'
-        elif default_value == "Field(...)":
-            default_value = f'Field(..., description="{description}")'
-        elif "Field(default_factory=list)" in default_value:
-            default_value = f'Field(default_factory=list, description="{description}")'
-        else:
-            # For other cases, add description - only remove the final closing parenthesis
-            if default_value.endswith(")"):
-                default_value = default_value[:-1] + f', description="{description}")'
-            else:
-                default_value = default_value + f', description="{description}")'
+        field_args.append(f'description="{description}"')
 
-    return f"{prop.name}: {type_annotation} = {default_value}"
+    # Build the Field() call
+    if field_args:
+        field_str = f"Field({', '.join(field_args)})"
+    else:
+        field_str = "Field()"
+
+    # Determine if we need Optional wrapper
+    # For fields with default values, use Annotated[Optional[Type], Field(...)]
+    # For required fields without defaults, use Annotated[Type, Field(...)]
+    # For optional fields without defaults, use Optional[Annotated[Type, Field(...)]]
+    if prop.default_value:
+        # Pattern: Annotated[Optional[Type], Field(...)] when there's a default
+        final_type = f"Annotated[Optional[{base_type}], {field_str}]"
+    elif not prop.required and prop.cardinality != "multiple":
+        # Pattern: Optional[Annotated[Type, Field(...)]] for optional fields
+        annotated_type = f"Annotated[{base_type}, {field_str}]"
+        final_type = f"Optional[{annotated_type}]"
+    else:
+        # Pattern: Annotated[Type, Field(...)] for required fields
+        final_type = f"Annotated[{base_type}, {field_str}]"
+
+    # Handle default value assignment
+    if prop.default_value:
+        # Default value goes after the type annotation
+        return f"{prop.name}: {final_type} = {prop.default_value}"
+    elif prop.required:
+        # Required field without default
+        return f"{prop.name}: {final_type} = Field(...)"
+    elif prop.cardinality == "multiple":
+        # List field with default_factory
+        return f"{prop.name}: {final_type} = Field(default_factory=list)"
+    else:
+        # Optional field without default
+        return f"{prop.name}: {final_type} = None"
