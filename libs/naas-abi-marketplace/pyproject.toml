@@ -140,6 +140,12 @@ applications-sanax = []
 applications-sendgrid = []
 applications-sharepoint = []
 applications-spotify = []
+applications-twilio = [
+    "flask>=3.1.2",
+    "types-flask>=1.1.6",
+    "twilio>=9.10.0",
+    "twilio-stubs>=0.2.0"
+]
 applications-worldbank = []
 applications-yahoofinance = [
     "yfinance==0.2.66",
