@@ -49,6 +49,7 @@ dependencies = [
     "naas-abi-marketplace[applications-sendgrid]",
     "naas-abi-marketplace[applications-sharepoint]",
     "naas-abi-marketplace[applications-spotify]",
+    "naas-abi-marketplace[applications-twilio]",
     "naas-abi-marketplace[applications-worldbank]",
     "naas-abi-marketplace[applications-yahoofinance]",
     # "requests[socks]>=2.32.3,<3",
@@ -106,6 +107,13 @@ abi = "naas_abi_cli.cli:main"
 #abi = "src.cli:main"
 api = "naas_abi_core.apps.api.api:api"
 mcp-server = "naas_abi_core.apps.mcp_server:run"
+
+[project.optional-dependencies]
+applications-twilio = [
+    "flask==3.1.2",
+    "twilio==9.10.0",
+    "types-flask==1.1.6",
+]
 
 [dependency-groups]
 terminal-agent = [
