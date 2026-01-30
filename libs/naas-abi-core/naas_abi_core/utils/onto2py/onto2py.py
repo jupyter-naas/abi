@@ -17,12 +17,10 @@ class PropertyInfo:
 
     name: str
     property_type: str  # 'data' or 'object'
-    range_class: Optional[str] = None  # Single class or comma-separated for unions
-    range_classes: List[str] = field(
-        default_factory=list
-    )  # Multiple classes for unions
+    range_classes: Dict[str, Optional[int]] = field(
+        default_factory=dict
+    )  # Dict mapping class name to cardinality (None = not specified, > 1 = list, 1 or 0 = single)
     datatype: Optional[str] = None
-    cardinality: Optional[str] = None  # 'single', 'multiple', 'exactly_one', etc.
     required: bool = False
     description: Optional[str] = None  # skos:definition
     default_value: Optional[str] = (
@@ -274,6 +272,159 @@ def extract_classes_from_intersection(
     return class_names
 
 
+def extract_cardinality_from_restriction(
+    g: rdflib.Graph, restriction: BNode, OWL: rdflib.Namespace
+) -> Optional[int]:
+    """Extract cardinality value from an OWL restriction (returns int or None)"""
+    # Check for exact cardinality
+    for cardinality_val in g.objects(restriction, OWL.cardinality):
+        try:
+            return int(str(cardinality_val))
+        except (ValueError, TypeError):
+            pass
+
+    # Check for minCardinality
+    min_card = None
+    for min_card_val in g.objects(restriction, OWL.minCardinality):
+        try:
+            min_card = int(str(min_card_val))
+        except (ValueError, TypeError):
+            pass
+
+    # Check for maxCardinality
+    max_card = None
+    for max_card_val in g.objects(restriction, OWL.maxCardinality):
+        try:
+            max_card = int(str(max_card_val))
+        except (ValueError, TypeError):
+            pass
+
+    # If we have minCardinality > 1 or maxCardinality > 1, return that value
+    if min_card is not None and min_card > 1:
+        return min_card
+    if max_card is not None and max_card > 1:
+        return max_card
+
+    # If minCardinality is 0 or 1 and maxCardinality is None or > 1, return None (unspecified)
+    return None
+
+
+def extract_classes_with_cardinality_from_intersection(
+    g: rdflib.Graph,
+    intersection_node: BNode,
+    classes: Dict[str, ClassInfo],
+    OWL: rdflib.Namespace,
+) -> Dict[str, Optional[int]]:
+    """Extract classes with their cardinalities from an owl:intersectionOf construct"""
+    class_cardinalities: Dict[str, Optional[int]] = {}
+
+    try:
+        collection = Collection(g, intersection_node)
+        for item in collection:
+            if isinstance(item, BNode):
+                # Check for owl:onClass with cardinality
+                on_class = list(g.objects(item, OWL.onClass))
+                if on_class:
+                    cardinality = extract_cardinality_from_restriction(g, item, OWL)
+                    for cls in on_class:
+                        if isinstance(cls, rdflib.URIRef):
+                            cls_name_on_item: Optional[str] = None
+                            if str(cls) in classes:
+                                cls_name_on_item = classes[str(cls)].name
+                            else:
+                                cls_name_on_item = extract_class_name(cls, g)
+                            if cls_name_on_item:
+                                class_cardinalities[cls_name_on_item] = cardinality
+
+                # Check for allValuesFrom with cardinality
+                all_values = list(g.objects(item, OWL.allValuesFrom))
+                for val in all_values:
+                    if isinstance(val, rdflib.URIRef):
+                        cardinality = extract_cardinality_from_restriction(g, item, OWL)
+                        cls_name_all: Optional[str] = None
+                        if str(val) in classes:
+                            cls_name_all = classes[str(val)].name
+                        else:
+                            cls_name_all = extract_class_name(val, g)
+                        if cls_name_all:
+                            class_cardinalities[cls_name_all] = cardinality
+
+                # Check for someValuesFrom with cardinality
+                some_values = list(g.objects(item, OWL.someValuesFrom))
+                for val in some_values:
+                    if isinstance(val, rdflib.URIRef):
+                        cardinality = extract_cardinality_from_restriction(g, item, OWL)
+                        cls_name_some: Optional[str] = None
+                        if str(val) in classes:
+                            cls_name_some = classes[str(val)].name
+                        else:
+                            cls_name_some = extract_class_name(val, g)
+                        if cls_name_some:
+                            class_cardinalities[cls_name_some] = cardinality
+    except Exception:
+        # Fallback: manual list traversal
+        current = intersection_node
+        while current and current != rdflib.RDF.nil:
+            first = list(g.objects(current, rdflib.RDF.first))
+            rest = list(g.objects(current, rdflib.RDF.rest))
+
+            if first:
+                first_item = first[0]
+                if isinstance(first_item, BNode):
+                    # Check for owl:onClass with cardinality
+                    on_class = list(g.objects(first_item, OWL.onClass))
+                    if on_class:
+                        cardinality = extract_cardinality_from_restriction(
+                            g, first_item, OWL
+                        )
+                        for cls in on_class:
+                            if isinstance(cls, rdflib.URIRef):
+                                cls_name_on2: Optional[str] = None
+                                if str(cls) in classes:
+                                    cls_name_on2 = classes[str(cls)].name
+                                else:
+                                    cls_name_on2 = extract_class_name(cls, g)
+                                if cls_name_on2:
+                                    class_cardinalities[cls_name_on2] = cardinality
+
+                    # Check for allValuesFrom with cardinality
+                    all_values = list(g.objects(first_item, OWL.allValuesFrom))
+                    for val in all_values:
+                        if isinstance(val, rdflib.URIRef):
+                            cardinality = extract_cardinality_from_restriction(
+                                g, first_item, OWL
+                            )
+                            cls_name_all2: Optional[str] = None
+                            if str(val) in classes:
+                                cls_name_all2 = classes[str(val)].name
+                            else:
+                                cls_name_all2 = extract_class_name(val, g)
+                            if cls_name_all2:
+                                class_cardinalities[cls_name_all2] = cardinality
+
+                    # Check for someValuesFrom with cardinality
+                    some_values = list(g.objects(first_item, OWL.someValuesFrom))
+                    for val in some_values:
+                        if isinstance(val, rdflib.URIRef):
+                            cardinality = extract_cardinality_from_restriction(
+                                g, first_item, OWL
+                            )
+                            cls_name_some2: Optional[str] = None
+                            if str(val) in classes:
+                                cls_name_some2 = classes[str(val)].name
+                            else:
+                                cls_name_some2 = extract_class_name(val, g)
+                            if cls_name_some2:
+                                class_cardinalities[cls_name_some2] = cardinality
+
+            if rest and rest[0] != rdflib.RDF.nil and isinstance(rest[0], BNode):
+                current = rest[0]
+            else:
+                break
+
+    return class_cardinalities
+
+
 def extract_restriction_properties(
     g: rdflib.Graph,
     restriction: BNode,
@@ -296,77 +447,90 @@ def extract_restriction_properties(
     if not prop_name:
         return
 
-    # Get the range from allValuesFrom or someValuesFrom
-    range_classes = []
+    # Get the range classes with their cardinalities from allValuesFrom or someValuesFrom
+    range_class_cardinalities: Dict[str, Optional[int]] = {}
+
+    # Get cardinality from the main restriction (applies to all classes if not overridden)
+    main_cardinality = extract_cardinality_from_restriction(g, restriction, OWL)
+
     for range_val in g.objects(restriction, OWL.allValuesFrom):
         if isinstance(range_val, rdflib.URIRef):
-            # Direct class reference
+            # Direct class reference - use main cardinality
+            cls_name_allval: Optional[str] = None
             if str(range_val) in classes:
-                range_classes.append(classes[str(range_val)].name)
+                cls_name_allval = classes[str(range_val)].name
             else:
-                class_name = extract_class_name(range_val, g)
-                if class_name:
-                    range_classes.append(class_name)
+                cls_name_allval = extract_class_name(range_val, g)
+            if cls_name_allval:
+                range_class_cardinalities[cls_name_allval] = main_cardinality
         elif isinstance(range_val, BNode):
             # Check for owl:unionOf
             union_of = list(g.objects(range_val, OWL.unionOf))
             if union_of and isinstance(union_of[0], BNode):
                 union_classes = extract_classes_from_union(g, union_of[0], classes)
-                range_classes.extend(union_classes)
+                for cls_name in union_classes:
+                    range_class_cardinalities[cls_name] = main_cardinality
             else:
-                # Check if it's a list head (has RDF.first)
-                first = list(g.objects(range_val, rdflib.RDF.first))
-                if first:
-                    # Try to extract from union
-                    union_classes = extract_classes_from_union(g, range_val, classes)
-                    if union_classes:
-                        range_classes.extend(union_classes)
-                else:
-                    # Check for owl:intersectionOf
-                    intersection_of = list(g.objects(range_val, OWL.intersectionOf))
-                    if intersection_of and isinstance(intersection_of[0], BNode):
-                        intersection_classes = extract_classes_from_intersection(
+                # Check for owl:intersectionOf
+                intersection_of = list(g.objects(range_val, OWL.intersectionOf))
+                if intersection_of and isinstance(intersection_of[0], BNode):
+                    # Extract classes with their specific cardinalities from intersection
+                    intersection_cardinalities = (
+                        extract_classes_with_cardinality_from_intersection(
                             g, intersection_of[0], classes, OWL
                         )
-                        range_classes.extend(intersection_classes)
+                    )
+                    # Merge with main cardinality as fallback
+                    for cls_name, card in intersection_cardinalities.items():
+                        range_class_cardinalities[cls_name] = (
+                            card if card is not None else main_cardinality
+                        )
 
     # If not found in allValuesFrom, check someValuesFrom
-    if not range_classes:
+    if not range_class_cardinalities:
         for range_val in g.objects(restriction, OWL.someValuesFrom):
             if isinstance(range_val, rdflib.URIRef):
+                cls_name_someval: Optional[str] = None
                 if str(range_val) in classes:
-                    range_classes.append(classes[str(range_val)].name)
+                    cls_name_someval = classes[str(range_val)].name
                 else:
-                    class_name = extract_class_name(range_val, g)
-                    if class_name:
-                        range_classes.append(class_name)
+                    cls_name_someval = extract_class_name(range_val, g)
+                if cls_name_someval:
+                    range_class_cardinalities[cls_name_someval] = main_cardinality
             elif isinstance(range_val, BNode):
                 # Check for owl:unionOf
                 union_of = list(g.objects(range_val, OWL.unionOf))
                 if union_of and isinstance(union_of[0], BNode):
                     union_classes = extract_classes_from_union(g, union_of[0], classes)
-                    range_classes.extend(union_classes)
+                    for cls_name_union in union_classes:
+                        range_class_cardinalities[cls_name_union] = main_cardinality
+                # Check for owl:intersectionOf in someValuesFrom
+                intersection_of = list(g.objects(range_val, OWL.intersectionOf))
+                if intersection_of and isinstance(intersection_of[0], BNode):
+                    intersection_cardinalities = (
+                        extract_classes_with_cardinality_from_intersection(
+                            g, intersection_of[0], classes, OWL
+                        )
+                    )
+                    for cls_name_int, card in intersection_cardinalities.items():
+                        range_class_cardinalities[cls_name_int] = (
+                            card if card is not None else main_cardinality
+                        )
 
     # Also check for owl:onClass (used in some restrictions)
     for on_class in g.objects(restriction, OWL.onClass):
         if isinstance(on_class, rdflib.URIRef):
+            cls_name_onclass: Optional[str] = None
             if str(on_class) in classes:
-                range_classes.append(classes[str(on_class)].name)
+                cls_name_onclass = classes[str(on_class)].name
             else:
-                class_name = extract_class_name(on_class, g)
-                if class_name:
-                    range_classes.append(class_name)
-
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_range_classes = []
-    for cls in range_classes:
-        if cls not in seen:
-            seen.add(cls)
-            unique_range_classes.append(cls)
+                cls_name_onclass = extract_class_name(on_class, g)
+            if cls_name_onclass:
+                # Use cardinality from this restriction
+                range_class_cardinalities[cls_name_onclass] = main_cardinality
 
     # Create property info if we have a valid property
-    if prop_name:
+    if prop_name and range_class_cardinalities:
         # Check if property already exists
         existing_prop = None
         for prop in class_info.properties:
@@ -375,27 +539,19 @@ def extract_restriction_properties(
                 break
 
         if existing_prop:
-            # Update existing property if range is more specific
-            if unique_range_classes:
-                if not existing_prop.range_classes:
-                    existing_prop.range_classes = unique_range_classes
-                else:
-                    # Merge new classes
-                    for cls in unique_range_classes:
-                        if cls not in existing_prop.range_classes:
-                            existing_prop.range_classes.append(cls)
+            # Merge new classes with their cardinalities
+            for cls_name, card in range_class_cardinalities.items():
+                # Update if not present or if new cardinality is more specific
+                if cls_name not in existing_prop.range_classes:
+                    existing_prop.range_classes[cls_name] = card
+                elif card is not None and existing_prop.range_classes[cls_name] is None:
+                    existing_prop.range_classes[cls_name] = card
         else:
             # Create new property from restriction
-            # Properties from OWL restrictions are optional unless explicitly constrained
             prop_info = PropertyInfo(
                 name=prop_name,
                 property_type="object",  # Restrictions are typically object properties
-                range_classes=unique_range_classes
-                if len(unique_range_classes) > 1
-                else [],
-                range_class=unique_range_classes[0]
-                if len(unique_range_classes) == 1
-                else None,
+                range_classes=range_class_cardinalities,
                 description=get_property_description(g, prop_uri),
                 required=False,  # Explicitly set to False - restrictions don't imply required
             )
@@ -490,7 +646,7 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
             properties[str(prop)] = PropertyInfo(
                 name=prop_name,
                 property_type="object",
-                range_class=get_property_range(g, prop, classes),
+                range_classes=get_property_range(g, prop, classes),
                 description=get_property_description(g, prop),
             )
 
@@ -527,8 +683,15 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
                     else:
                         # If either is not required, keep it optional (safer default)
                         existing_prop.required = False
-                    if prop_info.cardinality and not existing_prop.cardinality:
-                        existing_prop.cardinality = prop_info.cardinality
+                    # Merge range classes
+                    for cls_name, card in prop_info.range_classes.items():
+                        if cls_name not in existing_prop.range_classes:
+                            existing_prop.range_classes[cls_name] = card
+                        elif (
+                            card is not None
+                            and existing_prop.range_classes[cls_name] is None
+                        ):
+                            existing_prop.range_classes[cls_name] = card
                     if prop_info.description and not existing_prop.description:
                         existing_prop.description = prop_info.description
                     continue
@@ -585,15 +748,24 @@ def get_property_description(g: rdflib.Graph, prop) -> Optional[str]:
 
 def get_property_range(
     g: rdflib.Graph, prop, classes: Dict[str, ClassInfo]
-) -> Optional[str]:
-    """Get the range class for an object property"""
+) -> Dict[str, Optional[int]]:
+    """Get the range classes with cardinalities for an object property"""
     RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
+    range_classes: Dict[str, Optional[int]] = {}
 
     for range_cls in g.objects(prop, RDFS.range):
+        cls_name: Optional[str] = None
         if str(range_cls) in classes:
-            return classes[str(range_cls)].name
+            cls_name = classes[str(range_cls)].name
+            # No cardinality specified in rdfs:range, so use None
+            if cls_name:
+                range_classes[cls_name] = None
+        else:
+            cls_name = extract_class_name(range_cls, g)
+            if cls_name:
+                range_classes[cls_name] = None
 
-    return None
+    return range_classes
 
 
 def get_datatype_range(g: rdflib.Graph, prop) -> Optional[str]:
@@ -657,11 +829,19 @@ def process_property_shape(
                 if int(str(min_count)) > 0:
                     prop_info.required = True
 
+            # Update cardinality for all range classes if maxCount is specified
+            max_count_val = None
             for max_count in g.objects(prop_shape, SHACL.maxCount):
-                if int(str(max_count)) == 1:
-                    prop_info.cardinality = "single"
-                else:
-                    prop_info.cardinality = "multiple"
+                max_count_val = int(str(max_count))
+                break
+
+            if max_count_val is not None:
+                # Update all range classes with the cardinality
+                for cls_name in prop_info.range_classes:
+                    if max_count_val > 1:
+                        prop_info.range_classes[cls_name] = max_count_val
+                    else:
+                        prop_info.range_classes[cls_name] = 1
 
 
 def inherit_parent_properties(classes: Dict[str, ClassInfo]):
@@ -696,12 +876,8 @@ def inherit_parent_properties(classes: Dict[str, ClassInfo]):
                     inherited_prop = PropertyInfo(
                         name=prop.name,
                         property_type=prop.property_type,
-                        range_class=prop.range_class,
-                        range_classes=prop.range_classes.copy()
-                        if prop.range_classes
-                        else [],
+                        range_classes=prop.range_classes.copy(),
                         datatype=prop.datatype,
-                        cardinality=prop.cardinality,
                         required=prop.required,  # Preserve original required status
                         description=prop.description,
                     )
@@ -814,7 +990,7 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
             creator_prop = PropertyInfo(
                 name=creator_prop_name,
                 property_type="data",
-                range_class="str",
+                range_classes={"str": 1},
                 description="An entity responsible for making the resource.",
                 default_value="os.environ.get('USER')",
                 required=True,  # Mandatory property with default
@@ -883,12 +1059,17 @@ def generate_python_code(
     # Check all properties to see what types are needed
     for class_info in classes.values():
         for prop in class_info.properties:
-            if prop.cardinality == "multiple":
-                needs_list = True
-            if prop.property_type == "object" and prop.range_class:
+            # Check if any range class has cardinality None or > 1 (needs list)
+            if prop.property_type == "object":
+                for cardinality in prop.range_classes.values():
+                    if cardinality is None or cardinality > 1:
+                        needs_list = True
+                        break
+            # Object properties always need Union (for str, URIRef, and classes)
+            if prop.property_type == "object":
                 needs_union = True
             if (prop.property_type == "data" and not prop.datatype) or (
-                prop.property_type == "object" and not prop.range_class
+                prop.property_type == "object" and not prop.range_classes
             ):
                 needs_any = True
             if (
@@ -976,6 +1157,9 @@ def generate_python_code(
             "        # Add class type",
             "        if hasattr(self, '_class_uri'):",
             "            g.add((subject, RDF.type, URIRef(self._class_uri)))",
+            "        ",
+            "        # Add owl:NamedIndividual type",
+            "        g.add((subject, RDF.type, OWL.NamedIndividual))",
             "        ",
             "        object_props: set[str] = getattr(self, '_object_properties', set())",
             "        ",
@@ -1125,8 +1309,12 @@ def generate_class_code(
             # If one is required and one isn't, keep it as optional (safer default)
             else:
                 existing.required = False
-            if prop.cardinality and not existing.cardinality:
-                existing.cardinality = prop.cardinality
+            # Merge range classes
+            for cls_name, card in prop.range_classes.items():
+                if cls_name not in existing.range_classes:
+                    existing.range_classes[cls_name] = card
+                elif card is not None and existing.range_classes[cls_name] is None:
+                    existing.range_classes[cls_name] = card
             continue
         unique_props[prop.name] = prop
 
@@ -1226,28 +1414,45 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
 
     # Determine base type annotation (without Optional or Annotated)
     if prop.property_type == "object":
-        # Check for multiple range classes (from unionOf)
-        if prop.range_classes:
-            # Multiple classes from union - no 'str' option, only classes
-            union_types = ", ".join(prop.range_classes)
-            if prop.cardinality == "multiple":
-                base_type = f"List[Union[{union_types}]]"
+        # Build union type parts based on range_classes with their cardinalities
+        union_type_parts_set = {"str", "URIRef"}
+        union_type_parts_list_set = (
+            set()
+        )  # Only add list types if cardinality requires it
+
+        # Add classes from range_classes dict, avoiding duplicates
+        needs_lists = False
+        for class_name, cardinality in prop.range_classes.items():
+            if cardinality is None or cardinality > 1:
+                needs_lists = True
+                union_type_parts_list_set.add(f"List[{class_name}]")
             else:
-                base_type = f"Union[{union_types}]"
-        elif prop.range_class:
-            # Single class - no 'str' option, only the class
-            if prop.cardinality == "multiple":
-                base_type = f"List[{prop.range_class}]"
-            else:
-                base_type = prop.range_class
-        else:
-            # No range class specified
-            base_type = "Any" if has_any_import else "object"
+                union_type_parts_set.add(class_name)
+
+        # Only add List[str] and List[URIRef] if we actually need lists
+        if needs_lists:
+            union_type_parts_list_set.add("List[str]")
+            union_type_parts_list_set.add("List[URIRef]")
+
+        # Merge and preserve a consistent order: scalars first, then lists and custom lists
+        union_type_parts = list(sorted(union_type_parts_set))
+        union_type_parts_list = sorted(union_type_parts_list_set)
+        union_type_parts.extend(union_type_parts_list)
+
+        # Remove duplicates while preserving order
+        seen = set()
+        filtered_union_type_parts = []
+        for part in union_type_parts:
+            if part not in seen:
+                filtered_union_type_parts.append(part)
+                seen.add(part)
+
+        union_types = ", ".join(filtered_union_type_parts)
+        base_type = f"Union[{union_types}]"
     elif prop.property_type == "data" and prop.datatype:
-        if prop.cardinality == "multiple":
-            base_type = f"List[{prop.datatype}]"
-        else:
-            base_type = prop.datatype
+        # For data properties, check if any range class has cardinality > 1
+        # (data properties don't use range_classes, so this is a fallback)
+        base_type = prop.datatype
     else:
         # Use Any if imported, otherwise use object as fallback
         base_type = "Any" if has_any_import else "object"
@@ -1272,7 +1477,7 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
     if prop.default_value:
         # Pattern: Annotated[Optional[Type], Field(...)] when there's a default
         final_type = f"Annotated[Optional[{base_type}], {field_str}]"
-    elif not prop.required and prop.cardinality != "multiple":
+    elif not prop.required:
         # Pattern: Optional[Annotated[Type, Field(...)]] for optional fields
         annotated_type = f"Annotated[{base_type}, {field_str}]"
         final_type = f"Optional[{annotated_type}]"
@@ -1284,12 +1489,34 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
     if prop.default_value:
         # Default value goes after the type annotation
         return f"{prop.name}: {final_type} = {prop.default_value}"
-    elif prop.required:
-        # Required field without default
-        return f"{prop.name}: {final_type} = Field(...)"
-    elif prop.cardinality == "multiple":
-        # List field with default_factory
-        return f"{prop.name}: {final_type} = Field(default_factory=list)"
-    else:
-        # Optional field without default
+    elif not prop.required:
         return f"{prop.name}: {final_type} = None"
+    return f"{prop.name}: {final_type}"
+
+
+if __name__ == "__main__":
+    """
+    Convert a TTL file to Python code.
+
+    Command: uv run python libs/naas-abi-core/naas_abi_core/utils/onto2py/onto2py.py
+    """
+    import argparse
+    import os
+
+    # Default TTL file
+    default_ttl_file = "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl"
+
+    parser = argparse.ArgumentParser(description="Send a message via Twilio")
+    parser.add_argument(
+        "ttl_file",
+        nargs="?",
+        default=default_ttl_file,
+        help="Path to the TTL file to convert to Python code",
+    )
+    args = parser.parse_args()
+    ttl_file = args.ttl_file
+
+    python_code = onto2py(ttl_file)
+    py_file = os.path.splitext(ttl_file)[0] + ".py"
+    with open(py_file, "w") as f:
+        f.write(python_code)
