@@ -269,187 +269,190 @@ local-build: deps
 
 agent=AbiAgent
 # Generic chat command - allows specifying agent via agent=AgentName parameter
-chat: local-up deps 
+chat: deps 
 	@ LOG_LEVEL=DEBUG uv run abi chat $(module_name) $(agent_name)
 
 # Main ABI agent - the primary conversational AI interface
-chat-abi-agent: local-up deps
+chat-abi-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi AbiAgent
 
 # =============================================================================
 # CHAT WITH MARKETPLACE AI AGENTS
 # =============================================================================
 
-chat-chatgpt-agent: local-up deps
+chat-chatgpt-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.chatgpt ChatGPTAgent
 
-chat-claude-agent: local-up deps
+chat-claude-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.claude ClaudeAgent
 
-chat-deepseek-agent: local-up deps
+chat-deepseek-agent: deps
 	@ LOG_LEVEL=DEBUG uv run abi chat naas_abi_marketplace.ai.deepseek DeepSeekAgent
 
-chat-gemini-agent: local-up deps
+chat-gemini-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.gemini GeminiAgent
 
-chat-gemma-agent: local-up deps
+chat-gemma-agent: deps
 	@ LOG_LEVEL=DEBUG uv run abi chat naas_abi_marketplace.ai.gemma GemmaAgent
 
-chat-grok-agent: local-up deps
+chat-grok-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.grok GrokAgent
 
-chat-llama-agent: local-up deps
+chat-llama-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.llama LlamaAgent
 
-chat-mistral-agent: local-up deps
+chat-mistral-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.mistral MistralAgent
 
-chat-perplexity-agent: local-up deps
+chat-perplexity-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.perplexity PerplexityAgent
 
-chat-qwen-agent: local-up deps
+chat-qwen-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.qwen QwenAgent
 
 # =============================================================================
 # CHAT WITH MARKETPLACE APPLICATIONS AGENTS
 # =============================================================================
 
-chat-agicap-agent: local-up deps
+chat-agicap-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.agicap AgicapAgent
 
-chat-airtable-agent: local-up deps
+chat-airtable-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.airtable AirtableAgent
 
-chat-algolia-agent: local-up deps
+chat-algolia-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.algolia AlgoliaAgent
 
-chat-arxiv-agent: local-up deps
+chat-arxiv-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.arxiv ArXivAgent
 
-chat-aws-agent: local-up deps
+chat-aws-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.aws AWSAgent
 
-chat-bodo-agent: local-up deps
+chat-bodo-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.bodo BodoAgent
 
-chat-datagouv-agent: local-up deps
+chat-datagouv-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.datagouv DataGouvAgent
 
-chat-exchangeratesapi-agent: local-up deps
+chat-exchangeratesapi-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.exchangeratesapi ExchangeRatesAPIAgent
 
-chat-github-agent: local-up deps
+chat-github-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.github GitHubAgent
 
-chat-gmail-agent: local-up deps
+chat-gmail-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.gmail GmailAgent
 
-chat-google-analytics-agent: local-up deps
+chat-gmail-draft-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.gmail GmailDraftAgent
+
+chat-google-analytics-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_analytics GoogleAnalyticsAgent
 
-chat-google-calendar-agent: local-up deps
+chat-google-calendar-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_calendar GoogleCalendarAgent
 
-chat-google-drive-agent: local-up deps
+chat-google-drive-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_drive GoogleDriveAgent
 
-chat-google-maps-agent: local-up deps
+chat-google-maps-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_maps GoogleMapsAgent
 
-chat-google-search-agent: local-up deps
+chat-google-search-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_search GoogleSearchAgent
 
-chat-google-sheets-agent: local-up deps
+chat-google-sheets-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_sheets GoogleSheetsAgent
 
-chat-hubspot-agent: local-up deps
+chat-hubspot-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.hubspot HubSpotAgent
 
-chat-instagram-agent: local-up deps
+chat-instagram-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.instagram InstagramAgent
 
-chat-linkedin-agent: local-up deps
+chat-linkedin-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInAgent
 
-chat-mercury-agent: local-up deps
+chat-mercury-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.mercury MercuryAgent
 
-chat-naas-agent: local-up deps
+chat-naas-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.naas NaasAgent
 
-chat-nebari-agent: local-up deps
+chat-nebari-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.nebari NebariAgent
 
-chat-newsapi-agent: local-up deps
+chat-newsapi-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.newsapi NewsAPIAgent
 
-chat-notion-agent: local-up deps
+chat-notion-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.notion NotionAgent
 
-chat-openalex-agent: local-up deps
+chat-openalex-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openalex OpenAlexAgent
 
-chat-openrouter-agent: local-up deps
+chat-openrouter-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openrouter OpenRouterAgent
 
-chat-openweathermap-agent: local-up deps
+chat-openweathermap-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openweathermap OpenWeatherMapAgent
 
-chat-pennylane-agent: local-up deps
+chat-pennylane-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.pennylane PennylaneAgent
 
-chat-postgres-agent: local-up deps
+chat-postgres-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.postgres PostgresAgent
 
-chat-powerpoint-agent: local-up deps
+chat-powerpoint-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
 
-chat-pubmed-agent: local-up deps
+chat-pubmed-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.pubmed PubMedAgent
 
-chat-qonto-agent: local-up deps
+chat-qonto-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.qonto QontoAgent
 
-chat-salesforce-agent: local-up deps
+chat-salesforce-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.salesforce SalesforceAgent
 
-chat-sanax-agent: local-up deps
+chat-sanax-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sanax SanaxAgent
 
-chat-sendgrid-agent: local-up deps
+chat-sendgrid-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sendgrid SendGridAgent
 
-chat-sharepoint-agent: local-up deps
+chat-sharepoint-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sharepoint SharePointAgent
 
-chat-slack-agent: local-up deps
+chat-slack-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.slack SlackAgent
 
-chat-spotify-agent: local-up deps
+chat-spotify-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.spotify SpotifyAgent
 
-chat-stripe-agent: local-up deps
+chat-stripe-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.stripe StripeAgent
 
-chat-twilio-agent: local-up deps
+chat-twilio-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.twilio TwilioAgent
 
-chat-whatsapp-business-agent: local-up deps
+chat-whatsapp-business-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.whatsapp_business WhatsAppBusinessAgent
 
-chat-worldbank-agent: local-up deps
+chat-worldbank-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.worldbank WorldBankAgent
 
-chat-yahoofinance-agent: local-up deps
+chat-yahoofinance-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.yahoofinance YfinanceAgent
 
-chat-youtube-agent: local-up deps
+chat-youtube-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.youtube YouTubeAgent
 
-chat-zoho-agent: local-up deps
+chat-zoho-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.zoho ZohoAgent
 
-pull-request-description: local-up deps
+pull-request-description: deps
 	@ echo "generate the pull request description please."
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git PullRequestDescriptionAgent
 
@@ -457,13 +460,13 @@ pull-request-description: local-up deps
 # CHAT WITH MARKETPLACE DOMAINS AGENTS
 # =============================================================================
 
-chat-ontology-engineer-agent: local-up deps
+chat-ontology-engineer-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.ontology_engineer OntologyEngineerAgent
 
-chat-process-ontology-engineer-agent: local-up deps
+chat-process-ontology-engineer-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.ontology_engineer ProcessOntologyEngineerAgent
 
-chat-support-agent: local-up deps
+chat-support-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.support SupportAgent
 
 # =============================================================================
