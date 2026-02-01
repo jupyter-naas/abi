@@ -105,6 +105,13 @@ class ConvertOntologytoYamlWorkflowParameters(WorkflowParameters):
             description="The name of the ontology to publish to the workspace.",
         ),
     ] = "New Ontology"
+    display_individuals_classes: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Whether to display individuals and classes in the YAML file.",
+        ),
+    ] = True
 
 
 class ConvertOntologytoYamlWorkflow(Workflow):
@@ -199,6 +206,98 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                 Tuple[str, str], Tuple[str, URIRef]
             ] = {}
 
+            # Helper function to create individual entity entry
+            def create_individual_entry(
+                individual_uri: URIRef,
+                class_uri: Optional[URIRef],
+                individual_name: str,
+                individual_id: str,
+                individual_group: str,
+                subclassof_uri: Optional[URIRef],
+                entity_class: Optional[str] = None,
+                include_class_relation: bool = True,
+            ) -> dict:
+                """Create an entity entry for a NamedIndividual."""
+                style: dict = {"group": individual_group}
+                if "image" in GROUP_TO_STYLE.get(individual_group, {}):
+                    style["image"] = GROUP_TO_STYLE[individual_group]["image"]
+                    style["shape"] = "circularImage"
+                else:
+                    style["color"] = GROUP_TO_STYLE.get(individual_group, {}).get(
+                        "color", "purple"
+                    )
+                    style["shape"] = GROUP_TO_STYLE.get(individual_group, {}).get(
+                        "shape", "diamond"
+                    )
+
+                relations_individual = []
+                if include_class_relation and entity_class:
+                    relations_individual.append(
+                        {
+                            "label": "is a",
+                            "to": entity_class,
+                        }
+                    )
+
+                # Get all object properties pointing from this individual
+                for pred, obj in full_graph.predicate_objects(individual_uri):
+                    if isinstance(pred, URIRef) and isinstance(obj, URIRef):
+                        # Check if obj is a NamedIndividual
+                        obj_types = list(full_graph.objects(obj, RDF.type))
+                        if OWL.NamedIndividual in obj_types:
+                            # Get property label
+                            property_label = get_rdfs_label(pred, graph, imported_graph)
+
+                            # Get target individual ID
+                            target_prefix = get_class_id_prefix(obj, graph)
+                            target_short_name = get_short_name(obj)
+                            target_id = f"{target_prefix}:{target_short_name}"
+
+                            # Check for inverse relationship deduplication
+                            forward_key = (individual_id, target_id)
+                            inverse_key = (target_id, individual_id)
+                            should_add = True
+
+                            # Check if we've already seen this exact relationship
+                            if forward_key in individual_relationships_seen:
+                                should_add = False
+                            elif inverse_key in individual_relationships_seen:
+                                # Check if the properties are inverses
+                                existing_prop_uri = individual_relationships_seen[
+                                    inverse_key
+                                ][1]
+                                inverse_prop = get_inverse_property(pred, full_graph)
+                                if inverse_prop and inverse_prop == existing_prop_uri:
+                                    # This is an inverse relationship, skip it
+                                    should_add = False
+                                elif pred == get_inverse_property(
+                                    existing_prop_uri, full_graph
+                                ):
+                                    # The existing property is the inverse of this one, skip it
+                                    should_add = False
+
+                            if should_add:
+                                # Record this relationship
+                                individual_relationships_seen[forward_key] = (
+                                    property_label,
+                                    pred,
+                                )
+                                relations_individual.append(
+                                    {
+                                        "label": property_label,
+                                        "to": target_id,
+                                    }
+                                )
+
+                return {
+                    "id": individual_id,
+                    "name": individual_name,
+                    "type": "owl:NamedIndividual",
+                    "subclassOf": str(subclassof_uri) if subclassof_uri else "",
+                    "style": style,
+                    "relations": relations_individual,
+                }
+
             # Process classes for classes section (old format)
             for class_uri in classes:
                 # Get class ID (prefix:short_name)
@@ -292,33 +391,35 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                     class_entry["style"] = {"group": group}
 
                 yaml_classes.append(class_entry)
-
-                # Build entity entry (yellow square for classes)
                 entity_class = class_id.split(":")[-1]
-                entity_class_entry = {
-                    "id": entity_class,
-                    "name": name,
-                    "type": "owl:Class",
-                    "style": {
-                        "group": "Class",
-                        "color": "yellow",
-                        "shape": "square",
-                    },
-                    "relations": [
-                        {
-                            "label": "is a",
-                            "to": subclassof.split(":")[-1] if subclassof else "",
-                        }
-                    ]
-                    if subclassof
-                    else [],
-                }
-                yaml_entities.append(entity_class_entry)
+
+                if parameters.display_individuals_classes:
+                    # Build entity entry (yellow square for classes)
+                    entity_class_entry = {
+                        "id": entity_class,
+                        "name": name,
+                        "type": "owl:Class",
+                        "style": {
+                            "group": "Class",
+                            "color": "yellow",
+                            "shape": "square",
+                        },
+                        "relations": [
+                            {
+                                "label": "is a",
+                                "to": subclassof.split(":")[-1] if subclassof else "",
+                            }
+                        ]
+                        if subclassof
+                        else [],
+                    }
+                    yaml_entities.append(entity_class_entry)
 
                 # Use existing NamedIndividuals if available, otherwise generate one as fallback
                 individuals_for_class = named_individuals.get(class_uri, [])
 
                 if total_individuals > 0:
+                    # Case: Both classes and NamedIndividuals exist
                     # Use existing NamedIndividuals
                     for individual_uri in individuals_for_class:
                         # Get individual label
@@ -345,104 +446,39 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                         if individual_group is None:
                             individual_group = "UNKNOWN"
 
-                        # Extract relationships from the individual (all object properties)
-                        relations_individual = [
-                            {
-                                "label": "is a",
-                                "to": entity_class,
-                            }
-                        ]
-
-                        # Get all object properties pointing from this individual
-                        for pred, obj in full_graph.predicate_objects(individual_uri):
-                            if isinstance(pred, URIRef) and isinstance(obj, URIRef):
-                                # Check if obj is a NamedIndividual
-                                obj_types = list(full_graph.objects(obj, RDF.type))
-                                if OWL.NamedIndividual in obj_types:
-                                    # Get property label
-                                    property_label = get_rdfs_label(
-                                        pred, graph, imported_graph
-                                    )
-
-                                    # Get target individual ID
-                                    target_prefix = get_class_id_prefix(obj, graph)
-                                    target_short_name = get_short_name(obj)
-                                    target_id = f"{target_prefix}:{target_short_name}"
-
-                                    # Check for inverse relationship deduplication
-                                    # Check if inverse relationship already exists (in either direction)
-                                    forward_key = (individual_id, target_id)
-                                    inverse_key = (target_id, individual_id)
-                                    should_add = True
-
-                                    # Check if we've already seen this exact relationship
-                                    if forward_key in individual_relationships_seen:
-                                        should_add = False
-                                    elif inverse_key in individual_relationships_seen:
-                                        # Check if the properties are inverses
-                                        existing_prop_uri = (
-                                            individual_relationships_seen[inverse_key][
-                                                1
-                                            ]
-                                        )
-                                        inverse_prop = get_inverse_property(
-                                            pred, full_graph
-                                        )
-                                        if (
-                                            inverse_prop
-                                            and inverse_prop == existing_prop_uri
-                                        ):
-                                            # This is an inverse relationship, skip it
-                                            should_add = False
-                                        elif pred == get_inverse_property(
-                                            existing_prop_uri, full_graph
-                                        ):
-                                            # The existing property is the inverse of this one, skip it
-                                            should_add = False
-
-                                    if should_add:
-                                        # Record this relationship
-                                        individual_relationships_seen[forward_key] = (
-                                            property_label,
-                                            pred,
-                                        )
-                                        relations_individual.append(
-                                            {
-                                                "label": property_label,
-                                                "to": target_id,
-                                            }
-                                        )
-
-                        # Build individual entry (purple diamond for instances)
-                        style: dict = {
-                            "group": individual_group,
-                        }
-                        if "image" in GROUP_TO_STYLE[individual_group]:
-                            style["image"] = GROUP_TO_STYLE[individual_group]["image"]
-                            style["shape"] = "circularImage"
-                        else:
-                            style["color"] = GROUP_TO_STYLE[individual_group]["color"]
-                            style["shape"] = GROUP_TO_STYLE[individual_group]["shape"]
-                        entity_individual_entry = {
-                            "id": individual_id,
-                            "name": individual_name,
-                            "type": "owl:NamedIndividual",
-                            "subclassOf": str(subclassof_uri) if subclassof_uri else "",
-                            "style": style,
-                            "relations": relations_individual,
-                        }
+                        # Create individual entry with "is a" relation to class
+                        entity_individual_entry = create_individual_entry(
+                            individual_uri=individual_uri,
+                            class_uri=class_uri,
+                            individual_name=individual_name,
+                            individual_id=individual_id,
+                            individual_group=individual_group,
+                            subclassof_uri=subclassof_uri,
+                            entity_class=entity_class,
+                            include_class_relation=True,
+                        )
                         yaml_entities.append(entity_individual_entry)
                 else:
-                    # Fallback: generate individual entry if no NamedIndividuals exist
+                    # Case: Classes exist but no NamedIndividuals - create fallback entities
+                    individual_group = get_group_from_class_hierarchy(
+                        class_uri, full_graph
+                    )
+                    if individual_group is None:
+                        individual_group = "UNKNOWN"
+
                     style = {
                         "group": individual_group,
                     }
-                    if "image" in GROUP_TO_STYLE[individual_group]:
+                    if "image" in GROUP_TO_STYLE.get(individual_group, {}):
                         style["image"] = GROUP_TO_STYLE[individual_group]["image"]
                         style["shape"] = "circularImage"
                     else:
-                        style["color"] = GROUP_TO_STYLE[individual_group]["color"]
-                        style["shape"] = GROUP_TO_STYLE[individual_group]["shape"]
+                        style["color"] = GROUP_TO_STYLE.get(individual_group, {}).get(
+                            "color", "purple"
+                        )
+                        style["shape"] = GROUP_TO_STYLE.get(individual_group, {}).get(
+                            "shape", "diamond"
+                        )
                     entity_individual_entry = {
                         "id": entity_class + "_001",
                         "name": name + " 001",
@@ -478,6 +514,63 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                     if relations_individual:
                         entity_individual_entry["relations"] = relations_individual
                     yaml_entities.append(entity_individual_entry)
+
+            # Case: Only NamedIndividuals (ABOX) - no classes in classes_set
+            # Process NamedIndividuals that don't have corresponding classes
+            if len(classes) == 0 and total_individuals > 0:
+                logger.info(
+                    "Processing ABOX-only ontology: NamedIndividuals without classes"
+                )
+                for class_uri, individual_uris in named_individuals.items():
+                    # Get class information even though it's not in classes_set
+                    # (might be from imported ontology)
+                    subclassof_list = list(
+                        full_graph.objects(class_uri, RDFS.subClassOf)
+                    )
+                    subclassof_uri = None
+                    for subclassof_node in subclassof_list:
+                        if isinstance(subclassof_node, URIRef):
+                            subclassof_uri = subclassof_node
+                            break
+
+                    # Get group from class hierarchy
+                    individual_group = get_group_from_class_hierarchy(
+                        class_uri, full_graph
+                    )
+                    if individual_group is None:
+                        individual_group = "UNKNOWN"
+
+                    for individual_uri in individual_uris:
+                        # Get individual label
+                        individual_labels = list(
+                            full_graph.objects(individual_uri, RDFS.label)
+                        )
+                        individual_name = (
+                            str(individual_labels[0])
+                            if individual_labels
+                            else get_short_name(individual_uri)
+                        )
+                        if "@" in individual_name:
+                            individual_name = individual_name.split("@")[0]
+
+                        # Get individual ID
+                        individual_prefix = get_class_id_prefix(individual_uri, graph)
+                        individual_short_name = get_short_name(individual_uri)
+                        individual_id = f"{individual_prefix}:{individual_short_name}"
+
+                        # Create individual entry WITHOUT "is a" relation to class
+                        # (since the class entity doesn't exist in yaml_entities)
+                        entity_individual_entry = create_individual_entry(
+                            individual_uri=individual_uri,
+                            class_uri=class_uri,
+                            individual_name=individual_name,
+                            individual_id=individual_id,
+                            individual_group=individual_group,
+                            subclassof_uri=subclassof_uri,
+                            entity_class=None,
+                            include_class_relation=False,
+                        )
+                        yaml_entities.append(entity_individual_entry)
 
             # Create YAML structure with both classes and entities
             yaml_data = {"classes": yaml_classes, "entities": yaml_entities}
@@ -574,12 +667,14 @@ if __name__ == "__main__":
             storage_name=storage_name,
         )
     )
-    turtle_path = "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl"
+    turtle_path = "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/pipelines/insert_Florent_Ravenel.ttl"
     imported_ontologies = [
         "libs/naas-abi-marketplace/naas_abi_marketplace/domains/ontology_engineer/ontologies/BFO7BucketsProcessOntology.ttl",
         "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/imports/LinkedInOntology.ttl",
+        "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl",
     ]
-    ontology_name = "Act of Connections on LinkedIn"
+    ontology_name = "Florent Ravenel's Act of Connections on LinkedIn"
+    display_individuals_classes = False
 
     # Create workflow configuration and instance
     configuration = ConvertOntologytoYamlWorkflowConfiguration(
@@ -593,6 +688,7 @@ if __name__ == "__main__":
         imported_ontologies=imported_ontologies,
         publish_to_workspace=True,
         ontology_name=ontology_name,
+        display_individuals_classes=display_individuals_classes,
     )
 
     # Execute workflow
