@@ -30,11 +30,8 @@ linkedin:ActOfConnection a owl:Class ;
     rdfs:subClassOf cco:ont00000433  , # act of association
         [ a owl:Restriction ;
           owl:onProperty linkedin:connectedAt ; # connected at
-          owl:someValuesFrom abi:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty linkedin:connectedAt ; # connected at
-          owl:allValuesFrom abi:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
+          owl:cardinality "1"^^xsd:nonNegativeInteger ;
+          owl:onClass abi:ISO8601UTCDateTime  # ISO 8601 UTC DateTime
         ] ,
         [ a owl:Restriction ;
           owl:onProperty linkedin:involvesAgent ; # involves agent
@@ -84,6 +81,10 @@ linkedin:ActOfConnection a owl:Class ;
           owl:onProperty bfo:BFO_0000055 ; # realizes
           owl:allValuesFrom linkedin:ConnectionRole  # Connections Role
         ] .
+
+bfo:BFO_0000199 a owl:ObjectProperty ;
+    rdfs:label "occupies temporal region"@en ;
+    skos:definition "p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"@en .
 
 linkedin:connectedAt a owl:ObjectProperty ;
     rdfs:label "connected at"@en ;
@@ -295,6 +296,13 @@ linkedin:ConnectionsExportFile a owl:Class ;
         owl:allValuesFrom cco:ont00001180  # Commercial Organization
     ] .
 
+# linkedin:file_path a rdf:DatatypeProperty ;
+#     rdfs:label "file path"@en ;
+#     rdfs:domain linkedin:ConnectionsExportFile ;
+#     rdfs:range xsd:string ;
+#     skos:definition "The file path of a connections export file."@en ;
+#     skos:example "C:/Users/John Doe/Downloads/connections_export.csv"@en .
+
 bfo:BFO_0000058 a owl:ObjectProperty ;
     owl:inverseOf bfo:BFO_0000059 ;
     rdfs:label "is concretized by"@en ;
@@ -381,6 +389,7 @@ bfo:BFO_0000197 a owl:ObjectProperty ;
 # Role (WHY)
 linkedin:ConnectionRole a owl:Class ;
     rdfs:label "LinkedIn connection role"@en ;
+    owl:hasKey ( rdfs:label ) ;
     skos:definition "A role that a person can bear in a connection on LinkedIn, such as requester, recipient, or unknown role."@en ;
     skos:example "Requester, Recipient or Unknown connection role"@en ;
     rdfs:subClassOf bfo:BFO_0000023 ,  # role
@@ -397,107 +406,3 @@ bfo:BFO_0000054 a owl:ObjectProperty ;
     owl:inverseOf bfo:BFO_0000055 ;
     rdfs:label "has realization"@en ;
     skos:definition "b has realization c =Def c realizes b"@en .
-
-#################################################################
-#    Individuals from LinkedIn Connections Export
-#################################################################
-
-linkedin:actOfConnection_jeremy_ravenel_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:ActOfConnection ;
-    rdfs:label "Act of connection between Jeremy Ravenel and Olivia Alexander on LinkedIn"@en ;
-    linkedin:connectedAt linkedin:dateTime_20251023 ;
-    linkedin:involvesAgent linkedin:person_jeremy_ravenel , 
-                     linkedin:person_olivia_alexander , 
-                     linkedin:commercialOrganization_linkedin ; # involves agent (2 Persons + Organization)
-    linkedin:hasAssociatedQuality linkedin:currentPosition_olivia_alexander ,
-                     linkedin:currentOrganization_olivia_alexander ,
-                     linkedin:currentPublicUrl_olivia_alexander ,
-                     linkedin:currentEmailAddress_olivia_alexander ; # has associated quality
-    bfo:BFO_0000066 linkedin:userSite_olivia_alexander ; # occurs in
-    bfo:BFO_0000059 linkedin:connectionsExportFile_20251023 , linkedin:profilePage_olivia_alexander ; # concretizes
-    bfo:BFO_0000055 linkedin:connectionRole_jeremy_ravenel , linkedin:connectionRole_olivia_alexander . # realizes
-
-linkedin:dateTime_20251023 a owl:NamedIndividual ;
-    rdf:type abi:ISO8601UTCDateTime ;
-    rdfs:label "2025-10-23T00:00:00.000Z"@en .
-
-linkedin:person_olivia_alexander a owl:NamedIndividual ;
-    rdf:type cco:ont00001262 ; # Person
-    rdfs:label "Olivia Alexander"@en ;
-    bfo:BFO_0000171 linkedin:userSite_olivia_alexander ; # located in
-    linkedin:isOwnerOf linkedin:profilePage_olivia_alexander ;
-    linkedin:hasCurrentJobPosition linkedin:currentPosition_olivia_alexander ;
-    linkedin:hasCurrentOrganization linkedin:currentOrganization_olivia_alexander ;
-    linkedin:hasCurrentPublicUrl linkedin:currentPublicUrl_olivia_alexander ;
-    linkedin:hasEmailAddress linkedin:currentEmailAddress_olivia_alexander ;
-    linkedin:hasConnectionRole linkedin:connectionRole_olivia_alexander .
-
-linkedin:commercialOrganization_linkedin a owl:NamedIndividual ;
-    rdf:type cco:ont00001180 ; # Organization
-    rdfs:label "LinkedIn"@en ;
-    linkedin:isOwnerOf linkedin:connectionsExportFile_20251023 .
-
-linkedin:person_jeremy_ravenel a owl:NamedIndividual ;
-    rdf:type cco:ont00001262 ; # Person
-    rdfs:label "Jeremy Ravenel"@en ;
-    bfo:BFO_0000171 linkedin:userSite_jeremy_ravenel ; # located in
-    linkedin:hasConnectionRole linkedin:connectionRole_jeremy_ravenel .
-
-linkedin:userSite_jeremy_ravenel a owl:NamedIndividual ;
-    rdf:type linkedin:Location ;
-    rdfs:label "Unknown User Site"@en .
-
-linkedin:userSite_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:Location ;
-    rdfs:label "Unknown User Site"@en .
-
-linkedin:connectionsExportFile_20251023 a owl:NamedIndividual ;
-    rdf:type linkedin:ConnectionsExportFile ;
-    rdfs:label "LinkedIn Connections Export File - 2025-10-23"@en ;
-    linkedin:isOwnedBy linkedin:commercialOrganization_linkedin .
-
-linkedin:profilePage_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:ProfilePage ;
-    rdfs:label "Olivia Alexander's LinkedIn Profile Page"@en ;
-    linkedin:isOwnedBy linkedin:person_olivia_alexander .
-
-linkedin:currentPosition_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:CurrentJobPosition ;
-    rdfs:label "Event Mark"@en ;
-    bfo:BFO_0000059 linkedin:connectionsExportFile_20251023, linkedin:profilePage_olivia_alexander ; # concretizes
-    bfo:BFO_0000197 linkedin:person_olivia_alexander . # inheres in
-
-linkedin:currentOrganization_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:CurrentOrganization ;
-    rdfs:label "OpenTeam"@en ;
-    bfo:BFO_0000059 linkedin:connectionsExportFile_20251023, linkedin:profilePage_olivia_alexander ; # concretizes
-    bfo:BFO_0000197 linkedin:person_olivia_alexander, linkedin:organization_openTeam . # inheres in
-
-linkedin:organization_openTeam a owl:NamedIndividual ;
-    rdf:type cco:ont00001180 ; # Organization
-    rdfs:label "OpenTeam"@en ;
-    linkedin:holdsQuality linkedin:currentOrganization_olivia_alexander .
-
-linkedin:currentPublicUrl_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:CurrentPublicUrl ;
-    rdfs:label "https://www.linkedin.com/in/olivia-alexander"@en ;
-    bfo:BFO_0000059 linkedin:connectionsExportFile_20251023, linkedin:profilePage_olivia_alexander ; # concretizes
-    bfo:BFO_0000197 linkedin:person_olivia_alexander . # inheres in
-
-linkedin:currentEmailAddress_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:EmailAddress ;
-    rdfs:label "Unknown Email Address"@en ;
-    bfo:BFO_0000059 linkedin:connectionsExportFile_20251023, linkedin:profilePage_olivia_alexander ; # concretizes
-    bfo:BFO_0000197 linkedin:person_olivia_alexander . # inheres in
-
-linkedin:connectionRole_jeremy_ravenel a owl:NamedIndividual ;
-    rdf:type linkedin:ConnectionRole ;
-    rdfs:label "Unknown Connection Role"@en ;
-    bfo:BFO_0000054 linkedin:actOfConnection_jeremy_ravenel_olivia_alexander ; # has realization
-    bfo:BFO_0000197 linkedin:person_jeremy_ravenel . # inheres in
-
-linkedin:connectionRole_olivia_alexander a owl:NamedIndividual ;
-    rdf:type linkedin:ConnectionRole ;
-    rdfs:label "Unknown Connection Role"@en ;
-    bfo:BFO_0000054 linkedin:actOfConnection_jeremy_ravenel_olivia_alexander ; # has realization
-    bfo:BFO_0000197 linkedin:person_olivia_alexander . # inheres in
