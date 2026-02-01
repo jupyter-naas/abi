@@ -1138,8 +1138,19 @@ def generate_python_code(
             '        """Set the namespace for generating URIs"""',
             "        cls._namespace = namespace",
             "        ",
-            "    def rdf(self, subject_uri: str | None = None) -> Graph:",
-            '        """Generate RDF triples for this instance"""',
+            "    def rdf(",
+            "        self, subject_uri: str | None = None, visited: set[str] | None = None",
+            "    ) -> Graph:",
+            '        """Generate RDF triples for this instance',
+            "",
+            "        Args:",
+            "            subject_uri: Optional URI to use as subject (defaults to self._uri)",
+            "            visited: Set of URIs that have already been processed (for cycle detection)",
+            '        """',
+            "        # Initialize visited set if not provided",
+            "        if visited is None:",
+            "            visited = set()",
+            "",
             "        g = Graph()",
             "        g.bind('cco', CCO)",
             "        g.bind('bfo', BFO)",
@@ -1148,21 +1159,34 @@ def generate_python_code(
             "        g.bind('rdf', RDF)",
             "        g.bind('owl', OWL)",
             "        g.bind('xsd', XSD)",
-            "        ",
+            "",
             "        # Use stored URI or provided subject_uri",
             "        if subject_uri is None:",
             "            subject_uri = self._uri",
             "        subject = URIRef(subject_uri)",
-            "        ",
+            "",
+            "        # Check if we've already processed this entity (cycle detection)",
+            "        if subject_uri in visited:",
+            "            # Already processed, just return empty graph to avoid infinite recursion",
+            "            # The relationship triple will be added by the caller",
+            "            return g",
+            "",
+            "        # Mark this entity as visited before processing",
+            "        visited.add(subject_uri)",
+            "",
             "        # Add class type",
             "        if hasattr(self, '_class_uri'):",
             "            g.add((subject, RDF.type, URIRef(self._class_uri)))",
-            "        ",
+            "",
             "        # Add owl:NamedIndividual type",
             "        g.add((subject, RDF.type, OWL.NamedIndividual))",
-            "        ",
+            "",
+            "        # Add label if it exists",
+            "        if hasattr(self, 'label'):",
+            "            g.add((subject, RDFS.label, Literal(self.label)))",
+            "",
             "        object_props: set[str] = getattr(self, '_object_properties', set())",
-            "        ",
+            "",
             "        # Add properties",
             "        if hasattr(self, '_property_uris'):",
             "            for prop_name, prop_uri in self._property_uris.items():",
@@ -1171,23 +1195,29 @@ def generate_python_code(
             "                if prop_value is not None:",
             "                    if isinstance(prop_value, list):",
             "                        for item in prop_value:",
-            "                            if hasattr(item, 'rdf'):",
-            "                                # Add triples from related object",
-            "                                g += item.rdf()",
+            "                            if hasattr(item, 'rdf') and hasattr(item, '_uri'):",
+            "                                # Check if this entity was already visited to prevent cycles",
+            "                                if item._uri not in visited:",
+            "                                    # Add triples from related object",
+            "                                    g += item.rdf(visited=visited)",
+            "                                # Always add the triple, even if already visited",
             "                                g.add((subject, URIRef(prop_uri), URIRef(item._uri)))",
             "                            elif is_object_prop and isinstance(item, (str, URIRef)):",
             "                                g.add((subject, URIRef(prop_uri), URIRef(str(item))))",
             "                            else:",
             "                                g.add((subject, URIRef(prop_uri), Literal(item)))",
-            "                    elif hasattr(prop_value, 'rdf'):",
-            "                        # Add triples from related object",
-            "                        g += prop_value.rdf()",
+            "                    elif hasattr(prop_value, 'rdf') and hasattr(prop_value, '_uri'):",
+            "                        # Check if this entity was already visited to prevent cycles",
+            "                        if prop_value._uri not in visited:",
+            "                            # Add triples from related object",
+            "                            g += prop_value.rdf(visited=visited)",
+            "                        # Always add the triple, even if already visited",
             "                        g.add((subject, URIRef(prop_uri), URIRef(prop_value._uri)))",
             "                    elif is_object_prop and isinstance(prop_value, (str, URIRef)):",
             "                        g.add((subject, URIRef(prop_uri), URIRef(str(prop_value))))",
             "                    else:",
             "                        g.add((subject, URIRef(prop_uri), Literal(prop_value)))",
-            "        ",
+            "",
             "        return g",
             "",
             "",
@@ -1416,39 +1446,28 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
     if prop.property_type == "object":
         # Build union type parts based on range_classes with their cardinalities
         union_type_parts_set = {"str", "URIRef"}
-        union_type_parts_list_set = (
-            set()
-        )  # Only add list types if cardinality requires it
 
-        # Add classes from range_classes dict, avoiding duplicates
-        needs_lists = False
+        # Add all classes from range_classes dict (regardless of cardinality)
+        # We'll wrap the entire Union in List if any class needs to be a list
         for class_name, cardinality in prop.range_classes.items():
+            union_type_parts_set.add(class_name)
+
+        # Check if we need to wrap in List (if any cardinality is None or > 1)
+        needs_lists = False
+        for cardinality in prop.range_classes.values():
             if cardinality is None or cardinality > 1:
                 needs_lists = True
-                union_type_parts_list_set.add(f"List[{class_name}]")
-            else:
-                union_type_parts_set.add(class_name)
+                break
 
-        # Only add List[str] and List[URIRef] if we actually need lists
+        # Build the Union type with all scalar types
+        union_type_parts = sorted(union_type_parts_set)
+        union_types = ", ".join(union_type_parts)
+
+        # Wrap in List if needed, otherwise just use Union
         if needs_lists:
-            union_type_parts_list_set.add("List[str]")
-            union_type_parts_list_set.add("List[URIRef]")
-
-        # Merge and preserve a consistent order: scalars first, then lists and custom lists
-        union_type_parts = list(sorted(union_type_parts_set))
-        union_type_parts_list = sorted(union_type_parts_list_set)
-        union_type_parts.extend(union_type_parts_list)
-
-        # Remove duplicates while preserving order
-        seen = set()
-        filtered_union_type_parts = []
-        for part in union_type_parts:
-            if part not in seen:
-                filtered_union_type_parts.append(part)
-                seen.add(part)
-
-        union_types = ", ".join(filtered_union_type_parts)
-        base_type = f"Union[{union_types}]"
+            base_type = f"List[Union[{union_types}]]"
+        else:
+            base_type = f"Union[{union_types}]"
     elif prop.property_type == "data" and prop.datatype:
         # For data properties, check if any range class has cardinality > 1
         # (data properties don't use range_classes, so this is a fallback)
@@ -1490,7 +1509,13 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
         # Default value goes after the type annotation
         return f"{prop.name}: {final_type} = {prop.default_value}"
     elif not prop.required:
-        return f"{prop.name}: {final_type} = None"
+        # Determine if this is a list type based on base_type
+        is_list_type = base_type.startswith("List[")
+        if is_list_type:
+            default_value = "['http://ontology.naas.ai/abi/unknown']"
+        else:
+            default_value = "'http://ontology.naas.ai/abi/unknown'"
+        return f"{prop.name}: {final_type} = {default_value}"
     return f"{prop.name}: {final_type}"
 
 
