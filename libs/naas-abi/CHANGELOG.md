@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.15 (2026-02-02)
+
+### Bug Fixes
+
+- How ABI Agent loads templatable sparql query
+  ([`fa80a8c`](https://github.com/jupyter-naas/abi/commit/fa80a8c83f19e485b6d01abbb0573f58e214f517))
+
+
 ## v1.0.14 (2026-01-26)
 
 ### Bug Fixes

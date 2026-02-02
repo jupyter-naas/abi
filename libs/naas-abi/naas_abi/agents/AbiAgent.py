@@ -1,14 +1,11 @@
 from typing import Optional
 
 from langchain_core.tools import tool
-from naas_abi_core.services.agent.IntentAgent import (
-    AgentConfiguration,
-    AgentSharedState,
-    Intent,
-    IntentAgent,
-    IntentScope,
-    IntentType,
-)
+from naas_abi_core.module.Module import BaseModule
+from naas_abi_core.services.agent.IntentAgent import (AgentConfiguration,
+                                                      AgentSharedState, Intent,
+                                                      IntentAgent, IntentScope,
+                                                      IntentType)
 
 NAME = "Abi"
 AVATAR_URL = (
@@ -149,9 +146,12 @@ You can browse the data and run queries there."""
 
     tools.append(open_knowledge_graph_explorer)
 
-    from naas_abi_core.modules.templatablesparqlquery import (
-        ABIModule as TemplatableSparqlQueryABIModule,
-    )
+    from naas_abi import ABIModule
+    from naas_abi_core.modules.templatablesparqlquery import \
+        ABIModule as TemplatableSparqlQueryABIModuleModule
+    
+    templatable_sparql_query_module : BaseModule = ABIModule.get_instance().engine.modules["naas_abi_core.modules.templatablesparqlquery"]
+    assert isinstance(templatable_sparql_query_module, TemplatableSparqlQueryABIModuleModule), "TemplatableSparqlQueryABIModuleModule must be a subclass of BaseModule"
 
     agent_recommendation_tools = [
         "find_business_proposal_agents",
@@ -161,7 +161,7 @@ You can browse the data and run queries there."""
         "find_fastest_agents",
         "find_cheapest_agents",
     ]
-    sparql_query_tools_list = TemplatableSparqlQueryABIModule.get_instance().get_tools(
+    sparql_query_tools_list = templatable_sparql_query_module.get_tools(
         agent_recommendation_tools
     )
     tools += sparql_query_tools_list
@@ -176,7 +176,6 @@ You can browse the data and run queries there."""
 
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
-    from naas_abi import ABIModule
     from naas_abi_core import logger
 
     modules = ABIModule.get_instance().engine.modules.values()

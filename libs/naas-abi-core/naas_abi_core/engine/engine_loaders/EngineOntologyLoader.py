@@ -2,7 +2,8 @@ from typing import List
 
 from naas_abi_core import logger
 from naas_abi_core.module.Module import BaseModule
-from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import \
+    TripleStoreService
 
 
 class EngineOntologyLoader:
@@ -13,4 +14,5 @@ class EngineOntologyLoader:
         logger.debug("Loading ontologies")
         for module in modules:
             for ontology in module.ontologies:
+                logger.debug(f"Loading ontology: {ontology}")
                 triple_store.load_schema(ontology)
