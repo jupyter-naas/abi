@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ABI Service Portal</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #0b0f15;
+        color: #e6e9ef;
+      }
+      a {
+        color: #7dd3fc;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      .header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 28px;
+      }
+      .hint {
+        font-size: 14px;
+        color: #a3aab8;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        border: 1px solid #273043;
+        border-radius: 10px;
+        padding: 14px;
+        background: #121826;
+      }
+      .card h2 {
+        margin: 0 0 8px 0;
+        font-size: 18px;
+      }
+      .card p {
+        margin: 0 0 10px 0;
+        font-size: 13px;
+        color: #b8c0cc;
+      }
+      .links {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 14px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 999px;
+        font-size: 11px;
+        background: #1f2937;
+        color: #cbd5f5;
+        margin-left: 6px;
+      }
+      .footer {
+        margin-top: 24px;
+        font-size: 12px;
+        color: #9aa3b2;
+      }
+      @media (prefers-color-scheme: light) {
+        body {
+          background: #f8fafc;
+          color: #0f172a;
+        }
+        .card {
+          background: #ffffff;
+          border-color: #e2e8f0;
+        }
+        .hint,
+        .card p,
+        .footer {
+          color: #475569;
+        }
+        .badge {
+          background: #e2e8f0;
+          color: #334155;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>ABI Service Portal</h1>
+        <div class="hint">Local navigation for docker-compose services</div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>ABI</h2>
+          <p>Core API and Streamlit UI.</p>
+          <div class="links">
+            <a href="http://localhost:9879" target="_blank" rel="noreferrer">REST API</a>
+            <a href="http://localhost:8501" target="_blank" rel="noreferrer">Streamlit UI</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Dagster</h2>
+          <p>Workflow orchestration UI.</p>
+          <div class="links">
+            <a href="http://localhost:3001" target="_blank" rel="noreferrer">Dagster UI</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Oxigraph</h2>
+          <p>RDF store and SPARQL interface.</p>
+          <div class="links">
+            <a href="http://localhost:7878" target="_blank" rel="noreferrer">Oxigraph API</a>
+            <a href="http://localhost:7879" target="_blank" rel="noreferrer">Admin UI</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>YasGUI</h2>
+          <p>SPARQL query editor.</p>
+          <div class="links">
+            <a href="http://localhost:3000" target="_blank" rel="noreferrer">YasGUI UI</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Qdrant</h2>
+          <p>Vector database API and dashboard.</p>
+          <div class="links">
+            <a href="http://localhost:6333/dashboard" target="_blank" rel="noreferrer">Dashboard</a>
+            <a href="http://localhost:6333" target="_blank" rel="noreferrer">REST API</a>
+            <span>gRPC: localhost:6334 <span class="badge">non-HTTP</span></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>MinIO</h2>
+          <p>S3-compatible object storage.</p>
+          <div class="links">
+            <a href="http://localhost:9001" target="_blank" rel="noreferrer">Console</a>
+            <a href="http://localhost:9000" target="_blank" rel="noreferrer">S3 API</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>RabbitMQ</h2>
+          <p>AMQP message bus with UI.</p>
+          <div class="links">
+            <a href="http://localhost:15672" target="_blank" rel="noreferrer">Management UI</a>
+            <span>AMQP: localhost:5672 <span class="badge">non-HTTP</span></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>PostgreSQL</h2>
+          <p>Agent memory database.</p>
+          <div class="links">
+            <span>postgresql://abi_user:abi_password@localhost:5432/abi_memory</span>
+            <span class="badge">non-HTTP</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        If a link fails, the service may not be running in your active profile.
+      </div>
+    </div>
+  </body>
+</html>
