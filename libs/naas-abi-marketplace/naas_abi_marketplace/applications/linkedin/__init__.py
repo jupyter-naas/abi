@@ -50,7 +50,7 @@ class ABIModule(BaseModule[_Configuration]):
 
         ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
         ttl_files = glob.glob(
-            os.path.join(ontologies_dir, "**", "*.ttl"), recursive=True
+            os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
         )
 
         if not ttl_files:
