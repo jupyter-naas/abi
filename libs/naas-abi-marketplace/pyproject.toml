@@ -151,3 +151,7 @@ applications-yahoofinance = [
     "yfinance==0.2.66",
     "yahooquery==2.4.1"
 ]
+domains-ontology-engineer = [
+    "thefuzz==0.22.1",
+    "fuzzywuzzy-stubs==0.0.1"
+]
