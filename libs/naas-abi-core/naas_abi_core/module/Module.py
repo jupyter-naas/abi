@@ -9,7 +9,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import Global
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.integration.integration import Integration
 from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
+from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLoader
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
+from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.pipeline.pipeline import Pipeline
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.workflow.workflow import Workflow
@@ -65,6 +67,7 @@ class BaseModule(Generic[TConfig]):
     __integrations: List[Integration] = []
     __workflows: List[Workflow] = []
     __pipelines: List[Pipeline] = []
+    __orchestrations: List[type[Orchestrations]] = []
 
     def __init__(self, engine: EngineProxy, configuration: TConfig):
         assert isinstance(configuration, ModuleConfiguration), (
@@ -126,11 +129,18 @@ class BaseModule(Generic[TConfig]):
     def pipelines(self) -> List[Pipeline]:
         return self.__pipelines
 
+    @property
+    def orchestrations(self) -> List[type[Orchestrations]]:
+        return self.__orchestrations
+
     def on_load(self):
         logger.debug(f"on_load for module {self.__module__.split('.')[0]}")
         self.__load_ontologies()
 
         self.__agents = ModuleAgentLoader.load_agents(self.__class__)
+        self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(
+            self.__class__
+        )
 
     def on_initialized(self):
         """

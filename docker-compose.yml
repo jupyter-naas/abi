@@ -8,25 +8,66 @@
 # - Workflow orchestration (Dagster)
 # =============================================================================
 
-models:
-  gemma3:
-    model: ai/gemma3
-    context_size: 8192
-    runtime_flags:
-      - --memory=4g
-      - --cpus=2
-  embeddinggemma:
-    model: ai/embeddinggemma
-    context_size: 2048
-    runtime_flags:
-      - --memory=2g
-      - --cpus=1
-  qwen3:
-    model: ai/qwen3
-    context_size: 32768
-    runtime_flags:
-      - --memory=12g
-      - --cpus=4
+# models:
+#   gemma3:
+#     model: ai/gemma3
+#     context_size: 8192
+#     runtime_flags:
+#       - --memory=4g
+#       - --cpus=2
+#   embeddinggemma:
+#     model: ai/embeddinggemma
+#     context_size: 2048
+#     runtime_flags:
+#       - --memory=2g
+#       - --cpus=1
+#   qwen3:
+#     model: ai/qwen3
+#     context_size: 32768
+#     runtime_flags:
+#       - --memory=12g
+#       - --cpus=4
+ 
+x-abi-template: &abi_template
+  build:
+    context: .
+    dockerfile: docker/images/Dockerfile
+  ports:
+    - 9879:9879  # REST API endpoint - http://localhost:9879
+    - 8501:8501  # Streamlit web interface - http://localhost:8501
+  volumes:
+    # Development volumes for hot-reload
+    - ./scripts:/app/scripts
+    - ./uv.lock:/app/uv.lock
+    - ./config.yaml:/app/config.yaml
+    - ./pyproject.toml:/app/pyproject.toml
+    - ./Makefile:/app/Makefile
+    - ./storage:/app/storage  # Local file storage
+    - ./src:/app/src          # Source code
+    - ./libs:/app/libs        # Libraries
+    - ./README.md:/app/README.md
+    - ./.env:/app/.env
+    # Cached volumes for performance
+    - venv_cache:/app/.venv       # Python virtual environment cache
+  environment:
+    - PYTHONPATH=/app
+    - POSTGRES_URL=postgresql://abi_user:abi_password@postgres:5432/abi_memory
+    - VECTOR_STORE_ADAPTER=qdrant
+    - QDRANT_HOST=qdrant
+    - QDRANT_PORT=6333
+  # env_file:
+  #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
+  depends_on:
+    # oxigraph:
+    #   condition: service_healthy  # Wait for knowledge graph to be ready
+    postgres:
+      condition: service_healthy
+    # qdrant:
+    #   condition: service_healthy
+  networks:
+    - abi-network
+  profiles:
+    - container  # Only starts when running 'make container-up'
 
 services:
   # -----------------------------------------------------------------------------
@@ -35,50 +76,28 @@ services:
   # The core ABI application that routes between specialized AI agents
   # and coordinates multi-model conversations
   abi:
+    <<: *abi_template
+    command: ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.api.api"]  # Start ABI application
+    # models:
+    #   - gemma3        # Primary conversational AI model
+    #   - embeddinggemma # Text embedding model for semantic search
+    #   - qwen3         # Advanced reasoning model
+  
+  mcp-server:
     build:
       context: .
-      dockerfile: docker/images/Dockerfile
-    ports:
-      - 9879:9879  # REST API endpoint - http://localhost:9879
-      - 8501:8501  # Streamlit web interface - http://localhost:8501
-    volumes:
-      # Development volumes for hot-reload
-      - ./scripts:/app/scripts
-      - ./uv.lock:/app/uv.lock
-      - ./config.yaml:/app/config.yaml
-      - ./pyproject.toml:/app/pyproject.toml
-      - ./Makefile:/app/Makefile
-      - ./storage:/app/storage  # Local file storage
-      - ./src:/app/src          # Source code
-      - ./lib:/app/lib          # Libraries
-      - ./README.md:/app/README.md
-      # Cached volumes for performance
-      - venv_cache:/app/.venv       # Python virtual environment cache
+      dockerfile: libs/naas-abi-core/naas_abi_core/apps/mcp/Dockerfile.mcp
     environment:
-      - PYTHONPATH=/app
-      - POSTGRES_URL=postgresql://abi_user:abi_password@postgres:5432/abi_memory
-      - VECTOR_STORE_ADAPTER=qdrant
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-    env_file:
-      - .env  # Load environment variables (API keys, AI_MODE, etc.)
-    command: ["uv", "run"]  # Start ABI application
-    models:
-      - gemma3        # Primary conversational AI model
-      - embeddinggemma # Text embedding model for semantic search
-      - qwen3         # Advanced reasoning model
-    depends_on:
-      oxigraph:
-        condition: service_healthy  # Wait for knowledge graph to be ready
-      postgres:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
+      - ABI_API_BASE=http://abi:9879
+      - ABI_API_KEY=abi
+      - MCP_TRANSPORT=http
+    ports:
+      - 8000:8000
     networks:
       - abi-network
     profiles:
-      - container  # Only starts when running 'make container-up'
-  
+      - local
+
   # -----------------------------------------------------------------------------
   # PostgreSQL Database - Agent Memory & Conversation Storage
   # -----------------------------------------------------------------------------
@@ -119,11 +138,11 @@ services:
     volumes:
       - oxigraph_data:/data  # Persistent RDF triple storage
     command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7878/query || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl -f http://localhost:7878/query || exit 1"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 3
     networks:
       - abi-network
     profiles:
@@ -181,7 +200,7 @@ services:
       context: .
       dockerfile: docker/images/Dockerfile
     ports:
-      - 3001:3000  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
+      - 3001:3001  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
     volumes:
       - ./scripts:/app/scripts
       - ./uv.lock:/app/uv.lock
@@ -189,8 +208,10 @@ services:
       - ./pyproject.toml:/app/pyproject.toml
       - ./src:/app/src
       - ./lib:/app/lib
+      - ./libs:/app/libs
       - ./README.md:/app/README.md
       - ./storage:/app/storage
+      - .env:/app/.env
       - venv_cache:/app/.venv
       - dagster_home:/app/.dagster  # Dagster metadata and run history
       - ./docker/dagster/dagster.yaml:/app/.dagster/dagster.yaml:ro
@@ -209,7 +230,7 @@ services:
     command:
       - /bin/bash
       - -c
-      - 'uv sync --all-extras && python scripts/generate_dagster_command.py | bash'  # Start Dagster with custom instance config
+      - 'uv run dagster dev --host 0.0.0.0 --port 3001 -m naas_abi_core.apps.dagster.dagster'
     networks:
       - abi-network
     profiles:
@@ -255,6 +276,47 @@ services:
       - prod
       - container
 
+  # -----------------------------------------------------------------------------
+  # RabbitMQ - Message Bus (AMQP)
+  # -----------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - 5672:5672   # AMQP
+      - 15672:15672 # Management UI - http://localhost:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: abi
+      RABBITMQ_DEFAULT_PASS: abi
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+      - container
+
+  # -----------------------------------------------------------------------------
+  # Service Portal - Single-page navigation for all HTTP UIs
+  # -----------------------------------------------------------------------------
+  service-portal:
+    image: nginx:alpine
+    ports:
+      - 8080:80  # Service portal - http://localhost:8080
+    volumes:
+      - ./docker/service-portal:/usr/share/nginx/html:ro
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+      - container
+
 # =============================================================================
 # PERSISTENT VOLUMES
 # =============================================================================
@@ -270,11 +332,11 @@ services:
     environment:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
     networks:
       - abi-network
     profiles:
@@ -289,6 +351,7 @@ volumes:
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
   minio_data:     # MinIO object storage data
+  rabbitmq_data:  # RabbitMQ message bus data
 
 # =============================================================================
 # NETWORK CONFIGURATION
