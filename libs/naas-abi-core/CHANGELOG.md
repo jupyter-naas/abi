@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.0 (2026-02-03)
+
+### Features
+
+- Working on Dagster orchestration
+  ([`b970d21`](https://github.com/jupyter-naas/abi/commit/b970d21e135ab32c344122be50f292c0b44ff039))
+
+
 ## v1.7.2 (2026-02-02)
 
 ### Bug Fixes
