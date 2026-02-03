@@ -31,6 +31,8 @@ compute_logs:
       env: MINIO_ENDPOINT_URL
     region:
       env: MINIO_REGION_NAME
+    use_ssl: false
+    verify: false
 
 # Disable telemetry by default; enable manually if desired.
 telemetry:
