@@ -164,6 +164,7 @@ bfo:BFO_0000029 a owl:Class ;
 # Generically dependent continuant / ICE (HOW WE KNOW)
 bfo:BFO_0000031 a owl:Class ;
     rdfs:label "generically dependent continuant"@en ;
+    owl:hasKey (rdfs:label) ;
     skos:altLabel "g-dependent continuant"@en ;
     skos:definition "(Elucidation) A generically dependent continuant is an entity that exists in virtue of the fact that there is at least one of what may be multiple copies which is the content or the pattern that multiple copies would share"@en ;
     skos:example "The pdf file on your laptop; the pdf file that is a copy thereof on my laptop; the sequence of this protein molecule; the sequence that is a copy thereof in that protein molecule; the content that is shared by a string of dots and dashes written on a page and the transmitted Morse code signal; the content of a sentence; an engineering blueprint"@en ;
@@ -197,6 +198,7 @@ bfo:BFO_0000084 a owl:ObjectProperty ;
 # Quality (HOW IT IS)
 bfo:BFO_0000019 a owl:Class ;
     rdfs:label "quality"@en ;
+    owl:hasKey (rdfs:label) ;
     skos:definition "(Elucidation) A quality is a specifically dependent continuant that, in contrast to roles and dispositions, does not require any further process in order to be realized"@en ;
     skos:example "The colour of a tomato; the ambient temperature of this portion of air; the length of the circumference of your waist; the shape of your nose; the shape of your nostril; the mass of this piece of gold"@en ;
     rdfs:subClassOf bfo:BFO_0000020 ,  # specifically dependent continuant
@@ -221,6 +223,7 @@ bfo:BFO_0000197 a owl:ObjectProperty ;
 # Role (WHY)
 bfo:BFO_0000023 a owl:Class ;
     rdfs:label "role"@en ;
+    owl:hasKey (rdfs:label) ;
     skos:altLabel "externally-grounded realizable entity"@en ;
     skos:definition "(Elucidation) A role b is a realizable entity such that b exists because there is some single bearer that is in some special physical, social, or institutional set of circumstances in which this bearer does not have to be & b is not such that, if it ceases to exist, then the physical make-up of the bearer is thereby changed"@en ;
     skos:example "The priest role; the student role; the role of subject in a clinical trial; the role of a stone in marking a property boundary; the role of a boundary to demarcate two neighbouring administrative territories; the role of a building in serving as a military target"@en ;
@@ -246,6 +249,7 @@ bfo:BFO_0000054 a owl:ObjectProperty ;
 # Disposition (WHY)
 bfo:BFO_0000016 a owl:Class ;
     rdfs:label "disposition"@en ;
+    owl:hasKey (rdfs:label) ;
     skos:altLabel "internally-grounded realizable entity"@en ;
     skos:definition "(Elucidation) A disposition b is a realizable entity such that if b ceases to exist then its bearer is physically changed & b's realization occurs when and because this bearer is in some special physical circumstances & this realization occurs in virtue of the bearer's physical make-up"@en ;
     skos:example "An atom of element X has the disposition to decay to an atom of element Y; the cell wall is disposed to transport cellular material through endocytosis and exocytosis; certain people have a predisposition to colon cancer; children are innately disposed to categorize objects in certain ways"@en ;
