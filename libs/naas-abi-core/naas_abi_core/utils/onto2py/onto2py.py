@@ -569,7 +569,9 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
     Returns:
         Generated Python code as string
     """
+    ttl_file_path = None
     if isinstance(ttl_file, str):
+        ttl_file_path = ttl_file
         with open(ttl_file, "r") as f:
             content = f.read()
         g = rdflib.Graph()
@@ -706,7 +708,16 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
     add_metadata_properties(g, classes)
 
     # Generate Python code
-    return generate_python_code(classes, properties)
+    python_code = generate_python_code(classes, properties)
+
+    # Save the Python code next to the input file if a file path was provided
+    if ttl_file_path:
+        py_file = Path(ttl_file_path).with_suffix(".py")
+        with open(py_file, "w") as f:
+            f.write(python_code)
+        print(f"✅ Successfully converted {ttl_file_path} to {py_file}")
+
+    return python_code
 
 
 def get_label(g: rdflib.Graph, resource) -> Optional[str]:
@@ -1526,7 +1537,6 @@ if __name__ == "__main__":
     Command: uv run python libs/naas-abi-core/naas_abi_core/utils/onto2py/onto2py.py
     """
     import argparse
-    import os
 
     # Default TTL file
     default_ttl_file = "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl"
@@ -1542,6 +1552,3 @@ if __name__ == "__main__":
     ttl_file = args.ttl_file
 
     python_code = onto2py(ttl_file)
-    py_file = os.path.splitext(ttl_file)[0] + ".py"
-    with open(py_file, "w") as f:
-        f.write(python_code)
