@@ -20,10 +20,12 @@ Example:
 
 from typing import Any, Dict, List
 
-from naas_abi_core.services.secret.SecretPorts import ISecretAdapter, ISecretService
+from naas_abi_core.services.secret.SecretPorts import (ISecretAdapter,
+                                                       ISecretService)
+from naas_abi_core.services.ServiceBase import ServiceBase
 
 
-class Secret(ISecretService):
+class Secret(ServiceBase, ISecretService):
     """Secret service for managing and retrieving secrets.
 
     This service provides a unified interface for accessing secrets regardless of their storage location
@@ -41,6 +43,7 @@ class Secret(ISecretService):
     __adapters: List[ISecretAdapter]
 
     def __init__(self, adapters: List[ISecretAdapter]):
+        super().__init__()
         self.__adapters = adapters
 
     def get(self, key: str, default: Any = None) -> str:

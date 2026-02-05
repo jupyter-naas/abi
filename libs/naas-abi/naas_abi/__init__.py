@@ -1,13 +1,10 @@
-from naas_abi_core.module.Module import (
-    BaseModule,
-    ModuleConfiguration,
-    ModuleDependencies,
-)
-from naas_abi_core.services.object_storage.ObjectStorageService import (
-    ObjectStorageService,
-)
+from naas_abi_core.module.Module import (BaseModule, ModuleConfiguration,
+                                         ModuleDependencies)
+from naas_abi_core.services.object_storage.ObjectStorageService import \
+    ObjectStorageService
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import \
+    TripleStoreService
 
 
 class ABIModule(BaseModule):
@@ -99,3 +96,14 @@ class ABIModule(BaseModule):
     #         raise ValueError(
     #             "anthropic_api_key is provided but naas_abi_marketplace.ai.claude is not available"
     #         )
+
+    def on_load(self):
+        super().on_load()
+        from naas_abi_core.services.triple_store.TripleStorePorts import \
+            OntologyEvent
+        from rdflib import URIRef
+        self.engine.services.triple_store.subscribe(
+            (URIRef("http://example.com/subject"), None, None),
+            lambda triple: print(f"Triple received: {triple.decode('utf-8')}"),
+            OntologyEvent.INSERT
+        )

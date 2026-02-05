@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
-from rdflib import Graph, URIRef
-import rdflib
-from typing import List, Callable, Dict, Tuple
 from enum import Enum
+from typing import Callable, Dict, List, Tuple
+
+import rdflib
+from rdflib import Graph, URIRef
 
 
 class Exceptions:
@@ -67,43 +68,59 @@ class ITripleStoreService(ABC):
 
     @abstractmethod
     def subscribe(
-        self, topic: tuple, event_type: OntologyEvent, callback: Callable
-    ) -> str:
-        """Subscribe to events for a specific topic pattern.
+        self,
+        topic: tuple[URIRef | None, URIRef | None, URIRef | None],
+        callback: Callable[[bytes], None],
+        event_type: OntologyEvent | None = None,
+    ) -> None:
+        """
+        Register a callback function to receive notifications for triple store events matching the given
+        subject-predicate-object (SPO) pattern.
 
-        This method allows subscribing to INSERT or DELETE events that match a specific subject-predicate-object
-        pattern. When matching triples are inserted or deleted, the provided callback will be executed.
+        This subscription method allows users to listen for INSERT and/or DELETE events—indicated by
+        `event_type`—emitted when triples in the store match the specified SPO pattern. Each
+        element of the `topic` tuple can be a URIRef to filter on that subject, predicate, or object.
+        Specifying None in any position acts as a wildcard, matching any value for that component.
+
+        The provided callback will be invoked with the serialized triple event (as bytes) for
+        each matching occurrence.
 
         Args:
-            topic (tuple): A (subject, predicate, object) tuple specifying the pattern to match.
-                Each element can be None to match any value in that position.
-            event_type (OntologyEvent): The type of event to subscribe to (INSERT or DELETE)
-            callback (Callable): Function to call when matching events occur. Will be called with:
-                - event_type: The OntologyEvent that occurred
-                - triple: The (subject, predicate, object) triple that matched
+            topic (tuple[URIRef | None, URIRef | None, URIRef | None]):
+                The subject, predicate, object pattern to match. Use None for any element to match all.
+            callback (Callable[[bytes], None]):
+                Function that is called with serialized triple event bytes when a match occurs.
+            event_type (OntologyEvent | None, optional):
+                Restrict matches to INSERT, DELETE, or receive both event types if None. Defaults to None.
 
         Returns:
-            str: A unique subscription ID that can be used to unsubscribe later
+            str: A unique subscription ID that can later be used to unsubscribe.
+
+        Example:
+            >>> def print_triple(triple: bytes):
+            ...     print(triple)
+            >>> subscription_id = triple_store_service.subscribe(
+            ...     (None, RDF.type, None), print_triple, OntologyEvent.INSERT)
         """
         pass
 
-    @abstractmethod
-    def unsubscribe(self, subscription_id: str):
-        """Unsubscribe from events using a subscription ID.
+    # @abstractmethod
+    # def unsubscribe(self, subscription_id: str):
+    #     """Unsubscribe from events using a subscription ID.
 
-        This method removes a subscription based on its ID, stopping any further callbacks
-        for that subscription.
+    #     This method removes a subscription based on its ID, stopping any further callbacks
+    #     for that subscription.
 
-        Args:
-            subscription_id (str): The subscription ID returned from a previous subscribe() call
+    #     Args:
+    #         subscription_id (str): The subscription ID returned from a previous subscribe() call
 
-        Raises:
-            SubscriptionNotFoundError: If no subscription exists with the provided ID
+    #     Raises:
+    #         SubscriptionNotFoundError: If no subscription exists with the provided ID
 
-        Returns:
-            None
-        """
-        pass
+    #     Returns:
+    #         None
+    #     """
+    #     pass
 
     @abstractmethod
     def insert(self, triples: Graph):
