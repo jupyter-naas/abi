@@ -118,19 +118,19 @@ class RDFEntity(BaseModel):
         return g
 
 
-class ActOfConnectionOnLinkedIn(RDFEntity):
+class ActOfConnection(RDFEntity):
     """
-    Act of connection on LinkedIn
+    Act of Connection
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/linkedin/ActOfConnection"
-    _name: ClassVar[str] = "Act of connection on LinkedIn"
+    _name: ClassVar[str] = "Act of Connection"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://purl.obolibrary.org/obo/BFO_0000059",
         "connected_at": "http://ontology.naas.ai/abi/linkedin/connectedAt",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_associated_linkedin_quality": "http://ontology.naas.ai/abi/linkedin/hasAssociatedQuality",
+        "has_associated_quality": "http://ontology.naas.ai/abi/linkedin/hasAssociatedQuality",
         "involves_agent": "http://ontology.naas.ai/abi/linkedin/involvesAgent",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "occurs_in": "http://purl.obolibrary.org/obo/BFO_0000066",
@@ -139,7 +139,7 @@ class ActOfConnectionOnLinkedIn(RDFEntity):
     _object_properties: ClassVar[set[str]] = {
         "concretizes",
         "connected_at",
-        "has_associated_linkedin_quality",
+        "has_associated_quality",
         "involves_agent",
         "occurs_in",
         "realizes",
@@ -159,7 +159,7 @@ class ActOfConnectionOnLinkedIn(RDFEntity):
     # Object properties
     concretizes: Optional[
         Annotated[
-            List[Union[ConnectionsExportFile, LinkedInProfilePage, URIRef, str]],
+            List[Union[ConnectionsExportFile, ProfilePage, URIRef, str]],
             Field(
                 description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
@@ -173,14 +173,14 @@ class ActOfConnectionOnLinkedIn(RDFEntity):
             ),
         ]
     ] = "http://ontology.naas.ai/abi/unknown"
-    has_associated_linkedin_quality: Optional[
+    has_associated_quality: Optional[
         Annotated[
             List[
                 Union[
-                    LinkedInCurrentJobPosition,
-                    LinkedInCurrentOrganization,
-                    LinkedInCurrentPublicURL,
-                    LinkedInEmailAddress,
+                    CurrentJobPosition,
+                    CurrentOrganization,
+                    CurrentPublicURL,
+                    EmailAddress,
                     URIRef,
                     str,
                 ]
@@ -200,7 +200,7 @@ class ActOfConnectionOnLinkedIn(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
     occurs_in: Optional[
         Annotated[
-            List[Union[LinkedInLocation, URIRef, str]],
+            List[Union[Location, URIRef, str]],
             Field(
                 description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
             ),
@@ -208,7 +208,7 @@ class ActOfConnectionOnLinkedIn(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
     realizes: Optional[
         Annotated[
-            List[Union[LinkedInConnectionRole, URIRef, str]],
+            List[Union[ConnectionRole, URIRef, str]],
             Field(
                 description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
             ),
@@ -253,22 +253,22 @@ class Person(RDFEntity):
         "agent_involved_in": "http://ontology.naas.ai/abi/linkedin/agentInvolvedIn",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_linkedin_connection_role": "http://ontology.naas.ai/abi/linkedin/hasConnectionRole",
-        "has_linkedin_current_job_position": "http://ontology.naas.ai/abi/linkedin/hasCurrentJobPosition",
-        "has_linkedin_current_organization": "http://ontology.naas.ai/abi/linkedin/hasCurrentOrganization",
-        "has_linkedin_email_address": "http://ontology.naas.ai/abi/linkedin/hasEmailAddress",
-        "has_linkedin_public_url": "http://ontology.naas.ai/abi/linkedin/hasCurrentPublicUrl",
+        "has_connection_role": "http://ontology.naas.ai/abi/linkedin/hasConnectionRole",
+        "has_current_job_position": "http://ontology.naas.ai/abi/linkedin/hasCurrentJobPosition",
+        "has_current_organization": "http://ontology.naas.ai/abi/linkedin/hasCurrentOrganization",
+        "has_email_address": "http://ontology.naas.ai/abi/linkedin/hasEmailAddress",
+        "has_public_url": "http://ontology.naas.ai/abi/linkedin/hasCurrentPublicUrl",
         "is_located_in": "http://ontology.naas.ai/abi/linkedin/locatedIn",
         "is_owner_of": "http://ontology.naas.ai/abi/linkedin/isOwnerOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
         "agent_involved_in",
-        "has_linkedin_connection_role",
-        "has_linkedin_current_job_position",
-        "has_linkedin_current_organization",
-        "has_linkedin_email_address",
-        "has_linkedin_public_url",
+        "has_connection_role",
+        "has_current_job_position",
+        "has_current_organization",
+        "has_email_address",
+        "has_public_url",
         "is_located_in",
         "is_owner_of",
     }
@@ -287,47 +287,47 @@ class Person(RDFEntity):
     # Object properties
     agent_involved_in: Optional[
         Annotated[
-            List[Union[ActOfConnectionOnLinkedIn, URIRef, str]],
+            List[Union[ActOfConnection, URIRef, str]],
             Field(
                 description="Relates an agent (person or organization) to an event in which the agent is involved or participates."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_linkedin_connection_role: Optional[
+    has_connection_role: Optional[
         Annotated[
-            List[Union[LinkedInConnectionRole, URIRef, str]],
+            List[Union[ConnectionRole, URIRef, str]],
             Field(
                 description="A person has LinkedIn connection role y if and only if y is a ConnectionRole (a quality) that inheres in the person and expresses their role in a connection as recorded on LinkedIn. This property connects a Person to the specific role they hold in a connection, as indicated on their LinkedIn profile."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_linkedin_current_job_position: Optional[
+    has_current_job_position: Optional[
         Annotated[
-            List[Union[LinkedInCurrentJobPosition, URIRef, str]],
+            List[Union[CurrentJobPosition, URIRef, str]],
             Field(
                 description="A person has LinkedIn current job position y if and only if y is a CurrentJobPosition (a quality) that inheres in the person and expresses their present professional role or job title as recorded on LinkedIn. This property connects a Person to the specific professional position or title they currently hold, as indicated on their LinkedIn profile."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_linkedin_current_organization: Optional[
+    has_current_organization: Optional[
         Annotated[
-            List[Union[LinkedInCurrentOrganization, URIRef, str]],
+            List[Union[CurrentOrganization, URIRef, str]],
             Field(
                 description="A person has LinkedIn current organization y if and only if y is a CurrentOrganization (a quality) that inheres in the person and expresses their present place of employment or affiliation as recorded on LinkedIn. This property connects a Person to the specific organization they currently work for or are affiliated with, as indicated on their LinkedIn profile."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_linkedin_email_address: Optional[
+    has_email_address: Optional[
         Annotated[
-            List[Union[LinkedInEmailAddress, URIRef, str]],
+            List[Union[EmailAddress, URIRef, str]],
             Field(
                 description="A person has LinkedIn email address y if and only if y is an EmailAddress (a quality) that inheres in the person and expresses their email address as recorded on LinkedIn. This property connects a Person to the specific email address they have registered on their LinkedIn profile."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_linkedin_public_url: Optional[
+    has_public_url: Optional[
         Annotated[
-            List[Union[LinkedInCurrentPublicURL, URIRef, str]],
+            List[Union[CurrentPublicURL, URIRef, str]],
             Field(
                 description="A person has LinkedIn public URL y if and only if y is a CurrentPublicUrl (a quality) that inheres in the person and expresses their public web address as recorded on LinkedIn. This property connects a Person to the specific public web address they have registered on their LinkedIn profile."
             ),
@@ -335,7 +335,7 @@ class Person(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
     is_located_in: Optional[
         Annotated[
-            List[Union[LinkedInLocation, URIRef, str]],
+            List[Union[Location, URIRef, str]],
             Field(
                 description="A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile."
             ),
@@ -343,7 +343,7 @@ class Person(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
     is_owner_of: Optional[
         Annotated[
-            List[Union[LinkedInProfilePage, URIRef, str]],
+            List[Union[ProfilePage, URIRef, str]],
             Field(
                 description="b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information."
             ),
@@ -388,7 +388,7 @@ class Organization(RDFEntity):
     # Object properties
     agent_involved_in: Optional[
         Annotated[
-            List[Union[ActOfConnectionOnLinkedIn, URIRef, str]],
+            List[Union[ActOfConnection, URIRef, str]],
             Field(
                 description="Relates an agent (person or organization) to an event in which the agent is involved or participates."
             ),
@@ -396,7 +396,7 @@ class Organization(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
     holds_linkedin_quality: Optional[
         Annotated[
-            List[Union[LinkedInCurrentOrganization, URIRef, str]],
+            List[Union[CurrentOrganization, URIRef, str]],
             Field(
                 description="A organization holds quality y if and only if y is a CurrentOrganization (a quality) that inheres in the organization and expresses a specific quality or characteristic as recorded on LinkedIn. This property connects a Organization to the specific quality or characteristic they hold that can be indicated on their LinkedIn organization page or on people's LinkedIn profile page who are part of the organization."
             ),
@@ -404,7 +404,7 @@ class Organization(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
     is_located_in: Optional[
         Annotated[
-            List[Union[LinkedInLocation, URIRef, str]],
+            List[Union[Location, URIRef, str]],
             Field(
                 description="A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile."
             ),
@@ -420,13 +420,13 @@ class Organization(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
-class LinkedInLocation(RDFEntity):
+class Location(RDFEntity):
     """
-    LinkedIn Location
+    Location
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/linkedin/Location"
-    _name: ClassVar[str] = "LinkedIn Location"
+    _name: ClassVar[str] = "Location"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -446,13 +446,13 @@ class LinkedInLocation(RDFEntity):
     ] = os.environ.get("USER")
 
 
-class LinkedInProfilePage(RDFEntity):
+class ProfilePage(RDFEntity):
     """
     A LinkedIn profile page must be registered in https://www.linkedin.com/in/
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/linkedin/ProfilePage"
-    _name: ClassVar[str] = "LinkedIn Profile Page"
+    _name: ClassVar[str] = "Profile Page"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -478,12 +478,12 @@ class LinkedInProfilePage(RDFEntity):
         Annotated[
             List[
                 Union[
-                    ActOfConnectionOnLinkedIn,
-                    LinkedInConnectionRole,
-                    LinkedInCurrentJobPosition,
-                    LinkedInCurrentOrganization,
-                    LinkedInCurrentPublicURL,
-                    LinkedInEmailAddress,
+                    ActOfConnection,
+                    ConnectionRole,
+                    CurrentJobPosition,
+                    CurrentOrganization,
+                    CurrentPublicURL,
+                    EmailAddress,
                     URIRef,
                     str,
                 ]
@@ -503,13 +503,13 @@ class LinkedInProfilePage(RDFEntity):
 
 class ConnectionsExportFile(RDFEntity):
     """
-    Connections export file
+    Connections Export File
     """
 
     _class_uri: ClassVar[str] = (
         "http://ontology.naas.ai/abi/linkedin/ConnectionsExportFile"
     )
-    _name: ClassVar[str] = "Connections export file"
+    _name: ClassVar[str] = "Connections Export File"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -540,15 +540,15 @@ class ConnectionsExportFile(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
-class LinkedInCurrentJobPosition(RDFEntity):
+class CurrentJobPosition(RDFEntity):
     """
-    LinkedIn current job position
+    Current Job Position
     """
 
     _class_uri: ClassVar[str] = (
         "http://ontology.naas.ai/abi/linkedin/CurrentJobPosition"
     )
-    _name: ClassVar[str] = "LinkedIn current job position"
+    _name: ClassVar[str] = "Current Job Position"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://purl.obolibrary.org/obo/BFO_0000059",
         "created": "http://purl.org/dc/terms/created",
@@ -572,7 +572,7 @@ class LinkedInCurrentJobPosition(RDFEntity):
     # Object properties
     concretizes: Optional[
         Annotated[
-            List[Union[ConnectionsExportFile, LinkedInProfilePage, URIRef, str]],
+            List[Union[ConnectionsExportFile, ProfilePage, URIRef, str]],
             Field(
                 description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
@@ -588,15 +588,15 @@ class LinkedInCurrentJobPosition(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
-class LinkedInCurrentOrganization(RDFEntity):
+class CurrentOrganization(RDFEntity):
     """
-    LinkedIn current organization
+    Current Organization
     """
 
     _class_uri: ClassVar[str] = (
         "http://ontology.naas.ai/abi/linkedin/CurrentOrganization"
     )
-    _name: ClassVar[str] = "LinkedIn current organization"
+    _name: ClassVar[str] = "Current Organization"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://purl.obolibrary.org/obo/BFO_0000059",
         "created": "http://purl.org/dc/terms/created",
@@ -636,13 +636,13 @@ class LinkedInCurrentOrganization(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
-class LinkedInCurrentPublicURL(RDFEntity):
+class CurrentPublicURL(RDFEntity):
     """
-    LinkedIn current public URL
+    Current Public URL
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/linkedin/CurrentPublicUrl"
-    _name: ClassVar[str] = "LinkedIn current public URL"
+    _name: ClassVar[str] = "Current Public URL"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://purl.obolibrary.org/obo/BFO_0000059",
         "created": "http://purl.org/dc/terms/created",
@@ -682,13 +682,13 @@ class LinkedInCurrentPublicURL(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
-class LinkedInEmailAddress(RDFEntity):
+class EmailAddress(RDFEntity):
     """
-    LinkedIn email address
+    Email Address
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/linkedin/EmailAddress"
-    _name: ClassVar[str] = "LinkedIn email address"
+    _name: ClassVar[str] = "Email Address"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://purl.obolibrary.org/obo/BFO_0000059",
         "created": "http://purl.org/dc/terms/created",
@@ -728,13 +728,13 @@ class LinkedInEmailAddress(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
-class LinkedInConnectionRole(RDFEntity):
+class ConnectionRole(RDFEntity):
     """
-    LinkedIn connection role
+    Connection Role
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/linkedin/ConnectionRole"
-    _name: ClassVar[str] = "LinkedIn connection role"
+    _name: ClassVar[str] = "Connection Role"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -758,7 +758,7 @@ class LinkedInConnectionRole(RDFEntity):
     # Object properties
     has_realization: Optional[
         Annotated[
-            List[Union[ActOfConnectionOnLinkedIn, URIRef, str]],
+            List[Union[ActOfConnection, URIRef, str]],
             Field(description="b has realization c =Def c realizes b"),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -773,15 +773,15 @@ class LinkedInConnectionRole(RDFEntity):
 
 
 # Rebuild models to resolve forward references
-ActOfConnectionOnLinkedIn.model_rebuild()
+ActOfConnection.model_rebuild()
 ISO8601UTCDateTime.model_rebuild()
 Person.model_rebuild()
 Organization.model_rebuild()
-LinkedInLocation.model_rebuild()
-LinkedInProfilePage.model_rebuild()
+Location.model_rebuild()
+ProfilePage.model_rebuild()
 ConnectionsExportFile.model_rebuild()
-LinkedInCurrentJobPosition.model_rebuild()
-LinkedInCurrentOrganization.model_rebuild()
-LinkedInCurrentPublicURL.model_rebuild()
-LinkedInEmailAddress.model_rebuild()
-LinkedInConnectionRole.model_rebuild()
+CurrentJobPosition.model_rebuild()
+CurrentOrganization.model_rebuild()
+CurrentPublicURL.model_rebuild()
+EmailAddress.model_rebuild()
+ConnectionRole.model_rebuild()

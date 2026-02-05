@@ -11,12 +11,12 @@
 @prefix linkedin: <http://ontology.naas.ai/abi/linkedin/> .
 
 # Ontology: Act of connections on LinkedIn
-linkedin:ActOfConnectionsOnLinkedIn a owl:Ontology ;
+<http://ontology.naas.ai/abi/linkedin/ActOfConnection> a owl:Ontology ;
   owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>, 
   <https://www.commoncoreontologies.org/AgentOntology>, 
   <https://www.commoncoreontologies.org/InformationEntityOntology>,
   <https://www.commoncoreontologies.org/EventOntology> ;
-  dc:title "Act of Connections"@en ;
+  dc:title "Act of Connection"@en ;
   dc:description "Ontology for the Act of Connections on LinkedIn"@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   dc11:contributor "Florent Ravenel";
@@ -24,7 +24,7 @@ linkedin:ActOfConnectionsOnLinkedIn a owl:Ontology ;
 
 # Process (WHAT): Act of connection on LinkedIn
 linkedin:ActOfConnection a owl:Class ;
-    rdfs:label "Act of connection on LinkedIn"@en ;
+    rdfs:label "Act of Connection"@en ;
     skos:definition "A process in which one LinkedIn user initiates and establishes a connection with another user on the LinkedIn platform."@en ;
     skos:example "John Doe connects with Jane Smith on LinkedIn on 23 Oct 2025."@en ;
     rdfs:subClassOf cco:ont00000433  , # act of association
@@ -101,7 +101,7 @@ linkedin:involvesAgent a owl:ObjectProperty ;
     skos:definition "Relates an event (such as an act of connection) to an agent (person or organization) involved in it. If an event involves agent x, then x is actively participating or is otherwise involved in the event."@en .
 
 linkedin:hasAssociatedQuality a owl:ObjectProperty ;
-    rdfs:label "has associated LinkedIn quality"@en ;
+    rdfs:label "has associated quality"@en ;
     skos:definition "Relates a process (such as an act of connection) to a LinkedIn quality (such as CurrentJobPosition, CurrentOrganization, CurrentPublicUrl, or EmailAddress) that inheres in a participant of the process. This property is used to associate any LinkedIn quality with a process, emphasizing that the quality is relevant to or contextualizes the process, even if it is not a direct participant but is borne by one."@en ;
     skos:example "A LinkedIn connection event may have associated LinkedIn quality the current public URL of one of the persons involved, representing their profile at the time of the event."@en .
 
@@ -200,7 +200,7 @@ linkedin:locatedIn a owl:ObjectProperty ;
 
 linkedin:hasCurrentJobPosition a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
-    rdfs:label "has LinkedIn current job position"@en ;
+    rdfs:label "has current job position"@en ;
     rdfs:domain cco:ont00001262 ; # Person
     rdfs:range linkedin:CurrentJobPosition ; # Current Job Position
     skos:definition "A person has LinkedIn current job position y if and only if y is a CurrentJobPosition (a quality) that inheres in the person and expresses their present professional role or job title as recorded on LinkedIn. This property connects a Person to the specific professional position or title they currently hold, as indicated on their LinkedIn profile."@en ;
@@ -208,7 +208,7 @@ linkedin:hasCurrentJobPosition a owl:ObjectProperty ;
 
 linkedin:hasCurrentOrganization a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
-    rdfs:label "has LinkedIn current organization"@en ;
+    rdfs:label "has current organization"@en ;
     rdfs:domain cco:ont00001262 ; # Person
     rdfs:range linkedin:CurrentOrganization ; # Current Organization
     skos:definition "A person has LinkedIn current organization y if and only if y is a CurrentOrganization (a quality) that inheres in the person and expresses their present place of employment or affiliation as recorded on LinkedIn. This property connects a Person to the specific organization they currently work for or are affiliated with, as indicated on their LinkedIn profile."@en ;
@@ -216,7 +216,7 @@ linkedin:hasCurrentOrganization a owl:ObjectProperty ;
 
 linkedin:hasCurrentPublicUrl a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
-    rdfs:label "has LinkedIn public URL"@en ;
+    rdfs:label "has public URL"@en ;
     rdfs:domain cco:ont00001262 ; # Person
     rdfs:range linkedin:CurrentPublicUrl ; # Current Public URL
     skos:definition "A person has LinkedIn public URL y if and only if y is a CurrentPublicUrl (a quality) that inheres in the person and expresses their public web address as recorded on LinkedIn. This property connects a Person to the specific public web address they have registered on their LinkedIn profile."@en ;
@@ -224,7 +224,7 @@ linkedin:hasCurrentPublicUrl a owl:ObjectProperty ;
 
 linkedin:hasEmailAddress a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
-    rdfs:label "has LinkedIn email address"@en ;
+    rdfs:label "has email address"@en ;
     rdfs:domain cco:ont00001262 ; # Person
     rdfs:range linkedin:EmailAddress ; # Email Address
     skos:definition "A person has LinkedIn email address y if and only if y is an EmailAddress (a quality) that inheres in the person and expresses their email address as recorded on LinkedIn. This property connects a Person to the specific email address they have registered on their LinkedIn profile."@en ;
@@ -232,7 +232,7 @@ linkedin:hasEmailAddress a owl:ObjectProperty ;
 
 linkedin:hasConnectionRole a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
-    rdfs:label "has LinkedIn connection role"@en ;
+    rdfs:label "has connection role"@en ;
     rdfs:domain cco:ont00001262 ; # Person
     rdfs:range linkedin:ConnectionRole ; # Connection Role
     skos:definition "A person has LinkedIn connection role y if and only if y is a ConnectionRole (a quality) that inheres in the person and expresses their role in a connection as recorded on LinkedIn. This property connects a Person to the specific role they hold in a connection, as indicated on their LinkedIn profile."@en ;
@@ -255,14 +255,14 @@ linkedin:isOwnerOf a owl:ObjectProperty ;
 
 # Site (WHERE) : LinkedIn Location
 linkedin:Location a owl:Class ;
-    rdfs:label "LinkedIn Location"@en ;
+    rdfs:label "Location"@en ;
     skos:definition "The physical location of a LinkedIn user."@en ;
     skos:example "Germany, France, United States, etc."@en ;
     rdfs:subClassOf bfo:BFO_0000029 . # Site
 
 # Generically dependent continuant (HOW WE KNOW): LinkedIn Profile Page
 linkedin:ProfilePage a owl:Class ;
-    rdfs:label "LinkedIn Profile Page" ;
+    rdfs:label "Profile Page" ;
     skos:definition "A LinkedIn profile page that includes information such as a person's professional history, skills, and endorsements, representing the individual's professional identity on the web." ;
     skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues." ;
     rdfs:comment "A LinkedIn profile page must be registered in https://www.linkedin.com/in/" ;
@@ -287,7 +287,7 @@ linkedin:ProfilePage a owl:Class ;
     ] .
 
 linkedin:ConnectionsExportFile a owl:Class ;
-    rdfs:label "Connections export file"@en ;
+    rdfs:label "Connections Export File"@en ;
     skos:definition "A file that contains a list of connections exported from LinkedIn."@en ;
     skos:example "John Doe's connections exported to a CSV file on 23 Oct 2025."@en ;
     rdfs:subClassOf bfo:BFO_0000031 ,
@@ -317,7 +317,7 @@ linkedin:isOwnedBy a owl:ObjectProperty ;
 
 # Quality (HOW IT IS)
 linkedin:CurrentJobPosition a owl:Class ;
-    rdfs:label "LinkedIn current job position"@en ;
+    rdfs:label "Current Job Position"@en ;
     skos:definition "The current LinkedIn position held by a person on LinkedIn."@en ;
     skos:example "John Doe's current position on LinkedIn is 'Software Engineer'."@en ;
     rdfs:subClassOf bfo:BFO_0000019 ,  # quality
@@ -336,7 +336,7 @@ linkedin:CurrentJobPosition a owl:Class ;
     ] .
 
 linkedin:CurrentOrganization a owl:Class ;
-    rdfs:label "LinkedIn current organization"@en ;
+    rdfs:label "Current Organization"@en ;
     skos:definition "The current organization at which a person is employed on LinkedIn."@en ;
     skos:example "John Doe is employed at 'Google' on LinkedIn."@en ;
     rdfs:subClassOf bfo:BFO_0000019 ,  # quality
@@ -354,7 +354,7 @@ linkedin:CurrentOrganization a owl:Class ;
     ] .
 
 linkedin:CurrentPublicUrl a owl:Class ;
-    rdfs:label "LinkedIn current public URL"@en ;
+    rdfs:label "Current Public URL"@en ;
     skos:definition "The current public URL of a person on LinkedIn."@en ;
     skos:example "John Doe's current public URL on LinkedIn is 'https://www.linkedin.com/in/johndoe'."@en ;
     rdfs:subClassOf bfo:BFO_0000019 ,  # quality
@@ -368,7 +368,7 @@ linkedin:CurrentPublicUrl a owl:Class ;
     ] .
 
 linkedin:EmailAddress a owl:Class ;
-    rdfs:label "LinkedIn email address"@en ;
+    rdfs:label "Email Address"@en ;
     skos:definition "The email address of a person registered on LinkedIn."@en ;
     skos:example "John Doe's email address registered on LinkedIn is 'johndoe@gmail.com'."@en ;
     rdfs:subClassOf bfo:BFO_0000019 ,  # quality
@@ -388,7 +388,7 @@ bfo:BFO_0000197 a owl:ObjectProperty ;
 
 # Role (WHY)
 linkedin:ConnectionRole a owl:Class ;
-    rdfs:label "LinkedIn connection role"@en ;
+    rdfs:label "Connection Role"@en ;
     owl:hasKey ( rdfs:label ) ;
     skos:definition "A role that a person can bear in a connection on LinkedIn, such as requester, recipient, or unknown role."@en ;
     skos:example "Requester, Recipient or Unknown connection role"@en ;

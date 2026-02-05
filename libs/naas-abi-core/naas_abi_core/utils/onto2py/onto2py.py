@@ -1,4 +1,5 @@
 import io
+import os
 import re
 import subprocess
 import tempfile
@@ -559,12 +560,13 @@ def extract_restriction_properties(
             class_info.property_uris[prop_name] = str(prop_uri)
 
 
-def onto2py(ttl_file: str | io.TextIOBase) -> str:
+def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     """
     Convert TTL file to Python classes
 
     Args:
         ttl_file: Path to TTL file or file-like object
+        overwrite: If True, overwrite existing class files. Default is False.
 
     Returns:
         Generated Python code as string
@@ -716,6 +718,9 @@ def onto2py(ttl_file: str | io.TextIOBase) -> str:
         with open(py_file, "w") as f:
             f.write(python_code)
         print(f"✅ Successfully converted {ttl_file_path} to {py_file}")
+
+        # Create individual class files
+        create_class_files(ttl_file_path, classes, py_file, overwrite)
 
     return python_code
 
@@ -1008,6 +1013,181 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
             )
             class_info.properties.append(creator_prop)
             class_info.property_uris[creator_prop_name] = creator_prop_uri
+
+
+def create_class_files(
+    ttl_file_path: str,
+    classes: Dict[str, ClassInfo],
+    py_file: Path,
+    overwrite: bool = False,
+):
+    """
+    Create individual Python files for each class in the ontology.
+
+    Args:
+        ttl_file_path: Path to the original TTL file
+        classes: Dictionary of class URIs to ClassInfo objects
+        py_file: Path to the generated Python file containing all classes
+        overwrite: If True, overwrite existing files. Default is False.
+    """
+    # Extract module name from the TTL file path
+    # Find the directory containing 'ontologies' and use the parent as module base
+    ttl_path = Path(ttl_file_path).resolve()
+    parts = ttl_path.parts
+
+    # Find 'ontologies' in the path and get the parent directory
+    module_base_path = None
+    for i, part in enumerate(parts):
+        if part == "ontologies" and i > 0:
+            # Get the path up to (but not including) 'ontologies'
+            module_base_path = Path(*parts[:i])
+            break
+
+    if not module_base_path:
+        # Fallback: use the parent directory of the TTL file's parent
+        module_base_path = ttl_path.parent.parent
+
+    # Create base directory for class files: module_base_path/ontologies/classes/
+    base_classes_dir = module_base_path / "ontologies" / "classes"
+
+    # Calculate relative import path from class file to the generated Python file
+    # We need to find the relative path from the class file location to the py_file
+    py_file_path = py_file.resolve()
+
+    created_count = 0
+    skipped_count = 0
+
+    for class_uri, class_info in classes.items():
+        # Parse URI: remove "http://" or "https://" prefix and split by "/"
+        uri_str = str(class_uri)
+        if uri_str.startswith("http://"):
+            uri_str = uri_str[7:]  # Remove "http://"
+        elif uri_str.startswith("https://"):
+            uri_str = uri_str[8:]  # Remove "https://"
+
+        # Remove "www." if present
+        if uri_str.startswith("www."):
+            uri_str = uri_str[4:]  # Remove "www."
+
+        # Split by "/" to get path components
+        uri_parts = [part for part in uri_str.split("/") if part]
+
+        if not uri_parts:
+            continue
+
+        # Create directory structure: base_classes_dir/uri_parts[0]/uri_parts[1]/...
+        class_dir = base_classes_dir
+        for part in uri_parts[:-1]:  # All parts except the last
+            class_dir = class_dir / part
+
+        # Create directory if it doesn't exist
+        class_dir.mkdir(parents=True, exist_ok=True)
+
+        # File name is the class name in Python
+        class_file = class_dir / f"{class_info.name}.py"
+
+        # Skip if file exists and overwrite is False
+        if class_file.exists() and not overwrite:
+            skipped_count += 1
+            continue
+
+        # Calculate import path using absolute import starting from folder that begins with "naas_abi"
+        # Stop before any folder with "-" in its name
+        py_file_abs = py_file_path.resolve()
+
+        # Find the folder that starts with "naas_abi" in the path
+        naas_abi_idx = None
+        for i, part in enumerate(py_file_abs.parts):
+            if part.startswith("naas_abi"):
+                naas_abi_idx = i
+                break
+
+        if naas_abi_idx is not None:
+            # Build absolute import path from naas_abi folder onwards
+            import_parts = list(py_file_abs.parts[naas_abi_idx:-1]) + [
+                py_file_path.stem
+            ]
+
+            # Stop before any folder with "-" in its name
+            filtered_parts = []
+            for part in import_parts:
+                if "-" in part:
+                    # Stop here, use relative import from this point
+                    break
+                filtered_parts.append(part)
+
+            if len(filtered_parts) < len(import_parts):
+                # We stopped early due to hyphen, need to use relative import
+                try:
+                    class_dir_parent = class_dir.parent
+                    rel_path = Path(
+                        os.path.relpath(py_file_path.parent, class_dir_parent)
+                    )
+                    up_levels = rel_path.parts.count("..")
+                    remaining_parts = [
+                        p for p in rel_path.parts if p not in ("..", ".")
+                    ]
+                    if remaining_parts:
+                        import_path = (
+                            "." * (up_levels + 1)
+                            + ".".join(remaining_parts)
+                            + "."
+                            + py_file_path.stem
+                        )
+                    else:
+                        import_path = "." * (up_levels + 1) + py_file_path.stem
+                except (ValueError, AttributeError):
+                    # Last resort: use relative import based on depth
+                    import_path = f"..{'.' * (len(uri_parts) + 1)}{py_file_path.stem}"
+            else:
+                # No hyphen found, use absolute import
+                import_path = ".".join(filtered_parts)
+        else:
+            # No naas_abi folder found, try relative import
+            try:
+                class_dir_parent = class_dir.parent
+                rel_path = Path(os.path.relpath(py_file_path.parent, class_dir_parent))
+                up_levels = rel_path.parts.count("..")
+                remaining_parts = [p for p in rel_path.parts if p not in ("..", ".")]
+                if remaining_parts:
+                    import_path = (
+                        "." * (up_levels + 1)
+                        + ".".join(remaining_parts)
+                        + "."
+                        + py_file_path.stem
+                    )
+                else:
+                    import_path = "." * (up_levels + 1) + py_file_path.stem
+            except (ValueError, AttributeError):
+                # Last resort: use a simple relative import
+                import_path = f"..{'.' * (len(uri_parts) + 1)}{py_file_path.stem}"
+
+        # Generate the class file content
+        class_file_content = f'''from {import_path} import (
+    {class_info.name} as _{class_info.name},
+)
+
+
+class {class_info.name}Action(_{class_info.name}):
+    """Action class for {class_info.name}"""
+
+    def actions(self):
+        """Action method - implement your logic here"""
+        pass
+'''
+
+        # Write the file
+        try:
+            with open(class_file, "w") as f:
+                f.write(class_file_content)
+            created_count += 1
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to create class file {class_file}: {e}")
+
+    if created_count > 0 or skipped_count > 0:
+        print(
+            f"📁 Created {created_count} class file(s), skipped {skipped_count} existing file(s)"
+        )
 
 
 def apply_linting(code: str) -> str:
