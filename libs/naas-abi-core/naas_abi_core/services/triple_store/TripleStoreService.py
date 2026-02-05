@@ -3,17 +3,13 @@ import hashlib
 import io
 import os
 import uuid
-from typing import Callable, List, Tuple
+from typing import Callable, List
 
-import pydash
 import rdflib
 from naas_abi_core import logger
+from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.triple_store.TripleStorePorts import (
-    ITripleStorePort,
-    ITripleStoreService,
-    OntologyEvent,
-)
-from naas_abi_core.utils.Workers import Job, WorkerPool
+    ITripleStorePort, ITripleStoreService, OntologyEvent)
 from rdflib import RDF, Graph, URIRef
 
 SCHEMA_TTL = """
@@ -52,8 +48,7 @@ internal:content a owl:DatatypeProperty ;
     rdfs:comment "Base64 encoded content of the schema file" .
 """
 
-
-class TripleStoreService(ITripleStoreService):
+class TripleStoreService(ServiceBase, ITripleStoreService):
     """TripleStoreService provides CRUD operations and SPARQL querying capabilities for ontologies.
 
     This service acts as a facade for ontology storage and retrieval operations. It handles storing,
@@ -75,88 +70,114 @@ class TripleStoreService(ITripleStoreService):
     def __init__(
         self,
         triple_store_adapter: ITripleStorePort,
-        views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = [
-            (None, RDF.type, None)
-        ],
-        trigger_worker_pool_size: int = 10,
+        # views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = [
+        #     (None, RDF.type, None)
+        # ],
+        # trigger_worker_pool_size: int = 10,
     ):
+        super().__init__()
         self.__triple_store_adapter = triple_store_adapter
-        self.__event_listeners = {}
-        self.__views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = views
+        # self.__event_listeners = {}
+        # self.__views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = views
 
-        self.__trigger_worker_pool = WorkerPool(trigger_worker_pool_size)
+        # self.__trigger_worker_pool = WorkerPool(trigger_worker_pool_size)
 
         # Load SCHEMA_TTL in IOBuffer
         schema_ttl_buffer = io.StringIO(SCHEMA_TTL)
         self.insert(Graph().parse(schema_ttl_buffer, format="turtle"))
 
-        self.init_views()
+        # self.init_views()
 
-    def __del__(self):
-        self.__trigger_worker_pool.shutdown()
+    # def __del__(self):
+    #     self.__trigger_worker_pool.shutdown()
 
-    def init_views(self):
-        for view in self.__views:
-            self.subscribe(
-                view,
-                OntologyEvent.INSERT,
-                lambda event, triple: self.__triple_store_adapter.handle_view_event(
-                    view, event, triple
-                ),
-            )
-            self.subscribe(
-                view,
-                OntologyEvent.DELETE,
-                lambda event, triple: self.__triple_store_adapter.handle_view_event(
-                    view, event, triple
-                ),
-            )
+    # def init_views(self):
+    #     for view in self.__views:
+    #         self.subscribe(
+    #             view,
+    #             OntologyEvent.INSERT,
+    #             lambda event, triple: self.__triple_store_adapter.handle_view_event(
+    #                 view, event, triple
+    #             ),
+    #         )
+    #         self.subscribe(
+    #             view,
+    #             OntologyEvent.DELETE,
+    #             lambda event, triple: self.__triple_store_adapter.handle_view_event(
+    #                 view, event, triple
+    #             ),
+    #         )
 
     def insert(self, triples: Graph):
         # Insert the triples into the store
         self.__triple_store_adapter.insert(triples)
 
+        if self.services_wired is False:
+            return 
+
         # Notify listeners of the insert
         for s, p, o in triples.triples((None, None, None)):
-            for ss, sp, so in self.__event_listeners:
-                if (
-                    (ss is None or str(ss) == str(s))
-                    and (sp is None or str(sp) == str(p))
-                    and (so is None or str(so) == str(o))
-                ):
-                    if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
-                        for _, callback, background in self.__event_listeners[
-                            ss, sp, so
-                        ][OntologyEvent.INSERT]:
-                            if background:
-                                self.__trigger_worker_pool.submit(
-                                    Job(None, callback, OntologyEvent.INSERT, (s, p, o))
-                                )
-                            else:
-                                callback(OntologyEvent.INSERT, (s, p, o))
+            triple_bytes =  f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
+
+            try:
+                topic = f"ts.insert.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}"
+                print(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
+                self.services.bus.topic_publish(
+                    "triple_store",
+                    topic,
+                    triple_bytes,
+                )
+            except Exception as e:
+                logger.error(f"Error publishing triple: {e}")
+            # for ss, sp, so in self.__event_listeners:
+            #     if (
+            #         (ss is None or str(ss) == str(s))
+            #         and (sp is None or str(sp) == str(p))
+            #         and (so is None or str(so) == str(o))
+            #     ):
+            #         if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
+            #             for _, callback, background in self.__event_listeners[
+            #                 ss, sp, so
+            #             ][OntologyEvent.INSERT]:
+            #                 if background:
+            #                     self.__trigger_worker_pool.submit(
+            #                         Job(None, callback, OntologyEvent.INSERT, (s, p, o))
+            #                     )
+            #                 else:
+            #                     callback(OntologyEvent.INSERT, (s, p, o))
 
     def remove(self, triples: Graph):
         # Remove the triples from the store
         self.__triple_store_adapter.remove(triples)
 
+        if self.services_wired is False:
+            return 
+
         # Notify listeners of the delete
         for s, p, o in triples.triples((None, None, None)):
-            for ss, sp, so in self.__event_listeners:
-                if (
-                    (ss is None or str(ss) == str(s))
-                    and (sp is None or str(sp) == str(p))
-                    and (so is None or str(so) == str(o))
-                ):
-                    if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
-                        for _, callback, background in self.__event_listeners[
-                            ss, sp, so
-                        ][OntologyEvent.DELETE]:
-                            if background:
-                                self.__trigger_worker_pool.submit(
-                                    Job(None, callback, OntologyEvent.DELETE, (s, p, o))
-                                )
-                            else:
-                                callback(OntologyEvent.DELETE, (s, p, o))
+            triple_bytes =  f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
+            
+            self.services.bus.topic_publish(
+                "triple_store",
+                f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}",
+                triple_bytes,
+            )
+            # for ss, sp, so in self.__event_listeners:
+            #     if (
+            #         (ss is None or str(ss) == str(s))
+            #         and (sp is None or str(sp) == str(p))
+            #         and (so is None or str(so) == str(o))
+            #     ):
+            #         if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
+            #             for _, callback, background in self.__event_listeners[
+            #                 ss, sp, so
+            #             ][OntologyEvent.DELETE]:
+            #                 if background:
+            #                     self.__trigger_worker_pool.submit(
+            #                         Job(None, callback, OntologyEvent.DELETE, (s, p, o))
+            #                     )
+            #                 else:
+            #                     callback(OntologyEvent.DELETE, (s, p, o))
 
     def get(self) -> Graph:
         return self.__triple_store_adapter.get()
@@ -169,31 +190,38 @@ class TripleStoreService(ITripleStoreService):
 
     def subscribe(
         self,
-        topic: tuple,
-        event_type: OntologyEvent,
-        callback: Callable[[OntologyEvent, Tuple[str, str, str]], None],
-        background: bool = False,
-    ) -> str:
-        if topic not in self.__event_listeners:
-            self.__event_listeners[topic] = {}
-        if event_type not in self.__event_listeners[topic]:
-            self.__event_listeners[topic][event_type] = []
-
-        subscription_id = str(uuid.uuid4())
-
-        self.__event_listeners[topic][event_type].append(
-            (subscription_id, callback, background)
+        topic: tuple[URIRef | None, URIRef | None, URIRef | None],
+        callback: Callable[[bytes], None],
+        event_type: OntologyEvent | None = None
+    ) -> None:
+        _event_type : str = ""
+        if event_type == OntologyEvent.INSERT:
+            _event_type = "insert"
+        elif event_type == OntologyEvent.DELETE:
+            _event_type = "delete"
+        elif event_type is None:
+            _event_type = "*"
+        
+        graph_name = '*'
+        s = '*' if topic[0] is None else hashlib.sha256(str(topic[0]).encode('utf-8')).hexdigest()
+        p = '*' if topic[1] is None else hashlib.sha256(str(topic[1]).encode('utf-8')).hexdigest()
+        o = '*' if topic[2] is None else hashlib.sha256(str(topic[2]).encode('utf-8')).hexdigest()
+        
+        topic_str = f"ts.{_event_type}.g.{graph_name}.s.{s}.p.{p}.o.{o}"
+        
+        self.services.bus.topic_consume(
+            "triple_store",
+            topic_str,
+            callback,
         )
 
-        return subscription_id
-
-    def unsubscribe(self, subscription_id: str) -> None:
-        for topic in self.__event_listeners:
-            for event_type in self.__event_listeners[topic]:
-                self.__event_listeners[topic][event_type] = pydash.filter_(
-                    self.__event_listeners[topic][event_type],
-                    lambda x: x[0] != subscription_id,
-                )
+    # def unsubscribe(self, subscription_id: str) -> None:
+    #     for topic in self.__event_listeners:
+    #         for event_type in self.__event_listeners[topic]:
+    #             self.__event_listeners[topic][event_type] = pydash.filter_(
+    #                 self.__event_listeners[topic][event_type],
+    #                 lambda x: x[0] != subscription_id,
+    #             )
 
     def get_subject_graph(self, subject: str) -> Graph:
         return self.__triple_store_adapter.get_subject_graph(URIRef(subject))

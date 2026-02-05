@@ -7,22 +7,21 @@ from collections import OrderedDict
 from typing import Any, Callable
 
 from naas_abi_core import logger
-from naas_abi_core.services.cache.CachePort import (
-    CachedData,
-    CacheExpiredError,
-    CacheNotFoundError,
-    DataType,
-    ICacheAdapter,
-    ICacheService,
-)
+from naas_abi_core.services.cache.CachePort import (CachedData,
+                                                    CacheExpiredError,
+                                                    CacheNotFoundError,
+                                                    DataType, ICacheAdapter,
+                                                    ICacheService)
+from naas_abi_core.services.ServiceBase import ServiceBase
 
 
 class ForceRefresh(Exception):
     pass
 
 
-class CacheService(ICacheService):
+class CacheService(ServiceBase, ICacheService):
     def __init__(self, adapter: ICacheAdapter):
+        super().__init__()
         self.adapter = adapter
 
         self.deserializers = {
@@ -31,6 +30,7 @@ class CacheService(ICacheService):
             DataType.BINARY: self.__get_binary,
             DataType.PICKLE: self.__get_pickle,
         }
+
 
     def __call__(
         self,
