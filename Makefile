@@ -374,6 +374,9 @@ chat-instagram-agent: deps
 chat-linkedin-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInAgent
 
+chat-linkedin-graph-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInGraphAgent
+
 chat-mercury-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.mercury MercuryAgent
 
@@ -530,23 +533,6 @@ path=tests/
 test: deps
 	@ uv run python -m pytest .
 
-# Run tests with coverage reporting
-test-coverage: deps
-	@ uv run python -m pytest tests/ lib/abi/services/cache/ lib/abi/services/secret/ lib/abi/services/triple_store/ --cov=lib --cov-report=html --cov-report=term --cov-report=xml
-	@ uv run coverage-badge -f -o coverage.svg
-	@ echo "📊 Coverage report generated:"
-	@ echo "  - HTML: htmlcov/index.html"
-	@ echo "  - XML: coverage.xml"
-	@ echo "  - Badge: coverage.svg"
-
-# Run basic tests for CI (no external dependencies)
-test-ci: deps
-	@ uv run python -m pytest tests/unit/test_basic.py --cov=lib --cov-report=xml --cov-report=term -v
-
-# Run tests specifically for the abi library
-test-abi: deps
-	@ uv run python -m pytest lib
-
 # Run API-specific tests
 test-api: deps
 	@ uv run python -m pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v -s
@@ -566,18 +552,6 @@ test-api-init-container: build
 		-e OPENAI_API_KEY="${OPENAI_API_KEY}" \
 		-e GITHUB_ACCESS_TOKEN="${GITHUB_ACCESS_TOKEN}" \
 		abi:latest uv run --no-dev python -m naas_abi_core.apps.api.test_init
-
-# Interactive test selector using fzf (fuzzy finder)
-q=''
-ftest: deps
-	@ clear
-	LOG_LEVEL=DEBUG uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
-
-dtest: deps
-	@ uv run python -m pytest $(shell find lib src tests -type d | fzf -q $(q)) $(args)
-
-frun: deps
-	@ uv run $(shell find lib src tests -name '*.py' -type f | fzf -q $(q)) $(args)
 
 # TTL_FILES := $(wildcard src/*/*/ontologies/*.ttl src/marketplace/*/*/ontologies/*.ttl)
 TTL_FILES := $(shell find src -name '*.ttl')
@@ -633,7 +607,7 @@ check-core: deps
 
 	@#echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
 	@#echo "⚠️ Skipping bandit... (disabled)"
-	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
+	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml libs/naas-abi-core libs/naas-abi-cli libs/naas-abi -r
 	@echo "\n✅ CORE security checks passed!"
 
 # Code quality checks for marketplace modules
@@ -671,7 +645,7 @@ fmt: deps
 
 # Security scanning with bandit
 bandit:
-	@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests src/ lib -r
+	@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests libs src -r
 
 # Container security scanning with trivy
 trivy-container-scan: build
@@ -977,7 +951,7 @@ publish-remote-agents-dry-run: deps
 # Clean up build artifacts, caches, and Docker containers
 clean:
 	@echo "Cleaning up build artifacts..."
-	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv .mypy_cache
+	rm -rf __pycache__ .pytest_cache build dist *.egg-info .venv .mypy_cache
 	sudo find . -name "*.pyc" -delete
 	sudo find . -name "__pycache__" -delete
 	docker compose down
