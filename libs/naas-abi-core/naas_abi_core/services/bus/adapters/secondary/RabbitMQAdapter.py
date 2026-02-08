@@ -4,6 +4,7 @@ from typing import Callable, Optional
 
 import pika
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
+from naas_abi_core.utils.Logger import logger
 
 
 class RabbitMQAdapter(IBusAdapter):
@@ -122,6 +123,7 @@ class RabbitMQAdapter(IBusAdapter):
                         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
                         raise
 
+                logger.debug(f"Consuming topic: {topic} -- {routing_key}")
                 channel.basic_consume(
                     queue=queue_name,
                     on_message_callback=_on_message,
