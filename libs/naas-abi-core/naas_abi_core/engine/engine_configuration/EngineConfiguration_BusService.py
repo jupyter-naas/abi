@@ -34,12 +34,10 @@ class BusAdapterConfiguration(GenericLoader):
 
     @model_validator(mode="after")
     def validate_adapter(self) -> "BusAdapterConfiguration":
-        if self.adapter != "custom":
-            assert self.config is not None, (
-                "config is required if adapter is not custom"
-            )
-
         if self.adapter == "rabbitmq":
+            assert self.config is not None, (
+                "config is required for rabbitmq adapter"
+            )
             pydantic_model_validator(
                 BusAdapterRabbitMQConfiguration,
                 self.config,
@@ -47,35 +45,33 @@ class BusAdapterConfiguration(GenericLoader):
             )
 
         if self.adapter == "python_queue":
-            pydantic_model_validator(
-                BusAdapterPythonQueueConfiguration,
-                self.config,
-                "Invalid configuration for services.bus.bus_adapter 'python_queue' adapter",
-            )
+            # Python queue adapter doesn't require configuration
+            if self.config is not None:
+                pydantic_model_validator(
+                    BusAdapterPythonQueueConfiguration,
+                    self.config,
+                    "Invalid configuration for services.bus.bus_adapter 'python_queue' adapter",
+                )
 
         return self
 
     def load(self) -> IBusAdapter:
-        if self.adapter != "custom":
-            assert self.config is not None, (
-                "config is required if adapter is not custom"
-            )
+        # Lazy import: only import when actually loading
+        if self.adapter == "rabbitmq":
+            assert self.config is not None, "config is required for rabbitmq adapter"
+            from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import \
+                RabbitMQAdapter
 
-            # Lazy import: only import when actually loading
-            if self.adapter == "rabbitmq":
-                from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import \
-                    RabbitMQAdapter
+            return RabbitMQAdapter(**self.config)
+        elif self.adapter == "python_queue":
+            from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import \
+                PythonQueueAdapter
 
-                return RabbitMQAdapter(**self.config)
-            elif self.adapter == "python_queue":
-                from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import \
-                    PythonQueueAdapter
-
-                return PythonQueueAdapter(**self.config)
-            else:
-                raise ValueError(f"Unknown adapter: {self.adapter}")
-        else:
+            return PythonQueueAdapter()
+        elif self.adapter == "custom":
             return super().load()
+        else:
+            raise ValueError(f"Unknown adapter: {self.adapter}")
 
 
 class BusServiceConfiguration(BaseModel):
