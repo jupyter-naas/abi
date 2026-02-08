@@ -34,6 +34,11 @@ class BusAdapterConfiguration(GenericLoader):
 
     @model_validator(mode="after")
     def validate_adapter(self) -> "BusAdapterConfiguration":
+        if self.adapter != "custom":
+            assert self.config is not None, (
+                "config is required if adapter is not custom"
+            )
+        
         if self.adapter == "rabbitmq":
             assert self.config is not None, (
                 "config is required for rabbitmq adapter"
