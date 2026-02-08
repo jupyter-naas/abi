@@ -1,8 +1,8 @@
-from naas_abi_core.services.KeyValue.KVPorts import IKVAdapter
+from naas_abi_core.services.keyvalue.KeyValuePorts import IKVAdapter
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
-class KVService(ServiceBase):
+class KeyValueService(ServiceBase):
     __adapter: IKVAdapter
 
     def __init__(self, adapter: IKVAdapter):

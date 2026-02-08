@@ -4,7 +4,7 @@ from typing import (TYPE_CHECKING, Dict, List, Protocol, Union,
                     runtime_checkable)
 
 from naas_abi_core.services.bus.BusService import BusService
-from naas_abi_core.services.KeyValue.KVService import KVService
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import \
     ObjectStorageService
 from naas_abi_core.services.secret.Secret import Secret
@@ -30,7 +30,7 @@ class IEngine:
         __vector_store: VectorStoreService | None
         __secret: Secret | None
         __bus: BusService | None
-        __kv: KVService | None
+        __kv: KeyValueService | None
 
         def __init__(
             self,
@@ -39,7 +39,7 @@ class IEngine:
             vector_store: VectorStoreService | None = None,
             secret: Secret | None = None,
             bus: BusService | None = None,
-            kv: KVService | None = None,
+            kv: KeyValueService | None = None,
         ):
             self.__object_storage = object_storage
             self.__triple_store = triple_store
@@ -49,7 +49,7 @@ class IEngine:
             self.__kv = kv
 
         @property
-        def kv(self) -> KVService:
+        def kv(self) -> KeyValueService:
             assert self.__kv is not None, "KV service is not initialized"
             return self.__kv
 
@@ -97,7 +97,7 @@ class IEngine:
                 VectorStoreService | None,
                 Secret | None,
                 BusService | None,
-                KVService | None,
+                KeyValueService | None,
             ]
         ]:
             return [

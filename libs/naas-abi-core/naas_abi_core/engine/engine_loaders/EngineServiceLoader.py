@@ -6,7 +6,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import ModuleDependencies
 from naas_abi_core.services.bus.BusService import BusService
-from naas_abi_core.services.KeyValue.KVService import KVService
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import \
     ObjectStorageService
 from naas_abi_core.services.secret.Secret import Secret
@@ -63,7 +63,7 @@ class EngineServiceLoader:
             if self._should_load_service(BusService, services_to_load)
             else None,
             kv=self.__configuration.services.kv.load()
-            if self._should_load_service(KVService, services_to_load)
+            if self._should_load_service(KeyValueService, services_to_load)
             else None,
         )
         services.wire_services()

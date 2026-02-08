@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict
 
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.services.bus.BusService import BusService
-from naas_abi_core.services.KeyValue.KVService import KVService
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import \
     ObjectStorageService
 from naas_abi_core.services.secret.Secret import Secret
@@ -82,8 +82,8 @@ class ServicesProxy:
         return self.__engine.services.bus
 
     @property
-    def kv(self) -> KVService:
-        self.__ensure_access(KVService)
+    def kv(self) -> KeyValueService:
+        self.__ensure_access(KeyValueService)
 
         return self.__engine.services.kv
 

@@ -10,8 +10,8 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusAdapterConfiguration, BusServiceConfiguration)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import \
     DeployConfiguration
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_KVService import (
-    KVAdapterConfiguration, KVServiceConfiguration)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
+    KeyValueAdapterConfiguration, KeyValueServiceConfiguration)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
     ObjectStorageAdapterConfiguration, ObjectStorageAdapterFSConfiguration,
     ObjectStorageServiceConfiguration)
@@ -35,7 +35,7 @@ class ServicesConfiguration(BaseModel):
     vector_store: VectorStoreServiceConfiguration = VectorStoreServiceConfiguration(vector_store_adapter=VectorStoreAdapterConfiguration(adapter="qdrant_in_memory", config={}))
     secret: SecretServiceConfiguration = SecretServiceConfiguration(secret_adapters=[SecretAdapterConfiguration(adapter="dotenv", config=DotenvSecretConfiguration())])
     bus: BusServiceConfiguration = BusServiceConfiguration(bus_adapter=BusAdapterConfiguration(adapter="python_queue", config={}))  # Provide default if not supplied
-    kv: KVServiceConfiguration = KVServiceConfiguration(kv_adapter=KVAdapterConfiguration(adapter="python", config={}))
+    kv: KeyValueServiceConfiguration = KeyValueServiceConfiguration(kv_adapter=KeyValueAdapterConfiguration(adapter="python", config={}))
 
 
 class ApiConfiguration(BaseModel):
