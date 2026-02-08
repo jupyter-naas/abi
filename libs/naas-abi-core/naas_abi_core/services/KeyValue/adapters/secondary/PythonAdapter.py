@@ -13,8 +13,8 @@ class _Entry:
 
 
 class PythonAdapter(IKVAdapter):
-    __store: dict[str, _Entry]
-    __lock: threading.Lock
+    _store: dict[str, _Entry]
+    _lock: threading.Lock
     
     def __init__(self) -> None:
         self._store: dict[str, _Entry] = {}

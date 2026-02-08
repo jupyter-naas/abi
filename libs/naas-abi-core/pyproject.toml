@@ -33,8 +33,7 @@ dependencies = [
     "pillow>=12.0.0",
     "docker>=7.1.0",
     "types-pyyaml>=6.0.12.20250915",
-    "types-paramiko>=4.0.0.20250822",
-    "pika>=1.3.2",
+    "types-paramiko>=4.0.0.20250822"
 ]
 license = { text = "MIT License" }
 
@@ -67,6 +66,12 @@ openrouter = [
 ]
 dagster = [
     "dagster>=1.12.13",
+]
+redis = [
+    "redis>=7.1.0",
+]
+rabbitmq = [
+    "pika>=1.3.2",
 ]
 [project.scripts]
 onto2py = "naas_abi_core.utils.onto2py.__main__:main"

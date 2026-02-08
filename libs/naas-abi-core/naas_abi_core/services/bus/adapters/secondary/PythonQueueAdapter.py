@@ -15,8 +15,12 @@ class _Subscriber:
 class PythonQueueAdapter(IBusAdapter):
     """Process-local bus using stdlib queues (no external deps)."""
 
-    _lock = RLock()
-    _subscribers: Dict[str, List[_Subscriber]] = {}
+    _lock: RLock
+    _subscribers: Dict[str, List[_Subscriber]]
+    
+    def __init__(self) -> None:
+        self._lock = RLock()
+        self._subscribers: Dict[str, List[_Subscriber]] = {}
 
     def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
         with self._lock:

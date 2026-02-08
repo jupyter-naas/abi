@@ -29,8 +29,8 @@ class EngineServiceLoader:
         if service_type in services_to_load:
             return True
         
-        for service_type, dependencies in SERVICES_DEPENDENCIES.items():
-            if service_type in services_to_load:
+        for service, dependencies in SERVICES_DEPENDENCIES.items():
+            if service_type in dependencies and service in services_to_load:
                 return True
         return False
         
@@ -60,7 +60,7 @@ class EngineServiceLoader:
             if self._should_load_service(Secret, services_to_load)
             else None,
             bus=self.__configuration.services.bus.load()
-            if self._should_load_service(BusService, services_to_load) or self._should_load_service(TripleStoreService, services_to_load) # IMPORTANT: We need to load the bus service if we are loading the triple store service.
+            if self._should_load_service(BusService, services_to_load)
             else None,
             kv=self.__configuration.services.kv.load()
             if self._should_load_service(KVService, services_to_load)
