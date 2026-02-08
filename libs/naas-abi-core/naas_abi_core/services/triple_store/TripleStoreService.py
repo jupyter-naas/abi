@@ -113,15 +113,15 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self.__triple_store_adapter.insert(triples)
 
         if self.services_wired is False:
-            return 
+            return
 
         # Notify listeners of the insert
         for s, p, o in triples.triples((None, None, None)):
-            triple_bytes =  f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
+            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
 
             try:
                 topic = f"ts.insert.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}"
-                print(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
+                logger.debug(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
                 self.services.bus.topic_publish(
                     "triple_store",
                     topic,
