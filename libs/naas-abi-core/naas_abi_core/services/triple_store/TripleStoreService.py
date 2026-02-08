@@ -121,7 +121,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             try:
                 topic = f"ts.insert.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}"
-                print(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
+                logger.debug(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
                 self.services.bus.topic_publish(
                     "triple_store",
                     topic,
@@ -129,22 +129,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 )
             except Exception as e:
                 logger.error(f"Error publishing triple: {e}")
-            # for ss, sp, so in self.__event_listeners:
-            #     if (
-            #         (ss is None or str(ss) == str(s))
-            #         and (sp is None or str(sp) == str(p))
-            #         and (so is None or str(so) == str(o))
-            #     ):
-            #         if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
-            #             for _, callback, background in self.__event_listeners[
-            #                 ss, sp, so
-            #             ][OntologyEvent.INSERT]:
-            #                 if background:
-            #                     self.__trigger_worker_pool.submit(
-            #                         Job(None, callback, OntologyEvent.INSERT, (s, p, o))
-            #                     )
-            #                 else:
-            #                     callback(OntologyEvent.INSERT, (s, p, o))
+                raise e
 
     def remove(self, triples: Graph):
         # Remove the triples from the store
@@ -157,27 +142,18 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         for s, p, o in triples.triples((None, None, None)):
             triple_bytes =  f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
             
-            self.services.bus.topic_publish(
-                "triple_store",
-                f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}",
-                triple_bytes,
-            )
-            # for ss, sp, so in self.__event_listeners:
-            #     if (
-            #         (ss is None or str(ss) == str(s))
-            #         and (sp is None or str(sp) == str(p))
-            #         and (so is None or str(so) == str(o))
-            #     ):
-            #         if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
-            #             for _, callback, background in self.__event_listeners[
-            #                 ss, sp, so
-            #             ][OntologyEvent.DELETE]:
-            #                 if background:
-            #                     self.__trigger_worker_pool.submit(
-            #                         Job(None, callback, OntologyEvent.DELETE, (s, p, o))
-            #                     )
-            #                 else:
-            #                     callback(OntologyEvent.DELETE, (s, p, o))
+            try:
+                topic = f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}"
+                logger.debug(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
+                self.services.bus.topic_publish(
+                    "triple_store",
+                        f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}",
+                        triple_bytes,
+                    )
+            except Exception as e:
+                logger.error(f"Error publishing triple: {e}")
+                raise e
+
 
     def get(self) -> Graph:
         return self.__triple_store_adapter.get()
@@ -214,14 +190,6 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             topic_str,
             callback,
         )
-
-    # def unsubscribe(self, subscription_id: str) -> None:
-    #     for topic in self.__event_listeners:
-    #         for event_type in self.__event_listeners[topic]:
-    #             self.__event_listeners[topic][event_type] = pydash.filter_(
-    #                 self.__event_listeners[topic][event_type],
-    #                 lambda x: x[0] != subscription_id,
-    #             )
 
     def get_subject_graph(self, subject: str) -> Graph:
         return self.__triple_store_adapter.get_subject_graph(URIRef(subject))
