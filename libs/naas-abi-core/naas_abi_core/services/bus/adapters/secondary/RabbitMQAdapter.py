@@ -122,7 +122,6 @@ class RabbitMQAdapter(IBusAdapter):
                         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
                         raise
 
-                print(f"Consuming topic: {topic} -- {routing_key}")
                 channel.basic_consume(
                     queue=queue_name,
                     on_message_callback=_on_message,
