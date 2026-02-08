@@ -1,7 +1,7 @@
 deploy:
-  workspace_id: "{{ naas_workspace_id }}"
   space_name: "{{ project_name_snake }}-abi-api"
 {% raw %}
+  workspace_id: "{{ secret.NAAS_WORKSPACE_ID }}"
   naas_api_key: "{{ secret.NAAS_API_KEY }}"
   env:
     ENV: "prod"

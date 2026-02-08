@@ -4,12 +4,12 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader
     GenericLoader
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
     pydantic_model_validator
-from naas_abi_core.services.KeyValue.KVPorts import IKVAdapter
-from naas_abi_core.services.KeyValue.KVService import KVService
+from naas_abi_core.services.keyvalue.KeyValuePorts import IKVAdapter
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from pydantic import BaseModel, model_validator
 
 
-class KVAdapterRedisConfiguration(BaseModel):
+class KeyValueAdapterRedisConfiguration(BaseModel):
     """Redis KV adapter configuration.
 
     KV_adapter:
@@ -19,7 +19,7 @@ class KVAdapterRedisConfiguration(BaseModel):
     """
     redis_url: str = "redis://localhost:6379"
 
-class KVAdapterPythonConfiguration(BaseModel):
+class KeyValueAdapterPythonConfiguration(BaseModel):
     """Python KV adapter configuration.
 
     KV_adapter:
@@ -29,12 +29,12 @@ class KVAdapterPythonConfiguration(BaseModel):
     """
     pass
 
-class KVAdapterConfiguration(GenericLoader):
+class KeyValueAdapterConfiguration(GenericLoader):
     adapter: Literal["redis", "python", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
-    def validate_adapter(self) -> "KVAdapterConfiguration":
+    def validate_adapter(self) -> "KeyValueAdapterConfiguration":
         if self.adapter != "custom":
             assert self.config is not None, (
                 "config is required if adapter is not custom"
@@ -42,14 +42,14 @@ class KVAdapterConfiguration(GenericLoader):
 
         if self.adapter == "redis":
             pydantic_model_validator(
-                KVAdapterRedisConfiguration,
+                KeyValueAdapterRedisConfiguration,
                 self.config,
                 "Invalid configuration for services.KV.KV_adapter 'redis' adapter",
             )
 
         if self.adapter == "python":
             pydantic_model_validator(
-                KVAdapterPythonConfiguration,
+                KeyValueAdapterPythonConfiguration,
                 self.config,
                 "Invalid configuration for services.KV.KV_adapter 'python' adapter",
             )
@@ -64,12 +64,12 @@ class KVAdapterConfiguration(GenericLoader):
 
             # Lazy import: only import when actually loading
             if self.adapter == "redis":
-                from naas_abi_core.services.KeyValue.adapters.secondary.RedisAdapter import \
+                from naas_abi_core.services.keyvalue.adapters.secondary.RedisAdapter import \
                     RedisAdapter
 
                 return RedisAdapter(**self.config)
             elif self.adapter == "python":
-                from naas_abi_core.services.KeyValue.adapters.secondary.PythonAdapter import \
+                from naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter import \
                     PythonAdapter
 
                 return PythonAdapter(**self.config)
@@ -79,8 +79,8 @@ class KVAdapterConfiguration(GenericLoader):
             return super().load()
 
 
-class KVServiceConfiguration(BaseModel):
-    kv_adapter: KVAdapterConfiguration
+class KeyValueServiceConfiguration(BaseModel):
+    kv_adapter: KeyValueAdapterConfiguration
 
-    def load(self) -> KVService:
-        return KVService(adapter=self.kv_adapter.load())
+    def load(self) -> KeyValueService:
+        return KeyValueService(adapter=self.kv_adapter.load())
