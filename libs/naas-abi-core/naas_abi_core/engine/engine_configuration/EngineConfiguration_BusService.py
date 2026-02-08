@@ -24,10 +24,9 @@ class BusAdapterPythonQueueConfiguration(BaseModel):
 
     bus_adapter:
       adapter: "python_queue"
-      config:
-        queue_name: "{{ secret.PYTHON_QUEUE_NAME }}"
+      config: {}
     """
-    queue_name: str = "abi_bus"
+    pass
 
 class BusAdapterConfiguration(GenericLoader):
     adapter: Literal["rabbitmq", "python_queue", "custom"]
