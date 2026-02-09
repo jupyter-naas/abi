@@ -1,11 +1,11 @@
-from naas_abi_core.services.keyvalue.KeyValuePorts import IKVAdapter
+from naas_abi_core.services.keyvalue.KeyValuePorts import IKeyValueAdapter
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
 class KeyValueService(ServiceBase):
-    __adapter: IKVAdapter
+    __adapter: IKeyValueAdapter
 
-    def __init__(self, adapter: IKVAdapter):
+    def __init__(self, adapter: IKeyValueAdapter):
         super().__init__()
         self.__adapter = adapter
 

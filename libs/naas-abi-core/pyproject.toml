@@ -68,6 +68,8 @@ openrouter = [
 ]
 dagster = [
     "dagster>=1.12.13",
+    "dagster-postgres>=0.28.14",
+    "dagster-webserver>=1.12.14",
 ]
 redis = [
     "redis>=7.1.0",

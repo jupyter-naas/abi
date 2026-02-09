@@ -1,12 +1,14 @@
 from typing import Literal
 
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import \
-    GenericLoader
-from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
-    pydantic_model_validator
-from naas_abi_core.services.keyvalue.KeyValuePorts import IKVAdapter
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
+    GenericLoader,
+)
+from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
+    pydantic_model_validator,
+)
+from naas_abi_core.services.keyvalue.KeyValuePorts import IKeyValueAdapter
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class KeyValueAdapterRedisConfiguration(BaseModel):
@@ -17,7 +19,11 @@ class KeyValueAdapterRedisConfiguration(BaseModel):
       config:
         redis_url: "{{ secret.REDIS_URL }}"
     """
+
+    model_config = ConfigDict(extra="forbid")
+
     redis_url: str = "redis://localhost:6379"
+
 
 class KeyValueAdapterPythonConfiguration(BaseModel):
     """Python KV adapter configuration.
@@ -27,7 +33,11 @@ class KeyValueAdapterPythonConfiguration(BaseModel):
       config:
         python_url: "{{ secret.PYTHON_URL }}"
     """
+
+    model_config = ConfigDict(extra="forbid")
+
     pass
+
 
 class KeyValueAdapterConfiguration(GenericLoader):
     adapter: Literal["redis", "python", "custom"]
@@ -56,7 +66,7 @@ class KeyValueAdapterConfiguration(GenericLoader):
 
         return self
 
-    def load(self) -> IKVAdapter:
+    def load(self) -> IKeyValueAdapter:
         if self.adapter != "custom":
             assert self.config is not None, (
                 "config is required if adapter is not custom"
@@ -64,13 +74,15 @@ class KeyValueAdapterConfiguration(GenericLoader):
 
             # Lazy import: only import when actually loading
             if self.adapter == "redis":
-                from naas_abi_core.services.keyvalue.adapters.secondary.RedisAdapter import \
-                    RedisAdapter
+                from naas_abi_core.services.keyvalue.adapters.secondary.RedisAdapter import (
+                    RedisAdapter,
+                )
 
                 return RedisAdapter(**self.config)
             elif self.adapter == "python":
-                from naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter import \
-                    PythonAdapter
+                from naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter import (
+                    PythonAdapter,
+                )
 
                 return PythonAdapter(**self.config)
             else:
