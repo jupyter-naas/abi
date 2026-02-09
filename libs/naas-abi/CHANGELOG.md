@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.0 (2026-02-09)
+
+### Features
+
+- Working on addint BusService, KeyValueService and reworking Dagster orchestration
+  ([`bc448a6`](https://github.com/jupyter-naas/abi/commit/bc448a6a22c9f1788bb204e0671e6efb0c1bb774))
+
+
 ## v1.0.15 (2026-02-02)
 
 ### Bug Fixes
