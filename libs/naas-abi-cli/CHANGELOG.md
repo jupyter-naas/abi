@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.10.2 (2026-02-09)
+
+### Bug Fixes
+
+- Agent templating
+  ([`e199010`](https://github.com/jupyter-naas/abi/commit/e199010ceea5d4024e6c24337a36a2413eed8659))
+
+
 ## v1.10.1 (2026-02-09)
 
 ### Bug Fixes
