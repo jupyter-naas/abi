@@ -11,7 +11,7 @@ class RabbitMQAdapter(IBusAdapter):
     __rabbitmq_url: str
     __publish_connection: Optional[pika.BlockingConnection]
     __publish_channel: Optional[pika.adapters.blocking_connection.BlockingChannel]
-    
+
     def __init__(self, rabbitmq_url: str):
         self.__rabbitmq_url = rabbitmq_url
         self.__publish_connection = None
@@ -20,7 +20,7 @@ class RabbitMQAdapter(IBusAdapter):
     def __enter__(self) -> "RabbitMQAdapter":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(self, exc_type, exc, tb):
         self.close()
         return False
 
@@ -70,7 +70,7 @@ class RabbitMQAdapter(IBusAdapter):
             # Create the exchange if it doesn't exist
             channel.exchange_declare(
                 exchange=topic,
-                exchange_type='topic',
+                exchange_type="topic",
                 durable=True,
             )
 
@@ -83,8 +83,10 @@ class RabbitMQAdapter(IBusAdapter):
         except Exception as exc:
             self._close_publish_connection()
             raise ConnectionError("RabbitMQ publish failed") from exc
-        
-    def topic_consume(self, topic: str, routing_key: str, callback: Callable[[bytes], None]) -> Thread:
+
+    def topic_consume(
+        self, topic: str, routing_key: str, callback: Callable[[bytes], None]
+    ) -> Thread:
         def _consume_loop() -> None:
             connection = None
             channel = None
@@ -95,7 +97,7 @@ class RabbitMQAdapter(IBusAdapter):
                 channel = connection.channel()
                 channel.exchange_declare(
                     exchange=topic,
-                    exchange_type='topic',
+                    exchange_type="topic",
                     durable=True,
                 )
 
