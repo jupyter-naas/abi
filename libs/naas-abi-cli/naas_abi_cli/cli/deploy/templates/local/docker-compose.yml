@@ -220,7 +220,7 @@ services:
       - DAGSTER_PG_HOSTNAME=${POSTGRES_HOST}
       - DAGSTER_PG_USERNAME=${POSTGRES_USER}
       - DAGSTER_PG_PASSWORD=${POSTGRES_PASSWORD}
-      - DAGSTER_PG_DB=${POSTGRES_DB}
+      - DAGSTER_PG_DB=${POSTGRES_DB}_dagster
     command:
       - /bin/bash
       - -c
