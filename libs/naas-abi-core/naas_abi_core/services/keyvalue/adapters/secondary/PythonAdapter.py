@@ -3,7 +3,10 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-from naas_abi_core.services.KeyValue.KVPorts import IKVAdapter, KVNotFoundError
+from naas_abi_core.services.keyvalue.KeyValuePorts import (
+    IKeyValueAdapter,
+    KVNotFoundError,
+)
 
 
 @dataclass(frozen=True)
@@ -12,10 +15,10 @@ class _Entry:
     expires_at: Optional[float]
 
 
-class PythonAdapter(IKVAdapter):
+class PythonAdapter(IKeyValueAdapter):
     _store: dict[str, _Entry]
     _lock: threading.Lock
-    
+
     def __init__(self) -> None:
         self._store: dict[str, _Entry] = {}
         self._lock = threading.Lock()
@@ -90,6 +93,9 @@ class PythonAdapter(IKVAdapter):
             return True
 
     def exists(self, key: str) -> bool:
+        with self._lock:
+            self._purge_if_expired(key)
+            return key in self._store
         with self._lock:
             self._purge_if_expired(key)
             return key in self._store

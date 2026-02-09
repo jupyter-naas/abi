@@ -8,7 +8,7 @@ from naas_abi_core.services.vector_store.IVectorStorePort import \
     IVectorStorePort
 from naas_abi_core.services.vector_store.VectorStoreService import \
     VectorStoreService
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class VectorStoreAdapterQdrantConfiguration(BaseModel):
@@ -23,6 +23,8 @@ class VectorStoreAdapterQdrantConfiguration(BaseModel):
         https: "{{ secret.QDRANT_HTTPS }}"
         timeout: "{{ secret.QDRANT_TIMEOUT }}"
     """
+    model_config = ConfigDict(extra="forbid")
+
     host: str = "localhost"
     port: int = 6333
     api_key: str | None = None
@@ -36,6 +38,8 @@ class VectorStoreAdapterQdrantInMemoryConfiguration(BaseModel):
       adapter: "qdrant_in_memory"
       config: {}
     """
+    model_config = ConfigDict(extra="forbid")
+
     pass
 
 class VectorStoreAdapterConfiguration(GenericLoader):

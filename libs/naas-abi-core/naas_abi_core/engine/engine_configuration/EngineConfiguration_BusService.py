@@ -6,7 +6,7 @@ from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator impo
     pydantic_model_validator
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.services.bus.BusService import BusService
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class BusAdapterRabbitMQConfiguration(BaseModel):
@@ -17,6 +17,8 @@ class BusAdapterRabbitMQConfiguration(BaseModel):
       config:
         rabbitmq_url: "{{ secret.RABBITMQ_URL }}"
     """
+    model_config = ConfigDict(extra="forbid")
+
     rabbitmq_url: str = "amqp://abi:abi@127.0.0.1:5672"
 
 class BusAdapterPythonQueueConfiguration(BaseModel):
@@ -26,6 +28,8 @@ class BusAdapterPythonQueueConfiguration(BaseModel):
       adapter: "python_queue"
       config: {}
     """
+    model_config = ConfigDict(extra="forbid")
+
     pass
 
 class BusAdapterConfiguration(GenericLoader):

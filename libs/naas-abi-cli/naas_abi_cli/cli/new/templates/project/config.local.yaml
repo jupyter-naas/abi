@@ -1,14 +1,5 @@
-deploy:
-  space_name: "{{ project_name_snake }}-abi-api"
-{% raw %}
-  workspace_id: "{{ secret.NAAS_WORKSPACE_ID }}"
-  naas_api_key: "{{ secret.NAAS_API_KEY }}"
-  env:
-    ENV: "prod"
-    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
-    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
-    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
 
+{% raw %}
 
 auto_publish:
   enabled: true # Enable automatic publishing of agents to workspace
@@ -45,26 +36,35 @@ default_agent: "{{ project_name_snake }} {{project_name_pascal}}Agent"
 services:
   secret:
     secret_adapters:
-      - adapter: "naas"
-        config:
-          naas_api_key: "{{ secret.NAAS_API_KEY }}"
-          naas_api_url: "https://api.naas.ai"
+      - adapter: "dotenv"
+        config: {}
   object_storage:
     object_storage_adapter:
-      adapter: "naas"
+      adapter: "s3"
       config:
-        naas_api_key: "{{ secret.NAAS_API_KEY }}"
-        workspace_id: "{{ secret.NAAS_WORKSPACE_ID }}"
-        storage_name: "{{ secret.NAAS_STORAGE_NAME }}"
+        bucket_name: "{{ project_name_snake }}-datastore"
         base_prefix: "datastore"
+        access_key_id: "{{ secret.MINIO_ROOT_USER }}"
+        secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
+        endpoint_url: "http://minio:9000"
   triple_store:
     triple_store_adapter:
-      adapter: "fs"
+      adapter: "oxigraph"
       config:
-        store_path: "storage/triplestore"
+        oxigraph_url: "http://oxigraph:7878"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
       config: {}
+  bus:
+    bus_adapter:
+      adapter: "rabbitmq"
+      config:
+        rabbitmq_url: "amqp://abi:{{ secret.RABBITMQ_PASSWORD }}@rabbitmq:5672"
+  kv:
+    kv_adapter:
+      adapter: "redis"
+      config:
+        redis_url: "redis://redis:6379"
 
 {% endraw %}

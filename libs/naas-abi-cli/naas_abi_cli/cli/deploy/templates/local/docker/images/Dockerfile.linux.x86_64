@@ -1,0 +1,77 @@
+# Build stage
+FROM ubuntu:24.04 AS builder
+
+# Create a non-root user. Set home at /app
+RUN useradd -m -s /bin/bash -G sudo -u 1001 abi -d /app
+RUN mkdir -p /app && chown -R abi:abi /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y curl build-essential git 
+
+USER abi
+WORKDIR /app
+
+# Copy only the files needed for building
+ADD --chown=abi:abi ./libs/ /app/libs
+ADD --chown=abi:abi ./src/ /app/src
+ADD --chown=abi:abi ./uv.lock /app/uv.lock
+ADD --chown=abi:abi ./pyproject.toml /app/pyproject.toml
+ADD --chown=abi:abi ./README.md /app/README.md
+ADD --chown=abi:abi ./.python-version /app/.python-version
+# Marketplace is now in src/marketplace/ - no separate copy needed
+ADD --chown=abi:abi ./.git /app/.git
+
+# Get version from git tags or use a fallback
+RUN if git describe --tags > /app/VERSION 2>/dev/null; then \
+        echo "Version detected from git tags"; \
+    else \
+        echo "unknown" > /app/VERSION; \
+    fi && \
+    rm -rf /app/.git
+
+# Install uv and build the application
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+RUN mkdir -p /app/.cache/ && chown -R abi:abi /app/.cache/
+
+USER root
+
+RUN --mount=type=cache,target=/app/.cache/ chmod -R 777 /app/.cache/ && su abi /bin/bash -c "/app/.local/bin/uv sync --no-dev"
+
+
+# Final stage
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/cache/apt/*
+
+# Create the same user in the final image
+RUN useradd -m -s /bin/bash -G sudo -u 1001 abi -d /app
+RUN mkdir -p /app && chown -R abi:abi /app
+
+USER abi
+WORKDIR /app
+
+# Copy only the necessary files from the builder stage
+COPY --from=builder --chown=abi:abi /app/libs /app/libs
+COPY --from=builder --chown=abi:abi /app/src /app/src
+COPY --from=builder --chown=abi:abi /app/VERSION /app/VERSION
+COPY --from=builder --chown=abi:abi /app/.local /app/.local
+# Removing marketplace from the final image to save space and improve security
+# COPY --from=builder --chown=abi:abi /app/marketplace /app/marketplace
+COPY --from=builder --chown=abi:abi /app/.venv /app/.venv
+COPY --from=builder --chown=abi:abi /app/.python-version /app/.python-version
+
+# Copy the remaining files
+ADD --chown=abi:abi ./assets/ /app/assets
+ADD --chown=abi:abi ./config.yaml /app/config.yaml
+ADD --chown=abi:abi ./Makefile /app/Makefile
+ADD --chown=abi:abi ./uv.lock /app/uv.lock
+ADD --chown=abi:abi ./pyproject.toml /app/pyproject.toml
+ADD --chown=abi:abi ./README.md /app/README.md
+
+ENV PATH="/app/.local/bin:$PATH"
+
+# Make sure uv is fully setup
+RUN uv sync --no-dev
+
+CMD ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.api.api"]

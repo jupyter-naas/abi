@@ -1,18 +1,14 @@
 from typing import Dict, Literal, Tuple, Union
 
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
-    GenericLoader,
-)
-from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
-    pydantic_model_validator,
-)
-from naas_abi_core.services.object_storage.ObjectStoragePort import (
-    IObjectStorageAdapter,
-)
-from naas_abi_core.services.object_storage.ObjectStorageService import (
-    ObjectStorageService,
-)
-from pydantic import BaseModel, model_validator
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import \
+    GenericLoader
+from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
+    pydantic_model_validator
+from naas_abi_core.services.object_storage.ObjectStoragePort import \
+    IObjectStorageAdapter
+from naas_abi_core.services.object_storage.ObjectStorageService import \
+    ObjectStorageService
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing_extensions import Self
 
 
@@ -24,6 +20,8 @@ class ObjectStorageAdapterFSConfiguration(BaseModel):
       config:
         base_path: "storage/datastore"
     """
+    model_config = ConfigDict(extra="forbid")
+
     base_path: str
 
 
@@ -38,12 +36,16 @@ class ObjectStorageAdapterS3Configuration(BaseModel):
         access_key_id: "{{ secret.AWS_ACCESS_KEY_ID }}"
         secret_access_key: "{{ secret.AWS_SECRET_ACCESS_KEY }}"
         session_token: "{{ secret.AWS_SESSION_TOKEN }}"
+        endpoint_url: "http://localhost:9000"
     """
+    model_config = ConfigDict(extra="forbid")
+
     bucket_name: str
     base_prefix: str
     access_key_id: str
     secret_access_key: str
     session_token: str | None = None
+    endpoint_url: str | None = None
 
 
 class ObjectStorageAdapterNaasConfiguration(BaseModel):
@@ -57,6 +59,8 @@ class ObjectStorageAdapterNaasConfiguration(BaseModel):
         storage_name: "{{ secret.STORAGE_NAME }}"
         base_prefix: "my-prefix"
     """
+    model_config = ConfigDict(extra="forbid")
+
     naas_api_key: str
     workspace_id: str
     storage_name: str
@@ -124,21 +128,18 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
             )
 
             if self.adapter == "fs":
-                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
-                    ObjectStorageSecondaryAdapterFS,
-                )
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import \
+                    ObjectStorageSecondaryAdapterFS
 
                 return ObjectStorageSecondaryAdapterFS(**self.config.model_dump())
             elif self.adapter == "s3":
-                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import (
-                    ObjectStorageSecondaryAdapterS3,
-                )
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import \
+                    ObjectStorageSecondaryAdapterS3
 
                 return ObjectStorageSecondaryAdapterS3(**self.config.model_dump())
             elif self.adapter == "naas":
-                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas import (
-                    ObjectStorageSecondaryAdapterNaas,
-                )
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas import \
+                    ObjectStorageSecondaryAdapterNaas
 
                 return ObjectStorageSecondaryAdapterNaas(**self.config.model_dump())
             else:

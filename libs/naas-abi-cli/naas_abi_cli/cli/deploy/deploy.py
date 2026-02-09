@@ -1,13 +1,13 @@
 import os
+import shutil
 import subprocess
 from uuid import uuid4
 
 import click
 import requests
 from naas_abi_core import logger
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
-    EngineConfiguration,
-)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
+    EngineConfiguration
 from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
@@ -188,15 +188,7 @@ class NaasDeployer:
         )
 
 
-@deploy.command("naas")
-@click.option(
-    "-e",
-    "--env",
-    type=str,
-    default="prod",
-    help="Environment to use (default: prod). This is used to know which configuration file to load. (config.prod.yaml, config.yaml, ...)",
-)
-def naas(env: str):
+def _get_configuration(env: str):
     # Set the ENV environment variable for the EngineConfiguration.load_configuration() to load the correct configuration file.
     os.environ["ENV"] = env
 
@@ -208,5 +200,88 @@ def naas(env: str):
         )
         raise click.ClickException("Missing deploy configuration; aborting.")
 
+
+@deploy.command("naas")
+@click.option(
+    "-e",
+    "--env",
+    type=str,
+    default="prod",
+    help="Environment to use (default: prod). This is used to know which configuration file to load. (config.prod.yaml, config.yaml, ...)",
+)
+def naas(env: str):
+
+    configuration = _get_configuration(env)
+
     deployer = NaasDeployer(configuration)
     deployer.deploy()
+
+
+@deploy.command("local")
+@click.option(
+    "-e",
+    "--env",
+    type=str,
+    default="local",
+    help="Environment to use (default: local). This is used to know which configuration file to load. (config.local.yaml, config.yaml, ...)",
+)
+def local_deploy(env: str):
+
+
+    if not os.path.exists(os.path.join(os.getcwd(), ".deploy")):
+
+        import naas_abi_cli
+
+        from ..utils.Copier import Copier
+        
+        copier = Copier(
+            templates_path=os.path.join(
+                os.path.dirname(naas_abi_cli.__file__), "cli/deploy/templates/local"),
+            destination_path=os.path.join(os.getcwd(), ".deploy")
+        )
+        
+        copier.copy(
+            values={
+                "POSTGRES_USER": "abi",
+                "POSTGRES_PASSWORD": str(uuid4()),
+                "MINIO_ROOT_PASSWORD": str(uuid4()),
+                "RABBITMQ_PASSWORD": str(uuid4()),
+            }
+        )
+    
+        shutil.move(os.path.join(os.getcwd(), ".deploy", "docker-compose.yml"), os.path.join(os.getcwd(), "docker-compose.yml"))
+        
+        # Concat .deploy/.env into .env
+        with open(os.path.join(os.getcwd(), ".deploy", ".env"), "r") as f:
+            with open(os.path.join(os.getcwd(), ".env"), "a") as f2:
+                f2.write(f.read())
+        # Remove .deploy/.env
+        os.remove(os.path.join(os.getcwd(), ".deploy", ".env"))
+    
+@deploy.command("local-up")
+@click.option(
+    "-d",
+    "--detach",
+    is_flag=True,
+    default=False,
+    help="Run containers in the background.",
+)
+def local_up(detach: bool):
+    command = "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container up" + (" -d" if detach else "")
+    print(command)
+    subprocess.run(command, shell=True)
+
+@deploy.command("local-down")
+@click.option(
+    "-v",
+    "--volumes",
+    is_flag=True,
+    default=False,
+    help="Remove volumes along with the containers.",
+)
+def local_down(volumes: bool):
+    subprocess.run("docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container down" + (" -v" if volumes else ""), shell=True)
+
+@deploy.command("local-logs")
+def local_logs():
+    subprocess.run("docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container logs -f", shell=True)
