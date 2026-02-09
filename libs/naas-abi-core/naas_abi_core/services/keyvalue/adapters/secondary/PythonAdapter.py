@@ -96,6 +96,3 @@ class PythonAdapter(IKeyValueAdapter):
         with self._lock:
             self._purge_if_expired(key)
             return key in self._store
-        with self._lock:
-            self._purge_if_expired(key)
-            return key in self._store
