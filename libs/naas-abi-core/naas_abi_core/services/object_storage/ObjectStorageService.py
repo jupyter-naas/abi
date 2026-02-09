@@ -2,15 +2,15 @@ from queue import Queue
 from typing import Optional
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
-    IObjectStorageAdapter,
-    IObjectStorageDomain,
-)
+    IObjectStorageAdapter, IObjectStorageDomain)
+from naas_abi_core.services.ServiceBase import ServiceBase
 
 
-class ObjectStorageService(IObjectStorageDomain):
+class ObjectStorageService(ServiceBase, IObjectStorageDomain):
     adapter: IObjectStorageAdapter
 
     def __init__(self, adapter: IObjectStorageAdapter):
+        super().__init__()
         self.adapter = adapter
 
     # Function to avoid creating a new folder 'storage' while using FS adapter

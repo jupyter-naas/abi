@@ -3,12 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Dict
 
 from naas_abi_core.engine.IEngine import IEngine
-from naas_abi_core.services.object_storage.ObjectStorageService import (
-    ObjectStorageService,
-)
+from naas_abi_core.services.bus.BusService import BusService
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
+from naas_abi_core.services.object_storage.ObjectStorageService import \
+    ObjectStorageService
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import \
+    TripleStoreService
+from naas_abi_core.services.vector_store.VectorStoreService import \
+    VectorStoreService
 
 if TYPE_CHECKING:
     from naas_abi_core.module.Module import BaseModule, ModuleDependencies
@@ -72,6 +75,17 @@ class ServicesProxy:
 
         return self.__engine.services.secret
 
+    @property
+    def bus(self) -> BusService:
+        self.__ensure_access(BusService)
+
+        return self.__engine.services.bus
+
+    @property
+    def kv(self) -> KeyValueService:
+        self.__ensure_access(KeyValueService)
+
+        return self.__engine.services.kv
 
 class EngineProxy:
     __engine: IEngine

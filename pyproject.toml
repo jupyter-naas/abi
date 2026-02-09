@@ -107,6 +107,11 @@ abi = "naas_abi_cli.cli:main"
 api = "naas_abi_core.apps.api.api:api"
 mcp-server = "naas_abi_core.apps.mcp_server:run"
 
+[project.optional-dependencies]
+dev = [
+    "mkdocs-material>=9.7.1",
+]
+
 [dependency-groups]
 terminal-agent = [
     "langchain-anthropic>=0.3.0,<0.4",
