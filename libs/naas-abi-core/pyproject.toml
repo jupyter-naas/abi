@@ -33,7 +33,7 @@ dependencies = [
     "pillow>=12.0.0",
     "docker>=7.1.0",
     "types-pyyaml>=6.0.12.20250915",
-    "types-paramiko>=4.0.0.20250822",
+    "types-paramiko>=4.0.0.20250822"
 ]
 license = { text = "MIT License" }
 
@@ -59,9 +59,21 @@ all = [
     "naas-abi-core[aws]",
     "naas-abi-core[qdrant]",
     "naas-abi-core[openrouter]",
+    "naas-abi-core[dagster]",
+    "naas-abi-core[redis]",
+    "naas-abi-core[rabbitmq]",
 ]
 openrouter = [
     "langchain-openai>=0.3.35",
+]
+dagster = [
+    "dagster>=1.12.13",
+]
+redis = [
+    "redis>=7.1.0",
+]
+rabbitmq = [
+    "pika",
 ]
 [project.scripts]
 onto2py = "naas_abi_core.utils.onto2py.__main__:main"

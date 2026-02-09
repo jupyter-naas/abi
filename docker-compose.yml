@@ -122,9 +122,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local      # Available in local development
-      - prod       # Available in production
-      - container  # Available when running ABI in container mode
+      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Oxigraph - Knowledge Graph Database (RDF/SPARQL)
@@ -146,9 +144,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local      # Available in local development
-      - prod       # Available in production  
-      - container  # Available when running ABI in container mode
+      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Oxigraph Proxy - Web Interface for Knowledge Graph
@@ -167,8 +163,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local  # Only in development (production uses direct access)
-      - prod
+      - infrastructure
 
   # -----------------------------------------------------------------------------
   # YasGUI - SPARQL Query Interface
@@ -187,8 +182,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local 
-      - prod
+      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Dagster - Workflow Orchestration & Data Pipeline Management
@@ -204,7 +198,7 @@ services:
     volumes:
       - ./scripts:/app/scripts
       - ./uv.lock:/app/uv.lock
-      - ./config.yaml:/app/config.yaml
+      - ./config.local.yaml:/app/config.yaml # We mount the config.local.yaml as it's configured to run from within the containers network.
       - ./pyproject.toml:/app/pyproject.toml
       - ./src:/app/src
       - ./lib:/app/lib
@@ -234,9 +228,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local      # Available in local development
-      - prod       # Available in production
-      - container  # Available when running ABI in container mode
+      - infrastructure
 
   # -----------------------------------------------------------------------------
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
@@ -255,9 +247,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local
-      - prod
-      - container
+      - infrastructure
 
   # mc container to initialize the bucket on startup
   minio-init:
@@ -272,9 +262,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local
-      - prod
-      - container
+      - infrastructure
 
   # -----------------------------------------------------------------------------
   # RabbitMQ - Message Bus (AMQP)
@@ -297,9 +285,79 @@ services:
     networks:
       - abi-network
     profiles:
-      - local
-      - prod
-      - container
+      - infrastructure
+
+  # -----------------------------------------------------------------------------
+  # Redis - In-memory Cache / Message Broker
+  # -----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - 6379:6379  # Redis - redis://localhost:6379
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - abi-network
+    profiles:
+      - infrastructure
+
+  # -----------------------------------------------------------------------------
+  # Redis Commander - Web UI for Redis management
+  # -----------------------------------------------------------------------------
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - 8082:8081  # Redis Commander UI - http://localhost:8082
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - abi-network
+    profiles:
+      - infrastructure
+
+  # -----------------------------------------------------------------------------
+  # Matrix (Synapse) - Federated Messaging Server
+  # -----------------------------------------------------------------------------
+  matrix:
+    image: matrixdotorg/synapse:latest
+    environment:
+      SYNAPSE_SERVER_NAME: localhost
+      SYNAPSE_REPORT_STATS: "no"
+    ports:
+      - 8008:8008  # Matrix client-server API - http://localhost:8008
+      - 8448:8448  # Matrix federation API
+    volumes:
+      - synapse_data:/data
+      - ./docker/synapse/bootstrap.sh:/bootstrap.sh:ro
+    entrypoint: ["/bin/sh", "/bootstrap.sh"]
+    networks:
+      - abi-network
+    profiles:
+      - infrastructure
+
+  # -----------------------------------------------------------------------------
+  # Element Web - Matrix Client
+  # -----------------------------------------------------------------------------
+  element-web:
+    image: vectorim/element-web:latest
+    ports:
+      - 8081:80  # Element web client - http://localhost:8081
+    volumes:
+      - ./docker/element-config.json:/app/config.json:ro
+    depends_on:
+      - matrix
+    networks:
+      - abi-network
+    profiles:
+      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Service Portal - Single-page navigation for all HTTP UIs
@@ -313,9 +371,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local
-      - prod
-      - container
+      - infrastructure
 
 # =============================================================================
 # PERSISTENT VOLUMES
@@ -340,9 +396,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local
-      - prod
-      - container
+      - infrastructure
 
 volumes:
   venv_cache:     # Python virtual environment cache for faster startup
@@ -352,6 +406,8 @@ volumes:
   qdrant_storage: # Qdrant vector store data
   minio_data:     # MinIO object storage data
   rabbitmq_data:  # RabbitMQ message bus data
+  redis_data:     # Redis persistence data
+  synapse_data:   # Matrix Synapse data
 
 # =============================================================================
 # NETWORK CONFIGURATION
