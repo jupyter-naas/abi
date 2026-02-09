@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v1.9.0 (2026-02-09)
+
+### Bug Fixes
+
+- Add check
+  ([`a991e7c`](https://github.com/jupyter-naas/abi/commit/a991e7c28ec2a6a4f87fe1297c4b90efff80ed0e))
+
+- Add redis and rabbitmq to all optional group
+  ([`eac0fa6`](https://github.com/jupyter-naas/abi/commit/eac0fa61962863123d581017b6840dd14d232628))
+
+- Adding debug
+  ([`6ed8edf`](https://github.com/jupyter-naas/abi/commit/6ed8edf8e7dfea3906f1b2e0bb8deb355b1157f4))
+
+- Improve BusService configuration and add redis/rabbitmq to optional dependencies
+  ([`451d242`](https://github.com/jupyter-naas/abi/commit/451d242505e40f20792322b6862364df44194df1))
+
+- Remove undesired print
+  ([`3beedd8`](https://github.com/jupyter-naas/abi/commit/3beedd8eda8a81a08bf9fa6c12822c2936dea1eb))
+
+- Replace print with logger.debug in TripleStoreService and fix whitespace
+  ([`da1e6d0`](https://github.com/jupyter-naas/abi/commit/da1e6d01c2a7d0468e572a3b2bbf5995e485b385))
+
+- Update CLI and rename KVService
+  ([`00e62d6`](https://github.com/jupyter-naas/abi/commit/00e62d61c51e36f792cbdc2540e527596df67097))
+
+- Working on PR fixes
+  ([`2421685`](https://github.com/jupyter-naas/abi/commit/24216859bc2c122ffdea8ad7a4e8086c11701067))
+
+- Working on review
+  ([`a85b4a9`](https://github.com/jupyter-naas/abi/commit/a85b4a9a10910ac16d52ee8be1032e5c8ec311f1))
+
+### Features
+
+- Working on addint BusService, KeyValueService and reworking Dagster orchestration
+  ([`bc448a6`](https://github.com/jupyter-naas/abi/commit/bc448a6a22c9f1788bb204e0671e6efb0c1bb774))
+
+
 ## v1.8.0 (2026-02-03)
 
 ### Features
