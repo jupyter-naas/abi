@@ -2,11 +2,13 @@ import time
 from uuid import uuid4
 
 import pytest
-from naas_abi_core.services.KeyValue.adapters.secondary.PythonAdapter import \
-    PythonAdapter
-from naas_abi_core.services.KeyValue.KVPorts import KVNotFoundError
-from naas_abi_core.services.KeyValue.tests.kv__secondary_adapter__generic_test import \
-    GenericKVSecondaryAdapterTest
+from naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter import (
+    PythonAdapter,
+)
+from naas_abi_core.services.keyvalue.KeyValuePorts import KVNotFoundError
+from naas_abi_core.services.keyvalue.tests.kv__secondary_adapter__generic_test import (
+    GenericKVSecondaryAdapterTest,
+)
 
 
 class TestPythonAdapter(GenericKVSecondaryAdapterTest):

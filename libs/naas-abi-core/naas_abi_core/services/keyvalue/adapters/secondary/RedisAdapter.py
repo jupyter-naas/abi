@@ -1,10 +1,13 @@
 from typing import Optional, cast
 
 import redis
-from naas_abi_core.services.KeyValue.KVPorts import IKVAdapter, KVNotFoundError
+from naas_abi_core.services.keyvalue.KeyValuePorts import (
+    IKeyValueAdapter,
+    KVNotFoundError,
+)
 
 
-class RedisAdapter(IKVAdapter):
+class RedisAdapter(IKeyValueAdapter):
     _COMPARE_AND_DELETE_SCRIPT = """
     if redis.call("get", KEYS[1]) == ARGV[1] then
         return redis.call("del", KEYS[1])
@@ -44,9 +47,7 @@ class RedisAdapter(IKVAdapter):
         return value
 
     def get(self, key: str) -> bytes:
-        value = cast(
-            bytes | str | bytearray | memoryview | None, self._client.get(key)
-        )
+        value = cast(bytes | str | bytearray | memoryview | None, self._client.get(key))
         if value is None:
             raise KVNotFoundError(f"Key not found: {key}")
         return self._normalize_value(value)
