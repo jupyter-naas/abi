@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-02-09)
+
+### Bug Fixes
+
+- Working on make check
+  ([`32b09fa`](https://github.com/jupyter-naas/abi/commit/32b09fa17ff2eecd17208f5b2800f418062676af))
+
+- Working on make check
+  ([`64dc00f`](https://github.com/jupyter-naas/abi/commit/64dc00fd8ce415de7d4d977a8d83d834a67a5aa6))
+
+- Working on make check
+  ([`2b9972d`](https://github.com/jupyter-naas/abi/commit/2b9972d9602036e6a926ed0a7b469e1dc1b9bb2f))
+
+- Working on make check
+  ([`da6c160`](https://github.com/jupyter-naas/abi/commit/da6c160ab55d1ec4c56cdbe3dc3ddef67144d043))
+
+### Features
+
+- Working on deploy local cli
+  ([`c3ffe6d`](https://github.com/jupyter-naas/abi/commit/c3ffe6db633f2ce7789de5460d8849f80490b699))
+
+- Working on deploy local cli
+  ([`798e02a`](https://github.com/jupyter-naas/abi/commit/798e02ad2576f86344a54068fcd00e8f717c977d))
+
+
 ## v1.10.2 (2026-02-09)
 
 ### Bug Fixes
