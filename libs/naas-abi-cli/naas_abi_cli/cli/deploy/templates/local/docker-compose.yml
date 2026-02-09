@@ -256,7 +256,7 @@ services:
       - minio
     entrypoint: >-
       /bin/sh -c "
-      until /usr/bin/mc alias set dagster http://${MINIO_HOST}:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
+      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
       /usr/bin/mc mb -p ${MINIO_ROOT_USER}/dagster-logs || true
       "
     networks:
