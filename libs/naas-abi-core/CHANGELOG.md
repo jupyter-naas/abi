@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.1 (2026-02-09)
+
+### Bug Fixes
+
+- Rename keyvalue directory name
+  ([`5834c55`](https://github.com/jupyter-naas/abi/commit/5834c55179737ff3ff80384a474653379de2c643))
+
+
 ## v1.9.0 (2026-02-09)
 
 ### Bug Fixes
