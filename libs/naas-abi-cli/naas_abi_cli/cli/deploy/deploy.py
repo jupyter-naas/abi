@@ -6,8 +6,9 @@ from uuid import uuid4
 import click
 import requests
 from naas_abi_core import logger
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
-    EngineConfiguration
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+    EngineConfiguration,
+)
 from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
@@ -200,6 +201,8 @@ def _get_configuration(env: str):
         )
         raise click.ClickException("Missing deploy configuration; aborting.")
 
+    return configuration
+
 
 @deploy.command("naas")
 @click.option(
@@ -227,19 +230,18 @@ def naas(env: str):
 )
 def local_deploy(env: str):
 
-
     if not os.path.exists(os.path.join(os.getcwd(), ".deploy")):
-
         import naas_abi_cli
 
         from ..utils.Copier import Copier
-        
+
         copier = Copier(
             templates_path=os.path.join(
-                os.path.dirname(naas_abi_cli.__file__), "cli/deploy/templates/local"),
-            destination_path=os.path.join(os.getcwd(), ".deploy")
+                os.path.dirname(naas_abi_cli.__file__), "cli/deploy/templates/local"
+            ),
+            destination_path=os.path.join(os.getcwd(), ".deploy"),
         )
-        
+
         copier.copy(
             values={
                 "POSTGRES_USER": "abi",
@@ -248,16 +250,20 @@ def local_deploy(env: str):
                 "RABBITMQ_PASSWORD": str(uuid4()),
             }
         )
-    
-        shutil.move(os.path.join(os.getcwd(), ".deploy", "docker-compose.yml"), os.path.join(os.getcwd(), "docker-compose.yml"))
-        
+
+        shutil.move(
+            os.path.join(os.getcwd(), ".deploy", "docker-compose.yml"),
+            os.path.join(os.getcwd(), "docker-compose.yml"),
+        )
+
         # Concat .deploy/.env into .env
         with open(os.path.join(os.getcwd(), ".deploy", ".env"), "r") as f:
             with open(os.path.join(os.getcwd(), ".env"), "a") as f2:
                 f2.write(f.read())
         # Remove .deploy/.env
         os.remove(os.path.join(os.getcwd(), ".deploy", ".env"))
-    
+
+
 @deploy.command("local-up")
 @click.option(
     "-d",
@@ -267,9 +273,13 @@ def local_deploy(env: str):
     help="Run containers in the background.",
 )
 def local_up(detach: bool):
-    command = "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container up" + (" -d" if detach else "")
+    command = (
+        "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container up"
+        + (" -d" if detach else "")
+    )
     print(command)
     subprocess.run(command, shell=True)
+
 
 @deploy.command("local-down")
 @click.option(
@@ -280,8 +290,16 @@ def local_up(detach: bool):
     help="Remove volumes along with the containers.",
 )
 def local_down(volumes: bool):
-    subprocess.run("docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container down" + (" -v" if volumes else ""), shell=True)
+    subprocess.run(
+        "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container down"
+        + (" -v" if volumes else ""),
+        shell=True,
+    )
+
 
 @deploy.command("local-logs")
 def local_logs():
-    subprocess.run("docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container logs -f", shell=True)
+    subprocess.run(
+        "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container logs -f",
+        shell=True,
+    )
