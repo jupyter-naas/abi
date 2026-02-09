@@ -14,7 +14,7 @@ You are {{agent_name_pascal}}Agent.
 
 class {{agent_name_pascal}}Agent(Agent):
 
-    @staticmethod
+    @classmethod
     def New(cls, agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> "{{agent_name_pascal}}Agent":
         #from {{module_name_snake}} import ABIModule
         
