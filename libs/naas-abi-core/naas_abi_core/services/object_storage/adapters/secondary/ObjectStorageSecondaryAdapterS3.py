@@ -33,16 +33,21 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
         self.bucket_name = bucket_name
         self.base_prefix = base_prefix.rstrip("/")  # Remove trailing slash if present
 
-        args = {
-            "aws_access_key_id": access_key_id,
-            "aws_secret_access_key": secret_access_key,
-            "aws_session_token": session_token,
-        }
-
         if endpoint_url:
-            args["endpoint_url"] = endpoint_url
-
-        self.s3_client = boto3.client("s3", **args)
+            self.s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=access_key_id,
+                aws_secret_access_key=secret_access_key,
+                aws_session_token=session_token,
+                endpoint_url=endpoint_url,
+            )
+        else:
+            self.s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=access_key_id,
+                aws_secret_access_key=secret_access_key,
+                aws_session_token=session_token,
+            )
 
     def __get_full_key(self, prefix: str, key: str | None = None) -> str:
         """Construct full key path including base prefix.
