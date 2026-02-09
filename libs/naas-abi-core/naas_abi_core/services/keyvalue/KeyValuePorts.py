@@ -5,7 +5,7 @@ class KVNotFoundError(Exception):
     pass
 
 
-class IKVAdapter(ABC):
+class IKeyValueAdapter(ABC):
     @abstractmethod
     def get(self, key: str) -> bytes:
         raise NotImplementedError()

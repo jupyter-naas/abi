@@ -6,11 +6,11 @@ import pytest
 
 pytest.importorskip("redis")
 
-from naas_abi_core.services.KeyValue.adapters.secondary.RedisAdapter import \
-    RedisAdapter
-from naas_abi_core.services.KeyValue.KVPorts import KVNotFoundError
-from naas_abi_core.services.KeyValue.tests.kv__secondary_adapter__generic_test import \
-    GenericKVSecondaryAdapterTest
+from naas_abi_core.services.keyvalue.adapters.secondary.RedisAdapter import RedisAdapter
+from naas_abi_core.services.keyvalue.KeyValuePorts import KVNotFoundError
+from naas_abi_core.services.keyvalue.tests.kv__secondary_adapter__generic_test import (
+    GenericKVSecondaryAdapterTest,
+)
 
 
 def _redis_config_available() -> bool:
