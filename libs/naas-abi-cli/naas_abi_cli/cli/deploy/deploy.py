@@ -246,6 +246,7 @@ def local_deploy(env: str):
             values={
                 "POSTGRES_USER": "abi",
                 "POSTGRES_PASSWORD": str(uuid4()),
+                "POSTGRES_DB": "abi",
                 "MINIO_ROOT_PASSWORD": str(uuid4()),
                 "RABBITMQ_PASSWORD": str(uuid4()),
             }
