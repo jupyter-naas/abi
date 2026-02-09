@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.10.1 (2026-02-09)
+
+### Bug Fixes
+
+- Update CLI and rename KVService
+  ([`00e62d6`](https://github.com/jupyter-naas/abi/commit/00e62d61c51e36f792cbdc2540e527596df67097))
+
+
 ## v1.10.0 (2026-02-03)
 
 ### Features
