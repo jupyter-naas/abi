@@ -13,6 +13,7 @@ from .module import module
 from .new import new
 from .run import run
 from .secret import secrets
+from .setup import setup
 
 
 @click.group("abi")
@@ -29,7 +30,7 @@ _main.add_command(new)
 _main.add_command(init)
 _main.add_command(deploy)
 _main.add_command(run)
-
+_main.add_command(setup)
 ran = False
 
 
@@ -62,4 +63,5 @@ def main():
     _main()
 
 
+main()
 main()

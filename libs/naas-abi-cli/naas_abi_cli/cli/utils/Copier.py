@@ -28,23 +28,23 @@ class Copier:
         self.templates_path = os.path.abspath(templates_path)
         self.destination_path = os.path.abspath(destination_path)
 
-    def _template_file_to_file(
-        self, template_path: str, values: ValueProvider, destination_path: str
-    ) -> None:
-        destination_path = self._template_string(destination_path, values)
+    def _template_file_to_file(self, template_path: str, destination_path: str) -> None:
+        destination_path = self._template_string(destination_path)
         with open(destination_path, "w", encoding="utf-8") as file:
-            file.write(self._template_file(template_path, values))
+            file.write(self._template_file(template_path))
 
-    def _template_file(self, template_path: str, values: ValueProvider) -> str:
+    def _template_file(self, template_path: str) -> str:
         with open(template_path, "r", encoding="utf-8") as file:
-            return self._template_string(file.read(), values)
+            return self._template_string(file.read())
 
-    def _template_string(self, template_string: str, values: ValueProvider) -> str:
-        values.collect_values(template_string)
-        return jinja2.Template(template_string).render(values)
+    def _template_string(self, template_string: str) -> str:
+        vp = ValueProvider(self.values)
+        vp.collect_values(template_string)
+        self.values = {**self.values, **vp}
+        return jinja2.Template(template_string).render(self.values)
 
     def copy(self, values: dict, templates_path: str | None = None):
-        vp = ValueProvider(values)
+        self.values = values
 
         if templates_path is None:
             templates_path = self.templates_path
@@ -65,20 +65,18 @@ class Copier:
                 if False and "config" in file and file.endswith(".yaml"):
                     shutil.copy(
                         os.path.join(templates_path, file),
-                        self._template_string(os.path.join(target_path, file), vp),
+                        self._template_string(os.path.join(target_path, file)),
                     )
                 else:
                     self._template_file_to_file(
                         os.path.join(templates_path, file),
-                        vp,
                         os.path.join(target_path, file),
                     )
             elif os.path.isdir(os.path.join(templates_path, file)):
                 os.makedirs(
-                    self._template_string(os.path.join(target_path, file), vp),
+                    self._template_string(os.path.join(target_path, file)),
                     exist_ok=True,
                 )
-                self.copy(values, os.path.join(templates_path, file))
+                self.copy(self.values, os.path.join(templates_path, file))
             else:
-                print(f"Skipping {file}")
                 print(f"Skipping {file}")
