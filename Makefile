@@ -12,9 +12,9 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
-log_level=ERROR
+log_level=INFO
 default: deps local-up airgap
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi AbiAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi AbiAgent
 
 # Main help documentation - displays all available commands organized by category
 help:
@@ -72,6 +72,7 @@ help:
 	@echo "  chat-hubspot-agent        Start HubSpot integration agent"
 	@echo "  chat-instagram-agent     Start Instagram integration agent"
 	@echo "  chat-linkedin-agent      Start LinkedIn integration agent"
+	@echo "  chat-linkedin-kg-agent   Start LinkedIn Knowledge Graph agent"
 	@echo "  chat-mercury-agent       Start Mercury integration agent"
 	@echo "  chat-naas-agent          Start Naas platform integration agent"
 	@echo "  chat-nebari-agent        Start Nebari integration agent"
@@ -269,197 +270,208 @@ local-build: deps
 
 agent=AbiAgent
 # Generic chat command - allows specifying agent via agent=AgentName parameter
-chat: deps
-	@ LOG_LEVEL=DEBUG uv run cli chat $(module_name) $(agent_name)
+chat: deps 
+	@ LOG_LEVEL=DEBUG uv run abi chat $(module_name) $(agent_name)
 
 # Main ABI agent - the primary conversational AI interface
 chat-abi-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi AbiAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi AbiAgent
 
 # =============================================================================
 # CHAT WITH MARKETPLACE AI AGENTS
 # =============================================================================
 
 chat-chatgpt-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.chatgpt ChatGPTAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.chatgpt ChatGPTAgent
 
 chat-claude-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.claude ClaudeAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.claude ClaudeAgent
 
 chat-deepseek-agent: deps
-	@ LOG_LEVEL=DEBUG uv run cli chat naas_abi_marketplace.ai.deepseek DeepSeekAgent
+	@ LOG_LEVEL=DEBUG uv run abi chat naas_abi_marketplace.ai.deepseek DeepSeekAgent
 
 chat-gemini-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.gemini GeminiAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.gemini GeminiAgent
 
 chat-gemma-agent: deps
-	@ LOG_LEVEL=DEBUG uv run cli chat naas_abi_marketplace.ai.gemma GemmaAgent
+	@ LOG_LEVEL=DEBUG uv run abi chat naas_abi_marketplace.ai.gemma GemmaAgent
 
 chat-grok-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.grok GrokAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.grok GrokAgent
 
 chat-llama-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.llama LlamaAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.llama LlamaAgent
 
 chat-mistral-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.mistral MistralAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.mistral MistralAgent
 
 chat-perplexity-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.perplexity PerplexityAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.perplexity PerplexityAgent
 
 chat-qwen-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.ai.qwen QwenAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.ai.qwen QwenAgent
 
 # =============================================================================
 # CHAT WITH MARKETPLACE APPLICATIONS AGENTS
 # =============================================================================
 
 chat-agicap-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.agicap AgicapAgent
-
-chat-algolia-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.algolia AlgoliaAgent
-
-chat-github-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.github GitHubAgent
-
-chat-google-search-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_search GoogleSearchAgent
-
-chat-linkedin-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.linkedin LinkedInAgent
-
-chat-naas-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.naas NaasAgent
-
-chat-powerpoint-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
-
-chat-aws-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.aws AWSAgent
-
-chat-arxiv-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.arxiv ArXivAgent
-
-chat-bodo-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.bodo BodoAgent
-
-chat-exchangeratesapi-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.exchangeratesapi ExchangeRatesAPIAgent
-
-chat-sendgrid-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.sendgrid SendGridAgent
-
-chat-openrouter-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.openrouter OpenRouterAgent
-
-chat-hubspot-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.hubspot HubSpotAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.agicap AgicapAgent
 
 chat-airtable-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.airtable AirtableAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.airtable AirtableAgent
 
-chat-gmail-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.gmail GmailAgent
+chat-algolia-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.algolia AlgoliaAgent
 
-chat-google-calendar-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_calendar GoogleCalendarAgent
+chat-arxiv-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.arxiv ArXivAgent
 
-chat-google-drive-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_drive GoogleDriveAgent
+chat-aws-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.aws AWSAgent
 
-chat-google-sheets-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_sheets GoogleSheetsAgent
-
-chat-google-maps-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_maps GoogleMapsAgent
-
-chat-google-analytics-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.google_analytics GoogleAnalyticsAgent
-
-chat-instagram-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.instagram InstagramAgent
-
-chat-mercury-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.mercury MercuryAgent
-
-chat-nebari-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.nebari NebariAgent
-
-chat-notion-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.notion NotionAgent
-
-chat-newsapi-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.newsapi NewsAPIAgent
-
-chat-openweathermap-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.openweathermap OpenWeatherMapAgent
-
-chat-openalex-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.openalex OpenAlexAgent
-
-chat-pennylane-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.pennylane PennylaneAgent
-
-chat-postgres-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.postgres PostgresAgent
-
-chat-pubmed-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.pubmed PubMedAgent
-
-chat-qonto-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.qonto QontoAgent
-
-chat-salesforce-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.salesforce SalesforceAgent
-
-chat-sanax-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.sanax SanaxAgent
-
-chat-sharepoint-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.sharepoint SharePointAgent
-
-chat-slack-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.slack SlackAgent
-
-chat-spotify-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.spotify SpotifyAgent
-
-chat-stripe-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.stripe StripeAgent
-
-chat-twilio-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.twilio TwilioAgent
-
-chat-whatsapp-business-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.whatsapp_business WhatsAppBusinessAgent
-
-chat-worldbank-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.worldbank WorldBankAgent
-
-chat-yahoofinance-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.yahoofinance YfinanceAgent
-
-chat-youtube-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.youtube YouTubeAgent
-
-chat-zoho-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.zoho ZohoAgent
+chat-bodo-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.bodo BodoAgent
 
 chat-datagouv-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.datagouv DataGouvAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.datagouv DataGouvAgent
+
+chat-exchangeratesapi-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.exchangeratesapi ExchangeRatesAPIAgent
+
+chat-github-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.github GitHubAgent
+
+chat-gmail-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.gmail GmailAgent
+
+chat-gmail-draft-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.gmail GmailDraftAgent
+
+chat-google-analytics-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_analytics GoogleAnalyticsAgent
+
+chat-google-calendar-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_calendar GoogleCalendarAgent
+
+chat-google-drive-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_drive GoogleDriveAgent
+
+chat-google-maps-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_maps GoogleMapsAgent
+
+chat-google-search-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_search GoogleSearchAgent
+
+chat-google-sheets-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_sheets GoogleSheetsAgent
+
+chat-hubspot-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.hubspot HubSpotAgent
+
+chat-instagram-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.instagram InstagramAgent
+
+chat-linkedin-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInAgent
+
+chat-linkedin-kg-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInKGAgent
+
+chat-mercury-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.mercury MercuryAgent
+
+chat-naas-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.naas NaasAgent
+
+chat-nebari-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.nebari NebariAgent
+
+chat-newsapi-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.newsapi NewsAPIAgent
+
+chat-notion-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.notion NotionAgent
+
+chat-openalex-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openalex OpenAlexAgent
+
+chat-openrouter-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openrouter OpenRouterAgent
+
+chat-openweathermap-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openweathermap OpenWeatherMapAgent
+
+chat-pennylane-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.pennylane PennylaneAgent
+
+chat-postgres-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.postgres PostgresAgent
+
+chat-powerpoint-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
+
+chat-pubmed-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.pubmed PubMedAgent
+
+chat-qonto-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.qonto QontoAgent
+
+chat-salesforce-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.salesforce SalesforceAgent
+
+chat-sanax-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sanax SanaxAgent
+
+chat-sendgrid-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sendgrid SendGridAgent
+
+chat-sharepoint-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sharepoint SharePointAgent
+
+chat-slack-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.slack SlackAgent
+
+chat-spotify-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.spotify SpotifyAgent
+
+chat-stripe-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.stripe StripeAgent
+
+chat-twilio-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.twilio TwilioAgent
+
+chat-whatsapp-business-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.whatsapp_business WhatsAppBusinessAgent
+
+chat-worldbank-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.worldbank WorldBankAgent
+
+chat-yahoofinance-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.yahoofinance YfinanceAgent
+
+chat-youtube-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.youtube YouTubeAgent
+
+chat-zoho-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.zoho ZohoAgent
 
 pull-request-description: deps
 	@ echo "generate the pull request description please."
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.applications.git PullRequestDescriptionAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git PullRequestDescriptionAgent
 
 # =============================================================================
 # CHAT WITH MARKETPLACE DOMAINS AGENTS
 # =============================================================================
 
-chat-support-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run cli chat naas_abi_marketplace.domains.support SupportAgent
+chat-ontology-engineer-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.ontology_engineer OntologyEngineerAgent
 
+chat-process-ontology-engineer-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.ontology_engineer ProcessOntologyEngineerAgent
+
+chat-support-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.support SupportAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS
@@ -522,23 +534,6 @@ path=tests/
 test: deps
 	@ uv run python -m pytest .
 
-# Run tests with coverage reporting
-test-coverage: deps
-	@ uv run python -m pytest tests/ lib/abi/services/cache/ lib/abi/services/secret/ lib/abi/services/triple_store/ --cov=lib --cov-report=html --cov-report=term --cov-report=xml
-	@ uv run coverage-badge -f -o coverage.svg
-	@ echo "📊 Coverage report generated:"
-	@ echo "  - HTML: htmlcov/index.html"
-	@ echo "  - XML: coverage.xml"
-	@ echo "  - Badge: coverage.svg"
-
-# Run basic tests for CI (no external dependencies)
-test-ci: deps
-	@ uv run python -m pytest tests/unit/test_basic.py --cov=lib --cov-report=xml --cov-report=term -v
-
-# Run tests specifically for the abi library
-test-abi: deps
-	@ uv run python -m pytest lib
-
 # Run API-specific tests
 test-api: deps
 	@ uv run python -m pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v -s
@@ -558,18 +553,6 @@ test-api-init-container: build
 		-e OPENAI_API_KEY="${OPENAI_API_KEY}" \
 		-e GITHUB_ACCESS_TOKEN="${GITHUB_ACCESS_TOKEN}" \
 		abi:latest uv run --no-dev python -m naas_abi_core.apps.api.test_init
-
-# Interactive test selector using fzf (fuzzy finder)
-q=''
-ftest: deps
-	@ clear
-	LOG_LEVEL=DEBUG uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
-
-dtest: deps
-	@ uv run python -m pytest $(shell find lib src tests -type d | fzf -q $(q)) $(args)
-
-frun: deps
-	@ uv run $(shell find lib src tests -name '*.py' -type f | fzf -q $(q)) $(args)
 
 # TTL_FILES := $(wildcard src/*/*/ontologies/*.ttl src/marketplace/*/*/ontologies/*.ttl)
 TTL_FILES := $(shell find src -name '*.ttl')
@@ -617,20 +600,15 @@ check-core: deps
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
-	@cd libs/naas-abi-core && uv sync --all-extras && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports
+	@cd libs/naas-abi-core && uv sync --all-extras && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports --exclude '.*templates.*'
 
 	@echo "• Checking naas_abi_cli..."
 	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports --exclude "naas_abi_cli/cli/new/templates"
-
-	@echo "• Checking naas_abi..."
-	@cd libs/naas-abi && uv sync --all-extras && .venv/bin/mypy -p naas_abi --follow-untyped-imports
-
-	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check libs/naas-abi-core
 
 	@#echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
 	@#echo "⚠️ Skipping bandit... (disabled)"
-	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
+	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml libs/naas-abi-core libs/naas-abi-cli libs/naas-abi -r
 	@echo "\n✅ CORE security checks passed!"
 
 # Code quality checks for marketplace modules
@@ -668,7 +646,7 @@ fmt: deps
 
 # Security scanning with bandit
 bandit:
-	@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests src/ lib -r
+	@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests libs src -r
 
 # Container security scanning with trivy
 trivy-container-scan: build
@@ -974,7 +952,7 @@ publish-remote-agents-dry-run: deps
 # Clean up build artifacts, caches, and Docker containers
 clean:
 	@echo "Cleaning up build artifacts..."
-	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv .mypy_cache
+	rm -rf __pycache__ .pytest_cache build dist *.egg-info .venv .mypy_cache
 	sudo find . -name "*.pyc" -delete
 	sudo find . -name "__pycache__" -delete
 	docker compose down

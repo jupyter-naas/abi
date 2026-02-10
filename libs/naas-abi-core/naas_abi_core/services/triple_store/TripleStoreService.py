@@ -258,12 +258,13 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             # Check if schema with filePath == filepath already exists and grab all triples.
             schema_triples: rdflib.query.Result = read_query_func(query)
 
-            # logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
+            logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
             # If schema with filePath == filepath already exists, we check if the file has been modified.
             schema_exists_in_store = len(list(schema_triples)) == 1
             logger.debug(f"Schema exists in store: {schema_exists_in_store}")
             if schema_exists_in_store:
                 result_rows = list(schema_triples)
+                logger.debug(f"Result rows: {result_rows}")
                 assert len(result_rows) == 1
                 assert isinstance(result_rows[0], rdflib.query.ResultRow)
                 _SUBJECT_TUPLE_INDEX = 0
@@ -389,7 +390,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                     )
                 )
         except Exception as e:
-            logger.error(f"Error loading schema ({filepath}): {e}")
+            import traceback
+
+            logger.error(f"Error loading schema ({filepath}): {str(e)}")
+            traceback.print_exc()
 
     def get_schema_graph(self) -> Graph:
         contents: rdflib.query.Result = self.query(

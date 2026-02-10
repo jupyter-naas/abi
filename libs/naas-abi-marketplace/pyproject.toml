@@ -100,7 +100,10 @@ applications-git = []
 applications-github = [
     "pynacl>=1.5.0,<2"
 ]
-applications-gmail = []
+applications-gmail = [
+    "google-api-python-client>=2.188.0",
+    "google-api-python-client-stubs>=1.31.0"
+]
 applications-google-calendar = []
 applications-google-drive = []
 applications-google-sheets = []
@@ -127,17 +130,24 @@ applications-powerpoint = [
 ]
 applications-pubmed = [
     "ratelimit>=2.2.1",
-    "dagster>=1.11.12",
-    "dagster-webserver>=1.11.12",
-    "dagster-postgres>=0.27.12",
-    "dagster-aws>=0.27.12"
+    "ratelimit-types==0.0.3",
 ]
 applications-sanax = []
 applications-sendgrid = []
 applications-sharepoint = []
 applications-spotify = []
+applications-twilio = [
+    "flask>=3.1.2",
+    "types-flask>=1.1.6",
+    "twilio>=9.10.0",
+    "twilio-stubs>=0.2.0"
+]
 applications-worldbank = []
 applications-yahoofinance = [
     "yfinance==0.2.66",
     "yahooquery==2.4.1"
+]
+domains-ontology-engineer = [
+    "thefuzz==0.22.1",
+    "fuzzywuzzy-stubs==0.0.1"
 ]

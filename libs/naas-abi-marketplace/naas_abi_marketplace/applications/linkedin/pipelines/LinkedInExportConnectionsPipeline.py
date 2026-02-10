@@ -653,4 +653,3 @@ if __name__ == "__main__":
         )
     )
     print(graph.serialize(format="turtle"))
-    print(graph.serialize(format="turtle"))

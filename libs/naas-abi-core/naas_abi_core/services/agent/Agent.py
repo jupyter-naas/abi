@@ -189,7 +189,7 @@ class ABIAgentState(MessagesState):
 
 @dataclass
 class Event:
-    payload: Any
+    payload: Any = field()
 
 
 @dataclass
