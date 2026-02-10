@@ -19,3 +19,4 @@ where = ["src"]
 # naas-abi = { path = ".abi/libs/naas-abi",  editable = true }
 # naas-abi-core = { path = ".abi/libs/naas-abi-core",  editable = true }
 # naas-abi-marketplace = { path = ".abi/libs/naas-abi-marketplace",  editable = true }
+# naas-abi-cli = { path = ".abi/libs/naas-abi-cli",  editable = true }

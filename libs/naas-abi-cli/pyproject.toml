@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-cli"
-version = "1.9.1"
+version = "1.11.0"
 description = "Abi cli allowing you to build your AI system."
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 requires-python = ">=3.10,<4"
@@ -64,10 +64,10 @@ prerelease = true
 prerelease_token = "dev"
 
 [tool.hatch.build.targets.wheel]
-force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/new/templates/project/config.prod.yaml" = "naas_abi_cli/cli/new/templates/project/config.prod.yaml"}
+force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml"}
 
 [tool.hatch.build.targets.sdist]
-force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/new/templates/project/config.prod.yaml" = "naas_abi_cli/cli/new/templates/project/config.prod.yaml"}
+force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml"}
 
 [tool.uv.sources]
 naas-abi = { path = "../naas-abi",  editable = true }

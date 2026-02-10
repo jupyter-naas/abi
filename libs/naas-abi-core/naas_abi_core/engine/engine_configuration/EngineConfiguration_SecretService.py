@@ -1,21 +1,18 @@
 from typing import TYPE_CHECKING, List, Literal, Union
 
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
-    GenericLoader,
-)
-from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
-    pydantic_model_validator,
-)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import \
+    GenericLoader
+from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
+    pydantic_model_validator
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing_extensions import Self
 
 # Only import for type checking, not at runtime
 if TYPE_CHECKING:
-    from naas_abi_core.services.secret.adaptors.secondary.Base64Secret import (
-        Base64Secret,
-    )
+    from naas_abi_core.services.secret.adaptors.secondary.Base64Secret import \
+        Base64Secret
 
 
 class DotenvSecretConfiguration(BaseModel):
@@ -25,6 +22,8 @@ class DotenvSecretConfiguration(BaseModel):
       - adapter: "dotenv"
         config: {}
     """
+    model_config = ConfigDict(extra="forbid")
+
     pass
 
 
@@ -37,6 +36,8 @@ class NaasSecretConfiguration(BaseModel):
           naas_api_key: "{{ secret.NAAS_API_KEY }}"
           naas_api_url: "https://api.naas.ai"
     """
+    model_config = ConfigDict(extra="forbid")
+
     naas_api_key: str
     naas_api_url: str
 
@@ -50,13 +51,14 @@ class Base64SecretConfiguration(BaseModel):
           secret_adapter: *secret_adapter
           base64_secret_key: "{{ secret.BASE64_SECRET_KEY }}"
     """
+    model_config = ConfigDict(extra="forbid")
+
     secret_adapter: "SecretAdapterConfiguration"
     base64_secret_key: str
 
     def load(self) -> "Base64Secret":
-        from naas_abi_core.services.secret.adaptors.secondary.Base64Secret import (
-            Base64Secret,
-        )
+        from naas_abi_core.services.secret.adaptors.secondary.Base64Secret import \
+            Base64Secret
 
         return Base64Secret(self.secret_adapter.load(), self.base64_secret_key)
 
@@ -114,15 +116,13 @@ class SecretAdapterConfiguration(GenericLoader):
                 )
                 return self.config.load()
             elif self.adapter == "dotenv":
-                from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
-                    DotenvSecretSecondaryAdaptor,
-                )
+                from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import \
+                    DotenvSecretSecondaryAdaptor
 
                 return DotenvSecretSecondaryAdaptor(**self.config.model_dump())
             elif self.adapter == "naas":
-                from naas_abi_core.services.secret.adaptors.secondary.NaasSecret import (
-                    NaasSecret,
-                )
+                from naas_abi_core.services.secret.adaptors.secondary.NaasSecret import \
+                    NaasSecret
 
                 return NaasSecret(**self.config.model_dump())
             else:

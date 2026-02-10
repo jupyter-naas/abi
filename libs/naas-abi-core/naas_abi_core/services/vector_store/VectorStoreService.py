@@ -1,13 +1,16 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 import numpy as np
-from .IVectorStorePort import IVectorStorePort, VectorDocument, SearchResult
+from naas_abi_core.services.ServiceBase import ServiceBase
+
+from .IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
 
 logger = logging.getLogger(__name__)
 
-
-class VectorStoreService:
+class VectorStoreService(ServiceBase):
     def __init__(self, adapter: IVectorStorePort):
+        super().__init__()
         self.adapter = adapter
         self._initialized = False
 
