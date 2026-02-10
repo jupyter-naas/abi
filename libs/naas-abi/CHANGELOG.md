@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-02-10)
+
+### Bug Fixes
+
+- Get module instances from current module
+  ([`a5f4bc3`](https://github.com/jupyter-naas/abi/commit/a5f4bc3376c8f926c4e4959aee7b7dbb3012ba14))
+
+
 ## v1.1.0 (2026-02-09)
 
 ### Features
