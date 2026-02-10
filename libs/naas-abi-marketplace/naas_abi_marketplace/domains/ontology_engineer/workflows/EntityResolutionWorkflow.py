@@ -577,18 +577,32 @@ if __name__ == "__main__":
     )
 
     # Execute workflow
+    import concurrent.futures
+
     result = workflow.run(parameters)
+
     print("\nEntity Resolution Results:")
     print(f"  Classes found: {result['summary']['total_classes']}")
     print(f"  Individuals found: {result['summary']['total_individuals']}")
     print(f"  Duplicates found: {result['summary']['total_duplicates']}")
-    if result["duplicates"]:
-        for duplicate in result["duplicates"]:
-            print(f"Merging {duplicate['keep']} and {duplicate['remove']}")
-            merged_graph = merge_duplicates_pipeline.run(
-                MergeIndividualsPipelineParameters(
-                    merge_pairs=[
-                        (duplicate["keep"], duplicate["remove"]),
-                    ]
-                )
+
+    def merge_duplicate_worker(duplicate):
+        print(f"Merging {duplicate['keep']} and {duplicate['remove']}")
+        merged_graph = merge_duplicates_pipeline.run(
+            MergeIndividualsPipelineParameters(
+                merge_pairs=[
+                    (duplicate["keep"], duplicate["remove"]),
+                ]
             )
+        )
+        return merged_graph
+
+    if result["duplicates"]:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            futures = [
+                executor.submit(merge_duplicate_worker, duplicate)
+                for duplicate in result["duplicates"]
+            ]
+            # Wait for all futures to complete if you need merged results
+            for future in concurrent.futures.as_completed(futures):
+                _ = future.result()
