@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class CurrentPublicURLAction(_CurrentPublicURL):
+class CurrentPublicURL(_CurrentPublicURL):
     """Action class for CurrentPublicURL"""
 
     def actions(self):

@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class OrganizationAction(_Organization):
+class Organization(_Organization):
     """Action class for Organization"""
 
     def actions(self):

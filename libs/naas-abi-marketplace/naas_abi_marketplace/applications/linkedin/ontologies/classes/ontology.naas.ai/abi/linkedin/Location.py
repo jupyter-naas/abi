@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class LocationAction(_Location):
+class Location(_Location):
     """Action class for Location"""
 
     def actions(self):

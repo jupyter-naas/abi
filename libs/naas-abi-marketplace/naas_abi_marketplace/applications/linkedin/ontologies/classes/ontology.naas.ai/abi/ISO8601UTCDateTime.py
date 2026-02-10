@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class ISO8601UTCDateTimeAction(_ISO8601UTCDateTime):
+class ISO8601UTCDateTime(_ISO8601UTCDateTime):
     """Action class for ISO8601UTCDateTime"""
 
     def actions(self):
