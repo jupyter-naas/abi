@@ -1699,7 +1699,7 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
     if prop.default_value:
         # Default value goes after the type annotation
         return f"{prop.name}: {final_type} = {prop.default_value}"
-    elif not prop.required:
+    elif not prop.required and prop.property_type == "object":
         # Determine if this is a list type based on base_type
         is_list_type = base_type.startswith("List[")
         if is_list_type:
@@ -1707,6 +1707,8 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
         else:
             default_value = "'http://ontology.naas.ai/abi/unknown'"
         return f"{prop.name}: {final_type} = {default_value}"
+    elif not prop.required and prop.property_type == "data":
+        return f"{prop.name}: {final_type} ='unknown'"
     return f"{prop.name}: {final_type}"
 
 
