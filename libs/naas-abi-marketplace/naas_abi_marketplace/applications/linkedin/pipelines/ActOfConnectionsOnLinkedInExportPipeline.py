@@ -1,9 +1,11 @@
+import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any
+from typing import Annotated
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -35,7 +37,7 @@ from naas_abi_marketplace.applications.linkedin.pipelines.LinkedInExportProfileP
     LinkedInExportProfilePipelineConfiguration,
 )
 from pydantic import Field
-from rdflib import Graph, Namespace
+from rdflib import Graph, Namespace, URIRef
 
 LINKEDIN = Namespace("http://ontology.naas.ai/abi/linkedin/")
 UNKNOWN_VALUE = "UNKNOWN"
@@ -58,7 +60,7 @@ class ActOfConnectionsOnLinkedInExportPipelineConfiguration(PipelineConfiguratio
         LinkedInExportProfilePipelineConfiguration
     )
     limit: int | None = None
-    workers: int = 10
+    workers: int = 20
 
 
 class ActOfConnectionsOnLinkedInExportPipelineParameters(PipelineParameters):
@@ -153,27 +155,30 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         row: dict,
         row_index: int,
         total_rows: int,
-        init_person_entity: Person,
-        export_file_entity: ConnectionsExportFile,
-    ) -> list[Any]:
+        init_person_uri: str,
+        init_person_name: str,
+        export_file_uri: str,
+    ) -> Graph:
         """
         Process a single row from the CSV file and create entities with relationships.
-        Returns a list of entities for later graph generation.
+        Returns a graph with all entities from this row, ready to be inserted.
 
         Args:
             row: The row data as a dictionary
             row_index: The index of the row (0-based)
             total_rows: Total number of rows being processed
-            init_person_entity: Person entity whose connections are being imported
-            export_file_entity: The ConnectionsExportFile entity
+            init_person_uri: URI of the person entity whose connections are being imported
+            init_person_name: Name of the initial person
+            export_file_uri: URI of the ConnectionsExportFile entity
 
         Returns:
-            List of entities created from this row
+            Graph containing all entities created from this row
         """
-        # Get initial person info
-        initial_person_name = init_person_entity.label
 
-        logger.debug(f"🔄 Processing row {row_index + 1}/{total_rows}")
+        print(
+            f"🔄 Worker thread processing row {row_index + 1}/{total_rows} "
+            f"(Thread: {threading.current_thread().name})"
+        )
 
         # Get variables from row
         first_name = row.get("First Name", UNKNOWN_VALUE).strip()
@@ -228,17 +233,21 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         connection_role_initial_entity = ConnectionRole(label=UNKNOWN_VALUE)
 
         # Create act of connection entity
-        act_of_connection_label = f"{initial_person_name} connected with {person_name} on LinkedIn the {connected_on_str}"
+        act_of_connection_label = f"{init_person_name} connected with {person_name} on LinkedIn the {connected_on_str}"
         act_of_connection_entity = ActOfConnection(label=act_of_connection_label)
+
+        # Create URI references for shared entities
+        init_person_uriref = URIRef(init_person_uri)
+        export_file_uriref = URIRef(export_file_uri)
 
         # ============================================================
         # PHASE 2: Set all object properties between entities based on schema
         # ============================================================
 
         # WHAT
-        act_of_connection_entity.involves_agent = [init_person_entity, person_entity]
+        act_of_connection_entity.involves_agent = [init_person_uriref, person_entity]
         act_of_connection_entity.connected_at = date_entity
-        act_of_connection_entity.concretizes = [export_file_entity, profile_page_entity]
+        act_of_connection_entity.concretizes = [export_file_uriref, profile_page_entity]
         act_of_connection_entity.realizes = [connection_role_initial_entity]
         act_of_connection_entity.has_associated_quality = [
             email_entity,
@@ -254,7 +263,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         person_entity.has_current_job_position = [position_entity]
         person_entity.has_current_organization = [linkedin_org_entity]
         person_entity.has_connection_role = [connection_role_initial_entity]
-        init_person_entity.has_connection_role = [connection_role_initial_entity]
+        # Note: init_person_entity relationship is handled via URI reference
         organization_entity.holds_linkedin_quality = [linkedin_org_entity]
 
         # HOW WE KNOW
@@ -263,20 +272,22 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
 
         # HOW IT IS
         email_entity.inheres_in = [person_entity]
-        email_entity.concretizes = [export_file_entity]
+        email_entity.concretizes = [export_file_uriref]
         position_entity.inheres_in = [person_entity]
-        position_entity.concretizes = [export_file_entity, profile_page_entity]
+        position_entity.concretizes = [export_file_uriref, profile_page_entity]
         linkedin_org_entity.inheres_in = [person_entity, organization_entity]
-        linkedin_org_entity.concretizes = [export_file_entity]
+        linkedin_org_entity.concretizes = [export_file_uriref]
         organization_entity.holds_linkedin_quality = [linkedin_org_entity]
         linkedin_public_url_entity.inheres_in = [person_entity]
-        linkedin_public_url_entity.concretizes = [export_file_entity]
+        linkedin_public_url_entity.concretizes = [export_file_uriref]
 
         # WHY
-        connection_role_initial_entity.inheres_in = [init_person_entity, person_entity]
+        connection_role_initial_entity.inheres_in = [init_person_uriref, person_entity]
         connection_role_initial_entity.has_realization = [act_of_connection_entity]
 
-        # Return all entities created from this row
+        # Generate graph from all entities created in this row
+        row_graph = Graph()
+        row_graph.bind("linkedin", LINKEDIN)
         row_entities = [
             act_of_connection_entity,
             person_entity,
@@ -288,8 +299,12 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             position_entity,
             connection_role_initial_entity,
         ]
+        for entity in row_entities:
+            if entity is not None:
+                entity_graph = entity.rdf()
+                row_graph += entity_graph
 
-        return row_entities
+        return row_graph
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(
@@ -298,10 +313,8 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             raise ValueError(
                 "Parameters must be of type ActOfConnectionsOnLinkedInExportPipelineParameters"
             )
-        # List to collect all entities for graph generation at the end
-        all_entities: list[Any] = []
 
-        # Create person entity
+        # Create shared entities that will be reused across all rows
         person_entity = self.get_person_entity_from_name(parameters.person_name)
 
         # Create linkedin location entity
@@ -318,16 +331,35 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         linkedin_org_label = "LinkedIn"
         linkedin_org_entity = Organization(label=linkedin_org_label)
 
-        # Create relationships between entities
+        # Create relationships between shared entities
         person_entity.is_located_in = [linkedin_location_entity]
         export_file_entity.is_owned_by = [linkedin_org_entity]
         linkedin_org_entity.is_owner_of = [export_file_entity]
 
-        # Add entities to all_entities list
-        all_entities.append(person_entity)
-        all_entities.append(linkedin_location_entity)
-        all_entities.append(linkedin_org_entity)
-        all_entities.append(export_file_entity)
+        # Generate graph for shared entities and insert them once
+        logger.debug("==> Generating graph for shared entities")
+        shared_graph = Graph()
+        shared_graph.bind("linkedin", LINKEDIN)
+        shared_entities = [
+            person_entity,
+            linkedin_location_entity,
+            linkedin_org_entity,
+            export_file_entity,
+        ]
+        for entity in shared_entities:
+            if entity is not None:
+                entity_graph = entity.rdf()
+                shared_graph += entity_graph
+
+        # Insert shared entities into triple store
+        logger.debug("==> Inserting shared entities into triple store")
+        if len(shared_graph) > 0:
+            self.__configuration.triple_store.insert(shared_graph)
+
+        # Store URIs for reuse in row processing
+        init_person_uri = person_entity._uri
+        init_person_name = person_entity.label
+        export_file_uri = export_file_entity._uri
 
         # Read CSV File
         logger.debug(f"==> Reading CSV file '{parameters.file_name}'")
@@ -342,14 +374,20 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         logger.debug(f"✅ {len(df)} rows in CSV file to be processed")
 
         # Processing rows from CSV file with multi-worker threading
-        logger.debug(f"==> Processing rows with {self.__configuration.workers} workers")
+        print(
+            f"==> Starting parallel processing with {self.__configuration.workers} workers"
+        )
         if self.__configuration.limit is not None:
             df = df[: self.__configuration.limit]
+            logger.debug(f"Limited to {self.__configuration.limit} rows")
 
         total_rows = len(df)
         processed_count = 0
+        error_count = 0
+        start_time = time.time()
 
         # Process rows in parallel using ThreadPoolExecutor
+        logger.debug(f"Submitting {total_rows} tasks to thread pool...")
         with ThreadPoolExecutor(max_workers=self.__configuration.workers) as executor:
             # Submit all tasks
             future_to_row = {
@@ -358,43 +396,50 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
                     row.to_dict(),
                     idx,
                     total_rows,
-                    person_entity,
-                    export_file_entity,
+                    init_person_uri,
+                    init_person_name,
+                    export_file_uri,
                 ): (idx, row)
                 for idx, (_, row) in enumerate(df.iterrows())
             }
+            print(
+                f"✅ Submitted {len(future_to_row)} tasks to {self.__configuration.workers} workers"
+            )
 
-            # Collect results as they complete
+            # Collect results as they complete and insert immediately
+            logger.debug("Waiting for tasks to complete and inserting results...")
             for future in as_completed(future_to_row):
                 idx, row = future_to_row[future]
                 try:
-                    row_entities = future.result()
-                    all_entities.extend(row_entities)
+                    row_graph = future.result()
+                    # Insert row entities immediately into triple store
+                    if len(row_graph) > 0:
+                        self.__configuration.triple_store.insert(row_graph)
                     processed_count += 1
                     if processed_count % 10 == 0 or processed_count == total_rows:
-                        logger.debug(
-                            f"✅ Processed {processed_count}/{total_rows} rows"
+                        elapsed = time.time() - start_time
+                        rate = processed_count / elapsed if elapsed > 0 else 0
+                        print(
+                            f"✅ Progress: {processed_count}/{total_rows} rows processed and inserted "
+                            f"({rate:.2f} rows/sec, {elapsed:.2f}s elapsed)"
                         )
                 except Exception as e:
-                    logger.error(f"❌ Error processing row {idx + 1}: {e}")
+                    error_count += 1
+                    logger.error(
+                        f"❌ Error processing row {idx + 1}/{total_rows}: {e}",
+                        exc_info=True,
+                    )
                     continue
 
-        logger.debug(f"✅ Completed processing {processed_count}/{total_rows} rows")
+        elapsed_time = time.time() - start_time
+        avg_rate = processed_count / elapsed_time if elapsed_time > 0 else 0
+        print(
+            f"✅ Completed processing: {processed_count}/{total_rows} rows successful, "
+            f"{error_count} errors, {elapsed_time:.2f}s total ({avg_rate:.2f} rows/sec)"
+        )
 
-        # Generate ONE graph from all entities at the end
-        logger.debug("==> Generating final graph from all entities")
-        graph = Graph()
-        graph.bind("linkedin", LINKEDIN)
-        for entity in all_entities:
-            if entity is not None:
-                entity_graph = entity.rdf()
-                graph += entity_graph
-
-        # Add triples to triple store (single insert)
-        logger.debug("==> Adding triples to triple store")
-        if len(graph) > 0:
-            self.__configuration.triple_store.insert(graph)
-        return graph
+        # Return the shared graph (row graphs were already inserted)
+        return shared_graph
 
     def as_tools(self) -> list[BaseTool]:
         return [
@@ -431,7 +476,7 @@ if __name__ == "__main__":
     module: ABIModule = ABIModule.get_instance()
 
     linkedin_export_configuration = LinkedInExportIntegrationConfiguration(
-        export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
+        export_file_path="storage/datastore/linkedin/export/ChristopheBerrard/Complete_LinkedInDataExport_01-20-2026.zip.zip"
     )
     linkedin_export_profile_pipeline_configuration = (
         LinkedInExportProfilePipelineConfiguration(
@@ -439,7 +484,7 @@ if __name__ == "__main__":
             linkedin_export_configuration=linkedin_export_configuration,
         )
     )
-    person_name = "Florent Ravenel"
+    person_name = "Christophe Berrard"
     limit = None
 
     pipeline = ActOfConnectionsOnLinkedInExportPipeline(
