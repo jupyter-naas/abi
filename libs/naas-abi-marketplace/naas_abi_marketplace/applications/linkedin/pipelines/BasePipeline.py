@@ -12,4 +12,3 @@ class BasePipeline:
 
         self.sparql_utils = SPARQLUtils(module.engine.services.triple_store)
         self.storage_utils = StorageUtils(module.engine.services.object_storage)
-        self.storage_utils = StorageUtils(module.engine.services.object_storage)

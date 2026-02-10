@@ -5,13 +5,12 @@ import os
 from typing import Dict, List, cast
 
 from naas_abi_core import logger
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
-    GlobalConfig
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.integration.integration import Integration
 from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
-from naas_abi_core.module.ModuleOrchestrationLoader import \
-    ModuleOrchestrationLoader
+from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLoader
+from naas_abi_core.module.ModuleUtils import find_class_module_root_path
 from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.pipeline.pipeline import Pipeline
 from naas_abi_core.services.agent.Agent import Agent
@@ -76,6 +75,7 @@ class BaseModule(Generic[TConfig]):
         )
         logger.debug(f"Initializing module {self.__module__.split('.')[0]}")
         self.module_path = self.__module__.split(".")[0]
+        self.module_root_path = find_class_module_root_path(self.__class__).as_posix()
         self._engine = engine
         self._configuration = configuration
 
@@ -138,7 +138,9 @@ class BaseModule(Generic[TConfig]):
         self.__load_ontologies()
 
         self.__agents = ModuleAgentLoader.load_agents(self.__class__)
-        self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(self.__class__)
+        self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(
+            self.__class__
+        )
 
     def on_initialized(self):
         """
@@ -153,9 +155,9 @@ class BaseModule(Generic[TConfig]):
         pass
 
     def __load_ontologies(self):
-        if os.path.exists(os.path.join(self.__module__.split(".")[0], "ontologies")):
+        if os.path.exists(os.path.join(self.module_root_path, "ontologies")):
             for file in glob.glob(
-                os.path.join(self.module_path, "ontologies", "**", "*.ttl"),
+                os.path.join(self.module_root_path, "ontologies", "**", "*.ttl"),
                 recursive=True,
             ):
                 self.ontologies.append(file)

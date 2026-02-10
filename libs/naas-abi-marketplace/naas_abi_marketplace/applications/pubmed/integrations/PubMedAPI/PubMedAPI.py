@@ -1,8 +1,9 @@
 import hashlib
+import io
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Dict, List, Optional
+from typing import BinaryIO, Dict, List, Optional
 
 import requests
 from naas_abi_core import logger
@@ -17,7 +18,9 @@ from naas_abi_marketplace.applications.pubmed.ontologies.PubMed import (
     PubMedPaperSummary,
 )
 from ratelimit import limits
+
 from .PubMedCentralDownloader import PubMedCentralDownloader
+
 cache: CacheService = CacheFactory.CacheFS_find_storage(subpath="pubmed")
 
 PUB_MED_RATE_LIMIT_NUMBER = 3
@@ -538,8 +541,11 @@ class PubMedIntegration(Integration):
             unique_ids = unique_ids[:max_results]
         return self._summaries(unique_ids)
 
-    def download_pubmed_central_pdf(self, pmcid: str) -> str:
-        """Download a PDF from PubMed Central using it's PMCID"""
+    def download_pubmed_central_pdf(self, pmcid: str) -> BinaryIO:
+        """Download a PDF from PubMed Central using its PMCID and return as a binary IO object"""
         pubmed_central_downloader = PubMedCentralDownloader()
-        return pubmed_central_downloader.open_pmc_pdf_stream(pmcid)
-
+        pdf_bytes = pubmed_central_downloader.open_pmc_pdf_stream(pmcid)
+        if isinstance(pdf_bytes, bytes):
+            return io.BytesIO(pdf_bytes)
+        # If already a BinaryIO, just return it
+        return pdf_bytes

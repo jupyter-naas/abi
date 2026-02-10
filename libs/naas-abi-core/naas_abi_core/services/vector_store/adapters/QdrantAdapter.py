@@ -28,7 +28,7 @@ class QdrantAdapter(IVectorStorePort):
         port: int = 6333,
         api_key: Optional[str] = None,
         https: bool = False,
-        timeout: int = 30,
+        timeout: int = 300,
     ):
         self.host = host
         self.port = port

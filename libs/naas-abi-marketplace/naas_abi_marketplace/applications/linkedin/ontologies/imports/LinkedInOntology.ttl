@@ -24,28 +24,28 @@ abi:SocialPage a owl:Class ;
     rdfs:label "Social Page" ;
     skos:definition "A page on a social media platform that represents an entity's presence, containing information specific to that entity type." ;
     skos:example "A social media page could be a Facebook profile, LinkedIn company page, or Twitter account." ;
-    rdfs:comment "A social page must be registered on a social media platform" ;
-    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+    rdfs:comment "A social page must be registered on a social media platform" .
 
 linkedin:Page a owl:Class ;
     rdfs:subClassOf abi:SocialPage ;
     rdfs:label "LinkedIn Page" ;
+    owl:hasKey ( linkedin:id ) ;
     skos:definition "A LinkedIn page that represents an entity's presence on LinkedIn, containing information specific to that entity type such as professional details, organizational information, or educational programs." ;
     skos:example "A LinkedIn page could be a profile page showing work experience, a company page with job postings, or a school page highlighting academic programs." ;
-    rdfs:comment "A LinkedIn page must be registered in https://www.linkedin.com/" ;
-    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+    rdfs:comment "A LinkedIn page must be registered in https://www.linkedin.com/" .
 
 linkedin:ProfilePage a owl:Class ;
     rdfs:subClassOf linkedin:Page ;
     rdfs:label "LinkedIn Profile Page" ;
+    owl:hasKey ( linkedin:id ) ;
     skos:definition "A LinkedIn profile page that includes information such as a person's professional history, skills, and endorsements, representing the individual's professional identity on the web." ;
     skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues." ;
-    rdfs:comment "A LinkedIn profile page must be registered in https://www.linkedin.com/in/" ;
-    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+    rdfs:comment "A LinkedIn profile page must be registered in https://www.linkedin.com/in/" .
 
 linkedin:CompanyPage a owl:Class ;
     rdfs:subClassOf linkedin:Page ;
     rdfs:label "LinkedIn Company Page" ;
+    owl:hasKey ( linkedin:id ) ;
     skos:definition "A LinkedIn company page that includes information such as the company's overview, products/services, job postings, and updates, representing the organization's professional presence on LinkedIn." ;
     skos:example "Microsoft's LinkedIn company page, which showcases their company information, latest news, job opportunities, and employee insights." ;
     rdfs:comment "A LinkedIn company page must be registered in https://www.linkedin.com/company/" ;
@@ -54,6 +54,7 @@ linkedin:CompanyPage a owl:Class ;
 linkedin:SchoolPage a owl:Class ;
     rdfs:subClassOf linkedin:Page ;
     rdfs:label "LinkedIn School Page" ;
+    owl:hasKey ( linkedin:id ) ;
     skos:definition "A LinkedIn school page that includes information about the school's programs, faculty, students, and events, representing the educational institution's professional presence on LinkedIn." ;
     rdfs:comment "A LinkedIn school page must be registered in https://www.linkedin.com/school/" ;
     abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
@@ -61,6 +62,7 @@ linkedin:SchoolPage a owl:Class ;
 linkedin:JobSearchPage a owl:Class ;
     rdfs:subClassOf linkedin:Page ;
     rdfs:label "LinkedIn Job Search Page" ;
+    owl:hasKey ( linkedin:id ) ;
     skos:definition "A LinkedIn job search page that includes information about job opportunities, company reviews, and industry trends, representing the job search process on LinkedIn." ;
     rdfs:comment "A LinkedIn job search page must be registered in https://www.linkedin.com/jobs/" ;
     abi:is_curated_in_foundry "enterprise_management_foundry".

@@ -144,7 +144,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
             onto_level = parameters.level
 
             # Get ontology ID if it exists
-            ontologies = self.__naas_integration.get_ontologies(workspace_id).get(
+            ontologies = self.__naas_integration.list_ontologies(workspace_id).get(
                 "ontologies", []
             )
             for ontology in ontologies:
