@@ -1168,7 +1168,7 @@ def create_class_files(
 )
 
 
-class {class_info.name}Action(_{class_info.name}):
+class {class_info.name}(_{class_info.name}):
     """Action class for {class_info.name}"""
 
     def actions(self):
