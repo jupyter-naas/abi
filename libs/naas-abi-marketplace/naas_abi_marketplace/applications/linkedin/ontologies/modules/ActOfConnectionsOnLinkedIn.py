@@ -253,6 +253,8 @@ class Person(RDFEntity):
         "agent_involved_in": "http://ontology.naas.ai/abi/linkedin/agentInvolvedIn",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "first_name": "http://ontology.naas.ai/abi/first_name",
+        "given_name": "http://ontology.naas.ai/abi/given_name",
         "has_connection_role": "http://ontology.naas.ai/abi/linkedin/hasConnectionRole",
         "has_current_job_position": "http://ontology.naas.ai/abi/linkedin/hasCurrentJobPosition",
         "has_current_organization": "http://ontology.naas.ai/abi/linkedin/hasCurrentOrganization",
@@ -261,6 +263,7 @@ class Person(RDFEntity):
         "is_located_in": "http://ontology.naas.ai/abi/linkedin/locatedIn",
         "is_owner_of": "http://ontology.naas.ai/abi/linkedin/isOwnerOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "last_name": "http://ontology.naas.ai/abi/last_name",
     }
     _object_properties: ClassVar[set[str]] = {
         "agent_involved_in",
@@ -274,6 +277,15 @@ class Person(RDFEntity):
     }
 
     # Data properties
+    first_name: Optional[
+        Annotated[str, Field(description="The first name of a person.")]
+    ] = "unknown"
+    last_name: Optional[
+        Annotated[str, Field(description="The last name of a person.")]
+    ] = "unknown"
+    given_name: Optional[
+        Annotated[str, Field(description="The given name of a person.")]
+    ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
         Optional[datetime.datetime],
@@ -513,12 +525,16 @@ class ConnectionsExportFile(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "file_path": "http://ontology.naas.ai/abi/linkedin/file_path",
         "is_owned_by": "http://ontology.naas.ai/abi/linkedin/isOwnedBy",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {"is_owned_by"}
 
     # Data properties
+    file_path: Optional[
+        Annotated[str, Field(description="The file path of a connections export file.")]
+    ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
         Optional[datetime.datetime],
