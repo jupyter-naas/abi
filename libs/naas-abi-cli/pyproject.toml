@@ -67,7 +67,7 @@ prerelease_token = "dev"
 force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/deploy/templates/.env" = "naas_abi_cli/cli/deploy/templates/.env"}
 
 [tool.hatch.build.targets.sdist]
-force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml"}
+force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/deploy/templates/.env" = "naas_abi_cli/cli/deploy/templates/.env"}
 
 [tool.uv.sources]
 naas-abi = { path = "../naas-abi",  editable = true }
