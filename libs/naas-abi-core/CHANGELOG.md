@@ -2,6 +2,78 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-02-09)
+
+### Bug Fixes
+
+- Working on make check
+  ([`fa75fc6`](https://github.com/jupyter-naas/abi/commit/fa75fc6f21c0b0fe0158a861085a31844dbaf6d2))
+
+- Working on make check
+  ([`f90773c`](https://github.com/jupyter-naas/abi/commit/f90773c8ab6aac94712c9cb2aaf18a1e73aff89f))
+
+### Features
+
+- Working on deploy local cli
+  ([`c3ffe6d`](https://github.com/jupyter-naas/abi/commit/c3ffe6db633f2ce7789de5460d8849f80490b699))
+
+- Working on deploy local cli
+  ([`798e02a`](https://github.com/jupyter-naas/abi/commit/798e02ad2576f86344a54068fcd00e8f717c977d))
+
+
+## v1.9.1 (2026-02-09)
+
+### Bug Fixes
+
+- Rename keyvalue directory name
+  ([`5834c55`](https://github.com/jupyter-naas/abi/commit/5834c55179737ff3ff80384a474653379de2c643))
+
+
+## v1.9.0 (2026-02-09)
+
+### Bug Fixes
+
+- Add check
+  ([`a991e7c`](https://github.com/jupyter-naas/abi/commit/a991e7c28ec2a6a4f87fe1297c4b90efff80ed0e))
+
+- Add redis and rabbitmq to all optional group
+  ([`eac0fa6`](https://github.com/jupyter-naas/abi/commit/eac0fa61962863123d581017b6840dd14d232628))
+
+- Adding debug
+  ([`6ed8edf`](https://github.com/jupyter-naas/abi/commit/6ed8edf8e7dfea3906f1b2e0bb8deb355b1157f4))
+
+- Improve BusService configuration and add redis/rabbitmq to optional dependencies
+  ([`451d242`](https://github.com/jupyter-naas/abi/commit/451d242505e40f20792322b6862364df44194df1))
+
+- Remove undesired print
+  ([`3beedd8`](https://github.com/jupyter-naas/abi/commit/3beedd8eda8a81a08bf9fa6c12822c2936dea1eb))
+
+- Replace print with logger.debug in TripleStoreService and fix whitespace
+  ([`da1e6d0`](https://github.com/jupyter-naas/abi/commit/da1e6d01c2a7d0468e572a3b2bbf5995e485b385))
+
+- Update CLI and rename KVService
+  ([`00e62d6`](https://github.com/jupyter-naas/abi/commit/00e62d61c51e36f792cbdc2540e527596df67097))
+
+- Working on PR fixes
+  ([`2421685`](https://github.com/jupyter-naas/abi/commit/24216859bc2c122ffdea8ad7a4e8086c11701067))
+
+- Working on review
+  ([`a85b4a9`](https://github.com/jupyter-naas/abi/commit/a85b4a9a10910ac16d52ee8be1032e5c8ec311f1))
+
+### Features
+
+- Working on addint BusService, KeyValueService and reworking Dagster orchestration
+  ([`bc448a6`](https://github.com/jupyter-naas/abi/commit/bc448a6a22c9f1788bb204e0671e6efb0c1bb774))
+
+
+## v1.8.0 (2026-02-03)
+
+### Features
+
+- Working on Dagster orchestration
+  ([`b970d21`](https://github.com/jupyter-naas/abi/commit/b970d21e135ab32c344122be50f292c0b44ff039))
+
+
 ## v1.7.2 (2026-02-02)
 
 ### Bug Fixes

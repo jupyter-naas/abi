@@ -1,17 +1,16 @@
 from typing import TYPE_CHECKING, Literal, Union
 
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
-    GenericLoader,
-)
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
-    ObjectStorageServiceConfiguration,
-)
-from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
-    pydantic_model_validator,
-)
-from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStorePort
-from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from pydantic import BaseModel, model_validator
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import \
+    GenericLoader
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import \
+    ObjectStorageServiceConfiguration
+from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
+    pydantic_model_validator
+from naas_abi_core.services.triple_store.TripleStorePorts import \
+    ITripleStorePort
+from naas_abi_core.services.triple_store.TripleStoreService import \
+    TripleStoreService
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing_extensions import Self
 
 # Only import for type checking, not at runtime
@@ -29,6 +28,8 @@ class OxigraphAdapterConfiguration(BaseModel):
         timeout: 60
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     oxigraph_url: str = "http://localhost:7878"
     timeout: int = 60
 
@@ -44,6 +45,8 @@ class AWSNeptuneAdapterConfiguration(BaseModel):
         aws_secret_access_key: "{{ secret.AWS_SECRET_ACCESS_KEY }}"
         db_instance_identifier: "{{ secret.AWS_NEPTUNE_DB_INSTANCE_IDENTIFIER }}"
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     aws_region_name: str
     aws_access_key_id: str
@@ -67,6 +70,8 @@ class AWSNeptuneSSHTunnelAdapterConfiguration(AWSNeptuneAdapterConfiguration):
         bastion_private_key: "{{ secret.AWS_BASTION_PRIVATE_KEY }}"
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     bastion_host: str
     bastion_port: int
     bastion_user: str
@@ -83,6 +88,8 @@ class TripleStoreAdapterFilesystemConfiguration(BaseModel):
         triples_path: "triples"
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     store_path: str
     triples_path: str = "triples"
 
@@ -96,6 +103,8 @@ class TripleStoreAdapterObjectStorageConfiguration(BaseModel):
         object_storage_service: *object_storage_service
         triples_prefix: "triples"
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     object_storage_service: ObjectStorageServiceConfiguration
     triples_prefix: str = "triples"
@@ -174,41 +183,36 @@ class TripleStoreAdapterConfiguration(GenericLoader):
 
             # Lazy import: only import the adapter that's actually configured
             if self.adapter == "oxigraph":
-                from naas_abi_core.services.triple_store.adaptors.secondary.Oxigraph import (
-                    Oxigraph,
-                )
+                from naas_abi_core.services.triple_store.adaptors.secondary.Oxigraph import \
+                    Oxigraph
 
                 OxigraphAdapterConfiguration.model_validate(arguments)
 
                 return Oxigraph(**arguments)
             elif self.adapter == "aws_neptune":
-                from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
-                    AWSNeptune,
-                )
+                from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import \
+                    AWSNeptune
 
                 AWSNeptuneAdapterConfiguration.model_validate(arguments)
 
                 return AWSNeptune(**arguments)
             elif self.adapter == "aws_neptune_sshtunnel":
-                from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
-                    AWSNeptuneSSHTunnel,
-                )
+                from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import \
+                    AWSNeptuneSSHTunnel
 
                 AWSNeptuneSSHTunnelAdapterConfiguration.model_validate(arguments)
 
                 return AWSNeptuneSSHTunnel(**arguments)
             elif self.adapter == "fs":
-                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
-                    TripleStoreService__SecondaryAdaptor__Filesystem,
-                )
+                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import \
+                    TripleStoreService__SecondaryAdaptor__Filesystem
 
                 TripleStoreAdapterFilesystemConfiguration.model_validate(arguments)
 
                 return TripleStoreService__SecondaryAdaptor__Filesystem(**arguments)
             elif self.adapter == "object_storage":
-                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
-                    TripleStoreService__SecondaryAdaptor__ObjectStorage,
-                )
+                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import \
+                    TripleStoreService__SecondaryAdaptor__ObjectStorage
 
                 return TripleStoreService__SecondaryAdaptor__ObjectStorage(**arguments)
             else:

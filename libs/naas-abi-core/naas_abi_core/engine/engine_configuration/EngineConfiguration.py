@@ -6,21 +6,23 @@ from typing import List
 import yaml
 from jinja2 import Template
 from naas_abi_core import logger
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
-    DeployConfiguration,
-)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
+    BusAdapterConfiguration, BusServiceConfiguration)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import \
+    DeployConfiguration
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
+    KeyValueAdapterConfiguration, KeyValueServiceConfiguration)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
-    ObjectStorageServiceConfiguration,
-)
+    ObjectStorageAdapterConfiguration, ObjectStorageAdapterFSConfiguration,
+    ObjectStorageServiceConfiguration)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService import (
-    SecretServiceConfiguration,
-)
+    DotenvSecretConfiguration, SecretAdapterConfiguration,
+    SecretServiceConfiguration)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
-    TripleStoreServiceConfiguration,
-)
+    TripleStoreAdapterConfiguration, TripleStoreAdapterFilesystemConfiguration,
+    TripleStoreServiceConfiguration)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreService import (
-    VectorStoreServiceConfiguration,
-)
+    VectorStoreAdapterConfiguration, VectorStoreServiceConfiguration)
 from naas_abi_core.services.secret.Secret import Secret
 from pydantic import BaseModel, model_validator
 from rich.prompt import Prompt
@@ -28,10 +30,12 @@ from typing_extensions import Literal, Self
 
 
 class ServicesConfiguration(BaseModel):
-    object_storage: ObjectStorageServiceConfiguration
-    triple_store: TripleStoreServiceConfiguration
-    vector_store: VectorStoreServiceConfiguration
-    secret: SecretServiceConfiguration
+    object_storage: ObjectStorageServiceConfiguration = ObjectStorageServiceConfiguration(object_storage_adapter=ObjectStorageAdapterConfiguration(adapter="fs", config=ObjectStorageAdapterFSConfiguration(base_path="storage/datastore")))
+    triple_store: TripleStoreServiceConfiguration = TripleStoreServiceConfiguration(triple_store_adapter=TripleStoreAdapterConfiguration(adapter="fs", config=TripleStoreAdapterFilesystemConfiguration(store_path="storage/triplestore", triples_path="triples")))
+    vector_store: VectorStoreServiceConfiguration = VectorStoreServiceConfiguration(vector_store_adapter=VectorStoreAdapterConfiguration(adapter="qdrant_in_memory", config={}))
+    secret: SecretServiceConfiguration = SecretServiceConfiguration(secret_adapters=[SecretAdapterConfiguration(adapter="dotenv", config=DotenvSecretConfiguration())])
+    bus: BusServiceConfiguration = BusServiceConfiguration(bus_adapter=BusAdapterConfiguration(adapter="python_queue", config={}))  # Provide default if not supplied
+    kv: KeyValueServiceConfiguration = KeyValueServiceConfiguration(kv_adapter=KeyValueAdapterConfiguration(adapter="python", config={}))
 
 
 class ApiConfiguration(BaseModel):
