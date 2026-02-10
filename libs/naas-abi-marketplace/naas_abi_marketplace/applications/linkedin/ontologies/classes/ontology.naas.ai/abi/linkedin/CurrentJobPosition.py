@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class CurrentJobPositionAction(_CurrentJobPosition):
+class CurrentJobPosition(_CurrentJobPosition):
     """Action class for CurrentJobPosition"""
 
     def actions(self):

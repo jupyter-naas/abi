@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class ActOfConnectionAction(_ActOfConnection):
+class ActOfConnection(_ActOfConnection):
     """Action class for ActOfConnection"""
 
     def actions(self):

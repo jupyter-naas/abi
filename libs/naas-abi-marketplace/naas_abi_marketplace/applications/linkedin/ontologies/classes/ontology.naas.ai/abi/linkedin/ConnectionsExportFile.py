@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class ConnectionsExportFileAction(_ConnectionsExportFile):
+class ConnectionsExportFile(_ConnectionsExportFile):
     """Action class for ConnectionsExportFile"""
 
     def actions(self):

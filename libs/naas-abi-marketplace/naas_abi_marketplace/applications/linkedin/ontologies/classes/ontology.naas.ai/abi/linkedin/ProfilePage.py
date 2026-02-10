@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class ProfilePageAction(_ProfilePage):
+class ProfilePage(_ProfilePage):
     """Action class for ProfilePage"""
 
     def actions(self):

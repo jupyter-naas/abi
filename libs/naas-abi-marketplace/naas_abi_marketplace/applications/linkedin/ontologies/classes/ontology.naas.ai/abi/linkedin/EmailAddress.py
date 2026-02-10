@@ -3,7 +3,7 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
 )
 
 
-class EmailAddressAction(_EmailAddress):
+class EmailAddress(_EmailAddress):
     """Action class for EmailAddress"""
 
     def actions(self):
