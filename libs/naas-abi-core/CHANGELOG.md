@@ -2,6 +2,69 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-02-10)
+
+### Bug Fixes
+
+- Dependency dagster
+  ([`69601cd`](https://github.com/jupyter-naas/abi/commit/69601cdc8c9760227591ebd04631b064d3d26c5b))
+
+- Error query
+  ([`c1fc341`](https://github.com/jupyter-naas/abi/commit/c1fc34160da6123ec81805be58e3f4bbf304b0ca))
+
+- Improve timeout qdrant
+  ([`391f803`](https://github.com/jupyter-naas/abi/commit/391f803baafdc62aa8800dfbfef6e997cd33e198))
+
+- Load ontologies not working
+  ([`10de7ab`](https://github.com/jupyter-naas/abi/commit/10de7abd351c36ed537f0d692485cd4d01dd1894))
+
+- Manage default values for properties
+  ([`f290794`](https://github.com/jupyter-naas/abi/commit/f290794454b6a3ee1176a63d995923f99137693c))
+
+- New instances must be owl NamedIndividual
+  ([`6e105d4`](https://github.com/jupyter-naas/abi/commit/6e105d49429c002838632de9cec86eba682336a3))
+
+- Print sparql query performed
+  ([`fd52035`](https://github.com/jupyter-naas/abi/commit/fd520355b27452d78ca1e626d6f33c7ecf2566d9))
+
+- Remove debug
+  ([`bfddde8`](https://github.com/jupyter-naas/abi/commit/bfddde813433a61076e5a5693e555be6ea3accee))
+
+- Remove logger debug (duplicates)
+  ([`3428387`](https://github.com/jupyter-naas/abi/commit/3428387e40252a3786ca3b6587fb331d45e1b1f5))
+
+- Rename classes
+  ([`c4932f7`](https://github.com/jupyter-naas/abi/commit/c4932f7033eaa2d2143ef0cd6bb7f37f850bffd4))
+
+- Replace union of list by list of union + manage duplicates
+  ([`2b11c8a`](https://github.com/jupyter-naas/abi/commit/2b11c8aa13ac55432047ba1e41518cf684134fd1))
+
+- Right hand side values are not supported in TypedDict
+  ([`774ca70`](https://github.com/jupyter-naas/abi/commit/774ca707db85c0cfffa5f6d80b7f291ba7198f99))
+
+- Use restrictions, label for class and property names
+  ([`ef6320e`](https://github.com/jupyter-naas/abi/commit/ef6320e47052f765504d3106e22e573f7ad298d4))
+
+### Features
+
+- Add method to save py file next to ttl
+  ([`41f9cf1`](https://github.com/jupyter-naas/abi/commit/41f9cf136c311eafc4ece0d05f537e12e761b7e2))
+
+- Add rdfs label, dcterms creator and created as default properties for class
+  ([`4fc863f`](https://github.com/jupyter-naas/abi/commit/4fc863f1cab52c2325e4830a957850cf4e560350))
+
+- Bind namespace to graph, add class label as prop, improve meta prop
+  ([`f65cfdf`](https://github.com/jupyter-naas/abi/commit/f65cfdf90b767361a26bb29b1ea15fbb4b6e42d5))
+
+- Create class from ttl in folder ontologies + test on linkedin
+  ([`0c34ce2`](https://github.com/jupyter-naas/abi/commit/0c34ce23e9ab1a69af932f1b8337f9de74ea30e9))
+
+### Refactoring
+
+- Print trace back and logger debug
+  ([`fd64d06`](https://github.com/jupyter-naas/abi/commit/fd64d06e8ad6b401343455021a0675a429f5aeb6))
+
+
 ## v1.10.0 (2026-02-09)
 
 ### Bug Fixes
