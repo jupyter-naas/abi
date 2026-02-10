@@ -2,6 +2,156 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-02-10)
+
+### Bug Fixes
+
+- Act of connection update + create ontology on workspace
+  ([`96950c0`](https://github.com/jupyter-naas/abi/commit/96950c0bd146779f1ad95fc1eaf89eda2a672b36))
+
+- Add default module to chat with agent
+  ([`d93e3ff`](https://github.com/jupyter-naas/abi/commit/d93e3ff149e9e75644cfd97e7b94fcb6d501f924))
+
+- Add logger warning
+  ([`c837202`](https://github.com/jupyter-naas/abi/commit/c83720215789dd95a8d1cf1aad842a222b951038))
+
+- Add missing imports to ontology
+  ([`f7fe0ed`](https://github.com/jupyter-naas/abi/commit/f7fe0ed61e6fd44e11dc1a48ed66a22770172a22))
+
+- Add parameter to display classes for individuals
+  ([`dd4a217`](https://github.com/jupyter-naas/abi/commit/dd4a217835ff19d6ecb5ffcfac015358ee2df990))
+
+- Add timeout and max retry on openai models
+  ([`8e0a436`](https://github.com/jupyter-naas/abi/commit/8e0a436c9e26f7e3e3ad3d49ff2ebd94a240c709))
+
+- Dependencies gmail
+  ([`ff6e898`](https://github.com/jupyter-naas/abi/commit/ff6e89834fbd5aa8578640f7c4efafd2c2b11445))
+
+- Dependency dagster
+  ([`69601cd`](https://github.com/jupyter-naas/abi/commit/69601cdc8c9760227591ebd04631b064d3d26c5b))
+
+- Embed datatype properties
+  ([`63c0e9e`](https://github.com/jupyter-naas/abi/commit/63c0e9e033098089c68d72f54a3dd4e2f33d1403))
+
+- Error workspace id in integration, fix init and add test
+  ([`bb6d361`](https://github.com/jupyter-naas/abi/commit/bb6d3619c08e923bdc638c921f0a66a45f163254))
+
+- Exclude templatable sparql queries
+  ([`8946c1f`](https://github.com/jupyter-naas/abi/commit/8946c1f9409e7ca0fb765daeb823b3cfa91b45bb))
+
+- Generate onto2py
+  ([`a4b7070`](https://github.com/jupyter-naas/abi/commit/a4b70700395481ac2c0e53ee7c041c1e34922f95))
+
+- Load onto2py with ontologies/modules only
+  ([`aeb98a4`](https://github.com/jupyter-naas/abi/commit/aeb98a491cb22f8d0a13afcdc10f6e6c922190e9))
+
+- Material entity participates in process + has member part material entity
+  ([`5b3bdeb`](https://github.com/jupyter-naas/abi/commit/5b3bdeb7f6a470fcb46fc04776dfb1fbc5a47dd3))
+
+- Mypy errors
+  ([`37fbdd9`](https://github.com/jupyter-naas/abi/commit/37fbdd9bce0b13ca08b4d98156ac6309bf5482ff))
+
+- Process occurs in site
+  ([`79be074`](https://github.com/jupyter-naas/abi/commit/79be074546dfd839bb12a37daa73b06059e05ff5))
+
+- Remove duplicated code
+  ([`a61d901`](https://github.com/jupyter-naas/abi/commit/a61d901b4c268e67aedbb6e6f97dc65f0542877e))
+
+- Rename pipeline + use data type prop
+  ([`bd998eb`](https://github.com/jupyter-naas/abi/commit/bd998ebf8ae08ba75906ba4c81268dc992772857))
+
+- Restrictions and creating new subproperty of
+  ([`882fe0a`](https://github.com/jupyter-naas/abi/commit/882fe0ac379c829ef54720c3cf0dfcc785e30ab5))
+
+- Rm job queries
+  ([`3036fa1`](https://github.com/jupyter-naas/abi/commit/3036fa1eeac8476b49705bd804646389b75040c7))
+
+- Rm onto2py
+  ([`1ab2cb1`](https://github.com/jupyter-naas/abi/commit/1ab2cb1c57fd732b76e8f2e9e67eada7bf4aec35))
+
+- Save ontology and test agent
+  ([`a4d63bd`](https://github.com/jupyter-naas/abi/commit/a4d63bda81ab0e5d30589df3b1b73a21e60516b9))
+
+- Split ontologies folder with modules and imports
+  ([`a80639b`](https://github.com/jupyter-naas/abi/commit/a80639bdb97fcd09b9d57f34980c2cd0e65dce55))
+
+- Test import
+  ([`4d17d1e`](https://github.com/jupyter-naas/abi/commit/4d17d1e5e56bef6ac3e38824239de83caa7dc27b))
+
+- Update 7 buckets ttl
+  ([`0289d75`](https://github.com/jupyter-naas/abi/commit/0289d75f5871177c0b736ccd15029140d5fb3b13))
+
+- Update method name
+  ([`aa35c95`](https://github.com/jupyter-naas/abi/commit/aa35c9515e02de0414c527a61809e6b52e23f51f))
+
+### Features
+
+- Add data type prop to onto
+  ([`e71eb19`](https://github.com/jupyter-naas/abi/commit/e71eb19204a117beb962ff4e43ce4edead47ab89))
+
+- Add multi workers thread
+  ([`fd983bb`](https://github.com/jupyter-naas/abi/commit/fd983bb1823e037969c1c564ba7a93ca7b5bd2da))
+
+- Add ontologies classes .py
+  ([`77e83a3`](https://github.com/jupyter-naas/abi/commit/77e83a35190718fe8896c1acaf7f4925d8eaf0f6))
+
+- Add owl:hasKey to 7 buckets onto
+  ([`b7db624`](https://github.com/jupyter-naas/abi/commit/b7db624049b8e53ea43c76f2ce5abca0e7beb943))
+
+- Add owl:hasKey to 7 buckets onto
+  ([`3fdfa76`](https://github.com/jupyter-naas/abi/commit/3fdfa7664a66baa4bd03d7b7e78c235b1ea1e984))
+
+- Add services vector + secret & embed classes on init
+  ([`e975142`](https://github.com/jupyter-naas/abi/commit/e9751427580145f227bdff7de892055918b29ba2))
+
+- Add twilio dependencies
+  ([`341614e`](https://github.com/jupyter-naas/abi/commit/341614e2991770b7bb1c84320fce8aa4f4481229))
+
+- Add workflow to convert ontology to yaml
+  ([`a805f86`](https://github.com/jupyter-naas/abi/commit/a805f86a4ba3b18b0a6e8315b6f5c423dad5bad8))
+
+- Create class from ttl in folder ontologies + test on linkedin
+  ([`0c34ce2`](https://github.com/jupyter-naas/abi/commit/0c34ce23e9ab1a69af932f1b8337f9de74ea30e9))
+
+- Create entity resolution pipeline + merge individuals to graph
+  ([`93f0b7a`](https://github.com/jupyter-naas/abi/commit/93f0b7ab1e938ef74cb88d29d2e9497955e0e68e))
+
+- Create linkedin kg agent
+  ([`9d2c0a3`](https://github.com/jupyter-naas/abi/commit/9d2c0a3c90d9a18bba04f7130e1a1f1877d75b1a))
+
+- Create linkedin ontology
+  ([`7e57ea4`](https://github.com/jupyter-naas/abi/commit/7e57ea4c2efabff303d5879982fbbe37aaa2f3c1))
+
+- Generate onto2py and fix missing labels
+  ([`81062c0`](https://github.com/jupyter-naas/abi/commit/81062c0748620ba2ab3500a17a1b127a990e4850))
+
+- Install lib thefuzz for entity resolution
+  ([`b8fec09`](https://github.com/jupyter-naas/abi/commit/b8fec09be83f9e1b86125fd6681111466c9140b9))
+
+- Ontology engineer module
+  ([`d8b342f`](https://github.com/jupyter-naas/abi/commit/d8b342fc5cc6a76eb51a57656b5372dad525814c))
+
+- Ontology engineer with 7buckets knowledge
+  ([`da787a3`](https://github.com/jupyter-naas/abi/commit/da787a3151a2cc63e7195f03819bb083299a3863))
+
+- Pipeline to create act of connections from csv + queries + update agent
+  ([`6b54449`](https://github.com/jupyter-naas/abi/commit/6b5444988500806f32db93fe3efb4c72a894d72c))
+
+- Use onto2py on init
+  ([`74c898f`](https://github.com/jupyter-naas/abi/commit/74c898fa571cd914924f13b27468fba1a35d9401))
+
+- Use worker thread to merge duplicates
+  ([`6699ebb`](https://github.com/jupyter-naas/abi/commit/6699ebbe450f6006492f335a22993c79e840a39d))
+
+### Refactoring
+
+- Rename agent file
+  ([`1fc3ef8`](https://github.com/jupyter-naas/abi/commit/1fc3ef8e58b26c40de4a34ffd2214bd12fb32c11))
+
+- Rename classes
+  ([`a7046b0`](https://github.com/jupyter-naas/abi/commit/a7046b00292d2587f96ea6492b95d91b75d77c1e))
+
+
 ## v1.4.0 (2026-01-15)
 
 
