@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.11.3 (2026-02-10)
+
+### Bug Fixes
+
+- Add missing element-config.json
+  ([`37c8b76`](https://github.com/jupyter-naas/abi/commit/37c8b76da2d9124e48b5f2548dd7d2bf296af959))
+
+
 ## v1.11.2 (2026-02-10)
 
 
