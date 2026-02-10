@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.11.1 (2026-02-10)
+
+### Bug Fixes
+
+- Add template .env
+  ([`194421b`](https://github.com/jupyter-naas/abi/commit/194421b7828713606e30144f77a2fcd6c3c32b81))
+
+- Add template .env
+  ([`b5fbe73`](https://github.com/jupyter-naas/abi/commit/b5fbe731c7bd37bb12348fc0ddbe75b5c5a8aa78))
+
+- Add template .env
+  ([`8c9d43d`](https://github.com/jupyter-naas/abi/commit/8c9d43dda47f569b342d44f7d4789b853d6e72d1))
+
+
 ## v1.11.0 (2026-02-09)
 
 ### Bug Fixes
