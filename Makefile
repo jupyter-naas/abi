@@ -12,7 +12,7 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
-log_level=DEBUG
+log_level=INFO
 default: deps local-up airgap
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi AbiAgent
 
@@ -72,6 +72,7 @@ help:
 	@echo "  chat-hubspot-agent        Start HubSpot integration agent"
 	@echo "  chat-instagram-agent     Start Instagram integration agent"
 	@echo "  chat-linkedin-agent      Start LinkedIn integration agent"
+	@echo "  chat-linkedin-kg-agent   Start LinkedIn Knowledge Graph agent"
 	@echo "  chat-mercury-agent       Start Mercury integration agent"
 	@echo "  chat-naas-agent          Start Naas platform integration agent"
 	@echo "  chat-nebari-agent        Start Nebari integration agent"
@@ -374,8 +375,8 @@ chat-instagram-agent: deps
 chat-linkedin-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInAgent
 
-chat-linkedin-graph-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInGraphAgent
+chat-linkedin-kg-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInKGAgent
 
 chat-mercury-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.mercury MercuryAgent
