@@ -163,6 +163,27 @@ cco:ont00001262 a owl:Class ;
         owl:allValuesFrom linkedin:ConnectionRole  # LinkedIn Connection Role
     ] .
 
+abi:first_name a owl:DatatypeProperty ;
+    rdfs:label "first name"@en ;
+    rdfs:domain cco:ont00001262 ; # Person
+    rdfs:range xsd:string ;
+    skos:definition "The first name of a person."@en ;
+    skos:example "John"@en .
+
+abi:last_name a owl:DatatypeProperty ;
+    rdfs:label "last name"@en ;
+    rdfs:domain cco:ont00001262 ; # Person
+    rdfs:range xsd:string ;
+    skos:definition "The last name of a person."@en ;
+    skos:example "Doe"@en .
+
+abi:given_name a owl:DatatypeProperty ;
+    rdfs:label "given name"@en ;
+    rdfs:domain cco:ont00001262 ; # Person
+    rdfs:range xsd:string ;
+    skos:definition "The given name of a person."@en ;
+    skos:example "John"@en .
+
 cco:ont00001180 rdf:type owl:Class ;
     rdfs:label "Organization"@en ;
     rdfs:subClassOf cco:ont00000300 ,
@@ -296,12 +317,12 @@ linkedin:ConnectionsExportFile a owl:Class ;
         owl:allValuesFrom cco:ont00001180  # Commercial Organization
     ] .
 
-# linkedin:file_path a rdf:DatatypeProperty ;
-#     rdfs:label "file path"@en ;
-#     rdfs:domain linkedin:ConnectionsExportFile ;
-#     rdfs:range xsd:string ;
-#     skos:definition "The file path of a connections export file."@en ;
-#     skos:example "C:/Users/John Doe/Downloads/connections_export.csv"@en .
+linkedin:file_path a owl:DatatypeProperty ;
+    rdfs:label "file path"@en ;
+    rdfs:domain linkedin:ConnectionsExportFile ;
+    rdfs:range xsd:string ;
+    skos:definition "The file path of a connections export file."@en ;
+    skos:example "C:/Users/John Doe/Downloads/connections_export.csv"@en .
 
 bfo:BFO_0000058 a owl:ObjectProperty ;
     owl:inverseOf bfo:BFO_0000059 ;
