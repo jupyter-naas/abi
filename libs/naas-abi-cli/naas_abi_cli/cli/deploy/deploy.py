@@ -235,6 +235,9 @@ def local_deploy(env: str):
 
         from ..utils.Copier import Copier
 
+        # Create .deploy folder if it doesn't exist
+        os.makedirs(os.path.join(os.getcwd(), ".deploy"), exist_ok=False)
+
         copier = Copier(
             templates_path=os.path.join(
                 os.path.dirname(naas_abi_cli.__file__), "cli/deploy/templates/local"
