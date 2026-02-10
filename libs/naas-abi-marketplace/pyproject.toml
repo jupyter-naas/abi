@@ -131,10 +131,6 @@ applications-powerpoint = [
 applications-pubmed = [
     "ratelimit>=2.2.1",
     "ratelimit-types==0.0.3",
-    "dagster>=1.11.12",
-    "dagster-webserver>=1.11.12",
-    "dagster-postgres>=0.27.12",
-    "dagster-aws>=0.27.12"
 ]
 applications-sanax = []
 applications-sendgrid = []

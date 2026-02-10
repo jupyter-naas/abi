@@ -34,6 +34,10 @@ dependencies = [
     "docker>=7.1.0",
     "types-pyyaml>=6.0.12.20250915",
     "types-paramiko>=4.0.0.20250822",
+    "dagster>=1.11.12",
+    "dagster-webserver>=1.11.12",
+    "dagster-postgres>=0.27.12",
+    "dagster-aws>=0.27.12",
 ]
 license = { text = "MIT License" }
 
