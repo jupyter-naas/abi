@@ -476,7 +476,7 @@ if __name__ == "__main__":
     module: ABIModule = ABIModule.get_instance()
 
     linkedin_export_configuration = LinkedInExportIntegrationConfiguration(
-        export_file_path="storage/datastore/linkedin/export/ChristopheBerrard/Complete_LinkedInDataExport_01-20-2026.zip.zip"
+        export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
     )
     linkedin_export_profile_pipeline_configuration = (
         LinkedInExportProfilePipelineConfiguration(
@@ -484,7 +484,7 @@ if __name__ == "__main__":
             linkedin_export_configuration=linkedin_export_configuration,
         )
     )
-    person_name = "Christophe Berrard"
+    person_name = "Florent Ravenel"
     limit = None
 
     pipeline = ActOfConnectionsOnLinkedInExportPipeline(
