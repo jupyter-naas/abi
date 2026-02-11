@@ -1,0 +1,165 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Wikipedia Search Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:wikipedia_search_process a owl:Ontology ;
+    dc:title "Wikipedia Search Process"@en ;
+    dc:description "A process that searches Wikipedia using their public MediaWiki API, returning article titles, extracts (3 sentences), thumbnail URLs, and fullurl links with relevance scoring."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:WikipediaSearchProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Wikipedia Search Process"@en ;
+    skos:definition "A process that searches Wikipedia using their public MediaWiki API, returning article titles, extracts (3 sentences), thumbnail URLs, and fullurl links with relevance scoring."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/search.py:112-167 search_wikipedia()" ;
+    skos:example "1. Build Wikipedia API URL with query parameters\n2. HTTP GET to en.wikipedia.org/w/api.php (timeout: 10s)\n3. Parse JSON response, extract pages from query.pages\n4. Sort pages by search index (relevance)\n5. For each page: extract title, extract (snippet), fullurl\n6. Generate result ID: md5(wikipedia:{pageid})[:12]\n7. Calculate relevance: 1.0 - (index * 0.05)\n8. Include thumbnail URL if available\n9. Return list of WebSearchResult"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:WikipediaAPI a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WikipediaAPI"@en ;
+    skos:definition "Wikipedia MediaWiki public API at en.wikipedia.org"@en .
+
+nexus:SearchClient a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "SearchClient"@en ;
+    skos:definition "httpx async client executing search request"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:WikipediaEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "WikipediaEndpoint"@en ;
+    skos:definition "https://en.wikipedia.org/w/api.php with action=query&generator=search"@en .
+
+nexus:WebSearchEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "WebSearchEndpoint"@en ;
+    skos:definition "NEXUS API endpoint POST /api/search/web"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:SearchDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "SearchDuration"@en ;
+    skos:definition "200-1000ms for Wikipedia API response"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:WikipediaParams a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "WikipediaParams"@en ;
+    skos:definition "API params: gsrsearch, gsrlimit, prop=extracts|pageimages|info, exsentences=3"@en .
+
+nexus:WebSearchResult a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "WebSearchResult"@en ;
+    skos:definition "Result: id (md5 hash), title, snippet (extract), url, relevance (1.0-0.95), thumbnail"@en .
+
+nexus:RelevanceScore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "RelevanceScore"@en ;
+    skos:definition "Float: 1.0 for first result, decreasing by 0.05 per position"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:SnippetLength a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "SnippetLength"@en ;
+    skos:definition "Quality: maximum 3 sentences per snippet via exsentences=3"@en .
+
+nexus:ThumbnailSize a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ThumbnailSize"@en ;
+    skos:definition "Quality: thumbnails requested at 200px via pithumbsize=200"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:WebSearcherRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "WebSearcherRole"@en ;
+    skos:definition "Role realized when system queries Wikipedia for knowledge"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:RelevanceScoringDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "RelevanceScoringDisposition"@en ;
+    skos:definition "Disposition to assign decreasing relevance: 1.0, 0.95, 0.90..."@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:wikipedia_search_process_has_wikipediaapi a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:WikipediaSearchProcess ;
+    rdfs:range nexus:WikipediaAPI ;
+    rdfs:label "WikipediaSearchProcess has participant WikipediaAPI"@en .
+
+nexus:wikipedia_search_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:WikipediaSearchProcess ;
+    rdfs:range nexus:WikipediaEndpoint ;
+    rdfs:label "WikipediaSearchProcess occurs in WikipediaEndpoint"@en .
+
+nexus:wikipedia_search_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:WikipediaSearchProcess ;
+    rdfs:range nexus:SearchDuration ;
+    rdfs:label "WikipediaSearchProcess occupies SearchDuration"@en .
+
+nexus:wikipedia_search_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:WikipediaSearchProcess ;
+    rdfs:range nexus:WebSearcherRole ;
+    rdfs:label "WikipediaSearchProcess realizes WebSearcherRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:searchQuery a owl:DatatypeProperty ;
+    rdfs:label "searchQuery"@en ;
+    rdfs:range xsd:string .
+
+nexus:resultCount a owl:DatatypeProperty ;
+    rdfs:label "resultCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:maxResults a owl:DatatypeProperty ;
+    rdfs:label "maxResults"@en ;
+    rdfs:range xsd:integer .

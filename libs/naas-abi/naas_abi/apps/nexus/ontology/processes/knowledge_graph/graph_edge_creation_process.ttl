@@ -1,0 +1,165 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Graph Edge Creation Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:graph_edge_creation_process a owl:Ontology ;
+    dc:title "Graph Edge Creation Process"@en ;
+    dc:description "A process that creates a relationship (edge) between two nodes in the knowledge graph, validating both source and target node existence before inserting into graph_edges."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:GraphEdgeCreationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Graph Edge Creation Process"@en ;
+    skos:definition "A process that creates a relationship (edge) between two nodes in the knowledge graph, validating both source and target node existence before inserting into graph_edges."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/graph.py:267-292 create_edge()" ;
+    skos:example "1. Validate workspace access\n2. Verify source_id exists in graph_nodes (404 if not)\n3. Verify target_id exists in graph_nodes (404 if not)\n4. Generate edge ID: edge-{uuid.hex[:12]}\n5. Serialize properties to JSON\n6. Insert GraphEdgeModel into graph_edges table\n7. Return GraphEdge response"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:GraphAuthor a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "GraphAuthor"@en ;
+    skos:definition "User creating the relationship"@en .
+
+nexus:SourceNode a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "SourceNode"@en ;
+    skos:definition "Existing graph node at the start of the edge"@en .
+
+nexus:TargetNode a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "TargetNode"@en ;
+    skos:definition "Existing graph node at the end of the edge"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:GraphEdgesEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "GraphEdgesEndpoint"@en ;
+    skos:definition "API endpoint POST /api/graph/edges"@en .
+
+nexus:GraphEdgesTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "GraphEdgesTable"@en ;
+    skos:definition "PostgreSQL table graph_edges with FKs to graph_nodes"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:EdgeCreationDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "EdgeCreationDuration"@en ;
+    skos:definition "30-60ms: node existence checks (2x) + insert"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:GraphEdgeCreate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "GraphEdgeCreate"@en ;
+    skos:definition "Pydantic model: workspace_id, source_id, target_id, type (1-100 chars), properties (JSON)"@en .
+
+nexus:EdgeRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "EdgeRecord"@en ;
+    skos:definition "Database row: id (edge-{uuid}), workspace_id, source_id, target_id, type, properties"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:ReferentialIntegrity a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ReferentialIntegrity"@en ;
+    skos:definition "Quality: both source and target nodes must exist (404 if not)"@en .
+
+nexus:CascadeDeleteBehavior a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "CascadeDeleteBehavior"@en ;
+    skos:definition "Quality: deleting a node cascades to delete all connected edges"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:RelationshipCreatorRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "RelationshipCreatorRole"@en ;
+    skos:definition "Role realized when user defines connections between entities"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:NodeExistenceValidationDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "NodeExistenceValidationDisposition"@en ;
+    skos:definition "Disposition to verify source and target node existence before edge creation"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:graph_edge_creation_process_has_graphauthor a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:GraphEdgeCreationProcess ;
+    rdfs:range nexus:GraphAuthor ;
+    rdfs:label "GraphEdgeCreationProcess has participant GraphAuthor"@en .
+
+nexus:graph_edge_creation_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:GraphEdgeCreationProcess ;
+    rdfs:range nexus:GraphEdgesEndpoint ;
+    rdfs:label "GraphEdgeCreationProcess occurs in GraphEdgesEndpoint"@en .
+
+nexus:graph_edge_creation_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:GraphEdgeCreationProcess ;
+    rdfs:range nexus:EdgeCreationDuration ;
+    rdfs:label "GraphEdgeCreationProcess occupies EdgeCreationDuration"@en .
+
+nexus:graph_edge_creation_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:GraphEdgeCreationProcess ;
+    rdfs:range nexus:RelationshipCreatorRole ;
+    rdfs:label "GraphEdgeCreationProcess realizes RelationshipCreatorRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:edgeType a owl:DatatypeProperty ;
+    rdfs:label "edgeType"@en ;
+    rdfs:range xsd:string .
+
+nexus:sourceId a owl:DatatypeProperty ;
+    rdfs:label "sourceId"@en ;
+    rdfs:range xsd:string .
+
+nexus:targetId a owl:DatatypeProperty ;
+    rdfs:label "targetId"@en ;
+    rdfs:range xsd:string .

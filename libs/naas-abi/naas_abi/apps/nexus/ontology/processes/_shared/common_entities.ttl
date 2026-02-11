@@ -1,0 +1,78 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+# ======================================================================
+# NEXUS Common Entities - Shared Across All Processes
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:common_entities a owl:Ontology ;
+    dc:title "NEXUS Common Entities"@en ;
+    dc:description "Shared entities, roles, and properties used across all NEXUS process ontologies"@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> .
+
+# ======================================================================
+# WHO: Common Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:User a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "User"@en ;
+    skos:definition "A human agent who interacts with the NEXUS platform."@en .
+
+nexus:DatabaseServer a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Database Server"@en ;
+    skos:definition "A PostgreSQL server that stores platform data."@en .
+
+nexus:APIServer a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "API Server"@en ;
+    skos:definition "A FastAPI server that executes platform processes."@en .
+
+# ======================================================================
+# WHERE: Common Sites (BFO_0000029)
+# ======================================================================
+
+nexus:APIEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "API Endpoint"@en ;
+    skos:definition "A computational location (URL path) where HTTP requests are processed."@en .
+
+nexus:Database a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "Database"@en ;
+    skos:definition "A storage location where platform data is persisted."@en .
+
+# ======================================================================
+# Common Data Properties
+# ======================================================================
+
+nexus:hasId a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "has ID"@en ;
+    skos:definition "Unique identifier (UUID or similar)."@en .
+
+nexus:hasTimestamp a owl:DatatypeProperty ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has timestamp"@en .
+
+nexus:hasOrganizationId a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "has organization ID"@en ;
+    skos:definition "Identifier linking to a parent organization."@en .
+
+nexus:hasWorkspaceId a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "has workspace ID"@en .
+
+nexus:hasUserId a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "has user ID"@en .

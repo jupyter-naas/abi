@@ -1,0 +1,165 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Agent Sync From Registry Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:agent_sync_from_registry_process a owl:Ontology ;
+    dc:title "Agent Sync From Registry Process"@en ;
+    dc:description "A process that automatically creates agents from the MODEL_REGISTRY, creating one agent per model for a workspace, skipping models that already have agents."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:AgentSyncFromRegistryProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Agent Sync From Registry Process"@en ;
+    skos:definition "A process that automatically creates agents from the MODEL_REGISTRY, creating one agent per model for a workspace, skipping models that already have agents."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/agents.py:297-383 sync_agents_from_models()" ;
+    skos:example "1. Validate workspace access\n2. Call get_all_models() to retrieve 60+ models from MODEL_REGISTRY\n3. Query existing agents for workspace from agent_configs table\n4. For each model not yet represented: generate agent with name, description, system_prompt\n5. Set provider, model_id, logo_url from registry metadata\n6. Batch insert new AgentConfigModel rows\n7. Commit transaction\n8. Return AgentSyncResult with created/skipped counts"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ModelRegistry a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ModelRegistry"@en ;
+    skos:definition "In-memory MODEL_REGISTRY containing 60+ model definitions across 9 providers"@en .
+
+nexus:WorkspaceAgentStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WorkspaceAgentStore"@en ;
+    skos:definition "PostgreSQL agent_configs table for the target workspace"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:AgentSyncEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "AgentSyncEndpoint"@en ;
+    skos:definition "API endpoint POST /api/agents/sync?workspace_id={id}"@en .
+
+nexus:AgentConfigsTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "AgentConfigsTable"@en ;
+    skos:definition "PostgreSQL table agent_configs"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:SyncDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "SyncDuration"@en ;
+    skos:definition "100-300ms for registry scan + batch insert of 60+ agents"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:ModelRegistryEntry a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ModelRegistryEntry"@en ;
+    skos:definition "ModelInfo: id, name, provider, context_window, capabilities, released date"@en .
+
+nexus:SyncResult a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "SyncResult"@en ;
+    skos:definition "AgentSyncResult: created count, skipped count, total_models, agent_ids list"@en .
+
+nexus:ProviderLogo a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ProviderLogo"@en ;
+    skos:definition "Logo URL mapping from get_logo_for_provider()"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:SyncCompleteness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "SyncCompleteness"@en ;
+    skos:definition "Quality: all registry models should have corresponding agents"@en .
+
+nexus:DuplicateSkipping a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "DuplicateSkipping"@en ;
+    skos:definition "Quality: existing agents (by model_id) are skipped, not duplicated"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:AgentProvisionerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "AgentProvisionerRole"@en ;
+    skos:definition "Role realized when system auto-creates agents from model catalog"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:BatchInsertDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "BatchInsertDisposition"@en ;
+    skos:definition "Disposition to batch-insert multiple agents in single transaction"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:agent_sync_from_registry_process_has_modelregistry a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:AgentSyncFromRegistryProcess ;
+    rdfs:range nexus:ModelRegistry ;
+    rdfs:label "AgentSyncFromRegistryProcess has participant ModelRegistry"@en .
+
+nexus:agent_sync_from_registry_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:AgentSyncFromRegistryProcess ;
+    rdfs:range nexus:AgentSyncEndpoint ;
+    rdfs:label "AgentSyncFromRegistryProcess occurs in AgentSyncEndpoint"@en .
+
+nexus:agent_sync_from_registry_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:AgentSyncFromRegistryProcess ;
+    rdfs:range nexus:SyncDuration ;
+    rdfs:label "AgentSyncFromRegistryProcess occupies SyncDuration"@en .
+
+nexus:agent_sync_from_registry_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:AgentSyncFromRegistryProcess ;
+    rdfs:range nexus:AgentProvisionerRole ;
+    rdfs:label "AgentSyncFromRegistryProcess realizes AgentProvisionerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:createdCount a owl:DatatypeProperty ;
+    rdfs:label "createdCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:skippedCount a owl:DatatypeProperty ;
+    rdfs:label "skippedCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:totalModels a owl:DatatypeProperty ;
+    rdfs:label "totalModels"@en ;
+    rdfs:range xsd:integer .

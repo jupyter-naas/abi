@@ -1,0 +1,151 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Workspace Member Management Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:workspace_member_management_process a owl:Ontology ;
+    dc:title "Workspace Member Management Process"@en ;
+    dc:description "A process that updates member roles or removes members from a workspace, requiring admin or owner permissions and preventing owner self-removal."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:WorkspaceMemberManagementProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Workspace Member Management Process"@en ;
+    skos:definition "A process that updates member roles or removes members from a workspace, requiring admin or owner permissions and preventing owner self-removal."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/workspaces.py:282-348 remove_workspace_member(), update_workspace_member()" ;
+    skos:example "1. Validate current user is admin or owner\n2. For removal: check target is not owner, delete from workspace_members\n3. For update: modify role column (admin/member/viewer)\n4. Commit transaction\n5. Return result"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:WorkspaceAdmin a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WorkspaceAdmin"@en ;
+    skos:definition "Admin/owner managing workspace membership"@en .
+
+nexus:TargetMember a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "TargetMember"@en ;
+    skos:definition "Member whose role is being changed or who is being removed"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:MemberEndpoints a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "MemberEndpoints"@en ;
+    skos:definition "DELETE /api/workspaces/{id}/members/{user_id}, PATCH /api/workspaces/{id}/members/{user_id}"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:ManagementDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "ManagementDuration"@en ;
+    skos:definition "30-60ms per operation"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:RoleUpdate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "RoleUpdate"@en ;
+    skos:definition "Dict: role (admin|member|viewer)"@en .
+
+nexus:RemovalResult a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "RemovalResult"@en ;
+    skos:definition "Dict: status=removed"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:OwnerProtection a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "OwnerProtection"@en ;
+    skos:definition "Quality: workspace owner cannot be removed"@en .
+
+nexus:AdminRequirement a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "AdminRequirement"@en ;
+    skos:definition "Quality: only admins/owners can manage members"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:MemberManagerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "MemberManagerRole"@en ;
+    skos:definition "Role realized when admin changes roles or removes members"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:OwnerProtectionDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "OwnerProtectionDisposition"@en ;
+    skos:definition "Disposition to prevent removal of workspace owner"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:workspace_member_management_process_has_workspaceadmin a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:WorkspaceMemberManagementProcess ;
+    rdfs:range nexus:WorkspaceAdmin ;
+    rdfs:label "WorkspaceMemberManagementProcess has participant WorkspaceAdmin"@en .
+
+nexus:workspace_member_management_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:WorkspaceMemberManagementProcess ;
+    rdfs:range nexus:MemberEndpoints ;
+    rdfs:label "WorkspaceMemberManagementProcess occurs in MemberEndpoints"@en .
+
+nexus:workspace_member_management_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:WorkspaceMemberManagementProcess ;
+    rdfs:range nexus:ManagementDuration ;
+    rdfs:label "WorkspaceMemberManagementProcess occupies ManagementDuration"@en .
+
+nexus:workspace_member_management_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:WorkspaceMemberManagementProcess ;
+    rdfs:range nexus:MemberManagerRole ;
+    rdfs:label "WorkspaceMemberManagementProcess realizes MemberManagerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:targetUserId a owl:DatatypeProperty ;
+    rdfs:label "targetUserId"@en ;
+    rdfs:range xsd:string .
+
+nexus:newRole a owl:DatatypeProperty ;
+    rdfs:label "newRole"@en ;
+    rdfs:range xsd:string .
