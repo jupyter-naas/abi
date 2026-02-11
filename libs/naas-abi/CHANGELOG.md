@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-02-11)
+
+### Features
+
+- Integrate nexus app into abi monorepo
+  ([`f3699f0`](https://github.com/jupyter-naas/abi/commit/f3699f0b84fddd12b0f69d202779ab48ebf16e82))
+
+
 ## v1.1.1 (2026-02-10)
 
 ### Bug Fixes
