@@ -4,28 +4,23 @@ Public branding endpoint (no auth) + authenticated CRUD.
 Organizations sit above Workspaces in the hierarchy and own branding configuration.
 """
 
-from datetime import datetime, timezone
-from uuid import uuid4
-from pathlib import Path
 import os
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User, get_current_user_required)
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.models import (OrganizationDomainModel,
+                                                     OrganizationMemberModel,
+                                                     OrganizationModel,
+                                                     WorkspaceMemberModel,
+                                                     WorkspaceModel)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.database import get_db
-from app.models import (
-    OrganizationModel,
-    OrganizationMemberModel,
-    OrganizationDomainModel,
-    WorkspaceModel,
-    WorkspaceMemberModel,
-)
-from app.api.endpoints.auth import (
-    User,
-    get_current_user_required,
-)
 
 router = APIRouter()
 public_router = APIRouter()
@@ -585,7 +580,7 @@ async def list_org_members(
     await require_org_access(current_user.id, org_id, db)
     
     # Get members with user info
-    from app.models import UserModel
+    from naas_abi.apps.nexus.apps.api.app.models import UserModel
     result = await db.execute(
         select(OrganizationMemberModel, UserModel)
         .join(UserModel, OrganizationMemberModel.user_id == UserModel.id)
@@ -621,7 +616,7 @@ async def invite_org_member(
         raise HTTPException(status_code=403, detail="Only admins can invite members")
     
     # Find user by email
-    from app.models import UserModel
+    from naas_abi.apps.nexus.apps.api.app.models import UserModel
     result = await db.execute(
         select(UserModel).where(UserModel.email == invite.email)
     )
@@ -695,7 +690,7 @@ async def update_org_member(
     await db.flush()
     
     # Get user info
-    from app.models import UserModel
+    from naas_abi.apps.nexus.apps.api.app.models import UserModel
     user_result = await db.execute(
         select(UserModel).where(UserModel.id == user_id)
     )

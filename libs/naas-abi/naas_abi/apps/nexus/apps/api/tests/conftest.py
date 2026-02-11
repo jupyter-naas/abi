@@ -14,9 +14,10 @@ from uuid import uuid4
 import bcrypt
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine, text
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
 
 # Use PostgreSQL test database
 TEST_DB_NAME = "nexus_test"
@@ -50,12 +51,11 @@ db_module.AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
 )
 
-# Now we can safely import the app
-from app.main import app  # noqa: E402
-from app.api.endpoints.auth import create_access_token  # noqa: E402
-
 # Patch the engine in the auth module (it imports engine at module level for sync helpers)
 import app.api.endpoints.auth as auth_module  # noqa: E402
+from app.api.endpoints.auth import create_access_token  # noqa: E402
+# Now we can safely import the app
+from app.main import app  # noqa: E402
 
 auth_module.engine = db_module.engine
 

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "nexus-api"
 version = "0.0.1"
 description = "NEXUS Platform API - ABI Integration Layer"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     # Core
     "fastapi>=0.109.0",

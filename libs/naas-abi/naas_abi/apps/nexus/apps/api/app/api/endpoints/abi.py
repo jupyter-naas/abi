@@ -6,15 +6,16 @@ Manage external ABI servers per workspace.
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User, get_current_user_required, require_workspace_access)
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import (_decrypt,
+                                                                    _encrypt)
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.models import ABIServerModel
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.database import get_db
-from app.models import ABIServerModel
-from app.api.endpoints.auth import User, get_current_user_required, require_workspace_access
-from app.api.endpoints.secrets import _encrypt, _decrypt
 
 router = APIRouter()
 

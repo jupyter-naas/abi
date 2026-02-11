@@ -54,7 +54,6 @@ wheels/
 *.rec
 *.asciinema
 *.terminal
-chat
 
 # Docker
 .docker/
@@ -80,7 +79,6 @@ storage/vectorstore/*
 # Ignore data files globally
 *.csv
 *.parquet
-*.json
 *.pdf
 *.doc
 *.docx

@@ -3,13 +3,9 @@ WebSocket API endpoints for server-side broadcasting and presence queries.
 """
 
 from fastapi import APIRouter, HTTPException
+from naas_abi.apps.nexus.apps.api.app.services.websocket import (
+    get_user_workspaces, get_workspace_presence, sio)
 from pydantic import BaseModel
-
-from app.services.websocket import (
-    sio,
-    get_workspace_presence,
-    get_user_workspaces,
-)
 
 router = APIRouter(prefix="/websocket", tags=["websocket"])
 

@@ -7,9 +7,8 @@ Maps to: docs/TEST-PROTOCOL.md Section 5.
 """
 
 import pytest
-from jose import jwt
-
 from app.core.config import settings
+from jose import jwt
 
 
 class TestJWTSecurity:

@@ -5,11 +5,10 @@ Application configuration using pydantic-settings.
 import json
 import sys
 from functools import lru_cache
+from typing import Any
 
 from pydantic import PostgresDsn, validator
-from typing import Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 # Known-insecure secret keys that must be rejected
 _INSECURE_SECRETS = frozenset({
@@ -40,6 +39,9 @@ class Settings(BaseSettings):
 
     # API
     api_prefix: str = "/api"
+    api_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:3000"
+    websocket_path: str = "/ws/socket.io"
 
     # CORS - accept comma-separated (CORS_ORIGINS_STR) or JSON array (CORS_ORIGINS)
     cors_origins_str: str = "http://localhost:3000,http://127.0.0.1:3000"
@@ -68,6 +70,8 @@ class Settings(BaseSettings):
         if self.environment == "development" or self.nexus_env == "local":
             origins.add("http://localhost:3000")
             origins.add("http://127.0.0.1:3000")
+            origins.add("http://localhost:3042")
+            origins.add("http://127.0.0.1:3042")
         return list(origins)
 
     # Database
@@ -86,6 +90,10 @@ class Settings(BaseSettings):
     rate_limit_login_attempts: int = 5  # Max login attempts per window
     rate_limit_window_seconds: int = 300  # 5-minute window
     
+    # Demo data seeding (idempotent startup check)
+    # When enabled, startup seeds demo data only if users table is empty.
+    auto_seed_demo_data: bool = True
+    
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
         # Disable rate limiting in development to avoid blocking during hot reload
@@ -96,6 +104,7 @@ class Settings(BaseSettings):
         # - Force OFF unless environment is development or nexus_env is local
         if not (self.environment == "development" or self.nexus_env == "local"):
             self.enable_ollama_autostart = False
+            self.auto_seed_demo_data = False
     
     # Security Headers
     enable_security_headers: bool = True
@@ -118,8 +127,7 @@ class Settings(BaseSettings):
     # Local AI (Ollama) autostart
     # Default OFF; enabled automatically in local development.
     enable_ollama_autostart: bool = False
-
-
+    
 
 @lru_cache
 def get_settings() -> Settings:
@@ -128,6 +136,9 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+
 
 
 def validate_settings_on_startup() -> None:

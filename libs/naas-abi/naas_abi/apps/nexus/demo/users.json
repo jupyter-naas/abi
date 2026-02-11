@@ -1,0 +1,47 @@
+[
+  {
+    "id": "user-alice",
+    "email": "alice@example.com",
+    "name": "Alice Johnson",
+    "avatar": "/avatars/AliceJohnson.png",
+    "company": "TechCorp",
+    "role": "Product Manager",
+    "bio": "Leads product strategy for the NEXUS platform. Enjoys hiking and latte art."
+  },
+  {
+    "id": "user-bob",
+    "email": "bob@example.com",
+    "name": "Bob Smith",
+    "avatar": "/avatars/BobSmith.png",
+    "company": "TechCorp",
+    "role": "Site Reliability Engineer",
+    "bio": "Keeps the lights on. Obsessed with tooling, observability, and clean runbooks."
+  },
+  {
+    "id": "user-jeremy",
+    "email": "jeremy@example.com",
+    "name": "Jeremy Davis",
+    "avatar": "/avatars/JeremyDavis.png",
+    "company": "TechCorp",
+    "role": "Platform Architect",
+    "bio": "Architects multi-LLM workflows and data flows. Coffee-first, code-second."
+  },
+  {
+    "id": "user-diana",
+    "email": "diana@example.com",
+    "name": "Diana Martinez",
+    "avatar": "/avatars/DianaMartinez.png",
+    "company": "Research Lab",
+    "role": "Principal Investigator",
+    "bio": "Runs applied AI experiments in aviation safety. Loves neat charts and tidy datasets."
+  },
+  {
+    "id": "user-eve",
+    "email": "eve@example.com",
+    "name": "Eve Thompson",
+    "avatar": "/avatars/EveThompson.png",
+    "company": "Global Consulting",
+    "role": "Director of Strategy",
+    "bio": "Advises enterprises on AI adoption. Traveler, reader, and board-game nerd."
+  }
+]

@@ -3,37 +3,36 @@ Chat API endpoints - Agent conversation interface.
 Async sessions with SQLAlchemy ORM.
 """
 
-import logging
-
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query, Depends
-from pydantic import BaseModel, Field
-from sqlalchemy import select, delete
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from app.core.database import get_db, AsyncSessionLocal
-from app.models import ConversationModel, MessageModel, AgentConfigModel
-from app.api.endpoints.auth import (
-    User, get_current_user_required, require_workspace_access,
-)
-from app.services.providers import (
-    complete_chat as complete_with_provider,
-    stream_with_ollama,
-    stream_with_ollama_tools,
-    stream_with_cloudflare,
-    stream_with_abi,
-    check_ollama_status,
-    execute_tool,
-    ProviderConfig,
-    AVAILABLE_TOOLS,
-    Message as ProviderMessage,
-)
-from app.services.model_registry import get_all_provider_names
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User, get_current_user_required, require_workspace_access)
+from naas_abi.apps.nexus.apps.api.app.core.database import (AsyncSessionLocal,
+                                                            get_db)
+from naas_abi.apps.nexus.apps.api.app.models import (AgentConfigModel,
+                                                     ConversationModel,
+                                                     MessageModel)
+from naas_abi.apps.nexus.apps.api.app.services.model_registry import \
+    get_all_provider_names
+from naas_abi.apps.nexus.apps.api.app.services.providers import AVAILABLE_TOOLS
+from naas_abi.apps.nexus.apps.api.app.services.providers import \
+    Message as ProviderMessage
+from naas_abi.apps.nexus.apps.api.app.services.providers import (
+    ProviderConfig, check_ollama_status)
+from naas_abi.apps.nexus.apps.api.app.services.providers import \
+    complete_chat as complete_with_provider
+from naas_abi.apps.nexus.apps.api.app.services.providers import (
+    execute_tool, stream_with_abi_inprocess, stream_with_cloudflare,
+    stream_with_ollama, stream_with_ollama_tools)
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -206,6 +205,7 @@ async def _resolve_provider(
     provider: ProviderConfigRequest | None, 
     has_images: bool,
     agent_id: str | None = None,
+    workspace_id: str | None = None,
 ) -> ProviderConfigRequest | None:
     """Resolve the provider, falling back to agent's configured provider, then Ollama auto-detect."""
     if provider and provider.enabled:
@@ -228,7 +228,8 @@ async def _resolve_provider(
                     
                     # **NEW: Handle ABI provider via workspace's external ABI server**
                     if agent.provider == "abi":
-                        from app.models import InferenceServerModel
+                        from naas_abi.apps.nexus.apps.api.app.models import \
+                            InferenceServerModel
                         abi_result = await db.execute(
                             select(InferenceServerModel)
                             .where(InferenceServerModel.workspace_id == workspace_id)
@@ -253,8 +254,20 @@ async def _resolve_provider(
                             )
                         else:
                             import logging
-                            logging.warning(f"No ABI server configured for workspace {workspace_id}")
-                            return None
+                            logging.info(
+                                f"No ABI server configured for workspace {workspace_id}; "
+                                f"using in-process ABI agent '{agent.model_id}'"
+                            )
+                            return ProviderConfigRequest(
+                                id=f"abi-inprocess-{agent.id}",
+                                name="ABI (In-Process)",
+                                type="abi",
+                                enabled=True,
+                                endpoint="inprocess://abi",
+                                api_key=None,
+                                account_id=None,
+                                model=agent.model_id,
+                            )
                     
                     # Map provider to secret key
                     secret_key_map = {
@@ -278,7 +291,8 @@ async def _resolve_provider(
                     secret_key = secret_key_map.get(agent.provider)
                     if secret_key:
                         # Query secret from database
-                        from app.models import SecretModel
+                        from naas_abi.apps.nexus.apps.api.app.models import \
+                            SecretModel
                         secret_result = await db.execute(
                             select(SecretModel)
                             .where(SecretModel.workspace_id == workspace_id)
@@ -288,7 +302,8 @@ async def _resolve_provider(
                         
                         if secret:
                             # Decrypt the secret value
-                            from app.api.endpoints.secrets import _decrypt
+                            from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import \
+                                _decrypt
                             api_key = _decrypt(secret.encrypted_value)
                             
                             import logging
@@ -307,6 +322,46 @@ async def _resolve_provider(
                         else:
                             import logging
                             logging.warning(f"No API key found for {agent.provider} (key: {secret_key})")
+
+                # Handle discovered (non-DB) ABI agents:
+                # if selected agent id is not in AgentConfigModel, treat the id as ABI agent name
+                # and resolve workspace ABI server to route chat to /agents/{agent_id}/stream-completion.
+                if not agent and workspace_id and agent_id:
+                    from naas_abi.apps.nexus.apps.api.app.models import \
+                        InferenceServerModel
+                    abi_result = await db.execute(
+                        select(InferenceServerModel)
+                        .where(InferenceServerModel.workspace_id == workspace_id)
+                        .where(InferenceServerModel.type == 'abi')
+                        .where(InferenceServerModel.enabled == True)
+                    )
+                    abi_server = abi_result.scalar_one_or_none()
+                    if abi_server:
+                        import logging
+                        logging.info(f"✓ Resolved discovered ABI agent '{agent_id}' via {abi_server.endpoint}")
+                        return ProviderConfigRequest(
+                            id=f"abi-{abi_server.id}",
+                            name=f"ABI ({abi_server.name})",
+                            type="abi",
+                            enabled=True,
+                            endpoint=abi_server.endpoint,
+                            api_key=abi_server.api_key,
+                            account_id=None,
+                            model=agent_id,
+                        )
+                if not agent and agent_id:
+                    import logging
+                    logging.info(f"✓ Resolved discovered in-process ABI agent '{agent_id}'")
+                    return ProviderConfigRequest(
+                        id=f"abi-inprocess-{agent_id}",
+                        name="ABI (In-Process)",
+                        type="abi",
+                        enabled=True,
+                        endpoint="inprocess://abi",
+                        api_key=None,
+                        account_id=None,
+                        model=agent_id,
+                    )
             except Exception as e:
                 import logging
                 logging.warning(f"Failed to resolve agent provider: {e}")
@@ -566,7 +621,7 @@ async def complete_chat(
     await db.flush()
 
     has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
-    provider = await _resolve_provider(request.provider, has_images, request.agent)
+    provider = await _resolve_provider(request.provider, has_images, request.agent, request.workspace_id)
     provider_used = None
 
     if provider:
@@ -644,7 +699,7 @@ async def stream_chat(
     logger.info(f"🎯 Stream request: agent={request.agent}, provider={'None' if not request.provider else request.provider.type}")
     
     has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
-    provider = await _resolve_provider(request.provider, has_images, request.agent)
+    provider = await _resolve_provider(request.provider, has_images, request.agent, request.workspace_id)
     
     logger.info(f"✓ Resolved provider: {provider.type if provider else 'None'}, model={provider.model if provider else 'N/A'}")
 
@@ -790,8 +845,14 @@ async def stream_chat(
                         last_flush = loop.time()
                         buffered_chars = 0
             elif provider.type == "abi":
-                # Custom ABI streaming handler
-                async for chunk in stream_with_abi(provider_messages, provider_config, system_prompt):
+                # ABI is integrated in-process; stream directly from loaded agent runtime.
+                inprocess_emitted = False
+                async for chunk in stream_with_abi_inprocess(
+                    provider_messages,
+                    provider_config,
+                    thread_id=conversation_id,
+                ):
+                    inprocess_emitted = True
                     full_response += chunk
                     buffered_chars += len(chunk)
                     escaped = chunk.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
@@ -808,8 +869,11 @@ async def stream_chat(
                             logger.warning("Incremental flush failed", exc_info=True)
                         last_flush = loop.time()
                         buffered_chars = 0
+                if not inprocess_emitted:
+                    raise RuntimeError("In-process ABI stream returned no content")
             elif provider.type in openai_compatible:
-                from app.services.providers import stream_with_openai_compatible
+                from naas_abi.apps.nexus.apps.api.app.services.providers import \
+                    stream_with_openai_compatible
                 async for chunk in stream_with_openai_compatible(provider_messages, provider_config, system_prompt):
                     full_response += chunk
                     buffered_chars += len(chunk)

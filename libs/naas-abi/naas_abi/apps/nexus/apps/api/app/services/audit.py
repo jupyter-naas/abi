@@ -8,9 +8,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import Request
+from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from sqlalchemy import text
-
-from app.core.database import async_engine
 
 
 async def log_audit_event(
