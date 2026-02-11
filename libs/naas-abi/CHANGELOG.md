@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-02-11)
+
+### Features
+
+- Migrate assets from root to nexus app
+  ([`acea3c8`](https://github.com/jupyter-naas/abi/commit/acea3c88affcbeaf636b953ed04cdfb8e450117d))
+
+
 ## v1.2.0 (2026-02-11)
 
 ### Features
