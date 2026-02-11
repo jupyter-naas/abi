@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+libs/naas-abi/naas_abi/apps/nexus/.env
+libs/naas-abi/naas_abi/apps/nexus/apps/api/.env
 
 # Virtual Environment
 .venv/
