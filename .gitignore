@@ -47,6 +47,13 @@ wheels/
 *.swo
 .DS_Store
 
+# Terminal recordings
+*.cast
+*.rec
+*.asciinema
+*.terminal
+chat
+
 # Docker
 .docker/
 

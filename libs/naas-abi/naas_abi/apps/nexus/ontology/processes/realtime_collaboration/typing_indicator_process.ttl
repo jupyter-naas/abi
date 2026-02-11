@@ -1,0 +1,151 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Typing Indicator Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:typing_indicator_process a owl:Ontology ;
+    dc:title "Typing Indicator Process"@en ;
+    dc:description "A process that broadcasts real-time typing status indicators to all users in a workspace, showing who is currently typing in which conversation."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:TypingIndicatorProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Typing Indicator Process"@en ;
+    skos:definition "A process that broadcasts real-time typing status indicators to all users in a workspace, showing who is currently typing in which conversation."@en ;
+    rdfs:comment "Implements: apps/api/app/services/websocket.py:168-207 typing_start, typing_stop handlers" ;
+    skos:example "1. Get user_id from session\n2. On typing_start: broadcast user_typing {user_id, conversation_id, typing: true}\n3. On typing_stop: broadcast user_typing {user_id, conversation_id, typing: false}\n4. Broadcast to workspace:{workspace_id} room, excluding sender"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:TypingUser a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "TypingUser"@en ;
+    skos:definition "User currently composing a message"@en .
+
+nexus:WorkspaceParticipants a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WorkspaceParticipants"@en ;
+    skos:definition "Other users in the workspace who see the indicator"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:TypingEvents a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "TypingEvents"@en ;
+    skos:definition "Socket.IO events: typing_start, typing_stop"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:TypingLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "TypingLatency"@en ;
+    skos:definition "Less than 1ms for event broadcast"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:TypingEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "TypingEvent"@en ;
+    skos:definition "Broadcast: {user_id, conversation_id, typing: true/false}"@en .
+
+nexus:TypingData a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "TypingData"@en ;
+    skos:definition "Input: {workspace_id, conversation_id}"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:SenderExclusion a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "SenderExclusion"@en ;
+    skos:definition "Quality: typing indicator not sent back to the typing user (skip_sid)"@en .
+
+nexus:ConversationScoping a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ConversationScoping"@en ;
+    skos:definition "Quality: typing is scoped to specific conversation within workspace"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:TypingNotifierRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "TypingNotifierRole"@en ;
+    skos:definition "Role realized when system broadcasts typing status"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:SkipSenderDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "SkipSenderDisposition"@en ;
+    skos:definition "Disposition to exclude sender from receiving their own typing event"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:typing_indicator_process_has_typinguser a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:TypingIndicatorProcess ;
+    rdfs:range nexus:TypingUser ;
+    rdfs:label "TypingIndicatorProcess has participant TypingUser"@en .
+
+nexus:typing_indicator_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:TypingIndicatorProcess ;
+    rdfs:range nexus:TypingEvents ;
+    rdfs:label "TypingIndicatorProcess occurs in TypingEvents"@en .
+
+nexus:typing_indicator_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:TypingIndicatorProcess ;
+    rdfs:range nexus:TypingLatency ;
+    rdfs:label "TypingIndicatorProcess occupies TypingLatency"@en .
+
+nexus:typing_indicator_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:TypingIndicatorProcess ;
+    rdfs:range nexus:TypingNotifierRole ;
+    rdfs:label "TypingIndicatorProcess realizes TypingNotifierRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:conversationId a owl:DatatypeProperty ;
+    rdfs:label "conversationId"@en ;
+    rdfs:range xsd:string .
+
+nexus:isTyping a owl:DatatypeProperty ;
+    rdfs:label "isTyping"@en ;
+    rdfs:range xsd:boolean .

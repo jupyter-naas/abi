@@ -1,0 +1,141 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Ontology Relationship Creation Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:ontology_relationship_creation_process a owl:Ontology ;
+    dc:title "Ontology Relationship Creation Process"@en ;
+    dc:description "A process that creates a custom ontology relationship (owl:ObjectProperty) with optional base_property IRI reference, stored in the in-memory ontology items list."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:OntologyRelationshipCreationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Ontology Relationship Creation Process"@en ;
+    skos:definition "A process that creates a custom ontology relationship (owl:ObjectProperty) with optional base_property IRI reference, stored in the in-memory ontology items list."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/ontology.py:152-163 create_relationship()" ;
+    skos:example "1. Generate relationship ID: rel-{timestamp_ms}\n2. Create OntologyItem with type=relationship\n3. Set description and base_property\n4. Append to in-memory list\n5. Return OntologyItem"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:OntologyDesigner a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "OntologyDesigner"@en ;
+    skos:definition "User defining custom ontology relationships"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:OntologyRelationshipEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OntologyRelationshipEndpoint"@en ;
+    skos:definition "API endpoint POST /api/ontology/relationship"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:RelationshipCreationDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "RelationshipCreationDuration"@en ;
+    skos:definition "Less than 1ms (in-memory)"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:RelationshipCreate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "RelationshipCreate"@en ;
+    skos:definition "Pydantic model: name (1-200 chars), description, base_property IRI"@en .
+
+nexus:OntologyItem a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OntologyItem"@en ;
+    skos:definition "Response: id (rel-{timestamp}), name, type=relationship"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:PropertyDirectionality a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "PropertyDirectionality"@en ;
+    skos:definition "Quality: relationships are unidirectional (no inverse auto-creation)"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:PropertyDesignerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "PropertyDesignerRole"@en ;
+    skos:definition "Role realized when user defines ontology relationships"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:SimpleStorageDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "SimpleStorageDisposition"@en ;
+    skos:definition "Disposition to store as simple list item without RDF graph backing"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:ontology_relationship_creation_process_has_ontologydesigner a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:OntologyRelationshipCreationProcess ;
+    rdfs:range nexus:OntologyDesigner ;
+    rdfs:label "OntologyRelationshipCreationProcess has participant OntologyDesigner"@en .
+
+nexus:ontology_relationship_creation_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:OntologyRelationshipCreationProcess ;
+    rdfs:range nexus:OntologyRelationshipEndpoint ;
+    rdfs:label "OntologyRelationshipCreationProcess occurs in OntologyRelationshipEndpoint"@en .
+
+nexus:ontology_relationship_creation_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:OntologyRelationshipCreationProcess ;
+    rdfs:range nexus:RelationshipCreationDuration ;
+    rdfs:label "OntologyRelationshipCreationProcess occupies RelationshipCreationDuration"@en .
+
+nexus:ontology_relationship_creation_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:OntologyRelationshipCreationProcess ;
+    rdfs:range nexus:PropertyDesignerRole ;
+    rdfs:label "OntologyRelationshipCreationProcess realizes PropertyDesignerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:propertyName a owl:DatatypeProperty ;
+    rdfs:label "propertyName"@en ;
+    rdfs:range xsd:string .
+
+nexus:basePropertyIRI a owl:DatatypeProperty ;
+    rdfs:label "basePropertyIRI"@en ;
+    rdfs:range xsd:string .

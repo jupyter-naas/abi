@@ -1,0 +1,49 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+# ======================================================================
+# Provider Routing Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:provider_routing_process_ontology a owl:Ontology ;
+    dc:title "Provider Routing Process"@en ;
+    dc:description "A process that resolves which LLM provider to use based on agent configuration, workspace secrets, and model availability."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:ProviderRoutingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Provider Routing Process"@en ;
+    skos:definition "A process that resolves which LLM provider to use based on agent configuration, workspace secrets, and model availability."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/chat.py lines 202-319" ;
+    skos:example "Agent selected → System checks agent.provider → Loads API key from secrets → Selects model based on capabilities (vision support)"@en .
+
+# ======================================================================
+# WHO, WHERE, WHEN, HOW WE KNOW, HOW IT IS, WHY
+# TODO: Add specific entities, qualities, roles, and relationships
+# ======================================================================
+
+# Use this template to add process-specific BFO entities:
+# - WHO (BFO_0000040): Material entities that participate
+# - WHERE (BFO_0000029): Sites where process occurs
+# - WHEN (BFO_0000008): Temporal regions
+# - HOW WE KNOW (BFO_0000031): Information entities
+# - HOW IT IS (BFO_0000019): Qualities
+# - WHY (BFO_0000023/BFO_0000016): Roles and dispositions
+
+# Example instance (replace with actual data):
+nexus:example_provider_routing_process_instance a nexus:ProviderRoutingProcess ;
+    dc:created "2026-02-09T15:00:00Z"^^xsd:dateTime ;
+    rdfs:label "Example Provider Routing Process Instance"@en .

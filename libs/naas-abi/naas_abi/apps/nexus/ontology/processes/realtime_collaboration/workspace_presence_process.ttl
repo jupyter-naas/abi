@@ -1,0 +1,161 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Workspace Presence Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:workspace_presence_process a owl:Ontology ;
+    dc:title "Workspace Presence Process"@en ;
+    dc:description "A process that tracks which users are currently active in each workspace using Socket.IO rooms and in-memory presence dictionaries, broadcasting join/leave events."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:WorkspacePresenceProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Workspace Presence Process"@en ;
+    skos:definition "A process that tracks which users are currently active in each workspace using Socket.IO rooms and in-memory presence dictionaries, broadcasting join/leave events."@en ;
+    rdfs:comment "Implements: apps/api/app/services/websocket.py:92-164 join_workspace, leave_workspace, disconnect handlers" ;
+    skos:example "1. Join: enter Socket.IO room workspace:{id}, add to presence dicts, broadcast user_joined\n2. Leave: leave room, remove from presence dicts, broadcast user_left\n3. Disconnect: remove from all workspace rooms and presence dicts, broadcast user_left for each\n4. Return current presence list for joined workspace"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:PresenceTracker a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "PresenceTracker"@en ;
+    skos:definition "In-memory presence tracking system"@en .
+
+nexus:WorkspaceRoom a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WorkspaceRoom"@en ;
+    skos:definition "Socket.IO room grouping users in same workspace"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:PresenceEndpoints a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "PresenceEndpoints"@en ;
+    skos:definition "Socket.IO events: join_workspace, leave_workspace, disconnect"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:PresenceUpdateDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "PresenceUpdateDuration"@en ;
+    skos:definition "Less than 1ms (in-memory set operations)"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:WorkspacePresence a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "WorkspacePresence"@en ;
+    skos:definition "Dict[str, Set[str]]: workspace_id -> set of user_ids"@en .
+
+nexus:UserWorkspaces a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "UserWorkspaces"@en ;
+    skos:definition "Dict[str, Set[str]]: user_id -> set of workspace_ids"@en .
+
+nexus:JoinEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "JoinEvent"@en ;
+    skos:definition "Broadcast: {user_id, workspace_id, timestamp}"@en .
+
+nexus:LeaveEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "LeaveEvent"@en ;
+    skos:definition "Broadcast: {user_id, workspace_id, timestamp}"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:RealTimeAccuracy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "RealTimeAccuracy"@en ;
+    skos:definition "Quality: presence updates immediately on join/leave/disconnect"@en .
+
+nexus:DisconnectCleanup a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "DisconnectCleanup"@en ;
+    skos:definition "Quality: user removed from all workspaces on disconnect"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:PresenceManagerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "PresenceManagerRole"@en ;
+    skos:definition "Role realized when system tracks active users per workspace"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:BroadcastDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "BroadcastDisposition"@en ;
+    skos:definition "Disposition to broadcast user_joined/user_left events to room"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:workspace_presence_process_has_presencetracker a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:WorkspacePresenceProcess ;
+    rdfs:range nexus:PresenceTracker ;
+    rdfs:label "WorkspacePresenceProcess has participant PresenceTracker"@en .
+
+nexus:workspace_presence_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:WorkspacePresenceProcess ;
+    rdfs:range nexus:PresenceEndpoints ;
+    rdfs:label "WorkspacePresenceProcess occurs in PresenceEndpoints"@en .
+
+nexus:workspace_presence_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:WorkspacePresenceProcess ;
+    rdfs:range nexus:PresenceUpdateDuration ;
+    rdfs:label "WorkspacePresenceProcess occupies PresenceUpdateDuration"@en .
+
+nexus:workspace_presence_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:WorkspacePresenceProcess ;
+    rdfs:range nexus:PresenceManagerRole ;
+    rdfs:label "WorkspacePresenceProcess realizes PresenceManagerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:activeUserCount a owl:DatatypeProperty ;
+    rdfs:label "activeUserCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:workspaceId a owl:DatatypeProperty ;
+    rdfs:label "workspaceId"@en ;
+    rdfs:range xsd:string .
