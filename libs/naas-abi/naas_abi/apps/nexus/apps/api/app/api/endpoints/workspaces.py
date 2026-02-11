@@ -3,24 +3,30 @@ Workspaces API endpoints.
 All endpoints require authentication. Workspace-specific endpoints require membership.
 """
 
-from datetime import datetime, timezone
-from typing import Any
-from uuid import uuid4
 import os
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User, get_current_user_required, get_workspace_role,
+    require_workspace_access)
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import _encrypt
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.models import (AgentConfigModel,
+                                                     ConversationModel,
+                                                     GraphEdgeModel,
+                                                     GraphNodeModel,
+                                                     OrganizationModel,
+                                                     UserModel,
+                                                     WorkspaceMemberModel,
+                                                     WorkspaceModel)
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.database import get_db
-from app.models import WorkspaceModel, WorkspaceMemberModel, ConversationModel, GraphNodeModel, GraphEdgeModel, AgentConfigModel, UserModel, OrganizationModel
-from app.api.endpoints.auth import (
-    User, get_current_user_required, require_workspace_access, get_workspace_role,
-)
-from app.api.endpoints.secrets import _encrypt
 
 router = APIRouter()
 
@@ -511,8 +517,8 @@ async def list_inference_servers(
     db: AsyncSession = Depends(get_db),
 ) -> list[InferenceServer]:
     """List all inference servers in a workspace."""
-    from app.models import InferenceServerModel
-    
+    from naas_abi.apps.nexus.apps.api.app.models import InferenceServerModel
+
     # Check access
     await require_workspace_access(current_user.id, workspace_id)
     
@@ -551,8 +557,8 @@ async def create_inference_server(
     db: AsyncSession = Depends(get_db),
 ) -> InferenceServer:
     """Create a new inference server."""
-    from app.models import InferenceServerModel
-    
+    from naas_abi.apps.nexus.apps.api.app.models import InferenceServerModel
+
     # Check access (admin only)
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ['admin', 'owner']:
@@ -602,8 +608,8 @@ async def update_inference_server(
     db: AsyncSession = Depends(get_db),
 ) -> InferenceServer:
     """Update an inference server."""
-    from app.models import InferenceServerModel
-    
+    from naas_abi.apps.nexus.apps.api.app.models import InferenceServerModel
+
     # Check access (admin only)
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ['admin', 'owner']:
@@ -665,8 +671,8 @@ async def delete_inference_server(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Delete an inference server."""
-    from app.models import InferenceServerModel
-    
+    from naas_abi.apps.nexus.apps.api.app.models import InferenceServerModel
+
     # Check access (admin only)
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ['admin', 'owner']:

@@ -8,6 +8,7 @@ requires-python = ">=3.10,<4"
 dependencies = [
     "naas-abi-core[dagster]>=1.4.0",
     "naas-abi-marketplace>=1.3.3",
+    "nexus-api",
     "thefuzz>=0.22.1",
 ]
 license = { text = "MIT License" }
@@ -19,6 +20,8 @@ Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi"
 [tool.uv.sources]
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 naas-abi-marketplace = { path = "../naas-abi-marketplace", editable = true }
+nexus-api = { path = "./naas_abi/apps/nexus/apps/api", editable = true }
+
 
 [tool.semantic_release]
 commit_parser = "conventional-monorepo"

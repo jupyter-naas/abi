@@ -13,6 +13,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/stores/auth';
+import { getApiUrl, getWebsocketPath } from '@/lib/config';
 
 interface PresenceUser {
   user_id: string;
@@ -35,6 +36,7 @@ const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<string[]>([]);
@@ -42,14 +44,18 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize socket connection
   useEffect(() => {
-    if (!user) return;
+    if (!user || !token) {
+      setSocket(null);
+      setIsConnected(false);
+      return;
+    }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    
-    const token = typeof window !== 'undefined' ? useAuthStore.getState().token : undefined;
+    const apiUrl = getApiUrl();
+    const websocketPath = getWebsocketPath();
+
     const socketInstance = io(apiUrl, {
-      path: '/ws/socket.io',
-      auth: token ? { authorization: `Bearer ${token}` } : {},
+      path: websocketPath,
+      auth: { authorization: `Bearer ${token}` },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
@@ -66,10 +72,26 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       setIsConnected(false);
     });
 
-    socketInstance.on('connect_error', (error) => {
-      // Silently handle WebSocket auth errors - these are expected when not logged in
-      if (error.message.includes('403') || error.message.includes('websocket error')) {
-        return; // Don't spam console with expected auth failures
+    socketInstance.on('connect_error', (error: Error & { data?: { status?: number } }) => {
+      const message = error.message.toLowerCase();
+      const status = error.data?.status;
+      const isAuthError =
+        status === 401 ||
+        status === 403 ||
+        message.includes('401') ||
+        message.includes('403') ||
+        message.includes('unauthorized') ||
+        message.includes('forbidden');
+
+      // Stop retry loop on auth failures; reconnect will happen when token changes.
+      if (isAuthError) {
+        socketInstance.io.opts.reconnection = false;
+        socketInstance.disconnect();
+        useAuthStore.getState().logout();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        return;
       }
       console.error('WebSocket connection error:', error);
     });
@@ -118,7 +140,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     return () => {
       socketInstance.disconnect();
     };
-  }, [user]);
+  }, [user, token]);
 
   const joinWorkspace = useCallback((workspaceId: string) => {
     if (!socket) return;

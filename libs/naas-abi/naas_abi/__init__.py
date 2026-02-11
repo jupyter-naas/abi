@@ -1,3 +1,4 @@
+from fastapi import APIRouter, FastAPI
 from naas_abi_core.module.Module import (BaseModule, ModuleConfiguration,
                                          ModuleDependencies)
 from naas_abi_core.services.object_storage.ObjectStorageService import \
@@ -5,9 +6,52 @@ from naas_abi_core.services.object_storage.ObjectStorageService import \
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import \
     TripleStoreService
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class NexusConfig(BaseModel):
+    """Nexus runtime settings wired into app.core.config.Settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    app_name: str = "NEXUS API"
+    debug: bool = False
+    environment: str = "development"
+    nexus_env: str = "local"
+
+    api_prefix: str = "/api"
+    api_url: str = "http://localhost:9879"
+    frontend_url: str = "http://localhost:3042"
+    cors_origins_str: str = "http://localhost:3042,http://127.0.0.1:3042"
+    cors_origins: str | None = None
+    websocket_path: str = "/ws/socket.io"
+
+    database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
+    redis_url: str = "redis://localhost:6379/0"
+
+    secret_key: str = "change-me-in-production"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 30
+
+    rate_limit_enabled: bool = True
+    rate_limit_login_attempts: int = 5
+    rate_limit_window_seconds: int = 300
+
+    enable_security_headers: bool = True
+    content_security_policy: str | None = None
+
+    abi_api_url: str = "http://localhost:9879"
+    abi_api_key: str | None = None
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
+    cloudflare_api_token: str | None = None
+    cloudflare_account_id: str | None = None
+    enable_ollama_autostart: bool = False
+    auto_seed_demo_data: bool = True
 
 
 class ABIModule(BaseModule):
+
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
@@ -82,11 +126,21 @@ class ABIModule(BaseModule):
             datastore_path: "abi"
             workspace_id: "{{ secret.WORKSPACE_ID }}"
             storage_name: "{{ secret.STORAGE_NAME }}"
+            nexus_config:
+                # All settings accepted by app.core.config.Settings
+                database_url: "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
+                redis_url: "redis://localhost:6379/0"
+                api_url: "http://localhost:9879"
+                frontend_url: "http://localhost:3042"
+                websocket_path: "/ws/socket.io"
         """
 
         datastore_path: str = "abi"
         workspace_id: str | None = None
         storage_name: str | None = None
+
+        # Canonical nexus runtime settings (passed to app.core.config.Settings).
+        nexus_config: NexusConfig = Field(default_factory=NexusConfig)
 
     # def on_initialized(self):
     #     if (
@@ -107,3 +161,22 @@ class ABIModule(BaseModule):
             lambda triple: print(f"Triple received: {triple.decode('utf-8')}"),
             OntologyEvent.INSERT
         )
+        
+    def api(self, app: FastAPI) -> None:
+        # Initialize Nexus settings
+        
+        from naas_abi.apps.nexus.apps.api.app.core import \
+            config as nexus_config
+
+        # We override settings with module config from `nexus_config`.
+        settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
+
+        nexus_config.settings = nexus_config.Settings(**settings_kwargs)
+
+        # Expose ABI object storage to Nexus routes.
+        app.state.object_storage = self.engine.services.object_storage
+        # Expose ABI triple store to Nexus graph routes.
+        app.state.triple_store = self.engine.services.triple_store
+        
+        from naas_abi.apps.nexus.apps.api.app.main import create_app
+        create_app(app)

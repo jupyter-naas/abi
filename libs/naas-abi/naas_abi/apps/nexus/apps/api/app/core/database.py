@@ -7,11 +7,11 @@ Uses asyncpg for production-grade performance.
 
 from typing import AsyncGenerator
 
-from sqlalchemy import text, event
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from sqlalchemy import event, text
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
 from sqlalchemy.orm import DeclarativeBase
-
-from app.core.config import settings
 
 # Known tables for safe row count queries
 KNOWN_TABLES = frozenset({
@@ -31,6 +31,8 @@ class Base(DeclarativeBase):
 
 
 # ============ Async Engine & Session ============
+
+print(f"Database URL: {settings.database_url}")
 
 async_engine = create_async_engine(
     settings.database_url,
@@ -65,9 +67,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     """Initialize the database schema (async). Runs all migrations on every startup."""
-    from pathlib import Path
     import asyncio
-    
+    from pathlib import Path
+
     # Check database connection before attempting migrations
     print("Checking database connection...")
     max_retries = 5

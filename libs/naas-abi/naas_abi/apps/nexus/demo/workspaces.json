@@ -1,0 +1,72 @@
+[
+  {
+    "id": "workspace-platform",
+    "name": "Platform",
+    "slug": "platform",
+    "owner_id": "user-alice",
+    "description": "Main platform workspace - coordination, AI agents, and knowledge graphs",
+    
+    "logo_emoji": "🔮",
+    "primary_color": "#22c55e",
+    "accent_color": "#3b82f6",
+    "background_color": "#0a0a0a",
+    "sidebar_color": "#111111",
+    "font_family": "Inter, system-ui, sans-serif"
+  },
+  {
+    "id": "workspace-techcorp",
+    "name": "TechCorp",
+    "slug": "techcorp",
+    "owner_id": "user-alice",
+    "description": "TechCorp product workspace - data & AI platform",
+    
+    "logo_emoji": "🏢",
+    "primary_color": "#3b82f6",
+    "accent_color": "#0ea5e9",
+    "background_color": "#0b0f19",
+    "sidebar_color": "#0f172a",
+    "font_family": "Inter, system-ui, sans-serif"
+  },
+  {
+    "id": "workspace-research",
+    "name": "Research Lab",
+    "slug": "research",
+    "owner_id": "user-diana",
+    "description": "Research Lab workspace - ontology and applied research",
+    
+    "logo_emoji": "🔬",
+    "primary_color": "#8b5cf6",
+    "accent_color": "#a78bfa",
+    "background_color": "#0a0a0a",
+    "sidebar_color": "#111111",
+    "font_family": "Inter, system-ui, sans-serif"
+  },
+  {
+    "id": "workspace-innovate",
+    "name": "Innovate Solutions",
+    "slug": "innovate",
+    "owner_id": "user-diana",
+    "description": "Innovate project workspace - ontology-driven knowledge engineering",
+    
+    "logo_emoji": "💡",
+    "primary_color": "#a855f7",
+    "accent_color": "#ec4899",
+    "background_color": "#0a0a0a",
+    "sidebar_color": "#111111",
+    "font_family": "Inter, system-ui, sans-serif"
+  },
+  {
+    "id": "workspace-consulting",
+    "name": "Global Consulting",
+    "slug": "consulting",
+    "owner_id": "user-eve",
+    "description": "Consulting workspace - advisory and analytics services",
+    
+    "logo_emoji": "🏛️",
+    "primary_color": "#f97316",
+    "accent_color": "#fb923c",
+    "background_color": "#0a0a0a",
+    "sidebar_color": "#111111",
+    "font_family": "Inter, system-ui, sans-serif"
+  }
+]

@@ -3,8 +3,14 @@ Main API router that aggregates all endpoint routers.
 """
 
 from fastapi import APIRouter
-
-from app.api.endpoints import auth, chat, search, ontology, graph, agents, files, workspaces, secrets, websocket, providers, abi, abi_sync, organizations
+from naas_abi.apps.nexus.apps.api.app.api.endpoints import (abi, abi_sync,
+                                                            agents, auth, chat,
+                                                            files, graph,
+                                                            ontology,
+                                                            organizations,
+                                                            providers, search,
+                                                            secrets, websocket,
+                                                            workspaces)
 
 api_router = APIRouter()
 
