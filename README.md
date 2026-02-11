@@ -1,5 +1,5 @@
 <div align="center">
-<img src="assets/abi-logo-rounded.png" alt="ABI Logo" width="128" height="128">
+<img src="libs/naas-abi/naas_abi/apps/nexus/apps/web/public/abi-logo-rounded.png" alt="ABI Logo" width="128" height="128">
 
 # ABI
 *Agentic Brain Infrastructure*
@@ -319,18 +319,11 @@ Moreover, this project is built with international standards and regulatory fram
 - **Cloud**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral, Perplexity
 - **Local**: Privacy-focused Qwen, DeepSeek, Gemma (via Ollama)
 
-<div align="left">
-<img src="assets/llm-banner.png" alt="Supported AI Models" width="400">
-
-
 ### 🏪 **Marketplace**
 
 - **Domain Expert Agents**: 20+ specialized agents (Software Engineer, Content Creator, Data Engineer, Accountant, Project Manager, etc.)
 - **Applications Module**: GitHub, LinkedIn, Google Search, PostgreSQL, ArXiv, Naas, Git, PowerPoint, and more
 - **Modular Architecture**: Enable/disable any module via `config.yaml`
-
-<div align="left">
-<img src="assets/marketplace-banner.png" alt="Complete Marketplace Ecosystem" width="800">
 
 ### 🧠 **Knowledge Management**
 
@@ -340,18 +333,12 @@ Moreover, this project is built with international standards and regulatory fram
 - **Object Storage**: File storage and retrieval with MinIO compatibility
 - **Memory**: Persistent context and conversation history storage
 
-<div align="left">
-<img src="assets/knowledge-management-banner-v2.png" alt="Knowledge Management & Storage Technologies" width="400">
-
 ### ⚙️ **Automation & Orchestration**
 - **Integrations**: Seamless connectivity with external APIs and data export capabilities
 - **Workflows**: End-to-end automation of complex business processes with intelligent task orchestration
 - **Pipelines**: Data processing and semantic transformation
 - **Event-Driven**: Real-time reactivity with automatic triggers based on knowledge graph updates
 - **Cache System**: Intelligent caching layer to optimize API usage and manage rate limits efficiently
-
-<div align="left">
-<img src="assets/automation-orchestration-banner.png" alt="Automation & Orchestration Technologies" width="400">
 
 ### 🌐 **Multiple Interfaces**
 - **Terminal**: Interactive chat with any agent
