@@ -1,7 +1,7 @@
 [project]
-name = "src"
+name = "abi"
 version = "0.1.0"
-description = "AI system"
+description = "Agentic Brain Infrastructure - AI Operating System"
 authors = [{ name = "AI Team", email = "aiteam@company.com" }]
 requires-python = ">=3.10,<4"
 readme = "README.md"
@@ -105,7 +105,6 @@ dependencies = [
 
 [project.scripts]
 abi = "naas_abi_cli.cli:main"
-#abi = "src.cli:main"
 api = "naas_abi_core.apps.api.api:api"
 mcp-server = "naas_abi_core.apps.mcp_server:run"
 
@@ -137,7 +136,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = []
 
 [tool.pytest.ini_options]
 log_cli = true
