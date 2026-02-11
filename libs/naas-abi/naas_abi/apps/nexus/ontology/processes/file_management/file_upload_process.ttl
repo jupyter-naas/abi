@@ -1,0 +1,175 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# File Upload Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:file_upload_process a owl:Ontology ;
+    dc:title "File Upload Process"@en ;
+    dc:description "A process that handles multipart file uploads (max 50MB) to either local filesystem (LOCAL_STORAGE_PATH) or S3-compatible storage (MinIO, Cloudflare R2, AWS S3) based on STORAGE_TYPE configuration."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:FileUploadProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "File Upload Process"@en ;
+    skos:definition "A process that handles multipart file uploads (max 50MB) to either local filesystem (LOCAL_STORAGE_PATH) or S3-compatible storage (MinIO, Cloudflare R2, AWS S3) based on STORAGE_TYPE configuration."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/files.py:410-472 upload_file()" ;
+    skos:example "1. Construct full path: {path}/{filename}\n2. Sanitize path (prevent directory traversal)\n3. Read file content asynchronously from multipart\n4. Check size limit: reject if > 50MB (HTTP 413)\n5. If STORAGE_TYPE=local: write to LOCAL_STORAGE_PATH/{clean_path}\n6. If STORAGE_TYPE=s3: s3.put_object(Bucket, Key, Body, ContentType)\n7. Get file stats (size, modified)\n8. Return FileInfo response"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:UploadHandler a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "UploadHandler"@en ;
+    skos:definition "FastAPI multipart parser processing file upload"@en .
+
+nexus:StorageBackend a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "StorageBackend"@en ;
+    skos:definition "Local filesystem or S3-compatible object storage"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:FileUploadEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "FileUploadEndpoint"@en ;
+    skos:definition "API endpoint POST /api/files/upload"@en .
+
+nexus:LocalStorage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "LocalStorage"@en ;
+    skos:definition "Local filesystem at LOCAL_STORAGE_PATH (/tmp/nexus-files default)"@en .
+
+nexus:S3Bucket a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "S3Bucket"@en ;
+    skos:definition "S3-compatible bucket configured via S3_BUCKET, S3_ENDPOINT env vars"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:UploadDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "UploadDuration"@en ;
+    skos:definition "50-5000ms: 50ms for small local files, up to 5s for large S3 uploads"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:UploadFile a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "UploadFile"@en ;
+    skos:definition "FastAPI UploadFile: filename, content_type, file bytes"@en .
+
+nexus:FileInfo a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "FileInfo"@en ;
+    skos:definition "Response: name, path, type=file, size (bytes), modified (datetime), content_type"@en .
+
+nexus:PathSanitization a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "PathSanitization"@en ;
+    skos:definition "Validated path preventing directory traversal attacks"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:MaxFileSize a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "MaxFileSize"@en ;
+    skos:definition "Quality: 50MB upload limit enforced before storage"@en .
+
+nexus:PathSafety a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "PathSafety"@en ;
+    skos:definition "Quality: path sanitization prevents ../ directory traversal"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:FileReceiverRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "FileReceiverRole"@en ;
+    skos:definition "Role realized when system accepts and stores uploaded files"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:S3FallbackDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "S3FallbackDisposition"@en ;
+    skos:definition "Disposition to use S3 when STORAGE_TYPE=s3, local otherwise"@en .
+
+nexus:ContentTypePreservation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "ContentTypePreservation"@en ;
+    skos:definition "Disposition to preserve original Content-Type in storage"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:file_upload_process_has_uploadhandler a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:FileUploadProcess ;
+    rdfs:range nexus:UploadHandler ;
+    rdfs:label "FileUploadProcess has participant UploadHandler"@en .
+
+nexus:file_upload_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:FileUploadProcess ;
+    rdfs:range nexus:FileUploadEndpoint ;
+    rdfs:label "FileUploadProcess occurs in FileUploadEndpoint"@en .
+
+nexus:file_upload_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:FileUploadProcess ;
+    rdfs:range nexus:UploadDuration ;
+    rdfs:label "FileUploadProcess occupies UploadDuration"@en .
+
+nexus:file_upload_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:FileUploadProcess ;
+    rdfs:range nexus:FileReceiverRole ;
+    rdfs:label "FileUploadProcess realizes FileReceiverRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:fileSize a owl:DatatypeProperty ;
+    rdfs:label "fileSize"@en ;
+    rdfs:range xsd:integer .
+
+nexus:contentType a owl:DatatypeProperty ;
+    rdfs:label "contentType"@en ;
+    rdfs:range xsd:string .
+
+nexus:storagePath a owl:DatatypeProperty ;
+    rdfs:label "storagePath"@en ;
+    rdfs:range xsd:string .

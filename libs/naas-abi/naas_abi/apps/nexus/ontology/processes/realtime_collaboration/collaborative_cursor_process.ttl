@@ -1,0 +1,155 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Collaborative Cursor Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:collaborative_cursor_process a owl:Ontology ;
+    dc:title "Collaborative Cursor Process"@en ;
+    dc:description "A process that broadcasts cursor position updates for collaborative editing, showing where each user's cursor is positioned in shared documents."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:CollaborativeCursorProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Collaborative Cursor Process"@en ;
+    skos:definition "A process that broadcasts cursor position updates for collaborative editing, showing where each user's cursor is positioned in shared documents."@en ;
+    rdfs:comment "Implements: apps/api/app/services/websocket.py:230-249 cursor_update handler" ;
+    skos:example "1. Get user_id from session\n2. Receive cursor_update with workspace_id, document_id, position\n3. Broadcast to workspace:{workspace_id} room, excluding sender\n4. Include user_id, document_id, position in event"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:CursorOwner a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "CursorOwner"@en ;
+    skos:definition "User whose cursor position is being tracked"@en .
+
+nexus:Collaborators a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Collaborators"@en ;
+    skos:definition "Other users viewing the same document"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:CursorEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "CursorEvent"@en ;
+    skos:definition "Socket.IO event: cursor_update"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:CursorLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "CursorLatency"@en ;
+    skos:definition "Less than 1ms for position broadcast"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:CursorUpdate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "CursorUpdate"@en ;
+    skos:definition "Broadcast: {user_id, document_id, position (dict)}"@en .
+
+nexus:Position a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Position"@en ;
+    skos:definition "Cursor coordinates: line, column, or x, y depending on editor"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:SenderExclusion a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "SenderExclusion"@en ;
+    skos:definition "Quality: cursor position not sent back to cursor owner (skip_sid)"@en .
+
+nexus:DocumentScoping a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "DocumentScoping"@en ;
+    skos:definition "Quality: cursor updates scoped to specific document_id"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:CursorBroadcasterRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "CursorBroadcasterRole"@en ;
+    skos:definition "Role realized when system shares cursor positions"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:PositionTrackingDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "PositionTrackingDisposition"@en ;
+    skos:definition "Disposition to broadcast cursor coordinates in real-time"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:collaborative_cursor_process_has_cursorowner a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:CollaborativeCursorProcess ;
+    rdfs:range nexus:CursorOwner ;
+    rdfs:label "CollaborativeCursorProcess has participant CursorOwner"@en .
+
+nexus:collaborative_cursor_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:CollaborativeCursorProcess ;
+    rdfs:range nexus:CursorEvent ;
+    rdfs:label "CollaborativeCursorProcess occurs in CursorEvent"@en .
+
+nexus:collaborative_cursor_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:CollaborativeCursorProcess ;
+    rdfs:range nexus:CursorLatency ;
+    rdfs:label "CollaborativeCursorProcess occupies CursorLatency"@en .
+
+nexus:collaborative_cursor_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:CollaborativeCursorProcess ;
+    rdfs:range nexus:CursorBroadcasterRole ;
+    rdfs:label "CollaborativeCursorProcess realizes CursorBroadcasterRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:documentId a owl:DatatypeProperty ;
+    rdfs:label "documentId"@en ;
+    rdfs:range xsd:string .
+
+nexus:cursorLine a owl:DatatypeProperty ;
+    rdfs:label "cursorLine"@en ;
+    rdfs:range xsd:integer .
+
+nexus:cursorColumn a owl:DatatypeProperty ;
+    rdfs:label "cursorColumn"@en ;
+    rdfs:range xsd:integer .

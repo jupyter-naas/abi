@@ -1,0 +1,160 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# File CRUD Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:file_crud_process a owl:Ontology ;
+    dc:title "File CRUD Process"@en ;
+    dc:description "A process encompassing file creation, reading, updating, and deletion operations for both local filesystem and S3-compatible storage backends."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:FileCRUDProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "File CRUD Process"@en ;
+    skos:definition "A process encompassing file creation, reading, updating, and deletion operations for both local filesystem and S3-compatible storage backends."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/files.py:231-639 create_file(), read_file(), update_file(), delete_file()" ;
+    skos:example "1. Create: write content to path (local mkdir -p, S3 put_object)\n2. Read: read file content (local open(), S3 get_object)\n3. Update: overwrite existing file content\n4. Delete: remove file/folder (local unlink/rmtree, S3 delete_object)\n5. Folder: create directory (local mkdir, S3 empty marker object)"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:FileManager a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "FileManager"@en ;
+    skos:definition "Backend logic executing file operations"@en .
+
+nexus:StorageBackend a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "StorageBackend"@en ;
+    skos:definition "Local filesystem or S3 storage"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:FileCRUDEndpoints a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "FileCRUDEndpoints"@en ;
+    skos:definition "POST /api/files/, GET /api/files/{path}, PUT /api/files/{path}, DELETE /api/files/{path}"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:CRUDDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "CRUDDuration"@en ;
+    skos:definition "10-2000ms depending on operation and file size"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:CreateFileRequest a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "CreateFileRequest"@en ;
+    skos:definition "Pydantic model: path (max 500), content (optional text)"@en .
+
+nexus:FileContent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "FileContent"@en ;
+    skos:definition "Response for read: name, path, content (text), size"@en .
+
+nexus:CreateFolderRequest a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "CreateFolderRequest"@en ;
+    skos:definition "Pydantic model: path for folder creation"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:PathTraversalProtection a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "PathTraversalProtection"@en ;
+    skos:definition "Quality: all paths sanitized to prevent ../ attacks"@en .
+
+nexus:ContentTypeDetection a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ContentTypeDetection"@en ;
+    skos:definition "Quality: content type inferred from file extension"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:FileOperatorRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "FileOperatorRole"@en ;
+    skos:definition "Role realized when system performs CRUD on stored files"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:DualStorageDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "DualStorageDisposition"@en ;
+    skos:definition "Disposition to support both local and S3 storage transparently"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:file_crud_process_has_filemanager a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:FileCRUDProcess ;
+    rdfs:range nexus:FileManager ;
+    rdfs:label "FileCRUDProcess has participant FileManager"@en .
+
+nexus:file_crud_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:FileCRUDProcess ;
+    rdfs:range nexus:FileCRUDEndpoints ;
+    rdfs:label "FileCRUDProcess occurs in FileCRUDEndpoints"@en .
+
+nexus:file_crud_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:FileCRUDProcess ;
+    rdfs:range nexus:CRUDDuration ;
+    rdfs:label "FileCRUDProcess occupies CRUDDuration"@en .
+
+nexus:file_crud_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:FileCRUDProcess ;
+    rdfs:range nexus:FileOperatorRole ;
+    rdfs:label "FileCRUDProcess realizes FileOperatorRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:operationType a owl:DatatypeProperty ;
+    rdfs:label "operationType"@en ;
+    rdfs:range xsd:string .
+
+nexus:filePath a owl:DatatypeProperty ;
+    rdfs:label "filePath"@en ;
+    rdfs:range xsd:string .
+
+nexus:fileSize a owl:DatatypeProperty ;
+    rdfs:label "fileSize"@en ;
+    rdfs:range xsd:integer .

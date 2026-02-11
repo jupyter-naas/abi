@@ -1,0 +1,252 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+# ======================================================================
+# User Registration Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:user_registration_process a owl:Ontology ;
+    dc:title "User Registration Process"@en ;
+    dc:description "Creates new user accounts with personal workspace, encrypted credentials, and initial authentication tokens"@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:UserRegistrationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "User Registration Process"@en ;
+    skos:definition "A process that creates a new user account with personal workspace, encrypted credentials, and initial authentication tokens in the NEXUS platform."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/auth.py lines 265-341" ;
+    skos:example "User submits email + password → System hashes password → Creates user record → Creates personal workspace → Generates access/refresh tokens → Returns user + tokens"@en .
+
+# ======================================================================
+# WHO: Participants (BFO_0000040)
+# ======================================================================
+
+nexus:AuthenticationServer a owl:Class ;
+    rdfs:subClassOf nexus:APIServer ;
+    rdfs:label "Authentication Server"@en ;
+    skos:definition "A computational system that executes user registration processes."@en .
+
+nexus:RegistrationCandidate a owl:Class ;
+    rdfs:subClassOf nexus:User ;
+    rdfs:label "Registration Candidate"@en ;
+    skos:definition "A person providing credentials to create a new account."@en .
+
+# ======================================================================
+# WHERE: Site (BFO_0000029)
+# ======================================================================
+
+nexus:RegistrationEndpoint a owl:Class ;
+    rdfs:subClassOf nexus:APIEndpoint ;
+    rdfs:label "Registration Endpoint"@en ;
+    skos:definition "The API endpoint /api/auth/register where registration requests are processed."@en ;
+    skos:example "/api/auth/register"@en .
+
+nexus:UsersTable a owl:Class ;
+    rdfs:subClassOf nexus:Database ;
+    rdfs:label "Users Table"@en ;
+    skos:definition "PostgreSQL table where user records are stored."@en .
+
+nexus:WorkspacesTable a owl:Class ;
+    rdfs:subClassOf nexus:Database ;
+    rdfs:label "Workspaces Table"@en ;
+    skos:definition "PostgreSQL table where workspace records are stored."@en .
+
+# ======================================================================
+# WHEN: Temporal Region (BFO_0000008)
+# ======================================================================
+
+nexus:RegistrationDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Registration Duration"@en ;
+    skos:definition "Temporal region spanning from credential submission to token issuance, typically 200-500ms."@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:RegistrationRequest a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Registration Request"@en ;
+    skos:definition "Information content containing email, password, and optional name for account creation."@en .
+
+nexus:HashedPassword a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Hashed Password"@en ;
+    skos:definition "Bcrypt-hashed password stored in database (irreversible transformation)."@en ;
+    skos:example "$2b$12$Kj1LFbnCPyAOrndF3vGM6u/EiOYXnpUvcysnZtj.BztrTvSC0V/aO"@en .
+
+nexus:UserRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "User Record"@en ;
+    skos:definition "Database record containing user_id, email, hashed_password, name, created_at."@en .
+
+nexus:PersonalWorkspace a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Personal Workspace"@en ;
+    skos:definition "A workspace created automatically during registration with workspace_id = user_id."@en .
+
+nexus:InitialAccessToken a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Initial Access Token"@en ;
+    skos:definition "JWT token issued upon successful registration (15-minute lifetime)."@en .
+
+nexus:InitialRefreshToken a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Initial Refresh Token"@en ;
+    skos:definition "Long-lived token issued upon registration (30-day lifetime)."@en .
+
+nexus:RegistrationAuditLog a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Registration Audit Log"@en ;
+    skos:definition "Audit record of registration event with IP, user-agent, timestamp."@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:EmailUniqueness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Email Uniqueness"@en ;
+    skos:definition "A quality ensuring no two users share the same email address."@en .
+
+nexus:PasswordComplexity a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Password Complexity"@en ;
+    skos:definition "A quality measured by minimum length (8 characters) and bcrypt work factor (12 rounds)."@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:UserCreatorRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "User Creator Role"@en ;
+    skos:definition "A role realized when the system creates new user accounts."@en .
+
+nexus:WorkspaceProvisionerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "Workspace Provisioner Role"@en ;
+    skos:definition "A role realized when the system creates personal workspaces for new users."@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:PasswordHashingDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "Password Hashing Disposition"@en ;
+    skos:definition "A disposition to transform plaintext passwords into bcrypt hashes."@en .
+
+nexus:RateLimitingDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "Rate Limiting Disposition"@en ;
+    skos:definition "A disposition to limit registration attempts (5 per 15-minute window per IP)."@en .
+
+# ======================================================================
+# Process Relationships
+# ======================================================================
+
+nexus:registration_has_candidate a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;  # has participant
+    rdfs:domain nexus:UserRegistrationProcess ;
+    rdfs:range nexus:RegistrationCandidate ;
+    rdfs:label "registration has candidate"@en .
+
+nexus:registration_realizes_creator_role a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;  # realizes
+    rdfs:domain nexus:UserRegistrationProcess ;
+    rdfs:range nexus:UserCreatorRole ;
+    rdfs:label "registration realizes user creator role"@en .
+
+nexus:registration_occurs_at_endpoint a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;  # occurs in
+    rdfs:domain nexus:UserRegistrationProcess ;
+    rdfs:range nexus:RegistrationEndpoint ;
+    rdfs:label "registration occurs at endpoint"@en .
+
+nexus:registration_occupies_duration a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;  # occupies temporal region
+    rdfs:domain nexus:UserRegistrationProcess ;
+    rdfs:range nexus:RegistrationDuration ;
+    rdfs:label "registration occupies duration"@en .
+
+nexus:hashed_password_concretizes_request a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ;  # concretizes
+    rdfs:domain nexus:HashedPassword ;
+    rdfs:range nexus:RegistrationRequest ;
+    rdfs:label "hashed password concretizes registration request"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:hasEmail a owl:DatatypeProperty ;
+    rdfs:domain [
+        a owl:Class ;
+        owl:unionOf (nexus:RegistrationRequest nexus:UserRecord)
+    ] ;
+    rdfs:range xsd:string ;
+    rdfs:label "has email"@en .
+
+nexus:hasPassword a owl:DatatypeProperty ;
+    rdfs:domain nexus:RegistrationRequest ;
+    rdfs:range xsd:string ;
+    rdfs:label "has password"@en ;
+    rdfs:comment "Plaintext password (never stored, immediately hashed)."@en .
+
+nexus:hasPasswordHash a owl:DatatypeProperty ;
+    rdfs:domain nexus:HashedPassword ;
+    rdfs:range xsd:string ;
+    rdfs:label "has password hash"@en .
+
+nexus:hasName a owl:DatatypeProperty ;
+    rdfs:domain nexus:RegistrationRequest ;
+    rdfs:range xsd:string ;
+    rdfs:label "has name"@en .
+
+nexus:isUnique a owl:DatatypeProperty ;
+    rdfs:domain nexus:EmailUniqueness ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is unique"@en .
+
+# ======================================================================
+# Instance Example
+# ======================================================================
+
+nexus:registration_example_2026_02_09 a nexus:UserRegistrationProcess ;
+    bfo:BFO_0000057 nexus:candidate_john_doe ;
+    bfo:BFO_0000055 nexus:creator_role_instance ;
+    bfo:BFO_0000066 nexus:endpoint_register ;
+    bfo:BFO_0000199 nexus:duration_350ms ;
+    dc:created "2026-02-09T14:30:00Z"^^xsd:dateTime ;
+    rdfs:comment "Successful registration of john.doe@example.com"@en .
+
+nexus:candidate_john_doe a nexus:RegistrationCandidate ;
+    nexus:hasEmail "john.doe@example.com"^^xsd:string ;
+    rdfs:label "John Doe (Registration Candidate)"@en .
+
+nexus:endpoint_register a nexus:RegistrationEndpoint ;
+    rdfs:label "/api/auth/register"@en .
+
+nexus:creator_role_instance a nexus:UserCreatorRole ;
+    bfo:BFO_0000197 nexus:auth_server_prod ;  # inheres in
+    rdfs:label "User Creator Role Instance"@en .
+
+nexus:auth_server_prod a nexus:AuthenticationServer ;
+    rdfs:label "NEXUS Production Auth Server"@en .
+
+nexus:duration_350ms a nexus:RegistrationDuration ;
+    rdfs:label "Registration Duration: 350ms"@en .
