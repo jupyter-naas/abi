@@ -1,0 +1,185 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Agent Provider Resolution Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:agent_provider_resolution_process a owl:Ontology ;
+    dc:title "Agent Provider Resolution Process"@en ;
+    dc:description "A process that resolves which LLM provider, API key, and model to use for a given agent by checking agent_configs, workspace secrets, and falling back to Ollama auto-detection."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:AgentProviderResolutionProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Agent Provider Resolution Process"@en ;
+    skos:definition "A process that resolves which LLM provider, API key, and model to use for a given agent by checking agent_configs, workspace secrets, and falling back to Ollama auto-detection."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/chat.py:202-319 _resolve_provider()" ;
+    skos:example "1. If provider explicitly provided and enabled: return it directly\n2. If agent_id provided: query agent_configs for provider and model_id\n3. If agent provider is abi: query abi_servers for workspace's enabled ABI server\n4. If agent provider is cloud (openai, xai, etc.): map to secret key name\n5. Query secrets table and decrypt API key with Fernet\n6. Build ProviderConfigRequest with endpoint, api_key, model\n7. If no provider resolved: check Ollama status at localhost:11434/api/tags\n8. Select best Ollama model based on has_images flag (vision-capable models preferred)\n9. Return resolved ProviderConfigRequest or None"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ProviderResolver a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ProviderResolver"@en ;
+    skos:definition "Backend logic determining optimal provider for chat request"@en .
+
+nexus:SecretStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "SecretStore"@en ;
+    skos:definition "Encrypted secrets providing API keys for cloud providers"@en .
+
+nexus:OllamaFallback a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "OllamaFallback"@en ;
+    skos:definition "Local Ollama server as fallback when no cloud provider is configured"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:AgentConfigsTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "AgentConfigsTable"@en ;
+    skos:definition "PostgreSQL agent_configs table with provider and model_id columns"@en .
+
+nexus:SecretsTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "SecretsTable"@en ;
+    skos:definition "PostgreSQL secrets table with encrypted API keys"@en .
+
+nexus:ABIServersTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "ABIServersTable"@en ;
+    skos:definition "PostgreSQL abi_servers table for ABI provider resolution"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:ResolutionDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "ResolutionDuration"@en ;
+    skos:definition "50-600ms: 50ms for DB queries, up to 500ms for Ollama health check"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:ProviderConfigRequest a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ProviderConfigRequest"@en ;
+    skos:definition "Pydantic model: type, model, endpoint, api_key, enabled"@en .
+
+nexus:SecretKeyMapping a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "SecretKeyMapping"@en ;
+    skos:definition "Provider to secret key mapping: xai->XAI_API_KEY, openai->OPENAI_API_KEY"@en .
+
+nexus:DecryptedAPIKey a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "DecryptedAPIKey"@en ;
+    skos:definition "Fernet-decrypted API key from secrets table"@en .
+
+nexus:OllamaStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OllamaStatus"@en ;
+    skos:definition "Ollama health check result with available models list"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:ResolutionPriority a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ResolutionPriority"@en ;
+    skos:definition "Quality: explicit provider > agent config > secrets > Ollama fallback"@en .
+
+nexus:VisionModelSelection a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "VisionModelSelection"@en ;
+    skos:definition "Quality: if has_images=true, prefer vision-capable models"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:ProviderResolverRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "ProviderResolverRole"@en ;
+    skos:definition "Role realized when system determines optimal provider for request"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:FallbackDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "FallbackDisposition"@en ;
+    skos:definition "Disposition to fall back to Ollama when no cloud provider configured"@en .
+
+nexus:VisionAwareDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "VisionAwareDisposition"@en ;
+    skos:definition "Disposition to select vision-capable model when images are attached"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:agent_provider_resolution_process_has_providerresolver a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:AgentProviderResolutionProcess ;
+    rdfs:range nexus:ProviderResolver ;
+    rdfs:label "AgentProviderResolutionProcess has participant ProviderResolver"@en .
+
+nexus:agent_provider_resolution_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:AgentProviderResolutionProcess ;
+    rdfs:range nexus:AgentConfigsTable ;
+    rdfs:label "AgentProviderResolutionProcess occurs in AgentConfigsTable"@en .
+
+nexus:agent_provider_resolution_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:AgentProviderResolutionProcess ;
+    rdfs:range nexus:ResolutionDuration ;
+    rdfs:label "AgentProviderResolutionProcess occupies ResolutionDuration"@en .
+
+nexus:agent_provider_resolution_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:AgentProviderResolutionProcess ;
+    rdfs:range nexus:ProviderResolverRole ;
+    rdfs:label "AgentProviderResolutionProcess realizes ProviderResolverRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:providerType a owl:DatatypeProperty ;
+    rdfs:label "providerType"@en ;
+    rdfs:range xsd:string .
+
+nexus:hasImages a owl:DatatypeProperty ;
+    rdfs:label "hasImages"@en ;
+    rdfs:range xsd:boolean .
+
+nexus:agentId a owl:DatatypeProperty ;
+    rdfs:label "agentId"@en ;
+    rdfs:range xsd:string .

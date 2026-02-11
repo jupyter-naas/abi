@@ -1,0 +1,161 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Token Cleanup Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:token_cleanup_process a owl:Ontology ;
+    dc:title "Token Cleanup Process"@en ;
+    dc:description "A process that removes expired refresh tokens and revoked access tokens from the database to prevent unbounded table growth, intended to run as a scheduled background task."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:TokenCleanupProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Token Cleanup Process"@en ;
+    skos:definition "A process that removes expired refresh tokens and revoked access tokens from the database to prevent unbounded table growth, intended to run as a scheduled background task."@en ;
+    rdfs:comment "Implements: apps/api/app/services/refresh_token.py:217-231 cleanup functions" ;
+    skos:example "1. Get current timestamp\n2. DELETE FROM refresh_tokens WHERE expires_at < NOW()\n3. DELETE FROM revoked_tokens WHERE expires_at < NOW()\n4. Log number of deleted rows"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:CleanupScheduler a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "CleanupScheduler"@en ;
+    skos:definition "Background task executor (not yet scheduled, manual call)"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:RefreshTokensTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "RefreshTokensTable"@en ;
+    skos:definition "PostgreSQL refresh_tokens table"@en .
+
+nexus:RevokedTokensTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "RevokedTokensTable"@en ;
+    skos:definition "PostgreSQL revoked_tokens table"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:CleanupDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "CleanupDuration"@en ;
+    skos:definition "50-200ms for 2 DELETE queries"@en .
+
+nexus:ScheduleFrequency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "ScheduleFrequency"@en ;
+    skos:definition "Intended: daily (not yet implemented)"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:ExpiredRefreshTokens a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ExpiredRefreshTokens"@en ;
+    skos:definition "Rows WHERE expires_at < NOW() in refresh_tokens"@en .
+
+nexus:ExpiredRevokedTokens a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ExpiredRevokedTokens"@en ;
+    skos:definition "Rows WHERE expires_at < NOW() in revoked_tokens"@en .
+
+nexus:DeletedCount a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "DeletedCount"@en ;
+    skos:definition "Number of rows removed per table"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:TableGrowthPrevention a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "TableGrowthPrevention"@en ;
+    skos:definition "Quality: prevents unbounded growth of token tables"@en .
+
+nexus:NotYetScheduled a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "NotYetScheduled"@en ;
+    skos:definition "Quality: requires manual invocation or future cron job"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:DatabaseJanitorRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "DatabaseJanitorRole"@en ;
+    skos:definition "Role realized when system cleans expired security tokens"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:ExpirationBasedDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "ExpirationBasedDisposition"@en ;
+    skos:definition "Disposition to delete based on expires_at timestamp comparison"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:token_cleanup_process_has_cleanupscheduler a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:TokenCleanupProcess ;
+    rdfs:range nexus:CleanupScheduler ;
+    rdfs:label "TokenCleanupProcess has participant CleanupScheduler"@en .
+
+nexus:token_cleanup_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:TokenCleanupProcess ;
+    rdfs:range nexus:RefreshTokensTable ;
+    rdfs:label "TokenCleanupProcess occurs in RefreshTokensTable"@en .
+
+nexus:token_cleanup_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:TokenCleanupProcess ;
+    rdfs:range nexus:CleanupDuration ;
+    rdfs:label "TokenCleanupProcess occupies CleanupDuration"@en .
+
+nexus:token_cleanup_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:TokenCleanupProcess ;
+    rdfs:range nexus:DatabaseJanitorRole ;
+    rdfs:label "TokenCleanupProcess realizes DatabaseJanitorRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:deletedRefreshTokens a owl:DatatypeProperty ;
+    rdfs:label "deletedRefreshTokens"@en ;
+    rdfs:range xsd:integer .
+
+nexus:deletedRevokedTokens a owl:DatatypeProperty ;
+    rdfs:label "deletedRevokedTokens"@en ;
+    rdfs:range xsd:integer .

@@ -1,0 +1,161 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# ABI Agent Discovery Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:abi_agent_discovery_process a owl:Ontology ;
+    dc:title "ABI Agent Discovery Process"@en ;
+    dc:description "A process that discovers all available agents from an external ABI server by fetching and parsing its OpenAPI specification, extracting agent names from /agents/{name}/stream-completion paths."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:ABIAgentDiscoveryProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "ABI Agent Discovery Process"@en ;
+    skos:definition "A process that discovers all available agents from an external ABI server by fetching and parsing its OpenAPI specification, extracting agent names from /agents/{name}/stream-completion paths."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/abi_sync.py:29-80 discover_abi_agents()" ;
+    skos:example "1. Fetch OpenAPI spec from {endpoint}/openapi.json using httpx async client\n2. Parse JSON response\n3. Iterate paths looking for /agents/{name}/stream-completion pattern\n4. Extract agent names from path parameters\n5. Extract descriptions from operation summaries\n6. Generate model_id by normalizing agent name (lowercase, replace spaces with hyphens)\n7. Return list of {name, description, model_id} dicts"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ABIOpenAPIServer a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ABIOpenAPIServer"@en ;
+    skos:definition "External ABI server serving OpenAPI/Swagger specification"@en .
+
+nexus:DiscoveryClient a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "DiscoveryClient"@en ;
+    skos:definition "httpx async client fetching and parsing OpenAPI JSON"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:OpenAPIEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OpenAPIEndpoint"@en ;
+    skos:definition "ABI endpoint GET /openapi.json or GET /redoc"@en .
+
+nexus:AgentConfigsTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "AgentConfigsTable"@en ;
+    skos:definition "PostgreSQL table agent_configs where discovered agents are stored"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:DiscoveryDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "DiscoveryDuration"@en ;
+    skos:definition "200-1000ms for HTTP fetch + JSON parsing"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:OpenAPISpec a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OpenAPISpec"@en ;
+    skos:definition "JSON document containing paths, operations, and descriptions"@en .
+
+nexus:AgentPath a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "AgentPath"@en ;
+    skos:definition "OpenAPI path pattern: /agents/{agent_name}/stream-completion"@en .
+
+nexus:AgentInfo a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "AgentInfo"@en ;
+    skos:definition "Discovered agent metadata: name, description, model_id"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:AgentCount a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "AgentCount"@en ;
+    skos:definition "Integer quality: number of agents discovered from OpenAPI spec"@en .
+
+nexus:SpecCompleteness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "SpecCompleteness"@en ;
+    skos:definition "Quality measuring if spec contains descriptions for agents"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:AgentDiscovererRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "AgentDiscovererRole"@en ;
+    skos:definition "Role realized when system parses OpenAPI to find agents"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:OpenAPIParsingDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "OpenAPIParsingDisposition"@en ;
+    skos:definition "Disposition to extract agent names from path patterns"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:abi_agent_discovery_process_has_abiopenapiserver a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:ABIAgentDiscoveryProcess ;
+    rdfs:range nexus:ABIOpenAPIServer ;
+    rdfs:label "ABIAgentDiscoveryProcess has participant ABIOpenAPIServer"@en .
+
+nexus:abi_agent_discovery_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:ABIAgentDiscoveryProcess ;
+    rdfs:range nexus:OpenAPIEndpoint ;
+    rdfs:label "ABIAgentDiscoveryProcess occurs in OpenAPIEndpoint"@en .
+
+nexus:abi_agent_discovery_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:ABIAgentDiscoveryProcess ;
+    rdfs:range nexus:DiscoveryDuration ;
+    rdfs:label "ABIAgentDiscoveryProcess occupies DiscoveryDuration"@en .
+
+nexus:abi_agent_discovery_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:ABIAgentDiscoveryProcess ;
+    rdfs:range nexus:AgentDiscovererRole ;
+    rdfs:label "ABIAgentDiscoveryProcess realizes AgentDiscovererRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:endpointUrl a owl:DatatypeProperty ;
+    rdfs:label "endpointUrl"@en ;
+    rdfs:range xsd:string .
+
+nexus:agentCount a owl:DatatypeProperty ;
+    rdfs:label "agentCount"@en ;
+    rdfs:range xsd:integer .

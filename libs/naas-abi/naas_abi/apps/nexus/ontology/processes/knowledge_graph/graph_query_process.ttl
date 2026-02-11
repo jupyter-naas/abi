@@ -1,0 +1,175 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Graph Query Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:graph_query_process a owl:Ontology ;
+    dc:title "Graph Query Process"@en ;
+    dc:description "A process that searches the knowledge graph using ILIKE pattern matching on node labels and types, returning matching nodes and their connecting edges, limited to a configurable result count."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:GraphQueryProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Graph Query Process"@en ;
+    skos:definition "A process that searches the knowledge graph using ILIKE pattern matching on node labels and types, returning matching nodes and their connecting edges, limited to a configurable result count."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/graph.py:322-358 query_graph()" ;
+    skos:example "1. Validate workspace access\n2. Query graph_nodes: WHERE workspace_id=? AND (label ILIKE ? OR type ILIKE ?)\n3. Apply LIMIT from request (default 100, max 5000)\n4. Extract node IDs from results\n5. Query graph_edges: WHERE workspace_id=? AND source_id IN (?) AND target_id IN (?)\n6. Return GraphQueryResult with nodes, edges, and explanation"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:QueryExecutor a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "QueryExecutor"@en ;
+    skos:definition "Backend logic executing graph searches"@en .
+
+nexus:GraphDatabase a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "GraphDatabase"@en ;
+    skos:definition "PostgreSQL database with graph_nodes and graph_edges tables"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:GraphQueryEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "GraphQueryEndpoint"@en ;
+    skos:definition "API endpoint POST /api/graph/query?workspace_id={id}"@en .
+
+nexus:GraphNodesTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "GraphNodesTable"@en ;
+    skos:definition "PostgreSQL graph_nodes searched with ILIKE"@en .
+
+nexus:GraphEdgesTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "GraphEdgesTable"@en ;
+    skos:definition "PostgreSQL graph_edges for connecting edges"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:QueryDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "QueryDuration"@en ;
+    skos:definition "50-250ms depending on graph size and query complexity"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:GraphQuery a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "GraphQuery"@en ;
+    skos:definition "Pydantic model: query (1-10000 chars), language (natural/sparql), limit (1-5000, default 100)"@en .
+
+nexus:GraphQueryResult a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "GraphQueryResult"@en ;
+    skos:definition "Response: nodes list, edges list, query_explanation"@en .
+
+nexus:ILIKEPattern a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ILIKEPattern"@en ;
+    skos:definition "SQL pattern: WHERE label ILIKE %query% OR type ILIKE %query%"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:ResultLimit a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ResultLimit"@en ;
+    skos:definition "Quality: max 5000 nodes per query result"@en .
+
+nexus:CaseInsensitivity a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "CaseInsensitivity"@en ;
+    skos:definition "Quality: ILIKE provides case-insensitive matching"@en .
+
+nexus:NoSPARQLYet a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "NoSPARQLYet"@en ;
+    skos:definition "Quality: SPARQL language option exists but falls back to text search"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:GraphSearcherRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "GraphSearcherRole"@en ;
+    skos:definition "Role realized when system searches knowledge graph for matching entities"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:TextSearchDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "TextSearchDisposition"@en ;
+    skos:definition "Disposition to use ILIKE text matching (not semantic search)"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:graph_query_process_has_queryexecutor a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:GraphQueryProcess ;
+    rdfs:range nexus:QueryExecutor ;
+    rdfs:label "GraphQueryProcess has participant QueryExecutor"@en .
+
+nexus:graph_query_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:GraphQueryProcess ;
+    rdfs:range nexus:GraphQueryEndpoint ;
+    rdfs:label "GraphQueryProcess occurs in GraphQueryEndpoint"@en .
+
+nexus:graph_query_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:GraphQueryProcess ;
+    rdfs:range nexus:QueryDuration ;
+    rdfs:label "GraphQueryProcess occupies QueryDuration"@en .
+
+nexus:graph_query_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:GraphQueryProcess ;
+    rdfs:range nexus:GraphSearcherRole ;
+    rdfs:label "GraphQueryProcess realizes GraphSearcherRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:queryText a owl:DatatypeProperty ;
+    rdfs:label "queryText"@en ;
+    rdfs:range xsd:string .
+
+nexus:resultNodeCount a owl:DatatypeProperty ;
+    rdfs:label "resultNodeCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:resultEdgeCount a owl:DatatypeProperty ;
+    rdfs:label "resultEdgeCount"@en ;
+    rdfs:range xsd:integer .

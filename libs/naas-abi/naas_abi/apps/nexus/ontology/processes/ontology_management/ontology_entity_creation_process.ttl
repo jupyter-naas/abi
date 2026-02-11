@@ -1,0 +1,151 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Ontology Entity Creation Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:ontology_entity_creation_process a owl:Ontology ;
+    dc:title "Ontology Entity Creation Process"@en ;
+    dc:description "A process that creates a custom ontology entity (owl:Class) with optional base_class IRI reference, stored in an in-memory list (future: PostgreSQL ontologies table)."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:OntologyEntityCreationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Ontology Entity Creation Process"@en ;
+    skos:definition "A process that creates a custom ontology entity (owl:Class) with optional base_class IRI reference, stored in an in-memory list (future: PostgreSQL ontologies table)."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/ontology.py:138-149 create_entity()" ;
+    skos:example "1. Generate entity ID: entity-{timestamp_ms}\n2. Create OntologyItem with type=entity\n3. Set description and base_class from request\n4. Append to in-memory ontology_items list\n5. Return created OntologyItem"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:OntologyDesigner a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "OntologyDesigner"@en ;
+    skos:definition "User defining custom ontology entities"@en .
+
+nexus:InMemoryStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "InMemoryStore"@en ;
+    skos:definition "Python list storing ontology items (not yet persisted to DB)"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:OntologyEntityEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OntologyEntityEndpoint"@en ;
+    skos:definition "API endpoint POST /api/ontology/entity"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:EntityCreationDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "EntityCreationDuration"@en ;
+    skos:definition "Less than 1ms (in-memory list append)"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:EntityCreate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "EntityCreate"@en ;
+    skos:definition "Pydantic model: name (1-200 chars), description (max 2000), base_class (max 500, IRI)"@en .
+
+nexus:OntologyItem a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OntologyItem"@en ;
+    skos:definition "Response: id (entity-{timestamp}), name, type=entity, description, base_class, created_at"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:InMemoryPersistence a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "InMemoryPersistence"@en ;
+    skos:definition "Quality: items stored in memory only, lost on server restart"@en .
+
+nexus:IRIValidation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "IRIValidation"@en ;
+    skos:definition "Quality: base_class accepts any string (no IRI validation)"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:OntologyEngineerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "OntologyEngineerRole"@en ;
+    skos:definition "Role realized when user defines domain-specific entities"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:TimestampIDDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "TimestampIDDisposition"@en ;
+    skos:definition "Disposition to generate entity ID from timestamp milliseconds"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:ontology_entity_creation_process_has_ontologydesigner a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:OntologyEntityCreationProcess ;
+    rdfs:range nexus:OntologyDesigner ;
+    rdfs:label "OntologyEntityCreationProcess has participant OntologyDesigner"@en .
+
+nexus:ontology_entity_creation_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:OntologyEntityCreationProcess ;
+    rdfs:range nexus:OntologyEntityEndpoint ;
+    rdfs:label "OntologyEntityCreationProcess occurs in OntologyEntityEndpoint"@en .
+
+nexus:ontology_entity_creation_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:OntologyEntityCreationProcess ;
+    rdfs:range nexus:EntityCreationDuration ;
+    rdfs:label "OntologyEntityCreationProcess occupies EntityCreationDuration"@en .
+
+nexus:ontology_entity_creation_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:OntologyEntityCreationProcess ;
+    rdfs:range nexus:OntologyEngineerRole ;
+    rdfs:label "OntologyEntityCreationProcess realizes OntologyEngineerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:entityName a owl:DatatypeProperty ;
+    rdfs:label "entityName"@en ;
+    rdfs:range xsd:string .
+
+nexus:baseClassIRI a owl:DatatypeProperty ;
+    rdfs:label "baseClassIRI"@en ;
+    rdfs:range xsd:string .
