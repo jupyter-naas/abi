@@ -62,10 +62,6 @@ jobs:
         # Run CI-friendly tests
         make test-ci
     
-    - name: Generate coverage badge
-      run: |
-        uv run coverage-badge -f -o coverage.svg
-    
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
@@ -73,12 +69,3 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
-
-    - name: Commit coverage badge
-      if: github.ref == 'refs/heads/main'
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add coverage.svg
-        git diff --staged --quiet || git commit -m "Update coverage badge"
-        git push || echo "No changes to push"
