@@ -62,7 +62,6 @@ COPY --from=builder --chown=abi:abi /app/.venv /app/.venv
 COPY --from=builder --chown=abi:abi /app/.python-version /app/.python-version
 
 # Copy the remaining files
-ADD --chown=abi:abi ./assets/ /app/assets
 ADD --chown=abi:abi ./config.yaml /app/config.yaml
 ADD --chown=abi:abi ./Makefile /app/Makefile
 ADD --chown=abi:abi ./uv.lock /app/uv.lock
