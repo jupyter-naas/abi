@@ -1029,8 +1029,10 @@ async def stream_with_abi_inprocess(
             if text == "[DONE]" or event_name == "done":
                 break
 
-            # Forward AI message events and fallback message events.
-            if event_name in {"ai_message", "message"} and text.strip():
+            # Only forward the real-time ai_message events.
+            # Skip "message" events - those are a post-hoc replay of the final
+            # state and would duplicate the content already streamed via ai_message.
+            if event_name == "ai_message" and text.strip():
                 yield text
         elif isinstance(event, str) and event.strip():
             yield event
