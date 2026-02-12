@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-02-12)
+
+### Bug Fixes
+
+- Working on new project setup
+  ([`cd2a5cc`](https://github.com/jupyter-naas/abi/commit/cd2a5ccb156fe540759561e6eeb91abdeb1d4924))
+
+
 ## v1.13.0 (2026-02-11)
 
 ### Features
