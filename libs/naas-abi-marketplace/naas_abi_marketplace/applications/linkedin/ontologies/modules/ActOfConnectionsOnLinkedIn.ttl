@@ -128,6 +128,7 @@ abi:ISO8601UTCDateTime a owl:Class ;
 # Material entity (WHO): Person
 cco:ont00001262 a owl:Class ;
     rdfs:label "Person"@en ;
+    owl:hasKey ( linkedin:isOwnerOf ) ;
     rdfs:subClassOf cco:ont00000562,  # independent continuant
     [
         a owl:Restriction ;
@@ -271,6 +272,8 @@ linkedin:isOwnerOf a owl:ObjectProperty ;
     rdfs:label "is owner of"@en ;
     rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
     owl:inverseOf linkedin:isOwnedBy ;
+    rdfs:domain cco:ont00001262 ; # Person
+    rdfs:range linkedin:ProfilePage ; # Profile Page
     skos:definition "b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information."@en ;
     skos:example "John Doe is the owner of his LinkedIn profile page, which contains his professional information and connections."@en .
 
