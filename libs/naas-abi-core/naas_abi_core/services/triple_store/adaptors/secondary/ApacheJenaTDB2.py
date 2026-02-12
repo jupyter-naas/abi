@@ -315,3 +315,30 @@ class ApacheJenaTDB2(ITripleStorePort):
         if isinstance(result, Graph):
             return result
         return Graph()
+
+    def create_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+        self.query(f"CREATE GRAPH <{str(graph_name)}>")
+
+    def clear_graph(self, graph_name: URIRef | None = None) -> None:
+        if graph_name is None:
+            self.query("CLEAR DEFAULT")
+            return
+
+        assert isinstance(graph_name, URIRef)
+        self.query(f"CLEAR GRAPH <{str(graph_name)}>")
+
+    def drop_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+        self.query(f"DROP GRAPH <{str(graph_name)}>")
+
+    def list_graphs(self) -> list[URIRef]:
+        result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+        graphs: list[URIRef] = []
+        for row in result:
+            graph = getattr(row, "g", None)
+            if isinstance(graph, URIRef):
+                graphs.append(graph)
+        return graphs
