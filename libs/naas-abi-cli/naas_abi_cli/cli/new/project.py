@@ -3,6 +3,7 @@ import subprocess
 
 import click
 import naas_abi_cli
+from naas_abi_cli.cli.deploy.local import setup_local_deploy
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .module import new_module
@@ -13,7 +14,16 @@ from .utils import to_kebab_case, to_pascal_case, to_snake_case
 @new.command("project")
 @click.argument("project-name", required=False, default=None)
 @click.argument("project-path", required=False, default=None)
-def new_project(project_name: str | None, project_path: str | None):
+@click.option(
+    "--with-local-deploy/--without-local-deploy",
+    default=True,
+    help="Generate local docker-compose and deployment scaffolding (default: enabled).",
+)
+def new_project(
+    project_name: str | None,
+    project_path: str | None,
+    with_local_deploy: bool,
+):
     project_name = to_kebab_case(project_name)
     # Defaults must be evaluated at runtime so they reflect the caller's CWD.
     if project_name is None:
@@ -49,6 +59,9 @@ def new_project(project_name: str | None, project_path: str | None):
 
     # Calling new_module to create the module in the src folder
     new_module(project_name, os.path.join(project_path, "src"), quiet=True)
+
+    if with_local_deploy:
+        setup_local_deploy(project_path)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     subprocess.run(
