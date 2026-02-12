@@ -1,4 +1,5 @@
 import { ChatInterface } from '@/components/chat/chat-interface';
+import { Header } from '@/components/shell/header';
 
 interface ChatWorkspacePageProps {
   params: {
@@ -8,5 +9,10 @@ interface ChatWorkspacePageProps {
 }
 
 export default function ChatWorkspacePage(_: ChatWorkspacePageProps) {
-  return <ChatInterface />;
+  return (
+    <div className="flex h-full flex-col">
+      <Header title="Chat" />
+      <ChatInterface />
+    </div>
+  );
 }
