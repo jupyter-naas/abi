@@ -730,6 +730,13 @@ async def stream_chat(
             await db.rollback()
             raise
 
+    # DEBUG: Log provider messages to find duplication
+    import logging as _dbg_log
+    _dbg_logger = _dbg_log.getLogger(__name__)
+    _dbg_logger.info(f"🔍 Provider messages count: {len(provider_messages)}")
+    for i, pm in enumerate(provider_messages):
+        _dbg_logger.info(f"  [{i}] role={pm.role}, content={pm.content[:80]!r}...")
+    
     # Build system prompt with multi-agent context
     system_prompt = request.system_prompt or AGENT_SYSTEM_PROMPTS.get(request.agent, AGENT_SYSTEM_PROMPTS["aia"])
     
