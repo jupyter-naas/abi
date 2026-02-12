@@ -3,7 +3,7 @@
 # =============================================================================
 # This file defines a complete AI agent ecosystem with:
 # - Multi-model AI capabilities (chat, embeddings, reasoning)
-# - Knowledge graph storage (Oxigraph + SPARQL interface)
+# - Knowledge graph storage (Apache Jena Fuseki + TDB2)
 # - Agent memory persistence (PostgreSQL)
 # - Workflow orchestration (Dagster)
 # =============================================================================
@@ -61,7 +61,7 @@ x-abi-template: &abi_template
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
   depends_on:
-    # oxigraph:
+    # fuseki:
     #   condition: service_healthy  # Wait for knowledge graph to be ready
     postgres:
       condition: service_healthy
@@ -69,8 +69,6 @@ x-abi-template: &abi_template
     #   condition: service_healthy
   networks:
     - abi-network
-  profiles:
-    - container  # Only starts when running 'make container-up'
 
 services:
   nexus-web:
@@ -89,8 +87,6 @@ services:
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     networks:
       - abi-network
-    profiles:
-      - container
   # -----------------------------------------------------------------------------
   # ABI Main Service - AI Agent Coordinator
   # -----------------------------------------------------------------------------
@@ -116,8 +112,6 @@ services:
       - 8000:8000
     networks:
       - abi-network
-    profiles:
-      - local
 
   # -----------------------------------------------------------------------------
   # PostgreSQL Database - Agent Memory & Conversation Storage
@@ -142,49 +136,28 @@ services:
       retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
-  # Oxigraph - Knowledge Graph Database (RDF/SPARQL)
+  # Apache Jena Fuseki (TDB2) - Knowledge Graph Database (RDF/SPARQL)
   # -----------------------------------------------------------------------------
   # Stores structured knowledge as RDF triples for semantic reasoning
-  # Supports SPARQL queries for complex knowledge graph operations
-  oxigraph:
-    image: oxigraph/oxigraph:latest
+  # TDB2 provides transactional storage with SPARQL query/update endpoints
+  fuseki:
+    image: stain/jena-fuseki:latest
     ports:
-      - 7878:7878 # Internal port (accessed via proxy)
+      - 3030:3030
     volumes:
-      - oxigraph_data:/data  # Persistent RDF triple storage
-    command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
-    # healthcheck:
-    #   test: ["CMD-SHELL", "curl -f http://localhost:7878/query || exit 1"]
-    #   interval: 10s
-    #   timeout: 5s
-    #   retries: 3
+      - fuseki_data:/fuseki
+    environment:
+      - ADMIN_PASSWORD=abi
+      - FUSEKI_DATASET_1=ds
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3030/$/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
-
-  # -----------------------------------------------------------------------------
-  # Oxigraph Proxy - Web Interface for Knowledge Graph
-  # -----------------------------------------------------------------------------
-  # Nginx proxy that serves the Oxigraph admin interface
-  # Provides web-based access to RDF data and SPARQL endpoint
-  oxigraph-proxy:
-    image: nginx:alpine
-    ports:
-      - 7879:80  # Oxigraph web interface - http://localhost:7878
-    volumes:
-      - ./libs/naas-abi/naas_abi/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./libs/naas-abi/naas_abi/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
-    depends_on:
-      - oxigraph
-    networks:
-      - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # YasGUI - SPARQL Query Interface
@@ -197,13 +170,11 @@ services:
     ports:
       - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
     environment:
-      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:7879/query  # Points to Oxigraph via Docker network
+      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:3030/ds/query
     depends_on:
-      - oxigraph
+      - fuseki
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Dagster - Workflow Orchestration & Data Pipeline Management
@@ -248,8 +219,6 @@ services:
       - 'uv run dagster dev --host 0.0.0.0 --port 3001 -m naas_abi_core.apps.dagster.dagster'
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
@@ -267,8 +236,6 @@ services:
       - minio_data:/data
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # mc container to initialize the bucket on startup
   minio-init:
@@ -283,8 +250,6 @@ services:
       "
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # RabbitMQ - Message Bus (AMQP)
@@ -306,8 +271,6 @@ services:
       retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Redis - In-memory Cache / Message Broker
@@ -326,8 +289,6 @@ services:
       retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Redis Commander - Web UI for Redis management
@@ -342,8 +303,6 @@ services:
       - redis
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Matrix (Synapse) - Federated Messaging Server
@@ -362,8 +321,6 @@ services:
     entrypoint: ["/bin/sh", "/bootstrap.sh"]
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Element Web - Matrix Client
@@ -378,8 +335,6 @@ services:
       - matrix
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Service Portal - Single-page navigation for all HTTP UIs
@@ -392,8 +347,6 @@ services:
       - ./docker/service-portal:/usr/share/nginx/html:ro
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
 # =============================================================================
 # PERSISTENT VOLUMES
@@ -417,12 +370,10 @@ services:
     #   retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
 volumes:
   venv_cache:     # Python virtual environment cache for faster startup
-  oxigraph_data:  # RDF triple store data (knowledge graph persistence)
+  fuseki_data:    # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
