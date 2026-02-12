@@ -218,7 +218,7 @@ services:
       - 3001:3001  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
     volumes:
       - ./scripts:/app/scripts
-      - ./uv.lock:/app/uv.lock
+        # - ./uv.lock:/app/uv.lock
       - ./config.local.yaml:/app/config.yaml # We mount the config.local.yaml as it's configured to run from within the containers network.
       - ./pyproject.toml:/app/pyproject.toml
       - ./src:/app/src
