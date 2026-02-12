@@ -33,9 +33,6 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
     Person,
     ProfilePage,
 )
-from naas_abi_marketplace.applications.linkedin.pipelines.LinkedInExportProfilePipeline import (
-    LinkedInExportProfilePipelineConfiguration,
-)
 from pydantic import Field
 from rdflib import Graph, Namespace, URIRef
 
@@ -56,9 +53,6 @@ class ActOfConnectionsOnLinkedInExportPipelineConfiguration(PipelineConfiguratio
 
     triple_store: ITripleStoreService
     linkedin_export_configuration: LinkedInExportIntegrationConfiguration
-    linkedin_export_profile_pipeline_configuration: (
-        LinkedInExportProfilePipelineConfiguration
-    )
     limit: int | None = None
     workers: int = 20
 
@@ -478,12 +472,6 @@ if __name__ == "__main__":
     linkedin_export_configuration = LinkedInExportIntegrationConfiguration(
         export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
     )
-    linkedin_export_profile_pipeline_configuration = (
-        LinkedInExportProfilePipelineConfiguration(
-            triple_store=module.engine.services.triple_store,
-            linkedin_export_configuration=linkedin_export_configuration,
-        )
-    )
     person_name = "Florent Ravenel"
     limit = None
 
@@ -491,7 +479,6 @@ if __name__ == "__main__":
         ActOfConnectionsOnLinkedInExportPipelineConfiguration(
             triple_store=module.engine.services.triple_store,
             linkedin_export_configuration=linkedin_export_configuration,
-            linkedin_export_profile_pipeline_configuration=linkedin_export_profile_pipeline_configuration,
             limit=limit,
         )
     )
