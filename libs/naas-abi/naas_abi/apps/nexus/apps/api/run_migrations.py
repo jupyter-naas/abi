@@ -5,8 +5,9 @@ Run pending database migrations.
 
 import asyncio
 from pathlib import Path
-from sqlalchemy import text
+
 from app.core.database import async_engine
+from sqlalchemy import text
 
 
 async def run_migrations():

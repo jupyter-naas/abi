@@ -2,16 +2,18 @@
 ABI Server Agent Sync - Automatically sync agents from external ABI servers.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
-import httpx
 from datetime import datetime, timezone
 
-from app.core.database import get_db
-from app.models import InferenceServerModel, AgentConfigModel
-from app.api.endpoints.auth import get_current_user_required, User, require_workspace_access
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User, get_current_user_required, require_workspace_access)
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.models import (AgentConfigModel,
+                                                     InferenceServerModel)
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 

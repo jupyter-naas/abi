@@ -7,10 +7,9 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException, Request, status
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from sqlalchemy import text
-
-from app.core.config import settings
-from app.core.database import async_engine
 
 
 async def check_rate_limit(identifier: str, endpoint: str) -> None:

@@ -9,15 +9,16 @@ Handles:
 """
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Dict, Set
+
 import socketio
 from fastapi import FastAPI
-import logging
-
-from app.core.config import settings
-from app.api.endpoints.auth import decode_token
-from app.services.refresh_token import is_access_token_revoked
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import decode_token
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.services.refresh_token import \
+    is_access_token_revoked
 
 logger = logging.getLogger(__name__)
 
@@ -288,16 +289,34 @@ def get_user_workspaces(user_id: str) -> list[str]:
 def init_websocket(app: FastAPI):
     """Initialize WebSocket support in FastAPI app.
     
-    Socket.IO wraps the FastAPI app but delegates non-WebSocket requests.
+    In embedded ABI mode, we must mount Socket.IO in-place on the shared app.
+    In standalone mode, this also works and avoids replacing the root ASGI app.
     CORS is handled by both Socket.IO (for WS) and FastAPI middleware (for HTTP).
     """
-    # Wrap with Socket.IO ASGI app
-    socket_app = socketio.ASGIApp(
-        sio,
-        other_asgi_app=app,
-        socketio_path='/ws/socket.io',  # Match the frontend path
-        # Pass through FastAPI app for non-Socket.IO requests
-        on_startup=None,
-        on_shutdown=None
-    )
-    return socket_app
+    ws_path = getattr(settings, "websocket_path", "/ws/socket.io")
+    mount_prefix = ws_path.rsplit("/", 1)[0] if "/" in ws_path.strip("/") else "/ws"
+    if not mount_prefix.startswith("/"):
+        mount_prefix = f"/{mount_prefix}"
+    if mount_prefix == "":
+        mount_prefix = "/ws"
+
+    if not getattr(app.state, "_nexus_socketio_mounted", False):
+        logger.info(
+            "[WS] Mounting Socket.IO app at prefix=%s (raw_path=%s)",
+            mount_prefix,
+            ws_path,
+        )
+        socket_app = socketio.ASGIApp(
+            sio,
+            # Disable internal path filtering because mount path rewriting can differ
+            # between HTTP and WebSocket scopes across ASGI stacks.
+            socketio_path=None,
+            on_startup=None,
+            on_shutdown=None
+        )
+        app.mount(mount_prefix, socket_app)
+        app.state._nexus_socketio_mounted = True
+    else:
+        logger.info("[WS] Socket.IO app already mounted")
+
+    return app

@@ -10,11 +10,10 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException, status
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.config import settings
-from app.core.database import async_engine
 
 
 def generate_refresh_token() -> str:
@@ -205,7 +204,7 @@ async def revoke_access_token(jti: str, user_id: str, expires_at: datetime, reas
 
 async def is_access_token_revoked(jti: str) -> bool:
     """Check if an access token has been revoked."""
-    from app.core.database import async_engine
+    from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
     async with async_engine.begin() as conn:
         result = await conn.execute(
             text("SELECT 1 FROM revoked_tokens WHERE jti = :jti"),

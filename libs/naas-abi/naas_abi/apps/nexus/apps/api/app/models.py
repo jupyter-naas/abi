@@ -7,13 +7,10 @@ These replace raw SQL strings throughout the codebase.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import (
-    Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint,
-    func, Boolean,
-)
+from naas_abi.apps.nexus.apps.api.app.core.database import Base
+from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Index, Integer,
+                        String, Text, UniqueConstraint, func)
 from sqlalchemy.orm import relationship
-
-from app.core.database import Base
 
 
 def _utcnow() -> datetime:

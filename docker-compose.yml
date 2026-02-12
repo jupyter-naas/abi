@@ -27,7 +27,7 @@
 #     runtime_flags:
 #       - --memory=12g
 #       - --cpus=4
- 
+
 x-abi-template: &abi_template
   build:
     context: .
@@ -37,23 +37,26 @@ x-abi-template: &abi_template
     - 8501:8501  # Streamlit web interface - http://localhost:8501
   volumes:
     # Development volumes for hot-reload
-    - ./scripts:/app/scripts
-    - ./uv.lock:/app/uv.lock
-    - ./config.yaml:/app/config.yaml
-    - ./pyproject.toml:/app/pyproject.toml
-    - ./Makefile:/app/Makefile
-    - ./storage:/app/storage  # Local file storage
-    - ./src:/app/src          # Source code
-    - ./libs:/app/libs        # Libraries
-    - ./README.md:/app/README.md
-    - ./.env:/app/.env
+    - .:/app
+    # - ./scripts:/app/scripts
+    # - ./uv.lock:/app/uv.lock
+    # - ./config.yaml:/app/config.yaml
+    # - ./pyproject.toml:/app/pyproject.toml
+    # - ./Makefile:/app/Makefile
+    # - ./storage:/app/storage  # Local file storage
+    # - ./src:/app/src          # Source code
+    # - ./libs:/app/libs        # Libraries
+    # - ./README.md:/app/README.md
+    # - ./.env:/app/.env
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
   environment:
+    - ENV=max
+    - LOG_LEVEL=DEBUG
     - PYTHONPATH=/app
-    - POSTGRES_URL=postgresql://abi_user:abi_password@postgres:5432/abi_memory
+    - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
     - VECTOR_STORE_ADAPTER=qdrant
-    - QDRANT_HOST=qdrant
+    - QDRANT_HOST=${QDRANT_HOST}
     - QDRANT_PORT=6333
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
@@ -70,6 +73,24 @@ x-abi-template: &abi_template
     - container  # Only starts when running 'make container-up'
 
 services:
+  nexus-web:
+    build:
+      context: libs/naas-abi/naas_abi/apps/nexus/
+      dockerfile: Dockerfile
+    ports:
+      - 3042:3000
+    volumes:
+      - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - NEXT_PUBLIC_NEXUS_ENV=local
+      - NEXT_PUBLIC_API_URL=http://localhost:9879
+      - NEXT_PUBLIC_WS_PATH=/ws/socket.io
+    networks:
+      - abi-network
+    profiles:
+      - container
   # -----------------------------------------------------------------------------
   # ABI Main Service - AI Agent Coordinator
   # -----------------------------------------------------------------------------
@@ -88,7 +109,7 @@ services:
       context: .
       dockerfile: libs/naas-abi-core/naas_abi_core/apps/mcp/Dockerfile.mcp
     environment:
-      - ABI_API_BASE=http://abi:9879
+      - ABI_API_BASE=http://${ABI_HOST}:9879
       - ABI_API_KEY=abi
       - MCP_TRANSPORT=http
     ports:
@@ -106,16 +127,16 @@ services:
   postgres:
     image: postgres:17-alpine  # Latest stable PostgreSQL
     environment:
-      POSTGRES_USER: abi_user
-      POSTGRES_PASSWORD: abi_password
-      POSTGRES_DB: abi_memory  # Database for agent conversations and memory
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB} # Database for agent conversations and memory
     ports:
       - 5432:5432  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:5432/abi_memory
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent data storage
       - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro  # Bootstrap additional databases
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U abi_user -d abi_memory"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -197,7 +218,7 @@ services:
       - 3001:3001  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
     volumes:
       - ./scripts:/app/scripts
-      - ./uv.lock:/app/uv.lock
+        # - ./uv.lock:/app/uv.lock
       - ./config.local.yaml:/app/config.yaml # We mount the config.local.yaml as it's configured to run from within the containers network.
       - ./pyproject.toml:/app/pyproject.toml
       - ./src:/app/src
@@ -212,15 +233,15 @@ services:
     environment:
       - PYTHONPATH=/app
       - DAGSTER_HOME=/app/.dagster
-      - AWS_ACCESS_KEY_ID=dagster
-      - AWS_SECRET_ACCESS_KEY=dagster-secret
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - DAGSTER_S3_LOG_BUCKET=dagster-logs
-      - MINIO_ENDPOINT_URL=http://minio:9000
+      - MINIO_ENDPOINT_URL=http://${MINIO_HOST}:9000
       - MINIO_REGION_NAME=us-east-1
-      - DAGSTER_PG_HOSTNAME=postgres
-      - DAGSTER_PG_USERNAME=abi_user
-      - DAGSTER_PG_PASSWORD=abi_password
-      - DAGSTER_PG_DB=abi_dagster
+      - DAGSTER_PG_HOSTNAME=${POSTGRES_HOST}
+      - DAGSTER_PG_USERNAME=${POSTGRES_USER}
+      - DAGSTER_PG_PASSWORD=${POSTGRES_PASSWORD}
+      - DAGSTER_PG_DB=${POSTGRES_DB}
     command:
       - /bin/bash
       - -c
@@ -237,8 +258,8 @@ services:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address :9001
     environment:
-      MINIO_ROOT_USER: dagster
-      MINIO_ROOT_PASSWORD: dagster-secret
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
       - 9000:9000  # S3 API endpoint - http://localhost:9000
       - 9001:9001  # MinIO console - http://localhost:9001
@@ -256,8 +277,9 @@ services:
       - minio
     entrypoint: >-
       /bin/sh -c "
-      until /usr/bin/mc alias set dagster http://minio:9000 dagster dagster-secret; do sleep 1; done &&
-      /usr/bin/mc mb -p dagster/dagster-logs || true
+      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
+      /usr/bin/mc mb -p ${MINIO_ROOT_USER}/dagster-logs || true &&
+      /usr/bin/mc mb -p ${MINIO_ROOT_USER}/abi || true
       "
     networks:
       - abi-network
@@ -294,7 +316,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - 6379:6379  # Redis - redis://localhost:6379
+      - 6379:6379
     volumes:
       - redis_data:/data
     healthcheck:

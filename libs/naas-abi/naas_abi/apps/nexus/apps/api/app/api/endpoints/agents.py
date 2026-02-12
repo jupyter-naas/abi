@@ -2,20 +2,25 @@
 Agents API endpoints - Agent management and lifecycle.
 """
 
+import ast
+import importlib
+import logging
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
-import logging
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User, get_current_user_required, require_workspace_access)
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.models import AgentConfigModel
+from naas_abi.apps.nexus.apps.api.app.services.model_registry import (
+    ModelInfo, get_all_models, get_logo_for_provider)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.endpoints.auth import get_current_user_required, require_workspace_access, User
-from app.core.database import get_db
-from app.models import AgentConfigModel
-from app.services.model_registry import get_all_models, ModelInfo, get_logo_for_provider
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -74,6 +79,148 @@ class ToolResult(BaseModel):
     result: dict | None = None
     error: str | None = None
     execution_time_ms: int
+
+
+def _slugify(text: str) -> str:
+    value = re.sub(r"[^a-zA-Z0-9]+", "-", text).strip("-").lower()
+    return value or "agent"
+
+
+def _discover_loaded_abi_agents() -> list[AgentConfig]:
+    """Discover agent metadata from loaded ABI modules without instantiating agents."""
+    now = datetime.now(timezone.utc)
+    discovered: list[AgentConfig] = []
+
+    try:
+        from naas_abi import ABIModule
+        abi_module = ABIModule.get_instance()
+    except Exception as exc:
+        logger.debug(f"ABI module discovery unavailable: {exc}")
+        return discovered
+
+    modules = getattr(getattr(abi_module, "engine", None), "modules", {}) or {}
+    for module in modules.values():
+        for agent_cls in getattr(module, "agents", []) or []:
+            if agent_cls is None:
+                continue
+            try:
+                agent_mod = importlib.import_module(agent_cls.__module__)
+
+                # Preferred metadata lives on the agent module.
+                name = getattr(agent_mod, "NAME", None) or getattr(agent_cls, "NAME", None) or agent_cls.__name__
+                description = (
+                    getattr(agent_mod, "DESCRIPTION", None)
+                    or getattr(agent_cls, "DESCRIPTION", None)
+                    or f"Agent discovered from {module.__class__.__module__}"
+                )
+                logo_url = getattr(agent_mod, "AVATAR_URL", None) or getattr(agent_cls, "AVATAR_URL", None)
+
+                discovered.append(
+                    AgentConfig(
+                        # Use class name as stable technical ID for wiring.
+                        id=agent_cls.__name__,
+                        name=name,
+                        agent_type="custom",
+                        description=description,
+                        system_prompt=None,
+                        model=name,
+                        provider="abi",
+                        logo_url=logo_url,
+                        enabled=True,
+                        temperature=0.7,
+                        max_tokens=4096,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            except Exception as exc:
+                logger.debug(f"Skipping agent metadata discovery for {agent_cls}: {exc}")
+                continue
+
+    return discovered
+
+
+def _extract_string_constant(module_ast: ast.Module, constant_name: str) -> str | None:
+    for node in module_ast.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == constant_name:
+                    value = node.value
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        return value.value
+        if isinstance(node, ast.AnnAssign):
+            target = node.target
+            if isinstance(target, ast.Name) and target.id == constant_name:
+                value = node.value
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    return value.value
+    return None
+
+
+def _extract_agent_class_name(module_ast: ast.Module) -> str | None:
+    for node in module_ast.body:
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                if isinstance(base, ast.Name) and base.id in {"Agent", "IntentAgent"}:
+                    return node.name
+                if isinstance(base, ast.Attribute) and base.attr in {"Agent", "IntentAgent"}:
+                    return node.name
+    return None
+
+
+def _discover_agents_from_naas_abi_directory() -> list[AgentConfig]:
+    """Discover agents from `naas_abi/agents` via static file parsing only."""
+    discovered: list[AgentConfig] = []
+    now = datetime.now(timezone.utc)
+
+    try:
+        import naas_abi
+        agents_dir = Path(naas_abi.__file__).resolve().parent / "agents"
+    except Exception as exc:
+        logger.debug(f"Could not resolve naas_abi agents directory: {exc}")
+        return discovered
+
+    if not agents_dir.exists():
+        return discovered
+
+    for file_path in agents_dir.glob("*.py"):
+        if file_path.name.endswith("_test.py"):
+            continue
+        try:
+            source = file_path.read_text(encoding="utf-8")
+            module_ast = ast.parse(source, filename=str(file_path))
+
+            name = _extract_string_constant(module_ast, "NAME")
+            description = _extract_string_constant(module_ast, "DESCRIPTION")
+            avatar_url = _extract_string_constant(module_ast, "AVATAR_URL")
+            class_name = _extract_agent_class_name(module_ast)
+
+            agent_name = name or class_name or file_path.stem
+            agent_description = description or f"Agent discovered from {file_path.name}"
+
+            discovered.append(
+                AgentConfig(
+                    # Use class name as stable technical ID for wiring when available.
+                    id=class_name or file_path.stem,
+                    name=agent_name,
+                    agent_type="custom",
+                    description=agent_description,
+                    system_prompt=None,
+                    model=agent_name,
+                    provider="abi",
+                    logo_url=avatar_url,
+                    enabled=True,
+                    temperature=0.7,
+                    max_tokens=4096,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        except Exception as exc:
+            logger.debug(f"Failed to parse agent file {file_path}: {exc}")
+            continue
+
+    return discovered
 
 
 # Default agents
@@ -152,7 +299,17 @@ async def list_agents(
             created_at=agent.created_at,
             updated_at=agent.updated_at,
         ))
-    
+
+    # Add discovered ABI agents (no instantiation), unless already present by name.
+    discovered_agents = (
+        _discover_loaded_abi_agents() + _discover_agents_from_naas_abi_directory()
+    )
+    existing_names = {a.name.strip().lower() for a in agent_list}
+    for discovered in discovered_agents:
+        if discovered.name.strip().lower() not in existing_names:
+            agent_list.append(discovered)
+            existing_names.add(discovered.name.strip().lower())
+
     return agent_list
 
 
@@ -334,9 +491,10 @@ async def sync_agents_from_models(
     
     if server_id:
         # Sync from ABI server
-        from app.models import InferenceServerModel
         import httpx
-        
+        from naas_abi.apps.nexus.apps.api.app.models import \
+            InferenceServerModel
+
         # Get server
         server_result = await db.execute(
             select(InferenceServerModel).where(

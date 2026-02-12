@@ -2,11 +2,12 @@
 import os
 import re
 from datetime import datetime
-from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
+from typing import List, Optional
 
-from app.api.endpoints.auth import get_current_user_required
+from fastapi import APIRouter, Depends, HTTPException
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import \
+    get_current_user_required
+from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -228,6 +229,7 @@ async def get_bfo7_reference() -> dict:
     """
     try:
         from pathlib import Path
+
         # Locate repository root by walking up until we find the 'apps' directory
         p = Path(__file__).resolve()
         root = None

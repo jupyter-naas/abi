@@ -73,8 +73,9 @@ class TestProtectedEndpoints:
 
     async def test_expired_token_returns_401(self, client):
         """Expired token returns 401."""
-        from app.api.endpoints.auth import create_access_token
         from datetime import timedelta
+
+        from app.api.endpoints.auth import create_access_token
 
         token = create_access_token(
             data={"sub": "user-test"}, expires_delta=timedelta(seconds=-1)
