@@ -222,6 +222,14 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
                   Account Settings
                 </Link>
                 <Link
+                  href={getWorkspacePath('/settings')}
+                  onClick={() => setUserMenuOpen(false)}
+                  className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+                >
+                  <Settings size={16} className="shrink-0 text-muted-foreground" />
+                  Workspace Settings
+                </Link>
+                <Link
                   href="/organizations"
                   onClick={() => setUserMenuOpen(false)}
                   className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
