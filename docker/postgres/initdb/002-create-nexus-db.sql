@@ -1,0 +1,8 @@
+CREATE DATABASE nexus;
+
+\c nexus;
+
+CREATE SCHEMA IF NOT EXISTS public;
+
+GRANT ALL PRIVILEGES ON DATABASE nexus TO abi;
+

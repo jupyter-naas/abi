@@ -18,18 +18,20 @@ pip install naas-abi-cli
 
 ### Project Management
 
-#### `abi new project <project-name> [project-path]`
+#### `abi new project <project-name> [project-path] [--with-local-deploy/--without-local-deploy]`
 Creates a new ABI project with all necessary starter files and dependencies.
 
 **What it does:**
 - Creates a new project directory (must be empty or non-existent)
 - Generates project structure with configuration files, Docker setup, and Python package structure
+- Generates local deployment scaffolding (`docker-compose.yml`, `.deploy/`, and local `.env` values) by default
 - Automatically installs required dependencies (`naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, and `naas-abi-cli`)
 - Customizes project files with your project name
 
 **Example:**
 ```bash
 abi new project my-abi-project
+abi new project my-abi-project --without-local-deploy
 ```
 
 #### `abi init <path>`
@@ -204,7 +206,8 @@ When you create a new project with `abi new project`, the CLI:
 1. Uses template files from `cli/new/templates/project/`
 2. Customizes templates with your project name
 3. Sets up proper Python package structure
-4. Installs all required dependencies via `uv`
+4. Sets up local deployment files from `cli/deploy/templates/local/` (unless disabled)
+5. Installs all required dependencies via `uv`
 
 ## Integration with ABI Framework
 

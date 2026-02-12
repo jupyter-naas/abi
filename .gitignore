@@ -54,7 +54,6 @@ wheels/
 *.rec
 *.asciinema
 *.terminal
-chat
 
 # Docker
 .docker/
@@ -80,7 +79,6 @@ storage/vectorstore/*
 # Ignore data files globally
 *.csv
 *.parquet
-*.json
 *.pdf
 *.doc
 *.docx
@@ -94,6 +92,10 @@ storage/vectorstore/*
 *.jpeg
 *.webp
 *.heic
+
+# Keep demo data and assets in nexus
+!libs/naas-abi/naas_abi/apps/nexus/demo/**
+!libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
 
 
 *.pid

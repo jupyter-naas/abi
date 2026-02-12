@@ -1,0 +1,68 @@
+{
+  "id": "workspace-platform",
+  "name": "User",
+  "description": "User personal graph - connects to workspace graphs when both are visible",
+  "nodes": [
+    {
+      "id": "node-user-demo",
+      "type": "Material Entity",
+      "label": "Demo User",
+      "properties": {
+        "description": "A demonstration user exploring the NEXUS platform",
+        "role": "Explorer"
+      }
+    },
+    {
+      "id": "node-user-interests",
+      "type": "Disposition",
+      "label": "Knowledge Management",
+      "properties": {
+        "description": "Interest in organizing and connecting information",
+        "topics": ["AI", "Graphs", "Ontology", "Automation"]
+      }
+    },
+    {
+      "id": "node-user-goals",
+      "type": "Role",
+      "label": "Platform Evaluator",
+      "properties": {
+        "description": "Evaluating NEXUS for potential use in organization",
+        "criteria": ["usability", "features", "extensibility"]
+      }
+    },
+    {
+      "id": "node-user-session",
+      "type": "Process",
+      "label": "Demo Session",
+      "properties": {
+        "description": "Current exploration session of the NEXUS platform",
+        "startTime": "2026-02-05T10:00:00Z"
+      }
+    },
+    {
+      "id": "node-user-context",
+      "type": "GDC",
+      "label": "User Context",
+      "properties": {
+        "description": "Information about the user's current context and preferences",
+        "theme": "dark",
+        "defaultWorkspace": "workspace-platform"
+      }
+    }
+  ],
+  "edges": [
+    { "id": "edge-user-interests", "source": "node-user-demo", "target": "node-user-interests", "type": "has disposition" },
+    { "id": "edge-user-role", "source": "node-user-demo", "target": "node-user-goals", "type": "has role" },
+    { "id": "edge-user-session", "source": "node-user-demo", "target": "node-user-session", "type": "participates in" },
+    { "id": "edge-user-context", "source": "node-user-demo", "target": "node-user-context", "type": "concretizes" },
+    {
+      "id": "edge-user-explores-nexus",
+      "source": "node-user-demo",
+      "target": "node-nexus-platform",
+      "type": "participates in",
+      "properties": {
+        "description": "User exploring the NEXUS platform - this edge connects the User graph to the Nexus graph when both are visible"
+      }
+    }
+  ]
+}

@@ -19,10 +19,9 @@ from pathlib import Path
 # Add app to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from app.core.database import (async_engine, get_row_count, init_db,
+                               table_exists)
 from sqlalchemy import text
-
-from app.core.database import async_engine, init_db, table_exists, get_row_count
-
 
 # Demo data directory
 DEMO_DIR = Path(__file__).parent.parent.parent / "demo"
@@ -507,6 +506,17 @@ async def seed_all() -> None:
         except Exception as e:
             print(f"  ⚠️  Skipped BFO 7 Buckets seeding: {e}")
 
+        # Fail hard if core seed data did not get inserted.
+        users_count = int((await conn.execute(text("SELECT COUNT(*) FROM users"))).scalar_one() or 0)
+        organizations_count = int((await conn.execute(text("SELECT COUNT(*) FROM organizations"))).scalar_one() or 0)
+        workspaces_count = int((await conn.execute(text("SELECT COUNT(*) FROM workspaces"))).scalar_one() or 0)
+        if users_count == 0 or organizations_count == 0 or workspaces_count == 0:
+            raise RuntimeError(
+                "Seed validation failed: expected non-empty core tables after seeding "
+                f"(users={users_count}, organizations={organizations_count}, workspaces={workspaces_count}). "
+                "Check demo data files and runtime paths."
+            )
+
     print("\n✅ Database seeded successfully!")
     await print_stats()
     print_access_matrix()
@@ -557,6 +567,29 @@ def print_access_matrix() -> None:
     print("│  eve@example.com                   │ GlobalConsulting   │ Consulting (owner)      │")
     print("│                                    │ (owner)            │                         │")
     print("└──────────────────────────────────────────────────────────────────────────────────┘")
+
+
+async def ensure_seed_data() -> bool:
+    """
+    Ensure demo seed data exists.
+
+    Returns:
+        True if seeding was executed, False if data already existed.
+    """
+    if not await table_exists("users"):
+        await init_db()
+
+    async with async_engine.begin() as conn:
+        result = await conn.execute(text("SELECT COUNT(*) FROM users"))
+        user_count = int(result.scalar_one() or 0)
+
+    if user_count > 0:
+        print(f"✓ Demo seed check: users already present ({user_count}), skipping seed")
+        return False
+
+    print("No users found, running initial demo seed...")
+    await seed_all()
+    return True
 
 
 async def main():

@@ -5,11 +5,10 @@ This module adapts the FastAPI application to run on Cloudflare Workers
 using their Python runtime and ASGI support.
 """
 
-from workers import WorkerEntrypoint
 import asgi
-
 # Import the FastAPI app
 from app.main import app
+from workers import WorkerEntrypoint
 
 
 class Default(WorkerEntrypoint):

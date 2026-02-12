@@ -1,5 +1,6 @@
 import os
 import subprocess
+from importlib.resources import files
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
@@ -9,15 +10,12 @@ from fastapi.openapi.models import OAuthFlowPassword
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
-
 # Authentication
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.security.oauth2 import OAuth2
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
 from naas_abi_core import logger
-from importlib.resources import files
-
 # Docs
 from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML, TAGS_METADATA
 from naas_abi_core.engine.Engine import Engine
@@ -214,6 +212,9 @@ app.include_router(agents_router)
 app.include_router(pipelines_router)
 app.include_router(workflows_router)
 
+for module in engine.modules.values():
+    router = module.api(app)
+
 
 def api():
     import uvicorn
@@ -224,11 +225,11 @@ def api():
             host="0.0.0.0",
             port=9879,
             reload=os.environ.get("ENV") == "dev",
-            reload_dirs=["src", "lib"],
+            reload_dirs=["src", "libs"],
             log_level="debug",
         )
     else:
-        uvicorn.run(app, host="0.0.0.0", port=9879)
+        uvicorn.run("naas_abi_core.apps.api.api:app", host="0.0.0.0", port=9879, reload_dirs=["src", "libs"], reload=True)
 
 
 def test_init():

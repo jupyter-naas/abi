@@ -2,16 +2,18 @@
 AI Providers API endpoints - Discover and manage available AI providers from environment.
 """
 
-import os
 import logging
+import os
 from typing import Literal
+
 from fastapi import APIRouter, Depends
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User, get_current_user_required)
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.model_registry import (
+    MODEL_REGISTRY, get_logo_for_provider, get_models_for_provider)
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.endpoints.auth import get_current_user_required, User
-from app.core.database import get_db
-from app.services.model_registry import get_models_for_provider, MODEL_REGISTRY, get_logo_for_provider
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -47,9 +49,9 @@ async def has_api_key_configured(
     db: AsyncSession,
 ) -> bool:
     """Check if API key exists in database secrets or environment."""
+    from naas_abi.apps.nexus.apps.api.app.models import SecretModel
     from sqlalchemy import select
-    from app.models import SecretModel
-    
+
     # Check database first
     result = await db.execute(
         select(SecretModel.id).where(
@@ -73,8 +75,9 @@ async def list_available_providers(
     List all available AI providers based on workspace secrets.
     Returns providers with models from the registry.
     """
+    from naas_abi.apps.nexus.apps.api.app.models import (SecretModel,
+                                                         WorkspaceMemberModel)
     from sqlalchemy import select
-    from app.models import SecretModel, WorkspaceMemberModel
     
     providers = []
     

@@ -5,34 +5,34 @@ Uses async database sessions with SQLAlchemy ORM.
 Includes: refresh tokens, rate limiting, audit logging, session invalidation.
 """
 
+import logging
+import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
-import os
-from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Depends, status, Request, UploadFile, File
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr, Field
 import bcrypt
+from fastapi import (APIRouter, Depends, File, HTTPException, Request,
+                     UploadFile, status)
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-import logging
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.database import async_engine, get_db
+from naas_abi.apps.nexus.apps.api.app.models import (UserModel,
+                                                     WorkspaceMemberModel,
+                                                     WorkspaceModel)
+from naas_abi.apps.nexus.apps.api.app.services.audit import (
+    log_login, log_logout, log_password_change, log_register,
+    log_token_refresh)
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    check_rate_limit, get_rate_limit_identifier)
+from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
+    create_refresh_token, is_access_token_revoked, revoke_access_token,
+    revoke_all_user_tokens, revoke_refresh_token, validate_refresh_token)
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.config import settings
-from app.core.database import get_db, async_engine
-from app.models import UserModel, WorkspaceMemberModel, WorkspaceModel
-from app.services.audit import log_login, log_logout, log_register, log_token_refresh, log_password_change
-from app.services.rate_limit import check_rate_limit, get_rate_limit_identifier
-from app.services.refresh_token import (
-    create_refresh_token,
-    validate_refresh_token,
-    revoke_refresh_token,
-    revoke_all_user_tokens,
-    is_access_token_revoked,
-    revoke_access_token,
-)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -176,7 +176,7 @@ async def _get_user_by_email_async(db: AsyncSession, email: str) -> UserModel | 
 
 async def _get_user_by_id(user_id: str) -> UserModel | None:
     """Look up a user by ID from the database (async)."""
-    from app.core.database import async_engine
+    from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
     from sqlalchemy import text
     
     async with async_engine.begin() as conn:
@@ -235,7 +235,7 @@ async def get_current_user_required(token: str = Depends(oauth2_scheme)) -> User
 
 async def get_workspace_role(user_id: str, workspace_id: str) -> str | None:
     """Get user's role in a workspace. Returns None if not a member."""
-    from app.core.database import async_engine
+    from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
     from sqlalchemy import text
     
     async with async_engine.connect() as conn:
@@ -639,9 +639,10 @@ async def forgot_password(
     Request password reset link. Sends email with reset token.
     Always returns success (don't reveal if email exists).
     """
-    from app.models import PasswordResetTokenModel
     import secrets
-    
+
+    from naas_abi.apps.nexus.apps.api.app.models import PasswordResetTokenModel
+
     # Find user by email
     result = await db.execute(
         select(UserModel).where(UserModel.email == request.email)
@@ -702,8 +703,8 @@ async def reset_password(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Reset password using token from email."""
-    from app.models import PasswordResetTokenModel
-    
+    from naas_abi.apps.nexus.apps.api.app.models import PasswordResetTokenModel
+
     # Find valid token
     result = await db.execute(
         select(PasswordResetTokenModel)

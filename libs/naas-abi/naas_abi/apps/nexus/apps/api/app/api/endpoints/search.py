@@ -2,15 +2,15 @@
 Search API endpoints - Semantic search across all knowledge.
 """
 
-from typing import Literal, Optional
-from datetime import datetime, timezone
-import httpx
 import hashlib
+from datetime import datetime, timezone
+from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import \
+    get_current_user_required
 from pydantic import BaseModel, Field
-
-from app.api.endpoints.auth import get_current_user_required
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 

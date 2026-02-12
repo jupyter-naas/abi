@@ -3,11 +3,11 @@ AI Provider Service - Handles communication with different AI backends.
 Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom OpenAI-compatible endpoints.
 """
 
-from typing import Literal, AsyncGenerator
-import httpx
-from pydantic import BaseModel
+from typing import AsyncGenerator, Literal
 
-from app.core.config import settings
+import httpx
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from pydantic import BaseModel
 
 # Try importing provider SDKs
 try:
@@ -382,7 +382,7 @@ async def stream_with_cloudflare(
 ) -> AsyncGenerator[str, None]:
     """Stream chat using Cloudflare Workers AI API with SSE."""
     import json
-    
+
     # Use env vars as fallback
     api_key = config.api_key or settings.cloudflare_api_token
     account_id = config.account_id or settings.cloudflare_account_id
@@ -777,15 +777,18 @@ async def stream_with_abi(
             ) as response:
                 response.raise_for_status()
                 
-                # ABI returns Server-Sent Events (SSE) format:
-                # event: ai_message
-                # data: content here
-                # event: message
-                # data: content here (DUPLICATE!)
-                #
-                # Strategy: Track the current event type and only yield from 'ai_message' events
-                # to avoid duplicates. Don't reset current_event until a new event: line arrives.
+                # ABI returns SSE events. Depending on the agent/runtime, content can
+                # arrive under either:
+                # - event: ai_message
+                # - event: message
+                # Some runtimes emit both (duplicate content), others only one.
+                # We therefore:
+                # 1) prefer ai_message when present,
+                # 2) fallback to message when ai_message is absent,
+                # 3) skip duplicate consecutive chunks.
                 current_event = None
+                saw_ai_message = False
+                last_emitted_chunk = None
                 async for line in response.aiter_lines():
                     if not line or not line.strip():
                         continue
@@ -800,12 +803,21 @@ async def stream_with_abi(
                         if content == "[DONE]":
                             break
                         
-                        # Only yield content from 'ai_message' events to avoid duplicates
-                        # (ABI sends both 'ai_message' and 'message' with same content)
-                        # DON'T reset current_event here - it stays until next event: line
-                        if current_event == "ai_message" and content.strip():
+                        if not content.strip():
+                            continue
+
+                        should_emit = False
+                        if current_event == "ai_message":
+                            saw_ai_message = True
+                            should_emit = True
+                        elif current_event == "message" and not saw_ai_message:
+                            # Fallback path when no ai_message events are emitted.
+                            should_emit = True
+
+                        if should_emit and content != last_emitted_chunk:
                             logger.debug(f"📨 ABI chunk ({current_event}): {content[:100]}...")
                             yield content
+                            last_emitted_chunk = content
                             
     except httpx.HTTPStatusError as e:
         logger.error(f"ABI API error: {e.response.status_code} - {e.response.text}")
@@ -814,3 +826,211 @@ async def stream_with_abi(
         logger.error(f"ABI streaming error: {e}")
         yield f"\n\n**Error:** Failed to connect to ABI server: {str(e)}"
 
+
+def _resolve_inprocess_abi_agent(agent_name: str):
+    """Resolve an ABI agent instance from in-process loaded modules."""
+    import sys
+
+    from naas_abi import ABIModule
+
+    abi_module = ABIModule.get_instance()
+    modules = getattr(getattr(abi_module, "engine", None), "modules", {}) or {}
+
+    raw_target = (agent_name or "").strip()
+    if not raw_target:
+        return None
+
+    # Support:
+    # - "AgentName"
+    # - "module.path/AgentName"
+    # - "module.path:AgentName"
+    target_module = None
+    target_agent = raw_target
+    for sep in ("/", ":"):
+        if sep in raw_target:
+            parts = raw_target.split(sep, 1)
+            target_module = parts[0].strip().lower() or None
+            target_agent = parts[1].strip()
+            break
+
+    target_agent_norm = target_agent.lower()
+
+    for module in modules.values():
+        module_path = module.__class__.__module__
+        module_path_norm = module_path.lower()
+        if target_module and target_module not in module_path_norm:
+            continue
+
+        for agent_cls in getattr(module, "agents", []) or []:
+            if agent_cls is None:
+                continue
+            try:
+                agent_mod = sys.modules.get(agent_cls.__module__)
+                module_level_name = (
+                    getattr(agent_mod, "NAME", None) if agent_mod is not None else None
+                )
+                runtime_name = (
+                    module_level_name
+                    or getattr(agent_cls, "NAME", None)
+                    or agent_cls.__name__
+                )
+                class_name = agent_cls.__name__
+                class_name_stripped = (
+                    class_name[:-5] if class_name.endswith("Agent") else class_name
+                )
+
+                candidate_names = {
+                    str(runtime_name).strip().lower(),
+                    class_name.strip().lower(),
+                    class_name_stripped.strip().lower(),
+                    f"{module_path_norm}/{str(runtime_name).strip().lower()}",
+                    f"{module_path_norm}/{class_name.strip().lower()}",
+                    f"{module_path_norm}/{class_name_stripped.strip().lower()}",
+                }
+
+                if (
+                    target_agent_norm in candidate_names
+                    or raw_target.lower() in candidate_names
+                ):
+                    return agent_cls.New()
+            except Exception:
+                continue
+
+    # Fallback: resolve from local naas_abi.agents package directly.
+    # In some runtimes, module.agents may not include local agents (AbiAgent, etc.).
+    try:
+        from importlib import import_module
+
+        from naas_abi_core.services.agent.Agent import Agent
+
+        local_agent_module_names = [
+            "AbiAgent",
+            "EntitytoSPARQLAgent",
+            "KnowledgeGraphBuilderAgent",
+            "OntologyEngineerAgent",
+        ]
+
+        for mod_name in local_agent_module_names:
+            mod = import_module(f"naas_abi.agents.{mod_name}")
+            create_agent = getattr(mod, "create_agent", None)
+            for _, value in mod.__dict__.items():
+                if not isinstance(value, type):
+                    continue
+                if not issubclass(value, Agent):
+                    continue
+
+                class_name = value.__name__
+                class_name_stripped = (
+                    class_name[:-5] if class_name.endswith("Agent") else class_name
+                )
+                runtime_name = (
+                    getattr(mod, "NAME", None)
+                    or getattr(value, "NAME", None)
+                    or class_name
+                )
+                local_path = f"naas_abi.agents.{mod_name}".lower()
+                local_candidates = {
+                    str(runtime_name).strip().lower(),
+                    class_name.lower(),
+                    class_name_stripped.lower(),
+                    f"{local_path}/{str(runtime_name).strip().lower()}",
+                    f"{local_path}/{class_name.lower()}",
+                    f"{local_path}/{class_name_stripped.lower()}",
+                }
+                if (
+                    target_agent_norm in local_candidates
+                    or raw_target.lower() in local_candidates
+                ):
+                    if not hasattr(value, "New") and callable(create_agent):
+                        setattr(value, "New", create_agent)
+                    if hasattr(value, "New"):
+                        return value.New()
+    except Exception:
+        pass
+    return None
+
+
+async def stream_with_abi_inprocess(
+    messages: list[Message],
+    config: ProviderConfig,
+    thread_id: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """Stream chat by invoking ABI agent directly in-process."""
+    import asyncio
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    latest_user_message = None
+    for msg in reversed(messages):
+        if msg.role == "user":
+            latest_user_message = msg.content
+            break
+
+    if not latest_user_message:
+        logger.warning("No user message found in conversation")
+        yield "Error: No user message to send"
+        return
+
+    agent_name = config.model
+    agent = _resolve_inprocess_abi_agent(agent_name)
+    if agent is None:
+        # Expose available names to quickly diagnose bad IDs in UI/backend mapping.
+        try:
+            from naas_abi import ABIModule
+
+            available = []
+            modules = getattr(getattr(ABIModule.get_instance(), "engine", None), "modules", {}) or {}
+            for module in modules.values():
+                module_path = module.__class__.__module__
+                for agent_cls in getattr(module, "agents", []) or []:
+                    if agent_cls is None:
+                        continue
+                    agent_mod = __import__(agent_cls.__module__, fromlist=["*"])
+                    runtime_name = (
+                        getattr(agent_mod, "NAME", None)
+                        or getattr(agent_cls, "NAME", None)
+                        or agent_cls.__name__
+                    )
+                    available.append(f"{module_path}/{runtime_name}")
+            available_hint = ", ".join(sorted(set(available))[:20])
+        except Exception:
+            available_hint = "unavailable"
+        yield (
+            f"\n\n**Error:** In-process ABI agent not found: {agent_name}\n"
+            f"Available (sample): {available_hint}"
+        )
+        return
+
+    # Keep ABI memory continuity aligned with Nexus conversation.
+    if thread_id and hasattr(agent, "state") and hasattr(agent.state, "set_thread_id"):
+        try:
+            agent.state.set_thread_id(str(thread_id))
+        except Exception:
+            pass
+
+    stream_iter = iter(agent.stream_invoke(latest_user_message))
+
+    while True:
+        try:
+            event = await asyncio.to_thread(next, stream_iter)
+        except StopIteration:
+            break
+        except Exception as exc:
+            logger.error(f"In-process ABI streaming error: {exc}")
+            yield f"\n\n**Error:** Failed to stream ABI agent response: {str(exc)}"
+            break
+
+        if isinstance(event, dict):
+            event_name = str(event.get("event", "")).strip()
+            data = event.get("data", "")
+            text = "" if data is None else str(data)
+
+            if text == "[DONE]" or event_name == "done":
+                break
+
+            # Forward AI message events and fallback message events.
+            if event_name in {"ai_message", "message"} and text.strip():
+                yield text
+        elif isinstance(event, str) and event.strip():
+            yield event

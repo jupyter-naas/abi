@@ -16,6 +16,7 @@ export interface NexusConfig {
   // URLs
   frontendUrl: string;
   apiUrl: string;
+  websocketPath: string;
   ollamaUrl: string;
   
   // Features
@@ -59,7 +60,8 @@ const configs: Record<Environment, NexusConfig> = {
     appName: 'NEXUS',
     version: '0.1.0',
     frontendUrl: 'http://localhost:3000',
-    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9879',
+    websocketPath: process.env.NEXT_PUBLIC_WS_PATH || '/ws/socket.io',
     ollamaUrl: process.env.NEXT_PUBLIC_OLLAMA_URL || 'http://localhost:11434',
     features: {
       enableGraph: true,
@@ -82,6 +84,7 @@ const configs: Record<Environment, NexusConfig> = {
     version: '0.1.0',
     frontendUrl: process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://nexus.naas.ai',
     apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.nexus.naas.ai',
+    websocketPath: process.env.NEXT_PUBLIC_WS_PATH || '/ws/socket.io',
     ollamaUrl: '',  // No local Ollama in cloud
     features: {
       enableGraph: true,
@@ -104,6 +107,7 @@ const configs: Record<Environment, NexusConfig> = {
     version: '0.1.0',
     frontendUrl: process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://staging.nexus.naas.ai',
     apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.staging.nexus.naas.ai',
+    websocketPath: process.env.NEXT_PUBLIC_WS_PATH || '/ws/socket.io',
     ollamaUrl: '',  // No local Ollama in staging
     features: {
       enableGraph: true,
@@ -155,6 +159,13 @@ export function isFeatureEnabled(feature: keyof NexusConfig['features']): boolea
  */
 export function getApiUrl(): string {
   return getConfig().apiUrl;
+}
+
+/**
+ * Get Socket.IO endpoint path
+ */
+export function getWebsocketPath(): string {
+  return getConfig().websocketPath;
 }
 
 /**
