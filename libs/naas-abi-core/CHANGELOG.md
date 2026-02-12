@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.12.0 (2026-02-12)
+
+### Features
+
+- Working on wiring nexus to abi
+  ([`db01f8b`](https://github.com/jupyter-naas/abi/commit/db01f8b624870b47d1be9a331546ad5313a4204a))
+
+
 ## v1.11.0 (2026-02-10)
 
 ### Bug Fixes
