@@ -126,20 +126,35 @@ class ApacheJenaTDB2(ITripleStorePort):
 
         return clean_graph
 
-    def __build_data_update(self, operation: str, triples: Graph) -> str:
+    def __build_data_update(
+        self,
+        operation: str,
+        triples: Graph,
+        graph_name: URIRef | None = None,
+    ) -> str:
         statements: list[str] = []
         for s, p, o in triples:
             if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
                 continue
             statements.append(f"  {s.n3()} {p.n3()} {o.n3()} .")
 
-        return f"{operation} {{\n" + "\n".join(statements) + "\n}"
+        if graph_name is None:
+            return f"{operation} {{\n" + "\n".join(statements) + "\n}"
 
-    def insert(self, triples: Graph):
+        return (
+            f"{operation} {{\n"
+            + f"  GRAPH <{str(graph_name)}> {{\n"
+            + "\n".join(statements)
+            + "\n  }\n}"
+        )
+
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
         if len(triples) == 0:
             return
 
-        insert_query = self.__build_data_update("INSERT DATA", triples)
+        insert_query = self.__build_data_update(
+            "INSERT DATA", triples, graph_name=graph_name
+        )
         response = requests.post(
             self.update_endpoint,
             headers={"Content-Type": "application/sparql-update"},
@@ -148,11 +163,13 @@ class ApacheJenaTDB2(ITripleStorePort):
         )
         response.raise_for_status()
 
-    def remove(self, triples: Graph):
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
         if len(triples) == 0:
             return
 
-        delete_query = self.__build_data_update("DELETE DATA", triples)
+        delete_query = self.__build_data_update(
+            "DELETE DATA", triples, graph_name=graph_name
+        )
         response = requests.post(
             self.update_endpoint,
             headers={"Content-Type": "application/sparql-update"},

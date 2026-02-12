@@ -24,11 +24,11 @@ class OntologyEvent(Enum):
 
 class ITripleStorePort(ABC):
     @abstractmethod
-    def insert(self, triples: Graph):
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
         pass
 
     @abstractmethod
-    def remove(self, triples: Graph):
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
         pass
 
     @abstractmethod
@@ -72,6 +72,7 @@ class ITripleStoreService(ABC):
         topic: tuple[URIRef | None, URIRef | None, URIRef | None],
         callback: Callable[[bytes], None],
         event_type: OntologyEvent | None = None,
+        graph_name: URIRef | str | None = "*",
     ) -> None:
         """
         Register a callback function to receive notifications for triple store events matching the given
@@ -123,7 +124,7 @@ class ITripleStoreService(ABC):
     #     pass
 
     @abstractmethod
-    def insert(self, triples: Graph):
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
         """Insert triples from the provided graph into the store.
 
         This method takes a graph of triples and inserts them into the triple store. The triples
@@ -131,6 +132,7 @@ class ITripleStoreService(ABC):
 
         Args:
             triples (Graph): The RDF graph containing triples to insert
+            graph_name (URIRef | None): Named graph URI target. None means default graph.
 
         Returns:
             None
@@ -138,7 +140,7 @@ class ITripleStoreService(ABC):
         pass
 
     @abstractmethod
-    def remove(self, triples: Graph):
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
         """Remove triples from the provided graph from the store.
 
         This method takes a graph of triples and removes them from the triple store. The triples
@@ -146,6 +148,7 @@ class ITripleStoreService(ABC):
 
         Args:
             triples (Graph): The RDF graph containing triples to remove
+            graph_name (URIRef | None): Named graph URI target. None means default graph.
 
         Returns:
             None

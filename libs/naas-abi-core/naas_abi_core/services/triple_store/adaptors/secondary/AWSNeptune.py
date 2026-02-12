@@ -65,7 +65,7 @@ License: MIT
 import socket
 import tempfile
 from io import StringIO
-from typing import TYPE_CHECKING, Any, Tuple, overload
+from typing import TYPE_CHECKING, Any, Tuple
 
 import boto3
 import botocore
@@ -354,11 +354,6 @@ class AWSNeptune(ITripleStorePort):
 
         return response
 
-    @overload
-    def insert(self, triples: Graph, graph_name: URIRef): ...
-    @overload
-    def insert(self, triples: Graph): ...
-
     def insert(self, triples: Graph, graph_name: URIRef | None = None):
         """
         Insert RDF triples into Neptune.
@@ -400,13 +395,7 @@ class AWSNeptune(ITripleStorePort):
 
         query = self.graph_to_query(triples, QueryType.INSERT_DATA, graph_name)
 
-        response = self.submit_query({QueryMode.UPDATE.value: query})
-        return response
-
-    @overload
-    def remove(self, triples: Graph, graph_name: URIRef): ...
-    @overload
-    def remove(self, triples: Graph): ...
+        self.submit_query({QueryMode.UPDATE.value: query})
 
     def remove(self, triples: Graph, graph_name: URIRef | None = None):
         """
@@ -444,8 +433,7 @@ class AWSNeptune(ITripleStorePort):
         if graph_name is None:
             graph_name = self.default_graph_name
         query = self.graph_to_query(triples, QueryType.DELETE_DATA, graph_name)
-        response = self.submit_query({"update": query})
-        return response
+        self.submit_query({"update": query})
 
     def get(self) -> Graph:
         """

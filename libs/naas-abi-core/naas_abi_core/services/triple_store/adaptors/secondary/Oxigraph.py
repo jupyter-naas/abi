@@ -196,7 +196,7 @@ class Oxigraph(ITripleStorePort):
             f"Removed {len(triples)} triples from Oxigraph via store endpoint (large remove)"
         )
 
-    def insert(self, triples: Graph):
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
         """
         Insert RDF triples into Oxigraph.
 
@@ -216,15 +216,27 @@ class Oxigraph(ITripleStorePort):
         if len(triples) == 0:
             return
         elif len(triples) > 100000:
+            if graph_name is not None:
+                raise NotImplementedError(
+                    "Named graph insert for large graphs is not supported in Oxigraph adapter"
+                )
             self.__insert_large_graph(triples)
         else:
             # Build INSERT DATA query
-            insert_query = "INSERT DATA {\n"
+            if graph_name is None:
+                insert_query = "INSERT DATA {\n"
+            else:
+                insert_query = f"INSERT DATA {{\n  GRAPH <{str(graph_name)}> {{\n"
+
             for s, p, o in triples:
                 if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
                     continue
                 insert_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-            insert_query += "}"
+
+            if graph_name is None:
+                insert_query += "}"
+            else:
+                insert_query += "  }\n}"
 
             response = requests.post(
                 self.update_endpoint,
@@ -239,7 +251,7 @@ class Oxigraph(ITripleStorePort):
                 response.raise_for_status()
                 logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
 
-    def remove(self, triples: Graph, chunk_size: int = 1_000_000):
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
         """
         Remove RDF triples from Oxigraph.
 
@@ -258,15 +270,27 @@ class Oxigraph(ITripleStorePort):
         if len(triples) == 0:
             return
         elif len(triples) > 100000:
+            if graph_name is not None:
+                raise NotImplementedError(
+                    "Named graph remove for large graphs is not supported in Oxigraph adapter"
+                )
             self.__remove_large_graph(triples)
         else:
             # Build DELETE DATA query
-            delete_query = "DELETE DATA {\n"
+            if graph_name is None:
+                delete_query = "DELETE DATA {\n"
+            else:
+                delete_query = f"DELETE DATA {{\n  GRAPH <{str(graph_name)}> {{\n"
+
             for s, p, o in triples:
                 if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
                     continue
                 delete_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-            delete_query += "}"
+
+            if graph_name is None:
+                delete_query += "}"
+            else:
+                delete_query += "  }\n}"
 
             response = requests.post(
                 self.update_endpoint,

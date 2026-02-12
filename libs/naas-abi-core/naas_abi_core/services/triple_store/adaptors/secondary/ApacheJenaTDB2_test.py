@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import rdflib
+import pytest
 from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
     ApacheJenaTDB2,
 )
@@ -25,7 +26,17 @@ def test_init_endpoints():
     assert adapter.data_endpoint == "http://localhost:3030/ds/data"
 
 
-def test_insert_posts_sparql_update():
+@pytest.mark.parametrize(
+    "graph_name, expected_fragment",
+    [
+        (None, b"INSERT DATA"),
+        (
+            URIRef("http://example.org/graphs/people"),
+            b"GRAPH <http://example.org/graphs/people>",
+        ),
+    ],
+)
+def test_insert_posts_expected_sparql_update(graph_name, expected_fragment):
     adapter = _build_adapter()
     graph = Graph()
     graph.add(
@@ -42,15 +53,25 @@ def test_insert_posts_sparql_update():
         mock_post.return_value = Mock(status_code=200)
         mock_post.return_value.raise_for_status = Mock()
 
-        adapter.insert(graph)
+        adapter.insert(graph, graph_name=graph_name)
 
-        call_kwargs = mock_post.call_args.kwargs
         assert mock_post.call_args.args[0] == adapter.update_endpoint
+        call_kwargs = mock_post.call_args.kwargs
         assert call_kwargs["headers"]["Content-Type"] == "application/sparql-update"
-        assert b"INSERT DATA" in call_kwargs["data"]
+        assert expected_fragment in call_kwargs["data"]
 
 
-def test_remove_posts_sparql_update():
+@pytest.mark.parametrize(
+    "graph_name, expected_fragment",
+    [
+        (None, b"DELETE DATA"),
+        (
+            URIRef("http://example.org/graphs/people"),
+            b"GRAPH <http://example.org/graphs/people>",
+        ),
+    ],
+)
+def test_remove_posts_expected_sparql_update(graph_name, expected_fragment):
     adapter = _build_adapter()
     graph = Graph()
     graph.add(
@@ -67,11 +88,29 @@ def test_remove_posts_sparql_update():
         mock_post.return_value = Mock(status_code=200)
         mock_post.return_value.raise_for_status = Mock()
 
-        adapter.remove(graph)
+        adapter.remove(graph, graph_name=graph_name)
 
-        call_kwargs = mock_post.call_args.kwargs
         assert mock_post.call_args.args[0] == adapter.update_endpoint
-        assert b"DELETE DATA" in call_kwargs["data"]
+        call_kwargs = mock_post.call_args.kwargs
+        assert call_kwargs["headers"]["Content-Type"] == "application/sparql-update"
+        assert expected_fragment in call_kwargs["data"]
+
+
+def test_query_update_routes_to_update_endpoint():
+    adapter = _build_adapter()
+
+    response = Mock(status_code=200)
+    response.raise_for_status = Mock()
+
+    with patch(
+        "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.post",
+        return_value=response,
+    ) as mock_post:
+        adapter.query(
+            'INSERT DATA { <http://example.org/s> <http://example.org/p> "o" . }'
+        )
+
+    assert mock_post.call_args.args[0] == adapter.update_endpoint
 
 
 def test_query_select_returns_rows():
