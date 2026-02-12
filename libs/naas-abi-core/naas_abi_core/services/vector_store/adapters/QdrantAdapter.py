@@ -90,7 +90,10 @@ class QdrantAdapter(IVectorStorePort):
         return [c.name for c in collections.collections]
 
     def store_vectors(
-        self, collection_name: str, documents: List[VectorDocument]
+        self,
+        collection_name: str,
+        documents: List[VectorDocument],
+        batch_size: int = 100,
     ) -> None:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
@@ -110,12 +113,16 @@ class QdrantAdapter(IVectorStorePort):
             )
             points.append(point)
 
-        operation_info = self.client.upsert(
-            collection_name=collection_name, points=points
-        )
-
-        if operation_info.status != UpdateStatus.COMPLETED:
-            raise RuntimeError(f"Failed to store vectors: {operation_info}")
+        # Batch upsert to avoid OOM / payload-too-large issues
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
+            operation_info = self.client.upsert(
+                collection_name=collection_name, points=batch
+            )
+            if operation_info.status != UpdateStatus.COMPLETED:
+                raise RuntimeError(
+                    f"Failed to store vectors (batch {i // batch_size + 1}): {operation_info}"
+                )
 
         logger.debug(f"Stored {len(documents)} vectors in {collection_name}")
 
