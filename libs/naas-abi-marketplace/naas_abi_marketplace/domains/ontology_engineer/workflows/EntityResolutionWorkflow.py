@@ -11,7 +11,6 @@ Usage:
 
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from typing import Annotated, List, Optional, Set, Tuple, cast
 
 from fastapi import APIRouter
@@ -21,7 +20,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreSer
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from pydantic import Field
-from rdflib import RDFS, Graph, Literal, Node, URIRef
+from rdflib import OWL, RDF, RDFS, Graph, Literal, Node, URIRef
 from rdflib.collection import Collection
 from rdflib.query import ResultRow
 from thefuzz import fuzz  # type: ignore
@@ -50,22 +49,30 @@ class EntityResolutionWorkflowParameters(WorkflowParameters):
         uri_prefix_filter (Optional[str]): Optional URI prefix filter for individuals (e.g., "http://ontology.naas.ai/abi/").
     """
 
-    tbox_paths: Annotated[
-        Optional[List[str]],
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
+
+    tbox_graph: Annotated[
+        Graph,
         Field(
-            description="Optional list of paths to TBox (schema/classes) Turtle files. If not provided, schema will be loaded from triplestore.",
+            # default_factory=Graph,
+            description="RDFLib Graph for TBox (schema/classes). If not provided, schema will be loaded from triplestore or files.",
         ),
-    ] = None
-    abox_paths: Annotated[
-        Optional[List[str]],
+    ] = Graph()
+    abox_graph: Annotated[
+        Graph,
         Field(
-            description="Optional list of paths to ABox (individuals) Turtle files. If not provided, individuals will be loaded from triplestore.",
+            # default_factory=Graph,
+            description="RDFLib Graph for ABox (individuals). If not provided, individuals will be loaded from triplestore or files.",
         ),
-    ] = None
+    ] = Graph()
     similarity_threshold: Annotated[
         int,
         Field(
-            description="Minimum similarity score (0-100) to consider entities as duplicates.",
+            ge=95,
+            le=100,
+            description="Minimum similarity score (95-100) to consider entities as duplicates.",
         ),
     ] = 100
     uri_prefix_filter: Annotated[
@@ -91,25 +98,6 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__triple_store_service = self.__configuration.triple_store
-
-    def _load_schema_from_files(self, tbox_paths: List[str]) -> Graph:
-        """Load schema graph from Turtle files.
-
-        Args:
-            tbox_paths: List of paths to Turtle files containing schema/classes.
-
-        Returns:
-            Graph: The loaded schema graph.
-        """
-        schema_graph = Graph()
-        for schema_file in tbox_paths:
-            schema_path = Path(schema_file)
-            if not schema_path.exists():
-                logger.warning(f"Schema file not found: {schema_file}, skipping...")
-                continue
-            schema_graph += Graph().parse(str(schema_path), format="turtle")
-            logger.info(f"Loaded schema from: {schema_file}")
-        return schema_graph
 
     def _load_schema_from_triplestore(self) -> Graph:
         """Load schema (owl:Class) from triplestore.
@@ -145,27 +133,6 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         except Exception as e:
             logger.error(f"Error loading schema from triplestore: {e}")
         return schema_graph
-
-    def _load_individuals_from_files(self, abox_paths: List[str]) -> Graph:
-        """Load individuals graph from Turtle files.
-
-        Args:
-            abox_paths: List of paths to Turtle files containing individuals.
-
-        Returns:
-            Graph: The loaded individuals graph.
-        """
-        individual_graph = Graph()
-        for individual_file in abox_paths:
-            individual_path = Path(individual_file)
-            if not individual_path.exists():
-                logger.warning(
-                    f"Individual file not found: {individual_file}, skipping..."
-                )
-                continue
-            individual_graph += Graph().parse(str(individual_path), format="turtle")
-            logger.info(f"Loaded individuals from: {individual_file}")
-        return individual_graph
 
     def _load_individuals_from_triplestore(
         self, uri_prefix_filter: Optional[str] = None, limit: Optional[int] = None
@@ -336,21 +303,21 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
             ]
             entities.append((individual_uri, key_values))
 
-        # Step 1: Apply business rule for "unknown" values
-        unknown_entities = []
-        for i, (uri, key_values) in enumerate(entities):
-            # Check if any key value is "unknown" (case-insensitive, lowercase comparison)
-            has_unknown = any(str(kv).lower().strip() == "unknown" for kv in key_values)
-            if has_unknown:
-                unknown_entities.append((i, uri))
+        # # Step 1: Apply business rule for "unknown" values
+        # unknown_entities = []
+        # for i, (uri, key_values) in enumerate(entities):
+        #     # Check if any key value is "unknown" (case-insensitive, lowercase comparison)
+        #     has_unknown = any(str(kv).lower().strip() == "unknown" for kv in key_values)
+        #     if has_unknown:
+        #         unknown_entities.append((i, uri))
 
-        # If multiple entities have "unknown", keep the first one and remove others
-        if len(unknown_entities) > 1:
-            first_unknown_uri = unknown_entities[0][1]
-            for _, uri in unknown_entities[1:]:
-                if uri not in uris_to_remove:
-                    duplicates_to_remove.append((first_unknown_uri, uri))
-                    uris_to_remove.add(uri)
+        # # If multiple entities have "unknown", keep the first one and remove others
+        # if len(unknown_entities) > 1:
+        #     first_unknown_uri = unknown_entities[0][1]
+        #     for _, uri in unknown_entities[1:]:
+        #         if uri not in uris_to_remove:
+        #             duplicates_to_remove.append((first_unknown_uri, uri))
+        #             uris_to_remove.add(uri)
 
         # Step 2: Fuzzy matching for duplicates
         # Compare each entity with all subsequent entities
@@ -403,15 +370,15 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
                 - summary: Summary statistics
         """
         # Load schema graph (TBox)
-        if parameters.tbox_paths:
-            schema_graph = self._load_schema_from_files(parameters.tbox_paths)
-        else:
+        schema_graph = parameters.tbox_graph
+        individual_graph = parameters.abox_graph
+
+        # Load schema graph (TBox) if not provided
+        if not schema_graph:
             schema_graph = self._load_schema_from_triplestore()
 
-        # Load individuals graph (ABox)
-        if parameters.abox_paths:
-            individual_graph = self._load_individuals_from_files(parameters.abox_paths)
-        else:
+        # Load individuals graph (ABox) if not provided
+        if not individual_graph:
             individual_graph = self._load_individuals_from_triplestore(
                 parameters.uri_prefix_filter, parameters.limit
             )
@@ -429,6 +396,7 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
             logger.info(f"Has key for {c}: {keys}")
             if keys is not None and len(keys) > 0:
                 filter_clauses = []
+                exclude_clauses = []
                 var_names = []
                 for i, key_predicate in enumerate(keys):
                     # Always use angle-bracket IRI for predicate for SPARQL safety
@@ -436,8 +404,12 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
                     # Build valid SPARQL variable names by using 'val' plus numeric index, to avoid "-" or bad chars
                     var_name = f"val{i}"
                     var_names.append(var_name)
+                    exclude_clauses.append(
+                        f"FILTER(?{var_name} != <{parameters.uri_prefix_filter}unknown>)"
+                    )
                     filter_clauses.append(f"?individual {pred_str} ?{var_name} .")
                 keys_filter_str = "\n    ".join(filter_clauses)
+                exclude_clauses_str = "\n    ".join(exclude_clauses)
                 select_vars_str = " ".join(
                     [f"?{v}" for v in ["individual"] + var_names]
                 )
@@ -449,6 +421,7 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
                     ?individual rdf:type owl:NamedIndividual .
                     ?individual rdf:type <{c}> .
                     {keys_filter_str}
+                    {exclude_clauses_str}
                 }}
                 """
                 try:
@@ -476,7 +449,10 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
             ],
             "summary": {
                 "total_classes": len(classes),
-                "total_individuals": len(individual_graph),
+                "total_triples": len(individual_graph),
+                "total_individuals": len(
+                    list(individual_graph.subjects(RDF.type, OWL.NamedIndividual))
+                ),
                 "total_duplicates": len(all_duplicates),
             },
         }
@@ -528,6 +504,8 @@ if __name__ == "__main__":
             --tbox_paths path/to/schema.ttl \
             --abox_paths path/to/individuals.ttl
     """
+    import concurrent.futures
+
     from naas_abi_core.engine.Engine import Engine
     from naas_abi_marketplace.domains.ontology_engineer.pipelines.MergeIndividualsPipeline import (
         MergeIndividualsPipeline,
@@ -540,10 +518,14 @@ if __name__ == "__main__":
     engine.load(module_names=["naas_abi_marketplace.domains.ontology_engineer"])
     triple_store_service = engine.services.triple_store
     object_storage_service = engine.services.object_storage
+    merge_duplicates_pipeline_configuration = MergeIndividualsPipelineConfiguration(
+        triple_store=triple_store_service,
+        object_storage=object_storage_service,
+    )
 
     # Create workflow configuration and instance
     configuration = EntityResolutionWorkflowConfiguration(
-        triple_store=triple_store_service
+        triple_store=triple_store_service,
     )
     workflow = EntityResolutionWorkflow(configuration)
 
@@ -563,22 +545,17 @@ if __name__ == "__main__":
         "libs/naas-abi-marketplace/naas_abi_marketplace/domains/ontology_engineer/ontologies/BFO7BucketsProcessOntology.ttl",
         "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl",
     ]
-    abox_paths = [
-        "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/sandbox/insert_Florent_Ravenel.ttl"
-    ]
+    schema_graph = Graph()
+    for tbox_path in tbox_paths:
+        schema_graph.parse(tbox_path, format="turtle")
 
     # Create parameters (using triplestore by default)
     parameters = EntityResolutionWorkflowParameters(
-        tbox_paths=tbox_paths,  # Uncomment to use files
-        # abox_paths=abox_paths,  # Uncomment to use files
+        tbox_graph=schema_graph,
         similarity_threshold=100,
-        uri_prefix_filter="http://ontology.naas.ai/abi/",
-        # limit=1000,
     )
 
     # Execute workflow
-    import concurrent.futures
-
     result = workflow.run(parameters)
 
     print("\nEntity Resolution Results:")
@@ -598,7 +575,7 @@ if __name__ == "__main__":
         return merged_graph
 
     if result["duplicates"]:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = [
                 executor.submit(merge_duplicate_worker, duplicate)
                 for duplicate in result["duplicates"]

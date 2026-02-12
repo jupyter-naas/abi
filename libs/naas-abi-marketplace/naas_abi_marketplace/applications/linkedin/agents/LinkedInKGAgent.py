@@ -1,11 +1,9 @@
 from typing import Optional
 
-from naas_abi_core.services.agent.IntentAgent import (
+from naas_abi_core.services.agent.Agent import (
+    Agent,
     AgentConfiguration,
     AgentSharedState,
-    Intent,
-    IntentAgent,
-    IntentType,
 )
 
 NAME = "LinkedIn_KG"
@@ -55,7 +53,7 @@ SUGGESTIONS: list[str] = []
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
+) -> Agent:
     # Initialize module
     from naas_abi_core.module.Module import BaseModule
     from naas_abi_core.modules.templatablesparqlquery import (
@@ -87,141 +85,33 @@ def create_agent(
     )
     tools += sparql_query_tools_list
 
-    # Set intents
-    intents: list = [
-        Intent(
-            intent_value="Who is connected with {person}?",
-            intent_type=IntentType.TOOL,
-            intent_target="linkedin_search_connections_by_person_name",
-        ),
-        Intent(
-            intent_value="How many connections does {person} have?",
-            intent_type=IntentType.TOOL,
-            intent_target="linkedin_count_connections_by_person",
-        ),
-        Intent(
-            intent_value="What do you know about {person}?",
-            intent_type=IntentType.TOOL,
-            intent_target="linkedin_get_connection_information",
-        ),
-        Intent(
-            intent_value="What is {person}'s email address?",
-            intent_type=IntentType.TOOL,
-            intent_target="linkedin_search_email_address_by_person_uri",
-        ),
-    ]
-
-    from typing import Any, Dict, List
-
-    import numpy as np
-    from langchain_core.tools import StructuredTool
-    from naas_abi_core.services.agent.beta.Embeddings import embeddings
+    from naas_abi_core.services.triple_store.TripleStoreService import (
+        TripleStoreService,
+    )
     from naas_abi_core.services.vector_store.VectorStoreService import (
         VectorStoreService,
     )
-    from pydantic import BaseModel, Field
+    from naas_abi_marketplace.applications.linkedin.workflows.CreateClassEmbeddingsWorkflow import (
+        CreateClassEmbeddingsWorkflow,
+        CreateClassEmbeddingsWorkflowConfiguration,
+    )
 
     vector_store_service: VectorStoreService = (
         ABIModule.get_instance().engine.services.vector_store
     )
-
-    def create_search_tool(
-        collection_name: str,
-        search_param_name: str,
-        tool_name: str,
-        tool_description: str,
-        entity_type_label: str,
-    ) -> StructuredTool:
-        """Create a search tool for entities in a collection.
-
-        Args:
-            collection_name: Name of the vector store collection
-            search_param_name: Name of the search parameter (e.g., "person_name", "company_name")
-            tool_name: Name of the search tool to create
-            tool_description: Description of the search tool
-            entity_type_label: Label for the entity type for logging
-
-        Returns:
-            A StructuredTool for searching entities by name
-        """
-
-        # Create search schema dynamically
-        class SearchSchema(BaseModel):
-            __annotations__ = {
-                search_param_name: str,
-                "k": int,
-            }
-            # Annotate the search_param_name field
-            locals()[search_param_name] = Field(
-                description=f"The name of the {entity_type_label} to search for"
-            )
-            # Annotate the "k" field with bounds and default.
-            k: int = Field(
-                default=10,
-                ge=1,
-                le=20,
-                description="Number of results to return (default: 10)",
-            )
-
-        # Create search function that accepts the dynamic parameter name
-        def search_entity(**kwargs) -> List[Dict[str, Any]]:
-            """Search for entity URIs by name using vector similarity search.
-
-            Args:
-                **kwargs: Must contain the search_param_name and optionally 'k'
-
-            Returns:
-                List of dictionaries containing entity URI, label, and similarity score
-            """
-            try:
-                # Extract the name parameter using the search_param_name
-                name = kwargs.get(search_param_name, "")
-                k = kwargs.get("k", 10)
-
-                if not name:
-                    return [{"error": f"{search_param_name} is required"}]
-
-                # Generate embedding for the query
-                query_embedding = embeddings(name)
-                query_vector = np.array(query_embedding)
-
-                # Search in vector store
-                search_results = vector_store_service.search_similar(
-                    collection_name=collection_name,
-                    query_vector=query_vector,
-                    k=k,
-                    include_metadata=True,
-                )
-
-                # Format results
-                results = []
-                for result in search_results:
-                    if result.metadata:
-                        results.append(
-                            {
-                                "uri": result.metadata.get("uri", ""),
-                                "label": result.metadata.get("label", ""),
-                                "score": float(result.score),
-                            }
-                        )
-
-                return results
-            except Exception as e:
-                return [{"error": str(e)}]
-
-        # Create and return the search tool
-        search_tool = StructuredTool(
-            name=tool_name,
-            description=tool_description,
-            func=search_entity,
-            args_schema=SearchSchema,
+    triple_store_service: TripleStoreService = (
+        ABIModule.get_instance().engine.services.triple_store
+    )
+    embeddings_workflow = CreateClassEmbeddingsWorkflow(
+        CreateClassEmbeddingsWorkflowConfiguration(
+            triple_store=triple_store_service,
+            vector_store=vector_store_service,
         )
-
-        return search_tool
+    )
 
     # Create search tools for persons
     persons_collection_name = "linkedin_persons"
-    search_person_tool = create_search_tool(
+    search_person_tool = embeddings_workflow.create_search_tool(
         collection_name=persons_collection_name,
         tool_name="linkedin_search_person_uri",
         tool_description="Search for person URIs (entities of type cco:ont00001262) in the knowledge graph by name using semantic similarity. Use this tool when you need to find the URI of a person by their name.",
@@ -232,7 +122,7 @@ def create_agent(
 
     # Create search tools for companies
     companies_collection_name = "linkedin_companies"
-    search_company_tool = create_search_tool(
+    search_company_tool = embeddings_workflow.create_search_tool(
         collection_name=companies_collection_name,
         tool_name="linkedin_search_company_uri",
         tool_description="Search for company URIs (entities of type cco:ont00001180) in the knowledge graph by name using semantic similarity. Use this tool to find a company URI by its name.",
@@ -261,12 +151,11 @@ def create_agent(
         chat_model=model,
         tools=tools,
         agents=[],
-        intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,
     )
 
 
-class LinkedInKGAgent(IntentAgent):
+class LinkedInKGAgent(Agent):
     pass

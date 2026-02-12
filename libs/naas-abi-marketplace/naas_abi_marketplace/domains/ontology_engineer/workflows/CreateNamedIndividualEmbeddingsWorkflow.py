@@ -16,112 +16,89 @@ from pydantic import BaseModel, Field
 
 
 @dataclass
-class CreateClassEmbeddingsWorkflowConfiguration(WorkflowConfiguration):
-    """Configuration for CreateClassEmbeddings workflow.
-
-    This workflow doesn't require any configuration.
-    """
+class CreateNamedIndividualEmbeddingsWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for CreateNamedIndividualEmbeddings workflow.
 
     triple_store: ITripleStoreService
     vector_store: VectorStoreService
     embeddings_model_name: str = "text-embedding-3-large"
     embeddings_dimension: int = 3072
-
-
-class CreateClassEmbeddingsWorkflowParameters(WorkflowParameters):
-    """Parameters for CreateClassEmbeddings workflow execution.
-
-    Attributes:
-        class_uri (str): The URI of the class to query (e.g., "cco:ont00001262")
-        collection_name (str): Name of the vector store collection
-        entity_variable_name (str): Variable name for the entity in SPARQL query (e.g., "person", "company")
-        entity_type_label (str): Label for the entity type for logging (e.g., "person", "company")
     """
 
-    class_uri: Annotated[
-        str,
-        Field(
-            ..., description="The URI of the class to query (e.g., 'cco:ont00001262')"
-        ),
-    ]
+    vector_store: VectorStoreService
+    embeddings_model_name: str = "text-embedding-3-large"
+    embeddings_dimension: int = 3072
+
+
+class CreateNamedIndividualEmbeddingsWorkflowParameters(WorkflowParameters):
+    """Parameters for CreateNamedIndividualEmbeddings workflow execution.
+
+    Attributes:
+        class_uri (str): The URI of the class to get individuals from
+        collection_name (str): Name of the vector store collection
+    """
+
     collection_name: Annotated[
         str, Field(..., description="Name of the vector store collection")
     ]
-    entity_variable_name: Annotated[
-        str,
-        Field(
-            ...,
-            description="Variable name for the entity in SPARQL query (e.g., 'person', 'company')",
-        ),
-    ]
-    entity_type_label: Annotated[
-        str,
-        Field(
-            ...,
-            description="Label for the entity type for logging (e.g., 'person', 'company')",
-        ),
-    ]
+    uris: Annotated[
+        List[str], Field(..., description="List of URIs to create embeddings for")
+    ] = []
+    labels: Annotated[
+        List[str], Field(..., description="List of labels to get individuals from")
+    ] = []
+    metadata: Annotated[
+        List[Dict[str, Any]],
+        Field(..., description="List of metadata to get individuals from"),
+    ] = []
 
 
-class CreateClassEmbeddingsWorkflow(Workflow):
-    """Workflow for creating embeddings for entities of a given class and storing them in a vector store."""
+class CreateNamedIndividualEmbeddingsWorkflow(Workflow):
+    """Workflow for creating embeddings for named individuals of a given class and storing them in a vector store."""
 
-    __configuration: CreateClassEmbeddingsWorkflowConfiguration
+    __configuration: CreateNamedIndividualEmbeddingsWorkflowConfiguration
 
-    def __init__(self, configuration: CreateClassEmbeddingsWorkflowConfiguration):
+    def __init__(
+        self, configuration: CreateNamedIndividualEmbeddingsWorkflowConfiguration
+    ):
         super().__init__(configuration)
         self.__configuration = configuration
 
         # Get services from configuration
-        self.__triple_store_service = self.__configuration.triple_store
         self.__vector_store_service = self.__configuration.vector_store
-
-        # Get embedding dimension and model name
         self.__embedding_dimension = self.__configuration.embeddings_dimension
         self.__embeddings_model_name = self.__configuration.embeddings_model_name
 
-    def create_class_embeddings(
-        self, parameters: CreateClassEmbeddingsWorkflowParameters
-    ) -> Dict[str, Any]:
-        """Create embeddings for entities of a given class and store them in a vector store.
+    def get_individuals_from_class(
+        self,
+        class_uri: str,
+        triple_store_service: ITripleStoreService,
+    ) -> tuple[List[str], List[str], List[Dict[str, Any]]]:
+        """Get individuals from a given class.
 
         Args:
-            parameters: The workflow parameters containing class_uri, collection_name, etc.
+            class_uri: The URI of the class to get individuals from
 
         Returns:
-            A dictionary containing the number of entities processed and collection information
+            A tuple containing lists of labels, URIs, and metadata
         """
-        print(
-            f"==> Creating embeddings for class {parameters.class_uri} in collection {parameters.collection_name}"
-        )
-
-        # Ensure collection exists
-        self.__vector_store_service.ensure_collection(
-            collection_name=parameters.collection_name,
-            dimension=self.__embedding_dimension,
-            distance_metric="cosine",
-        )
-
         # Query entities from triple store (only URI and label)
         sparql_query = f"""
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             PREFIX cco: <https://www.commoncoreontologies.org/>
 
-            SELECT DISTINCT ?{parameters.entity_variable_name} ?label
+            SELECT DISTINCT ?uri ?label
             WHERE {{
-                ?{parameters.entity_variable_name} a {parameters.class_uri} ;
+                ?uri a <{class_uri}> ;
                         rdfs:label ?label .
             }}
         """
-        results = self.__triple_store_service.query(sparql_query)
-        sparql_utils = SPARQLUtils(self.__triple_store_service)
+        results = triple_store_service.query(sparql_query)
+        sparql_utils = SPARQLUtils(triple_store_service)
         results_list: List[Dict[str, Any]] = sparql_utils.results_to_list(results) or []
         if len(results_list) == 0:
-            logger.warning(f"No entities found for class {parameters.class_uri}")
-            return {
-                "status": "success",
-                "entities_processed": 0,
-            }
+            logger.warning(f"No entities found for class {class_uri}")
+            return [], [], []
 
         # Prepare data for embedding (only URI and label)
         labels: List[str] = []
@@ -132,7 +109,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
         seen_entities = set()
 
         for row in results_list:
-            entity_uri = str(row.get(parameters.entity_variable_name, ""))
+            entity_uri = str(row.get("uri", ""))
             entity_label = str(row.get("label", ""))
 
             if entity_uri and entity_label and entity_uri not in seen_entities:
@@ -141,9 +118,30 @@ class CreateClassEmbeddingsWorkflow(Workflow):
                 uris.append(entity_uri)
                 # Only include URI in metadata
                 metadata.append({"uri": entity_uri, "label": entity_label})
+        return labels, uris, metadata
+
+    def create_named_individual_embeddings(
+        self, parameters: CreateNamedIndividualEmbeddingsWorkflowParameters
+    ) -> Dict[str, Any]:
+        """Create embeddings for named individuals of a given class and store them in a vector store.
+
+        Args:
+            parameters: The workflow parameters containing class_uri and collection_name.
+
+        Returns:
+            A dictionary containing the number of entities processed and collection information
+        """
+        print(f"==> Creating embeddings in collection {parameters.collection_name}")
+
+        # Ensure collection exists
+        self.__vector_store_service.ensure_collection(
+            collection_name=parameters.collection_name,
+            dimension=self.__embedding_dimension,
+            distance_metric="cosine",
+        )
 
         # Check which embeddings already exist
-        doc_ids = [uri.split("/")[-1] for uri in uris]
+        doc_ids = [uri.split("/")[-1] for uri in parameters.uris]
         existing_doc_ids = set()
 
         if doc_ids:
@@ -167,27 +165,29 @@ class CreateClassEmbeddingsWorkflow(Workflow):
 
         for i, doc_id in enumerate(doc_ids):
             if doc_id not in existing_doc_ids:
-                new_labels.append(labels[i])
-                new_uris.append(uris[i])
-                new_metadata.append(metadata[i])
+                new_labels.append(parameters.labels[i])
+                new_uris.append(parameters.uris[i])
+                new_metadata.append(parameters.metadata[i])
                 new_doc_ids.append(doc_id)
 
         # Embed labels and store in vector store for new entities only
         if new_labels:
             print(
-                f"Embedding {len(new_labels)} new {parameters.entity_type_label} labels..."
+                f"Creating {len(new_labels)} embeddings for collection {parameters.collection_name}..."
             )
 
             embeddings_model = OpenAIEmbeddings(
                 model=self.__embeddings_model_name,
                 dimensions=self.__embedding_dimension,
             )
-            embeddings_vectors = embeddings_model.embed_documents(new_labels)
+            embeddings_vectors = embeddings_model.embed_documents(
+                new_labels, chunk_size=1000
+            )
             embeddings_array = [np.array(vector) for vector in embeddings_vectors]
 
             # Store in vector store
             print(
-                f"Storing {len(new_doc_ids)} new {parameters.entity_type_label} embeddings in vector store"
+                f"Storing {len(new_doc_ids)} new embeddings in collection {parameters.collection_name}"
             )
             self.__vector_store_service.add_documents(
                 collection_name=parameters.collection_name,
@@ -200,7 +200,6 @@ class CreateClassEmbeddingsWorkflow(Workflow):
                 "status": "success",
                 "entities_processed": len(new_labels),
                 "collection_name": parameters.collection_name,
-                "entity_type": parameters.entity_type_label,
             }
         else:
             logger.info("No new entities to embed")
@@ -283,9 +282,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
                     query_vector=query_vector,
                     k=k,
                     include_metadata=True,
-                    include_vectors=True,
                 )
-                print(search_results)
 
                 # Format results
                 results = []
@@ -293,7 +290,8 @@ class CreateClassEmbeddingsWorkflow(Workflow):
                     if (
                         result.metadata
                         and result.score is not None
-                        and result.score >= kwargs.get("threshold")
+                        and isinstance(result.score, float)
+                        and result.score >= kwargs.get("threshold", 0.8)
                     ):
                         results.append(
                             {
@@ -321,12 +319,12 @@ class CreateClassEmbeddingsWorkflow(Workflow):
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
-                name="create_class_embeddings",
-                description="Create embeddings for entities of a given class and store them in a vector store.",
-                func=lambda **kwargs: self.create_class_embeddings(
-                    CreateClassEmbeddingsWorkflowParameters(**kwargs)
+                name="create_named_individual_embeddings",
+                description="Create embeddings for named individuals of a given class and store them in a vector store.",
+                func=lambda **kwargs: self.create_named_individual_embeddings(
+                    CreateNamedIndividualEmbeddingsWorkflowParameters(**kwargs)
                 ),
-                args_schema=CreateClassEmbeddingsWorkflowParameters,
+                args_schema=CreateNamedIndividualEmbeddingsWorkflowParameters,
             )
         ]
 
@@ -344,24 +342,28 @@ class CreateClassEmbeddingsWorkflow(Workflow):
 
 if __name__ == "__main__":
     from naas_abi_core.engine.Engine import Engine
-    from naas_abi_marketplace.applications.linkedin import ABIModule
+    from naas_abi_marketplace.domains.ontology_engineer import ABIModule
 
     engine = Engine()
-    engine.load(module_names=["naas_abi_marketplace.applications.linkedin"])
+    engine.load(module_names=["naas_abi_marketplace.domains.ontology_engineer"])
 
     module: ABIModule = ABIModule.get_instance()
 
-    configuration = CreateClassEmbeddingsWorkflowConfiguration(
-        triple_store=module.engine.services.triple_store,
+    configuration = CreateNamedIndividualEmbeddingsWorkflowConfiguration(
         vector_store=module.engine.services.vector_store,
     )
-    workflow = CreateClassEmbeddingsWorkflow(configuration)
-    result = workflow.create_class_embeddings(
-        CreateClassEmbeddingsWorkflowParameters(
-            class_uri="cco:ont00001262",
-            collection_name="linkedin_persons",
-            entity_variable_name="person",
-            entity_type_label="person",
+    workflow = CreateNamedIndividualEmbeddingsWorkflow(configuration)
+
+    labels, uris, metadata = workflow.get_individuals_from_class(
+        class_uri="https://www.commoncoreontologies.org/ont00001180",
+        triple_store_service=module.engine.services.triple_store,
+    )
+    result = workflow.create_named_individual_embeddings(
+        CreateNamedIndividualEmbeddingsWorkflowParameters(
+            collection_name="Organization",
+            labels=labels,
+            uris=uris,
+            metadata=metadata,
         )
     )
     print(result)
