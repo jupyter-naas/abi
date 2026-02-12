@@ -121,6 +121,7 @@ help:
 	@echo "  test-ci                  Run basic tests for CI (no external dependencies)"
 	@echo "  test-abi                 Run tests specifically for the abi library"
 	@echo "  test-api                 Run API-specific tests"
+	@echo "  test-integration-core    Run core integration tests (testcontainers)"
 	@echo "  test-api-init            Test API initialization with production secrets"
 	@echo "  test-api-init-container  Test API initialization in containerized environment"
 	@echo "  ftest                    Interactive test selector using fzf (fuzzy finder)"
@@ -537,6 +538,11 @@ test: deps
 # Run API-specific tests
 test-api: deps
 	@ uv run python -m pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v -s
+
+# Run core integration tests using testcontainers
+test-integration-core: deps check-docker
+	@ echo "🔍 Running core integration tests (testcontainers)..."
+	@ cd libs/naas-abi-core && uv sync --all-extras && uv run pytest naas_abi_core/services/triple_store/adaptors/secondary/ApacheJenaTDB2_integration_test.py naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph_integration_test.py -m integration -v
 
 # Test API initialization with production secrets
 test-api-init: deps
@@ -964,4 +970,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology
+.PHONY: test test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology
