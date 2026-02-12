@@ -23,7 +23,7 @@ docker/
 
 ### **compose/**
 Contains Docker Compose configurations for orchestrating multi-container applications:
-- **`docker-compose.yml`** - Main service orchestration (Oxigraph, PostgreSQL, Dagster, etc.)
+- **`docker-compose.yml`** - Main service orchestration (Apache Jena Fuseki, PostgreSQL, Dagster, etc.)
 
 ### **images/**
 Contains all Dockerfile variants for different deployment scenarios:
@@ -55,7 +55,7 @@ docker build -f docker/images/Dockerfile.mcp -t abi-mcp .
 docker-compose -f docker-compose.yml --profile local up -d
 
 # Start specific service
-docker-compose -f docker-compose.yml up oxigraph
+docker-compose -f docker-compose.yml up fuseki
 ```
 
 ### Cleanup
