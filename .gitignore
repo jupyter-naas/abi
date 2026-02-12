@@ -93,6 +93,10 @@ storage/vectorstore/*
 *.webp
 *.heic
 
+# Keep demo data and assets in nexus
+!libs/naas-abi/naas_abi/apps/nexus/demo/**
+!libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
+
 
 *.pid
 sandbox/
