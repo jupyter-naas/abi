@@ -15,12 +15,20 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
     def supports_named_graphs(self) -> bool:
         return False
 
+    @pytest.fixture
+    def supports_graph_management(self, supports_named_graphs: bool) -> bool:
+        return supports_named_graphs
+
     def test_adapter_has_required_methods(self, adapter):
         assert callable(getattr(adapter, "insert", None))
         assert callable(getattr(adapter, "remove", None))
         assert callable(getattr(adapter, "query", None))
         assert callable(getattr(adapter, "get", None))
         assert callable(getattr(adapter, "get_subject_graph", None))
+        assert callable(getattr(adapter, "create_graph", None))
+        assert callable(getattr(adapter, "clear_graph", None))
+        assert callable(getattr(adapter, "drop_graph", None))
+        assert callable(getattr(adapter, "list_graphs", None))
 
     def test_insert_query_remove_roundtrip_default_graph(self, adapter):
         marker = uuid.uuid4().hex
@@ -106,3 +114,44 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
             )
         )
         assert len(named_graph_result_after_delete) == 0
+
+    def test_named_graph_management_roundtrip(
+        self, adapter, supports_graph_management: bool
+    ):
+        if not supports_graph_management:
+            pytest.skip("Adapter does not support graph management")
+
+        marker = uuid.uuid4().hex
+        graph_name = URIRef(f"http://test.example.org/graph-management/{marker}")
+        subject = URIRef(f"http://test.example.org/{marker}/entity")
+        predicate = URIRef("http://test.example.org/value")
+        obj = Literal(f"value-{marker}")
+
+        g = Graph()
+        g.add((subject, predicate, obj))
+
+        adapter.create_graph(graph_name)
+        adapter.insert(g, graph_name=graph_name)
+
+        listed_graphs = adapter.list_graphs()
+        assert graph_name in listed_graphs
+
+        adapter.clear_graph(graph_name)
+
+        after_clear = list(
+            adapter.query(
+                f"""
+                SELECT ?o WHERE {{
+                    GRAPH <{graph_name}> {{
+                        <{subject}> <{predicate}> ?o .
+                    }}
+                }}
+                """
+            )
+        )
+        assert len(after_clear) == 0
+
+        adapter.drop_graph(graph_name)
+
+        listed_graphs_after_drop = adapter.list_graphs()
+        assert graph_name not in listed_graphs_after_drop

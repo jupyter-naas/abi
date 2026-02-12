@@ -1,6 +1,6 @@
 import hashlib
 from types import SimpleNamespace
-from typing import Callable, Tuple
+from typing import Any, Callable, Tuple, cast
 
 import rdflib
 from naas_abi_core.services.triple_store.TripleStorePorts import (
@@ -32,6 +32,10 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
     def __init__(self) -> None:
         self.insert_calls: list[tuple[Graph, URIRef | None]] = []
         self.remove_calls: list[tuple[Graph, URIRef | None]] = []
+        self.create_graph_calls: list[URIRef] = []
+        self.clear_graph_calls: list[URIRef | None] = []
+        self.drop_graph_calls: list[URIRef] = []
+        self.graphs_to_return: list[URIRef] = []
 
     def insert(self, triples: Graph, graph_name: URIRef | None = None):
         self.insert_calls.append((triples, graph_name))
@@ -59,6 +63,18 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
     ):
         return None
 
+    def create_graph(self, graph_name: URIRef):
+        self.create_graph_calls.append(graph_name)
+
+    def clear_graph(self, graph_name: URIRef | None = None):
+        self.clear_graph_calls.append(graph_name)
+
+    def drop_graph(self, graph_name: URIRef):
+        self.drop_graph_calls.append(graph_name)
+
+    def list_graphs(self) -> list[URIRef]:
+        return self.graphs_to_return
+
 
 def _sha(value: object) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
@@ -72,7 +88,7 @@ def _build_service() -> tuple[TripleStoreService, _FakeTripleStoreAdapter, _Fake
     adapter.insert_calls.clear()
 
     bus = _FakeBus()
-    service.set_services(SimpleNamespace(bus=bus))
+    service.set_services(cast(Any, SimpleNamespace(bus=bus)))
     return service, adapter, bus
 
 
@@ -201,3 +217,23 @@ def test_subscribe_with_wildcard_graph_uses_wildcard_graph_token():
     assert len(bus.consumed) == 1
     _, routing_key, _ = bus.consumed[0]
     assert routing_key == f"ts.*.g.*.s.*.p.{_sha(RDF.type)}.o.*"
+
+
+def test_named_graph_management_methods_delegate_to_adapter():
+    service, adapter, _ = _build_service()
+
+    graph_name = URIRef("http://example.org/graphs/entities")
+    other_graph = URIRef("http://example.org/graphs/other")
+    adapter.graphs_to_return = [graph_name, other_graph]
+
+    service.create_graph(graph_name)
+    service.clear_graph(graph_name)
+    service.clear_graph()
+    service.drop_graph(other_graph)
+
+    listed = service.list_graphs()
+
+    assert adapter.create_graph_calls == [graph_name]
+    assert adapter.clear_graph_calls == [graph_name, None]
+    assert adapter.drop_graph_calls == [other_graph]
+    assert listed == [graph_name, other_graph]

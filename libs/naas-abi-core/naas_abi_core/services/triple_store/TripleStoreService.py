@@ -190,6 +190,18 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return self.__triple_store_adapter.query_view(view, query)
 
+    def create_graph(self, graph_name: URIRef) -> None:
+        self.__triple_store_adapter.create_graph(graph_name)
+
+    def clear_graph(self, graph_name: URIRef | None = None) -> None:
+        self.__triple_store_adapter.clear_graph(graph_name)
+
+    def drop_graph(self, graph_name: URIRef) -> None:
+        self.__triple_store_adapter.drop_graph(graph_name)
+
+    def list_graphs(self) -> list[URIRef]:
+        return self.__triple_store_adapter.list_graphs()
+
     def subscribe(
         self,
         topic: tuple[URIRef | None, URIRef | None, URIRef | None],

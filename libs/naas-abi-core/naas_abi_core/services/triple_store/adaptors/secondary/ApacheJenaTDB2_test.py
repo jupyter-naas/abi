@@ -6,6 +6,7 @@ from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 impor
     ApacheJenaTDB2,
 )
 from rdflib import RDF, Graph, Literal, URIRef
+from rdflib.term import Variable
 
 
 def _build_adapter() -> ApacheJenaTDB2:
@@ -165,3 +166,35 @@ def test_query_ask_returns_rdflib_ask_result():
 
     assert isinstance(result, rdflib.query.Result)
     assert result.askAnswer is True
+
+
+def test_graph_management_queries_delegate_to_query():
+    adapter = _build_adapter()
+    graph_name = URIRef("http://example.org/graphs/g1")
+
+    with patch.object(
+        adapter, "query", return_value=rdflib.query.Result("SELECT")
+    ) as mock_query:
+        adapter.create_graph(graph_name)
+        adapter.clear_graph(graph_name)
+        adapter.clear_graph()
+        adapter.drop_graph(graph_name)
+
+    assert mock_query.call_args_list[0].args[0] == f"CREATE GRAPH <{str(graph_name)}>"
+    assert mock_query.call_args_list[1].args[0] == f"CLEAR GRAPH <{str(graph_name)}>"
+    assert mock_query.call_args_list[2].args[0] == "CLEAR DEFAULT"
+    assert mock_query.call_args_list[3].args[0] == f"DROP GRAPH <{str(graph_name)}>"
+
+
+def test_list_graphs_returns_graph_uris_from_query_rows():
+    adapter = _build_adapter()
+    graph_name = URIRef("http://example.org/graphs/g1")
+
+    query_result = rdflib.query.Result("SELECT")
+    query_result.vars = [Variable("g")]
+    query_result.bindings = [{Variable("g"): graph_name}]
+
+    with patch.object(adapter, "query", return_value=query_result):
+        graphs = adapter.list_graphs()
+
+    assert graphs == [graph_name]
