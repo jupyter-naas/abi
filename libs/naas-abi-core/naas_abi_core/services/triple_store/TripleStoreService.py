@@ -9,7 +9,10 @@ import rdflib
 from naas_abi_core import logger
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.triple_store.TripleStorePorts import (
-    ITripleStorePort, ITripleStoreService, OntologyEvent)
+    ITripleStorePort,
+    ITripleStoreService,
+    OntologyEvent,
+)
 from rdflib import RDF, Graph, URIRef
 
 SCHEMA_TTL = """
@@ -47,6 +50,7 @@ internal:content a owl:DatatypeProperty ;
     rdfs:label "content" ;
     rdfs:comment "Base64 encoded content of the schema file" .
 """
+
 
 class TripleStoreService(ServiceBase, ITripleStoreService):
     """TripleStoreService provides CRUD operations and SPARQL querying capabilities for ontologies.
@@ -108,20 +112,39 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     #             ),
     #         )
 
-    def insert(self, triples: Graph):
+    def _hash_value(self, value: object) -> str:
+        return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+
+    def _graph_topic_token(self, graph_name: URIRef | None) -> str:
+        if graph_name is None:
+            return "default"
+        return self._hash_value(graph_name)
+
+    def _subscription_graph_topic_token(self, graph_name: URIRef | str | None) -> str:
+        if graph_name == "*":
+            return "*"
+        if graph_name is None:
+            return "default"
+        return self._hash_value(graph_name)
+
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
         # Insert the triples into the store
-        self.__triple_store_adapter.insert(triples)
+        self.__triple_store_adapter.insert(triples, graph_name=graph_name)
 
         if self.services_wired is False:
             return
+
+        graph_topic = self._graph_topic_token(graph_name)
 
         # Notify listeners of the insert
         for s, p, o in triples.triples((None, None, None)):
             triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
 
             try:
-                topic = f"ts.insert.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}"
-                logger.debug(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
+                topic = f"ts.insert.g.{graph_topic}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
+                logger.debug(
+                    f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}"
+                )
                 self.services.bus.topic_publish(
                     "triple_store",
                     topic,
@@ -131,29 +154,32 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 logger.error(f"Error publishing triple: {e}")
                 raise e
 
-    def remove(self, triples: Graph):
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
         # Remove the triples from the store
-        self.__triple_store_adapter.remove(triples)
+        self.__triple_store_adapter.remove(triples, graph_name=graph_name)
 
         if self.services_wired is False:
-            return 
+            return
+
+        graph_topic = self._graph_topic_token(graph_name)
 
         # Notify listeners of the delete
         for s, p, o in triples.triples((None, None, None)):
-            triple_bytes =  f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
-            
+            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
+
             try:
-                topic = f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}"
-                logger.debug(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
+                topic = f"ts.delete.g.{graph_topic}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
+                logger.debug(
+                    f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}"
+                )
                 self.services.bus.topic_publish(
                     "triple_store",
-                        f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}",
-                        triple_bytes,
-                    )
+                    topic,
+                    triple_bytes,
+                )
             except Exception as e:
                 logger.error(f"Error publishing triple: {e}")
                 raise e
-
 
     def get(self) -> Graph:
         return self.__triple_store_adapter.get()
@@ -168,23 +194,24 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self,
         topic: tuple[URIRef | None, URIRef | None, URIRef | None],
         callback: Callable[[bytes], None],
-        event_type: OntologyEvent | None = None
+        event_type: OntologyEvent | None = None,
+        graph_name: URIRef | str | None = "*",
     ) -> None:
-        _event_type : str = ""
+        _event_type: str = ""
         if event_type == OntologyEvent.INSERT:
             _event_type = "insert"
         elif event_type == OntologyEvent.DELETE:
             _event_type = "delete"
         elif event_type is None:
             _event_type = "*"
-        
-        graph_name = '*'
-        s = '*' if topic[0] is None else hashlib.sha256(str(topic[0]).encode('utf-8')).hexdigest()
-        p = '*' if topic[1] is None else hashlib.sha256(str(topic[1]).encode('utf-8')).hexdigest()
-        o = '*' if topic[2] is None else hashlib.sha256(str(topic[2]).encode('utf-8')).hexdigest()
-        
-        topic_str = f"ts.{_event_type}.g.{graph_name}.s.{s}.p.{p}.o.{o}"
-        
+
+        graph_topic = self._subscription_graph_topic_token(graph_name)
+        s = "*" if topic[0] is None else self._hash_value(topic[0])
+        p = "*" if topic[1] is None else self._hash_value(topic[1])
+        o = "*" if topic[2] is None else self._hash_value(topic[2])
+
+        topic_str = f"ts.{_event_type}.g.{graph_topic}.s.{s}.p.{p}.o.{o}"
+
         self.services.bus.topic_consume(
             "triple_store",
             topic_str,
