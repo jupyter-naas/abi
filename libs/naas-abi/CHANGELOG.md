@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-02-12)
+
+### Bug Fixes
+
+- Add header to chat page for settings access
+  ([`0cc3604`](https://github.com/jupyter-naas/abi/commit/0cc360414716726366e87f57da18a7e77b334179))
+
+- Working on new project setup
+  ([`cd2a5cc`](https://github.com/jupyter-naas/abi/commit/cd2a5ccb156fe540759561e6eeb91abdeb1d4924))
+
+### Features
+
+- Working on wiring nexus to abi
+  ([`db01f8b`](https://github.com/jupyter-naas/abi/commit/db01f8b624870b47d1be9a331546ad5313a4204a))
+
+
 ## v1.3.0 (2026-02-11)
 
 ### Features
