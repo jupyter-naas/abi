@@ -690,10 +690,6 @@ async def stream_chat(
     current_user: User = Depends(get_current_user_required),
 ):
     """Stream a chat response using Server-Sent Events."""
-    print("=" * 80)
-    print(f"STREAM CHAT CALLED: agent={request.agent}")
-    print("=" * 80)
-    
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"🎯 Stream request: agent={request.agent}, provider={'None' if not request.provider else request.provider.type}")
@@ -730,13 +726,6 @@ async def stream_chat(
             await db.rollback()
             raise
 
-    # DEBUG: Log provider messages to find duplication
-    import logging as _dbg_log
-    _dbg_logger = _dbg_log.getLogger(__name__)
-    _dbg_logger.info(f"🔍 Provider messages count: {len(provider_messages)}")
-    for i, pm in enumerate(provider_messages):
-        _dbg_logger.info(f"  [{i}] role={pm.role}, content={pm.content[:80]!r}...")
-    
     # Build system prompt with multi-agent context
     system_prompt = request.system_prompt or AGENT_SYSTEM_PROMPTS.get(request.agent, AGENT_SYSTEM_PROMPTS["aia"])
     
