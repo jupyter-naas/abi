@@ -23,6 +23,9 @@ jobs:
       - name: Run checks
         run: make check
 
+      - name: Run integration tests
+        run: make test-integration-core
+
       - name: Run API tests
         env:
           ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
