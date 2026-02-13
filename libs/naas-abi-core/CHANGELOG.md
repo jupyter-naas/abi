@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-02-13)
+
+### Bug Fixes
+
+- Critical local development setup issues
+  ([`b63d50e`](https://github.com/jupyter-naas/abi/commit/b63d50efa54e6c7e3a09bc3b3552084c1c9586b0))
+
+
 ## v1.13.0 (2026-02-13)
 
 ### Features
