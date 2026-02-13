@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.4.1 (2026-02-13)
+
+### Bug Fixes
+
+- AI Pane SupervisorAgent duplicate streaming and defaults
+  ([`f571323`](https://github.com/jupyter-naas/abi/commit/f5713236933003a4e8ace09e58cca4542b355504))
+
+
 ## v1.4.0 (2026-02-12)
 
 ### Bug Fixes
