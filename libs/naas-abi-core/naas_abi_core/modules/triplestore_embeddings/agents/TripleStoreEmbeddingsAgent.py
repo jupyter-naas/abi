@@ -81,6 +81,14 @@ def create_agent(
             f"Embeddings model provider {module.configuration.embeddings_model_provider} not supported"
         )
 
+    @tool(return_direct=True)
+    def get_collection_size(collection_name: str) -> str:
+        """Get the size of a collection in the vector store."""
+        size = vector_store_service.get_collection_size(collection_name)
+        return f"The collection '{collection_name}' contains {size} documents."
+
+    tools.append(get_collection_size)
+
     @tool
     def list_collections(return_direct=True) -> str:
         """List all collections in the vector store."""
@@ -93,12 +101,12 @@ def create_agent(
     tools.append(list_collections)
 
     @tool(return_direct=True)
-    def get_collection_size(collection_name: str) -> str:
-        """Get the size of a collection in the vector store."""
-        size = vector_store_service.get_collection_size(collection_name)
-        return f"The collection '{collection_name}' contains {size} documents."
+    def delete_collection(collection_name: str) -> str:
+        """Delete a collection in the vector store."""
+        vector_store_service.delete_collection(collection_name)
+        return f"The collection '{collection_name}' has been deleted."
 
-    tools.append(get_collection_size)
+    tools.append(delete_collection)
 
     # Search tools for vector store
     from naas_abi_core.modules.triplestore_embeddings.workflows.CreateSearchToolWorkflow import (
@@ -119,8 +127,8 @@ def create_agent(
             tool_description="Search for a person URI by name",
             search_param_name="person_name",
             search_param_description="Name of the person to search for",
-            collection_name="Person",
-            # search_filter={"type_label": "Person"},
+            collection_name=collection_name,
+            search_filter={"type_label": "Person"},
         )
     )
     tools.append(search_person_tool)
