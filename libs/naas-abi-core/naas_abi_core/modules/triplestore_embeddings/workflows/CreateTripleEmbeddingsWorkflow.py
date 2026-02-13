@@ -25,6 +25,7 @@ class CreateTripleEmbeddingsWorkflowConfiguration(WorkflowConfiguration):
     triple_store: ITripleStoreService
     vector_store: VectorStoreService
     embeddings_model: Embeddings
+    embeddings_dimension: int
     collection_name: str = "triple_embeddings"
     """
 
