@@ -82,6 +82,10 @@ async def _startup(app: FastAPI) -> None:
             app.state.abi_module = ABIModule.get_instance()
             app.state.abi_engine = engine
             
+            # Initialize object storage from engine services
+            app.state.object_storage = engine.services.object_storage
+            print("✓ Object storage initialized from engine")
+            
             # Count loaded agents
             modules = getattr(engine, "modules", {})
             agent_count = 0
@@ -95,6 +99,7 @@ async def _startup(app: FastAPI) -> None:
             print("   In-process agent chat will not be available (use Ollama/cloud providers instead)")
             app.state.abi_module = None
             app.state.abi_engine = None
+            app.state.object_storage = None
     except Exception as e:
         print(f"⚠ Warning: Could not initialize ABIModule: {e}")
         import traceback
@@ -102,6 +107,7 @@ async def _startup(app: FastAPI) -> None:
         print("   In-process agent chat will not be available (use Ollama/cloud providers instead)")
         app.state.abi_module = None
         app.state.abi_engine = None
+        app.state.object_storage = None
         # Non-fatal - agents can still use Ollama/external providers
 
     if bool(getattr(settings, "auto_seed_demo_data", True)):

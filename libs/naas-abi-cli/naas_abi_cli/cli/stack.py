@@ -96,7 +96,7 @@ def _start_docker_services() -> None:
         return
     
     result = subprocess.run(
-        ["docker", "compose", "up", "-d", "postgres", "fuseki"],
+        ["docker", "compose", "up", "-d", "postgres", "fuseki", "minio", "redis", "rabbitmq", "qdrant"],
         cwd=str(PROJECT_ROOT),  # Convert Path to string
         capture_output=True,
         text=True,
@@ -104,7 +104,7 @@ def _start_docker_services() -> None:
     )
     
     if result.returncode == 0:
-        console.print("   ✓ PostgreSQL and Fuseki starting")
+        console.print("   ✓ Infrastructure services starting")
     else:
         console.print(f"   ⚠ Docker services: {result.stderr}", style="yellow")
 
