@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.13.2 (2026-02-13)
+
+### Bug Fixes
+
+- Make the generation default to Jena
+  ([`470cdce`](https://github.com/jupyter-naas/abi/commit/470cdce3e4e3e970b043c21131ae39a8d4ad1622))
+
+
 ## v1.13.1 (2026-02-12)
 
 ### Bug Fixes
