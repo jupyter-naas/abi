@@ -65,7 +65,7 @@ License: MIT
 import socket
 import tempfile
 from io import StringIO
-from typing import TYPE_CHECKING, Any, Tuple, overload
+from typing import TYPE_CHECKING, Any, Tuple
 
 import boto3
 import botocore
@@ -354,11 +354,6 @@ class AWSNeptune(ITripleStorePort):
 
         return response
 
-    @overload
-    def insert(self, triples: Graph, graph_name: URIRef): ...
-    @overload
-    def insert(self, triples: Graph): ...
-
     def insert(self, triples: Graph, graph_name: URIRef | None = None):
         """
         Insert RDF triples into Neptune.
@@ -400,13 +395,7 @@ class AWSNeptune(ITripleStorePort):
 
         query = self.graph_to_query(triples, QueryType.INSERT_DATA, graph_name)
 
-        response = self.submit_query({QueryMode.UPDATE.value: query})
-        return response
-
-    @overload
-    def remove(self, triples: Graph, graph_name: URIRef): ...
-    @overload
-    def remove(self, triples: Graph): ...
+        self.submit_query({QueryMode.UPDATE.value: query})
 
     def remove(self, triples: Graph, graph_name: URIRef | None = None):
         """
@@ -444,8 +433,7 @@ class AWSNeptune(ITripleStorePort):
         if graph_name is None:
             graph_name = self.default_graph_name
         query = self.graph_to_query(triples, QueryType.DELETE_DATA, graph_name)
-        response = self.submit_query({"update": query})
-        return response
+        self.submit_query({"update": query})
 
     def get(self) -> Graph:
         """
@@ -716,7 +704,7 @@ class AWSNeptune(ITripleStorePort):
 
     # Graph management
 
-    def create_graph(self, graph_name: URIRef):
+    def create_graph(self, graph_name: URIRef) -> None:
         """
         Create a new named graph in Neptune.
 
@@ -743,7 +731,7 @@ class AWSNeptune(ITripleStorePort):
         )
         print(result.text)
 
-    def clear_graph(self, graph_name: URIRef = NEPTUNE_DEFAULT_GRAPH_NAME):
+    def clear_graph(self, graph_name: URIRef | None = None) -> None:
         """
         Remove all triples from a named graph.
 
@@ -771,12 +759,15 @@ class AWSNeptune(ITripleStorePort):
             >>> neptune.clear_graph(my_graph)
             >>> print("Graph cleared successfully")
         """
-        assert graph_name is not None
+        if graph_name is None:
+            self.submit_query({QueryMode.UPDATE.value: "CLEAR DEFAULT"})
+            return
+
         assert isinstance(graph_name, URIRef)
 
         self.submit_query({QueryMode.UPDATE.value: f"CLEAR GRAPH <{str(graph_name)}>"})
 
-    def drop_graph(self, graph_name: URIRef):
+    def drop_graph(self, graph_name: URIRef) -> None:
         """
         Delete a named graph and all its triples from Neptune.
 
@@ -878,6 +869,15 @@ class AWSNeptune(ITripleStorePort):
                 QueryMode.UPDATE.value: f"ADD GRAPH <{str(source_graph_name)}> TO <{str(target_graph_name)}>"
             }
         )
+
+    def list_graphs(self) -> list[URIRef]:
+        result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+        graphs: list[URIRef] = []
+        for row in result:
+            graph = getattr(row, "g", None)
+            if isinstance(graph, URIRef):
+                graphs.append(graph)
+        return graphs
 
 
 class AWSNeptuneSSHTunnel(AWSNeptune):
