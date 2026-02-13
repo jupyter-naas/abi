@@ -8,6 +8,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    MatchAny,
     MatchValue,
     PointIdsList,
     PointStruct,
@@ -142,9 +143,16 @@ class QdrantAdapter(IVectorStorePort):
         if filter:
             conditions = []
             for key, value in filter.items():
-                conditions.append(
-                    FieldCondition(key=key, match=MatchValue(value=value))
-                )
+                if isinstance(value, list):
+                    # For list values, use MatchAny to match any value in the list
+                    conditions.append(
+                        FieldCondition(key=key, match=MatchAny(any=value))
+                    )
+                else:
+                    # For single values, use MatchValue
+                    conditions.append(
+                        FieldCondition(key=key, match=MatchValue(value=value))
+                    )
             if conditions:
                 from typing import cast
 
