@@ -1028,7 +1028,7 @@ const MessageBubble = React.memo(function MessageBubble({
               )}
               <TypingDots />
               {!responseWithoutCaret && showConnecting && (
-                <span className="ml-2 text-xs text-muted-foreground">Connecting to model…</span>
+                <span className="ml-2 text-xs text-muted-foreground">Processing…</span>
               )}
               {showStop && (
                 <button

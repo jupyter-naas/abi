@@ -58,9 +58,9 @@ services:
     bus_adapter:
       adapter: "rabbitmq"
       config:
-        rabbitmq_url: "amqp://abi:abi@localhost:5672"
+        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@{{ secret.RABBITMQ_HOST }}:{{ secret.RABBITMQ_PORT }}"
   kv:
     kv_adapter:
       adapter: "redis"
       config:
-        redis_url: "redis://redis:6379"
+        redis_url: "redis://{{ secret.REDIS_HOST }}:{{ secret.REDIS_PORT }}"
