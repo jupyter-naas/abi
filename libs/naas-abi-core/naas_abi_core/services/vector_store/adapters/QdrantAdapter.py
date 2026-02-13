@@ -245,11 +245,22 @@ class QdrantAdapter(IVectorStorePort):
         logger.debug(f"Deleted {len(vector_ids)} vectors from {collection_name}")
 
     def count_vectors(self, collection_name: str) -> int:
+        """
+        Total vectors in the collection.
+
+        - info.points_count: Total number of vectors (points).
+        - info.indexed_vectors_count: Number of indexed vectors (optimized for fast search).
+        - info.segments_count: Number of segments (storage size indicator).
+        """
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
-        collection_info = self.client.get_collection(collection_name=collection_name)
-        return collection_info.indexed_vectors_count or 0
+        info = self.client.get_collection(collection_name=collection_name)
+        # You can also access:
+        #   info.points_count           -> total vectors
+        #   info.indexed_vectors_count  -> indexed vectors (fast search)
+        #   info.segments_count         -> storage size (number of segments)
+        return info.points_count or 0
 
     def close(self) -> None:
         if self.client:
