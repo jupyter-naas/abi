@@ -21,6 +21,8 @@ global_config:
 modules:
   - module: naas_abi
     enabled: true
+  - module: naas_abi_core.modules.triplestore_embeddings
+    enabled: true
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
