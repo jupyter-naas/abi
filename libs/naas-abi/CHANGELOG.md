@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-02-13)
+
+### Bug Fixes
+
+- Improve favicon display across browsers
+  ([`a26d1aa`](https://github.com/jupyter-naas/abi/commit/a26d1aa674494496045e145604c88535472865dd))
+
+- **infra**: Resolve CORS/500 errors and optimize Docker startup
+  ([`661f2cd`](https://github.com/jupyter-naas/abi/commit/661f2cde9390eb34c914e856644b1355d6b4907f))
+
+### Features
+
+- Rename to ABI NEXUS in browser tab
+  ([`a8725a6`](https://github.com/jupyter-naas/abi/commit/a8725a6dc1f08879face965fcbe7c7a6487d1b71))
+
+
 ## v1.4.1 (2026-02-13)
 
 ### Bug Fixes
