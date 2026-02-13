@@ -9,7 +9,10 @@ import rdflib
 from naas_abi_core import logger
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.triple_store.TripleStorePorts import (
-    ITripleStorePort, ITripleStoreService, OntologyEvent)
+    ITripleStorePort,
+    ITripleStoreService,
+    OntologyEvent,
+)
 from rdflib import RDF, Graph, URIRef
 
 SCHEMA_TTL = """
@@ -47,6 +50,7 @@ internal:content a owl:DatatypeProperty ;
     rdfs:label "content" ;
     rdfs:comment "Base64 encoded content of the schema file" .
 """
+
 
 class TripleStoreService(ServiceBase, ITripleStoreService):
     """TripleStoreService provides CRUD operations and SPARQL querying capabilities for ontologies.
@@ -121,7 +125,9 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             try:
                 topic = f"ts.insert.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}"
-                logger.debug(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
+                logger.debug(
+                    f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}"
+                )
                 self.services.bus.topic_publish(
                     "triple_store",
                     topic,
@@ -136,24 +142,25 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self.__triple_store_adapter.remove(triples)
 
         if self.services_wired is False:
-            return 
+            return
 
         # Notify listeners of the delete
         for s, p, o in triples.triples((None, None, None)):
-            triple_bytes =  f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
-            
+            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
+
             try:
                 topic = f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}"
-                logger.debug(f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}")
+                logger.debug(
+                    f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}"
+                )
                 self.services.bus.topic_publish(
                     "triple_store",
-                        f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}",
-                        triple_bytes,
-                    )
+                    f"ts.delete.g.default.s.{hashlib.sha256(str(s).encode('utf-8')).hexdigest()}.p.{hashlib.sha256(str(p).encode('utf-8')).hexdigest()}.o.{hashlib.sha256(str(o).encode('utf-8')).hexdigest()}",
+                    triple_bytes,
+                )
             except Exception as e:
                 logger.error(f"Error publishing triple: {e}")
                 raise e
-
 
     def get(self) -> Graph:
         return self.__triple_store_adapter.get()
@@ -167,28 +174,73 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     def subscribe(
         self,
         topic: tuple[URIRef | None, URIRef | None, URIRef | None],
-        callback: Callable[[bytes], None],
-        event_type: OntologyEvent | None = None
+        callback: Callable[[tuple[str, str, str]], None],
+        event_type: OntologyEvent | None = None,
     ) -> None:
-        _event_type : str = ""
+        _event_type: str = ""
         if event_type == OntologyEvent.INSERT:
             _event_type = "insert"
         elif event_type == OntologyEvent.DELETE:
             _event_type = "delete"
         elif event_type is None:
             _event_type = "*"
-        
-        graph_name = '*'
-        s = '*' if topic[0] is None else hashlib.sha256(str(topic[0]).encode('utf-8')).hexdigest()
-        p = '*' if topic[1] is None else hashlib.sha256(str(topic[1]).encode('utf-8')).hexdigest()
-        o = '*' if topic[2] is None else hashlib.sha256(str(topic[2]).encode('utf-8')).hexdigest()
-        
+
+        graph_name = "*"
+        s = (
+            "*"
+            if topic[0] is None
+            else hashlib.sha256(str(topic[0]).encode("utf-8")).hexdigest()
+        )
+        p = (
+            "*"
+            if topic[1] is None
+            else hashlib.sha256(str(topic[1]).encode("utf-8")).hexdigest()
+        )
+        o = (
+            "*"
+            if topic[2] is None
+            else hashlib.sha256(str(topic[2]).encode("utf-8")).hexdigest()
+        )
+
         topic_str = f"ts.{_event_type}.g.{graph_name}.s.{s}.p.{p}.o.{o}"
-        
+
+        def bytes_to_triple_callback(triple_bytes: bytes) -> None:
+            """Convert bytes to triple tuple and call the user's callback."""
+            try:
+                # Parse the Turtle triple statement from bytes
+                # Format is: "{s.n3()} {p.n3()} {o.n3()} .\n"
+                triple_str = triple_bytes.decode("utf-8").strip()
+
+                # Ensure it ends with a period for valid Turtle syntax
+                if not triple_str.endswith("."):
+                    triple_str = triple_str.rstrip() + " ."
+
+                # Parse using rdflib to handle all RDF term formats correctly
+                g = Graph()
+                g.parse(data=triple_str, format="turtle")
+
+                # Extract the triple (should be exactly one)
+                triples_list = list(g.triples((None, None, None)))
+                if len(triples_list) == 0:
+                    logger.warning(
+                        f"No triple found in bytes: {triple_bytes.decode('utf-8', errors='replace')}"
+                    )
+                    return
+
+                s_term, p_term, o_term = triples_list[0]
+                # Convert to strings
+                triple_tuple = (str(s_term), str(p_term), str(o_term))
+                callback(triple_tuple)
+            except Exception as e:
+                logger.error(
+                    f"Error parsing triple from bytes: {e}, bytes: {triple_bytes.decode('utf-8', errors='replace')}"
+                )
+                raise e
+
         self.services.bus.topic_consume(
             "triple_store",
             topic_str,
-            callback,
+            bytes_to_triple_callback,
         )
 
     def get_subject_graph(self, subject: str) -> Graph:
