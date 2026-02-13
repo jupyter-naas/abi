@@ -105,3 +105,4 @@ sandbox/
 .coverage
 coverage.xml
 htmlcov/
+secrets.yaml
