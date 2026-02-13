@@ -15,9 +15,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'NEXUS | naas.ai',
+  title: 'ABI Nexus | naas.ai',
   description:
-    'The coordination platform where agents, knowledge, and humans connect into actionable intelligence.',
+    'The coordination platform where AI agents, knowledge, and humans connect into actionable intelligence.',
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },
