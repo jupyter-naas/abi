@@ -1,7 +1,10 @@
 import os
 import sys
 
+from dotenv import load_dotenv
 from loguru import logger
+
+load_dotenv()
 
 
 def reconfigure(level: str = "DEBUG"):
