@@ -1,123 +1,67 @@
+# Minimal ABI Core API Configuration
+# Loads only essential modules for local development
+
 deploy:
   workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
   space_name: "abi-api"
-  naas_api_key: "{{ secret.NAAS_API_KEY }}"
+  naas_api_key: "local_dev"
   env:
-    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
-    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
-    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
+    NAAS_API_KEY: "local_dev"
+    OPENAI_API_KEY: "sk-local"
+    ABI_API_KEY: "local_dev"
 
 api:
   title: "ABI API"
-  description: "API for ABI, your Artifical Business Intelligence"
+  description: "API for ABI, your Agentic Brain Infrastructure"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
   cors_origins:
     - "http://localhost:9879"
+    - "http://localhost:3000"
 
 global_config:
-  ai_mode: "cloud"
+  ai_mode: "local" # Use local Ollama by default
 
 modules:
+  # Core ABI module - provides AbiAgent
   - module: naas_abi
     enabled: true
+    config:
+      datastore_path: "abi"
+      workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
+      storage_name: "abi"
+  
+  # Required dependency for naas_abi
+  - module: naas_abi_core.modules.templatablesparqlquery
+    enabled: true
+    config: {}
+  
+  # Required for AbiAgent (uses ChatGPT by default)
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-  - module: naas_abi_marketplace.ai.claude
-    enabled: true
-    config:
-      anthropic_api_key: "{{ secret.ANTHROPIC_API_KEY }}"
-  - module: naas_abi_marketplace.ai.mistral
-    enabled: true
-    config:
-      mistral_api_key: "{{ secret.MISTRAL_API_KEY }}"
-  - module: naas_abi_marketplace.ai.perplexity
-    enabled: true
-    config:
-      perplexity_api_key: "{{ secret.PERPLEXITY_API_KEY }}"
-  - module: naas_abi_marketplace.ai.gemini
-    enabled: true
-    config:
-      gemini_api_key: "{{ secret.GEMINI_API_KEY }}"
-  - module: naas_abi_marketplace.ai.grok
-    enabled: true
-    config:
-      xai_api_key: "{{ secret.XAI_API_KEY }}"
-  - module: naas_abi_marketplace.applications.algolia
-    enabled: true
-    config:
-      algolia_api_key: "{{ secret.ALGOLIA_API_KEY }}"
-      algolia_application_id: "{{ secret.ALGOLIA_APPLICATION_ID }}"
-  - module: naas_abi_marketplace.applications.github
-    enabled: true
-    config:
-      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
-  - module: naas_abi_marketplace.applications.google_search
-    enabled: true
-    config:
-      google_custom_search_api_key: "{{ secret.GOOGLE_CUSTOM_SEARCH_API_KEY }}"
-      google_custom_search_engine_id: "{{ secret.GOOGLE_CUSTOM_SEARCH_ENGINE_ID }}"
-  - module: naas_abi_marketplace.applications.hubspot
-    enabled: true
-    config:
-      hubspot_access_token: "{{ secret.HUBSPOT_ACCESS_TOKEN }}"
-  - module: naas_abi_marketplace.applications.linkedin
-    enabled: true
-    config:
-      li_at: "{{ secret.li_at }}"
-      JSESSIONID: "{{ secret.JSESSIONID }}"
-      linkedin_profile_url: "{{ secret.LINKEDIN_PROFILE_URL }}"
-  - module: naas_abi_marketplace.applications.naas
-    enabled: true
-    config:
-      naas_api_key: "{{ secret.NAAS_API_KEY }}"
-      workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
-      storage_name: "abi
-  - module: naas_abi_marketplace.domains.ontology_engineer
-    enabled: true
-    config: {}
-  - module: naas_abi_marketplace.domains.support
-    enabled: true
-    config:
-      default_repository: "jupyter-naas/abi"
-      github_project_id: 12
-      project_node_id: "PVT_kwDOBESWNM4AKRt3"
-      iteration_field_id: "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
-      status_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
-      status_option_id: "97363483"
-      priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
-      priority_option_id: "4fb76f2d"
 
 services:
   secret:
     secret_adapters:
-      - adapter: "naas"
-        config:
-          naas_api_key: "{{ secret.NAAS_API_KEY }}"
-          naas_api_url: "https://api.naas.ai"
-  object_storage:
-    object_storage_adapter:
-      adapter: "naas"
-      config:
-        naas_api_key: "{{ secret.NAAS_API_KEY }}"
-        workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
-        storage_name: "{{ secret.NAAS_STORAGE_NAME }}"
-        base_prefix: "datastore"
+      - adapter: "dotenv"
+        config: {}
+
   triple_store:
     triple_store_adapter:
-      adapter: "aws_neptune_sshtunnel"
+      adapter: "apache_jena_tdb2"
       config:
-        aws_region_name: "{{ secret.AWS_REGION }}"
-        aws_access_key_id: "{{ secret.AWS_ACCESS_KEY_ID }}"
-        aws_secret_access_key: "{{ secret.AWS_SECRET_ACCESS_KEY }}"
-        db_instance_identifier: "{{ secret.AWS_NEPTUNE_DB_INSTANCE_IDENTIFIER }}"
-        bastion_host: "{{ secret.AWS_BASTION_HOST }}"
-        bastion_port: "{{ secret.AWS_BASTION_PORT }}"
-        bastion_user: "{{ secret.AWS_BASTION_USER }}"
-        bastion_private_key: "{{ secret.AWS_BASTION_PRIVATE_KEY }}"
+        jena_tdb2_url: "http://admin:abi@localhost:3030/ds"
+        timeout: 30
+
   vector_store:
     vector_store_adapter:
-      adapter: "qdrant"
+      adapter: "qdrant_in_memory"
       config: {}
+
+  object_storage:
+    object_storage_adapter:
+      adapter: "fs"
+      config:
+        base_path: ".abi-storage"
