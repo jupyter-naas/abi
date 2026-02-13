@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.13.0 (2026-02-13)
+
+### Features
+
+- Add named graph management
+  ([`e4557e2`](https://github.com/jupyter-naas/abi/commit/e4557e2e5d55a43e062cc105368c254035329709))
+
+- Add tests for Jena and Oxigrpah. Also implemented a generci test to be reuse. Improved portal
+  ([`43ab798`](https://github.com/jupyter-naas/abi/commit/43ab798f1db273bb319cf952d5874d2729b743fa))
+
+- Added apache Jena TB2 Fuseki adapter to the triple store service
+  ([`620c466`](https://github.com/jupyter-naas/abi/commit/620c46608f2f74e845ed754e0332049da651aae4))
+
+
 ## v1.12.0 (2026-02-12)
 
 ### Features
