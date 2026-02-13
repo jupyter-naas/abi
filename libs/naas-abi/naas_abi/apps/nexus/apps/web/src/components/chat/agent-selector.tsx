@@ -99,8 +99,8 @@ export function AgentSelector() {
       )
     : enabledAgents;
 
-  const defaultAgents = filteredAgents.filter(a => a.isDefault);
-  const customAgents = filteredAgents.filter(a => !a.isDefault);
+  const defaultAgents = filteredAgents.filter(a => a.isDefault).sort((a, b) => a.name.localeCompare(b.name));
+  const customAgents = filteredAgents.filter(a => !a.isDefault).sort((a, b) => a.name.localeCompare(b.name));
 
   // Show default on server to prevent hydration mismatch
   const displayAgent = mounted ? selected : defaultAgent;

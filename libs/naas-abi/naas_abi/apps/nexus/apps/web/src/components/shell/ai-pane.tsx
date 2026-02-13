@@ -569,7 +569,7 @@ export function AIPane() {
                     <div className="px-3 py-1.5 text-xs text-muted-foreground">
                       Select agent
                     </div>
-                    {agents.filter(agent => agent.enabled).map((agent) => (
+                    {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
                       <button
                         key={agent.id}
                         type="button"
