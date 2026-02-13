@@ -14,7 +14,23 @@ class ABIModule(BaseModule):
     )
 
     class Configuration(ModuleConfiguration):
-        pass
+        """Configuration for TriplestoreEmbeddings module.
+
+        Configuration example:
+
+        module: naas_abi_core.modules.triplestore_embeddings
+        enabled: true
+        config:
+            collection_name: "triple_embeddings_test"
+            embeddings_dimensions: 3072
+            embeddings_model_name: "text-embedding-3-large"
+            embeddings_model_provider: "openai"
+        """
+
+        collection_name: str = "triple_embeddings_test"
+        embeddings_dimensions: int = 3072
+        embeddings_model_name: str = "text-embedding-3-large"
+        embeddings_model_provider: str = "openai"
 
     def on_load(self):
         super().on_load()
@@ -33,12 +49,17 @@ class ABIModule(BaseModule):
         from rdflib import RDFS
 
         # Init configuration
-        collection_name = "triple_embeddings_test"
-        embeddings_dimension = 3072
-        embeddings_model = OpenAIEmbeddings(
-            model="text-embedding-3-large",
-            dimensions=embeddings_dimension,
-        )
+        collection_name = self.configuration.collection_name
+        embeddings_dimensions = self.configuration.embeddings_dimensions
+        if self.configuration.embeddings_model_provider == "openai":
+            embeddings_model = OpenAIEmbeddings(
+                model=self.configuration.embeddings_model_name,
+                dimensions=embeddings_dimensions,
+            )
+        else:
+            raise ValueError(
+                f"Embeddings model provider {self.configuration.embeddings_model_provider} not supported"
+            )
 
         # Init create triple embeddings workflow
         create_triple_embeddings_configuration = (
@@ -46,7 +67,7 @@ class ABIModule(BaseModule):
                 vector_store=self.engine.services.vector_store,
                 triple_store=self.engine.services.triple_store,
                 embeddings_model=embeddings_model,
-                embeddings_dimension=embeddings_dimension,
+                embeddings_dimension=embeddings_dimensions,
                 collection_name=collection_name,
             )
         )
@@ -69,7 +90,7 @@ class ABIModule(BaseModule):
             DeleteTripleEmbeddingsWorkflowConfiguration(
                 vector_store=self.engine.services.vector_store,
                 embeddings_model=embeddings_model,
-                embeddings_dimension=embeddings_dimension,
+                embeddings_dimension=embeddings_dimensions,
                 collection_name=collection_name,
             )
         )

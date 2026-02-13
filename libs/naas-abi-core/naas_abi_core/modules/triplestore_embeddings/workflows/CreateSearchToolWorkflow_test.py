@@ -13,14 +13,24 @@ engine.load(module_names=["naas_abi_core.modules.triplestore_embeddings"])
 
 module: ABIModule = ABIModule.get_instance()
 
+collection_name = module.configuration.collection_name
+embeddings_dimension = module.configuration.embeddings_dimensions
+if module.configuration.embeddings_model_provider == "openai":
+    embeddings_model = OpenAIEmbeddings(
+        model=module.configuration.embeddings_model_name,
+        dimensions=embeddings_dimension,
+    )
+else:
+    raise ValueError(
+        f"Embeddings model provider {module.configuration.embeddings_model_provider} not supported"
+    )
+
 
 @pytest.fixture
 def workflow() -> CreateSearchToolWorkflow:
     configuration = CreateSearchToolWorkflowConfiguration(
         vector_store=module.engine.services.vector_store,
-        embeddings_model=OpenAIEmbeddings(
-            model="text-embedding-3-large",
-        ),
+        embeddings_model=embeddings_model,
     )
     workflow = CreateSearchToolWorkflow(configuration)
     return workflow
@@ -36,7 +46,7 @@ def test_create_search_tool(workflow):
 
     result = workflow.create_search_tool(
         CreateSearchToolWorkflowParameters(
-            collection_name="triple_embeddings_test",
+            collection_name=collection_name,
             search_param_name="person_name",
             tool_name="search_person",
             tool_description="Search for a person by name",

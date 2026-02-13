@@ -11,18 +11,24 @@ from naas_abi_core.modules.triplestore_embeddings.workflows.CreateTripleEmbeddin
     CreateTripleEmbeddingsWorkflowParameters,
 )
 
-collection_name = "triple_embeddings_test"
-embeddings_dimension = 3072
-embeddings_model = OpenAIEmbeddings(
-    model="text-embedding-3-large",
-    dimensions=embeddings_dimension,
-)
-embeddings_utils = EmbeddingsUtils(embeddings_model=embeddings_model)
-
 engine = Engine()
 engine.load(module_names=["naas_abi_core.modules.triplestore_embeddings"])
 
 module: ABIModule = ABIModule.get_instance()
+
+collection_name = module.configuration.collection_name
+embeddings_dimension = module.configuration.embeddings_dimensions
+if module.configuration.embeddings_model_provider == "openai":
+    embeddings_model = OpenAIEmbeddings(
+        model=module.configuration.embeddings_model_name,
+        dimensions=embeddings_dimension,
+    )
+else:
+    raise ValueError(
+        f"Embeddings model provider {module.configuration.embeddings_model_provider} not supported"
+    )
+
+embeddings_utils = EmbeddingsUtils(embeddings_model=embeddings_model)
 
 
 @pytest.fixture
