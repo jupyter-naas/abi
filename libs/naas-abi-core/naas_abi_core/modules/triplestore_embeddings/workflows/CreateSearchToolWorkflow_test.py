@@ -46,17 +46,17 @@ def test_create_search_tool(workflow):
 
     result = workflow.create_search_tool(
         CreateSearchToolWorkflowParameters(
-            collection_name=collection_name,
+            tool_name="search_person_uri",
+            tool_description="Search for a person URI by name",
             search_param_name="person_name",
-            tool_name="search_person",
-            tool_description="Search for a person by name",
-            entity_type_label="person",
-            filter={"type_label": "Person"},
+            search_param_description="Name of the person to search for",
+            collection_name=collection_name,
+            search_filter={"type_label": "Person"},
         )
     )
 
     assert result is not None, result
-    assert result.name == "search_person", result.name
+    assert result.name == "search_person_uri", result.name
     assert isinstance(result, StructuredTool), result
 
     agent = Agent(
@@ -69,4 +69,4 @@ def test_create_search_tool(workflow):
 
     response = agent.invoke("list tools")
     assert response is not None, response
-    assert "search_person" in response, response
+    assert "search_person_uri" in response, response

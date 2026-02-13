@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict, List, Optional
 
 import numpy as np
 from langchain_core.embeddings import Embeddings
 from langchain_core.tools import BaseTool, StructuredTool
+from naas_abi_core.modules.triplestore_embeddings.utils.Embeddings import (
+    EmbeddingsUtils,
+)
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
@@ -29,48 +32,81 @@ class CreateSearchToolWorkflowConfiguration(WorkflowConfiguration):
 
 
 class CreateSearchToolWorkflowParameters(WorkflowParameters):
-    """Parameters for CreateSearchTool workflow execution.
+    """
+    Parameters for configuring the CreateSearchTool workflow.
 
     Attributes:
-        collection_name: Name of the vector store collection
-        search_param_name: Name of the search parameter (e.g., "person_name", "company_name")
-        tool_name: Name of the search tool to create
-        tool_description: Description of the search tool
-        entity_type_label: Label for the entity type for logging
-        filter: Metadata filter for the search. Available filters: uri, label, owl_type, type_uri, type_label
+        tool_name: Name to assign to the generated search tool.
+        tool_description: Description of the created search tool and its purpose.
+        search_param_name: The input parameter name that the search tool uses for querying. Defaults to "search_entity_name".
+        search_param_description: Description for the querying parameter. Defaults to "Name of the entity to search for".
+        collection_name: Name of the vector store collection to be searched. Optional.
+        search_filter: A dictionary for metadata filtering during search (available keys: uri, label, owl_type, type_uri, type_label). Optional.
+        k: The number of search results to return (default: 10; min: 1, max: 20).
+        threshold: Minimum similarity score threshold for result filtering (float between 0.0 and 1.0, default: 0.80).
     """
 
-    collection_name: Annotated[
-        str, Field(..., description="Name of the vector store collection")
-    ]
-    search_param_name: Annotated[
-        str,
-        Field(
-            ...,
-            description="Name of the search parameter (e.g., 'person_name', 'company_name')",
-        ),
-    ]
     tool_name: Annotated[
         str, Field(..., description="Name of the search tool to create")
     ]
     tool_description: Annotated[
         str, Field(..., description="Description of the search tool")
     ]
-    entity_type_label: Annotated[
-        str, Field(..., description="Label for the entity type for logging")
-    ]
-    filter: Annotated[
-        Dict[str, Any],
+    search_param_name: Annotated[
+        str,
         Field(
-            description="Metadata filter for the search. Available filters: uri, label, owl_type, type_uri, type_label",
+            ...,
+            description="Name of the parameter for the search tool",
         ),
-    ]
+    ] = "search_entity_name"
+    search_param_description: Annotated[
+        str,
+        Field(
+            ...,
+            description="Description of the parameter for the search tool",
+        ),
+    ] = "Name of the entity to search for"
+    collection_name: Optional[
+        Annotated[
+            str,
+            Field(description="Name of the vector store collection"),
+        ]
+    ] = ""
+    search_filter: Optional[
+        Annotated[
+            Dict[str, Any],
+            Field(
+                description="Filter for the search. Available filters: uri, label, owl_type, type_uri, type_label",
+            ),
+        ]
+    ] = {}
+    k: Optional[
+        Annotated[
+            int,
+            Field(
+                ge=1,
+                le=20,
+                description="Number of results to return",
+            ),
+        ]
+    ] = 10
+    threshold: Optional[
+        Annotated[
+            float,
+            Field(
+                ge=0.0,
+                le=1.0,
+                description="Threshold for filtering results",
+            ),
+        ]
+    ] = 0.5
 
 
 class CreateSearchToolWorkflow(Workflow):
     """Workflow for creating a search tool for entities in a collection."""
 
     __configuration: CreateSearchToolWorkflowConfiguration
+    __embeddings_utils: EmbeddingsUtils
 
     def __init__(self, configuration: CreateSearchToolWorkflowConfiguration):
         super().__init__(configuration)
@@ -79,6 +115,9 @@ class CreateSearchToolWorkflow(Workflow):
         # Get services from configuration
         self.__vector_store_service = self.__configuration.vector_store
         self.__embeddings_model = self.__configuration.embeddings_model
+        self.__embeddings_utils = EmbeddingsUtils(
+            embeddings_model=self.__embeddings_model
+        )
 
     @cache(
         lambda self, text: text,
@@ -114,25 +153,53 @@ class CreateSearchToolWorkflow(Workflow):
         class SearchSchema(BaseModel):
             __annotations__ = {
                 parameters.search_param_name: str,
+                "collection_name": str,
+                "search_filter": Dict[str, Any],
                 "k": int,
+                "threshold": float,
             }
             # Annotate the search_param_name field
-            locals()[parameters.search_param_name] = Field(
-                description=f"The name of the {parameters.entity_type_label} to search for"
-            )
-            # Annotate the "k" field with bounds and default.
-            k: int = Field(
-                default=10,
-                ge=1,
-                le=20,
-                description="Number of results to return (default: 5)",
-            )
-            threshold: float = Field(
-                default=0.80,
-                ge=0.0,
-                le=1.0,
-                description="Threshold for filtering results (default: 0.95)",
-            )
+            locals()[parameters.search_param_name] = Annotated[
+                str, Field(description=parameters.search_param_description)
+            ]
+
+            # Annotate static fields
+            collection_name: Optional[
+                Annotated[
+                    str,
+                    Field(
+                        description="Name of the vector store collection",
+                    ),
+                ]
+            ] = parameters.collection_name
+            search_filter: Optional[
+                Annotated[
+                    Dict[str, Any],
+                    Field(
+                        description="Filter for the search. Available filters: uri, label, owl_type, type_uri, type_label",
+                    ),
+                ]
+            ] = parameters.search_filter
+            k: Optional[
+                Annotated[
+                    int,
+                    Field(
+                        ge=1,
+                        le=20,
+                        description="Number of results to return",
+                    ),
+                ]
+            ] = parameters.k
+            threshold: Optional[
+                Annotated[
+                    float,
+                    Field(
+                        ge=0.0,
+                        le=1.0,
+                        description="Threshold for filtering results",
+                    ),
+                ]
+            ] = parameters.threshold
 
         # Create search function that accepts the dynamic parameter name
         def search_entity(**kwargs) -> List[Dict[str, Any]]:
@@ -147,21 +214,28 @@ class CreateSearchToolWorkflow(Workflow):
             try:
                 # Extract the name parameter using the search_param_name
                 name = kwargs.get(parameters.search_param_name, "")
-                k = kwargs.get("k", 10)
+                collection_name = kwargs.get(
+                    "collection_name", parameters.collection_name
+                )
+                search_filter = kwargs.get("search_filter", parameters.search_filter)
+                k = kwargs.get("k", parameters.k)
+                threshold = kwargs.get("threshold", parameters.threshold)
 
                 if not name:
                     return [{"error": f"{parameters.search_param_name} is required"}]
 
+                if not collection_name:
+                    return [{"error": "Collection name is required"}]
+
                 # Generate embedding for the query
-                query_embedding = self.__embeddings_model.embed_query(name)
-                query_vector = np.array(query_embedding)
+                query_vector = self.__embeddings_utils.create_vector_embedding(name)
 
                 # Search in vector store
                 search_results = self.__vector_store_service.search_similar(
-                    collection_name=parameters.collection_name,
+                    collection_name=collection_name,
                     query_vector=query_vector,
                     k=k,
-                    filter=parameters.filter,
+                    filter=search_filter,
                     include_metadata=True,
                 )
 
@@ -172,7 +246,7 @@ class CreateSearchToolWorkflow(Workflow):
                         result.metadata
                         and result.score is not None
                         and isinstance(result.score, float)
-                        and result.score >= kwargs.get("threshold", 0.8)
+                        and result.score >= threshold
                     ):
                         results.append(
                             {
@@ -190,7 +264,7 @@ class CreateSearchToolWorkflow(Workflow):
         search_tool = StructuredTool(
             name=parameters.tool_name,
             description=parameters.tool_description,
-            func=search_entity,
+            func=lambda **kwargs: search_entity(**kwargs),
             args_schema=SearchSchema,
         )
 

@@ -9,7 +9,7 @@ from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreSe
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
-        modules=[],
+        modules=["naas_abi_marketplace.ai.chatgpt"],
         services=[TripleStoreService, VectorStoreService],
     )
 
