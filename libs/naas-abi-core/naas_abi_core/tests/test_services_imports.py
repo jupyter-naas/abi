@@ -23,6 +23,7 @@ def test_imports():
         TripleStoreService,
     )
     from naas_abi_core.services.triple_store.adaptors.secondary import (
+        ApacheJenaTDB2,
         AWSNeptune,
         Oxigraph,
     )
@@ -49,6 +50,7 @@ def test_imports():
     TripleStoreService
     TripleStoreFactory
     TripleStorePorts
+    ApacheJenaTDB2
     AWSNeptune
     Oxigraph
     ObjectStorageSecondaryAdapterNaas

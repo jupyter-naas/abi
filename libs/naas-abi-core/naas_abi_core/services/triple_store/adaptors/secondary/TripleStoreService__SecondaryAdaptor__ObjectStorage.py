@@ -64,7 +64,12 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
             prefix=self.__triples_prefix, key=f"{name}.ttl", content=serialized_triples
         )
 
-    def insert(self, triples: Graph):
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+        if graph_name is not None:
+            raise NotImplementedError(
+                "Named graphs are not supported by object storage triple store adapter"
+            )
+
         with self.__lock:
             triples_by_subject: Dict[Node, List[Tuple[Node, Node]]] = (
                 self.triples_by_subject(triples)
@@ -108,7 +113,12 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
 
             self.__live_graph += triples
 
-    def remove(self, triples: Graph):
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
+        if graph_name is not None:
+            raise NotImplementedError(
+                "Named graphs are not supported by object storage triple store adapter"
+            )
+
         with self.__lock:
             triples_by_subject: Dict[Any, List[Tuple[Any, Any]]] = (
                 self.triples_by_subject(triples)

@@ -1,15 +1,16 @@
 from typing import TYPE_CHECKING, Literal, Union
 
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import \
-    GenericLoader
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import \
-    ObjectStorageServiceConfiguration
-from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
-    pydantic_model_validator
-from naas_abi_core.services.triple_store.TripleStorePorts import \
-    ITripleStorePort
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
+    GenericLoader,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
+    ObjectStorageServiceConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
+    pydantic_model_validator,
+)
+from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStorePort
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, ConfigDict, model_validator
 from typing_extensions import Self
 
@@ -31,6 +32,22 @@ class OxigraphAdapterConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     oxigraph_url: str = "http://localhost:7878"
+    timeout: int = 60
+
+
+class ApacheJenaTDB2AdapterConfiguration(BaseModel):
+    """Apache Jena Fuseki (TDB2) adapter configuration.
+
+    triple_store_adapter:
+      adapter: "apache_jena_tdb2"
+      config:
+        jena_tdb2_url: "http://localhost:3030/ds"
+        timeout: 60
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    jena_tdb2_url: str = "http://localhost:3030/ds"
     timeout: int = 60
 
 
@@ -113,6 +130,7 @@ class TripleStoreAdapterObjectStorageConfiguration(BaseModel):
 class TripleStoreAdapterConfiguration(GenericLoader):
     adapter: Literal[
         "oxigraph",
+        "apache_jena_tdb2",
         "aws_neptune_sshtunnel",
         "aws_neptune",
         "fs",
@@ -122,6 +140,7 @@ class TripleStoreAdapterConfiguration(GenericLoader):
     config: (
         Union[
             OxigraphAdapterConfiguration,
+            ApacheJenaTDB2AdapterConfiguration,
             AWSNeptuneAdapterConfiguration,
             AWSNeptuneSSHTunnelAdapterConfiguration,
             TripleStoreAdapterFilesystemConfiguration,
@@ -156,6 +175,12 @@ class TripleStoreAdapterConfiguration(GenericLoader):
                 self.config,
                 "Invalid configuration for services.triple_store.triple_store_adapter 'oxigraph' adapter",
             )
+        if self.adapter == "apache_jena_tdb2":
+            pydantic_model_validator(
+                ApacheJenaTDB2AdapterConfiguration,
+                self.config,
+                "Invalid configuration for services.triple_store.triple_store_adapter 'apache_jena_tdb2' adapter",
+            )
         if self.adapter == "aws_neptune":
             pydantic_model_validator(
                 AWSNeptuneAdapterConfiguration,
@@ -183,36 +208,49 @@ class TripleStoreAdapterConfiguration(GenericLoader):
 
             # Lazy import: only import the adapter that's actually configured
             if self.adapter == "oxigraph":
-                from naas_abi_core.services.triple_store.adaptors.secondary.Oxigraph import \
-                    Oxigraph
+                from naas_abi_core.services.triple_store.adaptors.secondary.Oxigraph import (
+                    Oxigraph,
+                )
 
                 OxigraphAdapterConfiguration.model_validate(arguments)
 
                 return Oxigraph(**arguments)
+            elif self.adapter == "apache_jena_tdb2":
+                from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+                    ApacheJenaTDB2,
+                )
+
+                ApacheJenaTDB2AdapterConfiguration.model_validate(arguments)
+
+                return ApacheJenaTDB2(**arguments)
             elif self.adapter == "aws_neptune":
-                from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import \
-                    AWSNeptune
+                from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
+                    AWSNeptune,
+                )
 
                 AWSNeptuneAdapterConfiguration.model_validate(arguments)
 
                 return AWSNeptune(**arguments)
             elif self.adapter == "aws_neptune_sshtunnel":
-                from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import \
-                    AWSNeptuneSSHTunnel
+                from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
+                    AWSNeptuneSSHTunnel,
+                )
 
                 AWSNeptuneSSHTunnelAdapterConfiguration.model_validate(arguments)
 
                 return AWSNeptuneSSHTunnel(**arguments)
             elif self.adapter == "fs":
-                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import \
-                    TripleStoreService__SecondaryAdaptor__Filesystem
+                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
+                    TripleStoreService__SecondaryAdaptor__Filesystem,
+                )
 
                 TripleStoreAdapterFilesystemConfiguration.model_validate(arguments)
 
                 return TripleStoreService__SecondaryAdaptor__Filesystem(**arguments)
             elif self.adapter == "object_storage":
-                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import \
-                    TripleStoreService__SecondaryAdaptor__ObjectStorage
+                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
+                    TripleStoreService__SecondaryAdaptor__ObjectStorage,
+                )
 
                 return TripleStoreService__SecondaryAdaptor__ObjectStorage(**arguments)
             else:
