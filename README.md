@@ -40,12 +40,26 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/jupyter-naas/abi.git
 cd abi
 
-# Install dependencies
+# Install dependencies (Python + frontend)
 uv sync --all-extras
+
+# Install frontend dependencies
+cd libs/naas-abi/naas_abi/apps/nexus/apps/web
+pnpm install
+cd ../../../../..
 
 # Create local config
 cp config.yaml.example config.yaml
 # Edit config.yaml with your API keys
+
+# Configure for local development (update .env)
+# Change Docker hostnames to localhost:
+#   POSTGRES_HOST=localhost (not postgres)
+#   QDRANT_HOST=localhost (not qdrant)
+#   MINIO_HOST=localhost (not minio)
+
+# Start infrastructure
+docker compose up -d postgres fuseki rabbitmq
 
 # Start platform
 uv run abi stack start
