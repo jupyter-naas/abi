@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.13.3 (2026-02-13)
+
+### Bug Fixes
+
+- **infra**: Resolve CORS/500 errors and optimize Docker startup
+  ([`661f2cd`](https://github.com/jupyter-naas/abi/commit/661f2cde9390eb34c914e856644b1355d6b4907f))
+
+
 ## v1.13.2 (2026-02-13)
 
 ### Bug Fixes
