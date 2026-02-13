@@ -690,10 +690,6 @@ async def stream_chat(
     current_user: User = Depends(get_current_user_required),
 ):
     """Stream a chat response using Server-Sent Events."""
-    print("=" * 80)
-    print(f"STREAM CHAT CALLED: agent={request.agent}")
-    print("=" * 80)
-    
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"🎯 Stream request: agent={request.agent}, provider={'None' if not request.provider else request.provider.type}")
