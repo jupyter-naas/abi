@@ -229,6 +229,8 @@ uv:
 # Create virtual environment and install all dependencies
 .venv:
 	@ uv sync --all-extras
+	@ echo "📦 Installing frontend dependencies..."
+	@ cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm install || echo "⚠️  pnpm not found - skipping frontend deps (install pnpm: https://pnpm.io)"
 
 deps-upgrade:
 	@ uv sync --all-extras --upgrade

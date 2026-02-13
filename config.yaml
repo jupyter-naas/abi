@@ -1,42 +1,31 @@
-# Minimal ABI Core API Configuration
-# Loads only essential modules for local development
-
 deploy:
   workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
   space_name: "abi-api"
-  naas_api_key: "local_dev"
+  naas_api_key: "{{ secret.NAAS_API_KEY }}"
   env:
-    NAAS_API_KEY: "local_dev"
-    OPENAI_API_KEY: "sk-local"
-    ABI_API_KEY: "local_dev"
+    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
+    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
+    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
 
 api:
   title: "ABI API"
-  description: "API for ABI, your Agentic Brain Infrastructure"
+  description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
   cors_origins:
     - "http://localhost:9879"
-    - "http://localhost:3000"
 
 global_config:
-  ai_mode: "local" # Use local Ollama by default
+  ai_mode: "cloud"
 
 modules:
-  # Core ABI module - provides AbiAgent
   - module: naas_abi
     enabled: true
     config:
-      datastore_path: "abi"
-      workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
-      storage_name: "abi"
-  
-  # Required dependency for naas_abi
-  - module: naas_abi_core.modules.templatablesparqlquery
-    enabled: true
-    config: {}
-  
-  # Required for AbiAgent (uses ChatGPT by default)
+      nexus_config:
+        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/nexus"
+        redis_url: "redis://redis:6379/0"
+
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
@@ -47,21 +36,31 @@ services:
     secret_adapters:
       - adapter: "dotenv"
         config: {}
-
-  triple_store:
-    triple_store_adapter:
-      adapter: "apache_jena_tdb2"
-      config:
-        jena_tdb2_url: "http://admin:abi@localhost:3030/ds"
-        timeout: 30
-
-  vector_store:
-    vector_store_adapter:
-      adapter: "qdrant_in_memory"
-      config: {}
-
   object_storage:
     object_storage_adapter:
+      adapter: "s3"
+      config:
+        bucket_name: "abi"
+        base_prefix: "abi/datastore"
+        access_key_id: "{{ secret.MINIO_ROOT_USER }}"
+        secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
+        endpoint_url: "http://{{ secret.MINIO_HOST }}:{{ secret.MINIO_PORT }}"
+  triple_store:
+    triple_store_adapter:
       adapter: "fs"
       config:
-        base_path: ".abi-storage"
+        store_path: "storage/triplestore"
+  vector_store:
+    vector_store_adapter:
+      adapter: "qdrant"
+      config: {}
+  bus:
+    bus_adapter:
+      adapter: "rabbitmq"
+      config:
+        rabbitmq_url: "amqp://abi:abi@localhost:5672"
+  kv:
+    kv_adapter:
+      adapter: "redis"
+      config:
+        redis_url: "redis://redis:6379"
