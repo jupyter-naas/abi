@@ -50,11 +50,12 @@ x-abi-template: &abi_template
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
   environment:
+    - LOG_LEVEL=DEBUG
     - PYTHONPATH=/app
     - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
     - VECTOR_STORE_ADAPTER=qdrant
     - QDRANT_HOST=${QDRANT_HOST}
-    - QDRANT_PORT=6333
+    - QDRANT_PORT=${QDRANT_PORT}
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
   depends_on:
@@ -66,8 +67,6 @@ x-abi-template: &abi_template
     #   condition: service_healthy
   networks:
     - abi-network
-  profiles:
-    - container  # Only starts when running 'make container-up'
 
 services:
   # -----------------------------------------------------------------------------
@@ -86,7 +85,9 @@ services:
   mcp-server:
     build:
       context: .
-      dockerfile: libs/naas-abi-core/naas_abi_core/apps/mcp/Dockerfile.mcp
+      dockerfile: ./.deploy/docker/images/Dockerfile
+    command:
+      ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
     environment:
       - ABI_API_BASE=http://${ABI_HOST}:9879
       - ABI_API_KEY=abi
@@ -95,8 +96,6 @@ services:
       - 8000:8000
     networks:
       - abi-network
-    profiles:
-      - local
 
   # -----------------------------------------------------------------------------
   # PostgreSQL Database - Agent Memory & Conversation Storage
@@ -110,7 +109,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB} # Database for agent conversations and memory
     ports:
-      - 5432:5432  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:5432/abi_memory
+      - ${POSTGRES_PORT}:${POSTGRES_PORT}  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:${POSTGRES_PORT}/abi_memory
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent data storage
       - ./.deploy/docker/postgres/initdb:/docker-entrypoint-initdb.d:ro  # Bootstrap additional databases
@@ -121,8 +120,6 @@ services:
       retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Apache Jena Fuseki (TDB2) - Knowledge Graph Database (RDF/SPARQL)
@@ -145,8 +142,6 @@ services:
       retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # YasGUI - SPARQL Query Interface
@@ -164,8 +159,6 @@ services:
       - fuseki
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Dagster - Workflow Orchestration & Data Pipeline Management
@@ -198,20 +191,18 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - DAGSTER_S3_LOG_BUCKET=dagster-logs
-      - MINIO_ENDPOINT_URL=http://${MINIO_HOST}:9000
+      - MINIO_ENDPOINT_URL=http://${MINIO_HOST}:${MINIO_PORT}
       - MINIO_REGION_NAME=us-east-1
       - DAGSTER_PG_HOSTNAME=${POSTGRES_HOST}
       - DAGSTER_PG_USERNAME=${POSTGRES_USER}
       - DAGSTER_PG_PASSWORD=${POSTGRES_PASSWORD}
-      - DAGSTER_PG_DB=${POSTGRES_DB}_dagster
+      - DAGSTER_PG_DB=${POSTGRES_DB}
     command:
       - /bin/bash
       - -c
       - 'uv run dagster dev --host 0.0.0.0 --port 3001 -m naas_abi_core.apps.dagster.dagster'
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
@@ -223,14 +214,12 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - 9000:9000  # S3 API endpoint - http://localhost:9000
+      - ${MINIO_PORT}:${MINIO_PORT}  # S3 API endpoint - http://localhost:${MINIO_PORT}
       - 9001:9001  # MinIO console - http://localhost:9001
     volumes:
       - minio_data:/data
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # mc container to initialize the bucket on startup
   minio-init:
@@ -239,13 +228,12 @@ services:
       - minio
     entrypoint: >-
       /bin/sh -c "
-      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
-      /usr/bin/mc mb -p ${MINIO_ROOT_USER}/dagster-logs || true
+      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:${MINIO_PORT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
+      /usr/bin/mc mb -p ${MINIO_ROOT_USER}/dagster-logs || true &&
+      /usr/bin/mc mb -p ${MINIO_ROOT_USER}/abi || true
       "
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # RabbitMQ - Message Bus (AMQP)
@@ -267,8 +255,6 @@ services:
       retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Redis - In-memory Cache / Message Broker
@@ -287,8 +273,6 @@ services:
       retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Redis Commander - Web UI for Redis management
@@ -298,13 +282,11 @@ services:
     ports:
       - 8082:8081  # Redis Commander UI - http://localhost:8082
     environment:
-      - REDIS_HOSTS=local:redis:6379
+      - REDIS_HOSTS=local:redis:${REDIS_PORT}
     depends_on:
       - redis
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Matrix (Synapse) - Federated Messaging Server
@@ -323,8 +305,6 @@ services:
     entrypoint: ["/bin/sh", "/bootstrap.sh"]
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Element Web - Matrix Client
@@ -339,8 +319,6 @@ services:
       - matrix
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
   # -----------------------------------------------------------------------------
   # Service Portal - Single-page navigation for all HTTP UIs
@@ -353,8 +331,6 @@ services:
       - ./.deploy/docker/service-portal:/usr/share/nginx/html:ro
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
 # =============================================================================
 # PERSISTENT VOLUMES
@@ -378,8 +354,6 @@ services:
     #   retries: 5
     networks:
       - abi-network
-    profiles:
-      - infrastructure
 
 volumes:
   venv_cache:     # Python virtual environment cache for faster startup
