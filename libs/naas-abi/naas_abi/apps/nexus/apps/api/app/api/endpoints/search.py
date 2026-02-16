@@ -3,13 +3,12 @@ Search API endpoints - Semantic search across all knowledge.
 """
 
 import hashlib
-from datetime import datetime, timezone
-from typing import Literal, Optional
+from datetime import datetime
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import \
-    get_current_user_required
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -58,8 +57,8 @@ class WebSearchResult(BaseModel):
     id: str
     title: str
     snippet: str
-    url: Optional[str] = None
-    relevance: Optional[float] = None
+    url: str | None = None
+    relevance: float | None = None
     metadata: dict = {}
 
 
@@ -87,13 +86,13 @@ async def search(request: SearchRequest) -> SearchResponse:
 async def web_search(request: WebSearchRequest) -> WebSearchResponse:
     """
     Search external web sources (Wikipedia, DuckDuckGo).
-    
+
     Supported engines:
     - wikipedia: Wikipedia article search
     - duckduckgo: DuckDuckGo instant answers
     """
     results: list[WebSearchResult] = []
-    
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         if request.engine == "wikipedia":
             results = await search_wikipedia(client, request.query, request.limit)
@@ -101,7 +100,7 @@ async def web_search(request: WebSearchRequest) -> WebSearchResponse:
             results = await search_duckduckgo(client, request.query, request.limit)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown engine: {request.engine}")
-    
+
     return WebSearchResponse(
         query=request.query,
         engine=request.engine,
@@ -113,7 +112,7 @@ async def search_wikipedia(client: httpx.AsyncClient, query: str, limit: int) ->
     """Search Wikipedia using their public API with images and extracts."""
     results = []
     headers = {"User-Agent": "NEXUS/1.0 (https://github.com/jravenel/nexus; demo search)"}
-    
+
     try:
         # Use the query API with extracts and pageimages for richer results
         response = await client.get(
@@ -136,18 +135,18 @@ async def search_wikipedia(client: httpx.AsyncClient, query: str, limit: int) ->
         )
         response.raise_for_status()
         data = response.json()
-        
+
         pages = data.get("query", {}).get("pages", {})
-        
+
         # Sort by search index (relevance)
         sorted_pages = sorted(pages.values(), key=lambda p: p.get("index", 999))
-        
+
         for i, page in enumerate(sorted_pages):
             result_id = hashlib.md5(f"wikipedia:{page.get('pageid', i)}".encode()).hexdigest()[:12]
-            
+
             # Get thumbnail URL if available
             thumbnail = page.get("thumbnail", {}).get("source")
-            
+
             results.append(WebSearchResult(
                 id=result_id,
                 title=page.get("title", ""),
@@ -163,7 +162,7 @@ async def search_wikipedia(client: httpx.AsyncClient, query: str, limit: int) ->
             ))
     except Exception as e:
         print(f"Wikipedia search error: {e}")
-    
+
     return results
 
 
@@ -171,7 +170,7 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
     """Search DuckDuckGo using their instant answer API."""
     results = []
     headers = {"User-Agent": "NEXUS/1.0 (https://github.com/jravenel/nexus; demo search)"}
-    
+
     try:
         # DuckDuckGo Instant Answer API
         response = await client.get(
@@ -186,12 +185,12 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
         )
         response.raise_for_status()
         data = response.json()
-        
+
         # Get main image if available
         main_image = data.get("Image")
         if main_image and not main_image.startswith("http"):
             main_image = f"https://duckduckgo.com{main_image}"
-        
+
         # Add abstract if available
         if data.get("Abstract"):
             result_id = hashlib.md5(f"ddg:abstract:{query}".encode()).hexdigest()[:12]
@@ -208,7 +207,7 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
                     "image": main_image,
                 },
             ))
-        
+
         # Add related topics
         for i, topic in enumerate(data.get("RelatedTopics", [])[:limit-1]):
             if isinstance(topic, dict) and topic.get("Text"):
@@ -216,7 +215,7 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
                 topic_icon = topic.get("Icon", {}).get("URL")
                 if topic_icon and not topic_icon.startswith("http"):
                     topic_icon = f"https://duckduckgo.com{topic_icon}" if topic_icon else None
-                    
+
                 result_id = hashlib.md5(f"ddg:topic:{topic.get('FirstURL', str(i))}".encode()).hexdigest()[:12]
                 results.append(WebSearchResult(
                     id=result_id,
@@ -230,7 +229,7 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
                         "image": topic_icon,
                     },
                 ))
-        
+
         # Add results from topics within categories
         for topic in data.get("RelatedTopics", []):
             if isinstance(topic, dict) and "Topics" in topic:
@@ -250,10 +249,10 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
                             "category": topic.get("Name", ""),
                         },
                     ))
-                    
+
     except Exception as e:
         print(f"DuckDuckGo search error: {e}")
-    
+
     return results[:limit]
 
 
@@ -286,7 +285,7 @@ async def get_suggestions(
     """Get search suggestions based on partial query."""
     # Use Wikipedia suggestions API
     suggestions = []
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(
@@ -308,5 +307,5 @@ async def get_suggestions(
                 suggestions = data[1][:limit]
     except Exception as e:
         print(f"Suggestions error: {e}")
-    
+
     return suggestions

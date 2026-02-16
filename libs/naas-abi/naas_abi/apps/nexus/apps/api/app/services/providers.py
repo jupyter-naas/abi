@@ -3,7 +3,8 @@ AI Provider Service - Handles communication with different AI backends.
 Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom OpenAI-compatible endpoints.
 """
 
-from typing import AsyncGenerator, Literal
+from collections.abc import AsyncGenerator
+from typing import Literal
 
 import httpx
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
@@ -12,12 +13,14 @@ from pydantic import BaseModel
 # Try importing provider SDKs
 try:
     import anthropic
+
     HAS_ANTHROPIC = True
 except ImportError:
     HAS_ANTHROPIC = False
 
 try:
     import openai
+
     HAS_OPENAI = True
 except ImportError:
     HAS_OPENAI = False
@@ -25,6 +28,7 @@ except ImportError:
 
 class ProviderConfig(BaseModel):
     """Provider configuration from frontend."""
+
     id: str
     name: str
     type: str  # Provider type (validated against model registry)
@@ -37,6 +41,7 @@ class ProviderConfig(BaseModel):
 
 class Message(BaseModel):
     """Chat message with optional image support."""
+
     role: Literal["user", "assistant", "system"]
     content: str
     images: list[str] | None = None  # List of base64-encoded images
@@ -50,36 +55,40 @@ async def complete_with_anthropic(
     """Complete chat using Anthropic Claude API."""
     if not HAS_ANTHROPIC:
         raise RuntimeError("anthropic package not installed. Run: uv add anthropic")
-    
+
     # Use env var as fallback
     api_key = config.api_key or settings.anthropic_api_key
     if not api_key:
-        raise ValueError("Anthropic API key is required. Set ANTHROPIC_API_KEY env var or provide in settings.")
-    
+        raise ValueError(
+            "Anthropic API key is required. Set ANTHROPIC_API_KEY env var or provide in settings."
+        )
+
     client = anthropic.Anthropic(api_key=api_key)
-    
+
     # Convert messages to Anthropic format
     anthropic_messages = []
     for msg in messages:
         if msg.role != "system":
-            anthropic_messages.append({
-                "role": msg.role,
-                "content": msg.content,
-            })
-    
+            anthropic_messages.append(
+                {
+                    "role": msg.role,
+                    "content": msg.content,
+                }
+            )
+
     # Build system prompt from system messages
     system_parts = [system_prompt] if system_prompt else []
     for msg in messages:
         if msg.role == "system":
             system_parts.append(msg.content)
-    
+
     response = client.messages.create(
         model=config.model,
         max_tokens=4096,
         system="\n\n".join(system_parts) if system_parts else None,
         messages=anthropic_messages,
     )
-    
+
     return response.content[0].text
 
 
@@ -91,31 +100,35 @@ async def complete_with_openai(
     """Complete chat using OpenAI API."""
     if not HAS_OPENAI:
         raise RuntimeError("openai package not installed. Run: uv add openai")
-    
+
     # Use env var as fallback
     api_key = config.api_key or settings.openai_api_key
     if not api_key:
-        raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY env var or provide in settings.")
-    
+        raise ValueError(
+            "OpenAI API key is required. Set OPENAI_API_KEY env var or provide in settings."
+        )
+
     client = openai.OpenAI(api_key=api_key)
-    
+
     # Build messages list
     openai_messages = []
     if system_prompt:
         openai_messages.append({"role": "system", "content": system_prompt})
-    
+
     for msg in messages:
-        openai_messages.append({
-            "role": msg.role,
-            "content": msg.content,
-        })
-    
+        openai_messages.append(
+            {
+                "role": msg.role,
+                "content": msg.content,
+            }
+        )
+
     response = client.chat.completions.create(
         model=config.model,
         messages=openai_messages,
         max_tokens=4096,
     )
-    
+
     return response.choices[0].message.content
 
 
@@ -126,13 +139,13 @@ async def complete_with_ollama(
 ) -> str:
     """Complete chat using Ollama local API (non-streaming). Supports multimodal (images)."""
     # Always default to localhost if no endpoint provided
-    endpoint = (config.endpoint or "http://localhost:11434").rstrip('/')
-    
+    endpoint = (config.endpoint or "http://localhost:11434").rstrip("/")
+
     # Build messages list with optional images
     ollama_messages = []
     if system_prompt:
         ollama_messages.append({"role": "system", "content": system_prompt})
-    
+
     for msg in messages:
         message_dict: dict = {
             "role": msg.role,
@@ -142,7 +155,7 @@ async def complete_with_ollama(
         if msg.images:
             message_dict["images"] = msg.images
         ollama_messages.append(message_dict)
-    
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             f"{endpoint}/api/chat",
@@ -163,19 +176,19 @@ async def stream_with_ollama(
     system_prompt: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using Ollama local API. Supports multimodal (images).
-    
+
     Handles Qwen3-style models that output 'thinking' tokens separately from 'content'.
     Wraps thinking in <think></think> tags so the frontend can render them.
     """
     import json
-    
-    endpoint = (config.endpoint or "http://localhost:11434").rstrip('/')
-    
+
+    endpoint = (config.endpoint or "http://localhost:11434").rstrip("/")
+
     # Build messages list with optional images
     ollama_messages = []
     if system_prompt:
         ollama_messages.append({"role": "system", "content": system_prompt})
-    
+
     for msg in messages:
         message_dict: dict = {
             "role": msg.role,
@@ -185,7 +198,7 @@ async def stream_with_ollama(
         if msg.images:
             message_dict["images"] = msg.images
         ollama_messages.append(message_dict)
-    
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         async with client.stream(
             "POST",
@@ -197,7 +210,7 @@ async def stream_with_ollama(
             },
         ) as response:
             response.raise_for_status()
-            
+
             # Ollama streams JSON lines (not SSE). Each line looks like:
             # {"model":"...","message":{"role":"assistant","content":"token"},"done":false}
             # Final line has {"done": true}
@@ -226,42 +239,44 @@ async def stream_with_openai_compatible(
     """Stream chat using OpenAI-compatible API (OpenAI, XAI, Mistral, OpenRouter, etc)."""
     import json
     import logging
-    
+
     logger = logging.getLogger(__name__)
-    endpoint = config.endpoint.rstrip('/')
-    
+    endpoint = config.endpoint.rstrip("/")
+
     # Build messages list
     api_messages = []
     if system_prompt:
         api_messages.append({"role": "system", "content": system_prompt})
-    
+
     for msg in messages:
-        api_messages.append({
-            "role": msg.role,
-            "content": msg.content,
-        })
-    
+        api_messages.append(
+            {
+                "role": msg.role,
+                "content": msg.content,
+            }
+        )
+
     headers = {
         "Authorization": f"Bearer {config.api_key[:8]}...",  # Mask API key in logs
         "Content-Type": "application/json",
     }
-    
+
     # OpenRouter requires HTTP-Referer header
     if "openrouter" in endpoint:
         headers["HTTP-Referer"] = "https://nexus.local"
         headers["X-Title"] = "Nexus"
-    
+
     # Restore full API key for actual request
     headers["Authorization"] = f"Bearer {config.api_key}"
-    
+
     payload = {
         "model": config.model,
         "messages": api_messages,
         "stream": True,
     }
-    
+
     logger.info(f"🚀 Streaming to {endpoint}/chat/completions with model={config.model}")
-    
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         async with client.stream(
             "POST",
@@ -274,12 +289,15 @@ async def stream_with_openai_compatible(
                 error_text = await response.aread()
                 error_body = error_text.decode()
                 logger.error(f"❌ HTTP {response.status_code}: {error_body[:500]}")
-                
+
                 # Try to extract user-friendly error message
                 try:
                     error_json = json.loads(error_body)
                     if "error" in error_json:
-                        if isinstance(error_json["error"], dict) and "message" in error_json["error"]:
+                        if (
+                            isinstance(error_json["error"], dict)
+                            and "message" in error_json["error"]
+                        ):
                             user_message = error_json["error"]["message"]
                         elif isinstance(error_json["error"], str):
                             user_message = error_json["error"]
@@ -287,36 +305,34 @@ async def stream_with_openai_compatible(
                             user_message = str(error_json["error"])
                     else:
                         user_message = f"HTTP {response.status_code}: {error_body[:200]}"
-                except:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     user_message = f"HTTP {response.status_code}: {error_body[:200]}"
-                
+
                 raise httpx.HTTPStatusError(
-                    user_message,
-                    request=response.request,
-                    response=response
+                    user_message, request=response.request, response=response
                 )
-            
+
             async for line in response.aiter_lines():
                 if not line or not line.startswith("data: "):
                     continue
-                    
+
                 data_str = line[6:]  # Remove "data: " prefix
-                
+
                 if data_str == "[DONE]":
                     break
-                
+
                 try:
                     data = json.loads(data_str)
                     choices = data.get("choices", [])
                     if not choices:
                         continue
-                    
+
                     delta = choices[0].get("delta", {})
                     content = delta.get("content", "")
-                    
+
                     if content:
                         yield content
-                        
+
                 except json.JSONDecodeError:
                     continue
 
@@ -330,34 +346,40 @@ async def complete_with_cloudflare(
     # Use env vars as fallback
     api_key = config.api_key or settings.cloudflare_api_token
     account_id = config.account_id or settings.cloudflare_account_id
-    
+
     if not api_key:
-        raise ValueError("Cloudflare API token is required. Set CLOUDFLARE_API_TOKEN env var or provide in settings.")
-    
+        raise ValueError(
+            "Cloudflare API token is required. Set CLOUDFLARE_API_TOKEN env var or provide in settings."
+        )
+
     if not account_id:
-        raise ValueError("Cloudflare Account ID is required. Set CLOUDFLARE_ACCOUNT_ID env var or provide in settings.")
-    
+        raise ValueError(
+            "Cloudflare Account ID is required. Set CLOUDFLARE_ACCOUNT_ID env var or provide in settings."
+        )
+
     # Build messages list
     cf_messages = []
     if system_prompt:
         cf_messages.append({"role": "system", "content": system_prompt})
-    
+
     for msg in messages:
-        cf_messages.append({
-            "role": msg.role,
-            "content": msg.content,
-        })
-    
+        cf_messages.append(
+            {
+                "role": msg.role,
+                "content": msg.content,
+            }
+        )
+
     # Cloudflare Workers AI endpoint
     # Model format: @cf/meta/llama-3.1-8b-instruct
-    model_path = config.model.lstrip('@cf/')
+    model_path = config.model.lstrip("@cf/")
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/{model_path}"
-    
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             url,
@@ -368,7 +390,7 @@ async def complete_with_cloudflare(
         )
         response.raise_for_status()
         data = response.json()
-        
+
         # Cloudflare returns { "result": { "response": "..." } }
         if "result" in data:
             return data["result"].get("response", str(data["result"]))
@@ -386,33 +408,35 @@ async def stream_with_cloudflare(
     # Use env vars as fallback
     api_key = config.api_key or settings.cloudflare_api_token
     account_id = config.account_id or settings.cloudflare_account_id
-    
+
     if not api_key:
         raise ValueError("Cloudflare API token is required.")
-    
+
     if not account_id:
         raise ValueError("Cloudflare Account ID is required.")
-    
+
     # Build messages list
     cf_messages = []
     if system_prompt:
         cf_messages.append({"role": "system", "content": system_prompt})
-    
+
     for msg in messages:
-        cf_messages.append({
-            "role": msg.role,
-            "content": msg.content,
-        })
-    
+        cf_messages.append(
+            {
+                "role": msg.role,
+                "content": msg.content,
+            }
+        )
+
     # Cloudflare Workers AI endpoint
-    model_path = config.model.lstrip('@cf/')
+    model_path = config.model.lstrip("@cf/")
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/{model_path}"
-    
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         async with client.stream(
             "POST",
@@ -426,7 +450,7 @@ async def stream_with_cloudflare(
             if response.status_code != 200:
                 body = await response.aread()
                 raise ValueError(f"Cloudflare API error: {response.status_code} - {body.decode()}")
-            
+
             async for line in response.aiter_lines():
                 if line.startswith("data: "):
                     data_str = line[6:]
@@ -448,22 +472,24 @@ async def complete_with_custom(
     """Complete chat using custom OpenAI-compatible endpoint."""
     if not config.endpoint:
         raise ValueError("Custom endpoint URL is required")
-    
+
     # Build messages list (OpenAI format)
     api_messages = []
     if system_prompt:
         api_messages.append({"role": "system", "content": system_prompt})
-    
+
     for msg in messages:
-        api_messages.append({
-            "role": msg.role,
-            "content": msg.content,
-        })
-    
+        api_messages.append(
+            {
+                "role": msg.role,
+                "content": msg.content,
+            }
+        )
+
     headers = {"Content-Type": "application/json"}
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
-    
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             f"{config.endpoint}/v1/chat/completions",
@@ -489,7 +515,7 @@ async def complete_chat(
     """
     if not config.enabled:
         raise ValueError(f"Provider '{config.name}' is not enabled")
-    
+
     if config.type == "anthropic":
         return await complete_with_anthropic(messages, config, system_prompt)
     elif config.type == "openai":
@@ -506,13 +532,20 @@ async def complete_chat(
 
 # Known multimodal (vision) model patterns
 MULTIMODAL_MODEL_PATTERNS = [
-    "qwen3-vl", "qwen2.5vl", "qwen2-vl",
-    "llava", "llava-phi", "llava-llama",
-    "moondream", "bakllava",
+    "qwen3-vl",
+    "qwen2.5vl",
+    "qwen2-vl",
+    "llava",
+    "llava-phi",
+    "llava-llama",
+    "moondream",
+    "bakllava",
     "gemma3",  # Gemma 3 has vision
     "minicpm-v",
-    "llama3.2-vision", "llama4",
-    "mistral-small3.1", "mistral-small3.2",  # Vision variants
+    "llama3.2-vision",
+    "llama4",
+    "mistral-small3.1",
+    "mistral-small3.2",  # Vision variants
 ]
 
 
@@ -535,19 +568,16 @@ AVAILABLE_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to look up"
-                    },
+                    "query": {"type": "string", "description": "The search query to look up"},
                     "engine": {
                         "type": "string",
                         "enum": ["wikipedia", "duckduckgo"],
-                        "description": "Search engine to use. Wikipedia for encyclopedic content, DuckDuckGo for general web search."
-                    }
+                        "description": "Search engine to use. Wikipedia for encyclopedic content, DuckDuckGo for general web search.",
+                    },
                 },
-                "required": ["query"]
-            }
-        }
+                "required": ["query"],
+            },
+        },
     }
 ]
 
@@ -556,12 +586,13 @@ async def execute_tool(tool_name: str, arguments: dict) -> str:
     """Execute a tool by calling our own local API endpoints."""
     import json
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     if tool_name == "search_web":
         query = arguments.get("query", "")
         engine = arguments.get("engine", "wikipedia")
-        
+
         # Call our own search API endpoint (already proven to work)
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -572,7 +603,7 @@ async def execute_tool(tool_name: str, arguments: dict) -> str:
                 response.raise_for_status()
                 data = response.json()
                 results = data.get("results", [])
-                
+
                 if results:
                     # Format results for the LLM context
                     formatted = []
@@ -582,13 +613,13 @@ async def execute_tool(tool_name: str, arguments: dict) -> str:
                             entry += f"\n  Source: {r['url']}"
                         formatted.append(entry)
                     return "\n\n".join(formatted)
-                
+
                 return f"No results found for '{query}' on {engine}."
-                
+
         except Exception as e:
             logger.error(f"[execute_tool] search_web failed: {e}")
             return f"Search failed: {str(e)}"
-    
+
     return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
 
@@ -600,14 +631,14 @@ async def stream_with_ollama_tools(
 ) -> AsyncGenerator[str, None]:
     """Stream chat with Ollama, supporting tool calls. Handles tool execution loop."""
     import json
-    
-    endpoint = (config.endpoint or "http://localhost:11434").rstrip('/')
-    
+
+    endpoint = (config.endpoint or "http://localhost:11434").rstrip("/")
+
     # Build messages list
     ollama_messages = []
     if system_prompt:
         ollama_messages.append({"role": "system", "content": system_prompt})
-    
+
     for msg in messages:
         message_dict: dict = {
             "role": msg.role,
@@ -616,22 +647,22 @@ async def stream_with_ollama_tools(
         if msg.images:
             message_dict["images"] = msg.images
         ollama_messages.append(message_dict)
-    
+
     # First request - may return tool calls
     request_body = {
         "model": config.model,
         "messages": ollama_messages,
         "stream": True,
     }
-    
+
     # Only add tools if provided (not all models support it)
     if tools:
         request_body["tools"] = tools
-    
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         full_response = ""
         tool_calls = []
-        
+
         async with client.stream(
             "POST",
             f"{endpoint}/api/chat",
@@ -642,7 +673,7 @@ async def stream_with_ollama_tools(
                 if line:
                     try:
                         data = json.loads(line)
-                        
+
                         # Check for tool calls
                         if "message" in data:
                             msg = data["message"]
@@ -651,34 +682,38 @@ async def stream_with_ollama_tools(
                             if "content" in msg and msg["content"]:
                                 full_response += msg["content"]
                                 yield msg["content"]
-                                
+
                     except json.JSONDecodeError:
                         continue
-        
+
         # If there were tool calls, execute them and continue
         if tool_calls:
             yield "\n\n*Searching...*\n\n"
-            
+
             # Execute each tool call
             for tool_call in tool_calls:
                 func = tool_call.get("function", {})
                 tool_name = func.get("name", "")
                 arguments = func.get("arguments", {})
-                
+
                 # Execute the tool
                 tool_result = await execute_tool(tool_name, arguments)
-                
+
                 # Add assistant message with tool call and tool response to messages
-                ollama_messages.append({
-                    "role": "assistant",
-                    "content": full_response,
-                    "tool_calls": tool_calls,
-                })
-                ollama_messages.append({
-                    "role": "tool",
-                    "content": tool_result,
-                })
-            
+                ollama_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": full_response,
+                        "tool_calls": tool_calls,
+                    }
+                )
+                ollama_messages.append(
+                    {
+                        "role": "tool",
+                        "content": tool_result,
+                    }
+                )
+
             # Continue the conversation with tool results (no tools this time to avoid loop)
             async with client.stream(
                 "POST",
@@ -724,10 +759,10 @@ async def stream_with_abi(
     system_prompt: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat completion from ABI server (custom API).
-    
+
     ABI uses a custom endpoint format:
     POST {endpoint}/agents/{agent_name}/stream-completion?token={token}
-    
+
     Body format (expected):
     {
         "prompt": "user message here",
@@ -735,12 +770,13 @@ async def stream_with_abi(
     }
     """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     endpoint = config.endpoint.rstrip("/")
     agent_name = config.model  # e.g., "ForvisMazars_Corporate"
     token = config.api_key
-    
+
     # ABI expects a single "prompt" field with the latest user message
     # and a thread_id for conversation continuity
     latest_user_message = None
@@ -748,25 +784,27 @@ async def stream_with_abi(
         if msg.role == "user":
             latest_user_message = msg.content
             break
-    
+
     if not latest_user_message:
         logger.warning("No user message found in conversation")
         yield "Error: No user message to send"
         return
-    
+
     # Build request URL with token as query param
     url = f"{endpoint}/agents/{agent_name}/stream-completion?token={token}"
-    
+
     logger.info(f"🔌 Streaming from ABI: {url} (agent: {agent_name})")
-    
+
     # Use conversation ID as thread_id (or generate one from messages hash)
-    thread_id = str(hash(tuple(m.content for m in messages[-5:])))  # Last 5 messages as thread context
-    
+    thread_id = str(
+        hash(tuple(m.content for m in messages[-5:]))
+    )  # Last 5 messages as thread context
+
     request_body = {
         "prompt": latest_user_message,
         "thread_id": thread_id,
     }
-    
+
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
@@ -776,7 +814,7 @@ async def stream_with_abi(
                 headers={"Content-Type": "application/json"},
             ) as response:
                 response.raise_for_status()
-                
+
                 # ABI returns SSE events. Depending on the agent/runtime, content can
                 # arrive under either:
                 # - event: ai_message
@@ -792,17 +830,17 @@ async def stream_with_abi(
                 async for line in response.aiter_lines():
                     if not line or not line.strip():
                         continue
-                    
+
                     # Parse SSE format
                     if line.startswith("event: "):
                         current_event = line[7:].strip()  # Extract event name
                     elif line.startswith("data: "):
                         content = line[6:]  # Remove "data: " prefix
-                        
+
                         # Skip [DONE] marker
                         if content == "[DONE]":
                             break
-                        
+
                         if not content.strip():
                             continue
 
@@ -818,7 +856,7 @@ async def stream_with_abi(
                             logger.debug(f"📨 ABI chunk ({current_event}): {content[:100]}...")
                             yield content
                             last_emitted_chunk = content
-                            
+
     except httpx.HTTPStatusError as e:
         logger.error(f"ABI API error: {e.response.status_code} - {e.response.text}")
         yield f"\n\n**Error:** ABI server returned {e.response.status_code}\n\n{e.response.text}"
@@ -870,9 +908,7 @@ def _resolve_inprocess_abi_agent(agent_name: str):
                     getattr(agent_mod, "NAME", None) if agent_mod is not None else None
                 )
                 runtime_name = (
-                    module_level_name
-                    or getattr(agent_cls, "NAME", None)
-                    or agent_cls.__name__
+                    module_level_name or getattr(agent_cls, "NAME", None) or agent_cls.__name__
                 )
                 class_name = agent_cls.__name__
                 class_name_stripped = (
@@ -888,10 +924,7 @@ def _resolve_inprocess_abi_agent(agent_name: str):
                     f"{module_path_norm}/{class_name_stripped.strip().lower()}",
                 }
 
-                if (
-                    target_agent_norm in candidate_names
-                    or raw_target.lower() in candidate_names
-                ):
+                if target_agent_norm in candidate_names or raw_target.lower() in candidate_names:
                     return agent_cls.New()
             except Exception:
                 continue
@@ -924,9 +957,7 @@ def _resolve_inprocess_abi_agent(agent_name: str):
                     class_name[:-5] if class_name.endswith("Agent") else class_name
                 )
                 runtime_name = (
-                    getattr(mod, "NAME", None)
-                    or getattr(value, "NAME", None)
-                    or class_name
+                    getattr(mod, "NAME", None) or getattr(value, "NAME", None) or class_name
                 )
                 local_path = f"naas_abi.agents.{mod_name}".lower()
                 local_candidates = {
@@ -937,12 +968,9 @@ def _resolve_inprocess_abi_agent(agent_name: str):
                     f"{local_path}/{class_name.lower()}",
                     f"{local_path}/{class_name_stripped.lower()}",
                 }
-                if (
-                    target_agent_norm in local_candidates
-                    or raw_target.lower() in local_candidates
-                ):
+                if target_agent_norm in local_candidates or raw_target.lower() in local_candidates:
                     if not hasattr(value, "New") and callable(create_agent):
-                        setattr(value, "New", create_agent)
+                        value.New = create_agent
                     if hasattr(value, "New"):
                         return value.New()
     except Exception:
@@ -980,7 +1008,9 @@ async def stream_with_abi_inprocess(
             from naas_abi import ABIModule
 
             available = []
-            modules = getattr(getattr(ABIModule.get_instance(), "engine", None), "modules", {}) or {}
+            modules = (
+                getattr(getattr(ABIModule.get_instance(), "engine", None), "modules", {}) or {}
+            )
             for module in modules.values():
                 module_path = module.__class__.__module__
                 for agent_cls in getattr(module, "agents", []) or []:

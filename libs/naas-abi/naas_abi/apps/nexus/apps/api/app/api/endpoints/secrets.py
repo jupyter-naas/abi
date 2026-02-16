@@ -10,16 +10,20 @@ Async sessions with SQLAlchemy ORM.
 
 import base64
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Literal
 from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required, require_workspace_access)
+    User,
+    get_current_user_required,
+    require_workspace_access,
+)
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import SecretModel
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -153,7 +157,7 @@ async def create_secret(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail=f"Secret with key '{secret.key}' already exists")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     row = SecretModel(
         id=str(uuid4()), workspace_id=secret.workspace_id, key=secret.key,
         encrypted_value=_encrypt(secret.value), description=secret.description,
@@ -187,7 +191,7 @@ async def update_secret(
     if role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Only admins and owners can manage secrets")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     row.updated_at = now
 
     if update.value is not None:
@@ -232,7 +236,7 @@ async def bulk_import_secrets(
 
     imported = 0
     updated = 0
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     for line in data.env_content.split("\n"):
         trimmed = line.strip()

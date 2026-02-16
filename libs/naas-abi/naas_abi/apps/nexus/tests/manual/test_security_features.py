@@ -31,11 +31,11 @@ async def main():
         assert "refresh_token" in register_data
         assert "expires_in" in register_data
         print(f"   ✓ Got access_token (expires in {register_data['expires_in']}s)")
-        print(f"   ✓ Got refresh_token")
+        print("   ✓ Got refresh_token")
         
         access_token = register_data["access_token"]
         refresh_token = register_data["refresh_token"]
-        user_id = register_data["user"]["id"]
+        register_data["user"]["id"]
         
         # Test 2: Access token works
         print("\n✅ Test 2: Access token authenticates")
@@ -60,8 +60,8 @@ async def main():
         print("   ✓ New access token received")
         print("   ✓ Refresh token rotated (old one invalidated)")
         
-        new_access_token = refresh_data["access_token"]
-        new_refresh_token = refresh_data["refresh_token"]
+        refresh_data["access_token"]
+        refresh_data["refresh_token"]
         
         # Test 4: Old refresh token is revoked
         print("\n✅ Test 4: Old refresh token is revoked")

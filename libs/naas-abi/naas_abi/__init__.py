@@ -1,11 +1,14 @@
-from fastapi import APIRouter, FastAPI
-from naas_abi_core.module.Module import (BaseModule, ModuleConfiguration,
-                                         ModuleDependencies)
-from naas_abi_core.services.object_storage.ObjectStorageService import \
-    ObjectStorageService
+from fastapi import FastAPI
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -51,7 +54,6 @@ class NexusConfig(BaseModel):
 
 
 class ABIModule(BaseModule):
-
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
@@ -153,20 +155,19 @@ class ABIModule(BaseModule):
 
     def on_load(self):
         super().on_load()
-        from naas_abi_core.services.triple_store.TripleStorePorts import \
-            OntologyEvent
+        from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
         from rdflib import URIRef
+
         self.engine.services.triple_store.subscribe(
             (URIRef("http://example.com/subject"), None, None),
             lambda triple: print(f"Triple received: {triple.decode('utf-8')}"),
-            OntologyEvent.INSERT
+            OntologyEvent.INSERT,
         )
-        
+
     def api(self, app: FastAPI) -> None:
         # Initialize Nexus settings
-        
-        from naas_abi.apps.nexus.apps.api.app.core import \
-            config as nexus_config
+
+        from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
         # We override settings with module config from `nexus_config`.
         settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
@@ -177,6 +178,7 @@ class ABIModule(BaseModule):
         app.state.object_storage = self.engine.services.object_storage
         # Expose ABI triple store to Nexus graph routes.
         app.state.triple_store = self.engine.services.triple_store
-        
+
         from naas_abi.apps.nexus.apps.api.app.main import create_app
+
         create_app(app)

@@ -6,10 +6,7 @@ Note: Ollama-dependent tests are skipped if Ollama is not running.
 Maps to: docs/TEST-PROTOCOL.md Section 4.
 """
 
-import json
 from unittest.mock import AsyncMock, patch
-
-import pytest
 
 
 class TestConversationCRUD:

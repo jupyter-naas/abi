@@ -6,9 +6,9 @@ SQL injection, CORS, and rate limiting.
 Maps to: docs/TEST-PROTOCOL.md Section 5.
 """
 
-import pytest
-from app.core.config import settings
 from jose import jwt
+
+from app.core.config import settings
 
 
 class TestJWTSecurity:
