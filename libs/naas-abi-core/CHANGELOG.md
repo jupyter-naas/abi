@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.13.2 (2026-02-16)
+
+### Bug Fixes
+
+- **deps**: Move greenlet to nexus-api package
+  ([`0a381ae`](https://github.com/jupyter-naas/abi/commit/0a381ae7f92ad326afe18cae21aeceb544c1a597))
+
+
 ## v1.13.1 (2026-02-13)
 
 ### Bug Fixes
