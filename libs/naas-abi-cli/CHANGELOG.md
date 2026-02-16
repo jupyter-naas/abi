@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-02-12)
+
+### Bug Fixes
+
+- Working on new project setup
+  ([`cd2a5cc`](https://github.com/jupyter-naas/abi/commit/cd2a5ccb156fe540759561e6eeb91abdeb1d4924))
+
+
+## v1.13.0 (2026-02-11)
+
+### Features
+
+- Migrate assets from root to nexus app
+  ([`acea3c8`](https://github.com/jupyter-naas/abi/commit/acea3c88affcbeaf636b953ed04cdfb8e450117d))
+
+
+## v1.12.0 (2026-02-10)
+
+
+## v1.11.4 (2026-02-10)
+
+
+## v1.11.3 (2026-02-10)
+
+### Bug Fixes
+
+- Add missing element-config.json
+  ([`37c8b76`](https://github.com/jupyter-naas/abi/commit/37c8b76da2d9124e48b5f2548dd7d2bf296af959))
+
+
 ## v1.11.2 (2026-02-10)
 
 

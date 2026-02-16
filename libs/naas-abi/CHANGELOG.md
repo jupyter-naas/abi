@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-02-12)
+
+### Bug Fixes
+
+- Add header to chat page for settings access
+  ([`0cc3604`](https://github.com/jupyter-naas/abi/commit/0cc360414716726366e87f57da18a7e77b334179))
+
+- Working on new project setup
+  ([`cd2a5cc`](https://github.com/jupyter-naas/abi/commit/cd2a5ccb156fe540759561e6eeb91abdeb1d4924))
+
+### Features
+
+- Working on wiring nexus to abi
+  ([`db01f8b`](https://github.com/jupyter-naas/abi/commit/db01f8b624870b47d1be9a331546ad5313a4204a))
+
+
+## v1.3.0 (2026-02-11)
+
+### Features
+
+- Migrate assets from root to nexus app
+  ([`acea3c8`](https://github.com/jupyter-naas/abi/commit/acea3c88affcbeaf636b953ed04cdfb8e450117d))
+
+
+## v1.2.0 (2026-02-11)
+
+### Features
+
+- Integrate nexus app into abi monorepo
+  ([`f3699f0`](https://github.com/jupyter-naas/abi/commit/f3699f0b84fddd12b0f69d202779ab48ebf16e82))
+
+
 ## v1.1.1 (2026-02-10)
 
 ### Bug Fixes

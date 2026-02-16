@@ -1,5 +1,4 @@
 import os
-import shutil
 import subprocess
 from uuid import uuid4
 
@@ -12,6 +11,8 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
+
+from .local import setup_local_deploy
 
 
 @click.group("deploy")
@@ -213,7 +214,6 @@ def _get_configuration(env: str):
     help="Environment to use (default: prod). This is used to know which configuration file to load. (config.prod.yaml, config.yaml, ...)",
 )
 def naas(env: str):
-
     configuration = _get_configuration(env)
 
     deployer = NaasDeployer(configuration)
@@ -229,43 +229,7 @@ def naas(env: str):
     help="Environment to use (default: local). This is used to know which configuration file to load. (config.local.yaml, config.yaml, ...)",
 )
 def local_deploy(env: str):
-
-    if not os.path.exists(os.path.join(os.getcwd(), ".deploy")):
-        import naas_abi_cli
-
-        from ..utils.Copier import Copier
-
-        # Create .deploy folder if it doesn't exist
-        os.makedirs(os.path.join(os.getcwd(), ".deploy"), exist_ok=False)
-
-        copier = Copier(
-            templates_path=os.path.join(
-                os.path.dirname(naas_abi_cli.__file__), "cli/deploy/templates/local"
-            ),
-            destination_path=os.path.join(os.getcwd(), ".deploy"),
-        )
-
-        copier.copy(
-            values={
-                "POSTGRES_USER": "abi",
-                "POSTGRES_PASSWORD": str(uuid4()),
-                "POSTGRES_DB": "abi",
-                "MINIO_ROOT_PASSWORD": str(uuid4()),
-                "RABBITMQ_PASSWORD": str(uuid4()),
-            }
-        )
-
-        shutil.move(
-            os.path.join(os.getcwd(), ".deploy", "docker-compose.yml"),
-            os.path.join(os.getcwd(), "docker-compose.yml"),
-        )
-
-        # Concat .deploy/.env into .env
-        with open(os.path.join(os.getcwd(), ".deploy", ".env"), "r") as f:
-            with open(os.path.join(os.getcwd(), ".env"), "a") as f2:
-                f2.write(f.read())
-        # Remove .deploy/.env
-        os.remove(os.path.join(os.getcwd(), ".deploy", ".env"))
+    setup_local_deploy(os.getcwd())
 
 
 @deploy.command("local-up")

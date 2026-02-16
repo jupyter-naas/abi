@@ -1,0 +1,170 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Ollama Inference Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:ollama_inference_process a owl:Ontology ;
+    dc:title "Ollama Inference Process"@en ;
+    dc:description "A process that performs local LLM inference via Ollama API at localhost:11434, supporting both streaming and non-streaming modes with optional multimodal (image) input."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:OllamaInferenceProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Ollama Inference Process"@en ;
+    skos:definition "A process that performs local LLM inference via Ollama API at localhost:11434, supporting both streaming and non-streaming modes with optional multimodal (image) input."@en ;
+    rdfs:comment "Implements: apps/api/app/services/providers.py:122-199 complete_with_ollama(), stream_with_ollama()" ;
+    skos:example "1. Build messages array with system prompt\n2. If images present and model supports vision: encode images as base64 array\n3. POST to http://localhost:11434/api/chat with model, messages, stream flag\n4. If streaming: iterate JSON lines, yield message.content chunks\n5. If non-streaming: return message.content from response\n6. Handle connection errors (Ollama not running)"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:OllamaServer a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "OllamaServer"@en ;
+    skos:definition "Local Ollama server running at http://localhost:11434"@en .
+
+nexus:LocalGPU a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "LocalGPU"@en ;
+    skos:definition "Local GPU hardware executing model inference"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:OllamaChatEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OllamaChatEndpoint"@en ;
+    skos:definition "Ollama API endpoint POST /api/chat at localhost:11434"@en .
+
+nexus:OllamaTagsEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OllamaTagsEndpoint"@en ;
+    skos:definition "Ollama API endpoint GET /api/tags for model listing"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:OllamaInferenceDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "OllamaInferenceDuration"@en ;
+    skos:definition "1-60 seconds depending on model size (2B-70B parameters) and prompt length"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:OllamaMessage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OllamaMessage"@en ;
+    skos:definition "Message with role, content, and optional images array (base64)"@en .
+
+nexus:OllamaStreamLine a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OllamaStreamLine"@en ;
+    skos:definition "JSON line: {message: {content: chunk, role: assistant}, done: false}"@en .
+
+nexus:ModelTag a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ModelTag"@en ;
+    skos:definition "Ollama model identifier like llama3:8b, qwen3-vl:2b, gemma3:4b"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:ModelAvailability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ModelAvailability"@en ;
+    skos:definition "Quality indicating if model is pulled and ready locally"@en .
+
+nexus:VisionSupport a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "VisionSupport"@en ;
+    skos:definition "Boolean quality indicating multimodal image input support"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:LocalInferenceRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "LocalInferenceRole"@en ;
+    skos:definition "Role realized when Ollama executes model inference on local hardware"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:MultimodalDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "MultimodalDisposition"@en ;
+    skos:definition "Disposition to accept base64 images when model supports vision (llava, qwen3-vl, gemma3)"@en .
+
+nexus:ToolCallingDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "ToolCallingDisposition"@en ;
+    skos:definition "Disposition to execute tool calls when model supports function calling"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:ollama_inference_process_has_ollamaserver a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:OllamaInferenceProcess ;
+    rdfs:range nexus:OllamaServer ;
+    rdfs:label "OllamaInferenceProcess has participant OllamaServer"@en .
+
+nexus:ollama_inference_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:OllamaInferenceProcess ;
+    rdfs:range nexus:OllamaChatEndpoint ;
+    rdfs:label "OllamaInferenceProcess occurs in OllamaChatEndpoint"@en .
+
+nexus:ollama_inference_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:OllamaInferenceProcess ;
+    rdfs:range nexus:OllamaInferenceDuration ;
+    rdfs:label "OllamaInferenceProcess occupies OllamaInferenceDuration"@en .
+
+nexus:ollama_inference_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:OllamaInferenceProcess ;
+    rdfs:range nexus:LocalInferenceRole ;
+    rdfs:label "OllamaInferenceProcess realizes LocalInferenceRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:modelName a owl:DatatypeProperty ;
+    rdfs:label "modelName"@en ;
+    rdfs:range xsd:string .
+
+nexus:supportsVision a owl:DatatypeProperty ;
+    rdfs:label "supportsVision"@en ;
+    rdfs:range xsd:boolean .
+
+nexus:supportsTools a owl:DatatypeProperty ;
+    rdfs:label "supportsTools"@en ;
+    rdfs:range xsd:boolean .

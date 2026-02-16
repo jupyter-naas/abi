@@ -1,0 +1,166 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Workspace Creation Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:workspace_creation_process a owl:Ontology ;
+    dc:title "Workspace Creation Process"@en ;
+    dc:description "A process that creates a new workspace with unique slug, automatically adding the creating user as owner in workspace_members table within a single transaction."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:WorkspaceCreationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Workspace Creation Process"@en ;
+    skos:definition "A process that creates a new workspace with unique slug, automatically adding the creating user as owner in workspace_members table within a single transaction."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/workspaces.py:96-124 create_workspace()" ;
+    skos:example "1. Check slug uniqueness in workspaces table\n2. Generate workspace ID: ws-{uuid.hex[:12]}\n3. Create WorkspaceModel with name, slug, owner_id=current_user.id\n4. Create WorkspaceMemberModel with role=owner\n5. Insert both in single transaction\n6. Commit and return Workspace"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:WorkspaceCreator a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WorkspaceCreator"@en ;
+    skos:definition "Authenticated user creating the workspace"@en .
+
+nexus:WorkspaceDatabase a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WorkspaceDatabase"@en ;
+    skos:definition "PostgreSQL with workspaces and workspace_members tables"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:WorkspacesEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "WorkspacesEndpoint"@en ;
+    skos:definition "API endpoint POST /api/workspaces"@en .
+
+nexus:WorkspacesTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "WorkspacesTable"@en ;
+    skos:definition "PostgreSQL workspaces table"@en .
+
+nexus:WorkspaceMembersTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "WorkspaceMembersTable"@en ;
+    skos:definition "PostgreSQL workspace_members table"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:CreationDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "CreationDuration"@en ;
+    skos:definition "40-80ms: uniqueness check + 2 inserts"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:WorkspaceCreate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "WorkspaceCreate"@en ;
+    skos:definition "Pydantic model: name (1-200 chars), slug (regex: ^[a-z0-9][a-z0-9-]*[a-z0-9]$)"@en .
+
+nexus:WorkspaceRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "WorkspaceRecord"@en ;
+    skos:definition "DB row: id (ws-{uuid}), name, slug (unique), owner_id, timestamps"@en .
+
+nexus:MemberRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "MemberRecord"@en ;
+    skos:definition "DB row: id, workspace_id, user_id, role=owner, created_at"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:SlugUniqueness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "SlugUniqueness"@en ;
+    skos:definition "Quality: slug must be unique across all workspaces (400 if duplicate)"@en .
+
+nexus:OwnerAutoMembership a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "OwnerAutoMembership"@en ;
+    skos:definition "Quality: creator automatically added as member with owner role"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:WorkspaceOwnerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "WorkspaceOwnerRole"@en ;
+    skos:definition "Role realized when user creates and owns a workspace"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:TransactionalDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "TransactionalDisposition"@en ;
+    skos:definition "Disposition to create workspace + membership in single transaction"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:workspace_creation_process_has_workspacecreator a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:WorkspaceCreationProcess ;
+    rdfs:range nexus:WorkspaceCreator ;
+    rdfs:label "WorkspaceCreationProcess has participant WorkspaceCreator"@en .
+
+nexus:workspace_creation_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:WorkspaceCreationProcess ;
+    rdfs:range nexus:WorkspacesEndpoint ;
+    rdfs:label "WorkspaceCreationProcess occurs in WorkspacesEndpoint"@en .
+
+nexus:workspace_creation_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:WorkspaceCreationProcess ;
+    rdfs:range nexus:CreationDuration ;
+    rdfs:label "WorkspaceCreationProcess occupies CreationDuration"@en .
+
+nexus:workspace_creation_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:WorkspaceCreationProcess ;
+    rdfs:range nexus:WorkspaceOwnerRole ;
+    rdfs:label "WorkspaceCreationProcess realizes WorkspaceOwnerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:workspaceName a owl:DatatypeProperty ;
+    rdfs:label "workspaceName"@en ;
+    rdfs:range xsd:string .
+
+nexus:workspaceSlug a owl:DatatypeProperty ;
+    rdfs:label "workspaceSlug"@en ;
+    rdfs:range xsd:string .

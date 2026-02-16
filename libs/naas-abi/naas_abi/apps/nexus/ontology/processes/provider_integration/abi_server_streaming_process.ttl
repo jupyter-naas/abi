@@ -1,0 +1,180 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# ABI Server Streaming Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:abi_server_streaming_process a owl:Ontology ;
+    dc:title "ABI Server Streaming Process"@en ;
+    dc:description "A process that streams AI responses from external ABI (Agentic Brain Infrastructure) servers using custom SSE format with event: ai_message events, extracting prompt from messages and authenticating via query parameter token."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:ABIServerStreamingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "ABI Server Streaming Process"@en ;
+    skos:definition "A process that streams AI responses from external ABI (Agentic Brain Infrastructure) servers using custom SSE format with event: ai_message events, extracting prompt from messages and authenticating via query parameter token."@en ;
+    rdfs:comment "Implements: apps/api/app/services/providers.py:702-796 stream_with_abi()" ;
+    skos:example "1. Extract latest user message as prompt from messages array\n2. Generate thread_id from message content hash\n3. Extract agent_name from model_id in provider config\n4. Build URL: {endpoint}/agents/{agent_name}/stream-completion?token={token}\n5. POST with {prompt, thread_id} body\n6. Parse SSE stream: track current_event from event: lines\n7. Only yield content from data: lines when current_event == ai_message\n8. Do NOT reset current_event until next event: line (handles multi-line data)\n9. Stop on data: [DONE]"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ABIServer a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ABIServer"@en ;
+    skos:definition "External Agentic Brain Infrastructure server (e.g., Forvis Mazars)"@en .
+
+nexus:ABIAgent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ABIAgent"@en ;
+    skos:definition "Named agent on ABI server discovered via OpenAPI spec"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:ABIStreamEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "ABIStreamEndpoint"@en ;
+    skos:definition "ABI endpoint POST /agents/{agent_name}/stream-completion?token={token}"@en .
+
+nexus:ABIOpenAPIEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "ABIOpenAPIEndpoint"@en ;
+    skos:definition "ABI endpoint GET /openapi.json for agent discovery"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:ABIStreamDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "ABIStreamDuration"@en ;
+    skos:definition "1-30 seconds depending on agent complexity and query type"@en .
+
+nexus:ABIFirstTokenLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "ABIFirstTokenLatency"@en ;
+    skos:definition "200-2000ms for first ai_message event"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:ABIRequest a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ABIRequest"@en ;
+    skos:definition "JSON body: {prompt: latest_user_message, thread_id: message_hash}"@en .
+
+nexus:ABISSEEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ABISSEEvent"@en ;
+    skos:definition "Custom SSE: event: ai_message followed by data: content lines"@en .
+
+nexus:ABIDuplicateEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ABIDuplicateEvent"@en ;
+    skos:definition "ABI sends both ai_message and message events with same content"@en .
+
+nexus:ABITokenParam a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ABITokenParam"@en ;
+    skos:definition "Authentication via query parameter ?token={api_key}"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:DuplicateFilteringQuality a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "DuplicateFilteringQuality"@en ;
+    skos:definition "Quality of filtering: only yield from ai_message events, skip message events"@en .
+
+nexus:MultiLineDataQuality a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "MultiLineDataQuality"@en ;
+    skos:definition "Quality: handle multiple data: lines per single event (W3C SSE standard)"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:ABIProxyRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "ABIProxyRole"@en ;
+    skos:definition "Role realized when NEXUS proxies requests to external ABI server"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:DuplicateFilteringDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "DuplicateFilteringDisposition"@en ;
+    skos:definition "Disposition to only yield ai_message events to prevent duplicate content"@en .
+
+nexus:MultiLineDataDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "MultiLineDataDisposition"@en ;
+    skos:definition "Disposition to not reset current_event until next event: line arrives"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:abi_server_streaming_process_has_abiserver a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:ABIServerStreamingProcess ;
+    rdfs:range nexus:ABIServer ;
+    rdfs:label "ABIServerStreamingProcess has participant ABIServer"@en .
+
+nexus:abi_server_streaming_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:ABIServerStreamingProcess ;
+    rdfs:range nexus:ABIStreamEndpoint ;
+    rdfs:label "ABIServerStreamingProcess occurs in ABIStreamEndpoint"@en .
+
+nexus:abi_server_streaming_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:ABIServerStreamingProcess ;
+    rdfs:range nexus:ABIStreamDuration ;
+    rdfs:label "ABIServerStreamingProcess occupies ABIStreamDuration"@en .
+
+nexus:abi_server_streaming_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:ABIServerStreamingProcess ;
+    rdfs:range nexus:ABIProxyRole ;
+    rdfs:label "ABIServerStreamingProcess realizes ABIProxyRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:agentName a owl:DatatypeProperty ;
+    rdfs:label "agentName"@en ;
+    rdfs:range xsd:string .
+
+nexus:threadId a owl:DatatypeProperty ;
+    rdfs:label "threadId"@en ;
+    rdfs:range xsd:string .
+
+nexus:promptText a owl:DatatypeProperty ;
+    rdfs:label "promptText"@en ;
+    rdfs:range xsd:string .

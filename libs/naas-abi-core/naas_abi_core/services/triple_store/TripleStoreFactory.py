@@ -6,6 +6,9 @@ from naas_abi_core.services.object_storage.ObjectStorageFactory import (
 from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
     AWSNeptuneSSHTunnel,
 )
+from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+    ApacheJenaTDB2,
+)
 from naas_abi_core.services.triple_store.adaptors.secondary.Oxigraph import Oxigraph
 from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
     TripleStoreService__SecondaryAdaptor__Filesystem,
@@ -112,5 +115,27 @@ class TripleStoreFactory:
         return TripleStoreService(
             Oxigraph(
                 oxigraph_url=oxigraph_url,
+            )
+        )
+
+    @staticmethod
+    def TripleStoreServiceApacheJenaTDB2(
+        jena_tdb2_url: str | None = None,
+    ) -> TripleStoreService:
+        """Creates a TripleStoreService using Apache Jena Fuseki (TDB2).
+
+        Args:
+            jena_tdb2_url (str, optional): Dataset URL of the Fuseki instance.
+                Defaults to JENA_TDB2_URL env var or http://localhost:3030/ds
+
+        Returns:
+            TripleStoreService: Configured triple store service using Apache Jena TDB2
+        """
+        if jena_tdb2_url is None:
+            jena_tdb2_url = os.environ.get("JENA_TDB2_URL", "http://localhost:3030/ds")
+
+        return TripleStoreService(
+            ApacheJenaTDB2(
+                jena_tdb2_url=jena_tdb2_url,
             )
         )

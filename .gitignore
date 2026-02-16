@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+libs/naas-abi/naas_abi/apps/nexus/.env
+libs/naas-abi/naas_abi/apps/nexus/apps/api/.env
 
 # Virtual Environment
 .venv/
@@ -47,6 +49,12 @@ wheels/
 *.swo
 .DS_Store
 
+# Terminal recordings
+*.cast
+*.rec
+*.asciinema
+*.terminal
+
 # Docker
 .docker/
 
@@ -71,7 +79,6 @@ storage/vectorstore/*
 # Ignore data files globally
 *.csv
 *.parquet
-*.json
 *.pdf
 *.doc
 *.docx
@@ -85,6 +92,10 @@ storage/vectorstore/*
 *.jpeg
 *.webp
 *.heic
+
+# Keep demo data and assets in nexus
+!libs/naas-abi/naas_abi/apps/nexus/demo/**
+!libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
 
 
 *.pid

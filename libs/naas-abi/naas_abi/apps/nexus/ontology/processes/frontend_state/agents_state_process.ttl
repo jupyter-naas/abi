@@ -1,0 +1,146 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Agents State Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:agents_state_process a owl:Ontology ;
+    dc:title "Agents State Process"@en ;
+    dc:description "A process managing the list of available AI agents in the frontend, fetching from API per workspace and syncing selected agent validity when workspace changes."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:AgentsStateProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Agents State Process"@en ;
+    skos:definition "A process managing the list of available AI agents in the frontend, fetching from API per workspace and syncing selected agent validity when workspace changes."@en ;
+    rdfs:comment "Implements: apps/web/src/stores/agents.ts useAgentsStore" ;
+    skos:example "1. On workspace change: fetchAgents(workspaceId) from /api/agents/?workspace_id={id}\n2. Format API response to Agent[] array\n3. Check if selectedAgent still valid in new list\n4. If invalid: reset to first available agent\n5. Persist agent list to localStorage"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ZustandAgentsStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ZustandAgentsStore"@en ;
+    skos:definition "Zustand store managing agent list and selection"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:AgentsStorageKey a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "AgentsStorageKey"@en ;
+    skos:definition "localStorage key: nexus-agents"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:FetchDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "FetchDuration"@en ;
+    skos:definition "100-300ms for API call to /api/agents/?workspace_id={id}"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:Agent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Agent"@en ;
+    skos:definition "Interface: id, name, description, icon, systemPrompt, provider, modelId, logoUrl, tools, capabilities"@en .
+
+nexus:AgentActions a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "AgentActions"@en ;
+    skos:definition "fetchAgents(workspaceId), addAgent(), updateAgent(), deleteAgent(), syncAgentsFromProviders()"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:WorkspaceScopedFetch a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "WorkspaceScopedFetch"@en ;
+    skos:definition "Quality: agents fetched per workspace, filtered server-side"@en .
+
+nexus:SelectedAgentValidation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "SelectedAgentValidation"@en ;
+    skos:definition "Quality: resets selectedAgent if current selection invalid after fetch"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:AgentCatalogRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "AgentCatalogRole"@en ;
+    skos:definition "Role realized when store provides agent list for UI selection"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:AutoResetDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "AutoResetDisposition"@en ;
+    skos:definition "Disposition to reset selected agent to first available if current becomes invalid"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:agents_state_process_has_zustandagentsstore a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:AgentsStateProcess ;
+    rdfs:range nexus:ZustandAgentsStore ;
+    rdfs:label "AgentsStateProcess has participant ZustandAgentsStore"@en .
+
+nexus:agents_state_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:AgentsStateProcess ;
+    rdfs:range nexus:AgentsStorageKey ;
+    rdfs:label "AgentsStateProcess occurs in AgentsStorageKey"@en .
+
+nexus:agents_state_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:AgentsStateProcess ;
+    rdfs:range nexus:FetchDuration ;
+    rdfs:label "AgentsStateProcess occupies FetchDuration"@en .
+
+nexus:agents_state_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:AgentsStateProcess ;
+    rdfs:range nexus:AgentCatalogRole ;
+    rdfs:label "AgentsStateProcess realizes AgentCatalogRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:agentCount a owl:DatatypeProperty ;
+    rdfs:label "agentCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:selectedAgentId a owl:DatatypeProperty ;
+    rdfs:label "selectedAgentId"@en ;
+    rdfs:range xsd:string .

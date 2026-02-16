@@ -1,0 +1,175 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Files State Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:files_state_process a owl:Ontology ;
+    dc:title "Files State Process"@en ;
+    dc:description "A process managing file browser state including directory listing, open files, file contents, unsaved changes, and dual storage source support (local + cloud) in the Zustand store."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:FilesStateProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Files State Process"@en ;
+    skos:definition "A process managing file browser state including directory listing, open files, file contents, unsaved changes, and dual storage source support (local + cloud) in the Zustand store."@en ;
+    rdfs:comment "Implements: apps/web/src/stores/files.ts useFilesStore" ;
+    skos:example "1. fetchFiles(path): GET /api/files/?path={path}\n2. openFile(path): add to openFiles, set as activeFile\n3. readFile(path): GET /api/files/{path}, cache in fileContents\n4. saveFile(path): PUT /api/files/{path} with cached content\n5. uploadFile(file): POST /api/files/upload with multipart\n6. syncLocalFolder(): use File System Access API to sync browser folder"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ZustandFilesStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ZustandFilesStore"@en ;
+    skos:definition "Zustand store managing file browser and editor state"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:FileBrowserUI a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "FileBrowserUI"@en ;
+    skos:definition "Sidebar files section + lab section"@en .
+
+nexus:FileAPI a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "FileAPI"@en ;
+    skos:definition "Backend endpoints /api/files/*"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:FileListDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "FileListDuration"@en ;
+    skos:definition "50-500ms for directory listing from API"@en .
+
+nexus:FileReadDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "FileReadDuration"@en ;
+    skos:definition "50-2000ms depending on file size"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:FilesState a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "FilesState"@en ;
+    skos:definition "State: files, currentPath, openFiles, activeFile, fileContents, unsavedChanges, storageSources"@en .
+
+nexus:FileActions a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "FileActions"@en ;
+    skos:definition "fetchFiles(), createFile(), createFolder(), uploadFile(), readFile(), saveFile(), deleteFile(), renameFile()"@en .
+
+nexus:StorageSource a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "StorageSource"@en ;
+    skos:definition "Interface: id, name, category (local/cloud), enabled, connected"@en .
+
+nexus:SyncedFolder a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "SyncedFolder"@en ;
+    skos:definition "Interface: id, name, localPath, handle (FileSystemDirectoryHandle), syncEnabled"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:DualStorageSupport a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "DualStorageSupport"@en ;
+    skos:definition "Quality: supports both local filesystem and cloud (S3) storage"@en .
+
+nexus:UnsavedTracking a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "UnsavedTracking"@en ;
+    skos:definition "Quality: tracks per-file unsaved changes for save prompts"@en .
+
+nexus:FileSystemAccessAPI a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "FileSystemAccessAPI"@en ;
+    skos:definition "Quality: uses browser File System Access API for local folder sync"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:FileManagerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "FileManagerRole"@en ;
+    skos:definition "Role realized when store manages file browsing, editing, and storage"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:LazyContentLoadDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "LazyContentLoadDisposition"@en ;
+    skos:definition "Disposition to load file contents only when file is opened (not on list)"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:files_state_process_has_zustandfilesstore a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:FilesStateProcess ;
+    rdfs:range nexus:ZustandFilesStore ;
+    rdfs:label "FilesStateProcess has participant ZustandFilesStore"@en .
+
+nexus:files_state_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:FilesStateProcess ;
+    rdfs:range nexus:FileBrowserUI ;
+    rdfs:label "FilesStateProcess occurs in FileBrowserUI"@en .
+
+nexus:files_state_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:FilesStateProcess ;
+    rdfs:range nexus:FileListDuration ;
+    rdfs:label "FilesStateProcess occupies FileListDuration"@en .
+
+nexus:files_state_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:FilesStateProcess ;
+    rdfs:range nexus:FileManagerRole ;
+    rdfs:label "FilesStateProcess realizes FileManagerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:openFileCount a owl:DatatypeProperty ;
+    rdfs:label "openFileCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:currentPath a owl:DatatypeProperty ;
+    rdfs:label "currentPath"@en ;
+    rdfs:range xsd:string .
+
+nexus:hasUnsavedChanges a owl:DatatypeProperty ;
+    rdfs:label "hasUnsavedChanges"@en ;
+    rdfs:range xsd:boolean .

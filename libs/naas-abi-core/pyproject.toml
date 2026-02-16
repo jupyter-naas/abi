@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-core"
-version = "1.11.0"
+version = "1.12.0"
 description = "Abi framework allowing you to build your AI system."
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 requires-python = ">=3.10,<4"
@@ -96,6 +96,7 @@ dev = [
     "mypy>=1.19.0",
     "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",
+    "testcontainers>=4.13.2",
 ]
 
 [tool.semantic_release]
@@ -132,3 +133,8 @@ prerelease_token = "dev"
 
 [tool.hatch.build.targets.sdist.force-include]
 "assets" = "assets"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (may require external services)",
+]
