@@ -72,7 +72,7 @@ def _parse_ps_json(raw_json: str) -> list[dict]:
 
 
 def compose_service_states() -> dict[str, ComposeServiceState]:
-    result = run_compose(["ps", "--format", "json"], capture_output=True)
+    result = run_compose(["ps", "-a", "--format", "json"], capture_output=True)
     rows = _parse_ps_json(result.stdout)
     states: dict[str, ComposeServiceState] = {}
 

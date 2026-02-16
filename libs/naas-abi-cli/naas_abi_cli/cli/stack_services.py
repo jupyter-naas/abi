@@ -159,7 +159,10 @@ def _check_tcp(host: str, port: int, timeout: float = 1.2) -> tuple[bool, str]:
 
 
 def evaluate_service_readiness(
-    service_name: str, state: ComposeServiceState | None
+    service_name: str,
+    state: ComposeServiceState | None,
+    http_timeout: float = 1.5,
+    tcp_timeout: float = 1.2,
 ) -> ReadinessResult:
     if state is None:
         return ReadinessResult(False, "compose", "Container not created")
@@ -181,12 +184,12 @@ def evaluate_service_readiness(
 
     if service:
         for url in service.urls:
-            ready, detail = _check_http(url)
+            ready, detail = _check_http(url, timeout=http_timeout)
             if ready:
                 return ReadinessResult(True, "http", detail)
 
         for host, port in service.tcp_targets:
-            ready, detail = _check_tcp(host, port)
+            ready, detail = _check_tcp(host, port, timeout=tcp_timeout)
             if ready:
                 return ReadinessResult(True, "tcp", detail)
 
