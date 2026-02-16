@@ -1,17 +1,20 @@
 {% raw %}
-auto_publish:
-  enabled: true # Enable automatic publishing of agents to workspace
-  exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
-  default_agent: "Abi" # Which agent to set as default in workspace
+deploy:
+  workspace_id: "{{ secret.WORKSPACE_ID }}"
+  space_name: "{% endraw %}{{ project_name }}{% raw %}"
+  naas_api_key: "{{ secret.NAAS_API_KEY }}"
+  env:
+    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
+    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
+    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
 
 api:
   title: "ABI API"
-  description: "API for ABI, your Artifical Business Intelligence"
+  description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
   cors_origins:
     - "http://localhost:9879"
-
 
 global_config:
   ai_mode: "cloud"
@@ -19,6 +22,11 @@ global_config:
 modules:
   - module: naas_abi
     enabled: true
+    config:
+      nexus_config:
+        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/nexus"
+        redis_url: "redis://{{ secret.REDIS_HOST }}:{{ secret.REDIS_PORT }}/0"
+
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
@@ -27,7 +35,6 @@ modules:
   - module: {{ project_name_snake }}
     enabled: true
 
-# Comment default_agent to talk to naas_abi AbiAgent by default
 default_agent: "{{ project_name_snake }} {{project_name_pascal}}Agent"
 
 {% raw %}
@@ -38,9 +45,13 @@ services:
         config: {}
   object_storage:
     object_storage_adapter:
-      adapter: "fs"
+      adapter: "s3"
       config:
-        base_path: "storage/datastore"
+        bucket_name: "abi"
+        base_prefix: "abi/datastore"
+        access_key_id: "{{ secret.MINIO_ROOT_USER }}"
+        secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
+        endpoint_url: "http://{{ secret.MINIO_HOST }}:{{ secret.MINIO_PORT }}"
   triple_store:
     triple_store_adapter:
       adapter: "fs"
@@ -50,4 +61,14 @@ services:
     vector_store_adapter:
       adapter: "qdrant"
       config: {}
+  bus:
+    bus_adapter:
+      adapter: "rabbitmq"
+      config:
+        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@{{ secret.RABBITMQ_HOST }}:{{ secret.RABBITMQ_PORT }}"
+  kv:
+    kv_adapter:
+      adapter: "redis"
+      config:
+        redis_url: "redis://{{ secret.REDIS_HOST }}:{{ secret.REDIS_PORT }}"
 {% endraw %}
