@@ -53,7 +53,7 @@ WORKDIR /app
 
 # Copy only the necessary files from the builder stage
 COPY --from=builder --chown=abi:abi /app/libs /app/libs
-COPY --from=builder --chown=abi:abi /app/src /app/src
+COPY --from=builder --chown=abi:abi /app/abi /app/abi
 COPY --from=builder --chown=abi:abi /app/VERSION /app/VERSION
 COPY --from=builder --chown=abi:abi /app/.local /app/.local
 # Removing marketplace from the final image to save space and improve security
