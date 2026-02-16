@@ -39,77 +39,6 @@ async def _startup(app: FastAPI) -> None:
         print("  API will not start without database connection.")
         raise
 
-    # Initialize TripleStoreService for graph operations
-    try:
-        import os
-        from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-        from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import ApacheJenaTDB2
-        
-        # Get Jena URL from environment
-        jena_url = os.getenv("JENA_TDB2_URL", "http://admin:abi@localhost:3030/ds")
-        
-        # Create adapter directly
-        adapter = ApacheJenaTDB2(jena_tdb2_url=jena_url, timeout=30)
-        
-        # Wrap in TripleStoreService
-        triple_store = TripleStoreService(triple_store_adapter=adapter)
-        
-        # Attach to app state for graph endpoints
-        app.state.triple_store = triple_store
-        print(f"✓ Triple store service initialized (Jena: {jena_url})")
-    except Exception as e:
-        print(f"⚠ Warning: Could not initialize triple store service: {e}")
-        import traceback
-        traceback.print_exc()
-        # Non-fatal - API can still serve other endpoints
-
-    # Initialize ABIModule for in-process agent chat (OPTIONAL)
-    try:
-        from naas_abi import ABIModule
-        from naas_abi_core.engine.Engine import Engine
-        
-        # Check if config.yaml exists
-        config_path = Path.cwd() / "config.yaml"
-        if config_path.exists():
-            print(f"🤖 Loading ABIModule with config: {config_path}")
-            print("   This may take 30-60 seconds...")
-            
-            # Create Engine and load naas_abi module
-            engine = Engine()
-            engine.load(module_names=["naas_abi"])
-            
-            # Now ABIModule.get_instance() will work
-            app.state.abi_module = ABIModule.get_instance()
-            app.state.abi_engine = engine
-            
-            # Initialize object storage from engine services
-            app.state.object_storage = engine.services.object_storage
-            print("✓ Object storage initialized from engine")
-            
-            # Count loaded agents
-            modules = getattr(engine, "modules", {})
-            agent_count = 0
-            for module in modules.values():
-                agents = getattr(module, "agents", []) or []
-                agent_count += len([a for a in agents if a is not None])
-            
-            print(f"✓ ABIModule initialized ({agent_count} agents available)")
-        else:
-            print(f"⚠ No config.yaml found at {config_path}, skipping ABIModule init")
-            print("   In-process agent chat will not be available (use Ollama/cloud providers instead)")
-            app.state.abi_module = None
-            app.state.abi_engine = None
-            app.state.object_storage = None
-    except Exception as e:
-        print(f"⚠ Warning: Could not initialize ABIModule: {e}")
-        import traceback
-        traceback.print_exc()
-        print("   In-process agent chat will not be available (use Ollama/cloud providers instead)")
-        app.state.abi_module = None
-        app.state.abi_engine = None
-        app.state.object_storage = None
-        # Non-fatal - agents can still use Ollama/external providers
-
     if bool(getattr(settings, "auto_seed_demo_data", True)):
         from naas_abi.apps.nexus.apps.api import seed as seed_module
 
@@ -118,41 +47,38 @@ async def _startup(app: FastAPI) -> None:
             await cast(Callable[[], Awaitable[bool]], ensure_seed_fn)()
 
     # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
-    # OPTIMIZATION: Skip Ollama check in dev mode for faster startup
-    if not settings.debug:
-        print("Checking Ollama status...")
-        required_model = "qwen3-vl:2b"
-        if settings.enable_ollama_autostart:
-            ollama_result = await ensure_ollama_ready(required_model=required_model)
-        else:
-            from naas_abi.apps.nexus.apps.api.app.services.ollama import (
-                get_installed_models, is_ollama_running)
-            running = await is_ollama_running()
-            models = await get_installed_models() if running else []
-            ollama_result = {
-                "ollama_installed": running or bool(models),
-                "ollama_running": running,
-                "ollama_started_by_nexus": False,
-                "model_available": any(required_model in m for m in models),
-                "model_pulled": False,
-                "models": models,
-                "error": None,
-            }
-        app.state.ollama_status = ollama_result
-        if ollama_result["ollama_running"]:
-            started_msg = " (started by NEXUS)" if ollama_result.get("ollama_started_by_nexus") else ""
-            print(f"Ollama: running{started_msg} - models: {ollama_result['models']}")
-        elif ollama_result["ollama_installed"]:
-            print(
-                "Ollama: installed but not running - "
-                f"{ollama_result.get('error', 'not started')} "
-                f"(autostart={'on' if settings.enable_ollama_autostart else 'off'})"
-            )
-        else:
-            print("Ollama: not installed - install from https://ollama.ai for local AI")
+    print("Checking Ollama status...")
+    # Gate autostart behind config flag to avoid process management in prod
+    required_model = "qwen3-vl:2b"
+    if settings.enable_ollama_autostart:
+        ollama_result = await ensure_ollama_ready(required_model=required_model)
     else:
-        # Dev mode: skip Ollama check for faster startup
-        app.state.ollama_status = {"ollama_running": False, "models": []}
+        # Do not attempt to start; only report current status
+        from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+            get_installed_models, is_ollama_running)
+        running = await is_ollama_running()
+        models = await get_installed_models() if running else []
+        ollama_result = {
+            "ollama_installed": running or bool(models),
+            "ollama_running": running,
+            "ollama_started_by_nexus": False,
+            "model_available": any(required_model in m for m in models),
+            "model_pulled": False,
+            "models": models,
+            "error": None,
+        }
+    app.state.ollama_status = ollama_result
+    if ollama_result["ollama_running"]:
+        started_msg = " (started by NEXUS)" if ollama_result.get("ollama_started_by_nexus") else ""
+        print(f"Ollama: running{started_msg} - models: {ollama_result['models']}")
+    elif ollama_result["ollama_installed"]:
+        print(
+            "Ollama: installed but not running - "
+            f"{ollama_result.get('error', 'not started')} "
+            f"(autostart={'on' if settings.enable_ollama_autostart else 'off'})"
+        )
+    else:
+        print("Ollama: not installed - install from https://ollama.ai for local AI")
 
 
 async def _shutdown(app: FastAPI) -> None:
@@ -348,23 +274,8 @@ def create_app(app: FastAPI | None = None):
     app.state._nexus_asgi_app = asgi_app
     return asgi_app
 
-
-# Module-level FastAPI app instance for uvicorn
-_fastapi_app = FastAPI(
-    title="NEXUS API",
-    description="The coordination platform API by naas.ai, powered by ABI",
-    version="0.0.1",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan,  # CRITICAL: This runs _startup() which initializes TripleStoreService
-)
-_configure_middleware(_fastapi_app)
-_register_routes(_fastapi_app)
-_mount_static_assets(_fastapi_app)
-app = init_websocket(_fastapi_app)
-
-
 if __name__ == "__main__":
+    app = create_app()
     uvicorn.run(app, host="0.0.0.0", port=9879, reload_dirs=["src", "libs"], reload=True)
 
 
