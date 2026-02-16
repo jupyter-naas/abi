@@ -5,6 +5,7 @@ import sys
 import click
 
 from .agent import agent
+from .call import call
 from .chat import chat
 from .config import config
 from .deploy import deploy
@@ -27,6 +28,7 @@ _main.add_command(secrets)
 _main.add_command(config)
 _main.add_command(module)
 _main.add_command(agent)
+_main.add_command(call)
 _main.add_command(chat)
 _main.add_command(new)
 _main.add_command(init)
