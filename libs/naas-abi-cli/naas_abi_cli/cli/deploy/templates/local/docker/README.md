@@ -12,8 +12,7 @@ docker/
 │   └── docker-compose.yml          # Main orchestration configuration
 ├── images/
 │   ├── Dockerfile                  # Primary application container
-│   ├── Dockerfile.linux.x86_64     # Linux x86_64 optimized build
-│   └── Dockerfile.mcp              # MCP server variant
+│   └── Dockerfile.linux.x86_64     # Linux x86_64 optimized build
 ├── scripts/
 │   └── cleanup.sh                  # Docker cleanup utilities
 └── README.md                       # This documentation
@@ -29,7 +28,6 @@ Contains Docker Compose configurations for orchestrating multi-container applica
 Contains all Dockerfile variants for different deployment scenarios:
 - **`Dockerfile`** - Standard application container
 - **`Dockerfile.linux.x86_64`** - Optimized for Linux x86_64 architecture
-- **`Dockerfile.mcp`** - Model Context Protocol server configuration
 
 ### **scripts/**
 Docker-related utility scripts:
@@ -45,17 +43,15 @@ docker build -f docker/images/Dockerfile -t abi .
 # Build Linux x86_64 optimized
 docker build -f docker/images/Dockerfile.linux.x86_64 -t abi-linux .
 
-# Build MCP server
-docker build -f docker/images/Dockerfile.mcp -t abi-mcp .
 ```
 
 ### Running Services
 ```bash
 # Start all local services
-docker-compose -f docker-compose.yml --profile local up -d
+docker compose -f docker-compose.yml up -d
 
 # Start specific service
-docker-compose -f docker-compose.yml up fuseki
+docker compose -f docker-compose.yml up fuseki
 ```
 
 ### Cleanup
