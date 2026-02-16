@@ -187,6 +187,7 @@ abi:given_name a owl:DatatypeProperty ;
 
 cco:ont00001180 rdf:type owl:Class ;
     rdfs:label "Organization"@en ;
+    owl:hasKey ( linkedin:isOwnerOf ) ;
     rdfs:subClassOf cco:ont00000300 ,
     [ a owl:Restriction ;
         owl:onProperty linkedin:agentInvolvedIn ; # agent involved in
