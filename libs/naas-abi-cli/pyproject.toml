@@ -9,6 +9,7 @@ dependencies = [
     "naas-abi>=1.0.11",
     "naas-abi-core[qdrant]>=1.4.0",
     "naas-abi-marketplace[ai-chatgpt]>=1.3.3",
+    "textual>=0.89.0",
 ]
 license = { text = "MIT License" }
 
@@ -73,5 +74,4 @@ force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_ab
 naas-abi = { path = "../naas-abi",  editable = true }
 naas-abi-core = { path = "../naas-abi-core",  editable = true }
 naas-abi-marketplace = { path = "../naas-abi-marketplace",  editable = true }
-
 
