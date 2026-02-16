@@ -63,7 +63,9 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         candidate_norm = np.linalg.norm(candidate_vector)
         if query_norm == 0.0 or candidate_norm == 0.0:
             return 0.0
-        return float(np.dot(query_vector, candidate_vector) / (query_norm * candidate_norm))
+        return float(
+            np.dot(query_vector, candidate_vector) / (query_norm * candidate_norm)
+        )
 
     def _matches_filter(
         self, document: VectorDocument, filter: Optional[Dict[str, Any]]

@@ -117,9 +117,11 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
         # Filter the classes from the ontology.
         _onto_classes = self._.filter_(
             self.onto,
-            lambda x: "http://www.w3.org/2002/07/owl#Class" in x["type"]
-            if "type" in x
-            else None,
+            lambda x: (
+                "http://www.w3.org/2002/07/owl#Class" in x["type"]
+                if "type" in x
+                else None
+            ),
         )
 
         # Remove subclassOf that are restrictions to keep it simple for now.
@@ -211,23 +213,27 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
         if "domain" in x:
             x["domain"] = self._.map_(
                 x["domain"],
-                lambda x: x
-                if (x is not None and "http" in x)
-                else (
-                    self.get_linked_classes(x)[0]
-                    if self.get_linked_classes(x)
-                    else None
+                lambda x: (
+                    x
+                    if (x is not None and "http" in x)
+                    else (
+                        self.get_linked_classes(x)[0]
+                        if self.get_linked_classes(x)
+                        else None
+                    )
                 ),
             )
         if "range" in x:
             x["range"] = self._.map_(
                 x["range"],
-                lambda x: x
-                if (x is not None and "http" in x)
-                else (
-                    self.get_linked_classes(x)[0]
-                    if self.get_linked_classes(x)
-                    else None
+                lambda x: (
+                    x
+                    if (x is not None and "http" in x)
+                    else (
+                        self.get_linked_classes(x)[0]
+                        if self.get_linked_classes(x)
+                        else None
+                    )
                 ),
             )
         return x
@@ -376,9 +382,7 @@ if __name__ == "__main__":
     from naas_abi_core.engine.Engine import Engine
 
     engine = Engine()
-    engine.load(module_names=[
-        "naas_abi"
-    ])
+    engine.load(module_names=["naas_abi"])
 
     workflow = GetObjectPropertiesFromClassWorkflow(
         GetObjectPropertiesFromClassWorkflowConfiguration(

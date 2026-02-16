@@ -92,7 +92,7 @@ async def start_ollama(ollama_path: str) -> bool:
         )
 
         # Wait for it to become responsive
-        for i in range(STARTUP_TIMEOUT):
+        for _ in range(STARTUP_TIMEOUT):
             await asyncio.sleep(1)
             if await is_ollama_running():
                 logger.info(f"Ollama started successfully (pid={process.pid})")
@@ -110,9 +110,7 @@ async def start_ollama(ollama_path: str) -> bool:
         return False
 
 
-async def pull_model(
-    model: str = DEFAULT_MODEL, endpoint: str = OLLAMA_ENDPOINT
-) -> bool:
+async def pull_model(model: str = DEFAULT_MODEL, endpoint: str = OLLAMA_ENDPOINT) -> bool:
     """Pull a model from the Ollama registry. Runs in background."""
     try:
         logger.info(f"Pulling model {model}...")
@@ -169,9 +167,7 @@ async def ensure_ollama_ready(
     ollama_path = find_ollama()
     if not ollama_path:
         result["error"] = "Ollama not installed"
-        logger.warning(
-            "Ollama not found. Install from https://ollama.ai to enable local AI."
-        )
+        logger.warning("Ollama not found. Install from https://ollama.ai to enable local AI.")
         return result
 
     result["ollama_installed"] = True
@@ -190,9 +186,7 @@ async def ensure_ollama_ready(
             result["ollama_started_by_nexus"] = True
         else:
             result["error"] = "Failed to start Ollama"
-            logger.error(
-                "Could not start Ollama. Try running 'ollama serve' manually."
-            )
+            logger.error("Could not start Ollama. Try running 'ollama serve' manually.")
             return result
 
     # 4. Check installed models
@@ -207,9 +201,7 @@ async def ensure_ollama_ready(
         logger.info(f"Required model '{required_model}' is available")
     else:
         # 6. Pull the model (in background to not block startup)
-        logger.info(
-            f"Required model '{required_model}' not found, pulling in background..."
-        )
+        logger.info(f"Required model '{required_model}' not found, pulling in background...")
         # Fire and forget - don't block startup
         asyncio.create_task(_pull_model_background(required_model, result))
 

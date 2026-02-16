@@ -8,7 +8,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "Zoho"
-DESCRIPTION = "Helps you interact with Zoho for business applications and CRM operations."
+DESCRIPTION = (
+    "Helps you interact with Zoho for business applications and CRM operations."
+)
 SYSTEM_PROMPT = """<role>
 You are a Zoho Agent with expertise in business applications, CRM, and productivity tools.
 </role>
@@ -57,12 +59,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Zoho features",
             intent_type=IntentType.RAW,
-            intent_target="Zoho provides business applications including CRM, email, and productivity tools. I can provide general information, but I currently do not have access to Zoho tools to manage applications."
+            intent_target="Zoho provides business applications including CRM, email, and productivity tools. I can provide general information, but I currently do not have access to Zoho tools to manage applications.",
         ),
         Intent(
             intent_value="Understand CRM and business application management",
             intent_type=IntentType.RAW,
-            intent_target="Business application management involves managing CRM data, contacts, and workflows. I can explain the concepts, but I currently do not have access to tools to manage applications."
+            intent_target="Business application management involves managing CRM data, contacts, and workflows. I can explain the concepts, but I currently do not have access to tools to manage applications.",
         ),
     ]
 
@@ -88,4 +90,3 @@ def create_agent(
 
 class ZohoAgent(IntentAgent):
     pass
-

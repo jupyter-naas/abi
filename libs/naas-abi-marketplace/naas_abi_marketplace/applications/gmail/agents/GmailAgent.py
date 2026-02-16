@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Gmail features",
             intent_type=IntentType.RAW,
-            intent_target="Gmail is Google's email service with features like labels, filters, and search. I can provide general information, but I currently do not have access to Gmail tools to access emails."
+            intent_target="Gmail is Google's email service with features like labels, filters, and search. I can provide general information, but I currently do not have access to Gmail tools to access emails.",
         ),
         Intent(
             intent_value="Understand email management and organization",
             intent_type=IntentType.RAW,
-            intent_target="Email management involves organizing, searching, and managing emails. I can explain best practices, but I currently do not have access to tools to manage emails."
+            intent_target="Email management involves organizing, searching, and managing emails. I can explain best practices, but I currently do not have access to tools to manage emails.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class GmailAgent(IntentAgent):
     pass
-

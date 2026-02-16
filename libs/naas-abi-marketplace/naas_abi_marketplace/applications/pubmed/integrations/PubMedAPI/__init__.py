@@ -1,1 +1,1 @@
-from .PubMedAPI import * # noqa: F403
+from .PubMedAPI import *  # noqa: F403

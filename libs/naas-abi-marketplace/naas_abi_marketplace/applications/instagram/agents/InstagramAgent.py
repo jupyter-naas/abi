@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Instagram features",
             intent_type=IntentType.RAW,
-            intent_target="Instagram is a social media platform for sharing photos and videos. I can provide general information, but I currently do not have access to Instagram tools to manage content."
+            intent_target="Instagram is a social media platform for sharing photos and videos. I can provide general information, but I currently do not have access to Instagram tools to manage content.",
         ),
         Intent(
             intent_value="Understand content management and engagement",
             intent_type=IntentType.RAW,
-            intent_target="Content management involves creating, scheduling, and analyzing posts and stories. I can explain the concepts, but I currently do not have access to tools to manage content."
+            intent_target="Content management involves creating, scheduling, and analyzing posts and stories. I can explain the concepts, but I currently do not have access to tools to manage content.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class InstagramAgent(IntentAgent):
     pass
-

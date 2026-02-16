@@ -24,6 +24,7 @@ class ABIModule(BaseModule):
             algolia_api_key: "{{ secret.ALGOLIA_API_KEY }}"
             algolia_application_id: "{{ secret.ALGOLIA_APPLICATION_ID }}"
         """
+
         algolia_api_key: str
         algolia_application_id: str
         datastore_path: str = "algolia"

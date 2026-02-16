@@ -6,9 +6,9 @@ SQL injection, CORS, and rate limiting.
 Maps to: docs/TEST-PROTOCOL.md Section 5.
 """
 
-import pytest
-from app.core.config import settings
 from jose import jwt
+
+from app.core.config import settings
 
 
 class TestJWTSecurity:
@@ -111,7 +111,7 @@ class TestSQLInjection:
         payloads = [
             "' OR 1=1 --",
             "'; DROP TABLE users; --",
-            "\" UNION SELECT * FROM users --",
+            '" UNION SELECT * FROM users --',
             "1; SELECT * FROM secrets",
         ]
         for payload in payloads:
@@ -128,9 +128,7 @@ class TestSQLInjection:
                 assert "hashed_password" not in body
                 assert "encrypted_value" not in body
 
-    async def test_sql_injection_in_conversation_search(
-        self, client, test_user, test_workspace
-    ):
+    async def test_sql_injection_in_conversation_search(self, client, test_user, test_workspace):
         """SQL injection in workspace_id parameter."""
         response = await client.get(
             "/api/chat/conversations?workspace_id=' OR 1=1 --",

@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "google_sheets"
         """
-        datastore_path: str = "google_sheets"
 
+        datastore_path: str = "google_sheets"

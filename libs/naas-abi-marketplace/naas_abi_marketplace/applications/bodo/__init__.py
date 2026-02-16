@@ -23,4 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "bodo"
         """
+
         datastore_path: str = "bodo"

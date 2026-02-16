@@ -28,7 +28,12 @@ class SearchLinkedInOrganizationPageWorkflowConfiguration(WorkflowConfiguration)
 
     integration_config: GoogleProgrammableSearchEngineIntegrationConfiguration
     pattern = r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"
-    datastore_path: str = field(default_factory=lambda: os.path.join(ABIModule.get_instance().configuration.datastore_path, "linkedin_organization_pages"))
+    datastore_path: str = field(
+        default_factory=lambda: os.path.join(
+            ABIModule.get_instance().configuration.datastore_path,
+            "linkedin_organization_pages",
+        )
+    )
 
 
 class SearchLinkedInOrganizationPageWorkflowParameters(WorkflowParameters):
@@ -46,7 +51,7 @@ class SearchLinkedInOrganizationPageWorkflowParameters(WorkflowParameters):
 class SearchLinkedInOrganizationPageWorkflow(Workflow):
     __configuration: SearchLinkedInOrganizationPageWorkflowConfiguration
     __storage_utils: StorageUtils
-    
+
     def __init__(
         self, configuration: SearchLinkedInOrganizationPageWorkflowConfiguration
     ):

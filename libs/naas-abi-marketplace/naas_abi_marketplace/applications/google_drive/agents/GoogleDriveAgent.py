@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Google Drive features",
             intent_type=IntentType.RAW,
-            intent_target="Google Drive is a file storage and synchronization service. I can provide general information, but I currently do not have access to Google Drive tools to access files."
+            intent_target="Google Drive is a file storage and synchronization service. I can provide general information, but I currently do not have access to Google Drive tools to access files.",
         ),
         Intent(
             intent_value="Understand file and folder management",
             intent_type=IntentType.RAW,
-            intent_target="File management involves organizing, uploading, and sharing files. I can explain the concepts, but I currently do not have access to tools to manage files."
+            intent_target="File management involves organizing, uploading, and sharing files. I can explain the concepts, but I currently do not have access to tools to manage files.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class GoogleDriveAgent(IntentAgent):
     pass
-

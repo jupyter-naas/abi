@@ -9,7 +9,7 @@ class IBusAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def topic_consume(self, topic: str, routing_key: str, callback: Callable[[bytes], None]) -> Thread:
+    def topic_consume(
+        self, topic: str, routing_key: str, callback: Callable[[bytes], None]
+    ) -> Thread:
         raise NotImplementedError()
-
-

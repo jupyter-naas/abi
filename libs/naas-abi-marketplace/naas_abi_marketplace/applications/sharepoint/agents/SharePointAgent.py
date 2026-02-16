@@ -8,7 +8,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "SharePoint"
-DESCRIPTION = "Helps you interact with SharePoint for document management and collaboration."
+DESCRIPTION = (
+    "Helps you interact with SharePoint for document management and collaboration."
+)
 SYSTEM_PROMPT = """<role>
 You are a SharePoint Agent with expertise in document management, collaboration, and enterprise content management.
 </role>
@@ -57,12 +59,12 @@ def create_agent(
         Intent(
             intent_value="Get information about SharePoint features",
             intent_type=IntentType.RAW,
-            intent_target="SharePoint is a document management and collaboration platform. I can provide general information, but I currently do not have access to SharePoint tools to access documents."
+            intent_target="SharePoint is a document management and collaboration platform. I can provide general information, but I currently do not have access to SharePoint tools to access documents.",
         ),
         Intent(
             intent_value="Understand document and site management",
             intent_type=IntentType.RAW,
-            intent_target="Document management involves organizing, sharing, and collaborating on files. I can explain the concepts, but I currently do not have access to tools to manage documents."
+            intent_target="Document management involves organizing, sharing, and collaborating on files. I can explain the concepts, but I currently do not have access to tools to manage documents.",
         ),
     ]
 
@@ -88,4 +90,3 @@ def create_agent(
 
 class SharePointAgent(IntentAgent):
     pass
-

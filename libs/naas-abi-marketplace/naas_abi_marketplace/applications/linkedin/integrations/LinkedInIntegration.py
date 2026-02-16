@@ -402,14 +402,16 @@ class LinkedInIntegration(Integration):
         return data
 
     @cache(
-        lambda self, method, endpoint, params: method
-        + "_"
-        + self.cookies.get("li_at")
-        + "_"
-        + self.cookies.get("JSESSIONID")
-        + "_"
-        + endpoint
-        + ("_".join(f"{k}_{v}" for k, v in params.items()) if params else ""),
+        lambda self, method, endpoint, params: (
+            method
+            + "_"
+            + self.cookies.get("li_at")
+            + "_"
+            + self.cookies.get("JSESSIONID")
+            + "_"
+            + endpoint
+            + ("_".join(f"{k}_{v}" for k, v in params.items()) if params else "")
+        ),
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(days=1),
     )
@@ -1192,11 +1194,13 @@ class LinkedInIntegration(Integration):
             return os.path.join(self.__configuration.datastore_path, prefix, file_name)
 
     @cache(
-        lambda self, profile_url, organization_url, connection_distance: profile_url
-        + "_"
-        + connection_distance
-        + "_"
-        + (str(organization_url) if organization_url else "all"),
+        lambda self, profile_url, organization_url, connection_distance: (
+            profile_url
+            + "_"
+            + connection_distance
+            + "_"
+            + (str(organization_url) if organization_url else "all")
+        ),
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(days=1),
     )
@@ -1338,9 +1342,9 @@ class LinkedInIntegration(Integration):
         return final_data
 
     @cache(
-        lambda self, connection_distance, organization_url: connection_distance
-        + "_"
-        + organization_url,
+        lambda self, connection_distance, organization_url: (
+            connection_distance + "_" + organization_url
+        ),
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(days=1),
     )

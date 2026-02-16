@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Notion features",
             intent_type=IntentType.RAW,
-            intent_target="Notion is a workspace and knowledge management platform. I can provide general information, but I currently do not have access to Notion tools to access workspaces."
+            intent_target="Notion is a workspace and knowledge management platform. I can provide general information, but I currently do not have access to Notion tools to access workspaces.",
         ),
         Intent(
             intent_value="Understand workspace and page management",
             intent_type=IntentType.RAW,
-            intent_target="Workspace management involves organizing pages, databases, and content. I can explain the concepts, but I currently do not have access to tools to manage workspaces."
+            intent_target="Workspace management involves organizing pages, databases, and content. I can explain the concepts, but I currently do not have access to tools to manage workspaces.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class NotionAgent(IntentAgent):
     pass
-

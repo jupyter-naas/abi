@@ -1,8 +1,9 @@
 import threading
 import time
 
-from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import \
-    PythonQueueAdapter
+from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
+    PythonQueueAdapter,
+)
 
 
 def _clear_subscribers() -> None:

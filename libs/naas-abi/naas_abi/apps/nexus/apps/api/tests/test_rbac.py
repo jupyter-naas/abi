@@ -19,9 +19,7 @@ class TestWorkspaceAccess:
         )
         assert response.status_code == 200
 
-    async def test_non_member_cannot_access_workspace(
-        self, client, test_user, isolated_workspace
-    ):
+    async def test_non_member_cannot_access_workspace(self, client, test_user, isolated_workspace):
         """RBAC-02: User who is NOT a workspace member gets 403."""
         response = await client.get(
             f"/api/chat/conversations?workspace_id={isolated_workspace['id']}",
@@ -29,9 +27,7 @@ class TestWorkspaceAccess:
         )
         assert response.status_code == 403
 
-    async def test_added_member_can_access_workspace(
-        self, client, test_user, isolated_workspace
-    ):
+    async def test_added_member_can_access_workspace(self, client, test_user, isolated_workspace):
         """After being added as a member, user can access the workspace."""
         # First: denied
         response = await client.get(
@@ -175,9 +171,7 @@ class TestCrossUserDataLeakage:
         )
         assert response.status_code in (400, 422)
 
-    async def test_chat_validates_workspace_access(
-        self, client, test_user, isolated_workspace
-    ):
+    async def test_chat_validates_workspace_access(self, client, test_user, isolated_workspace):
         """Cannot create conversations in workspaces you don't belong to."""
         response = await client.post(
             "/api/chat/complete",

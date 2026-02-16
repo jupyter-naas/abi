@@ -29,7 +29,9 @@ class PennylaneIntegrationConfiguration(IntegrationConfiguration):
 
     api_key: str
     base_url: str = "https://app.pennylane.com/api/external"
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class PennylaneIntegration(Integration):
@@ -46,7 +48,9 @@ class PennylaneIntegration(Integration):
         """Initialize Pennylane client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
 
         self.headers = {
             "Authorization": f"Bearer {self.__configuration.api_key}",
@@ -207,9 +211,7 @@ class PennylaneIntegration(Integration):
             file_name = f"list_customer_invoices_{filter_str}.json"
         self.__storage_utils.save_json(
             invoices,
-            os.path.join(
-                self.__configuration.datastore_path, "list_customer_invoices"
-            ),
+            os.path.join(self.__configuration.datastore_path, "list_customer_invoices"),
             file_name,
         )
         return invoices
@@ -327,9 +329,7 @@ class PennylaneIntegration(Integration):
             file_name = f"list_bank_transactions_{filter_str}.json"
         self.__storage_utils.save_json(
             bank_transactions,
-            os.path.join(
-                self.__configuration.datastore_path, "list_bank_transactions"
-            ),
+            os.path.join(self.__configuration.datastore_path, "list_bank_transactions"),
             file_name,
         )
         return bank_transactions

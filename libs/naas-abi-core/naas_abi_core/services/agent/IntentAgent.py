@@ -15,7 +15,13 @@ from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
 from spacy.cli import download as spacy_download
 
-from .Agent import Agent, AgentConfiguration, AgentSharedState, create_checkpointer, ABIAgentState
+from .Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    create_checkpointer,
+    ABIAgentState,
+)
 from .beta.IntentMapper import Intent, IntentMapper, IntentScope, IntentType
 
 _nlp = None
@@ -475,15 +481,14 @@ class IntentAgent(Agent):
             threshold_neighbor (float, optional): Maximum score difference for similar intents.
                 Defaults to 0.05.
         """
-        
-        
+
         @tool(return_direct=True)
         def list_available_agents() -> str:
             """Displays a formatted list of all available agents."""
             return "\n".join([agent.name for agent in self._agents])
-        
+
         tools.append(list_available_agents)
-        
+
         # Add default intents while avoiding duplicates
         intents.append(
             Intent(
@@ -492,7 +497,7 @@ class IntentAgent(Agent):
                 intent_target="list_available_agents",
             )
         )
-        
+
         intent_values = {
             (intent.intent_value, intent.intent_type, intent.intent_target)
             for intent in intents

@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about DataGouv features",
             intent_type=IntentType.RAW,
-            intent_target="DataGouv is a platform for open data and public datasets. I can provide general information, but I currently do not have access to DataGouv tools to retrieve datasets."
+            intent_target="DataGouv is a platform for open data and public datasets. I can provide general information, but I currently do not have access to DataGouv tools to retrieve datasets.",
         ),
         Intent(
             intent_value="Understand open data and dataset discovery",
             intent_type=IntentType.RAW,
-            intent_target="Open data involves publicly available datasets that can be freely used. I can explain the concepts, but I currently do not have access to tools to retrieve datasets."
+            intent_target="Open data involves publicly available datasets that can be freely used. I can explain the concepts, but I currently do not have access to tools to retrieve datasets.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class DataGouvAgent(IntentAgent):
     pass
-

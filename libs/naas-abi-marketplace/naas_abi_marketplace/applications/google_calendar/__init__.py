@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "google_calendar"
         """
-        datastore_path: str = "google_calendar"
 
+        datastore_path: str = "google_calendar"

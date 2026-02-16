@@ -23,4 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "gemma"
         """
+
         datastore_path: str = "gemma"

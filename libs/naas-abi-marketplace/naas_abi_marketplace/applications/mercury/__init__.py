@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "mercury"
         """
-        datastore_path: str = "mercury"
 
+        datastore_path: str = "mercury"

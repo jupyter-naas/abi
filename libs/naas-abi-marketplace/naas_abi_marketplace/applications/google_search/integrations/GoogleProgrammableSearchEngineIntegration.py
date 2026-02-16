@@ -30,7 +30,9 @@ class GoogleProgrammableSearchEngineIntegrationConfiguration(IntegrationConfigur
     api_key: str
     search_engine_id: str
     base_url: str = "https://www.googleapis.com/customsearch/v1"
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class GoogleProgrammableSearchEngineIntegration(Integration):
@@ -115,13 +117,13 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
     def extract_content(self, url: str) -> str:
         """
         Fetch a URL and extract text content from HTML.
-        
+
         Args:
             url (str): The URL to fetch and extract content from
-            
+
         Returns:
             str: Extracted text content from the HTML page
-            
+
         Raises:
             requests.RequestException: If the HTTP request fails
             Exception: If HTML parsing fails
@@ -133,22 +135,22 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
             }
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
-            
+
             # Parse HTML with BeautifulSoup
             soup = BeautifulSoup(response.text, "html.parser")
-            
+
             # Remove script and style elements
             for script in soup(["script", "style", "noscript"]):
                 script.decompose()
-            
+
             # Extract text content
             text = soup.get_text(separator=" ", strip=True)
-            
+
             # Clean up excessive whitespace
             lines = (line.strip() for line in text.splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             text = " ".join(chunk for chunk in chunks if chunk)
-            
+
             # Save to storage
             def clean_string(string: str) -> str:
                 # Remove special characters except spaces and pipes
@@ -156,16 +158,18 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
                 cleaned = cleaned.strip()
                 cleaned = cleaned.replace(" ", "_")
                 return cleaned
-            
+
             url_clean = clean_string(url)
             self.__storage_utils.save_text(
                 text,
-                os.path.join(self.__configuration.datastore_path, "extracted_content", url_clean),
+                os.path.join(
+                    self.__configuration.datastore_path, "extracted_content", url_clean
+                ),
                 url_clean + ".txt",
             )
-            
+
             return text
-            
+
         except requests.RequestException as e:
             logger.error(f"Error fetching URL {url}: {str(e)}")
             raise
@@ -185,9 +189,8 @@ def as_tools(configuration: GoogleProgrammableSearchEngineIntegrationConfigurati
 
     class SearchSchema(BaseModel):
         query: Annotated[str, Field(..., description="Search query")]
-        num_results: Optional[Annotated[
-            int, 
-            Field(description="Number of results to return")]
+        num_results: Optional[
+            Annotated[int, Field(description="Number of results to return")]
         ] = 5
 
     class ExtractContentSchema(BaseModel):

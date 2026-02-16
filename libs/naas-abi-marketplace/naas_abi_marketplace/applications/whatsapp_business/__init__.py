@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "whatsapp_business"
         """
-        datastore_path: str = "whatsapp_business"
 
+        datastore_path: str = "whatsapp_business"

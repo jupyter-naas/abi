@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "twilio"
         """
-        datastore_path: str = "twilio"
 
+        datastore_path: str = "twilio"

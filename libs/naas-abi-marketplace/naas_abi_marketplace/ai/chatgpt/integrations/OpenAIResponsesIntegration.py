@@ -58,11 +58,9 @@ class OpenAIResponsesIntegration(Integration):
         )
 
     @cache(
-        lambda self,
-        method,
-        endpoint,
-        params,
-        json: f"{method}_{endpoint}_{str(params)}_{str(json)}",
+        lambda self, method, endpoint, params, json: (
+            f"{method}_{endpoint}_{str(params)}_{str(json)}"
+        ),
         cache_type=DataType.PICKLE,
         ttl=timedelta(days=1),
     )

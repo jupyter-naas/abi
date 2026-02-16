@@ -17,7 +17,7 @@ class PythonQueueAdapter(IBusAdapter):
 
     _lock: RLock
     _subscribers: Dict[str, List[_Subscriber]]
-    
+
     def __init__(self) -> None:
         self._lock = RLock()
         self._subscribers: Dict[str, List[_Subscriber]] = {}

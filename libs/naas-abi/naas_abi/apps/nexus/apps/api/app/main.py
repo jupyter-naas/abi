@@ -3,22 +3,20 @@ NEXUS API - Main Application Entry Point
 """
 
 import logging
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, Awaitable, Callable, cast
+from typing import cast
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
-from naas_abi.apps.nexus.apps.api.app.core.config import (
-    settings, validate_settings_on_startup)
-from naas_abi.apps.nexus.apps.api.app.core.database import (init_db,
-                                                            table_exists)
+from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
+from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
-from naas_abi.apps.nexus.apps.api.app.services.ollama import (
-    ensure_ollama_ready, get_ollama_status)
+from naas_abi.apps.nexus.apps.api.app.services.ollama import ensure_ollama_ready, get_ollama_status
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -55,7 +53,10 @@ async def _startup(app: FastAPI) -> None:
     else:
         # Do not attempt to start; only report current status
         from naas_abi.apps.nexus.apps.api.app.services.ollama import (
-            get_installed_models, is_ollama_running)
+            get_installed_models,
+            is_ollama_running,
+        )
+
         running = await is_ollama_running()
         models = await get_installed_models() if running else []
         ollama_result = {
@@ -119,7 +120,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
             # HSTS (only in production)
             if settings.environment == "production":
-                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+                response.headers["Strict-Transport-Security"] = (
+                    "max-age=31536000; includeSubDomains"
+                )
 
             # CSP (if configured)
             if settings.content_security_policy:
@@ -128,6 +131,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 # Strict default CSP for production (no 'unsafe-*').
                 # Generate a per-response nonce in case any HTML is ever served via this app.
                 import secrets
+
                 nonce = secrets.token_urlsafe(16)
                 csp = (
                     "default-src 'self'; "
@@ -162,8 +166,7 @@ async def ollama_pull_model(model: str = "qwen3-vl:2b"):
     """Trigger a model pull. Returns immediately, pull runs in background."""
     import asyncio
 
-    from naas_abi.apps.nexus.apps.api.app.services.ollama import (
-        is_ollama_running, pull_model)
+    from naas_abi.apps.nexus.apps.api.app.services.ollama import is_ollama_running, pull_model
 
     if not await is_ollama_running():
         return {"success": False, "error": "Ollama is not running"}
@@ -180,7 +183,10 @@ async def ollama_ensure_ready(model: str = "qwen3-vl:2b"):
     to decide whether to retry the pending chat request automatically.
     """
     result = await ensure_ollama_ready(required_model=model)
-    ready = bool(result.get("ollama_running") and (result.get("model_available") or result.get("model_pulled")))
+    ready = bool(
+        result.get("ollama_running")
+        and (result.get("model_available") or result.get("model_pulled"))
+    )
     return {"ready": ready, "status": result}
 
 
@@ -234,7 +240,9 @@ def _mount_static_assets(app: FastAPI) -> None:
     # Serve organization logos
     org_logos_path = Path(__file__).parent.parent / "public" / "organizations"
     if org_logos_path.exists():
-        app.mount("/organizations", StaticFiles(directory=str(org_logos_path)), name="organizations")
+        app.mount(
+            "/organizations", StaticFiles(directory=str(org_logos_path)), name="organizations"
+        )
 
     # Serve uploaded workspace logos
     uploads_path = Path(__file__).parent.parent / "uploads"
@@ -274,8 +282,7 @@ def create_app(app: FastAPI | None = None):
     app.state._nexus_asgi_app = asgi_app
     return asgi_app
 
+
 if __name__ == "__main__":
     app = create_app()
     uvicorn.run(app, host="0.0.0.0", port=9879, reload_dirs=["src", "libs"], reload=True)
-
-

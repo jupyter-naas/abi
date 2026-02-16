@@ -9,7 +9,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 
 
 NAME = "YouTube"
-DESCRIPTION = "Helps you interact with YouTube for video management and channel operations."
+DESCRIPTION = (
+    "Helps you interact with YouTube for video management and channel operations."
+)
 SYSTEM_PROMPT = """<role>
 You are a YouTube Agent with expertise in video management, channel operations, and content analytics.
 </role>
@@ -58,12 +60,12 @@ def create_agent(
         Intent(
             intent_value="Get information about YouTube features",
             intent_type=IntentType.RAW,
-            intent_target="YouTube is a video-sharing platform for uploading, managing, and analyzing videos. I can provide general information, but I currently do not have access to YouTube tools to manage content."
+            intent_target="YouTube is a video-sharing platform for uploading, managing, and analyzing videos. I can provide general information, but I currently do not have access to YouTube tools to manage content.",
         ),
         Intent(
             intent_value="Understand video and channel management",
             intent_type=IntentType.RAW,
-            intent_target="Video management involves uploading, editing, and organizing videos and playlists. I can explain the concepts, but I currently do not have access to tools to manage videos."
+            intent_target="Video management involves uploading, editing, and organizing videos and playlists. I can explain the concepts, but I currently do not have access to tools to manage videos.",
         ),
     ]
 
@@ -89,4 +91,3 @@ def create_agent(
 
 class YouTubeAgent(IntentAgent):
     pass
-

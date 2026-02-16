@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "datagouv"
         """
-        datastore_path: str = "datagouv"
 
+        datastore_path: str = "datagouv"

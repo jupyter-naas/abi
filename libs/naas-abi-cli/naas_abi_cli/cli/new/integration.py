@@ -15,7 +15,9 @@ def _new_integration(integration_name: str, integration_path: str = "."):
     new_integration(integration_name, integration_path)
 
 
-def new_integration(integration_name: str, integration_path: str = ".", extra_values: dict = {}):
+def new_integration(
+    integration_name: str, integration_path: str = ".", extra_values: dict = {}
+):
     integration_name = to_pascal_case(integration_name)
 
     if integration_path == ".":
@@ -32,5 +34,6 @@ def new_integration(integration_name: str, integration_path: str = ".", extra_va
     )
 
     copier.copy(
-        values={"integration_name_pascal": to_pascal_case(integration_name)} | extra_values
+        values={"integration_name_pascal": to_pascal_case(integration_name)}
+        | extra_values
     )

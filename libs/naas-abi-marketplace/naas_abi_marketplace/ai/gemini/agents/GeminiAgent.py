@@ -80,6 +80,7 @@ def create_agent(
 ) -> Optional[IntentAgent]:
     # Init module
     from naas_abi_marketplace.ai.gemini import ABIModule
+
     module: ABIModule = ABIModule.get_instance()
     gemini_api_key = module.configuration.gemini_api_key
 

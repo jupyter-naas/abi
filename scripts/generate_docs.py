@@ -189,9 +189,11 @@ class OntologyDocs:
         _onto_classes = sorted(
             self._.filter_(
                 self.onto,
-                lambda x: "http://www.w3.org/2002/07/owl#Class" in x["type"]
-                if "type" in x
-                else None,
+                lambda x: (
+                    "http://www.w3.org/2002/07/owl#Class" in x["type"]
+                    if "type" in x
+                    else None
+                ),
             ),
             key=lambda x: x["__id"],
         )
@@ -325,23 +327,27 @@ class OntologyDocs:
         if "domain" in x:
             x["domain"] = self._.map_(
                 x["domain"],
-                lambda x: x
-                if (x is not None and "http" in x)
-                else (
-                    self.get_linked_classes(x)[0]
-                    if self.get_linked_classes(x)
-                    else None
+                lambda x: (
+                    x
+                    if (x is not None and "http" in x)
+                    else (
+                        self.get_linked_classes(x)[0]
+                        if self.get_linked_classes(x)
+                        else None
+                    )
                 ),
             )
         if "range" in x:
             x["range"] = self._.map_(
                 x["range"],
-                lambda x: x
-                if (x is not None and "http" in x)
-                else (
-                    self.get_linked_classes(x)[0]
-                    if self.get_linked_classes(x)
-                    else None
+                lambda x: (
+                    x
+                    if (x is not None and "http" in x)
+                    else (
+                        self.get_linked_classes(x)[0]
+                        if self.get_linked_classes(x)
+                        else None
+                    )
                 ),
             )
         return x
@@ -350,9 +356,11 @@ class OntologyDocs:
         # We filter the object properties from the ontology.
         _onto_oprop = self._.filter_(
             self.onto,
-            lambda x: "http://www.w3.org/2002/07/owl#ObjectProperty" in x["type"]
-            if "type" in x
-            else None,
+            lambda x: (
+                "http://www.w3.org/2002/07/owl#ObjectProperty" in x["type"]
+                if "type" in x
+                else None
+            ),
         )
         logger.info(f"🔍 Found {len(_onto_oprop)} object properties in the ontology.")
 
@@ -367,9 +375,11 @@ class OntologyDocs:
         # We filter the data properties from the ontology.
         _onto_dprop = self._.filter_(
             self.onto,
-            lambda x: "http://www.w3.org/2002/07/owl#DatatypeProperty" in x["type"]
-            if "type" in x
-            else None,
+            lambda x: (
+                "http://www.w3.org/2002/07/owl#DatatypeProperty" in x["type"]
+                if "type" in x
+                else None
+            ),
         )
         logger.info(f"🔍 Found {len(_onto_dprop)} data properties in the ontology.")
 
@@ -565,8 +575,9 @@ class OntologyDocs:
                 # H3 : Data Properties
                 dproperties = self._.filter_(
                     self.onto_dprop.values(),
-                    lambda x: "domain" in x
-                    and any(uri in x["domain"] for uri in parents),
+                    lambda x: (
+                        "domain" in x and any(uri in x["domain"] for uri in parents)
+                    ),
                 )
                 data_properties = []
                 for dprop in sorted(dproperties, key=lambda x: x.get("__id", 0)):
@@ -648,8 +659,9 @@ class OntologyDocs:
                 # H3 : Object Properties
                 oproperties = self._.filter_(
                     self.onto_oprop.values(),
-                    lambda x: "domain" in x
-                    and any(uri in x["domain"] for uri in parents),
+                    lambda x: (
+                        "domain" in x and any(uri in x["domain"] for uri in parents)
+                    ),
                 )
                 object_properties = []
                 for oprop in sorted(oproperties, key=lambda x: x.get("__id", 0)):

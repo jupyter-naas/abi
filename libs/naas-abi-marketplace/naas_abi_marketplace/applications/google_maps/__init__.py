@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "google_maps"
         """
-        datastore_path: str = "google_maps"
 
+        datastore_path: str = "google_maps"

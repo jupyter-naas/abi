@@ -20,8 +20,7 @@ Example:
 
 from typing import Any, Dict, List
 
-from naas_abi_core.services.secret.SecretPorts import (ISecretAdapter,
-                                                       ISecretService)
+from naas_abi_core.services.secret.SecretPorts import ISecretAdapter, ISecretService
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 

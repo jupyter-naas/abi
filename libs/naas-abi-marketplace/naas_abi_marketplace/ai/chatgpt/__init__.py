@@ -9,9 +9,10 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
 
+
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
-        modules=[], 
+        modules=[],
         services=[ObjectStorageService],
     )
 
@@ -25,6 +26,7 @@ class ABIModule(BaseModule):
             openai_api_key: "{{ secret.OPENAI_API_KEY }}"
             openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
         """
+
         openai_api_key: str
         openrouter_api_key: str | None = None
         datastore_path: str = "chatgpt"

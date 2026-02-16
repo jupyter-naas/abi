@@ -1,23 +1,24 @@
 from typing import Dict, List
 
 from naas_abi_core import logger
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
-    EngineConfiguration
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+    EngineConfiguration,
+)
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import ModuleDependencies
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
-from naas_abi_core.services.object_storage.ObjectStorageService import \
-    ObjectStorageService
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
-from naas_abi_core.services.vector_store.VectorStoreService import \
-    VectorStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
 SERVICES_DEPENDENCIES = {
     TripleStoreService: [BusService],
 }
+
 
 class EngineServiceLoader:
     __configuration: EngineConfiguration
@@ -25,15 +26,17 @@ class EngineServiceLoader:
     def __init__(self, configuration: EngineConfiguration):
         self.__configuration = configuration
 
-    def _should_load_service(self, service_type: type, services_to_load: List[type]) -> bool:
+    def _should_load_service(
+        self, service_type: type, services_to_load: List[type]
+    ) -> bool:
         if service_type in services_to_load:
             return True
-        
+
         for service, dependencies in SERVICES_DEPENDENCIES.items():
             if service_type in dependencies and service in services_to_load:
                 return True
         return False
-        
+
     def load_services(
         self, module_dependencies: Dict[str, ModuleDependencies]
     ) -> IEngine.Services:
@@ -41,7 +44,6 @@ class EngineServiceLoader:
 
         for _, module_dependency in module_dependencies.items():
             services_to_load.extend(module_dependency.services)
-
 
         services_to_load = list(set(services_to_load))
         logger.debug(f"Services to load: {services_to_load}")

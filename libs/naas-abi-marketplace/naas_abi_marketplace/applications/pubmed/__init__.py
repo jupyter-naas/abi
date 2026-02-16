@@ -6,6 +6,8 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+
+
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=["naas_abi_marketplace.ai.chatgpt"],
@@ -21,4 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "pubmed"
         """
+
         datastore_path: str = "pubmed"

@@ -23,5 +23,6 @@ class ABIModule(BaseModule):
         config:
             sendgrid_api_key: "{{ secret.SENDGRID_API_KEY }}"
         """
+
         sendgrid_api_key: str
         datastore_path: str = "sendgrid"

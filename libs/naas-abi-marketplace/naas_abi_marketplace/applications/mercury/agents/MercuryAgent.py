@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Mercury features",
             intent_type=IntentType.RAW,
-            intent_target="Mercury is a banking platform for businesses to manage accounts and financial operations. I can provide general information, but I currently do not have access to Mercury tools to access banking data."
+            intent_target="Mercury is a banking platform for businesses to manage accounts and financial operations. I can provide general information, but I currently do not have access to Mercury tools to access banking data.",
         ),
         Intent(
             intent_value="Understand banking and account management",
             intent_type=IntentType.RAW,
-            intent_target="Banking involves managing accounts, transactions, and financial operations. I can explain the concepts, but I currently do not have access to tools to manage banking data."
+            intent_target="Banking involves managing accounts, transactions, and financial operations. I can explain the concepts, but I currently do not have access to tools to manage banking data.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class MercuryAgent(IntentAgent):
     pass
-

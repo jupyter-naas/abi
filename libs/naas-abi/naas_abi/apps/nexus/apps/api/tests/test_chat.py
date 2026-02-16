@@ -6,10 +6,7 @@ Note: Ollama-dependent tests are skipped if Ollama is not running.
 Maps to: docs/TEST-PROTOCOL.md Section 4.
 """
 
-import json
 from unittest.mock import AsyncMock, patch
-
-import pytest
 
 
 class TestConversationCRUD:
@@ -120,9 +117,7 @@ class TestChatComplete:
             assert "conversation_id" in data
             assert "message" in data
 
-    async def test_complete_with_existing_conversation(
-        self, client, test_user, test_workspace
-    ):
+    async def test_complete_with_existing_conversation(self, client, test_user, test_workspace):
         """Chat complete can append to an existing conversation."""
         conv_response = await client.post(
             "/api/chat/conversations",

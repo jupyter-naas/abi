@@ -295,27 +295,33 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
         # Step 3: Processing rows from Excel file
         logger.debug("Step 3: Processing rows")
         count_row: int = 0
-        linkedin_profile_page_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
-            class_uri=LINKEDIN_PROFILE_PAGE
+        linkedin_profile_page_uris: dict[str, URIRef] = (
+            self.__sparql_utils.get_identifiers(class_uri=LINKEDIN_PROFILE_PAGE)
         )
         logger.debug(
             f"- Existing LinkedIn profile page: {len(linkedin_profile_page_uris)}"
         )
-        person_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(RDFS.label, class_uri=PERSON)
+        person_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
+            RDFS.label, class_uri=PERSON
+        )
         logger.debug(f"- Existing Person: {len(person_uris)}")
-        position_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(class_uri=POSITION)
+        position_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
+            class_uri=POSITION
+        )
         logger.debug(f"- Existing Positions: {len(position_uris)}")
         organization_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
             RDFS.label, class_uri=ORGANIZATION
         )
         logger.debug(f"- Existing Organization: {len(organization_uris)}")
-        linkedin_company_page_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
-            class_uri=LINKEDIN_COMPANY_PAGE
+        linkedin_company_page_uris: dict[str, URIRef] = (
+            self.__sparql_utils.get_identifiers(class_uri=LINKEDIN_COMPANY_PAGE)
         )
         logger.debug(
             f"- Existing LinkedIn company page: {len(linkedin_company_page_uris)}"
         )
-        location_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(class_uri=LOCATION)
+        location_uris: dict[str, URIRef] = self.__sparql_utils.get_identifiers(
+            class_uri=LOCATION
+        )
         logger.debug(f"- Existing Location: {len(location_uris)}")
         if self.__configuration.limit is not None:
             df = df[: self.__configuration.limit]
@@ -677,7 +683,9 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
         ttl_file_name = f"insert_{file_name.split('.')[0]}_{parameters.sheet_name}.ttl"
         if len(graph) > 0:
             # Save triples to file
-            self.__storage_utils.save_triples(graph, log_dir_path, ttl_file_name, copy=False)
+            self.__storage_utils.save_triples(
+                graph, log_dir_path, ttl_file_name, copy=False
+            )
             # Save Excel file
             self.__storage_utils.save_excel(
                 df, log_dir_path, excel_file_name, parameters.sheet_name, copy=False

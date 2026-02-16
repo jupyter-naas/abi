@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "zoho"
         """
-        datastore_path: str = "zoho"
 
+        datastore_path: str = "zoho"

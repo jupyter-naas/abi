@@ -6,6 +6,7 @@ from naas_abi_core.models.Model import ChatModel
 
 def get_model() -> ChatModel:
     from naas_abi_marketplace.ai.chatgpt import ABIModule as ChatGPTABIModule
+
     ai_mode: Literal["cloud", "local", "airgap"] = (
         ABIModule.get_instance().configuration.global_config.ai_mode
     )

@@ -23,4 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "deepseek"
         """
+
         datastore_path: str = "deepseek"

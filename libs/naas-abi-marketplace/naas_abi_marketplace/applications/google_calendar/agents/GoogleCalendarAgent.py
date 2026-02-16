@@ -9,7 +9,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "Google_Calendar"
-DESCRIPTION = "Helps you interact with Google Calendar for scheduling and event management."
+DESCRIPTION = (
+    "Helps you interact with Google Calendar for scheduling and event management."
+)
 SYSTEM_PROMPT = """<role>
 You are a Google Calendar Agent with expertise in scheduling, event management, and calendar operations.
 </role>
@@ -58,12 +60,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Google Calendar features",
             intent_type=IntentType.RAW,
-            intent_target="Google Calendar is a time-management and scheduling service. I can provide general information, but I currently do not have access to Google Calendar tools to access events."
+            intent_target="Google Calendar is a time-management and scheduling service. I can provide general information, but I currently do not have access to Google Calendar tools to access events.",
         ),
         Intent(
             intent_value="Understand event management and scheduling",
             intent_type=IntentType.RAW,
-            intent_target="Event management involves creating, updating, and organizing calendar events. I can explain the concepts, but I currently do not have access to tools to manage events."
+            intent_target="Event management involves creating, updating, and organizing calendar events. I can explain the concepts, but I currently do not have access to tools to manage events.",
         ),
     ]
 
@@ -89,4 +91,3 @@ def create_agent(
 
 class GoogleCalendarAgent(IntentAgent):
     pass
-

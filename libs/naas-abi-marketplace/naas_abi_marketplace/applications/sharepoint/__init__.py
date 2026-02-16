@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "sharepoint"
         """
-        datastore_path: str = "sharepoint"
 
+        datastore_path: str = "sharepoint"

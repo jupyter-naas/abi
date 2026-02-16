@@ -12,20 +12,20 @@ COLORS_NODES = {
     "https://www.commoncoreontologies.org/ont00000832": "#47DD82",
     "http://ontology.naas.ai/abi/ISO8601UTCDateTime": "#47DD82",
     # Agent Ontology
-    'https://www.commoncoreontologies.org/ont00001180': 'white', # Organization
-    'https://www.commoncoreontologies.org/ont00000443': 'white', # Commercial Organization
-    'http://ontology.naas.ai/abi/StockMarket': 'white', # Stock Market Institution
-    'https://www.commoncoreontologies.org/ont00001302': 'white', # Civil Organization
-    'https://www.commoncoreontologies.org/ont00000564': 'white', # Educational Organization
-    'https://www.commoncoreontologies.org/ont00000408': 'white', # Government Organization
-    'https://www.commoncoreontologies.org/ont00001239': '#f6f6f6', # Group Organization
-    'http://ontology.naas.ai/abi/Industry': '#f6f6f6', # Group of organizations
-    'http://ontology.naas.ai/abi/LinkedInIndustry': '#f6f6f6', # Group of organizations
-    'https://www.commoncoreontologies.org/ont00001262': '#919191', # Group
-    'https://www.commoncoreontologies.org/ont00000647': '#919191', # Member
-    'https://www.commoncoreontologies.org/ont00000914': 'white', # Group Member
-    'https://www.commoncoreontologies.org/ont00000175': '#3e3e3e', # Member Role
-    'http://ontology.naas.ai/abi/leadership#Position': '#905e0e', # Position
+    "https://www.commoncoreontologies.org/ont00001180": "white",  # Organization
+    "https://www.commoncoreontologies.org/ont00000443": "white",  # Commercial Organization
+    "http://ontology.naas.ai/abi/StockMarket": "white",  # Stock Market Institution
+    "https://www.commoncoreontologies.org/ont00001302": "white",  # Civil Organization
+    "https://www.commoncoreontologies.org/ont00000564": "white",  # Educational Organization
+    "https://www.commoncoreontologies.org/ont00000408": "white",  # Government Organization
+    "https://www.commoncoreontologies.org/ont00001239": "#f6f6f6",  # Group Organization
+    "http://ontology.naas.ai/abi/Industry": "#f6f6f6",  # Group of organizations
+    "http://ontology.naas.ai/abi/LinkedInIndustry": "#f6f6f6",  # Group of organizations
+    "https://www.commoncoreontologies.org/ont00001262": "#919191",  # Group
+    "https://www.commoncoreontologies.org/ont00000647": "#919191",  # Member
+    "https://www.commoncoreontologies.org/ont00000914": "white",  # Group Member
+    "https://www.commoncoreontologies.org/ont00000175": "#3e3e3e",  # Member Role
+    "http://ontology.naas.ai/abi/leadership#Position": "#905e0e",  # Position
     # Event Ontology
     "http://ontology.naas.ai/abi/ActOfPartnership": "black",
     "http://ontology.naas.ai/abi/ActOfJointVenture": "black",
@@ -74,7 +74,6 @@ COLORS_NODES = {
     "http://ontology.naas.ai/abi/linkedin#Skill": "#bd87df",
     "http://ontology.naas.ai/abi/linkedin#Certification": "#76b3ec",
     "http://ontology.naas.ai/abi/linkedin#Course": "#b9986d",
-    
     # "http://ontology.naas.ai/abi/linkedin#Skill": "white",
     # "http://ontology.naas.ai/abi/linkedin#Education": "white",
     # "http://ontology.naas.ai/abi/linkedin#Certification": "white",

@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "aws"
         """
-        datastore_path: str = "aws"
 
+        datastore_path: str = "aws"

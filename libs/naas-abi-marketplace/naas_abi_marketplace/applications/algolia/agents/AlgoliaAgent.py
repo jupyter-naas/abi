@@ -46,6 +46,7 @@ def create_agent(
 ) -> Optional[IntentAgent]:
     # Initialize module
     from naas_abi_marketplace.applications.algolia import ABIModule
+
     module = ABIModule.get_instance()
     algolia_api_key = module.configuration.algolia_api_key
     algolia_application_id = module.configuration.algolia_application_id

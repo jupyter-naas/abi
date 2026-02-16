@@ -91,16 +91,21 @@ def create_agent(
 ) -> IntentAgent:
     # Initialize module
     from naas_abi_marketplace.domains.support import ABIModule
+
     module = ABIModule.get_instance()
     github_project_id = module.configuration.github_project_id
     default_repository = module.configuration.default_repository
 
     # Get github access token
     from naas_abi_marketplace.applications.github import ABIModule as GitHubABIModule
-    github_access_token = GitHubABIModule.get_instance().configuration.github_access_token
+
+    github_access_token = (
+        GitHubABIModule.get_instance().configuration.github_access_token
+    )
 
     # Define model
     from naas_abi_marketplace.domains.support.models.default import get_model
+
     model = get_model()
 
     # Define tools
@@ -125,6 +130,7 @@ def create_agent(
         ReportBugWorkflow,
         ReportBugWorkflowConfiguration,
     )
+
     github_integration_config = GitHubIntegrationConfiguration(
         access_token=github_access_token
     )
@@ -225,12 +231,8 @@ def create_agent(
     system_prompt = SYSTEM_PROMPT.replace(
         "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
     )
-    system_prompt = system_prompt.replace(
-        "[GITHUB_PROJECT_ID]", str(github_project_id)
-    )
-    system_prompt = system_prompt.replace(
-        "[GITHUB_REPOSITORY]", default_repository
-    )
+    system_prompt = system_prompt.replace("[GITHUB_PROJECT_ID]", str(github_project_id))
+    system_prompt = system_prompt.replace("[GITHUB_REPOSITORY]", default_repository)
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=system_prompt)
 

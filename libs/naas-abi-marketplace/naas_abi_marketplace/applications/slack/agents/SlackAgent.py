@@ -57,12 +57,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Slack features",
             intent_type=IntentType.RAW,
-            intent_target="Slack is a team communication platform for channels, messages, and collaboration. I can provide general information, but I currently do not have access to Slack tools to manage channels."
+            intent_target="Slack is a team communication platform for channels, messages, and collaboration. I can provide general information, but I currently do not have access to Slack tools to manage channels.",
         ),
         Intent(
             intent_value="Understand channel and message management",
             intent_type=IntentType.RAW,
-            intent_target="Channel management involves organizing conversations, sending messages, and collaborating with teams. I can explain the concepts, but I currently do not have access to tools to manage channels."
+            intent_target="Channel management involves organizing conversations, sending messages, and collaborating with teams. I can explain the concepts, but I currently do not have access to tools to manage channels.",
         ),
     ]
 
@@ -88,4 +88,3 @@ def create_agent(
 
 class SlackAgent(IntentAgent):
     pass
-

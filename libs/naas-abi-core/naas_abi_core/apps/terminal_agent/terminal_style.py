@@ -95,7 +95,7 @@ def clear_screen():
 def print_welcome_message(agent):
     # Set terminal title
     set_terminal_title()
-    
+
     # Skip the welcome - we already said hello in the CLI startup
     # Just quietly start the conversation
     pass
@@ -157,7 +157,9 @@ def print_image(image_path: str):
                 pass  # Silently fail if we can't display the image
         elif platform.system() == "Windows":
             try:
-                subprocess.run(['start', '', image_path], shell=True)  # Windows-specific file opening
+                subprocess.run(
+                    ["start", "", image_path], shell=True
+                )  # Windows-specific file opening
             except Exception:
                 pass
 

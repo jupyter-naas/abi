@@ -60,19 +60,19 @@ def new_module(module_name: str, module_path: str = ".", quiet: bool = False):
         os.path.join(module_path, "integrations"),
         extra_values={"module_name_snake": to_snake_case(module_name)},
     )
-    
+
     new_pipeline(
         module_name,
         os.path.join(module_path, "pipelines"),
         extra_values={"module_name_snake": to_snake_case(module_name)},
     )
-    
+
     new_workflow(
         module_name,
         os.path.join(module_path, "workflows"),
         extra_values={"module_name_snake": to_snake_case(module_name)},
     )
-    
+
     new_orchestration(
         module_name,
         os.path.join(module_path, "orchestrations"),

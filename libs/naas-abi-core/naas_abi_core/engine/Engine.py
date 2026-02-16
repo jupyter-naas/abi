@@ -1,14 +1,14 @@
 from typing import Dict, List
 
 from naas_abi_core import logger
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
-    EngineConfiguration
-from naas_abi_core.engine.engine_loaders.EngineModuleLoader import \
-    EngineModuleLoader
-from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import \
-    EngineOntologyLoader
-from naas_abi_core.engine.engine_loaders.EngineServiceLoader import \
-    EngineServiceLoader
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+    EngineConfiguration,
+)
+from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
+from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
+    EngineOntologyLoader,
+)
+from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import BaseModule
 

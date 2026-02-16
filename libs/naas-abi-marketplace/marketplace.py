@@ -10,14 +10,15 @@ from typing import Dict, List, Any
 
 # Configure page
 st.set_page_config(
-    page_title="ABI Marketplace", 
-    page_icon="🏪", 
+    page_title="ABI Marketplace",
+    page_icon="🏪",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
 
 # Minimal CSS - Apple-inspired
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* Updated spacing v2 */
     .main > div {
@@ -278,7 +279,10 @@ st.markdown("""
         border-color: #e5e5ea;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 def get_app_status(port: int) -> str:
     """Check if app is running"""
@@ -288,10 +292,13 @@ def get_app_status(port: int) -> str:
     except Exception:
         return "stopped"
 
-def load_modules_from_path(path: Path, module_type: str = "module") -> List[Dict[str, Any]]:
+
+def load_modules_from_path(
+    path: Path, module_type: str = "module"
+) -> List[Dict[str, Any]]:
     """Helper function to load modules from a given path"""
     modules = []
-    
+
     if path.exists():
         for module_dir in path.iterdir():
             if module_dir.is_dir() and not module_dir.name.startswith("__"):
@@ -303,74 +310,142 @@ def load_modules_from_path(path: Path, module_type: str = "module") -> List[Dict
                     for agent_file in agent_path.glob("*Agent.py"):
                         try:
                             # Read the agent file to extract AVATAR_URL and DESCRIPTION
-                            with open(agent_file, 'r') as f:
+                            with open(agent_file, "r") as f:
                                 content = f.read()
-                                for line in content.split('\n'):
+                                for line in content.split("\n"):
                                     line = line.strip()
-                                    if line.startswith('AVATAR_URL = '):
-                                        avatar_url = line.split('=', 1)[1].strip().strip('"\'')
-                                    elif line.startswith('DESCRIPTION = '):
-                                        description = line.split('=', 1)[1].strip().strip('"\'')
+                                    if line.startswith("AVATAR_URL = "):
+                                        avatar_url = (
+                                            line.split("=", 1)[1].strip().strip("\"'")
+                                        )
+                                    elif line.startswith("DESCRIPTION = "):
+                                        description = (
+                                            line.split("=", 1)[1].strip().strip("\"'")
+                                        )
                             if avatar_url and description:
                                 break
                         except Exception:
                             continue
-                
+
                 # Fallback values
-                fallback_icon = {"chatgpt": "🤖", "claude": "🎭", "gemini": "💎", "grok": "🚀", 
-                                "llama": "🦙", "mistral": "🌪️", "deepseek": "🔍", "abi": "⭐"}.get(module_dir.name, "🧠")
+                fallback_icon = {
+                    "chatgpt": "🤖",
+                    "claude": "🎭",
+                    "gemini": "💎",
+                    "grok": "🚀",
+                    "llama": "🦙",
+                    "mistral": "🌪️",
+                    "deepseek": "🔍",
+                    "abi": "⭐",
+                }.get(module_dir.name, "🧠")
                 fallback_description = f"AI module with {module_dir.name} capabilities"
-                
+
                 # Format name for domain experts (replace hyphens with spaces and title case)
                 if "domain" in module_type.lower():
                     name = module_dir.name.replace("-", " ").title()
                 else:
                     name = module_dir.name.title()
-                
-                modules.append({
-                    "name": name,
-                    "type": module_type, 
-                    "description": description if description else fallback_description,
-                    "icon": avatar_url if avatar_url else fallback_icon,
-                    "status": "available"
-                })
-    
+
+                modules.append(
+                    {
+                        "name": name,
+                        "type": module_type,
+                        "description": description
+                        if description
+                        else fallback_description,
+                        "icon": avatar_url if avatar_url else fallback_icon,
+                        "status": "available",
+                    }
+                )
+
     return modules
+
 
 def get_modules() -> List[Dict[str, Any]]:
     """Get available modules"""
     modules = []
-    
+
     # Core modules
     core_path = Path("src/core/modules")
     modules.extend(load_modules_from_path(core_path, "core-module"))
-    
+
     # Custom modules
     custom_path = Path("src/custom/modules")
     modules.extend(load_modules_from_path(custom_path, "custom-module"))
-    
+
     # Domain expert modules
     domain_path = Path("src/marketplace/modules/domains/modules")
     modules.extend(load_modules_from_path(domain_path, "domain-expert"))
-    
+
     # Marketplace application modules (disabled ones)
     marketplace_apps_path = Path("src/marketplace/modules/applications")
     modules.extend(load_modules_from_path(marketplace_apps_path, "marketplace-app"))
-    
+
     return modules
+
 
 # Apps data
 apps_data: list[dict[str, str | int]] = [
-    {"name": "Dashboard", "port": 8500, "icon": "🎛️", "description": "Central control hub with system monitoring"},
-    {"name": "Chat API", "port": 8511, "icon": "💬", "description": "API-based chat interface with multi-agent support"},
-    {"name": "Table Mode", "port": 8503, "icon": "📊", "description": "Advanced data table interface with filtering"},
-    {"name": "Kanban Mode", "port": 8504, "icon": "📋", "description": "Project management with kanban boards"},
-    {"name": "Ontology Mode", "port": 8505, "icon": "🕸️", "description": "Knowledge graph visualization"},
-    {"name": "Financial Dashboard", "port": 8506, "icon": "💰", "description": "Financial analytics and KPIs"},
-    {"name": "Calendar", "port": 8507, "icon": "📅", "description": "Advanced scheduling interface"},
-    {"name": "Project Board", "port": 8508, "icon": "📈", "description": "Enterprise project tracking"},
-    {"name": "Reconciliation", "port": 8509, "icon": "🧮", "description": "Financial reconciliation tool"},
-    {"name": "Network Viz", "port": 8510, "icon": "🌐", "description": "Interactive network visualization"}
+    {
+        "name": "Dashboard",
+        "port": 8500,
+        "icon": "🎛️",
+        "description": "Central control hub with system monitoring",
+    },
+    {
+        "name": "Chat API",
+        "port": 8511,
+        "icon": "💬",
+        "description": "API-based chat interface with multi-agent support",
+    },
+    {
+        "name": "Table Mode",
+        "port": 8503,
+        "icon": "📊",
+        "description": "Advanced data table interface with filtering",
+    },
+    {
+        "name": "Kanban Mode",
+        "port": 8504,
+        "icon": "📋",
+        "description": "Project management with kanban boards",
+    },
+    {
+        "name": "Ontology Mode",
+        "port": 8505,
+        "icon": "🕸️",
+        "description": "Knowledge graph visualization",
+    },
+    {
+        "name": "Financial Dashboard",
+        "port": 8506,
+        "icon": "💰",
+        "description": "Financial analytics and KPIs",
+    },
+    {
+        "name": "Calendar",
+        "port": 8507,
+        "icon": "📅",
+        "description": "Advanced scheduling interface",
+    },
+    {
+        "name": "Project Board",
+        "port": 8508,
+        "icon": "📈",
+        "description": "Enterprise project tracking",
+    },
+    {
+        "name": "Reconciliation",
+        "port": 8509,
+        "icon": "🧮",
+        "description": "Financial reconciliation tool",
+    },
+    {
+        "name": "Network Viz",
+        "port": 8510,
+        "icon": "🌐",
+        "description": "Interactive network visualization",
+    },
 ]
 
 # Add status to apps
@@ -379,15 +454,23 @@ for app in apps_data:
     app["type"] = "app"
 
 # Header
-st.markdown("""
+st.markdown(
+    """
 <div class="marketplace-header">
     <h1 class="marketplace-title">ABI Marketplace</h1>
     <p class="marketplace-subtitle">Discover and launch AI applications and modules</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # Search
-search_query = st.text_input("Search", placeholder="Search apps and modules...", key="search", label_visibility="collapsed")
+search_query = st.text_input(
+    "Search",
+    placeholder="Search apps and modules...",
+    key="search",
+    label_visibility="collapsed",
+)
 
 # Tabs
 col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
@@ -416,44 +499,67 @@ filtered_items = all_items
 
 # Apply search filter
 if search_query:
-    filtered_items = [item for item in filtered_items 
-                     if search_query.lower() in item["name"].lower() 
-                     or search_query.lower() in item["description"].lower()]
+    filtered_items = [
+        item
+        for item in filtered_items
+        if search_query.lower() in item["name"].lower()
+        or search_query.lower() in item["description"].lower()
+    ]
 
 # Apply tab filter
 if st.session_state.active_tab == "apps":
     filtered_items = [item for item in filtered_items if item["type"] == "app"]
 elif st.session_state.active_tab == "modules":
-    filtered_items = [item for item in filtered_items if item["type"] in ["module", "core-module", "domain-expert", "custom-module", "marketplace-app"]]
+    filtered_items = [
+        item
+        for item in filtered_items
+        if item["type"]
+        in [
+            "module",
+            "core-module",
+            "domain-expert",
+            "custom-module",
+            "marketplace-app",
+        ]
+    ]
 elif st.session_state.active_tab == "running":
-    filtered_items = [item for item in filtered_items if item.get("status") == "running"]
+    filtered_items = [
+        item for item in filtered_items if item.get("status") == "running"
+    ]
 
 # Results count
 if search_query or st.session_state.active_tab != "all":
-    st.markdown(f'<div class="results-count">{len(filtered_items)} results</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="results-count">{len(filtered_items)} results</div>',
+        unsafe_allow_html=True,
+    )
 
 # Cards grid - proper Streamlit grid with spacing
 if filtered_items:
     cols_per_row = 3
     for i in range(0, len(filtered_items), cols_per_row):
         cols = st.columns(cols_per_row, gap="large")
-        
+
         for j, col in enumerate(cols):
             if i + j < len(filtered_items):
                 item = filtered_items[i + j]
-                
+
                 with col:
                     # Card container with proper spacing
                     st.markdown('<div class="card-container">', unsafe_allow_html=True)
-                    
+
                     # Card content
                     # Determine if icon is URL or emoji
-                    icon_html = f'<img src="{item["icon"]}" alt="{item["name"]}">' if item["icon"].startswith("http") else item["icon"]
-                    
+                    icon_html = (
+                        f'<img src="{item["icon"]}" alt="{item["name"]}">'
+                        if item["icon"].startswith("http")
+                        else item["icon"]
+                    )
+
                     # Determine tag text and class
                     tag_text = "APP" if item["type"] == "app" else "MODULE"
                     tag_class = "app" if item["type"] == "app" else "module"
-                    
+
                     card_html = f"""
                     <div class="card">
                         <div class="card-tag {tag_class}">{tag_text}</div>
@@ -462,20 +568,22 @@ if filtered_items:
                         <p class="card-description">{item["description"]}</p>
                         <div class="card-status">
                     """
-                    
+
                     if item["type"] == "app":
                         status = item["status"]
-                        status_text = "🟢 Running" if status == "running" else "🔴 Stopped"
+                        status_text = (
+                            "🟢 Running" if status == "running" else "🔴 Stopped"
+                        )
                         card_html += f'<span><span class="status-dot status-{status}"></span>{status_text}</span>'
                     else:
                         card_html += '<span><span class="status-dot status-available"></span>🟡 Available</span>'
-                    
+
                     card_html += """</div>
                         <div class="card-actions">
                     """
-                    
+
                     st.markdown(card_html, unsafe_allow_html=True)
-                    
+
                     # Single action button that changes based on status
                     if item["type"] == "app":
                         button_label = "Launch"
@@ -486,12 +594,15 @@ if filtered_items:
                     else:
                         button_label = "Install"
                         button_key = f"install_{item['name']}"
-                    
-                    if st.button(button_label, key=button_key, use_container_width=True):
+
+                    if st.button(
+                        button_label, key=button_key, use_container_width=True
+                    ):
                         if item["type"] == "app":
                             if item["status"] == "running":
                                 # Launch running app in new tab
                                 import webbrowser
+
                                 webbrowser.open(f"http://localhost:{item['port']}")
                             else:
                                 # Start the app and open it
@@ -499,7 +610,7 @@ if filtered_items:
                                 import os
                                 import time
                                 import threading
-                                
+
                                 # Map ports to their corresponding app files
                                 app_files = {
                                     8500: "apps/dashboard.py",
@@ -511,48 +622,73 @@ if filtered_items:
                                     8507: "modules/domains/apps/calendar/scheduling_interface.py",
                                     8508: "modules/domains/apps/project-board/project_management.py",
                                     8509: "modules/domains/apps/reconciliation/account_reconciliation.py",
-                                    8510: "apps/network-vizualization/streamlit.py"
+                                    8510: "apps/network-vizualization/streamlit.py",
                                 }
-                                
-                                app_file = app_files.get(item['port'])
+
+                                app_file = app_files.get(item["port"])
                                 if app_file and os.path.exists(app_file):
                                     try:
                                         # Start the app in background
-                                        subprocess.Popen([
-                                            "streamlit", "run", app_file,
-                                            "--server.port", str(item['port']),
-                                            "--server.headless", "true"
-                                        ], cwd=os.path.dirname(os.path.abspath(__file__)))
-                                        
+                                        subprocess.Popen(
+                                            [
+                                                "streamlit",
+                                                "run",
+                                                app_file,
+                                                "--server.port",
+                                                str(item["port"]),
+                                                "--server.headless",
+                                                "true",
+                                            ],
+                                            cwd=os.path.dirname(
+                                                os.path.abspath(__file__)
+                                            ),
+                                        )
+
                                         # Open the app in a new tab after a short delay (no rerun interruption)
                                         def open_after_delay():
-                                            time.sleep(4)  # Slightly longer to ensure app is ready
-                                            webbrowser.open(f"http://localhost:{item['port']}")
-                                        
-                                        threading.Thread(target=open_after_delay, daemon=True).start()
+                                            time.sleep(
+                                                4
+                                            )  # Slightly longer to ensure app is ready
+                                            webbrowser.open(
+                                                f"http://localhost:{item['port']}"
+                                            )
+
+                                        threading.Thread(
+                                            target=open_after_delay, daemon=True
+                                        ).start()
                                         # Don't call st.rerun() here to avoid interrupting the flow
                                     except Exception as e:
-                                        st.error(f"❌ Failed to start {item['name']}: {str(e)}")
+                                        st.error(
+                                            f"❌ Failed to start {item['name']}: {str(e)}"
+                                        )
                                 else:
-                                    st.error(f"❌ App file not found for {item['name']}")
+                                    st.error(
+                                        f"❌ App file not found for {item['name']}"
+                                    )
                         else:
                             # Module installation
                             st.success(f"Installing {item['name']}...")
-                    
+
                     # Close card
                     st.markdown("</div></div></div>", unsafe_allow_html=True)
 
 else:
-    st.markdown("""
+    st.markdown(
+        """
     <div style="text-align: center; padding: 3rem; color: #86868b;">
         <h3>No results found</h3>
         <p>Try adjusting your search or filters</p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 # Footer
-st.markdown("""
+st.markdown(
+    """
 <div style="text-align: center; padding: 2rem; color: #86868b; border-top: 1px solid #f0f0f0; margin-top: 2rem;">
     <p>ABI Marketplace • Simple • Clean • Functional</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)

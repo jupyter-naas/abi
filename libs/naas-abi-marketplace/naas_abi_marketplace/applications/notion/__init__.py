@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "notion"
         """
-        datastore_path: str = "notion"
 
+        datastore_path: str = "notion"

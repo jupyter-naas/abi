@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "spotify"
         """
-        datastore_path: str = "spotify"
 
+        datastore_path: str = "spotify"

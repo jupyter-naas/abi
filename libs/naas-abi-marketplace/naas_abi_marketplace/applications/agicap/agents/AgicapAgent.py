@@ -59,6 +59,7 @@ def create_agent(
     """
     # Initialize module
     from naas_abi_marketplace.applications.agicap import ABIModule
+
     module = ABIModule.get_instance()
     agicap_username = module.configuration.agicap_username
     agicap_password = module.configuration.agicap_password
@@ -75,6 +76,7 @@ def create_agent(
         AgicapIntegrationConfiguration,
         as_tools,
     )
+
     agicap_integration_config = AgicapIntegrationConfiguration(
         username=agicap_username,
         password=agicap_password,

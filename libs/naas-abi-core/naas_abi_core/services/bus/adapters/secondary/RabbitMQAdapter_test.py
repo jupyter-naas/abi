@@ -2,10 +2,12 @@ from unittest.mock import MagicMock
 
 import pika
 import pytest
-from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import \
-    RabbitMQAdapter
-from naas_abi_core.services.bus.tests.bus__secondary_adapter__generic_test import \
-    GenericBusSecondaryAdapterTest
+from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import (
+    RabbitMQAdapter,
+)
+from naas_abi_core.services.bus.tests.bus__secondary_adapter__generic_test import (
+    GenericBusSecondaryAdapterTest,
+)
 
 
 class TestRabbitMQAdapter(GenericBusSecondaryAdapterTest):

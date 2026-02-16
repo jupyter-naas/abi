@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "salesforce"
         """
-        datastore_path: str = "salesforce"
 
+        datastore_path: str = "salesforce"

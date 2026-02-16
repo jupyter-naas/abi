@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Google Sheets features",
             intent_type=IntentType.RAW,
-            intent_target="Google Sheets is a spreadsheet application with collaboration features. I can provide general information, but I currently do not have access to Google Sheets tools to access spreadsheets."
+            intent_target="Google Sheets is a spreadsheet application with collaboration features. I can provide general information, but I currently do not have access to Google Sheets tools to access spreadsheets.",
         ),
         Intent(
             intent_value="Understand spreadsheet management and formulas",
             intent_type=IntentType.RAW,
-            intent_target="Spreadsheet management involves organizing data, using formulas, and collaborating. I can explain the concepts, but I currently do not have access to tools to manage spreadsheets."
+            intent_target="Spreadsheet management involves organizing data, using formulas, and collaborating. I can explain the concepts, but I currently do not have access to tools to manage spreadsheets.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class GoogleSheetsAgent(IntentAgent):
     pass
-

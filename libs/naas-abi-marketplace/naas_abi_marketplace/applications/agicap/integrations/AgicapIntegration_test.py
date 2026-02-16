@@ -8,6 +8,7 @@ from naas_abi_marketplace.applications.agicap.integrations.AgicapIntegration imp
 @pytest.fixture
 def integration() -> AgicapIntegration:
     from naas_abi_marketplace.applications.agicap import ABIModule
+
     module = ABIModule.get_instance()
     agicap_username = module.configuration.agicap_username
     agicap_password = module.configuration.agicap_password

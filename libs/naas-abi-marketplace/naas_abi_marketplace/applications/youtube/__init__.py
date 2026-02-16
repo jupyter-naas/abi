@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "youtube"
         """
-        datastore_path: str = "youtube"
 
+        datastore_path: str = "youtube"

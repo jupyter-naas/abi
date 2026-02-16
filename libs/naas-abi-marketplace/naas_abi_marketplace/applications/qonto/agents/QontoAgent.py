@@ -9,7 +9,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "Qonto"
-DESCRIPTION = "Helps you interact with Qonto for business banking and financial management."
+DESCRIPTION = (
+    "Helps you interact with Qonto for business banking and financial management."
+)
 SYSTEM_PROMPT = """<role>
 You are a Qonto Agent with expertise in business banking, financial management, and account operations.
 </role>
@@ -58,12 +60,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Qonto features",
             intent_type=IntentType.RAW,
-            intent_target="Qonto is a business banking platform for managing accounts and financial operations. I can provide general information, but I currently do not have access to Qonto tools to access banking data."
+            intent_target="Qonto is a business banking platform for managing accounts and financial operations. I can provide general information, but I currently do not have access to Qonto tools to access banking data.",
         ),
         Intent(
             intent_value="Understand business banking and account management",
             intent_type=IntentType.RAW,
-            intent_target="Business banking involves managing accounts, transactions, and financial operations. I can explain the concepts, but I currently do not have access to tools to manage banking data."
+            intent_target="Business banking involves managing accounts, transactions, and financial operations. I can explain the concepts, but I currently do not have access to tools to manage banking data.",
         ),
     ]
 
@@ -89,4 +91,3 @@ def create_agent(
 
 class QontoAgent(IntentAgent):
     pass
-

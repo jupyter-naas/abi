@@ -10,14 +10,17 @@ Async sessions with SQLAlchemy ORM.
 
 import base64
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required, require_workspace_access)
+    User,
+    get_current_user_required,
+    require_workspace_access,
+)
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import SecretModel
@@ -28,13 +31,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 
-
 # ============ Schemas ============
+
 
 class SecretCreate(BaseModel):
     """Create a new secret."""
+
     workspace_id: str = Field(..., min_length=1, max_length=100)
-    key: str = Field(..., min_length=1, max_length=200, pattern=r'^[\w\-. ]+$')
+    key: str = Field(..., min_length=1, max_length=200, pattern=r"^[\w\-. ]+$")
     value: str = Field(..., min_length=1, max_length=50_000)
     description: str = Field(default="", max_length=1000)
     category: Literal["api_keys", "credentials", "tokens", "other"] = "other"
@@ -42,12 +46,14 @@ class SecretCreate(BaseModel):
 
 class SecretUpdate(BaseModel):
     """Update a secret value."""
+
     value: str | None = Field(None, min_length=1, max_length=50_000)
     description: str | None = Field(None, max_length=1000)
 
 
 class SecretResponse(BaseModel):
     """Secret returned to client - value is masked."""
+
     id: str
     workspace_id: str
     key: str
@@ -60,26 +66,28 @@ class SecretResponse(BaseModel):
 
 class SecretBulkImport(BaseModel):
     """Bulk import secrets from .env format."""
+
     workspace_id: str = Field(..., min_length=1, max_length=100)
     env_content: str = Field(..., min_length=1, max_length=500_000)
 
 
 # ============ Encryption Helpers ============
 
+
 def _get_fernet() -> Fernet:
-    key_hash = hashlib.sha256(settings.secret_key.encode('utf-8')).digest()
+    key_hash = hashlib.sha256(settings.secret_key.encode("utf-8")).digest()
     fernet_key = base64.urlsafe_b64encode(key_hash)
     return Fernet(fernet_key)
 
 
 def _encrypt(value: str) -> str:
     f = _get_fernet()
-    return f.encrypt(value.encode('utf-8')).decode('utf-8')
+    return f.encrypt(value.encode("utf-8")).decode("utf-8")
 
 
 def _decrypt(encrypted_value: str) -> str:
     f = _get_fernet()
-    return f.decrypt(encrypted_value.encode('utf-8')).decode('utf-8')
+    return f.decrypt(encrypted_value.encode("utf-8")).decode("utf-8")
 
 
 def _try_decrypt(encrypted_value: str) -> str | None:
@@ -110,13 +118,19 @@ def _to_response(row: SecretModel) -> SecretResponse:
     decrypted = _try_decrypt(row.encrypted_value)
     masked = _mask_value(decrypted) if decrypted else "****"
     return SecretResponse(
-        id=row.id, workspace_id=row.workspace_id, key=row.key,
-        masked_value=masked, description=row.description or "",
-        category=row.category, created_at=row.created_at, updated_at=row.updated_at,
+        id=row.id,
+        workspace_id=row.workspace_id,
+        key=row.key,
+        masked_value=masked,
+        description=row.description or "",
+        category=row.category,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
 # ============ Endpoints ============
+
 
 @router.get("/{workspace_id}")
 async def list_secrets(
@@ -127,7 +141,9 @@ async def list_secrets(
     """List all secrets for a workspace (values are masked)."""
     await require_workspace_access(current_user.id, workspace_id)
     result = await db.execute(
-        select(SecretModel).where(SecretModel.workspace_id == workspace_id).order_by(SecretModel.key)
+        select(SecretModel)
+        .where(SecretModel.workspace_id == workspace_id)
+        .order_by(SecretModel.key)
     )
     return [_to_response(r) for r in result.scalars().all()]
 
@@ -151,22 +167,33 @@ async def create_secret(
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"Secret with key '{secret.key}' already exists")
+        raise HTTPException(
+            status_code=409, detail=f"Secret with key '{secret.key}' already exists"
+        )
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     row = SecretModel(
-        id=str(uuid4()), workspace_id=secret.workspace_id, key=secret.key,
-        encrypted_value=_encrypt(secret.value), description=secret.description,
+        id=str(uuid4()),
+        workspace_id=secret.workspace_id,
+        key=secret.key,
+        encrypted_value=_encrypt(secret.value),
+        description=secret.description,
         category=secret.category or _infer_category(secret.key),
-        created_at=now, updated_at=now,
+        created_at=now,
+        updated_at=now,
     )
     db.add(row)
     await db.commit()
 
     return SecretResponse(
-        id=row.id, workspace_id=row.workspace_id, key=row.key,
-        masked_value=_mask_value(secret.value), description=secret.description,
-        category=row.category, created_at=now, updated_at=now,
+        id=row.id,
+        workspace_id=row.workspace_id,
+        key=row.key,
+        masked_value=_mask_value(secret.value),
+        description=secret.description,
+        category=row.category,
+        created_at=now,
+        updated_at=now,
     )
 
 
@@ -187,7 +214,7 @@ async def update_secret(
     if role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Only admins and owners can manage secrets")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     row.updated_at = now
 
     if update.value is not None:
@@ -232,7 +259,7 @@ async def bulk_import_secrets(
 
     imported = 0
     updated = 0
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     for line in data.env_content.split("\n"):
         trimmed = line.strip()
@@ -244,10 +271,11 @@ async def bulk_import_secrets(
             continue
 
         key = trimmed[:eq_idx].strip()
-        value = trimmed[eq_idx + 1:].strip()
+        value = trimmed[eq_idx + 1 :].strip()
 
-        if (value.startswith('"') and value.endswith('"')) or \
-           (value.startswith("'") and value.endswith("'")):
+        if (value.startswith('"') and value.endswith('"')) or (
+            value.startswith("'") and value.endswith("'")
+        ):
             value = value[1:-1]
 
         if not key:
@@ -268,11 +296,18 @@ async def bulk_import_secrets(
             existing.updated_at = now
             updated += 1
         else:
-            db.add(SecretModel(
-                id=str(uuid4()), workspace_id=data.workspace_id, key=key,
-                encrypted_value=encrypted, description="",
-                category=_infer_category(key), created_at=now, updated_at=now,
-            ))
+            db.add(
+                SecretModel(
+                    id=str(uuid4()),
+                    workspace_id=data.workspace_id,
+                    key=key,
+                    encrypted_value=encrypted,
+                    description="",
+                    category=_infer_category(key),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
             imported += 1
 
     await db.commit()

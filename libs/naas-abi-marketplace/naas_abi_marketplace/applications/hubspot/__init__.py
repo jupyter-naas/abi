@@ -26,5 +26,6 @@ class ABIModule(BaseModule):
         config:
             hubspot_access_token: "{{ secret.HUBSPOT_ACCESS_TOKEN }}"
         """
+
         hubspot_access_token: str
         datastore_path: str = "hubspot"

@@ -9,7 +9,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "Google Analytics"
-DESCRIPTION = "Helps you interact with Google Analytics for website analytics and data insights."
+DESCRIPTION = (
+    "Helps you interact with Google Analytics for website analytics and data insights."
+)
 SYSTEM_PROMPT = """<role>
 You are a Google Analytics Agent with expertise in web analytics, data analysis, and reporting.
 </role>
@@ -58,12 +60,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Google Analytics features",
             intent_type=IntentType.RAW,
-            intent_target="Google Analytics provides website analytics and reporting tools for tracking traffic and user behavior. I can provide general information, but I currently do not have access to Google Analytics tools to retrieve data."
+            intent_target="Google Analytics provides website analytics and reporting tools for tracking traffic and user behavior. I can provide general information, but I currently do not have access to Google Analytics tools to retrieve data.",
         ),
         Intent(
             intent_value="Understand analytics data and reporting",
             intent_type=IntentType.RAW,
-            intent_target="Analytics involves tracking website traffic, user behavior, and generating reports. I can explain the concepts, but I currently do not have access to tools to retrieve analytics data."
+            intent_target="Analytics involves tracking website traffic, user behavior, and generating reports. I can explain the concepts, but I currently do not have access to tools to retrieve analytics data.",
         ),
     ]
 
@@ -89,4 +91,3 @@ def create_agent(
 
 class GoogleAnalyticsAgent(IntentAgent):
     pass
-

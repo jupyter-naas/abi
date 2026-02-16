@@ -8,7 +8,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "Stripe"
-DESCRIPTION = "Helps you interact with Stripe for payment processing and financial operations."
+DESCRIPTION = (
+    "Helps you interact with Stripe for payment processing and financial operations."
+)
 SYSTEM_PROMPT = """<role>
 You are a Stripe Agent with expertise in payment processing, subscriptions, and financial transactions.
 </role>
@@ -57,12 +59,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Stripe features",
             intent_type=IntentType.RAW,
-            intent_target="Stripe is a payment processing platform for accepting payments and managing subscriptions. I can provide general information, but I currently do not have access to Stripe tools to process payments."
+            intent_target="Stripe is a payment processing platform for accepting payments and managing subscriptions. I can provide general information, but I currently do not have access to Stripe tools to process payments.",
         ),
         Intent(
             intent_value="Understand payment processing and subscriptions",
             intent_type=IntentType.RAW,
-            intent_target="Payment processing involves accepting payments, managing customers, and handling subscriptions. I can explain the concepts, but I currently do not have access to tools to process payments."
+            intent_target="Payment processing involves accepting payments, managing customers, and handling subscriptions. I can explain the concepts, but I currently do not have access to tools to process payments.",
         ),
     ]
 
@@ -88,4 +90,3 @@ def create_agent(
 
 class StripeAgent(IntentAgent):
     pass
-

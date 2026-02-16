@@ -5,7 +5,6 @@ if TYPE_CHECKING:
 
 
 class ServiceBase:
-    
     def __init__(self) -> None:
         self._services: Optional["IEngine.Services"] = None
 

@@ -9,14 +9,17 @@ def agent():
 
 def test_agent_name(agent):
     result = agent.invoke("What is your name?")
-    
+
     assert result is not None, result
     assert "Stripe" in result, result
 
 
 def test_agent_system_prompt(agent):
     result = agent.invoke("What can you help me with?")
-    
-    assert result is not None, result
-    assert "stripe" in result.lower() or "payment" in result.lower() or "subscription" in result.lower(), result
 
+    assert result is not None, result
+    assert (
+        "stripe" in result.lower()
+        or "payment" in result.lower()
+        or "subscription" in result.lower()
+    ), result

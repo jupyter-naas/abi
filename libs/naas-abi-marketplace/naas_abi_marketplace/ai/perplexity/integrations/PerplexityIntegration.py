@@ -150,13 +150,13 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
         StructuredTool(
             name="perplexity_quick_search",
             description="A lightweight, cost-effective search model optimized for quick, grounded answers with real-time web search.",
-            func=lambda question,
-            user_location,
-            search_context_size: integration.search_web(
-                question=question,
-                user_location=user_location,
-                search_context_size=search_context_size,
-                model="sonar",
+            func=lambda question, user_location, search_context_size: (
+                integration.search_web(
+                    question=question,
+                    user_location=user_location,
+                    search_context_size=search_context_size,
+                    model="sonar",
+                )
             ),
             args_schema=SearchWebSchema,
             return_direct=True,
@@ -164,13 +164,13 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
         StructuredTool(
             name="perplexity_search",
             description="Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar.",
-            func=lambda question,
-            user_location,
-            search_context_size: integration.search_web(
-                question=question,
-                user_location=user_location,
-                search_context_size=search_context_size,
-                model="sonar-pro",
+            func=lambda question, user_location, search_context_size: (
+                integration.search_web(
+                    question=question,
+                    user_location=user_location,
+                    search_context_size=search_context_size,
+                    model="sonar-pro",
+                )
             ),
             args_schema=SearchWebSchema,
             return_direct=True,

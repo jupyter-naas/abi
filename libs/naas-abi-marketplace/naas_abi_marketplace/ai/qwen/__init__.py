@@ -23,4 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "qwen"
         """
+
         datastore_path: str = "qwen"

@@ -1154,14 +1154,10 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="create_ontology",
             description="Create a new ontology in a given workspace.",
-            func=lambda workspace_id,
-            label,
-            source,
-            level,
-            description,
-            logo_url,
-            is_public: integration.create_ontology(
-                workspace_id, label, source, level, description, logo_url, is_public
+            func=lambda workspace_id, label, source, level, description, logo_url, is_public: (
+                integration.create_ontology(
+                    workspace_id, label, source, level, description, logo_url, is_public
+                )
             ),
             args_schema=CreateOntologySchema,
         ),
@@ -1182,22 +1178,17 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="update_ontology",
             description="Update an existing ontology in a given workspace.",
-            func=lambda workspace_id,
-            ontology_id,
-            download_url,
-            source,
-            level,
-            description,
-            logo_url,
-            is_public: integration.update_ontology(
-                workspace_id,
-                ontology_id,
-                download_url,
-                source,
-                level,
-                description,
-                logo_url,
-                is_public,
+            func=lambda workspace_id, ontology_id, download_url, source, level, description, logo_url, is_public: (
+                integration.update_ontology(
+                    workspace_id,
+                    ontology_id,
+                    download_url,
+                    source,
+                    level,
+                    description,
+                    logo_url,
+                    is_public,
+                )
             ),
             args_schema=UpdateOntologySchema,
         ),
@@ -1288,28 +1279,28 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="list_workspace_storage_objects",
             description="List all objects and subdirectories in a workspace storage location",
-            func=lambda workspace_id,
-            storage_name,
-            prefix: integration.list_workspace_storage_objects(
-                workspace_id, storage_name, prefix
+            func=lambda workspace_id, storage_name, prefix: (
+                integration.list_workspace_storage_objects(
+                    workspace_id, storage_name, prefix
+                )
             ),
             args_schema=ListWorkspaceStorageObjectsSchema,
         ),
         StructuredTool(
             name="create_workspace_storage",
             description="Create a new storage in a workspace",
-            func=lambda workspace_id,
-            storage_name: integration.create_workspace_storage(
-                workspace_id, storage_name
+            func=lambda workspace_id, storage_name: (
+                integration.create_workspace_storage(workspace_id, storage_name)
             ),
             args_schema=CreateWorkspaceStorageSchema,
         ),
         StructuredTool(
             name="create_workspace_storage_credentials",
             description="Create credentials for workspace storage",
-            func=lambda workspace_id,
-            storage_name: integration.create_workspace_storage_credentials(
-                workspace_id, storage_name
+            func=lambda workspace_id, storage_name: (
+                integration.create_workspace_storage_credentials(
+                    workspace_id, storage_name
+                )
             ),
             args_schema=CreateWorkspaceStorageCredentialsSchema,
         ),

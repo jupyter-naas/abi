@@ -33,13 +33,26 @@ class ReportBugWorkflowConfiguration(WorkflowConfiguration):
         priority_field_id: ID of the priority field to create the bug report in
         iteration_field_id: ID of the iteration field to create the bug report in
     """
+
     github_integration_config: GitHubIntegrationConfiguration
     github_graphql_integration_config: GitHubGraphqlIntegrationConfiguration
-    data_store_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
-    project_node_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.project_node_id)
-    status_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.status_field_id)
-    priority_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.priority_field_id)
-    iteration_field_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.iteration_field_id)
+    data_store_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
+    project_node_id: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.project_node_id
+    )
+    status_field_id: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.status_field_id
+    )
+    priority_field_id: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.priority_field_id
+    )
+    iteration_field_id: str = field(
+        default_factory=lambda: (
+            ABIModule.get_instance().configuration.iteration_field_id
+        )
+    )
 
 
 class ReportBugParameters(WorkflowParameters):
@@ -54,18 +67,12 @@ class ReportBugParameters(WorkflowParameters):
         priority_id: ID of the priority of the bug report
         status_id: ID of the status of the bug report
     """
-    issue_title: Annotated[
-        str, 
-        Field(
-            ..., 
-            description="The title of the bug report"
-        )
-    ]
+
+    issue_title: Annotated[str, Field(..., description="The title of the bug report")]
     issue_body: Annotated[
         str,
         Field(
-            ..., 
-            description="The description of the bug, including steps to reproduce"
+            ..., description="The description of the bug, including steps to reproduce"
         ),
     ]
     repo_name: Annotated[
@@ -75,32 +82,23 @@ class ReportBugParameters(WorkflowParameters):
             description="The name of the repository to create the bug report in",
         ),
     ]
-    labels: Annotated[
-        list,
-        Field(
-            ["bug"],
-            description="The labels of the bug report"
-        )
-    ]
+    labels: Annotated[list, Field(["bug"], description="The labels of the bug report")]
     priority_id: Annotated[
-            str, 
-            Field(
-                ABIModule.get_instance().configuration.priority_option_id,
-                description="The ID of the priority of the bug report"
-            )
+        str,
+        Field(
+            ABIModule.get_instance().configuration.priority_option_id,
+            description="The ID of the priority of the bug report",
+        ),
     ]
     status_id: Annotated[
-        str, 
+        str,
         Field(
             ABIModule.get_instance().configuration.status_option_id,
-            description="The ID of the status of the bug report"
-        )
+            description="The ID of the status of the bug report",
+        ),
     ]
     assignees: Optional[
-        Annotated[
-            list,
-            Field(description="The assignees of the bug report")
-        ]
+        Annotated[list, Field(description="The assignees of the bug report")]
     ] = []
 
 

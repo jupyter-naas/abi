@@ -34,6 +34,7 @@ class ABIModule(BaseModule):
             priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
             priority_option_id: "4fb76f2d"
         """
+
         default_repository: str
         github_project_id: int
         project_node_id: str

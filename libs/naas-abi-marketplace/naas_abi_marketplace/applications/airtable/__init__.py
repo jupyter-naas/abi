@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "airtable"
         """
-        datastore_path: str = "airtable"
 
+        datastore_path: str = "airtable"

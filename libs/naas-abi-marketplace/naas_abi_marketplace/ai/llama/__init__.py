@@ -23,4 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "llama"
         """
+
         datastore_path: str = "llama"

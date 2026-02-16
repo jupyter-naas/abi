@@ -23,5 +23,6 @@ class ABIModule(BaseModule):
         config:
             xai_api_key: "{{ secret.XAI_API_KEY }}"
         """
+
         xai_api_key: str
         datastore_path: str = "grok"

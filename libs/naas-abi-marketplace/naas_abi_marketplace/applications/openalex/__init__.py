@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "openalex"
         """
-        datastore_path: str = "openalex"
 
+        datastore_path: str = "openalex"

@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "slack"
         """
-        datastore_path: str = "slack"
 
+        datastore_path: str = "slack"

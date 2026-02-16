@@ -61,6 +61,7 @@ def create_agent(
         as_tools,
         SendGridIntegrationConfiguration,
     )
+
     integration_config = SendGridIntegrationConfiguration(api_key=api_key)
     tools += as_tools(integration_config)
 
@@ -69,12 +70,12 @@ def create_agent(
         Intent(
             intent_value="Get information about SendGrid email services",
             intent_type=IntentType.RAW,
-            intent_target="SendGrid is an email delivery platform that provides transactional and marketing email services. I can provide general information, but I currently do not have access to SendGrid tools to perform operations."
+            intent_target="SendGrid is an email delivery platform that provides transactional and marketing email services. I can provide general information, but I currently do not have access to SendGrid tools to perform operations.",
         ),
         Intent(
             intent_value="Understand email delivery and management",
             intent_type=IntentType.RAW,
-            intent_target="Email delivery involves sending emails through SMTP or API. I can explain best practices, but I currently do not have access to tools to send or manage emails."
+            intent_target="Email delivery involves sending emails through SMTP or API. I can explain best practices, but I currently do not have access to tools to send or manage emails.",
         ),
     ]
 
@@ -100,4 +101,3 @@ def create_agent(
 
 class SendGridAgent(IntentAgent):
     pass
-

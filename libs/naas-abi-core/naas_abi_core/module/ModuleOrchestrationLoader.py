@@ -23,8 +23,12 @@ class ModuleOrchestrationLoader:
                     orchestration_module_path = (
                         f"{class_.__module__}.orchestrations.{file.replace('.py', '')}"
                     )
-                    logger.debug(f"Importing orchestration module from {orchestration_module_path}")
-                    orchestration_module = importlib.import_module(orchestration_module_path)
+                    logger.debug(
+                        f"Importing orchestration module from {orchestration_module_path}"
+                    )
+                    orchestration_module = importlib.import_module(
+                        orchestration_module_path
+                    )
                     for key, value in orchestration_module.__dict__.items():
                         if (
                             isinstance(value, type)
@@ -35,7 +39,9 @@ class ModuleOrchestrationLoader:
                             ]  # This makes sure we only load agents from the same module.
                         ):
                             if not hasattr(value, "New"):
-                                logger.error(f"Orchestration {key} in module {class_.__module__} does not have a New method")
+                                logger.error(
+                                    f"Orchestration {key} in module {class_.__module__} does not have a New method"
+                                )
                                 continue
 
                             orchestrations.append(getattr(orchestration_module, key))

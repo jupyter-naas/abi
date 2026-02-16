@@ -65,6 +65,7 @@ def create_agent(
         as_tools,
         OpenRouterAPIIntegrationConfiguration,
     )
+
     integration_config = OpenRouterAPIIntegrationConfiguration(api_key=api_key)
     tools += as_tools(integration_config)
 
@@ -73,12 +74,12 @@ def create_agent(
         Intent(
             intent_value="Get information about OpenRouter and available models",
             intent_type=IntentType.RAW,
-            intent_target="OpenRouter provides access to multiple AI models through a unified API. I can provide general information, but I currently do not have access to OpenRouter tools to route requests."
+            intent_target="OpenRouter provides access to multiple AI models through a unified API. I can provide general information, but I currently do not have access to OpenRouter tools to route requests.",
         ),
         Intent(
             intent_value="Understand AI model routing and selection",
             intent_type=IntentType.RAW,
-            intent_target="Model routing involves selecting the best AI model for a given task. I can explain the concepts, but I currently do not have access to tools to perform routing."
+            intent_target="Model routing involves selecting the best AI model for a given task. I can explain the concepts, but I currently do not have access to tools to perform routing.",
         ),
         Intent(
             intent_value="List all available models from OpenRouter",
@@ -93,7 +94,9 @@ def create_agent(
     ]
 
     # Set configuration
-    system_prompt = SYSTEM_PROMPT.replace("[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools]))
+    system_prompt = SYSTEM_PROMPT.replace(
+        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+    )
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=system_prompt)
 
@@ -115,4 +118,3 @@ def create_agent(
 
 class OpenRouterAgent(IntentAgent):
     pass
-

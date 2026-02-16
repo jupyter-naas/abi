@@ -8,8 +8,8 @@ requests: Any = importlib.import_module("requests")
 
 PMC_FTP_BASE = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/"
 
-class PubMedCentralDownloader:
 
+class PubMedCentralDownloader:
     def find_pdf_path(self, pmcid: str, oa_file_list_path: str) -> str:
         """
         Stream over oa_file_list.txt line by line to find the relative archive (or PDF) path
@@ -32,7 +32,9 @@ class PubMedCentralDownloader:
 
         raise FileNotFoundError(f"No entry found for {pmcid}")
 
-    def open_pmc_pdf_stream(self, pmcid: str, oa_file_list_path: str = "oa_file_list.txt") -> BinaryIO:
+    def open_pmc_pdf_stream(
+        self, pmcid: str, oa_file_list_path: str = "oa_file_list.txt"
+    ) -> BinaryIO:
         """
         Returns an open binary stream to the PMC PDF.
         The caller is responsible for closing the stream.
@@ -43,9 +45,7 @@ class PubMedCentralDownloader:
         response = requests.get(
             url,
             stream=True,
-            headers={
-                "User-Agent": "PMC-open-stream/1.0 (mailto:you@example.com)"
-            },
+            headers={"User-Agent": "PMC-open-stream/1.0 (mailto:you@example.com)"},
             timeout=60,
         )
         response.raise_for_status()
@@ -57,7 +57,10 @@ class PubMedCentralDownloader:
             # The OA file list points to a tarball; download it fully then extract the first PDF.
             archive_bytes = response.content
             with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
-                pdf_member = next((m for m in tar.getmembers() if m.name.lower().endswith(".pdf")), None)
+                pdf_member = next(
+                    (m for m in tar.getmembers() if m.name.lower().endswith(".pdf")),
+                    None,
+                )
                 if not pdf_member:
                     raise FileNotFoundError(f"No PDF found inside archive for {pmcid}")
 
@@ -71,4 +74,3 @@ class PubMedCentralDownloader:
             return io.BytesIO(pdf_bytes)
 
         raise FileNotFoundError(f"Unsupported path type for {pmcid}: {relative_path}")
-

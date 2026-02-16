@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Google Maps features",
             intent_type=IntentType.RAW,
-            intent_target="Google Maps provides location services, geocoding, directions, and mapping data. I can provide general information, but I currently do not have access to Google Maps tools to retrieve location data."
+            intent_target="Google Maps provides location services, geocoding, directions, and mapping data. I can provide general information, but I currently do not have access to Google Maps tools to retrieve location data.",
         ),
         Intent(
             intent_value="Understand location services and geocoding",
             intent_type=IntentType.RAW,
-            intent_target="Location services involve converting addresses to coordinates and finding directions. I can explain the concepts, but I currently do not have access to tools to perform geocoding."
+            intent_target="Location services involve converting addresses to coordinates and finding directions. I can explain the concepts, but I currently do not have access to tools to perform geocoding.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class GoogleMapsAgent(IntentAgent):
     pass
-

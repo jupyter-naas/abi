@@ -8,7 +8,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "AWS"
-DESCRIPTION = "Helps you interact with Amazon Web Services for cloud infrastructure and services."
+DESCRIPTION = (
+    "Helps you interact with Amazon Web Services for cloud infrastructure and services."
+)
 SYSTEM_PROMPT = """<role>
 You are an AWS Agent with expertise in cloud infrastructure, services, and resource management.
 </role>
@@ -57,12 +59,12 @@ def create_agent(
         Intent(
             intent_value="Get information about AWS services",
             intent_type=IntentType.RAW,
-            intent_target="AWS provides cloud computing services including EC2, S3, Lambda, and many others. I can provide general information, but I currently do not have access to AWS tools to manage resources."
+            intent_target="AWS provides cloud computing services including EC2, S3, Lambda, and many others. I can provide general information, but I currently do not have access to AWS tools to manage resources.",
         ),
         Intent(
             intent_value="Understand cloud infrastructure and resource management",
             intent_type=IntentType.RAW,
-            intent_target="Cloud infrastructure involves managing compute, storage, and networking resources. I can explain the concepts, but I currently do not have access to tools to manage infrastructure."
+            intent_target="Cloud infrastructure involves managing compute, storage, and networking resources. I can explain the concepts, but I currently do not have access to tools to manage infrastructure.",
         ),
     ]
 
@@ -88,4 +90,3 @@ def create_agent(
 
 class AWSAgent(IntentAgent):
     pass
-

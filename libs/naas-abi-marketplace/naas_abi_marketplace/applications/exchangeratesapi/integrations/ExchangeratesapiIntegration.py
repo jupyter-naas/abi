@@ -68,10 +68,9 @@ class ExchangeratesapiIntegration(Integration):
         return self._make_request("GET", "/symbols")
 
     @cache(
-        lambda self,
-        date,
-        base,
-        symbols: f"get_exchange_rates_{date}_{base}_{('ALL' if not symbols else ','.join(symbols))}",
+        lambda self, date, base, symbols: (
+            f"get_exchange_rates_{date}_{base}_{('ALL' if not symbols else ','.join(symbols))}"
+        ),
         cache_type=DataType.JSON,
     )
     def get_exchange_rates(

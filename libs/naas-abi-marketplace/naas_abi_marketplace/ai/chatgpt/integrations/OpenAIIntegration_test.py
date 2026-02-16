@@ -32,6 +32,7 @@ def test_retrieve_model(integration: OpenAIIntegration):
     response = integration.retrieve_model(model_id="gpt-4.1-mini")
     assert response is not None, response
 
+
 def test_create_chat_completion(integration: OpenAIIntegration):
     response = integration.create_chat_completion(
         prompt="What is the capital of France?",
@@ -40,6 +41,7 @@ def test_create_chat_completion(integration: OpenAIIntegration):
     )
     assert response is not None, response
     assert "Paris" in response["content"], response
+
 
 def test_create_chat_completion_o3_mini(integration: OpenAIIntegration):
     response = integration.create_chat_completion(

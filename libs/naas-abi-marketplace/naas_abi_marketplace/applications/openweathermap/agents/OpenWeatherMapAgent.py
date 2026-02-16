@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about OpenWeatherMap features",
             intent_type=IntentType.RAW,
-            intent_target="OpenWeatherMap provides weather data, forecasts, and meteorological information. I can provide general information, but I currently do not have access to OpenWeatherMap tools to retrieve weather data."
+            intent_target="OpenWeatherMap provides weather data, forecasts, and meteorological information. I can provide general information, but I currently do not have access to OpenWeatherMap tools to retrieve weather data.",
         ),
         Intent(
             intent_value="Understand weather data and forecasts",
             intent_type=IntentType.RAW,
-            intent_target="Weather data includes current conditions, forecasts, and historical data. I can explain the concepts, but I currently do not have access to tools to retrieve weather data."
+            intent_target="Weather data includes current conditions, forecasts, and historical data. I can explain the concepts, but I currently do not have access to tools to retrieve weather data.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class OpenWeatherMapAgent(IntentAgent):
     pass
-

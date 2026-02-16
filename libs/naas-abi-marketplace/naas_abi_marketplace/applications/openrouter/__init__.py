@@ -23,5 +23,6 @@ class ABIModule(BaseModule):
         config:
             openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
         """
+
         openrouter_api_key: str
         datastore_path: str = "openrouter"

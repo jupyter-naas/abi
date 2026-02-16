@@ -77,9 +77,7 @@ class TestProtectedEndpoints:
 
         from app.api.endpoints.auth import create_access_token
 
-        token = create_access_token(
-            data={"sub": "user-test"}, expires_delta=timedelta(seconds=-1)
-        )
+        token = create_access_token(data={"sub": "user-test"}, expires_delta=timedelta(seconds=-1))
         response = await client.get(
             "/api/chat/conversations?workspace_id=ws-test",
             headers={"Authorization": f"Bearer {token}"},

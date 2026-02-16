@@ -154,7 +154,9 @@ class AddPowerPointPresentationPipeline(Pipeline):
 
         # Add objects if not exists
         presentation_hash = create_hash_from_string(identifier)
-        presentation_uri = self.__sparql_utils.get_identifier(presentation_hash, type=ABI.unique_id)
+        presentation_uri = self.__sparql_utils.get_identifier(
+            presentation_hash, type=ABI.unique_id
+        )
         if presentation_uri is not None:
             logger.info(f"🛑 Presentation already exists: {presentation_uri}")
             return self.__sparql_utils.get_subject_graph(presentation_uri, depth=2)

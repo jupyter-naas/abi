@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from typing import (TYPE_CHECKING, Dict, List, Protocol, Union,
-                    runtime_checkable)
+from typing import TYPE_CHECKING, Dict, List, Protocol, Union, runtime_checkable
 
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
-from naas_abi_core.services.object_storage.ObjectStorageService import \
-    ObjectStorageService
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
-from naas_abi_core.services.vector_store.VectorStoreService import \
-    VectorStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
 if TYPE_CHECKING:
     from naas_abi_core.module.Module import BaseModule
@@ -19,8 +17,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class ServicesAware(Protocol):
-    def set_services(self, services: "IEngine.Services") -> None:
-        ...
+    def set_services(self, services: "IEngine.Services") -> None: ...
 
 
 class IEngine:

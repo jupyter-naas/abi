@@ -23,5 +23,6 @@ class ABIModule(BaseModule):
         config:
             exchangeratesapi_api_key: "{{ secret.EXCHANGERATESAPI_API_KEY }}"
         """
+
         exchangeratesapi_api_key: str
         datastore_path: str = "exchangeratesapi"

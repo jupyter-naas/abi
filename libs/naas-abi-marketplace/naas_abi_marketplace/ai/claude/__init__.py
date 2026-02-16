@@ -24,6 +24,7 @@ class ABIModule(BaseModule):
         config:
             anthropic_api_key: "{{ secret.ANTHROPIC_API_KEY }}"
         """
+
         anthropic_api_key: str
         datastore_path: str = "claude"
 

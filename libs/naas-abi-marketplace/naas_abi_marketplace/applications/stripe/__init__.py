@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "stripe"
         """
-        datastore_path: str = "stripe"
 
+        datastore_path: str = "stripe"

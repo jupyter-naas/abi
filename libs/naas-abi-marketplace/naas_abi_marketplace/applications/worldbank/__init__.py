@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "worldbank"
         """
-        datastore_path: str = "worldbank"
 
+        datastore_path: str = "worldbank"

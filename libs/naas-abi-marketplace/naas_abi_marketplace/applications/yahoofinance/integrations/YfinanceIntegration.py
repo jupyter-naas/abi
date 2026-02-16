@@ -27,7 +27,9 @@ class YfinanceIntegrationConfiguration(IntegrationConfiguration):
         data_store_path (str): Path to store cached financial data
     """
 
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class YfinanceIntegration(Integration):
@@ -53,7 +55,9 @@ class YfinanceIntegration(Integration):
     def __init__(self, configuration: YfinanceIntegrationConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
 
     def _result_df_to_dict(self, result: pd.DataFrame | None) -> List[Dict]:
         """Convert DataFrame to dictionary format with proper indexing.

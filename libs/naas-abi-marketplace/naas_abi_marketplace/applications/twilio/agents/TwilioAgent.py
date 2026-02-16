@@ -57,12 +57,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Twilio features",
             intent_type=IntentType.RAW,
-            intent_target="Twilio provides communication services for SMS, voice calls, and messaging. I can provide general information, but I currently do not have access to Twilio tools to send messages."
+            intent_target="Twilio provides communication services for SMS, voice calls, and messaging. I can provide general information, but I currently do not have access to Twilio tools to send messages.",
         ),
         Intent(
             intent_value="Understand messaging and voice communication",
             intent_type=IntentType.RAW,
-            intent_target="Communication services involve sending SMS, making voice calls, and managing messaging workflows. I can explain the concepts, but I currently do not have access to tools to send messages."
+            intent_target="Communication services involve sending SMS, making voice calls, and managing messaging workflows. I can explain the concepts, but I currently do not have access to tools to send messages.",
         ),
     ]
 
@@ -88,4 +88,3 @@ def create_agent(
 
 class TwilioAgent(IntentAgent):
     pass
-

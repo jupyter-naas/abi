@@ -7,18 +7,19 @@ import sys
 from functools import lru_cache
 from typing import Any
 
-from pydantic import PostgresDsn, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Known-insecure secret keys that must be rejected
-_INSECURE_SECRETS = frozenset({
-    "",
-    "change-me-in-production",
-    "change-me-in-production-use-a-long-random-string",
-    "secret",
-    "password",
-    "changeme",
-})
+_INSECURE_SECRETS = frozenset(
+    {
+        "",
+        "change-me-in-production",
+        "change-me-in-production-use-a-long-random-string",
+        "secret",
+        "password",
+        "changeme",
+    }
+)
 
 
 class Settings(BaseSettings):
@@ -59,7 +60,11 @@ class Settings(BaseSettings):
         # From JSON array (CORS_ORIGINS in .env)
         if self.cors_origins:
             try:
-                parsed = json.loads(self.cors_origins) if isinstance(self.cors_origins, str) else self.cors_origins
+                parsed = (
+                    json.loads(self.cors_origins)
+                    if isinstance(self.cors_origins, str)
+                    else self.cors_origins
+                )
                 if isinstance(parsed, list):
                     for o in parsed:
                         if isinstance(o, str) and o.strip():
@@ -84,16 +89,16 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
-    
+
     # Rate Limiting
     rate_limit_enabled: bool = True
     rate_limit_login_attempts: int = 5  # Max login attempts per window
     rate_limit_window_seconds: int = 300  # 5-minute window
-    
+
     # Demo data seeding (idempotent startup check)
     # When enabled, startup seeds demo data only if users table is empty.
     auto_seed_demo_data: bool = True
-    
+
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
         # Disable rate limiting in development to avoid blocking during hot reload
@@ -105,7 +110,7 @@ class Settings(BaseSettings):
         if not (self.environment == "development" or self.nexus_env == "local"):
             self.enable_ollama_autostart = False
             self.auto_seed_demo_data = False
-    
+
     # Security Headers
     enable_security_headers: bool = True
     content_security_policy: str | None = None  # Set in production
@@ -127,7 +132,7 @@ class Settings(BaseSettings):
     # Local AI (Ollama) autostart
     # Default OFF; enabled automatically in local development.
     enable_ollama_autostart: bool = False
-    
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -138,12 +143,9 @@ def get_settings() -> Settings:
 settings = get_settings()
 
 
-
-
-
 def validate_settings_on_startup() -> None:
     """Validate critical settings before the app starts serving requests.
-    
+
     Called during app lifespan startup. Refuses to start if SECRET_KEY
     is a known-insecure value in non-development environments.
     """
@@ -159,7 +161,7 @@ def validate_settings_on_startup() -> None:
                 "authentication tokens.\n"
                 "\n"
                 "Generate a secure key:\n"
-                "  python -c \"import secrets; print(secrets.token_urlsafe(64))\"\n"
+                '  python -c "import secrets; print(secrets.token_urlsafe(64))"\n'
                 "\n"
                 "Set it in your .env file:\n"
                 "  SECRET_KEY=<your-generated-key>\n"

@@ -9,7 +9,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "OpenAlex"
-DESCRIPTION = "Helps you interact with OpenAlex for academic research and publication data."
+DESCRIPTION = (
+    "Helps you interact with OpenAlex for academic research and publication data."
+)
 SYSTEM_PROMPT = """<role>
 You are an OpenAlex Agent with expertise in academic research, publications, and scholarly data.
 </role>
@@ -58,12 +60,12 @@ def create_agent(
         Intent(
             intent_value="Get information about OpenAlex features",
             intent_type=IntentType.RAW,
-            intent_target="OpenAlex is an open catalog of scholarly works, authors, and institutions. I can provide general information, but I currently do not have access to OpenAlex tools to retrieve research data."
+            intent_target="OpenAlex is an open catalog of scholarly works, authors, and institutions. I can provide general information, but I currently do not have access to OpenAlex tools to retrieve research data.",
         ),
         Intent(
             intent_value="Understand research and publication discovery",
             intent_type=IntentType.RAW,
-            intent_target="Research discovery involves finding papers, authors, and academic information. I can explain the concepts, but I currently do not have access to tools to search publications."
+            intent_target="Research discovery involves finding papers, authors, and academic information. I can explain the concepts, but I currently do not have access to tools to search publications.",
         ),
     ]
 
@@ -89,4 +91,3 @@ def create_agent(
 
 class OpenAlexAgent(IntentAgent):
     pass
-

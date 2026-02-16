@@ -6,14 +6,13 @@ Uses async database operations to avoid locking.
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import HTTPException, status
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def generate_refresh_token() -> str:
@@ -34,28 +33,30 @@ async def create_refresh_token(
 ) -> str:
     """
     Create a new refresh token for a user.
-    
+
     Args:
         user_id: User ID
         access_token_jti: JTI of the associated access token
         user_agent: User agent string
         ip_address: IP address
-        
+
     Returns:
         The refresh token (plaintext, return to client)
     """
     token = generate_refresh_token()
     token_hash = hash_token(token)
     token_id = f"rt-{uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=settings.refresh_token_expire_days)
-    
+    now = datetime.now(UTC).replace(tzinfo=None)
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+        days=settings.refresh_token_expire_days
+    )
+
     async with async_engine.begin() as conn:
         await conn.execute(
             text("""
-                INSERT INTO refresh_tokens 
+                INSERT INTO refresh_tokens
                 (id, user_id, token_hash, access_token_jti, expires_at, created_at, user_agent, ip_address)
-                VALUES 
+                VALUES
                 (:id, :user_id, :token_hash, :access_token_jti, :expires_at, :created_at, :user_agent, :ip_address)
             """),
             {
@@ -69,26 +70,26 @@ async def create_refresh_token(
                 "ip_address": ip_address,
             },
         )
-    
+
     return token
 
 
 async def validate_refresh_token(token: str) -> str:
     """
     Validate a refresh token and return the user_id.
-    
+
     Args:
         token: The refresh token
-        
+
     Returns:
         The user_id
-        
+
     Raises:
         HTTPException: If token is invalid, expired, or revoked
     """
     token_hash = hash_token(token)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    
+    now = datetime.now(UTC).replace(tzinfo=None)
+
     async with async_engine.begin() as conn:
         result = await conn.execute(
             text("""
@@ -99,25 +100,25 @@ async def validate_refresh_token(token: str) -> str:
             {"token_hash": token_hash},
         )
         row = result.fetchone()
-        
+
         if not row:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token",
             )
-        
+
         if row.revoked_at:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token has been revoked",
             )
-        
+
         if row.expires_at < now:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token has expired",
             )
-        
+
         # Update last_used_at
         await conn.execute(
             text("""
@@ -127,21 +128,21 @@ async def validate_refresh_token(token: str) -> str:
             """),
             {"now": now, "token_hash": token_hash},
         )
-        
+
         return row.user_id
 
 
 async def revoke_refresh_token(token: str, reason: str = "user_requested") -> None:
     """
     Revoke a refresh token.
-    
+
     Args:
         token: The refresh token
         reason: Reason for revocation
     """
     token_hash = hash_token(token)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    
+    now = datetime.now(UTC).replace(tzinfo=None)
+
     async with async_engine.begin() as conn:
         await conn.execute(
             text("""
@@ -156,13 +157,13 @@ async def revoke_refresh_token(token: str, reason: str = "user_requested") -> No
 async def revoke_all_user_tokens(user_id: str, reason: str = "password_change") -> None:
     """
     Revoke all refresh tokens for a user (e.g., on password change).
-    
+
     Args:
         user_id: User ID
         reason: Reason for revocation
     """
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    
+    now = datetime.now(UTC).replace(tzinfo=None)
+
     async with async_engine.begin() as conn:
         await conn.execute(
             text("""
@@ -174,18 +175,20 @@ async def revoke_all_user_tokens(user_id: str, reason: str = "password_change") 
         )
 
 
-async def revoke_access_token(jti: str, user_id: str, expires_at: datetime, reason: str = "logout") -> None:
+async def revoke_access_token(
+    jti: str, user_id: str, expires_at: datetime, reason: str = "logout"
+) -> None:
     """
     Revoke an access token immediately (add to blacklist).
-    
+
     Args:
         jti: JWT ID
         user_id: User ID
         expires_at: Token expiration time
         reason: Reason for revocation
     """
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    
+    now = datetime.now(UTC).replace(tzinfo=None)
+
     async with async_engine.begin() as conn:
         await conn.execute(
             text("""
@@ -205,6 +208,7 @@ async def revoke_access_token(jti: str, user_id: str, expires_at: datetime, reas
 async def is_access_token_revoked(jti: str) -> bool:
     """Check if an access token has been revoked."""
     from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
+
     async with async_engine.begin() as conn:
         result = await conn.execute(
             text("SELECT 1 FROM revoked_tokens WHERE jti = :jti"),
@@ -215,8 +219,8 @@ async def is_access_token_revoked(jti: str) -> bool:
 
 async def cleanup_expired_tokens() -> None:
     """Clean up expired refresh tokens and revoked access tokens (background task)."""
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    
+    now = datetime.now(UTC).replace(tzinfo=None)
+
     async with async_engine.begin() as conn:
         # Delete expired refresh tokens
         await conn.execute(

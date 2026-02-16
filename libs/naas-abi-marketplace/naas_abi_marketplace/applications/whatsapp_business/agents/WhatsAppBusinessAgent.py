@@ -57,12 +57,12 @@ def create_agent(
         Intent(
             intent_value="Get information about WhatsApp Business features",
             intent_type=IntentType.RAW,
-            intent_target="WhatsApp Business provides messaging services for businesses to communicate with customers. I can provide general information, but I currently do not have access to WhatsApp Business tools to send messages."
+            intent_target="WhatsApp Business provides messaging services for businesses to communicate with customers. I can provide general information, but I currently do not have access to WhatsApp Business tools to send messages.",
         ),
         Intent(
             intent_value="Understand business messaging and customer communication",
             intent_type=IntentType.RAW,
-            intent_target="Business messaging involves sending messages, managing conversations, and interacting with customers. I can explain the concepts, but I currently do not have access to tools to send messages."
+            intent_target="Business messaging involves sending messages, managing conversations, and interacting with customers. I can explain the concepts, but I currently do not have access to tools to send messages.",
         ),
     ]
 
@@ -88,4 +88,3 @@ def create_agent(
 
 class WhatsAppBusinessAgent(IntentAgent):
     pass
-

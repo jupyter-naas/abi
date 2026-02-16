@@ -9,7 +9,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "HubSpot"
-DESCRIPTION = "Helps you interact with HubSpot for CRM, marketing, and sales operations."
+DESCRIPTION = (
+    "Helps you interact with HubSpot for CRM, marketing, and sales operations."
+)
 SYSTEM_PROMPT = """<role>
 You are a HubSpot Agent with expertise in CRM, marketing automation, and sales pipeline management.
 </role>
@@ -58,12 +60,12 @@ def create_agent(
         Intent(
             intent_value="Get information about HubSpot CRM and marketing",
             intent_type=IntentType.RAW,
-            intent_target="HubSpot is a CRM platform that provides tools for marketing, sales, and customer service. I can provide general information, but I currently do not have access to HubSpot tools to access CRM data."
+            intent_target="HubSpot is a CRM platform that provides tools for marketing, sales, and customer service. I can provide general information, but I currently do not have access to HubSpot tools to access CRM data.",
         ),
         Intent(
             intent_value="Understand contact and deal management",
             intent_type=IntentType.RAW,
-            intent_target="CRM management involves tracking contacts, deals, and customer interactions. I can explain the concepts, but I currently do not have access to tools to manage CRM data."
+            intent_target="CRM management involves tracking contacts, deals, and customer interactions. I can explain the concepts, but I currently do not have access to tools to manage CRM data.",
         ),
     ]
 
@@ -89,4 +91,3 @@ def create_agent(
 
 class HubSpotAgent(IntentAgent):
     pass
-

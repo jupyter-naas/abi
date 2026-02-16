@@ -13,15 +13,15 @@ import argparse
 import asyncio
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Add app to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.core.database import (async_engine, get_row_count, init_db,
-                               table_exists)
 from sqlalchemy import text
+
+from app.core.database import async_engine, get_row_count, init_db, table_exists
 
 # Demo data directory
 DEMO_DIR = Path(__file__).parent.parent.parent / "demo"
@@ -50,7 +50,7 @@ async def seed_users(conn) -> None:
     import bcrypt
 
     users = load_json("users.json")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     hashed = bcrypt.hashpw(DEMO_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
@@ -92,7 +92,7 @@ async def seed_users(conn) -> None:
                 "bio": user.get("bio"),
                 "created_at": now,
                 "updated_at": now,
-            }
+            },
         )
 
     print(f"  ✓ Seeded {len(users)} users (password: {DEMO_PASSWORD})")
@@ -102,7 +102,7 @@ async def seed_organizations(conn) -> None:
     """Seed organizations and organization_members tables."""
     orgs = load_json("organizations.json")
     org_memberships = load_json("org_memberships.json")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     for org in orgs:
         await conn.execute(
@@ -151,7 +151,7 @@ async def seed_organizations(conn) -> None:
                 "default_theme": org.get("default_theme"),
                 "created_at": now,
                 "updated_at": now,
-            }
+            },
         )
 
     print(f"  ✓ Seeded {len(orgs)} organizations")
@@ -169,7 +169,7 @@ async def seed_organizations(conn) -> None:
                 "user_id": m["user_id"],
                 "role": m["role"],
                 "created_at": now,
-            }
+            },
         )
 
     print(f"  ✓ Seeded {len(org_memberships)} organization memberships")
@@ -179,7 +179,7 @@ async def seed_workspaces(conn) -> None:
     """Seed workspaces table with organization links and theme fields."""
     workspaces = load_json("workspaces.json")
     orgs = load_json("organizations.json")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     # Build workspace->org mapping from organizations.json
     ws_to_org = {}
@@ -219,7 +219,7 @@ async def seed_workspaces(conn) -> None:
                 # Timestamps
                 "created_at": now,
                 "updated_at": now,
-            }
+            },
         )
 
     linked = sum(1 for ws in workspaces if ws["id"] in ws_to_org)
@@ -229,7 +229,7 @@ async def seed_workspaces(conn) -> None:
 async def seed_memberships(conn) -> None:
     """Seed workspace_members from memberships.json."""
     memberships = load_json("memberships.json")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     for m in memberships:
         member_id = f"wm-{m['workspace_id']}-{m['user_id']}"
@@ -244,7 +244,7 @@ async def seed_memberships(conn) -> None:
                 "user_id": m["user_id"],
                 "role": m["role"],
                 "created_at": now,
-            }
+            },
         )
 
     print(f"  ✓ Seeded {len(memberships)} workspace memberships")
@@ -258,7 +258,7 @@ async def seed_agents(conn) -> None:
       the local Ollama model 'qwen3-vl:2b' so chat works out of the box.
     """
     agents = load_json("agents.json")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     # Insert demo agents, defaulting to Ollama Qwen3 VL if not specified
     for agent in agents:
@@ -288,7 +288,7 @@ async def seed_agents(conn) -> None:
                 "is_default": True if agent.get("is_default") else False,
                 "created_at": now,
                 "updated_at": now,
-            }
+            },
         )
 
     # Ensure each workspace has at least one enabled Ollama agent
@@ -299,7 +299,7 @@ async def seed_agents(conn) -> None:
         # Skip if an enabled agent already exists in this workspace
         result = await conn.execute(
             text("""
-                SELECT 1 FROM agent_configs 
+                SELECT 1 FROM agent_configs
                 WHERE workspace_id = :ws AND enabled = true
                 LIMIT 1
             """),
@@ -331,17 +331,19 @@ async def seed_agents(conn) -> None:
                 "is_default": True,
                 "created_at": now,
                 "updated_at": now,
-            }
+            },
         )
         created_per_ws += 1
 
-    print(f"  ✓ Seeded {len(agents)} demo agents; ensured enabled Ollama agent in {created_per_ws} workspaces")
+    print(
+        f"  ✓ Seeded {len(agents)} demo agents; ensured enabled Ollama agent in {created_per_ws} workspaces"
+    )
 
 
 async def seed_conversations(conn) -> None:
     """Seed conversations and messages tables."""
     conversations = load_json("conversations.json")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     conv_count = 0
     msg_count = 0
@@ -360,7 +362,7 @@ async def seed_conversations(conn) -> None:
                 "agent": conv.get("agent", "aia"),
                 "created_at": now,
                 "updated_at": now,
-            }
+            },
         )
         conv_count += 1
 
@@ -379,7 +381,7 @@ async def seed_conversations(conn) -> None:
                     "agent": msg.get("agent"),
                     "metadata": json.dumps(msg.get("metadata")) if msg.get("metadata") else None,
                     "created_at": now,
-                }
+                },
             )
             msg_count += 1
 
@@ -393,7 +395,7 @@ async def seed_graphs(conn) -> None:
         print("Warning: demo/graphs/ not found, skipping graphs")
         return
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     total_nodes = 0
     total_edges = 0
     graph_count = 0
@@ -410,8 +412,12 @@ async def seed_graphs(conn) -> None:
         graph_name = graph_data.get("name", graph_file.stem)
 
         # Clear any previously-seeded nodes/edges for this workspace graph id to prevent accumulation
-        await conn.execute(text("DELETE FROM graph_edges WHERE workspace_id = :wid"), {"wid": graph_id})
-        await conn.execute(text("DELETE FROM graph_nodes WHERE workspace_id = :wid"), {"wid": graph_id})
+        await conn.execute(
+            text("DELETE FROM graph_edges WHERE workspace_id = :wid"), {"wid": graph_id}
+        )
+        await conn.execute(
+            text("DELETE FROM graph_nodes WHERE workspace_id = :wid"), {"wid": graph_id}
+        )
 
         # Seed nodes
         for node in graph_data.get("nodes", []):
@@ -428,7 +434,7 @@ async def seed_graphs(conn) -> None:
                     "properties": json.dumps(node.get("properties", {})),
                     "created_at": now,
                     "updated_at": now,
-                }
+                },
             )
             total_nodes += 1
 
@@ -447,12 +453,14 @@ async def seed_graphs(conn) -> None:
                     "type": edge["type"],
                     "properties": json.dumps(edge.get("properties", {})),
                     "created_at": now,
-                }
+                },
             )
             total_edges += 1
 
         graph_count += 1
-        print(f"  ✓ Loaded graph '{graph_name}' ({len(graph_data.get('nodes', []))} nodes, {len(graph_data.get('edges', []))} edges)")
+        print(
+            f"  ✓ Loaded graph '{graph_name}' ({len(graph_data.get('nodes', []))} nodes, {len(graph_data.get('edges', []))} edges)"
+        )
 
     print(f"  ✓ Seeded {graph_count} graphs with {total_nodes} nodes and {total_edges} edges total")
 
@@ -471,20 +479,20 @@ async def seed_all() -> None:
         await seed_agents(conn)
         await seed_conversations(conn)
         await seed_graphs(conn)
-        
+
         # Load BFO 7 Buckets as a reference ontology item per workspace (simple stub in ontologies table)
         try:
-            from pathlib import Path
-            ttl_path = Path(__file__).parent.parent.parent / 'ontology' / 'BFO7Buckets.ttl'
-            content = ttl_path.read_text(encoding='utf-8')
             import json as _json
-            schema_stub = _json.dumps({
-                "id": "reference-bfo7",
-                "name": "BFO 7 Buckets",
-                "format": "ttl",
-                "file": "/ontology/BFO7Buckets.ttl",
-                "classCount": 7
-            })
+
+            schema_stub = _json.dumps(
+                {
+                    "id": "reference-bfo7",
+                    "name": "BFO 7 Buckets",
+                    "format": "ttl",
+                    "file": "/ontology/BFO7Buckets.ttl",
+                    "classCount": 7,
+                }
+            )
             # Insert one ontology reference per workspace
             ws_result = await conn.execute(text("SELECT id FROM workspaces"))
             for (ws_id,) in ws_result.fetchall():
@@ -499,17 +507,23 @@ async def seed_all() -> None:
                         "name": "BFO 7 Buckets",
                         "desc": "Reference ontology loaded by default",
                         "schema": schema_stub,
-                        "now": datetime.now(timezone.utc).replace(tzinfo=None),
-                    }
+                        "now": datetime.now(UTC).replace(tzinfo=None),
+                    },
                 )
-            print(f"  ✓ Linked BFO 7 Buckets reference to all workspaces")
+            print("  ✓ Linked BFO 7 Buckets reference to all workspaces")
         except Exception as e:
             print(f"  ⚠️  Skipped BFO 7 Buckets seeding: {e}")
 
         # Fail hard if core seed data did not get inserted.
-        users_count = int((await conn.execute(text("SELECT COUNT(*) FROM users"))).scalar_one() or 0)
-        organizations_count = int((await conn.execute(text("SELECT COUNT(*) FROM organizations"))).scalar_one() or 0)
-        workspaces_count = int((await conn.execute(text("SELECT COUNT(*) FROM workspaces"))).scalar_one() or 0)
+        users_count = int(
+            (await conn.execute(text("SELECT COUNT(*) FROM users"))).scalar_one() or 0
+        )
+        organizations_count = int(
+            (await conn.execute(text("SELECT COUNT(*) FROM organizations"))).scalar_one() or 0
+        )
+        workspaces_count = int(
+            (await conn.execute(text("SELECT COUNT(*) FROM workspaces"))).scalar_one() or 0
+        )
         if users_count == 0 or organizations_count == 0 or workspaces_count == 0:
             raise RuntimeError(
                 "Seed validation failed: expected non-empty core tables after seeding "
@@ -525,7 +539,19 @@ async def seed_all() -> None:
 async def print_stats() -> None:
     """Print database statistics."""
     print("\nDatabase statistics:")
-    tables = ["users", "organizations", "organization_members", "workspaces", "workspace_members", "agent_configs", "conversations", "messages", "graph_nodes", "graph_edges", "workspace_secrets"]
+    tables = [
+        "users",
+        "organizations",
+        "organization_members",
+        "workspaces",
+        "workspace_members",
+        "agent_configs",
+        "conversations",
+        "messages",
+        "graph_nodes",
+        "graph_edges",
+        "workspace_secrets",
+    ]
 
     for table in tables:
         if await table_exists(table):

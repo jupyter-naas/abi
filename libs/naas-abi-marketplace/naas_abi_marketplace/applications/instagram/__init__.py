@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "instagram"
         """
-        datastore_path: str = "instagram"
 
+        datastore_path: str = "instagram"

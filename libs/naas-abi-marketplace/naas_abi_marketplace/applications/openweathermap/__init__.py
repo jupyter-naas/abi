@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "openweathermap"
         """
-        datastore_path: str = "openweathermap"
 
+        datastore_path: str = "openweathermap"

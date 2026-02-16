@@ -57,12 +57,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Salesforce features",
             intent_type=IntentType.RAW,
-            intent_target="Salesforce is a CRM platform for managing sales, leads, and customer relationships. I can provide general information, but I currently do not have access to Salesforce tools to access CRM data."
+            intent_target="Salesforce is a CRM platform for managing sales, leads, and customer relationships. I can provide general information, but I currently do not have access to Salesforce tools to access CRM data.",
         ),
         Intent(
             intent_value="Understand CRM and sales pipeline management",
             intent_type=IntentType.RAW,
-            intent_target="CRM management involves tracking leads, opportunities, and managing sales pipelines. I can explain the concepts, but I currently do not have access to tools to manage CRM data."
+            intent_target="CRM management involves tracking leads, opportunities, and managing sales pipelines. I can explain the concepts, but I currently do not have access to tools to manage CRM data.",
         ),
     ]
 
@@ -88,4 +88,3 @@ def create_agent(
 
 class SalesforceAgent(IntentAgent):
     pass
-

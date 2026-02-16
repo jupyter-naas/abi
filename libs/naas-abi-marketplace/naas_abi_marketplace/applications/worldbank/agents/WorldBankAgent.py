@@ -8,7 +8,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "WorldBank"
-DESCRIPTION = "Helps you interact with World Bank data for economic and development indicators."
+DESCRIPTION = (
+    "Helps you interact with World Bank data for economic and development indicators."
+)
 SYSTEM_PROMPT = """<role>
 You are a World Bank Agent with expertise in economic data, development indicators, and global statistics.
 </role>
@@ -57,12 +59,12 @@ def create_agent(
         Intent(
             intent_value="Get information about World Bank data features",
             intent_type=IntentType.RAW,
-            intent_target="World Bank provides economic data, development indicators, and global statistics. I can provide general information, but I currently do not have access to World Bank tools to retrieve data."
+            intent_target="World Bank provides economic data, development indicators, and global statistics. I can provide general information, but I currently do not have access to World Bank tools to retrieve data.",
         ),
         Intent(
             intent_value="Understand economic indicators and development data",
             intent_type=IntentType.RAW,
-            intent_target="Economic indicators include GDP, inflation, and development metrics. I can explain the concepts, but I currently do not have access to tools to retrieve economic data."
+            intent_target="Economic indicators include GDP, inflation, and development metrics. I can explain the concepts, but I currently do not have access to tools to retrieve economic data.",
         ),
     ]
 
@@ -88,4 +90,3 @@ def create_agent(
 
 class WorldBankAgent(IntentAgent):
     pass
-

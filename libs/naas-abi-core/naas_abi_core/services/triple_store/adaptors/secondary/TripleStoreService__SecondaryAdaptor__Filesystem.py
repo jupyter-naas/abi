@@ -234,7 +234,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def create_graph(self, graph_name: URIRef) -> None:
         """Create a named graph.
-        
+
         Not supported by filesystem adapter.
         """
         raise NotImplementedError(
@@ -243,7 +243,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def clear_graph(self, graph_name: URIRef | None = None) -> None:
         """Clear triples from a graph.
-        
+
         Not supported by filesystem adapter.
         """
         raise NotImplementedError(
@@ -252,7 +252,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def drop_graph(self, graph_name: URIRef) -> None:
         """Drop a graph.
-        
+
         Not supported by filesystem adapter.
         """
         raise NotImplementedError(
@@ -261,7 +261,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def list_graphs(self) -> list[URIRef]:
         """List all named graphs.
-        
+
         Not supported by filesystem adapter - returns empty list.
         """
         return []

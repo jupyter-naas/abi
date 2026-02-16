@@ -18,7 +18,10 @@ class AlgoliaIntegrationConfiguration(IntegrationConfiguration):
 
     app_id: str
     api_key: str
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
+
 
 class AlgoliaIntegration(Integration):
     """Algolia integration client.

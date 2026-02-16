@@ -23,4 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "arxiv"
         """
+
         datastore_path: str = "arxiv"

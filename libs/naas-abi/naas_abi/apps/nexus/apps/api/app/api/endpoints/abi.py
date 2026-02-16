@@ -3,14 +3,16 @@ ABI Server Configuration API
 Manage external ABI servers per workspace.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required, require_workspace_access)
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import (_decrypt,
-                                                                    _encrypt)
+    User,
+    get_current_user_required,
+    require_workspace_access,
+)
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import _encrypt
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import ABIServerModel
 from pydantic import BaseModel, Field
@@ -22,8 +24,10 @@ router = APIRouter()
 
 # ============ Pydantic Schemas ============
 
+
 class ABIServer(BaseModel):
     """ABI Server model."""
+
     id: str
     workspace_id: str
     name: str
@@ -35,6 +39,7 @@ class ABIServer(BaseModel):
 
 class ABIServerCreate(BaseModel):
     """Create ABI server request."""
+
     name: str = Field(..., min_length=1, max_length=255)
     endpoint: str = Field(..., min_length=1)
     api_key: str | None = None
@@ -42,6 +47,7 @@ class ABIServerCreate(BaseModel):
 
 class ABIServerUpdate(BaseModel):
     """Update ABI server request."""
+
     name: str | None = Field(None, min_length=1, max_length=255)
     endpoint: str | None = Field(None, min_length=1)
     api_key: str | None = None
@@ -49,6 +55,7 @@ class ABIServerUpdate(BaseModel):
 
 
 # ============ Helpers ============
+
 
 def _to_abi_server(row: ABIServerModel) -> ABIServer:
     return ABIServer(
@@ -64,6 +71,7 @@ def _to_abi_server(row: ABIServerModel) -> ABIServer:
 
 # ============ Endpoints ============
 
+
 @router.get("/workspaces/{workspace_id}/abi-servers")
 async def list_abi_servers(
     workspace_id: str,
@@ -72,7 +80,7 @@ async def list_abi_servers(
 ) -> list[ABIServer]:
     """List all ABI servers for a workspace."""
     await require_workspace_access(current_user.id, workspace_id)
-    
+
     result = await db.execute(
         select(ABIServerModel).where(ABIServerModel.workspace_id == workspace_id)
     )
@@ -88,7 +96,7 @@ async def create_abi_server(
 ) -> ABIServer:
     """Create a new ABI server for a workspace."""
     await require_workspace_access(current_user.id, workspace_id)
-    
+
     # Check if endpoint already exists for this workspace
     existing = await db.execute(
         select(ABIServerModel).where(
@@ -98,10 +106,10 @@ async def create_abi_server(
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="ABI server with this endpoint already exists")
-    
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    now = datetime.now(UTC).replace(tzinfo=None)
     server_id = f"abi-{uuid4().hex[:12]}"
-    
+
     row = ABIServerModel(
         id=server_id,
         workspace_id=workspace_id,
@@ -112,10 +120,10 @@ async def create_abi_server(
         created_at=now,
         updated_at=now,
     )
-    
+
     db.add(row)
     await db.commit()
-    
+
     return _to_abi_server(row)
 
 
@@ -128,7 +136,7 @@ async def get_abi_server(
 ) -> ABIServer:
     """Get a specific ABI server."""
     await require_workspace_access(current_user.id, workspace_id)
-    
+
     result = await db.execute(
         select(ABIServerModel).where(
             ABIServerModel.id == server_id,
@@ -138,7 +146,7 @@ async def get_abi_server(
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="ABI server not found")
-    
+
     return _to_abi_server(row)
 
 
@@ -152,7 +160,7 @@ async def update_abi_server(
 ) -> ABIServer:
     """Update an ABI server."""
     await require_workspace_access(current_user.id, workspace_id)
-    
+
     result = await db.execute(
         select(ABIServerModel).where(
             ABIServerModel.id == server_id,
@@ -162,9 +170,9 @@ async def update_abi_server(
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="ABI server not found")
-    
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+
     if updates.name is not None:
         row.name = updates.name
     if updates.endpoint is not None:
@@ -173,10 +181,10 @@ async def update_abi_server(
         row.api_key = _encrypt(updates.api_key) if updates.api_key else None
     if updates.enabled is not None:
         row.enabled = updates.enabled
-    
+
     row.updated_at = now
     await db.commit()
-    
+
     return _to_abi_server(row)
 
 
@@ -189,7 +197,7 @@ async def delete_abi_server(
 ) -> dict[str, str]:
     """Delete an ABI server."""
     await require_workspace_access(current_user.id, workspace_id)
-    
+
     result = await db.execute(
         select(ABIServerModel).where(
             ABIServerModel.id == server_id,
@@ -199,8 +207,8 @@ async def delete_abi_server(
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="ABI server not found")
-    
+
     await db.delete(row)
     await db.commit()
-    
+
     return {"status": "deleted"}

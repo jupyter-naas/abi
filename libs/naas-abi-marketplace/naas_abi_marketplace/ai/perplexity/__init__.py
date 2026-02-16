@@ -25,6 +25,7 @@ class ABIModule(BaseModule):
             openai_api_key: "{{ secret.OPENAI_API_KEY }}"
             openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
         """
+
         perplexity_api_key: str
         openai_api_key: str | None = None
         openrouter_api_key: str | None = None

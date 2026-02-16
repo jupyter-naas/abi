@@ -23,5 +23,6 @@ class ABIModule(BaseModule):
         config:
             mistral_api_key: "{{ secret.MISTRAL_API_KEY }}"
         """
+
         mistral_api_key: str
         datastore_path: str = "mistral"

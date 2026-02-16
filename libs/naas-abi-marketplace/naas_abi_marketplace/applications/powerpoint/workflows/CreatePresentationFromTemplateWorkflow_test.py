@@ -21,11 +21,16 @@ TEMPLATE_PATH = "src/marketplace/applications/powerpoint/templates/TemplateNaasP
 @pytest.fixture
 def workflow() -> CreatePresentationFromTemplateWorkflow:
     from naas_abi_core.engine.Engine import Engine
-    
+
     # We need to load the engine to load the module.
     engine = Engine()
-    engine.load(module_names=["naas_abi_marketplace.applications.powerpoint", "naas_abi_marketplace.applications.naas"])
-    
+    engine.load(
+        module_names=[
+            "naas_abi_marketplace.applications.powerpoint",
+            "naas_abi_marketplace.applications.naas",
+        ]
+    )
+
     module = ABIModule.get_instance()
     triple_store_service = module.engine.services.triple_store
     naas_configuration = NaasIntegrationConfiguration(
@@ -58,7 +63,9 @@ def test_workflow_name(workflow: CreatePresentationFromTemplateWorkflow):
     from naas_abi_marketplace.applications.powerpoint import ABIModule
 
     json_file_path = "datastore/powerpoint/presentations/tests/presentation_data.json"
-    storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+    storage_utils = StorageUtils(
+        ABIModule.get_instance().engine.services.object_storage
+    )
     presentation_data = storage_utils.get_json(
         os.path.dirname(json_file_path), os.path.basename(json_file_path)
     )

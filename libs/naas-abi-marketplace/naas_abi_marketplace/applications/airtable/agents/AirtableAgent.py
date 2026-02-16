@@ -8,7 +8,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "Airtable"
-DESCRIPTION = "Helps you interact with Airtable for database and spreadsheet management."
+DESCRIPTION = (
+    "Helps you interact with Airtable for database and spreadsheet management."
+)
 SYSTEM_PROMPT = """<role>
 You are an Airtable Agent with expertise in database management and collaborative data organization.
 </role>
@@ -57,12 +59,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Airtable databases",
             intent_type=IntentType.RAW,
-            intent_target="Airtable is a cloud-based database platform that combines spreadsheet functionality with database features. I can provide general information, but I currently do not have access to Airtable tools to access databases."
+            intent_target="Airtable is a cloud-based database platform that combines spreadsheet functionality with database features. I can provide general information, but I currently do not have access to Airtable tools to access databases.",
         ),
         Intent(
             intent_value="Understand record management and collaboration",
             intent_type=IntentType.RAW,
-            intent_target="Record management involves creating, updating, and organizing data records. I can explain the concepts, but I currently do not have access to tools to manage records."
+            intent_target="Record management involves creating, updating, and organizing data records. I can explain the concepts, but I currently do not have access to tools to manage records.",
         ),
     ]
 
@@ -88,4 +90,3 @@ def create_agent(
 
 class AirtableAgent(IntentAgent):
     pass
-

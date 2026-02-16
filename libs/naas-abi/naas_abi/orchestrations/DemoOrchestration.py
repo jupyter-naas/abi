@@ -3,7 +3,6 @@ from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestrati
 
 
 class DemoOrchestration(DagsterOrchestration):
-
     @classmethod
     def New(cls) -> "DemoOrchestration":
         return cls(

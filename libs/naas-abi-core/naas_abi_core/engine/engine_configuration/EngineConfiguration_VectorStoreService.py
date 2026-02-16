@@ -1,13 +1,13 @@
 from typing import Literal
 
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import \
-    GenericLoader
-from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
-    pydantic_model_validator
-from naas_abi_core.services.vector_store.IVectorStorePort import \
-    IVectorStorePort
-from naas_abi_core.services.vector_store.VectorStoreService import \
-    VectorStoreService
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
+    GenericLoader,
+)
+from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
+    pydantic_model_validator,
+)
+from naas_abi_core.services.vector_store.IVectorStorePort import IVectorStorePort
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from pydantic import BaseModel, ConfigDict, model_validator
 
 
@@ -23,6 +23,7 @@ class VectorStoreAdapterQdrantConfiguration(BaseModel):
         https: "{{ secret.QDRANT_HTTPS }}"
         timeout: "{{ secret.QDRANT_TIMEOUT }}"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     host: str = "localhost"
@@ -31,6 +32,7 @@ class VectorStoreAdapterQdrantConfiguration(BaseModel):
     https: bool = False
     timeout: int = 30
 
+
 class VectorStoreAdapterQdrantInMemoryConfiguration(BaseModel):
     """Qdrant in memory vector store adapter configuration.
 
@@ -38,9 +40,11 @@ class VectorStoreAdapterQdrantInMemoryConfiguration(BaseModel):
       adapter: "qdrant_in_memory"
       config: {}
     """
+
     model_config = ConfigDict(extra="forbid")
 
     pass
+
 
 class VectorStoreAdapterConfiguration(GenericLoader):
     adapter: Literal["qdrant", "qdrant_in_memory", "custom"]
@@ -77,13 +81,15 @@ class VectorStoreAdapterConfiguration(GenericLoader):
 
             # Lazy import: only import when actually loading
             if self.adapter == "qdrant":
-                from naas_abi_core.services.vector_store.adapters.QdrantAdapter import \
-                    QdrantAdapter
+                from naas_abi_core.services.vector_store.adapters.QdrantAdapter import (
+                    QdrantAdapter,
+                )
 
                 return QdrantAdapter(**self.config)
             elif self.adapter == "qdrant_in_memory":
-                from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import \
-                    QdrantInMemoryAdapter
+                from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
+                    QdrantInMemoryAdapter,
+                )
 
                 return QdrantInMemoryAdapter(**self.config)
             else:

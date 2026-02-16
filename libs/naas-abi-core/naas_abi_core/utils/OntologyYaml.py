@@ -225,9 +225,11 @@ class Translator:
         # We filter the classes from the ontology.
         _onto_classes = _.filter_(
             self.onto,
-            lambda x: "http://www.w3.org/2002/07/owl#Class" in x["type"]
-            if "type" in x
-            else None,
+            lambda x: (
+                "http://www.w3.org/2002/07/owl#Class" in x["type"]
+                if "type" in x
+                else None
+            ),
         )
 
         # We remove the subclassOf that are restrictions to keep it simple for now.
@@ -352,9 +354,11 @@ class Translator:
         # We filter the object properties from the ontology.
         _onto_oprop = _.filter_(
             self.onto,
-            lambda x: "http://www.w3.org/2002/07/owl#ObjectProperty" in x["type"]
-            if "type" in x
-            else None,
+            lambda x: (
+                "http://www.w3.org/2002/07/owl#ObjectProperty" in x["type"]
+                if "type" in x
+                else None
+            ),
         )
 
         # For each Object property, we map the ranges and domains.
@@ -367,9 +371,11 @@ class Translator:
     def load_individuals(self):
         self.onto_individuals = _.filter_(
             self.onto,
-            lambda x: "http://www.w3.org/2002/07/owl#NamedIndividual" in x["type"]
-            if "type" in x
-            else None,
+            lambda x: (
+                "http://www.w3.org/2002/07/owl#NamedIndividual" in x["type"]
+                if "type" in x
+                else None
+            ),
         )
 
     def map_oprop_labels(self):

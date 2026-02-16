@@ -37,6 +37,7 @@ def create_agent(
     """
     # Initialize module
     from naas_abi_marketplace.applications.arxiv import ABIModule
+
     module = ABIModule.get_instance()
     triple_store = module.engine.services.triple_store
 
@@ -101,4 +102,5 @@ def create_agent(
 
 class ArXivAgent(Agent):
     """Agent for interacting with ArXiv papers."""
+
     pass

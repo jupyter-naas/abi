@@ -32,7 +32,7 @@ class IVectorStorePort(ABC):
         collection_name: str,
         dimension: int,
         distance_metric: str = "cosine",
-        **kwargs
+        **kwargs,
     ) -> None:
         pass
 
@@ -46,9 +46,7 @@ class IVectorStorePort(ABC):
 
     @abstractmethod
     def store_vectors(
-        self,
-        collection_name: str,
-        documents: List[VectorDocument]
+        self, collection_name: str, documents: List[VectorDocument]
     ) -> None:
         pass
 
@@ -60,16 +58,13 @@ class IVectorStorePort(ABC):
         k: int = 10,
         filter: Optional[Dict[str, Any]] = None,
         include_vectors: bool = False,
-        include_metadata: bool = True
+        include_metadata: bool = True,
     ) -> List[SearchResult]:
         pass
 
     @abstractmethod
     def get_vector(
-        self,
-        collection_name: str,
-        vector_id: str,
-        include_vector: bool = True
+        self, collection_name: str, vector_id: str, include_vector: bool = True
     ) -> Optional[VectorDocument]:
         pass
 
@@ -80,16 +75,12 @@ class IVectorStorePort(ABC):
         vector_id: str,
         vector: Optional[np.ndarray] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        payload: Optional[Dict[str, Any]] = None
+        payload: Optional[Dict[str, Any]] = None,
     ) -> None:
         pass
 
     @abstractmethod
-    def delete_vectors(
-        self,
-        collection_name: str,
-        vector_ids: List[str]
-    ) -> None:
+    def delete_vectors(self, collection_name: str, vector_ids: List[str]) -> None:
         pass
 
     @abstractmethod

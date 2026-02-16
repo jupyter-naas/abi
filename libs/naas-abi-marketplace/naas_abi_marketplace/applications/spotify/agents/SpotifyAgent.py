@@ -8,7 +8,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 )
 
 NAME = "Spotify"
-DESCRIPTION = "Helps you interact with Spotify for music streaming and playlist management."
+DESCRIPTION = (
+    "Helps you interact with Spotify for music streaming and playlist management."
+)
 SYSTEM_PROMPT = """<role>
 You are a Spotify Agent with expertise in music streaming, playlist management, and audio content.
 </role>
@@ -57,12 +59,12 @@ def create_agent(
         Intent(
             intent_value="Get information about Spotify features",
             intent_type=IntentType.RAW,
-            intent_target="Spotify is a music streaming platform with playlists, tracks, and discovery features. I can provide general information, but I currently do not have access to Spotify tools to access music data."
+            intent_target="Spotify is a music streaming platform with playlists, tracks, and discovery features. I can provide general information, but I currently do not have access to Spotify tools to access music data.",
         ),
         Intent(
             intent_value="Understand playlist and track management",
             intent_type=IntentType.RAW,
-            intent_target="Playlist management involves creating, organizing, and sharing music playlists. I can explain the concepts, but I currently do not have access to tools to manage playlists."
+            intent_target="Playlist management involves creating, organizing, and sharing music playlists. I can explain the concepts, but I currently do not have access to tools to manage playlists.",
         ),
     ]
 
@@ -88,4 +90,3 @@ def create_agent(
 
 class SpotifyAgent(IntentAgent):
     pass
-

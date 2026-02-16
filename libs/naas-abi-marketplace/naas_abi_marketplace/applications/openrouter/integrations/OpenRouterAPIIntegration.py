@@ -29,7 +29,9 @@ class OpenRouterAPIIntegrationConfiguration(IntegrationConfiguration):
 
     api_key: str
     base_url: str = "https://openrouter.ai/api/v1"
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class OpenRouterAPIIntegration(Integration):
@@ -56,7 +58,9 @@ class OpenRouterAPIIntegration(Integration):
         """Initialize OpenRouter API client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
 
         self.headers = {
             "Authorization": f"Bearer {self.__configuration.api_key}",
@@ -64,10 +68,12 @@ class OpenRouterAPIIntegration(Integration):
         }
 
     @cache(
-        lambda self, method, endpoint, data, params: method
-        + "_"
-        + endpoint
-        + ("_".join(f"{k}_{v}" for k, v in params.items()) if params else ""),
+        lambda self, method, endpoint, data, params: (
+            method
+            + "_"
+            + endpoint
+            + ("_".join(f"{k}_{v}" for k, v in params.items()) if params else "")
+        ),
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(days=7),
     )

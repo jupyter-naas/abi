@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "newsapi"
         """
-        datastore_path: str = "newsapi"
 
+        datastore_path: str = "newsapi"

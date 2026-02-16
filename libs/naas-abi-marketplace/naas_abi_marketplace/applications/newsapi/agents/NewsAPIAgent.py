@@ -58,12 +58,12 @@ def create_agent(
         Intent(
             intent_value="Get information about NewsAPI features",
             intent_type=IntentType.RAW,
-            intent_target="NewsAPI provides access to news articles and headlines from various sources. I can provide general information, but I currently do not have access to NewsAPI tools to retrieve articles."
+            intent_target="NewsAPI provides access to news articles and headlines from various sources. I can provide general information, but I currently do not have access to NewsAPI tools to retrieve articles.",
         ),
         Intent(
             intent_value="Understand news search and article retrieval",
             intent_type=IntentType.RAW,
-            intent_target="News search involves finding articles by keywords, sources, or topics. I can explain the concepts, but I currently do not have access to tools to retrieve articles."
+            intent_target="News search involves finding articles by keywords, sources, or topics. I can explain the concepts, but I currently do not have access to tools to retrieve articles.",
         ),
     ]
 
@@ -89,4 +89,3 @@ def create_agent(
 
 class NewsAPIAgent(IntentAgent):
     pass
-

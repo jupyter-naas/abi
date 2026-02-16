@@ -28,6 +28,7 @@ class ABIModule(BaseModule):
             workspace_id: "{{ config.workspace_id }}"
             storage_name: "{{ config.storage_name }}"
         """
+
         workspace_id: str
         storage_name: str
         datastore_path: str = "powerpoint"

@@ -2,19 +2,20 @@
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required, require_workspace_access)
+    User,
+    get_current_user_required,
+    require_workspace_access,
+)
 from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, Field
-from rdflib import Graph
+from rdflib import Graph, Namespace, URIRef
 from rdflib import Literal as RDFLiteral
-from rdflib import Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, XSD
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -35,6 +36,7 @@ NEXUS_UPDATED_AT = NEXUS.updatedAt
 
 
 # ============ Pydantic Schemas ============
+
 
 class GraphNode(BaseModel):
     id: str
@@ -96,6 +98,7 @@ class GraphQueryResult(BaseModel):
 
 # ============ Helpers ============
 
+
 def get_triple_store(request: Request) -> TripleStoreService:
     store = getattr(request.app.state, "triple_store", None)
     if store is not None:
@@ -120,7 +123,7 @@ def _as_utc_naive(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt.astimezone(UTC).replace(tzinfo=None)
     return dt
 
 
@@ -173,9 +176,21 @@ def _node_graph(node: GraphNode) -> Graph:
     g.add((subject, RDFS.label, RDFLiteral(node.label)))
     g.add((subject, NEXUS_PROPERTIES, RDFLiteral(json.dumps(node.properties or {}))))
     if node.created_at is not None:
-        g.add((subject, NEXUS_CREATED_AT, RDFLiteral(_as_utc_naive(node.created_at).isoformat(), datatype=XSD.dateTime)))
+        g.add(
+            (
+                subject,
+                NEXUS_CREATED_AT,
+                RDFLiteral(_as_utc_naive(node.created_at).isoformat(), datatype=XSD.dateTime),
+            )
+        )
     if node.updated_at is not None:
-        g.add((subject, NEXUS_UPDATED_AT, RDFLiteral(_as_utc_naive(node.updated_at).isoformat(), datatype=XSD.dateTime)))
+        g.add(
+            (
+                subject,
+                NEXUS_UPDATED_AT,
+                RDFLiteral(_as_utc_naive(node.updated_at).isoformat(), datatype=XSD.dateTime),
+            )
+        )
     return g
 
 
@@ -190,7 +205,13 @@ def _edge_graph(edge: GraphEdge) -> Graph:
     g.add((subject, NEXUS_EDGE_TYPE, RDFLiteral(edge.type)))
     g.add((subject, NEXUS_PROPERTIES, RDFLiteral(json.dumps(edge.properties or {}))))
     if edge.created_at is not None:
-        g.add((subject, NEXUS_CREATED_AT, RDFLiteral(_as_utc_naive(edge.created_at).isoformat(), datatype=XSD.dateTime)))
+        g.add(
+            (
+                subject,
+                NEXUS_CREATED_AT,
+                RDFLiteral(_as_utc_naive(edge.created_at).isoformat(), datatype=XSD.dateTime),
+            )
+        )
     return g
 
 
@@ -211,15 +232,26 @@ def _query_nodes(
     offset: int | None = None,
     search: str | None = None,
 ) -> list[GraphNode]:
-    where_parts = ["?node a <urn:nexus:kg:Node> .", "?node <urn:nexus:kg:nodeId> ?id .", "?node <urn:nexus:kg:workspaceId> ?workspace_id .", "?node <urn:nexus:kg:nodeType> ?type .", "?node <http://www.w3.org/2000/01/rdf-schema#label> ?label .", "OPTIONAL { ?node <urn:nexus:kg:properties> ?properties . }", "OPTIONAL { ?node <urn:nexus:kg:createdAt> ?created_at . }", "OPTIONAL { ?node <urn:nexus:kg:updatedAt> ?updated_at . }"]
+    where_parts = [
+        "?node a <urn:nexus:kg:Node> .",
+        "?node <urn:nexus:kg:nodeId> ?id .",
+        "?node <urn:nexus:kg:workspaceId> ?workspace_id .",
+        "?node <urn:nexus:kg:nodeType> ?type .",
+        "?node <http://www.w3.org/2000/01/rdf-schema#label> ?label .",
+        "OPTIONAL { ?node <urn:nexus:kg:properties> ?properties . }",
+        "OPTIONAL { ?node <urn:nexus:kg:createdAt> ?created_at . }",
+        "OPTIONAL { ?node <urn:nexus:kg:updatedAt> ?updated_at . }",
+    ]
     filter_parts: list[str] = []
     if workspace_id is not None:
-        filter_parts.append(f'?workspace_id = {_sparql_str(workspace_id)}')
+        filter_parts.append(f"?workspace_id = {_sparql_str(workspace_id)}")
     if node_type is not None:
-        filter_parts.append(f'?type = {_sparql_str(node_type)}')
+        filter_parts.append(f"?type = {_sparql_str(node_type)}")
     if search:
         q = _sparql_str(search.lower())
-        filter_parts.append(f"(CONTAINS(LCASE(STR(?label)), {q}) || CONTAINS(LCASE(STR(?type)), {q}))")
+        filter_parts.append(
+            f"(CONTAINS(LCASE(STR(?label)), {q}) || CONTAINS(LCASE(STR(?type)), {q}))"
+        )
     where = "\n".join(where_parts)
     if filter_parts:
         where += f"\nFILTER({' && '.join(filter_parts)})"
@@ -260,12 +292,21 @@ def _query_edges(
     source_or_target_ids: list[str] | None = None,
     source_and_target_ids: list[str] | None = None,
 ) -> list[GraphEdge]:
-    where_parts = ["?edge a <urn:nexus:kg:Edge> .", "?edge <urn:nexus:kg:edgeId> ?id .", "?edge <urn:nexus:kg:workspaceId> ?workspace_id .", "?edge <urn:nexus:kg:sourceId> ?source_id .", "?edge <urn:nexus:kg:targetId> ?target_id .", "?edge <urn:nexus:kg:edgeType> ?type .", "OPTIONAL { ?edge <urn:nexus:kg:properties> ?properties . }", "OPTIONAL { ?edge <urn:nexus:kg:createdAt> ?created_at . }"]
+    where_parts = [
+        "?edge a <urn:nexus:kg:Edge> .",
+        "?edge <urn:nexus:kg:edgeId> ?id .",
+        "?edge <urn:nexus:kg:workspaceId> ?workspace_id .",
+        "?edge <urn:nexus:kg:sourceId> ?source_id .",
+        "?edge <urn:nexus:kg:targetId> ?target_id .",
+        "?edge <urn:nexus:kg:edgeType> ?type .",
+        "OPTIONAL { ?edge <urn:nexus:kg:properties> ?properties . }",
+        "OPTIONAL { ?edge <urn:nexus:kg:createdAt> ?created_at . }",
+    ]
     filter_parts: list[str] = []
     if workspace_id is not None:
-        filter_parts.append(f'?workspace_id = {_sparql_str(workspace_id)}')
+        filter_parts.append(f"?workspace_id = {_sparql_str(workspace_id)}")
     if edge_type is not None:
-        filter_parts.append(f'?type = {_sparql_str(edge_type)}')
+        filter_parts.append(f"?type = {_sparql_str(edge_type)}")
     if source_or_target_ids is not None:
         if not source_or_target_ids:
             return []
@@ -368,6 +409,7 @@ def _get_edge_by_id(store: TripleStoreService, edge_id: str) -> GraphEdge | None
 
 # ============ Endpoints ============
 
+
 @router.get("/workspaces/{workspace_id}")
 async def get_workspace_graph(
     request: Request,
@@ -427,7 +469,7 @@ async def create_node(
     await require_workspace_access(current_user.id, node.workspace_id)
     store = get_triple_store(request)
     node_id = f"node-{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     created = GraphNode(
         id=node_id,
         workspace_id=node.workspace_id,
@@ -466,7 +508,7 @@ async def update_node(
     if existing is None:
         raise HTTPException(status_code=404, detail="Node not found")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     updated = GraphNode(
         id=existing.id,
         workspace_id=existing.workspace_id,
@@ -547,7 +589,7 @@ async def create_edge(
             raise HTTPException(status_code=404, detail=f"{label} node not found")
 
     edge_id = f"edge-{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     created = GraphEdge(
         id=edge_id,
         workspace_id=edge.workspace_id,
@@ -613,7 +655,8 @@ async def query_graph(
     )
 
     return GraphQueryResult(
-        nodes=nodes, edges=edges,
+        nodes=nodes,
+        edges=edges,
         query_explanation=f"Found {len(nodes)} nodes matching '{payload.query}'",
     )
 

@@ -1145,20 +1145,19 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         StructuredTool(
             name="github_create_organization_repository",
             description="Create a new repository for an organization",
-            func=lambda org,
-            name,
-            private,
-            description: integration.create_organization_repository(
-                org, name, private, description
+            func=lambda org, name, private, description: (
+                integration.create_organization_repository(
+                    org, name, private, description
+                )
             ),
             args_schema=CreateOrganizationRepositorySchema,
         ),
         StructuredTool(
             name="github_update_organization_repository",
             description="Update a repository for an organization",
-            func=lambda org,
-            repo_name,
-            data: integration.update_organization_repository(org, repo_name, data),
+            func=lambda org, repo_name, data: (
+                integration.update_organization_repository(org, repo_name, data)
+            ),
             args_schema=UpdateOrganizationRepositorySchema,
         ),
         StructuredTool(
@@ -1182,12 +1181,8 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         StructuredTool(
             name="github_create_issue",
             description="Create an issue in the specified repository",
-            func=lambda repo_name,
-            title,
-            body,
-            labels,
-            assignees: integration.create_issue(
-                repo_name, title, body, labels, assignees
+            func=lambda repo_name, title, body, labels, assignees: (
+                integration.create_issue(repo_name, title, body, labels, assignees)
             ),
             args_schema=CreateIssueSchema,
         ),
@@ -1200,28 +1195,20 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         StructuredTool(
             name="github_list_issues",
             description="Get issues from a repository",
-            func=lambda repo_name,
-            filter,
-            state,
-            sort,
-            direction,
-            limit,
-            since,
-            labels: integration.list_issues(
-                repo_name, filter, state, sort, direction, limit, since, labels
+            func=lambda repo_name, filter, state, sort, direction, limit, since, labels: (
+                integration.list_issues(
+                    repo_name, filter, state, sort, direction, limit, since, labels
+                )
             ),
             args_schema=GetIssuesSchema,
         ),
         StructuredTool(
             name="github_list_issue_comments",
             description="Get comments on an issue or pull request",
-            func=lambda repo_name,
-            sort,
-            direction,
-            since,
-            per_page,
-            page: integration.list_issue_comments(
-                repo_name, sort, direction, since, per_page, page
+            func=lambda repo_name, sort, direction, since, per_page, page: (
+                integration.list_issue_comments(
+                    repo_name, sort, direction, since, per_page, page
+                )
             ),
             args_schema=ListIssueCommentsSchema,
         ),
@@ -1260,11 +1247,9 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         StructuredTool(
             name="github_create_pull_request",
             description="Create a pull request in the specified repository",
-            func=lambda repo_name,
-            title,
-            body,
-            head,
-            base: integration.create_pull_request(repo_name, title, body, head, base),
+            func=lambda repo_name, title, body, head, base: (
+                integration.create_pull_request(repo_name, title, body, head, base)
+            ),
             args_schema=CreatePullRequestSchema,
         ),
         StructuredTool(
@@ -1276,30 +1261,26 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         StructuredTool(
             name="github_check_assignee_permission",
             description="Check if a user can be assigned to a specific issue",
-            func=lambda repo_name,
-            issue_number,
-            assignee: integration.check_assignee_permission(
-                repo_name, issue_number, assignee
+            func=lambda repo_name, issue_number, assignee: (
+                integration.check_assignee_permission(repo_name, issue_number, assignee)
             ),
             args_schema=CheckAssigneePermissionSchema,
         ),
         StructuredTool(
             name="github_add_assignees_to_issue",
             description="Add assignees to an issue",
-            func=lambda repo_name,
-            issue_number,
-            assignees: integration.add_assignees_to_issue(
-                repo_name, issue_number, assignees
+            func=lambda repo_name, issue_number, assignees: (
+                integration.add_assignees_to_issue(repo_name, issue_number, assignees)
             ),
             args_schema=AddAssigneesToIssueSchema,
         ),
         StructuredTool(
             name="github_remove_assignees_from_issue",
             description="Remove assignees from an issue",
-            func=lambda repo_name,
-            issue_number,
-            assignees: integration.remove_assignees_from_issue(
-                repo_name, issue_number, assignees
+            func=lambda repo_name, issue_number, assignees: (
+                integration.remove_assignees_from_issue(
+                    repo_name, issue_number, assignees
+                )
             ),
             args_schema=RemoveAssigneesFromIssueSchema,
         ),
@@ -1320,10 +1301,10 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         StructuredTool(
             name="github_create_or_update_repository_secret",
             description="Create or update a secret in a GitHub repository",
-            func=lambda repo_name,
-            secret_name,
-            value: integration.create_or_update_repository_secret(
-                repo_name, secret_name, value
+            func=lambda repo_name, secret_name, value: (
+                integration.create_or_update_repository_secret(
+                    repo_name, secret_name, value
+                )
             ),
             args_schema=CreateOrUpdateRepositorySecretSchema,
         ),

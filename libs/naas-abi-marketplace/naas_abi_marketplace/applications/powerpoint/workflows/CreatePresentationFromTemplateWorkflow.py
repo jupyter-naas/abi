@@ -47,8 +47,12 @@ class CreatePresentationFromTemplateWorkflowConfiguration(WorkflowConfiguration)
     naas_configuration: NaasIntegrationConfiguration
     pipeline_configuration: AddPowerPointPresentationPipelineConfiguration
     datastore_path: str = "datastore/powerpoint/presentations"
-    workspace_id: str = field(default_factory=lambda: ABIModule.get_instance().configuration.workspace_id)
-    storage_name: str = field(default_factory=lambda: ABIModule.get_instance().configuration.storage_name)
+    workspace_id: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.workspace_id
+    )
+    storage_name: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.storage_name
+    )
 
 
 class CreatePresentationFromTemplateWorkflowParameters(WorkflowParameters):
@@ -91,7 +95,9 @@ class CreatePresentationFromTemplateWorkflow(Workflow):
                 triple_store=self.__configuration.triple_store,
             )
         )
-        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
 
     def create_presentation(
         self, parameters: CreatePresentationFromTemplateWorkflowParameters

@@ -2,7 +2,9 @@ from queue import Queue
 from typing import Optional
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
-    IObjectStorageAdapter, IObjectStorageDomain)
+    IObjectStorageAdapter,
+    IObjectStorageDomain,
+)
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 

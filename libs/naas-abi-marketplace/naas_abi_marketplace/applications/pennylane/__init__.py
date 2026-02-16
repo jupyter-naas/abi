@@ -23,5 +23,6 @@ class ABIModule(BaseModule):
         config:
             pennylane_api_key: "{{ secret.PENNYLANE_API_KEY }}"
         """
+
         pennylane_api_key: str
         datastore_path: str = "pennylane"

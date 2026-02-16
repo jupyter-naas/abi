@@ -23,4 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "nebari"
         """
+
         datastore_path: str = "nebari"

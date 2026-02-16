@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "qonto"
         """
-        datastore_path: str = "qonto"
 
+        datastore_path: str = "qonto"

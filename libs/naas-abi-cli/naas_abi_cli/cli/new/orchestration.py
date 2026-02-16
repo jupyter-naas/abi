@@ -15,7 +15,9 @@ def _new_orchestration(orchestration_name: str, orchestration_path: str = "."):
     new_orchestration(orchestration_name, orchestration_path)
 
 
-def new_orchestration(orchestration_name: str, orchestration_path: str = ".", extra_values: dict = {}):
+def new_orchestration(
+    orchestration_name: str, orchestration_path: str = ".", extra_values: dict = {}
+):
     orchestration_name = to_pascal_case(orchestration_name)
 
     if orchestration_path == ".":
@@ -32,5 +34,6 @@ def new_orchestration(orchestration_name: str, orchestration_path: str = ".", ex
     )
 
     copier.copy(
-        values={"orchestration_name_pascal": to_pascal_case(orchestration_name)} | extra_values
+        values={"orchestration_name_pascal": to_pascal_case(orchestration_name)}
+        | extra_values
     )

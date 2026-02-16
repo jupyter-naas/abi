@@ -12,8 +12,6 @@ model: ChatModel = ChatModel(
     provider=PROVIDER,
     model=ChatGoogleGenerativeAI(
         model=MODEL_ID,
-        api_key=SecretStr(
-            ABIModule.get_instance().configuration.gemini_api_key
-        ),
+        api_key=SecretStr(ABIModule.get_instance().configuration.gemini_api_key),
     ),
 )

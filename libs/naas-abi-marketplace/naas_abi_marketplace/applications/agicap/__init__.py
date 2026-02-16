@@ -28,6 +28,7 @@ class ABIModule(BaseModule):
             agicap_bearer_token: "{{ secret.AGICAP_BEARER_TOKEN }}"
             agicap_api_token: "{{ secret.AGICAP_API_TOKEN }}"
         """
+
         agicap_username: str
         agicap_password: str
         agicap_client_id: str

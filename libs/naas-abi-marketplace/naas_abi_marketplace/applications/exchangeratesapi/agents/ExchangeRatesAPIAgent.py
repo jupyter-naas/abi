@@ -10,7 +10,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 from naas_abi_marketplace.applications.exchangeratesapi import ABIModule
 
 NAME = "ExchangeRatesAPI"
-DESCRIPTION = "Helps you interact with ExchangeRatesAPI for currency exchange rate information."
+DESCRIPTION = (
+    "Helps you interact with ExchangeRatesAPI for currency exchange rate information."
+)
 SYSTEM_PROMPT = """<role>
 You are an ExchangeRatesAPI Agent with expertise in currency exchange rates and financial data.
 </role>
@@ -65,6 +67,7 @@ def create_agent(
         as_tools,
         ExchangeratesapiIntegrationConfiguration,
     )
+
     integration_config = ExchangeratesapiIntegrationConfiguration(api_key=api_key)
     tools += as_tools(integration_config)
 
@@ -73,17 +76,19 @@ def create_agent(
         Intent(
             intent_value="Get exchange rate information",
             intent_type=IntentType.RAW,
-            intent_target="I can provide general information about exchange rates and currency conversion. However, I currently do not have access to ExchangeRatesAPI tools to retrieve real-time data."
+            intent_target="I can provide general information about exchange rates and currency conversion. However, I currently do not have access to ExchangeRatesAPI tools to retrieve real-time data.",
         ),
         Intent(
             intent_value="Understand currency conversion",
             intent_type=IntentType.RAW,
-            intent_target="Currency conversion involves converting one currency to another using current exchange rates. I can explain the concepts, but I currently do not have access to tools to perform actual conversions."
+            intent_target="Currency conversion involves converting one currency to another using current exchange rates. I can explain the concepts, but I currently do not have access to tools to perform actual conversions.",
         ),
     ]
 
     # Set configuration
-    system_prompt = SYSTEM_PROMPT.replace("[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools]))
+    system_prompt = SYSTEM_PROMPT.replace(
+        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+    )
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=system_prompt)
 
@@ -105,4 +110,3 @@ def create_agent(
 
 class ExchangeRatesAPIAgent(IntentAgent):
     pass
-
