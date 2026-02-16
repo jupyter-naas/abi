@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Copy only the files needed for building
 ADD --chown=abi:abi ./libs/ /app/libs
-ADD --chown=abi:abi ./src/ /app/src
+ADD --chown=abi:abi ./abi/ /app/abi
 ADD --chown=abi:abi ./uv.lock /app/uv.lock
 ADD --chown=abi:abi ./pyproject.toml /app/pyproject.toml
 ADD --chown=abi:abi ./README.md /app/README.md
