@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.5.1 (2026-02-16)
+
+### Bug Fixes
+
+- **deps**: Move greenlet to nexus-api package
+  ([`0a381ae`](https://github.com/jupyter-naas/abi/commit/0a381ae7f92ad326afe18cae21aeceb544c1a597))
+
+- **infra**: Rollback unstable weekend runtime wiring
+  ([`aac4a33`](https://github.com/jupyter-naas/abi/commit/aac4a33f2309ebff4a5889f72e45d13192955dd4))
+
+
 ## v1.5.0 (2026-02-13)
 
 ### Bug Fixes
