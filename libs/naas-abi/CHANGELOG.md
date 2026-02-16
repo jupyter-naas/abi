@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.5.2 (2026-02-16)
+
+### Bug Fixes
+
+- Remaning issues
+  ([`e9480ea`](https://github.com/jupyter-naas/abi/commit/e9480ea53bb33b2358e73dc9fead3915738bc2b8))
+
+
 ## v1.5.1 (2026-02-16)
 
 ### Bug Fixes
