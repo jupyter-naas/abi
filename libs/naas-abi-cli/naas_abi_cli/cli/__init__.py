@@ -13,9 +13,7 @@ from .module import module
 from .new import new
 from .run import run
 from .secret import secrets
-from .seed import seed_jena
 from .setup import setup
-from .stack import stack
 
 
 @click.group("abi")
@@ -33,8 +31,6 @@ _main.add_command(init)
 _main.add_command(deploy)
 _main.add_command(run)
 _main.add_command(setup)
-_main.add_command(stack)
-_main.add_command(seed_jena)
 ran = False
 
 

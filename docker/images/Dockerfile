@@ -4,7 +4,6 @@ WORKDIR /app
 # Install CA certificates
 RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
 
-# Install uv
 RUN pip install uv
 
 # Add build argument for architecture
@@ -19,15 +18,3 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     && unzip awscliv2.zip \
     && ./aws/install
 
-# Copy ALL source code (required for editable installs)
-COPY . .
-
-# Sync dependencies once during build (this creates .venv with all deps)
-RUN uv sync --all-extras --no-dev
-
-# Set Python path to use the venv
-ENV PATH="/app/.venv/bin:$PATH"
-ENV PYTHONPATH="/app"
-
-# Default command - direct python (no uv run overhead)
-CMD ["python", "-m", "naas_abi_core.apps.api.api"]
