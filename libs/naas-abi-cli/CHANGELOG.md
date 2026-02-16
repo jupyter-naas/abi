@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.14.0 (2026-02-16)
+
+### Features
+
+- Working on abi new project setup and stack management
+  ([`2fa9392`](https://github.com/jupyter-naas/abi/commit/2fa939201d32c065cc9284e3e876aac953d66c1b))
+
+- Working on nexus container release to ghcr
+  ([`7f6f441`](https://github.com/jupyter-naas/abi/commit/7f6f441f07c409337e4082ea721a7b71080b49a8))
+
+- Working on tui
+  ([`01165ef`](https://github.com/jupyter-naas/abi/commit/01165ef2ac49966d0d343d6fe6381b659f32ef93))
+
+
 ## v1.13.4 (2026-02-16)
 
 ### Bug Fixes
