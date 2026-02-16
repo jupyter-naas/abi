@@ -37,7 +37,7 @@ class EntityResolutionWorkflowConfiguration(WorkflowConfiguration):
         CreateTripleEmbeddingsWorkflowConfiguration
     )
     vector_store: VectorStoreService
-    triple_store: ITripleStoreService
+    triple_store: TripleStoreService
     embeddings_model: Embeddings
     embeddings_dimension: int
     collection_name: str = "triple_embeddings"

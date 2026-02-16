@@ -21,9 +21,8 @@ engine = Engine()
 engine.load(module_names=["naas_abi_core.modules.triplestore_embeddings"])
 
 module: ABIModule = ABIModule.get_instance()
-
-collection_name = "triple_embeddings_test"
-datastore_path = "merged_individual_test"
+collection_name = module.configuration.collection_name + "_test"
+datastore_path = module.configuration.datastore_path + "_test"
 embeddings_dimension = module.configuration.embeddings_dimensions
 vector_store_service = module.engine.services.vector_store
 triple_store_service = module.engine.services.triple_store

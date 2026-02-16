@@ -24,12 +24,15 @@ class ABIModule(BaseModule):
         module: naas_abi_core.modules.triplestore_embeddings
         enabled: true
         config:
+            datastore_path: "triples"
             collection_name: "triple_embeddings"
             embeddings_dimensions: 3072
             embeddings_model_name: "text-embedding-3-large"
             embeddings_model_provider: "openai"
+
         """
 
+        datastore_path: str = "triples"
         collection_name: str = "triple_embeddings"
         embeddings_dimensions: int = 3072
         embeddings_model_name: str = "text-embedding-3-large"
@@ -37,6 +40,7 @@ class ABIModule(BaseModule):
 
     def on_load(self):
         super().on_load()
+
         from langchain_openai import OpenAIEmbeddings
         from naas_abi_core.modules.triplestore_embeddings.pipelines.MergeIndividualsPipeline import (
             MergeIndividualsPipelineConfiguration,
@@ -57,7 +61,7 @@ class ABIModule(BaseModule):
         from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
         from rdflib import RDFS
 
-        # Init configuration
+        # Init configurations
         collection_name = self.configuration.collection_name
         embeddings_dimensions = self.configuration.embeddings_dimensions
         if self.configuration.embeddings_model_provider == "openai":
@@ -84,6 +88,7 @@ class ABIModule(BaseModule):
             MergeIndividualsPipelineConfiguration(
                 triple_store=self.engine.services.triple_store,
                 object_storage=self.engine.services.object_storage,
+                datastore_path=self.configuration.datastore_path,
             )
         )
 
