@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.1 (2026-02-16)
+
+### Bug Fixes
+
+- Make check-core
+  ([`5fcd0cd`](https://github.com/jupyter-naas/abi/commit/5fcd0cd53fb3f02ab12e6f9e65613afc65a7ffbc))
+
+
 ## v1.6.0 (2026-02-16)
 
 ### Features
