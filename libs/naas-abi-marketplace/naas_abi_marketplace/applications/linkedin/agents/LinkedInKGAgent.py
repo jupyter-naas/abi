@@ -59,6 +59,9 @@ def create_agent(
     from naas_abi_core.modules.templatablesparqlquery import (
         ABIModule as TemplatableSparqlQueryABIModule,
     )
+    from naas_abi_core.modules.triplestore_embeddings import (
+        ABIModule as TriplestoreEmbeddingsABIModule,
+    )
     from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
     from naas_abi_marketplace.applications.linkedin import ABIModule
 
@@ -69,65 +72,94 @@ def create_agent(
             "naas_abi_core.modules.templatablesparqlquery"
         ]
     )
+    triplestore_embeddings_module: BaseModule = ABIModule.get_instance().engine.modules[
+        "naas_abi_core.modules.triplestore_embeddings"
+    ]
+    assert isinstance(triplestore_embeddings_module, TriplestoreEmbeddingsABIModule), (
+        "TriplestoreEmbeddingsABIModule must be a subclass of BaseModule"
+    )
     assert isinstance(
         templatable_sparql_query_module, TemplatableSparqlQueryABIModule
     ), "TemplatableSparqlQueryABIModuleModule must be a subclass of BaseModule"
 
-    linkedin_tools = [
-        "linkedin_count_connections_by_person",
-        "linkedin_search_connections_by_person",
-        "linkedin_search_connections_by_organization",
-        "linkedin_search_connections_by_job_position",
-        "linkedin_search_person_info",
-    ]
-    sparql_query_tools_list = TemplatableSparqlQueryABIModule.get_instance().get_tools(
+    from rdflib import RDFS, Graph
+
+    linkedin_queries_path = "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/queries/ActOfConnectionsOnLinkedInQueries.ttl"
+    linkedin_queries_graph = Graph()
+    linkedin_queries_graph.parse(linkedin_queries_path, format="turtle")
+
+    # Dynamically extract all labels from ActOfConnectionsOnLinkedInQueries.ttl as linkedin_tools
+    linkedin_tools: list[str] = []
+    for _, _, o in linkedin_queries_graph.triples((None, RDFS.label, None)):
+        linkedin_tools.append(str(o))
+    sparql_query_tools_list = templatable_sparql_query_module.get_instance().get_tools(
         linkedin_tools
     )
     tools += sparql_query_tools_list
 
-    from naas_abi_core.services.triple_store.TripleStoreService import (
-        TripleStoreService,
+    from langchain_openai import OpenAIEmbeddings
+    from naas_abi_core.modules.triplestore_embeddings.workflows.CreateSearchToolWorkflow import (
+        CreateSearchToolWorkflow,
+        CreateSearchToolWorkflowConfiguration,
+        CreateSearchToolWorkflowParameters,
     )
     from naas_abi_core.services.vector_store.VectorStoreService import (
         VectorStoreService,
-    )
-    from naas_abi_marketplace.applications.linkedin.workflows.CreateClassEmbeddingsWorkflow import (
-        CreateClassEmbeddingsWorkflow,
-        CreateClassEmbeddingsWorkflowConfiguration,
     )
 
     vector_store_service: VectorStoreService = (
         ABIModule.get_instance().engine.services.vector_store
     )
-    triple_store_service: TripleStoreService = (
-        ABIModule.get_instance().engine.services.triple_store
+    embeddings_model_name = (
+        triplestore_embeddings_module.configuration.embeddings_model_name
     )
-    embeddings_workflow = CreateClassEmbeddingsWorkflow(
-        CreateClassEmbeddingsWorkflowConfiguration(
-            triple_store=triple_store_service,
+    embeddings_dimensions = (
+        triplestore_embeddings_module.configuration.embeddings_dimensions
+    )
+    collection_name = triplestore_embeddings_module.configuration.collection_name
+    if (
+        triplestore_embeddings_module.configuration.embeddings_model_provider
+        == "openai"
+    ):
+        embeddings_model = OpenAIEmbeddings(
+            model=embeddings_model_name,
+            dimensions=embeddings_dimensions,
+        )
+    else:
+        raise ValueError(
+            f"Embeddings model provider {triplestore_embeddings_module.configuration.embeddings_model_provider} not supported"
+        )
+
+    embeddings_workflow = CreateSearchToolWorkflow(
+        CreateSearchToolWorkflowConfiguration(
             vector_store=vector_store_service,
+            embeddings_model=embeddings_model,
         )
     )
 
     # Create search tools for persons
-    persons_collection_name = "linkedin_persons"
     search_person_tool = embeddings_workflow.create_search_tool(
-        collection_name=persons_collection_name,
-        tool_name="linkedin_search_person_uri",
-        tool_description="Search for person URIs (entities of type cco:ont00001262) in the knowledge graph by name using semantic similarity. Use this tool when you need to find the URI of a person by their name.",
-        search_param_name="person_name",
-        entity_type_label="person",
+        CreateSearchToolWorkflowParameters(
+            tool_name="linkedin_search_person_uri",
+            tool_description="Search for person URIs in the knowledge graph by name using semantic similarity.",
+            search_param_name="person_name",
+            search_param_description="Name of the person to search for",
+            collection_name=collection_name,
+            search_filter={"type_label": "Person"},
+        )
     )
     tools.append(search_person_tool)
 
     # Create search tools for companies
-    companies_collection_name = "linkedin_companies"
     search_company_tool = embeddings_workflow.create_search_tool(
-        collection_name=companies_collection_name,
-        tool_name="linkedin_search_company_uri",
-        tool_description="Search for company URIs (entities of type cco:ont00001180) in the knowledge graph by name using semantic similarity. Use this tool to find a company URI by its name.",
-        search_param_name="company_name",
-        entity_type_label="company",
+        CreateSearchToolWorkflowParameters(
+            tool_name="linkedin_search_organization_uri",
+            tool_description="Search for organization URIs in the knowledge graph by name using semantic similarity.",
+            search_param_name="organization_name",
+            search_param_description="Name of the organization to search for",
+            collection_name=collection_name,
+            search_filter={"type_label": "Organization"},
+        )
     )
     tools.append(search_company_tool)
 
