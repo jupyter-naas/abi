@@ -94,7 +94,7 @@ services:
   # and coordinates multi-model conversations
   abi:
     <<: *abi_template
-    command: ["python", "-m", "naas_abi_core.apps.api.api"]  # Use pre-installed packages (no uv run overhead)
+    command: ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.api.api"]  # Start ABI application
     # models:
     #   - gemma3        # Primary conversational AI model
     #   - embeddinggemma # Text embedding model for semantic search
