@@ -4,11 +4,12 @@ Tracks sensitive operations for security and compliance.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import Request
 from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from sqlalchemy import text
 
 
@@ -23,7 +24,7 @@ async def log_audit_event(
 ) -> None:
     """
     Log an audit event.
-    
+
     Args:
         action: Action type ('login', 'logout', 'register', 'password_change', etc.)
         user_id: User performing the action
@@ -34,23 +35,23 @@ async def log_audit_event(
         success: Whether the action succeeded
     """
     log_id = f"audit-{uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    
+    now = datetime.now(UTC).replace(tzinfo=None)
+
     ip_address = None
     user_agent = None
     if request:
         ip_address = request.client.host if request.client else None
         user_agent = request.headers.get("user-agent")
-    
+
     details_json = json.dumps(details) if details else None
-    
+
     try:
         async with async_engine.begin() as conn:
             await conn.execute(
                 text("""
-                    INSERT INTO audit_logs 
+                    INSERT INTO audit_logs
                     (id, user_id, action, resource_type, resource_id, details, ip_address, user_agent, success, created_at)
-                    VALUES 
+                    VALUES
                     (:id, :user_id, :action, :resource_type, :resource_id, :details, :ip_address, :user_agent, :success, :created_at)
                 """),
                 {
@@ -89,10 +90,10 @@ async def log_register(user_id: str, request: Request | None = None) -> None:
 async def log_password_change(user_id: str, request: Request | None = None, forced: bool = False) -> None:
     """Log a password change."""
     await log_audit_event(
-        "password_change", 
-        user_id=user_id, 
-        resource_type="user", 
-        resource_id=user_id, 
+        "password_change",
+        user_id=user_id,
+        resource_type="user",
+        resource_id=user_id,
         request=request,
         details={"forced": forced}
     )

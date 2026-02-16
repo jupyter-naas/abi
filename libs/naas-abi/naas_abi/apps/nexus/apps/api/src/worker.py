@@ -6,26 +6,27 @@ using their Python runtime and ASGI support.
 """
 
 import asgi
+from workers import WorkerEntrypoint
+
 # Import the FastAPI app
 from app.main import app
-from workers import WorkerEntrypoint
 
 
 class Default(WorkerEntrypoint):
     """
     Cloudflare Worker entry point for the NEXUS API.
-    
+
     This class handles incoming requests and routes them through
     the FastAPI application using the ASGI protocol.
     """
-    
+
     async def fetch(self, request):
         """
         Handle incoming HTTP requests.
-        
+
         Args:
             request: The incoming Cloudflare request object
-            
+
         Returns:
             Response object to send back to the client
         """
@@ -38,11 +39,11 @@ class Default(WorkerEntrypoint):
 def on_fetch(request, env, ctx):
     """Alternative entry point for wrangler dev."""
     import asyncio
-    
+
     async def run():
         worker = Default()
         worker.env = env
         worker.ctx = ctx
         return await worker.fetch(request)
-    
+
     return asyncio.get_event_loop().run_until_complete(run())

@@ -2,15 +2,11 @@
 
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Optional
 
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
-                     Request, UploadFile)
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import \
-    get_current_user_required
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
-from naas_abi_core.services.object_storage.ObjectStorageService import \
-    ObjectStorageService
+from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -25,9 +21,9 @@ class FileInfo(BaseModel):
     name: str
     path: str
     type: str  # 'file' or 'folder'
-    size: Optional[int] = None
-    modified: Optional[datetime] = None
-    content_type: Optional[str] = None
+    size: int | None = None
+    modified: datetime | None = None
+    content_type: str | None = None
 
 
 class FileContent(BaseModel):
@@ -207,10 +203,9 @@ def _collect_directory_tree(
 # SPECIFIC ROUTES FIRST (before wildcard routes)
 # =============================================================================
 
+
 @router.get("/", response_model=FileListResponse)
-async def list_files(
-    request: Request, path: str = Query("", description="Directory path to list")
-):
+async def list_files(request: Request, path: str = Query("", description="Directory path to list")):
     """List files and folders in a directory."""
     storage = get_object_storage(request)
     normalized_path = normalize_relative_path(path, allow_empty=True)
@@ -230,8 +225,8 @@ async def list_files(
             )
             continue
 
-        size: Optional[int] = None
-        content_type: Optional[str] = None
+        size: int | None = None
+        content_type: str | None = None
         try:
             content = _read_bytes(storage, entry)
             size = len(content)
@@ -400,6 +395,7 @@ async def upload_file(
 # WILDCARD ROUTES LAST (catch-all patterns)
 # =============================================================================
 
+
 @router.get("/{path:path}", response_model=FileContent)
 async def read_file(request: Request, path: str):
     """Read file content."""
@@ -411,13 +407,13 @@ async def read_file(request: Request, path: str):
 
     try:
         content_bytes = _read_bytes(storage, normalized_path)
-    except Exceptions.ObjectNotFound:
-        raise HTTPException(status_code=404, detail="File not found")
+    except Exceptions.ObjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="File not found") from exc
 
     try:
         content = content_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File is not text")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="File is not text") from exc
 
     ext = PurePosixPath(normalized_path).suffix.lower()
     content_types = {

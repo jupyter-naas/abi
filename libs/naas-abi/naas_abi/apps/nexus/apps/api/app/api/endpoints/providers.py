@@ -7,11 +7,12 @@ import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required)
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.model_registry import (
-    MODEL_REGISTRY, get_logo_for_provider, get_models_for_provider)
+    get_logo_for_provider,
+    get_models_for_provider,
+)
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,7 +62,7 @@ async def has_api_key_configured(
     )
     if result.first():
         return True
-    
+
     # Fallback to environment
     return bool(os.getenv(key_name))
 
@@ -75,12 +76,11 @@ async def list_available_providers(
     List all available AI providers based on workspace secrets.
     Returns providers with models from the registry.
     """
-    from naas_abi.apps.nexus.apps.api.app.models import (SecretModel,
-                                                         WorkspaceMemberModel)
+    from naas_abi.apps.nexus.apps.api.app.models import SecretModel, WorkspaceMemberModel
     from sqlalchemy import select
-    
+
     providers = []
-    
+
     # Get user's workspaces to check for secrets
     result = await db.execute(
         select(WorkspaceMemberModel.workspace_id).where(
@@ -88,11 +88,11 @@ async def list_available_providers(
         )
     )
     workspace_ids = [row[0] for row in result.fetchall()]
-    
+
     if not workspace_ids:
         logger.warning(f"User {current_user.id} has no workspaces")
         return providers
-    
+
     # Check which API keys exist in any of the user's workspaces
     result = await db.execute(
         select(SecretModel.key).where(
@@ -100,21 +100,21 @@ async def list_available_providers(
         )
     )
     secret_keys = {row[0] for row in result.fetchall()}
-    
+
     logger.info(f"Found secrets: {secret_keys}")
-    
+
     # Check environment variables as fallback
     env_keys = set()
-    for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY", "MISTRAL_API_KEY", 
+    for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY", "MISTRAL_API_KEY",
                 "PERPLEXITY_API_KEY", "GOOGLE_API_KEY", "OPENROUTER_API_KEY",
                 "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]:
         if os.getenv(key):
             env_keys.add(key)
-    
+
     # Combine both sources
     all_keys = secret_keys | env_keys
     logger.info(f"All available keys: {all_keys}")
-    
+
     # OpenAI
     if "OPENAI_API_KEY" in all_keys:
         models = [Model(**m) for m in get_models_for_provider("openai")]
@@ -126,7 +126,7 @@ async def list_available_providers(
             logo_url=get_logo_for_provider("openai"),
             models=models,
         ))
-    
+
     # Anthropic
     if "ANTHROPIC_API_KEY" in all_keys:
         models = [Model(**m) for m in get_models_for_provider("anthropic")]
@@ -138,7 +138,7 @@ async def list_available_providers(
             logo_url=get_logo_for_provider("anthropic"),
             models=models,
         ))
-    
+
     # xAI
     if "XAI_API_KEY" in all_keys:
         models = [Model(**m) for m in get_models_for_provider("xai")]
@@ -150,7 +150,7 @@ async def list_available_providers(
             logo_url=get_logo_for_provider("xai"),
             models=models,
         ))
-    
+
     # Mistral
     if "MISTRAL_API_KEY" in all_keys:
         models = [Model(**m) for m in get_models_for_provider("mistral")]
@@ -162,7 +162,7 @@ async def list_available_providers(
             logo_url=get_logo_for_provider("mistral"),
             models=models,
         ))
-    
+
     # Perplexity
     if "PERPLEXITY_API_KEY" in all_keys:
         models = [Model(**m) for m in get_models_for_provider("perplexity")]
@@ -174,7 +174,7 @@ async def list_available_providers(
             logo_url=get_logo_for_provider("perplexity"),
             models=models,
         ))
-    
+
     # Google
     if "GOOGLE_API_KEY" in all_keys:
         models = [Model(**m) for m in get_models_for_provider("google")]
@@ -186,7 +186,7 @@ async def list_available_providers(
             logo_url=get_logo_for_provider("google"),
             models=models,
         ))
-    
+
     # OpenRouter
     if "OPENROUTER_API_KEY" in all_keys:
         models = [Model(**m) for m in get_models_for_provider("openrouter")]
@@ -198,7 +198,7 @@ async def list_available_providers(
             logo_url=get_logo_for_provider("openrouter"),
             models=models,
         ))
-    
+
     # Cloudflare (require both API token and Account ID)
     if ("CLOUDFLARE_API_TOKEN" in all_keys) and ("CLOUDFLARE_ACCOUNT_ID" in all_keys):
         models = [Model(**m) for m in get_models_for_provider("cloudflare")]
@@ -210,7 +210,7 @@ async def list_available_providers(
             logo_url=get_logo_for_provider("cloudflare"),
             models=models,
         ))
-    
+
     # Ollama (always available - local, no API key needed)
     models = [Model(**m) for m in get_models_for_provider("ollama")]
     providers.append(Provider(
@@ -221,5 +221,5 @@ async def list_available_providers(
         logo_url=get_logo_for_provider("ollama"),
         models=models,
     ))
-    
+
     return providers

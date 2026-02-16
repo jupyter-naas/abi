@@ -4,7 +4,7 @@ import glob
 import os
 from typing import Dict, List, cast
 
-from fastapi import APIRouter, FastAPI
+from fastapi import FastAPI
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
     GlobalConfig

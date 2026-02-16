@@ -92,7 +92,7 @@ async def start_ollama(ollama_path: str) -> bool:
         )
 
         # Wait for it to become responsive
-        for i in range(STARTUP_TIMEOUT):
+        for _i in range(STARTUP_TIMEOUT):
             await asyncio.sleep(1)
             if await is_ollama_running():
                 logger.info(f"Ollama started successfully (pid={process.pid})")

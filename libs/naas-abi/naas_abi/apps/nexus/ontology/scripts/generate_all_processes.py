@@ -6,8 +6,6 @@ Each process maps to real Python functions and React components.
 """
 
 from pathlib import Path
-from textwrap import dedent
-import json
 
 OUTPUT_DIR = Path(__file__).parent.parent / "processes"
 

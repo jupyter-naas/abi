@@ -5,19 +5,21 @@ Organizations sit above Workspaces in the hierarchy and own branding configurati
 """
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required)
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
-from naas_abi.apps.nexus.apps.api.app.models import (OrganizationDomainModel,
-                                                     OrganizationMemberModel,
-                                                     OrganizationModel,
-                                                     WorkspaceMemberModel,
-                                                     WorkspaceModel)
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.models import (
+    OrganizationDomainModel,
+    OrganizationMemberModel,
+    OrganizationModel,
+    WorkspaceMemberModel,
+    WorkspaceModel,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -352,7 +354,7 @@ async def create_organization(
         raise HTTPException(status_code=400, detail="Slug already exists")
 
     org_id = f"org-{uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     organization = OrganizationModel(
         id=org_id,
@@ -420,7 +422,7 @@ async def update_organization(
     update_data = updates.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(org, field, value)
-    org.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    org.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     await db.flush()
     return _to_schema(org)
@@ -578,7 +580,7 @@ async def list_org_members(
 ) -> list[OrganizationMember]:
     """List members of an organization. Requires membership."""
     await require_org_access(current_user.id, org_id, db)
-    
+
     # Get members with user info
     from naas_abi.apps.nexus.apps.api.app.models import UserModel
     result = await db.execute(
@@ -587,7 +589,7 @@ async def list_org_members(
         .where(OrganizationMemberModel.organization_id == org_id)
         .order_by(OrganizationMemberModel.created_at)
     )
-    
+
     members = []
     for member, user in result.all():
         members.append(OrganizationMember(
@@ -599,7 +601,7 @@ async def list_org_members(
             name=user.name,
             created_at=member.created_at,
         ))
-    
+
     return members
 
 
@@ -614,7 +616,7 @@ async def invite_org_member(
     role = await require_org_access(current_user.id, org_id, db)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can invite members")
-    
+
     # Find user by email
     from naas_abi.apps.nexus.apps.api.app.models import UserModel
     result = await db.execute(
@@ -623,7 +625,7 @@ async def invite_org_member(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found with this email")
-    
+
     # Check if already a member
     existing = await db.execute(
         select(OrganizationMemberModel).where(
@@ -633,9 +635,9 @@ async def invite_org_member(
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="User is already a member")
-    
+
     # Create membership
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     member = OrganizationMemberModel(
         id=str(uuid4()),
         organization_id=org_id,
@@ -645,7 +647,7 @@ async def invite_org_member(
     )
     db.add(member)
     await db.flush()
-    
+
     return OrganizationMember(
         id=member.id,
         organization_id=member.organization_id,
@@ -669,11 +671,11 @@ async def update_org_member(
     role = await require_org_access(current_user.id, org_id, db)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can update member roles")
-    
+
     # Can't change your own role
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot change your own role")
-    
+
     # Get member
     result = await db.execute(
         select(OrganizationMemberModel).where(
@@ -684,18 +686,18 @@ async def update_org_member(
     member = result.scalar_one_or_none()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
-    
+
     # Update role
     member.role = updates.role
     await db.flush()
-    
+
     # Get user info
     from naas_abi.apps.nexus.apps.api.app.models import UserModel
     user_result = await db.execute(
         select(UserModel).where(UserModel.id == user_id)
     )
     user = user_result.scalar_one()
-    
+
     return OrganizationMember(
         id=member.id,
         organization_id=member.organization_id,
@@ -718,11 +720,11 @@ async def remove_org_member(
     role = await require_org_access(current_user.id, org_id, db)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can remove members")
-    
+
     # Can't remove yourself
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself from the organization")
-    
+
     # Get member
     result = await db.execute(
         select(OrganizationMemberModel).where(
@@ -733,14 +735,14 @@ async def remove_org_member(
     member = result.scalar_one_or_none()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
-    
+
     # Can't remove the owner
     if member.role == "owner":
         raise HTTPException(status_code=400, detail="Cannot remove the organization owner")
-    
+
     await db.delete(member)
     await db.flush()
-    
+
     return {"message": "Member removed successfully"}
 
 
@@ -754,14 +756,14 @@ async def list_org_domains(
 ) -> list[OrganizationDomain]:
     """List domains for an organization. Requires membership."""
     await require_org_access(current_user.id, org_id, db)
-    
+
     result = await db.execute(
         select(OrganizationDomainModel)
         .where(OrganizationDomainModel.organization_id == org_id)
         .order_by(OrganizationDomainModel.created_at)
     )
     domains = result.scalars().all()
-    
+
     return [
         OrganizationDomain(
             id=domain.id,
@@ -787,19 +789,19 @@ async def add_org_domain(
     role = await require_org_access(current_user.id, org_id, db)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can add domains")
-    
+
     # Check if domain already exists
     existing = await db.execute(
         select(OrganizationDomainModel).where(OrganizationDomainModel.domain == domain_data.domain)
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Domain already registered")
-    
+
     # Generate verification token
     import secrets
     verification_token = secrets.token_urlsafe(32)
-    
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    now = datetime.now(UTC).replace(tzinfo=None)
     domain = OrganizationDomainModel(
         id=str(uuid4()),
         organization_id=org_id,
@@ -810,7 +812,7 @@ async def add_org_domain(
     )
     db.add(domain)
     await db.flush()
-    
+
     return OrganizationDomain(
         id=domain.id,
         organization_id=domain.organization_id,
@@ -833,7 +835,7 @@ async def verify_org_domain(
     role = await require_org_access(current_user.id, org_id, db)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can verify domains")
-    
+
     result = await db.execute(
         select(OrganizationDomainModel).where(
             (OrganizationDomainModel.id == domain_id)
@@ -843,16 +845,16 @@ async def verify_org_domain(
     domain = result.scalar_one_or_none()
     if not domain:
         raise HTTPException(status_code=404, detail="Domain not found")
-    
+
     if domain.is_verified:
         raise HTTPException(status_code=400, detail="Domain already verified")
-    
+
     # TODO: Implement actual DNS verification
     # For now, just mark as verified
     domain.is_verified = True
-    domain.verified_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    domain.verified_at = datetime.now(UTC).replace(tzinfo=None)
     await db.flush()
-    
+
     return OrganizationDomain(
         id=domain.id,
         organization_id=domain.organization_id,
@@ -875,7 +877,7 @@ async def delete_org_domain(
     role = await require_org_access(current_user.id, org_id, db)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can delete domains")
-    
+
     result = await db.execute(
         select(OrganizationDomainModel).where(
             (OrganizationDomainModel.id == domain_id)
@@ -885,10 +887,10 @@ async def delete_org_domain(
     domain = result.scalar_one_or_none()
     if not domain:
         raise HTTPException(status_code=404, detail="Domain not found")
-    
+
     await db.delete(domain)
     await db.flush()
-    
+
     return {"message": "Domain removed successfully"}
 
 
@@ -913,7 +915,7 @@ async def get_org_billing(
 ) -> BillingInfo:
     """Get organization billing information. NOT IMPLEMENTED."""
     await require_org_access(current_user.id, org_id, db)
-    
+
     # Return 501 Not Implemented
     raise HTTPException(
         status_code=501,
@@ -932,7 +934,7 @@ async def upgrade_org_plan(
     role = await require_org_access(current_user.id, org_id, db)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can manage billing")
-    
+
     raise HTTPException(
         status_code=501,
         detail="Billing upgrades are not yet implemented. Please contact support@naas.ai to discuss enterprise plans."
@@ -949,7 +951,7 @@ async def add_payment_method(
     role = await require_org_access(current_user.id, org_id, db)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can manage billing")
-    
+
     raise HTTPException(
         status_code=501,
         detail="Payment method management is not yet implemented. Billing features are coming soon."

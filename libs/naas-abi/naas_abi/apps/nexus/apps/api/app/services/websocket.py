@@ -8,17 +8,15 @@ Handles:
 - Notification delivery
 """
 
-import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Set
+from datetime import datetime
 
 import socketio
 from fastapi import FastAPI
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import decode_token
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from naas_abi.apps.nexus.apps.api.app.services.refresh_token import \
-    is_access_token_revoked
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.refresh_token import is_access_token_revoked
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +31,10 @@ sio = socketio.AsyncServer(
 
 # In-memory presence tracking
 # workspace_id -> set of user_ids
-workspace_presence: Dict[str, Set[str]] = {}
+workspace_presence: dict[str, set[str]] = {}
 
 # user_id -> set of workspace_ids they're viewing
-user_workspaces: Dict[str, Set[str]] = {}
+user_workspaces: dict[str, set[str]] = {}
 
 
 @sio.event
@@ -76,12 +74,12 @@ async def connect(sid, environ, auth):
         return False
 
     logger.info(f"[WS] Client connected sid={sid} user={user_id}")
-    
+
     # Store user_id with session
     async with sio.session(sid) as session:
         session['user_id'] = user_id
         session['workspaces'] = set()
-    
+
     return True
 
 
@@ -91,15 +89,15 @@ async def disconnect(sid):
     async with sio.session(sid) as session:
         user_id = session.get('user_id')
         workspaces = session.get('workspaces', set())
-    
+
     if not user_id:
         return
-    
+
     # Remove from all workspaces
     for workspace_id in workspaces:
         if workspace_id in workspace_presence:
             workspace_presence[workspace_id].discard(user_id)
-            
+
             # Notify others in workspace
             await sio.emit(
                 'user_left',
@@ -107,11 +105,11 @@ async def disconnect(sid):
                 room=f'workspace:{workspace_id}',
                 skip_sid=sid
             )
-    
+
     # Clean up user tracking
     if user_id in user_workspaces:
         del user_workspaces[user_id]
-    
+
     logger.info(f"[WS] Disconnected sid={sid} user={user_id}")
 
 
@@ -119,38 +117,38 @@ async def disconnect(sid):
 async def join_workspace(sid, data):
     """User joins a workspace room."""
     workspace_id = data.get('workspace_id')
-    
+
     if not workspace_id:
         return {'error': 'workspace_id required'}
-    
+
     async with sio.session(sid) as session:
         user_id = session.get('user_id')
         session['workspaces'].add(workspace_id)
-    
+
     # Join Socket.IO room
     sio.enter_room(sid, f'workspace:{workspace_id}')
-    
+
     # Track presence
     if workspace_id not in workspace_presence:
         workspace_presence[workspace_id] = set()
     workspace_presence[workspace_id].add(user_id)
-    
+
     if user_id not in user_workspaces:
         user_workspaces[user_id] = set()
     user_workspaces[user_id].add(workspace_id)
-    
+
     # Notify others
     await sio.emit(
         'user_joined',
         {
             'user_id': user_id,
             'workspace_id': workspace_id,
-            'timestamp': datetime.now(timezone.utc).isoformat()
+            'timestamp': datetime.now(UTC).isoformat()
         },
         room=f'workspace:{workspace_id}',
         skip_sid=sid
     )
-    
+
     # Return current presence list
     return {
         'workspace_id': workspace_id,
@@ -162,24 +160,24 @@ async def join_workspace(sid, data):
 async def leave_workspace(sid, data):
     """User leaves a workspace room."""
     workspace_id = data.get('workspace_id')
-    
+
     if not workspace_id:
         return {'error': 'workspace_id required'}
-    
+
     async with sio.session(sid) as session:
         user_id = session.get('user_id')
         session['workspaces'].discard(workspace_id)
-    
+
     # Leave Socket.IO room
     sio.leave_room(sid, f'workspace:{workspace_id}')
-    
+
     # Remove from presence
     if workspace_id in workspace_presence:
         workspace_presence[workspace_id].discard(user_id)
-    
+
     if user_id in user_workspaces:
         user_workspaces[user_id].discard(workspace_id)
-    
+
     # Notify others
     await sio.emit(
         'user_left',
@@ -187,7 +185,7 @@ async def leave_workspace(sid, data):
         room=f'workspace:{workspace_id}',
         skip_sid=sid
     )
-    
+
     return {'status': 'left', 'workspace_id': workspace_id}
 
 
@@ -196,10 +194,10 @@ async def typing_start(sid, data):
     """User started typing in a conversation."""
     workspace_id = data.get('workspace_id')
     conversation_id = data.get('conversation_id')
-    
+
     async with sio.session(sid) as session:
         user_id = session.get('user_id')
-    
+
     # Broadcast to workspace (excluding sender)
     await sio.emit(
         'user_typing',
@@ -218,10 +216,10 @@ async def typing_stop(sid, data):
     """User stopped typing."""
     workspace_id = data.get('workspace_id')
     conversation_id = data.get('conversation_id')
-    
+
     async with sio.session(sid) as session:
         user_id = session.get('user_id')
-    
+
     await sio.emit(
         'user_typing',
         {
@@ -240,14 +238,14 @@ async def message_created(sid, data):
     workspace_id = data.get('workspace_id')
     conversation_id = data.get('conversation_id')
     message = data.get('message')
-    
+
     # Broadcast to all users in workspace
     await sio.emit(
         'new_message',
         {
             'conversation_id': conversation_id,
             'message': message,
-            'timestamp': datetime.now(timezone.utc).isoformat()
+            'timestamp': datetime.now(UTC).isoformat()
         },
         room=f'workspace:{workspace_id}'
     )
@@ -259,10 +257,10 @@ async def cursor_position(sid, data):
     workspace_id = data.get('workspace_id')
     document_id = data.get('document_id')
     position = data.get('position')
-    
+
     async with sio.session(sid) as session:
         user_id = session.get('user_id')
-    
+
     # Broadcast cursor position
     await sio.emit(
         'cursor_update',
@@ -288,7 +286,7 @@ def get_user_workspaces(user_id: str) -> list[str]:
 
 def init_websocket(app: FastAPI):
     """Initialize WebSocket support in FastAPI app.
-    
+
     In embedded ABI mode, we must mount Socket.IO in-place on the shared app.
     In standalone mode, this also works and avoids replacing the root ASGI app.
     CORS is handled by both Socket.IO (for WS) and FastAPI middleware (for HTTP).

@@ -242,3 +242,23 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
         triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         pass
+
+    def create_graph(self, graph_name: URIRef):
+        raise NotImplementedError(
+            "Named graphs are not supported by object storage triple store adapter"
+        )
+
+    def clear_graph(self, graph_name: URIRef | None = None):
+        raise NotImplementedError(
+            "Named graphs are not supported by object storage triple store adapter"
+        )
+
+    def drop_graph(self, graph_name: URIRef):
+        raise NotImplementedError(
+            "Named graphs are not supported by object storage triple store adapter"
+        )
+
+    def list_graphs(self) -> list[URIRef]:
+        raise NotImplementedError(
+            "Named graphs are not supported by object storage triple store adapter"
+        )

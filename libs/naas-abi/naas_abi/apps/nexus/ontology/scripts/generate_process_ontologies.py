@@ -6,7 +6,6 @@ Each process gets its own file with full BFO 7 Buckets structure.
 
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List
 
 @dataclass
 class ProcessDef:

@@ -6,7 +6,6 @@ It's simpler and more reliable than dynamic discovery.
 """
 
 from typing import Literal, TypedDict
-from datetime import datetime
 
 
 class ModelInfo(TypedDict):
@@ -95,7 +94,7 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "released": "2024-09-12",
         },
     ],
-    
+
     "anthropic": [
         {
             "id": "claude-opus-4.6",
@@ -164,7 +163,7 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "released": "2024-03-07",
         },
     ],
-    
+
     "xai": [
         {
             "id": "grok-3",
@@ -200,7 +199,7 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "released": "2024-12-12",
         },
     ],
-    
+
     "mistral": [
         {
             "id": "mistral-large-latest",
@@ -247,7 +246,7 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "released": "2024-05-29",
         },
     ],
-    
+
     "perplexity": [
         {
             "id": "llama-3.1-sonar-large-128k-online",
@@ -294,7 +293,7 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "released": "2024-07-23",
         },
     ],
-    
+
     "google": [
         {
             "id": "gemini-2.0-flash-exp",
@@ -341,7 +340,7 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "released": "2024-05-14",
         },
     ],
-    
+
     "openrouter": [
         {
             "id": "anthropic/claude-opus-4.6",
@@ -399,7 +398,7 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "released": "2024-12-11",
         },
     ],
-    
+
     "ollama": [
         {
             "id": "qwen3-vl:2b",
@@ -446,7 +445,7 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "released": "2023-08-24",
         },
     ],
-    
+
     "cloudflare": [
         {
             "id": "@cf/meta/llama-3.1-8b-instruct",
