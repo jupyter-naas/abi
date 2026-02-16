@@ -134,11 +134,11 @@ flowchart TD
     DeleteEmbeddings --> ReturnDelete[Return Success]
     LogNotFound --> ReturnDelete
     
-    style EntityResolution fill:#e1f5ff
-    style DeleteWorkflow fill:#ffe1e1
-    style MergePipeline fill:#fff4e1
-    style CreateEmbeddings fill:#e1ffe1
-    style Error fill:#ffcccc
+    style EntityResolution fill:#e1f5ff,color:black
+    style DeleteWorkflow fill:#ffe1e1,color:black
+    style MergePipeline fill:#fff4e1,color:black
+    style CreateEmbeddings fill:#e1ffe1,color:black
+    style Error fill:#ffcccc,color:black
 ```
 
 ## Logical Relationships
