@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.0 (2026-02-16)
+
+### Features
+
+- Trigger release
+  ([`cf5dfe9`](https://github.com/jupyter-naas/abi/commit/cf5dfe9691af94ff1d791de0bd0d6a53cb877a32))
+
+
 ## v1.6.1 (2026-02-16)
 
 ### Bug Fixes
