@@ -49,11 +49,6 @@ class ABIModule(BaseModule[_Configuration]):
 
         from naas_abi_core import logger
         from naas_abi_core.utils.onto2py import onto2py
-        from naas_abi_marketplace.applications.linkedin.workflows.CreateClassEmbeddingsWorkflow import (
-            CreateClassEmbeddingsWorkflow,
-            CreateClassEmbeddingsWorkflowConfiguration,
-            CreateClassEmbeddingsWorkflowParameters,
-        )
 
         ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
         ttl_files = glob.glob(
@@ -74,45 +69,3 @@ class ABIModule(BaseModule[_Configuration]):
                 logger.error(
                     f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
                 )
-
-        # Initialize and execute workflow for creating embeddings
-        try:
-            embeddings_workflow = CreateClassEmbeddingsWorkflow(
-                CreateClassEmbeddingsWorkflowConfiguration(
-                    triple_store=self.engine.services.triple_store,
-                    vector_store=self.engine.services.vector_store,
-                )
-            )
-
-            # Create embeddings for persons
-            logger.info("Creating embeddings for persons...")
-            persons_result = embeddings_workflow.create_class_embeddings(
-                CreateClassEmbeddingsWorkflowParameters(
-                    class_uri="cco:ont00001262",
-                    collection_name="linkedin_persons",
-                    entity_variable_name="person",
-                    entity_type_label="person",
-                )
-            )
-            logger.info(
-                f"Persons embeddings created: {persons_result.get('entities_processed', 0)} entities processed"
-            )
-
-            # Create embeddings for organizations/companies
-            logger.info("Creating embeddings for organizations...")
-            organizations_result = embeddings_workflow.create_class_embeddings(
-                CreateClassEmbeddingsWorkflowParameters(
-                    class_uri="cco:ont00001180",
-                    collection_name="linkedin_companies",
-                    entity_variable_name="company",
-                    entity_type_label="company",
-                )
-            )
-            logger.info(
-                f"Organizations embeddings created: {organizations_result.get('entities_processed', 0)} entities processed"
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to create class embeddings on initialization: {e}",
-                exc_info=True,
-            )
