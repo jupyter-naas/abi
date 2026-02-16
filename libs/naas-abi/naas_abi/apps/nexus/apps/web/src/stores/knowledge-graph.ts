@@ -435,7 +435,7 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphState>()(
             'A demo scenario grounded in BFO 7 Buckets showing a flight from SFO to JFK'
           );
         } else {
-          get().selectGraph(aviationGraph.id);
+          get().selectGraph(aviationGraph!.id);
         }
 
         // Clear existing data
