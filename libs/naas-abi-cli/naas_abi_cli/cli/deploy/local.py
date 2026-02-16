@@ -21,6 +21,9 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "MINIO_ROOT_USER": "abi",
     "ABI_HOST": "abi",
     "RABBITMQ_USER": "abi",
+    "NEXUS_WEB_IMAGE": "ghcr.io/jupyter-naas/nexus-web",
+    "NEXUS_WEB_TAG": "latest",
+    "NEXUS_WEB_PORT": "3042",
 }
 
 RANDOM_ENV_KEYS: tuple[str, ...] = (
