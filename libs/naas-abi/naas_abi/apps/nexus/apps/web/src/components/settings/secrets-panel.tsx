@@ -137,7 +137,7 @@ export function SecretsPanel() {
       setImportContent(data.env_content);
       
       // Show success feedback
-      alert(`✅ Loaded ${data.env_content.split('\n').filter(l => l.trim() && !l.startsWith('#')).length} keys from:\n${data.path}\n\nClick "Import" to save them to the database.`);
+      alert(`✅ Loaded ${data.env_content.split('\n').filter((l: string) => l.trim() && !l.startsWith('#')).length} keys from:\n${data.path}\n\nClick "Import" to save them to the database.`);
     } catch (error) {
       console.error('Failed to load root .env:', error);
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';

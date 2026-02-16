@@ -180,13 +180,20 @@ export default function AgentsPage() {
 
   const handleAddAgent = () => {
     if (!newAgent.name.trim()) return;
-    addAgent(
-      newAgent.name.trim(),
-      newAgent.description.trim(),
-      newAgent.icon,
-      newAgent.systemPrompt,
-      newAgent.providerId
-    );
+    void addAgent({
+      name: newAgent.name.trim(),
+      description: newAgent.description.trim(),
+      icon: newAgent.icon,
+      systemPrompt: newAgent.systemPrompt,
+      providerId: newAgent.providerId,
+      provider: null,
+      modelId: null,
+      logoUrl: null,
+      enabled: true,
+      tools: ['search_knowledge', 'search_files', 'read_ontology'],
+      capabilities: { memory: true, reasoning: false, vision: false },
+      intentMappings: [],
+    });
     setNewAgent({
       name: '',
       description: '',

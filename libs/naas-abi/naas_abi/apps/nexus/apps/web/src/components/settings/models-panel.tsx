@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/stores/auth';
+import { useIntegrationsStore } from '@/stores/integrations';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
 const API_BASE = getApiUrl();
@@ -124,8 +125,9 @@ export function ModelsPanel() {
         }
         setModels(generatedModels);
         // Also refresh the integrations store to avoid drift in other parts of the UI
-        const { refreshProviders } = await import('@/stores/integrations');
-        try { (refreshProviders as any)?.(); } catch {}
+        try {
+          await useIntegrationsStore.getState().refreshProviders();
+        } catch {}
       }
     } catch (error) {
       console.error('Failed to fetch providers:', error);
