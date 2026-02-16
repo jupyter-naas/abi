@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.13.4 (2026-02-16)
+
+### Bug Fixes
+
+- **infra**: Rollback unstable weekend runtime wiring
+  ([`aac4a33`](https://github.com/jupyter-naas/abi/commit/aac4a33f2309ebff4a5889f72e45d13192955dd4))
+
+
 ## v1.13.3 (2026-02-13)
 
 ### Bug Fixes
