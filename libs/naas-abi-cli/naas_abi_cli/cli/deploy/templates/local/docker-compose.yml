@@ -69,6 +69,21 @@ x-abi-template: &abi_template
     - abi-network
 
 services:
+  nexus-web:
+    image: ${NEXUS_WEB_IMAGE}:${NEXUS_WEB_TAG}
+    ports:
+      - ${NEXUS_WEB_PORT}:3000
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NEXT_PUBLIC_NEXUS_ENV=local
+      - NEXT_PUBLIC_API_URL=http://localhost:9879
+      - NEXT_PUBLIC_WS_PATH=/ws/socket.io
+    depends_on:
+      - abi
+    networks:
+      - abi-network
+
   # -----------------------------------------------------------------------------
   # ABI Main Service - AI Agent Coordinator
   # -----------------------------------------------------------------------------
