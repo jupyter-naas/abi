@@ -3,14 +3,17 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
-        modules=["naas_abi_marketplace.ai.chatgpt"],
-        services=[TripleStoreService, VectorStoreService],
+        modules=["naas_abi_marketplace.ai.chatgpt#soft"],
+        services=[TripleStoreService, VectorStoreService, ObjectStorageService],
     )
 
     class Configuration(ModuleConfiguration):
@@ -21,13 +24,13 @@ class ABIModule(BaseModule):
         module: naas_abi_core.modules.triplestore_embeddings
         enabled: true
         config:
-            collection_name: "triple_embeddings_test"
+            collection_name: "triple_embeddings"
             embeddings_dimensions: 3072
             embeddings_model_name: "text-embedding-3-large"
             embeddings_model_provider: "openai"
         """
 
-        collection_name: str = "triple_embeddings_test"
+        collection_name: str = "triple_embeddings"
         embeddings_dimensions: int = 3072
         embeddings_model_name: str = "text-embedding-3-large"
         embeddings_model_provider: str = "openai"
@@ -35,15 +38,21 @@ class ABIModule(BaseModule):
     def on_load(self):
         super().on_load()
         from langchain_openai import OpenAIEmbeddings
+        from naas_abi_core.modules.triplestore_embeddings.pipelines.MergeIndividualsPipeline import (
+            MergeIndividualsPipelineConfiguration,
+        )
         from naas_abi_core.modules.triplestore_embeddings.workflows.CreateTripleEmbeddingsWorkflow import (
-            CreateTripleEmbeddingsWorkflow,
             CreateTripleEmbeddingsWorkflowConfiguration,
-            CreateTripleEmbeddingsWorkflowParameters,
         )
         from naas_abi_core.modules.triplestore_embeddings.workflows.DeleteTripleEmbeddingsWorkflow import (
             DeleteTripleEmbeddingsWorkflow,
             DeleteTripleEmbeddingsWorkflowConfiguration,
             DeleteTripleEmbeddingsWorkflowParameters,
+        )
+        from naas_abi_core.modules.triplestore_embeddings.workflows.EntityResolutionWorkflow import (
+            EntityResolutionWorkflow,
+            EntityResolutionWorkflowConfiguration,
+            EntityResolutionWorkflowParameters,
         )
         from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
         from rdflib import RDFS
@@ -71,14 +80,30 @@ class ABIModule(BaseModule):
                 collection_name=collection_name,
             )
         )
-        create_triple_embeddings_workflow = CreateTripleEmbeddingsWorkflow(
-            create_triple_embeddings_configuration
+        merge_individuals_pipeline_configuration = (
+            MergeIndividualsPipelineConfiguration(
+                triple_store=self.engine.services.triple_store,
+                object_storage=self.engine.services.object_storage,
+            )
+        )
+
+        entity_resolution_workflow_configuration = EntityResolutionWorkflowConfiguration(
+            merge_pipeline_configuration=merge_individuals_pipeline_configuration,
+            create_embeddings_workflow_configuration=create_triple_embeddings_configuration,
+            vector_store=self.engine.services.vector_store,
+            triple_store=self.engine.services.triple_store,
+            embeddings_model=embeddings_model,
+            embeddings_dimension=embeddings_dimensions,
+            collection_name=collection_name,
+        )
+        entity_resolution_workflow = EntityResolutionWorkflow(
+            entity_resolution_workflow_configuration
         )
 
         self.engine.services.triple_store.subscribe(
             (None, RDFS.label, None),
-            lambda triple: create_triple_embeddings_workflow.create_triple_embeddings(
-                CreateTripleEmbeddingsWorkflowParameters(
+            lambda triple: entity_resolution_workflow.resolve_entity(
+                EntityResolutionWorkflowParameters(
                     s=str(triple[0]), p=str(triple[1]), o=str(triple[2])
                 )
             ),

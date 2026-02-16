@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.tools import BaseTool
@@ -8,14 +8,14 @@ from naas_abi_core import logger
 from naas_abi_core.modules.triplestore_embeddings.utils.Embeddings import (
     EmbeddingsUtils,
 )
-from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.modules.triplestore_embeddings.utils.Triples import TriplesUtils
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from pydantic import Field
-from rdflib import OWL, RDFS, Literal, URIRef
-from rdflib.query import ResultRow
+from rdflib import RDFS, Literal, URIRef
 
 
 @dataclass
@@ -30,7 +30,7 @@ class CreateTripleEmbeddingsWorkflowConfiguration(WorkflowConfiguration):
     """
 
     vector_store: VectorStoreService
-    triple_store: ITripleStoreService
+    triple_store: TripleStoreService
     embeddings_model: Embeddings
     embeddings_dimension: int
     collection_name: str = "triple_embeddings"
@@ -61,6 +61,7 @@ class CreateTripleEmbeddingsWorkflow(Workflow):
 
     __configuration: CreateTripleEmbeddingsWorkflowConfiguration
     __embeddings_utils: EmbeddingsUtils
+    __triples_utils: TriplesUtils
 
     def __init__(self, configuration: CreateTripleEmbeddingsWorkflowConfiguration):
         super().__init__(configuration)
@@ -73,36 +74,11 @@ class CreateTripleEmbeddingsWorkflow(Workflow):
         self.__embeddings_dimension = self.__configuration.embeddings_dimension
         self.__collection_name = self.__configuration.collection_name
 
-        # Init embeddings utils
+        # Init utils
         self.__embeddings_utils = EmbeddingsUtils(
             embeddings_model=self.__embeddings_model
         )
-
-    def get_rdf_type_from_subject(self, subject: URIRef | str) -> List[Dict[str, Any]]:
-        """Get the RDF type from a given subject.
-
-        Args:
-            subject: The subject of the triple
-
-        Returns:
-            The RDF type of the subject
-        """
-        sparql_query = f"""
-            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-            PREFIX owl: <http://www.w3.org/2002/07/owl#>
-            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            SELECT ?type ?label
-            WHERE {{
-                <{str(subject)}> rdf:type ?type .
-                ?type rdfs:label ?label .
-            }}
-        """
-        rdf_types: List[Dict] = []
-        results = self.__triple_store_service.query(sparql_query)
-        for row in results:
-            assert isinstance(row, ResultRow)
-            rdf_types.append({"type": row.type, "label": row.label})
-        return rdf_types
+        self.__triples_utils = TriplesUtils(triple_store=self.__triple_store_service)
 
     def create_triple_embeddings(
         self, parameters: CreateTripleEmbeddingsWorkflowParameters
@@ -124,8 +100,8 @@ class CreateTripleEmbeddingsWorkflow(Workflow):
         label = str(parameters.o)
         metadata: Dict[str, Any] = {"uri": uri, "label": label}
 
-        # Add metadata: Get RDF types from subject
-        rdf_types = self.get_rdf_type_from_subject(parameters.s)
+        # Get RDF types from subject
+        rdf_types = self.__triples_utils.get_rdf_type_from_subject(parameters.s)
         if len(rdf_types) == 0:
             logger.error(f"No RDF types found for {parameters.s}")
             return {
@@ -133,25 +109,8 @@ class CreateTripleEmbeddingsWorkflow(Workflow):
                 "message": f"No RDF types found for {parameters.s}",
             }
 
-        owl_types: List[str] = []
-        type_uris: List[str] = []
-        type_labels: List[str] = []
-        for rdf_type in rdf_types:
-            # If the type is from OWL namespace, add its URI to "owl"
-            if str(rdf_type["type"]).startswith(str(OWL)):
-                # Collect all OWL types
-                owl_types.append(str(rdf_type["type"]))
-            else:
-                # Otherwise accumulate its type and label
-                type_uris.append(str(rdf_type["type"]))
-                type_labels.append(str(rdf_type["label"]))
-
-        # If any non-OWL types were found, add them as lists
-        if type_uris and type_labels:
-            metadata["type_uri"] = type_uris
-            metadata["type_label"] = type_labels
-        if owl_types:
-            metadata["owl_type"] = owl_types
+        # Add RDF types to metadata
+        metadata = self.__triples_utils.add_rdf_types_to_metadata(metadata, rdf_types)
 
         # Ensure collection exists
         self.__vector_store_service.ensure_collection(
