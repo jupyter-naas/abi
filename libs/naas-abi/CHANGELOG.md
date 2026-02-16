@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-02-16)
+
+### Features
+
+- Working on nexus container release to ghcr
+  ([`7f6f441`](https://github.com/jupyter-naas/abi/commit/7f6f441f07c409337e4082ea721a7b71080b49a8))
+
+
 ## v1.5.2 (2026-02-16)
 
 ### Bug Fixes
