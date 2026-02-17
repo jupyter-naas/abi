@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.2 (2026-02-17)
+
+### Bug Fixes
+
+- Build nexus for arm64
+  ([`859a31b`](https://github.com/jupyter-naas/abi/commit/859a31b68d121bbf5a1370d8daa1661db47831a3))
+
+
 ## v1.7.1 (2026-02-16)
 
 
