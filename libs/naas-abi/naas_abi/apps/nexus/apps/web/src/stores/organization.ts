@@ -7,8 +7,9 @@ import { create } from 'zustand';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from './auth';
 
-const API_BASE = getApiUrl();
-const normalize = (url?: string | null) => (url && url.startsWith('/') ? `${API_BASE}${url}` : url || undefined);
+const getApiBase = () => getApiUrl();
+const normalize = (url?: string | null) =>
+  (url && url.startsWith('/') ? `${getApiBase()}${url}` : url || undefined);
 
 export interface OrganizationBranding {
   id: string;
@@ -123,7 +124,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
 
     try {
       // Public endpoint - no auth needed
-      const response = await fetch(`${API_BASE}/api/organizations/slug/${slug}/branding`);
+      const response = await fetch(`${getApiBase()}/api/organizations/slug/${slug}/branding`);
 
       if (!response.ok) {
         if (response.status === 404) {

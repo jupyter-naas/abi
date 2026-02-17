@@ -17,13 +17,13 @@ import { TypingIndicator } from '@/components/typing-indicator';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
-const API_BASE = getApiUrl();
+const getApiBase = () => getApiUrl();
 
 // Helper to get logo URL (prefix relative URLs with API base)
 const getLogoUrl = (url: string | null): string | undefined => {
   if (!url) return undefined;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${API_BASE}${url}`; // Relative URL -> add API base
+  return `${getApiBase()}${url}`; // Relative URL -> add API base
 };
 
 // Max image size for uploads (5MB)
@@ -307,7 +307,7 @@ export function ChatInterface() {
         try {
           const controller = new AbortController();
           streamControllerRef.current = controller;
-          const response = await fetch(`${API_BASE}/api/chat/stream`, {
+          const response = await fetch(`${getApiBase()}/api/chat/stream`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -447,7 +447,7 @@ export function ChatInterface() {
         // Non-streaming for other providers
         const thinkingStartTime = Date.now();
         
-        const response = await fetch(`${API_BASE}/api/chat/complete`, {
+        const response = await fetch(`${getApiBase()}/api/chat/complete`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -503,7 +503,7 @@ export function ChatInterface() {
             setIsLoading(true);
             
             // Try to ensure Ollama is ready (will auto-start + pull model)
-            const ensureResponse = await fetch(`${API_BASE}/api/ollama/ensure-ready`, {
+            const ensureResponse = await fetch(`${getApiBase()}/api/ollama/ensure-ready`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
             });
@@ -585,7 +585,7 @@ export function ChatInterface() {
       
       // Call backend API for auditable export
       const response = await authFetch(
-        `${API_BASE}/api/chat/conversations/${activeConversation.id}/export?format=txt`
+        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export?format=txt`
       );
       
       if (!response.ok) {

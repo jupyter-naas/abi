@@ -30,7 +30,7 @@ import { useAuthStore } from '@/stores/auth';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
-const API_BASE = getApiUrl();
+const getApiBase = () => getApiUrl();
 
 type Mode = 'agent' | 'plan' | 'debug' | 'ask';
 
@@ -247,7 +247,7 @@ export function AIPane() {
       setIsLoading(false); // Stop loading indicator, streaming will show the cursor
 
       const token = useAuthStore.getState().token;
-      const response = await fetch(`${API_BASE}/api/chat/stream`, {
+      const response = await fetch(`${getApiBase()}/api/chat/stream`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

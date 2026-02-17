@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { getOllamaUrl, getApiUrl } from '@/lib/config';
 import { authFetch } from './auth';
 
-const API_BASE = getApiUrl();
+const getApiBase = () => getApiUrl();
 
 export type ServerType = 'ollama' | 'abi' | 'vllm' | 'llamacpp' | 'custom';
 
@@ -71,7 +71,7 @@ export const useServersStore = create<ServersState>()((set, get) => ({
     set({ loading: true, currentWorkspaceId: workspaceId });
     
     try {
-      const response = await authFetch(`${API_BASE}/api/workspaces/${workspaceId}/servers`);
+      const response = await authFetch(`${getApiBase()}/api/workspaces/${workspaceId}/servers`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch servers');
@@ -117,7 +117,7 @@ export const useServersStore = create<ServersState>()((set, get) => ({
     const defaults = serverDefaults[server.type];
     
     try {
-      const response = await authFetch(`${API_BASE}/api/workspaces/${currentWorkspaceId}/servers`, {
+      const response = await authFetch(`${getApiBase()}/api/workspaces/${currentWorkspaceId}/servers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -175,7 +175,7 @@ export const useServersStore = create<ServersState>()((set, get) => ({
     }
 
     try {
-      const response = await authFetch(`${API_BASE}/api/workspaces/${currentWorkspaceId}/servers/${id}`, {
+      const response = await authFetch(`${getApiBase()}/api/workspaces/${currentWorkspaceId}/servers/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -228,7 +228,7 @@ export const useServersStore = create<ServersState>()((set, get) => ({
     }
 
     try {
-      const response = await authFetch(`${API_BASE}/api/workspaces/${currentWorkspaceId}/servers/${id}`, {
+      const response = await authFetch(`${getApiBase()}/api/workspaces/${currentWorkspaceId}/servers/${id}`, {
         method: 'DELETE',
       });
 
