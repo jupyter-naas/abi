@@ -228,6 +228,8 @@ def api():
             reload=os.environ.get("ENV") == "dev",
             reload_dirs=["src", "libs"],
             log_level="debug",
+            proxy_headers=True,
+            forwarded_allow_ips="*",
         )
     else:
         uvicorn.run(
@@ -236,6 +238,8 @@ def api():
             port=9879,
             reload_dirs=["src", "libs"],
             reload=True,
+            proxy_headers=True,
+            forwarded_allow_ips="*",
         )
 
 

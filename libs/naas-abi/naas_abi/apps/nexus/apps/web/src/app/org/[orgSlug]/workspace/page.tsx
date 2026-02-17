@@ -40,7 +40,7 @@ export default function OrgWorkspacePage() {
         }
 
         // Fetch user's workspaces
-        const wsRes = await authFetch('/api/workspaces/');
+        const wsRes = await authFetch('/api/workspaces');
         if (!wsRes.ok) {
           setError('Failed to load workspaces');
           return;
