@@ -1,0 +1,7 @@
+{$PUBLIC_WEB_HOST:localhost} {
+    reverse_proxy nexus-web:3000
+}
+
+{$PUBLIC_API_HOST:api.localhost} {
+    reverse_proxy abi:9879
+}
