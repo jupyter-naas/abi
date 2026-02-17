@@ -6,11 +6,13 @@ RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/web ./apps/web
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 WORKDIR /app/apps/web
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
+RUN chmod +x /app/docker-entrypoint.sh
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -18,4 +20,5 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 EXPOSE 3000
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["pnpm", "start", "--hostname", "0.0.0.0", "--port", "3000"]

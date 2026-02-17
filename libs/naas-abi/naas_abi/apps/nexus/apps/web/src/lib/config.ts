@@ -36,11 +36,48 @@ export interface NexusConfig {
   };
 }
 
+declare global {
+  interface Window {
+    __NEXUS_RUNTIME_CONFIG__?: {
+      apiUrl?: string;
+      env?: Environment;
+      websocketPath?: string;
+      frontendUrl?: string;
+      ollamaUrl?: string;
+    };
+  }
+}
+
+function getRuntimeConfig() {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  return window.__NEXUS_RUNTIME_CONFIG__;
+}
+
+function getResolvedApiUrl(defaultValue: string): string {
+  return getRuntimeConfig()?.apiUrl || process.env.NEXUS_API_URL || process.env.NEXT_PUBLIC_API_URL || defaultValue;
+}
+
+function getResolvedWebsocketPath(defaultValue: string): string {
+  return getRuntimeConfig()?.websocketPath || process.env.NEXT_PUBLIC_WS_PATH || defaultValue;
+}
+
+function getResolvedFrontendUrl(defaultValue: string): string {
+  return getRuntimeConfig()?.frontendUrl || process.env.NEXT_PUBLIC_FRONTEND_URL || defaultValue;
+}
+
+function getResolvedOllamaUrl(defaultValue: string): string {
+  return getRuntimeConfig()?.ollamaUrl || process.env.NEXT_PUBLIC_OLLAMA_URL || defaultValue;
+}
+
 /**
  * Get current environment from NEXT_PUBLIC_NEXUS_ENV or NEXUS_ENV
  */
 export function getEnvironment(): Environment {
-  const env = process.env.NEXT_PUBLIC_NEXUS_ENV || process.env.NEXUS_ENV || 'local';
+  const runtimeEnv = getRuntimeConfig()?.env;
+  const env = runtimeEnv || process.env.NEXT_PUBLIC_NEXUS_ENV || process.env.NEXUS_ENV || 'local';
   
   if (!['local', 'cloudflare', 'staging'].includes(env)) {
     console.warn(`Unknown environment: ${env}, defaulting to 'local'`);
@@ -60,9 +97,9 @@ const configs: Record<Environment, NexusConfig> = {
     appName: 'NEXUS',
     version: '0.1.0',
     frontendUrl: 'http://localhost:3000',
-    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9879',
-    websocketPath: process.env.NEXT_PUBLIC_WS_PATH || '/ws/socket.io',
-    ollamaUrl: process.env.NEXT_PUBLIC_OLLAMA_URL || 'http://localhost:11434',
+    apiUrl: 'http://localhost:9879',
+    websocketPath: '/ws/socket.io',
+    ollamaUrl: 'http://localhost:11434',
     features: {
       enableGraph: true,
       enableOntology: true,
@@ -82,9 +119,9 @@ const configs: Record<Environment, NexusConfig> = {
     name: 'Cloudflare Production',
     appName: 'NEXUS',
     version: '0.1.0',
-    frontendUrl: process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://nexus.naas.ai',
-    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.nexus.naas.ai',
-    websocketPath: process.env.NEXT_PUBLIC_WS_PATH || '/ws/socket.io',
+    frontendUrl: 'https://nexus.naas.ai',
+    apiUrl: 'https://api.nexus.naas.ai',
+    websocketPath: '/ws/socket.io',
     ollamaUrl: '',  // No local Ollama in cloud
     features: {
       enableGraph: true,
@@ -105,9 +142,9 @@ const configs: Record<Environment, NexusConfig> = {
     name: 'Staging',
     appName: 'NEXUS',
     version: '0.1.0',
-    frontendUrl: process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://staging.nexus.naas.ai',
-    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.staging.nexus.naas.ai',
-    websocketPath: process.env.NEXT_PUBLIC_WS_PATH || '/ws/socket.io',
+    frontendUrl: 'https://staging.nexus.naas.ai',
+    apiUrl: 'https://api.staging.nexus.naas.ai',
+    websocketPath: '/ws/socket.io',
     ollamaUrl: '',  // No local Ollama in staging
     features: {
       enableGraph: true,
@@ -129,7 +166,15 @@ const configs: Record<Environment, NexusConfig> = {
  */
 export function getConfig(env?: Environment): NexusConfig {
   const environment = env || getEnvironment();
-  return configs[environment];
+  const config = configs[environment];
+
+  return {
+    ...config,
+    frontendUrl: getResolvedFrontendUrl(config.frontendUrl),
+    apiUrl: getResolvedApiUrl(config.apiUrl),
+    websocketPath: getResolvedWebsocketPath(config.websocketPath),
+    ollamaUrl: getResolvedOllamaUrl(config.ollamaUrl),
+  };
 }
 
 /**
