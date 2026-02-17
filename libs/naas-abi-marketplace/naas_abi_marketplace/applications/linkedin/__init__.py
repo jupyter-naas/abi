@@ -37,6 +37,7 @@ class ABIModule(BaseModule[_Configuration]):
             "naas_abi_marketplace.applications.google_search",
             "naas_abi_marketplace.applications.naas",
             "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_core.modules.triplestore_embeddings",
         ],
         services=[ObjectStorageService, TripleStoreService, Secret, VectorStoreService],
     )
