@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.5 (2026-02-17)
+
+### Bug Fixes
+
+- Add missing data in naas_abi release
+  ([`4aa9316`](https://github.com/jupyter-naas/abi/commit/4aa9316facc963b4ef4f1653f41b594ea7ae5479))
+
+
 ## v1.7.4 (2026-02-17)
 
 
