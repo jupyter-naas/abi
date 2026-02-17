@@ -1,6 +1,7 @@
 services:
   headscale:
     image: docker.io/headscale/headscale:stable
+    pull_policy: always
     restart: unless-stopped
     container_name: headscale
     ports:
