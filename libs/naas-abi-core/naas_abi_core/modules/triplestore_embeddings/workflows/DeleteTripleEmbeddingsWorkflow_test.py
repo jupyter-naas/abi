@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from langchain_openai import OpenAIEmbeddings
 from naas_abi_core.engine.Engine import Engine
@@ -8,15 +10,17 @@ from naas_abi_core.modules.triplestore_embeddings.utils.Embeddings import (
 from naas_abi_core.modules.triplestore_embeddings.workflows.DeleteTripleEmbeddingsWorkflow import (
     DeleteTripleEmbeddingsWorkflow,
     DeleteTripleEmbeddingsWorkflowConfiguration,
-    DeleteTripleEmbeddingsWorkflowParameters,
 )
+
+# Set ENV=test to ensure test graph is used
+os.environ["TEST"] = "true"
 
 engine = Engine()
 engine.load(module_names=["naas_abi_core.modules.triplestore_embeddings"])
 
 module: ABIModule = ABIModule.get_instance()
 
-collection_name = module.configuration.collection_name
+collection_name = module.configuration.collection_name + "_test"
 embeddings_dimension = module.configuration.embeddings_dimensions
 if module.configuration.embeddings_model_provider == "openai":
     embeddings_model = OpenAIEmbeddings(
@@ -29,6 +33,9 @@ else:
     )
 
 embeddings_utils = EmbeddingsUtils(embeddings_model=embeddings_model)
+
+# Test graph name constant
+TEST_GRAPH_NAME = "http://ontology.naas.ai/abi/test/"
 
 
 @pytest.fixture
@@ -43,20 +50,7 @@ def workflow() -> DeleteTripleEmbeddingsWorkflow:
     return workflow
 
 
-def test_delete_triple_embeddings(workflow):
-    from rdflib import RDFS
-
-    result = workflow.delete_triple_embeddings(
-        DeleteTripleEmbeddingsWorkflowParameters(
-            s="http://ontology.naas.ai/abi/9187f182-f84a-4dca-ab3b-7e39f73c901b",
-            p=RDFS.label,
-            o="Florent Ravenel",
-        )
-    )
-    assert result["status"] == "success", result["message"]
-
-
-def test_trigger_delete_triple_embeddings(workflow):
+def test_subscribe_delete_triple_embeddings(workflow):
     import time
     from uuid import uuid4
 
@@ -73,7 +67,7 @@ def test_trigger_delete_triple_embeddings(workflow):
     graph.add((URIRef(uri), RDFS.label, Literal(label)))
 
     triple_store_service = module.engine.services.triple_store
-    triple_store_service.insert(graph)
+    triple_store_service.insert(graph, graph_name=URIRef(TEST_GRAPH_NAME))
     time.sleep(10)
 
     vector_store_service = module.engine.services.vector_store
@@ -88,16 +82,8 @@ def test_trigger_delete_triple_embeddings(workflow):
     )
     assert len(search_results) > 0, search_results
 
-    triple_store_service.remove(graph)
-
-    result = workflow.delete_triple_embeddings(
-        DeleteTripleEmbeddingsWorkflowParameters(
-            s=uri,
-            p=RDFS.label,
-            o="Florent Ravenel",
-        )
-    )
-    assert result["status"] == "success", result["message"]
+    triple_store_service.remove(graph, graph_name=URIRef(TEST_GRAPH_NAME))
+    time.sleep(10)
 
     search_results = vector_store_service.search_similar(
         collection_name=collection_name,
