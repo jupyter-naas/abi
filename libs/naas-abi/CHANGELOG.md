@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.10 (2026-02-17)
+
+### Bug Fixes
+
+- **nexus**: File manager api url
+  ([`09b3fde`](https://github.com/jupyter-naas/abi/commit/09b3fdecae31770a8620284c052b953c1810a7d4))
+
+
 ## v1.7.9 (2026-02-17)
 
 
