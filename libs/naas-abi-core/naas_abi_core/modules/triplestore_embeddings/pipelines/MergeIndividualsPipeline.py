@@ -32,7 +32,7 @@ class MergeIndividualsPipelineConfiguration(PipelineConfiguration):
 
     triple_store: TripleStoreService
     object_storage: ObjectStorageService
-    graph_name: URIRef | None = None
+    graph_name: URIRef | str | None = None
     datastore_path: str = field(
         default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
     )
@@ -55,6 +55,7 @@ class MergeIndividualsPipeline(Pipeline):
     __configuration: MergeIndividualsPipelineConfiguration
     __sparql_utils: SPARQLUtils
     __storage_utils: StorageUtils
+    __graph_name: URIRef | None = None
 
     def __init__(self, configuration: MergeIndividualsPipelineConfiguration):
         super().__init__(configuration)
@@ -63,6 +64,10 @@ class MergeIndividualsPipeline(Pipeline):
         self.__object_storage_service = self.__configuration.object_storage
         self.__sparql_utils: SPARQLUtils = SPARQLUtils(self.__triple_store_service)
         self.__storage_utils: StorageUtils = StorageUtils(self.__object_storage_service)
+        if self.__configuration.graph_name is not None:
+            self.__graph_name = URIRef(self.__configuration.graph_name)
+        else:
+            self.__graph_name = None
 
     def get_all_triples_for_uri(self, uri: str, graph_name: URIRef | str | None = None):
         """
@@ -212,7 +217,7 @@ class MergeIndividualsPipeline(Pipeline):
                 f"{uri_to_keep_label}_{uri_to_keep.split('/')[-1]}_merged.ttl",
             )
             self.__configuration.triple_store.insert(
-                graph_insert, graph_name=self.__configuration.graph_name
+                graph_insert, graph_name=self.__graph_name
             )
         if len(graph_remove) > 0:
             logger.info(f"Removing {len(graph_remove)} triples")
@@ -223,7 +228,7 @@ class MergeIndividualsPipeline(Pipeline):
                 f"{uri_to_merge_label}_{uri_to_merge.split('/')[-1]}_removed.ttl",
             )
             self.__configuration.triple_store.remove(
-                graph_remove, graph_name=self.__configuration.graph_name
+                graph_remove, graph_name=self.__graph_name
             )
 
         return self.__sparql_utils.get_subject_graph(uri_to_keep)

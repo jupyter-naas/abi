@@ -113,7 +113,7 @@ class ABIModule(BaseModule):
             MergeIndividualsPipelineConfiguration(
                 triple_store=triple_store_service,
                 object_storage=object_storage_service,
-                graph_name=URIRef(graph_name),
+                graph_name=graph_name,
                 datastore_path=datastore_path,
             )
         )
