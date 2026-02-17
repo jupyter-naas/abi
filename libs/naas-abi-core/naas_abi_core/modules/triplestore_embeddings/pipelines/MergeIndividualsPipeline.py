@@ -75,6 +75,7 @@ class MergeIndividualsPipeline(Pipeline):
 
         Args:
             uri (str): The URI to search for
+            graph_name: Optional graph name. If None, uses self.__graph_name from configuration.
 
         Returns:
             rdflib.query.Result: Query results containing all triples where the URI appears
@@ -124,7 +125,9 @@ class MergeIndividualsPipeline(Pipeline):
             Graph: The graph of the merged individual (uri_to_keep)
         """
         # Get all triples to keep
-        keep_results = list(self.get_all_triples_for_uri(uri_to_keep))
+        keep_results = list(
+            self.get_all_triples_for_uri(uri_to_keep, self.__graph_name)
+        )
         keep_graph = Graph()
         for row in keep_results:
             s, p, o = row
@@ -132,7 +135,9 @@ class MergeIndividualsPipeline(Pipeline):
         logger.info(f"Found {len(keep_results)} triples for URI to keep: {uri_to_keep}")
 
         # Get all triples to merge
-        merge_results = list(self.get_all_triples_for_uri(uri_to_merge))
+        merge_results = list(
+            self.get_all_triples_for_uri(uri_to_merge, self.__graph_name)
+        )
         merge_graph = Graph()
         for row in merge_results:
             s, p, o = row

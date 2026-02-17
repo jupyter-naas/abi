@@ -64,7 +64,7 @@ class ABIModule(BaseModule):
             EntityResolutionWorkflowParameters,
         )
         from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
-        from rdflib import RDFS, URIRef
+        from rdflib import RDFS
 
         # Init configurations
         datastore_path = self.configuration.datastore_path
