@@ -77,9 +77,27 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
-      - NEXT_PUBLIC_API_URL=http://localhost:9879
+      - NEXT_PUBLIC_API_URL=https://${PUBLIC_API_HOST:-api.localhost}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     depends_on:
+      - abi
+    networks:
+      - abi-network
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - 80:80
+      - 443:443
+    environment:
+      - PUBLIC_WEB_HOST=${PUBLIC_WEB_HOST:-localhost}
+      - PUBLIC_API_HOST=${PUBLIC_API_HOST:-api.localhost}
+    volumes:
+      - ./.deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - nexus-web
       - abi
     networks:
       - abi-network
@@ -380,6 +398,8 @@ volumes:
   rabbitmq_data:  # RabbitMQ message bus data
   redis_data:     # Redis persistence data
   synapse_data:   # Matrix Synapse data
+  caddy_data:     # Caddy certificates and ACME data
+  caddy_config:   # Caddy runtime configuration
 
 # =============================================================================
 # NETWORK CONFIGURATION

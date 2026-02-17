@@ -20,6 +20,8 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "MINIO_PORT": "9000",
     "MINIO_ROOT_USER": "abi",
     "ABI_HOST": "abi",
+    "PUBLIC_WEB_HOST": "localhost",
+    "PUBLIC_API_HOST": "api.localhost",
     "RABBITMQ_USER": "abi",
     "NEXUS_WEB_IMAGE": "ghcr.io/jupyter-naas/nexus-web",
     "NEXUS_WEB_TAG": "latest",
