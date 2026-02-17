@@ -1,9 +1,12 @@
-from naas_abi_core.module.Module import (BaseModule, ModuleConfiguration,
-                                         ModuleDependencies)
-from naas_abi_core.modules.templatablesparqlquery.workflows.TemplatableSparqlQueryLoader import \
-    TemplatableSparqlQueryLoader
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.modules.templatablesparqlquery.workflows.TemplatableSparqlQueryLoader import (
+    TemplatableSparqlQueryLoader,
+)
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 
 
 class ABIModule(BaseModule):

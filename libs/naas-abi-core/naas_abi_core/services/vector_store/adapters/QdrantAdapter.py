@@ -8,6 +8,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    MatchAny,
     MatchValue,
     PointIdsList,
     PointStruct,
@@ -90,7 +91,10 @@ class QdrantAdapter(IVectorStorePort):
         return [c.name for c in collections.collections]
 
     def store_vectors(
-        self, collection_name: str, documents: List[VectorDocument]
+        self,
+        collection_name: str,
+        documents: List[VectorDocument],
+        batch_size: int = 100,
     ) -> None:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
@@ -110,12 +114,16 @@ class QdrantAdapter(IVectorStorePort):
             )
             points.append(point)
 
-        operation_info = self.client.upsert(
-            collection_name=collection_name, points=points
-        )
-
-        if operation_info.status != UpdateStatus.COMPLETED:
-            raise RuntimeError(f"Failed to store vectors: {operation_info}")
+        # Batch upsert to avoid OOM / payload-too-large issues
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
+            operation_info = self.client.upsert(
+                collection_name=collection_name, points=batch
+            )
+            if operation_info.status != UpdateStatus.COMPLETED:
+                raise RuntimeError(
+                    f"Failed to store vectors (batch {i // batch_size + 1}): {operation_info}"
+                )
 
         logger.debug(f"Stored {len(documents)} vectors in {collection_name}")
 
@@ -135,9 +143,16 @@ class QdrantAdapter(IVectorStorePort):
         if filter:
             conditions = []
             for key, value in filter.items():
-                conditions.append(
-                    FieldCondition(key=key, match=MatchValue(value=value))
-                )
+                if isinstance(value, list):
+                    # For list values, use MatchAny to match any value in the list
+                    conditions.append(
+                        FieldCondition(key=key, match=MatchAny(any=value))
+                    )
+                else:
+                    # For single values, use MatchValue
+                    conditions.append(
+                        FieldCondition(key=key, match=MatchValue(value=value))
+                    )
             if conditions:
                 from typing import cast
 
@@ -238,11 +253,22 @@ class QdrantAdapter(IVectorStorePort):
         logger.debug(f"Deleted {len(vector_ids)} vectors from {collection_name}")
 
     def count_vectors(self, collection_name: str) -> int:
+        """
+        Total vectors in the collection.
+
+        - info.points_count: Total number of vectors (points).
+        - info.indexed_vectors_count: Number of indexed vectors (optimized for fast search).
+        - info.segments_count: Number of segments (storage size indicator).
+        """
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
-        collection_info = self.client.get_collection(collection_name=collection_name)
-        return collection_info.indexed_vectors_count or 0
+        info = self.client.get_collection(collection_name=collection_name)
+        # You can also access:
+        #   info.points_count           -> total vectors
+        #   info.indexed_vectors_count  -> indexed vectors (fast search)
+        #   info.segments_count         -> storage size (number of segments)
+        return info.points_count or 0
 
     def close(self) -> None:
         if self.client:

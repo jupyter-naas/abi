@@ -229,8 +229,8 @@ class Oxigraph(ITripleStorePort):
                 insert_query = f"INSERT DATA {{\n  GRAPH <{str(graph_name)}> {{\n"
 
             for s, p, o in triples:
-                if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
-                    continue
+                # if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
+                #     continue
                 insert_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
 
             if graph_name is None:

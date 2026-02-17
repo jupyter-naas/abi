@@ -205,7 +205,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     def subscribe(
         self,
         topic: tuple[URIRef | None, URIRef | None, URIRef | None],
-        callback: Callable[[bytes], None],
+        callback: Callable[[tuple[str, str, str]], None],
         event_type: OntologyEvent | None = None,
         graph_name: URIRef | str | None = "*",
     ) -> None:
@@ -224,16 +224,49 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         topic_str = f"ts.{_event_type}.g.{graph_topic}.s.{s}.p.{p}.o.{o}"
 
+        def bytes_to_triple_callback(triple_bytes: bytes) -> None:
+            """Convert bytes to triple tuple and call the user's callback."""
+            try:
+                # Parse the Turtle triple statement from bytes
+                # Format is: "{s.n3()} {p.n3()} {o.n3()} .\n"
+                triple_str = triple_bytes.decode("utf-8").strip()
+
+                # Ensure it ends with a period for valid Turtle syntax
+                if not triple_str.endswith("."):
+                    triple_str = triple_str.rstrip() + " ."
+
+                # Parse using rdflib to handle all RDF term formats correctly
+                g = Graph()
+                g.parse(data=triple_str, format="turtle")
+
+                # Extract the triple (should be exactly one)
+                triples_list = list(g.triples((None, None, None)))
+                if len(triples_list) == 0:
+                    logger.warning(
+                        f"No triple found in bytes: {triple_bytes.decode('utf-8', errors='replace')}"
+                    )
+                    return
+
+                s_term, p_term, o_term = triples_list[0]
+                # Convert to strings
+                triple_tuple = (str(s_term), str(p_term), str(o_term))
+                callback(triple_tuple)
+            except Exception as e:
+                logger.error(
+                    f"Error parsing triple from bytes: {e}, bytes: {triple_bytes.decode('utf-8', errors='replace')}"
+                )
+                raise e
+
         self.services.bus.topic_consume(
             "triple_store",
             topic_str,
-            callback,
+            bytes_to_triple_callback,
         )
 
     def get_subject_graph(self, subject: str) -> Graph:
         return self.__triple_store_adapter.get_subject_graph(URIRef(subject))
 
-    ###################lib/abi/services/ontology/OntologyService.py#########################################
+    ############################################################
     # Schema Management
     ############################################################
 
