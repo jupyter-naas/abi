@@ -46,6 +46,12 @@ Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi"
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 naas-abi-marketplace = { path = "../naas-abi-marketplace", editable = true }
 
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+naas_abi = ["apps/nexus/apps/api/migrations/*.sql"]
+
 
 [tool.semantic_release]
 commit_parser = "conventional-monorepo"

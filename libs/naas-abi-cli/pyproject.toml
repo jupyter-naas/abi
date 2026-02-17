@@ -65,13 +65,12 @@ prerelease = true
 prerelease_token = "dev"
 
 [tool.hatch.build.targets.wheel]
-force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/deploy/templates/local/.env" = "naas_abi_cli/cli/deploy/templates/local/.env", "naas_abi_cli/cli/deploy/templates/local/docker/element-config.json" = "naas_abi_cli/cli/deploy/templates/local/docker/element-config.json"}
+force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/deploy/templates/local/.env" = "naas_abi_cli/cli/deploy/templates/local/.env", "naas_abi_cli/cli/deploy/templates/local/docker/element-config.json" = "naas_abi_cli/cli/deploy/templates/local/docker/element-config.json", "naas_abi_cli/cli/setup/headscale/templates/config/config.yaml" = "naas_abi_cli/cli/setup/headscale/templates/config/config.yaml", "naas_abi_cli/cli/setup/headscale/templates/config/extra-records.json" = "naas_abi_cli/cli/setup/headscale/templates/config/extra-records.json"}
 
 [tool.hatch.build.targets.sdist]
-force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/deploy/templates/local/.env" = "naas_abi_cli/cli/deploy/templates/local/.env", "naas_abi_cli/cli/deploy/templates/local/docker/element-config.json" = "naas_abi_cli/cli/deploy/templates/local/docker/element-config.json"}
+force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/deploy/templates/local/.env" = "naas_abi_cli/cli/deploy/templates/local/.env", "naas_abi_cli/cli/deploy/templates/local/docker/element-config.json" = "naas_abi_cli/cli/deploy/templates/local/docker/element-config.json", "naas_abi_cli/cli/setup/headscale/templates/config/config.yaml" = "naas_abi_cli/cli/setup/headscale/templates/config/config.yaml", "naas_abi_cli/cli/setup/headscale/templates/config/extra-records.json" = "naas_abi_cli/cli/setup/headscale/templates/config/extra-records.json"}
 
 [tool.uv.sources]
 naas-abi = { path = "../naas-abi",  editable = true }
 naas-abi-core = { path = "../naas-abi-core",  editable = true }
 naas-abi-marketplace = { path = "../naas-abi-marketplace",  editable = true }
-
