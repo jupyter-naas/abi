@@ -3,6 +3,7 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -13,7 +14,12 @@ from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreSe
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=["naas_abi_marketplace.ai.chatgpt#soft"],
-        services=[TripleStoreService, VectorStoreService, ObjectStorageService],
+        services=[
+            TripleStoreService,
+            VectorStoreService,
+            ObjectStorageService,
+            KeyValueService,
+        ],
     )
 
     class Configuration(ModuleConfiguration):
@@ -41,9 +47,11 @@ class ABIModule(BaseModule):
     def on_load(self):
         super().on_load()
 
+        import hashlib
         import os
 
         from langchain_openai import OpenAIEmbeddings
+        from naas_abi_core import logger
         from naas_abi_core.modules.triplestore_embeddings.pipelines.MergeIndividualsPipeline import (
             MergeIndividualsPipelineConfiguration,
         )
@@ -71,6 +79,7 @@ class ABIModule(BaseModule):
         triple_store_service = self.engine.services.triple_store
         vector_store_service = self.engine.services.vector_store
         object_storage_service = self.engine.services.object_storage
+        kv_service = self.engine.services.kv
         collection_name = self.configuration.collection_name
         embeddings_dimensions = self.configuration.embeddings_dimensions
         if self.configuration.embeddings_model_provider == "openai":
@@ -132,13 +141,33 @@ class ABIModule(BaseModule):
             entity_resolution_workflow_configuration
         )
 
+        def create_triple_hash(s: str, p: str, o: str) -> str:
+            """Create a hash key from triple (s, p, o) values."""
+            triple_str = f"{s}|{p}|{o}"
+            return hashlib.sha256(triple_str.encode("utf-8")).hexdigest()
+
+        def handle_triple_insert(triple):
+            """Handle triple insert with deduplication using KV store."""
+            s_str = str(triple[0])
+            p_str = str(triple[1])
+            o_str = str(triple[2])
+            hash_key = f"entity_resolution:{create_triple_hash(s_str, p_str, o_str)}"
+
+            # Atomically check if hash exists and set it if not
+            # Returns True if key was set (didn't exist), False if it already existed
+            if kv_service.set_if_not_exists(hash_key, b"1"):
+                # Only process if this is the first time we see this triple
+                try:
+                    entity_resolution_workflow.resolve_entity(
+                        EntityResolutionWorkflowParameters(s=s_str, p=p_str, o=o_str)
+                    )
+                except Exception as e:
+                    kv_service.delete(hash_key)
+                    logger.error(f"Error resolving entity: {e}")
+
         self.engine.services.triple_store.subscribe(
             (None, RDFS.label, None),
-            lambda triple: entity_resolution_workflow.resolve_entity(
-                EntityResolutionWorkflowParameters(
-                    s=str(triple[0]), p=str(triple[1]), o=str(triple[2])
-                )
-            ),
+            handle_triple_insert,
             OntologyEvent.INSERT,
             graph_name,
         )
