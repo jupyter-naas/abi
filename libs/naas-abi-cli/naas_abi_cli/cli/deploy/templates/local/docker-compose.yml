@@ -32,6 +32,7 @@ x-abi-template: &abi_template
   build:
     context: .
     dockerfile: ./.deploy/docker/images/Dockerfile
+  restart: unless-stopped
   ports:
     - 9879:9879  # REST API endpoint - http://localhost:9879
     - 8501:8501  # Streamlit web interface - http://localhost:8501
@@ -71,6 +72,8 @@ x-abi-template: &abi_template
 services:
   nexus-web:
     image: ${NEXUS_WEB_IMAGE}:${NEXUS_WEB_TAG}
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - ${NEXUS_WEB_PORT}:3000
     environment:
@@ -86,6 +89,8 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 80:80
       - 443:443
@@ -119,6 +124,7 @@ services:
     build:
       context: .
       dockerfile: ./.deploy/docker/images/Dockerfile
+    restart: unless-stopped
     command:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
     environment:
@@ -137,6 +143,8 @@ services:
   # Used by LangGraph for agent state management and memory retrieval
   postgres:
     image: postgres:17-alpine  # Latest stable PostgreSQL
+    pull_policy: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -161,6 +169,8 @@ services:
   # TDB2 provides transactional storage with SPARQL query/update endpoints
   fuseki:
     image: stain/jena-fuseki:latest
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 3030:3030
     volumes:
@@ -183,6 +193,8 @@ services:
   # Allows interactive exploration of the knowledge graph
   yasgui:
     image: erikap/yasgui:latest
+    pull_policy: always
+    restart: unless-stopped
     platform: linux/amd64  # Force x86_64 for compatibility with Apple Silicon
     ports:
       - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
@@ -202,6 +214,7 @@ services:
     build:
       context: .
       dockerfile: ./.deploy/docker/images/Dockerfile
+    restart: unless-stopped
     ports:
       - 3001:3001  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
     volumes:
@@ -242,6 +255,8 @@ services:
   # -----------------------------------------------------------------------------
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    pull_policy: always
+    restart: unless-stopped
     command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -257,6 +272,7 @@ services:
   # mc container to initialize the bucket on startup
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    pull_policy: always
     depends_on:
       - minio
     entrypoint: >-
@@ -273,6 +289,8 @@ services:
   # -----------------------------------------------------------------------------
   rabbitmq:
     image: rabbitmq:3-management
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 5672:5672   # AMQP
       - 15672:15672 # Management UI - http://localhost:15672
@@ -294,6 +312,8 @@ services:
   # -----------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
+    pull_policy: always
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - 6379:6379
@@ -312,6 +332,8 @@ services:
   # -----------------------------------------------------------------------------
   redis-commander:
     image: rediscommander/redis-commander:latest
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 8082:8081  # Redis Commander UI - http://localhost:8082
     environment:
@@ -326,6 +348,8 @@ services:
   # -----------------------------------------------------------------------------
   matrix:
     image: matrixdotorg/synapse:latest
+    pull_policy: always
+    restart: unless-stopped
     environment:
       SYNAPSE_SERVER_NAME: localhost
       SYNAPSE_REPORT_STATS: "no"
@@ -344,6 +368,8 @@ services:
   # -----------------------------------------------------------------------------
   element-web:
     image: vectorim/element-web:latest
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 8081:80  # Element web client - http://localhost:8081
     volumes:
@@ -358,6 +384,8 @@ services:
   # -----------------------------------------------------------------------------
   service-portal:
     image: nginx:alpine
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 8080:80  # Service portal - http://localhost:8080
     volumes:
@@ -372,6 +400,8 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 6333:6333
       - 6334:6334
