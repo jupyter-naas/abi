@@ -50,8 +50,9 @@ class EntityResolutionWorkflowConfiguration(WorkflowConfiguration):
     vector_store: VectorStoreService
     triple_store: TripleStoreService
     embeddings_model: Embeddings
-    embeddings_dimension: int
+    embeddings_dimensions: int
     collection_name: str = "triple_embeddings"
+    graph_name: URIRef | str | None = None
 
 
 class EntityResolutionWorkflowParameters(WorkflowParameters):
@@ -105,6 +106,7 @@ class EntityResolutionWorkflow(Workflow):
         self.__triple_store_service = self.__configuration.triple_store
         self.__vector_store_service = self.__configuration.vector_store
         self.__embeddings_model = self.__configuration.embeddings_model
+        self.__embeddings_dimensions = self.__configuration.embeddings_dimensions
         self.__collection_name = self.__configuration.collection_name
 
         # Init utils
@@ -133,7 +135,9 @@ class EntityResolutionWorkflow(Workflow):
         metadata: Dict[str, Any] = {"uri": uri, "label": label}
 
         # Get RDF types from subject
-        rdf_types = self.__triples_utils.get_rdf_type_from_subject(parameters.s)
+        rdf_types = self.__triples_utils.get_rdf_type_from_subject(
+            parameters.s, self.__configuration.graph_name
+        )
         if len(rdf_types) == 0:
             logger.error(f"No RDF types found for {parameters.s}")
             return {
@@ -157,7 +161,7 @@ class EntityResolutionWorkflow(Workflow):
         while type_uri_index < len(type_uris):
             type_uri = type_uris[type_uri_index]
             is_gdc_sdc_class = self.__triples_utils.is_subclass_of(
-                type_uri, gdc_sdc_class_uris
+                type_uri, gdc_sdc_class_uris, graph_name=self.__configuration.graph_name
             )
             if is_gdc_sdc_class is False:
                 break
@@ -167,6 +171,13 @@ class EntityResolutionWorkflow(Workflow):
             logger.info(
                 f"Entity '{label}' ({uri}) is a GDC or SDC class, searching for similar entities in the vector store..."
             )
+            # Ensure collection exists
+            self.__vector_store_service.ensure_collection(
+                collection_name=self.__collection_name,
+                dimension=self.__embeddings_dimensions,
+                distance_metric="cosine",
+            )
+
             # Search for similar entities in the vector store
             vector = self.__embeddings_utils.create_vector_embedding(label)
             search_results = self.__vector_store_service.search_similar(

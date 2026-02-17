@@ -1,9 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Annotated
 
 from langchain_core.tools import BaseTool
 from naas_abi_core import logger
+from naas_abi_core.modules.triplestore_embeddings import ABIModule
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -31,7 +32,10 @@ class MergeIndividualsPipelineConfiguration(PipelineConfiguration):
 
     triple_store: TripleStoreService
     object_storage: ObjectStorageService
-    datastore_path: str = "merged_individual"
+    graph_name: URIRef | None = None
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class MergeIndividualsPipelineParameters(PipelineParameters):
@@ -60,7 +64,7 @@ class MergeIndividualsPipeline(Pipeline):
         self.__sparql_utils: SPARQLUtils = SPARQLUtils(self.__triple_store_service)
         self.__storage_utils: StorageUtils = StorageUtils(self.__object_storage_service)
 
-    def get_all_triples_for_uri(self, uri: str):
+    def get_all_triples_for_uri(self, uri: str, graph_name: URIRef | str | None = None):
         """
         Retrieve all triples where the given URI appears as either a subject or object.
 
@@ -70,6 +74,13 @@ class MergeIndividualsPipeline(Pipeline):
         Returns:
             rdflib.query.Result: Query results containing all triples where the URI appears
         """
+        if graph_name is None:
+            graph_clause = ""
+            graph_close = ""
+        else:
+            graph_clause = f"GRAPH <{str(graph_name)}> {{"
+            graph_close = "}"
+
         sparql_query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -77,6 +88,7 @@ class MergeIndividualsPipeline(Pipeline):
         
         SELECT ?s ?p ?o
         WHERE {{
+            {graph_clause}
             {{
                 # Find triples where the URI is the subject
                 <{uri}> ?p ?o .
@@ -88,6 +100,7 @@ class MergeIndividualsPipeline(Pipeline):
                 ?s ?p <{uri}> .
                 BIND(<{uri}> AS ?o)
             }}
+            {graph_close}
         }}
         """
 
@@ -195,19 +208,23 @@ class MergeIndividualsPipeline(Pipeline):
             logger.debug(graph_insert.serialize(format="turtle"))
             self.__storage_utils.save_triples(
                 graph_insert,
-                self.__configuration.datastore_path,
+                self.__configuration.datastore_path + "/merged_individual",
                 f"{uri_to_keep_label}_{uri_to_keep.split('/')[-1]}_merged.ttl",
             )
-            self.__configuration.triple_store.insert(graph_insert)
+            self.__configuration.triple_store.insert(
+                graph_insert, graph_name=self.__configuration.graph_name
+            )
         if len(graph_remove) > 0:
             logger.info(f"Removing {len(graph_remove)} triples")
             logger.debug(graph_remove.serialize(format="turtle"))
             self.__storage_utils.save_triples(
                 graph_remove,
-                self.__configuration.datastore_path,
+                self.__configuration.datastore_path + "/merged_individual",
                 f"{uri_to_merge_label}_{uri_to_merge.split('/')[-1]}_removed.ttl",
             )
-            self.__configuration.triple_store.remove(graph_remove)
+            self.__configuration.triple_store.remove(
+                graph_remove, graph_name=self.__configuration.graph_name
+            )
 
         return self.__sparql_utils.get_subject_graph(uri_to_keep)
 

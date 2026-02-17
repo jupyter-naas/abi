@@ -26,7 +26,7 @@ class DeleteTripleEmbeddingsWorkflowConfiguration(WorkflowConfiguration):
 
     vector_store: VectorStoreService
     embeddings_model: Embeddings
-    embeddings_dimension: int
+    embeddings_dimensions: int
     collection_name: str = "triple_embeddings"
 
 
@@ -63,7 +63,7 @@ class DeleteTripleEmbeddingsWorkflow(Workflow):
         # Get services from configuration
         self.__vector_store_service = self.__configuration.vector_store
         self.__embeddings_model = self.__configuration.embeddings_model
-        self.__embeddings_dimension = self.__configuration.embeddings_dimension
+        self.__embeddings_dimensions = self.__configuration.embeddings_dimensions
         self.__collection_name = self.__configuration.collection_name
 
         # Init embeddings utils
@@ -90,7 +90,7 @@ class DeleteTripleEmbeddingsWorkflow(Workflow):
         # Ensure collection exists
         self.__vector_store_service.ensure_collection(
             collection_name=self.__collection_name,
-            dimension=self.__embeddings_dimension,
+            dimension=self.__embeddings_dimensions,
             distance_metric="cosine",
         )
 

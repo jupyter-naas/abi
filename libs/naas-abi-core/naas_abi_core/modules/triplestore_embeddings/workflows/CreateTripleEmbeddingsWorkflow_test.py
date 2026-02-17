@@ -24,11 +24,11 @@ engine.load(module_names=["naas_abi_core.modules.triplestore_embeddings"])
 module: ABIModule = ABIModule.get_instance()
 
 collection_name = module.configuration.collection_name + "_test"
-embeddings_dimension = module.configuration.embeddings_dimensions
+embeddings_dimensions = module.configuration.embeddings_dimensions
 if module.configuration.embeddings_model_provider == "openai":
     embeddings_model = OpenAIEmbeddings(
         model=module.configuration.embeddings_model_name,
-        dimensions=embeddings_dimension,
+        dimensions=embeddings_dimensions,
     )
 else:
     raise ValueError(
@@ -46,7 +46,7 @@ def workflow() -> CreateTripleEmbeddingsWorkflow:
         vector_store=module.engine.services.vector_store,
         triple_store=module.engine.services.triple_store,
         embeddings_model=embeddings_model,
-        embeddings_dimension=embeddings_dimension,
+        embeddings_dimensions=embeddings_dimensions,
         collection_name=collection_name,
         graph_name=TEST_GRAPH_NAME,
     )
