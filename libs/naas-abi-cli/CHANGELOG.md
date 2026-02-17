@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.15.1 (2026-02-17)
+
+### Bug Fixes
+
+- Generate config.yaml on new project
+  ([`cfdc888`](https://github.com/jupyter-naas/abi/commit/cfdc88819326cc52cdf608257c84cb5d03859de1))
+
+
 ## v1.15.0 (2026-02-16)
 
 ### Features
