@@ -43,25 +43,40 @@ class TriplesUtils:
 
         return metadata
 
-    def get_rdf_type_from_subject(self, subject: URIRef | str) -> List[Dict[str, Any]]:
+    def get_rdf_type_from_subject(
+        self, subject: URIRef | str, graph_name: URIRef | str | None = None
+    ) -> List[Dict[str, Any]]:
         """Get the RDF type from a given subject.
 
         Args:
             subject: The subject of the triple
+            graph_name: Named graph to query from (default: "*" for all graphs)
 
         Returns:
             The RDF type of the subject
         """
+        if graph_name is None:
+            graph_clause = ""
+            graph_close = ""
+        else:
+            graph_clause = f"GRAPH <{str(graph_name)}> {{"
+            graph_close = "}"
+
         sparql_query = f"""
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             PREFIX owl: <http://www.w3.org/2002/07/owl#>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             SELECT ?type ?label
             WHERE {{
-                <{str(subject)}> rdf:type ?type .
-                ?type rdfs:label ?label .
+                {graph_clause}
+                    <{str(subject)}> rdf:type ?type .
+                {graph_close}
+                OPTIONAL {{
+                    ?type rdfs:label ?label .
+                }}
             }}
         """
+        print(sparql_query)
         rdf_types: List[Dict] = []
         results = self.triple_store.query(sparql_query)
         for row in results:
@@ -74,6 +89,7 @@ class TriplesUtils:
         class_uri: str,
         parent_class: Union[str, List[str]],
         visited: Optional[Set[str]] = None,
+        graph_name: URIRef | str | None = None,
     ) -> bool:
         """
         Recursively check if a subject is a subclass of a parent class (or one of multiple parent classes).
@@ -102,11 +118,20 @@ class TriplesUtils:
             return True
 
         # Query for direct parent classes using rdfs:subClassOf
+        if graph_name is None:
+            graph_clause = ""
+            graph_close = ""
+        else:
+            graph_clause = f"GRAPH <{str(graph_name)}> {{"
+            graph_close = "}"
+
         query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT ?parent
         WHERE {{
-            <{class_uri}> rdfs:subClassOf ?parent .
+            {graph_clause}
+                <{class_uri}> rdfs:subClassOf ?parent .
+            {graph_close}
         }}
         """
 
