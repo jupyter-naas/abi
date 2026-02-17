@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.15.7 (2026-02-17)
+
+### Bug Fixes
+
+- Update the local docker compose template
+  ([`08f4c1f`](https://github.com/jupyter-naas/abi/commit/08f4c1ff374dcfe66732f9a3d48e57ad367a460c))
+
+
 ## v1.15.6 (2026-02-17)
 
 ### Bug Fixes
