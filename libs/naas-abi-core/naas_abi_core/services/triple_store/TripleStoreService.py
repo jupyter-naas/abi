@@ -266,7 +266,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     def get_subject_graph(self, subject: str) -> Graph:
         return self.__triple_store_adapter.get_subject_graph(URIRef(subject))
 
-    ###################lib/abi/services/ontology/OntologyService.py#########################################
+    ############################################################
     # Schema Management
     ############################################################
 
