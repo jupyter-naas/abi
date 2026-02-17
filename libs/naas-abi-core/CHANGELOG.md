@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.14.1 (2026-02-17)
+
+### Bug Fixes
+
+- Working on fixing nexus workspace access
+  ([`d29b007`](https://github.com/jupyter-naas/abi/commit/d29b00775bbe631d978f5d1d0f687fa187282cd0))
+
+
 ## v1.14.0 (2026-02-16)
 
 ### Features
