@@ -68,7 +68,10 @@ class EntityResolutionWorkflowParameters(WorkflowParameters):
         "arbitrary_types_allowed": True,
     }
 
-    s: Annotated[URIRef | str, Field(..., description="The subject of the triple")]
+    s: Annotated[
+        URIRef | str,
+        Field(..., description="The subject of the triple"),
+    ]
     p: Annotated[
         URIRef | str, Field(..., description="The predicate of the triple")
     ] = RDFS.label
@@ -150,86 +153,53 @@ class EntityResolutionWorkflow(Workflow):
         type_uris = metadata.get("type_uri", [])
         owl_types = metadata.get("owl_type", [])
 
-        # Check if type is subclass of BFO_0000004 (independent continuant) and use owl:hasKey for resolution
-        independent_continuant_uri = "http://purl.obolibrary.org/obo/BFO_0000004"
-        is_independent_continuant = False
-        type_uri_index = 0
-        while type_uri_index < len(type_uris):
-            type_uri = type_uris[type_uri_index]
-            is_independent_continuant = self.__triples_utils.is_subclass_of(
-                type_uri,
-                independent_continuant_uri,
-                graph_name=self.__configuration.graph_name,
+        # Entity resolution: Use owl:hasKey
+        for type_uri in type_uris:
+            # Get owl:hasKey properties for the class
+            key_properties = self.__triples_utils.get_owl_hasKey(
+                type_uri, self.__configuration.graph_name
             )
-            if is_independent_continuant is False:
-                break
-            type_uri_index += 1
 
-        if is_independent_continuant:
-            logger.info(
-                f"Entity '{label}' ({uri}) is a subclass of Independent Continuant, checking for owl:hasKey..."
-            )
-            for type_uri in type_uris:
-                # Get owl:hasKey properties for the class
-                key_properties = self.__triples_utils.get_owl_hasKey(
-                    type_uri, self.__configuration.graph_name
-                )
-
-                if len(key_properties) == 0:
-                    logger.info(
-                        f"No owl:hasKey found for class {type_uri}, creating embeddings..."
-                    )
-                    # No owl:hasKey, create embeddings
-                    return self.__create_embeddings_workflow.create_triple_embeddings(
-                        CreateTripleEmbeddingsWorkflowParameters(
-                            s=parameters.s,
-                            p=parameters.p,
-                            o=parameters.o,
-                        )
-                    )
-
+            if len(key_properties) == 0:
                 logger.info(
-                    f"Found owl:hasKey properties: {[str(kp) for kp in key_properties]} for class {type_uri}"
+                    f"No owl:hasKey found for class {type_uri}, creating embeddings..."
                 )
-                # Find individuals with matching key values
-                matching_individuals = (
-                    self.__triples_utils.find_individuals_with_matching_keys(
-                        uri,
-                        key_properties,
-                        type_uri,
-                        self.__configuration.graph_name,
-                    )
+                continue
+
+            logger.info(
+                f"Found owl:hasKey properties: {[str(kp) for kp in key_properties]} for class {type_uri}"
+            )
+            # Find individuals with matching key values
+            matching_individuals = (
+                self.__triples_utils.find_individuals_with_matching_keys(
+                    uri,
+                    key_properties,
+                    type_uri,
+                    self.__configuration.graph_name,
                 )
+            )
 
-                if len(matching_individuals) > 0:
-                    logger.info(
-                        f"Found {len(matching_individuals)} individuals with matching keys: {matching_individuals}"
-                    )
-                    # Merge subject and all matching individuals into the first matching individual
-                    canonical_uri = matching_individuals[0]
-                    merge_pairs = [(canonical_uri, uri)]  # Merge subject into canonical
-                    # If there are multiple matches, merge them all into the canonical one
-                    for other_uri in matching_individuals[1:]:
-                        merge_pairs.append((canonical_uri, other_uri))
-                    logger.info(f"Merging {len(merge_pairs)} pairs: {merge_pairs}")
-                    return self.__merge_pipeline.run(
-                        MergeIndividualsPipelineParameters(merge_pairs=merge_pairs)
-                    )
-                else:
-                    logger.info(
-                        "No individuals with matching keys found, creating embeddings..."
-                    )
-                    # No matching individuals, create embeddings
-                    return self.__create_embeddings_workflow.create_triple_embeddings(
-                        CreateTripleEmbeddingsWorkflowParameters(
-                            s=parameters.s,
-                            p=parameters.p,
-                            o=parameters.o,
-                        )
-                    )
+            if len(matching_individuals) > 0:
+                logger.info(
+                    f"Found {len(matching_individuals)} individuals with matching keys: {matching_individuals}"
+                )
+                # Merge subject and all matching individuals into the first matching individual
+                canonical_uri = matching_individuals[0]
+                merge_pairs = [(canonical_uri, uri)]  # Merge subject into canonical
+                # If there are multiple matches, merge them all into the canonical one
+                for other_uri in matching_individuals[1:]:
+                    merge_pairs.append((canonical_uri, other_uri))
+                logger.info(f"Merging {len(merge_pairs)} pairs: {merge_pairs}")
+                return self.__merge_pipeline.run(
+                    MergeIndividualsPipelineParameters(merge_pairs=merge_pairs)
+                )
+            else:
+                logger.info(
+                    "No individuals with matching keys found, creating embeddings..."
+                )
+                continue
 
-        # Check if entity resolution is needed
-        # Logic: if type_uris are GDC or SDC then entity resolution must be performed with labels
+        # Entity resolution: if type_uris are GDC or SDC then entity resolution must be performed with labels
         gdc_sdc_class_uris = [
             "http://purl.obolibrary.org/obo/BFO_0000031",
             "http://purl.obolibrary.org/obo/BFO_0000020",
