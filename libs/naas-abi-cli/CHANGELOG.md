@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.15.4 (2026-02-17)
+
+### Bug Fixes
+
+- Add migrations to release
+  ([`b928c24`](https://github.com/jupyter-naas/abi/commit/b928c24bc1c0034029192b80d1b7cbc06083dd81))
+
+
 ## v1.15.3 (2026-02-17)
 
 
