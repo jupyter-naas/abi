@@ -41,6 +41,8 @@ class ABIModule(BaseModule):
     def on_load(self):
         super().on_load()
 
+        import os
+
         from langchain_openai import OpenAIEmbeddings
         from naas_abi_core.modules.triplestore_embeddings.pipelines.MergeIndividualsPipeline import (
             MergeIndividualsPipelineConfiguration,
@@ -62,6 +64,7 @@ class ABIModule(BaseModule):
         from rdflib import RDFS
 
         # Init configurations
+        datastore_path = self.configuration.datastore_path
         collection_name = self.configuration.collection_name
         embeddings_dimensions = self.configuration.embeddings_dimensions
         if self.configuration.embeddings_model_provider == "openai":
@@ -74,6 +77,13 @@ class ABIModule(BaseModule):
                 f"Embeddings model provider {self.configuration.embeddings_model_provider} not supported"
             )
 
+        graph_name = None
+        env = os.getenv("TEST")
+        if env == "true":
+            graph_name = "http://ontology.naas.ai/abi/test/"
+            collection_name = collection_name + "_test"
+            datastore_path = self.configuration.datastore_path + "_test"
+
         # Init create triple embeddings workflow
         create_triple_embeddings_configuration = (
             CreateTripleEmbeddingsWorkflowConfiguration(
@@ -82,13 +92,14 @@ class ABIModule(BaseModule):
                 embeddings_model=embeddings_model,
                 embeddings_dimension=embeddings_dimensions,
                 collection_name=collection_name,
+                graph_name=graph_name,
             )
         )
         merge_individuals_pipeline_configuration = (
             MergeIndividualsPipelineConfiguration(
                 triple_store=self.engine.services.triple_store,
                 object_storage=self.engine.services.object_storage,
-                datastore_path=self.configuration.datastore_path,
+                datastore_path=datastore_path,
             )
         )
 
@@ -100,6 +111,7 @@ class ABIModule(BaseModule):
             embeddings_model=embeddings_model,
             embeddings_dimension=embeddings_dimensions,
             collection_name=collection_name,
+            graph_name=graph_name,
         )
         entity_resolution_workflow = EntityResolutionWorkflow(
             entity_resolution_workflow_configuration
@@ -113,6 +125,7 @@ class ABIModule(BaseModule):
                 )
             ),
             OntologyEvent.INSERT,
+            graph_name,
         )
 
         # Init delete triple embeddings workflow
@@ -136,4 +149,5 @@ class ABIModule(BaseModule):
                 )
             ),
             OntologyEvent.DELETE,
+            graph_name,
         )
