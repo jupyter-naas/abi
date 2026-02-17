@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.3 (2026-02-17)
+
+### Bug Fixes
+
+- Install nexus-api deps from naas_abi pyproject directly
+  ([`a0a5734`](https://github.com/jupyter-naas/abi/commit/a0a57344e2d34adae689b52695b1f586c09b0ab3))
+
+
 ## v1.7.2 (2026-02-17)
 
 ### Bug Fixes
