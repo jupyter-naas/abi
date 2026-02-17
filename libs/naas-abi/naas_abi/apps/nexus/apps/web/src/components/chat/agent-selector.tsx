@@ -7,13 +7,13 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore, type Agent } from '@/stores/agents';
 import { getApiUrl } from '@/lib/config';
 
-const API_BASE = getApiUrl();
+const getApiBase = () => getApiUrl();
 
 // Helper to get logo URL (prefix relative URLs with API base)
 const getLogoUrl = (url: string | null): string | undefined => {
   if (!url) return undefined;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${API_BASE}${url}`; // Relative URL -> add API base
+  return `${getApiBase()}${url}`; // Relative URL -> add API base
 };
 
 const iconComponents = {

@@ -10,7 +10,7 @@ import { authFetch } from './auth';
 
 import { getApiUrl } from '@/lib/config';
 
-const API_BASE = getApiUrl();
+const getApiBase = () => getApiUrl();
 
 export interface Secret {
   id: string;
@@ -49,7 +49,7 @@ export const useSecretsStore = create<SecretsState>()(
     fetchSecrets: async (workspaceId: string) => {
       set({ isLoading: true, error: null });
       try {
-        const response = await authFetch(`${API_BASE}/api/secrets/${workspaceId}`);
+        const response = await authFetch(`${getApiBase()}/api/secrets/${workspaceId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch secrets');
         }
@@ -65,7 +65,7 @@ export const useSecretsStore = create<SecretsState>()(
 
     addSecret: async (workspaceId, key, value, description = '', category = 'other') => {
       try {
-        const response = await authFetch(`${API_BASE}/api/secrets`, {
+        const response = await authFetch(`${getApiBase()}/api/secrets`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -95,7 +95,7 @@ export const useSecretsStore = create<SecretsState>()(
 
     updateSecret: async (id, updates) => {
       try {
-        const response = await authFetch(`${API_BASE}/api/secrets/${id}`, {
+        const response = await authFetch(`${getApiBase()}/api/secrets/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updates),
@@ -116,7 +116,7 @@ export const useSecretsStore = create<SecretsState>()(
 
     deleteSecret: async (id) => {
       try {
-        const response = await authFetch(`${API_BASE}/api/secrets/${id}`, {
+        const response = await authFetch(`${getApiBase()}/api/secrets/${id}`, {
           method: 'DELETE',
         });
         
@@ -136,7 +136,7 @@ export const useSecretsStore = create<SecretsState>()(
 
     importFromEnv: async (workspaceId, envContent) => {
       try {
-        const response = await authFetch(`${API_BASE}/api/secrets/import`, {
+        const response = await authFetch(`${getApiBase()}/api/secrets/import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

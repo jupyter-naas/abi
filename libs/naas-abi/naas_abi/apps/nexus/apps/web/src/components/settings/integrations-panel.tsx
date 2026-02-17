@@ -44,9 +44,7 @@ const providerLabels: Record<ProviderType, string> = {
   custom: 'Custom',
 };
 
-import { getApiUrl, getOllamaUrl } from '@/lib/config';
-
-const API_BASE = getApiUrl();
+import { getOllamaUrl } from '@/lib/config';
 
 export function IntegrationsPanel() {
   const { providers, toggleProvider, deleteProvider, updateProvider, addProvider, syncOllamaProviders } = useIntegrationsStore();

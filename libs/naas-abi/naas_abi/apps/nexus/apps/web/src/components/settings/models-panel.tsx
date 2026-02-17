@@ -22,7 +22,7 @@ import { authFetch } from '@/stores/auth';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
-const API_BASE = getApiUrl();
+const getApiBase = () => getApiUrl();
 
 type ModelInfo = {
   id: string;
@@ -95,7 +95,7 @@ export function ModelsPanel() {
 
   const fetchProviders = async (fetchLive = false) => {
     try {
-      const response = await authFetch(`${API_BASE}/api/providers/available`);
+      const response = await authFetch(`${getApiBase()}/api/providers/available`);
       if (response.ok) {
         const data = await response.json();
         setProviders(data);
@@ -359,7 +359,7 @@ export function ModelsPanel() {
                               const url = p?.logo_url as string | undefined;
                               return url ? (
                                 // Use API base for relative /logos/* paths
-                                <img src={url.startsWith('http') ? url : `${API_BASE}${url}`} alt={model.provider} className="h-full w-full object-cover" />
+                                <img src={url.startsWith('http') ? url : `${getApiBase()}${url}`} alt={model.provider} className="h-full w-full object-cover" />
                               ) : (
                                 providerIcons[model.provider.toLowerCase()] || <Cloud size={18} />
                               );
