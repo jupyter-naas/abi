@@ -6,6 +6,7 @@ RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/web ./apps/web
+COPY apps/api/public/logos ./apps/api/public/logos
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 WORKDIR /app/apps/web
