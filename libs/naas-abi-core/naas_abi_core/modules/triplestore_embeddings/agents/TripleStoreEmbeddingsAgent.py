@@ -70,11 +70,11 @@ def create_agent(
 
     vector_store_service: VectorStoreService = module.engine.services.vector_store
     collection_name = module.configuration.collection_name
-    embeddings_dimension = module.configuration.embeddings_dimensions
+    embeddings_dimensions = module.configuration.embeddings_dimensions
     if module.configuration.embeddings_model_provider == "openai":
         embeddings_model = OpenAIEmbeddings(
             model=module.configuration.embeddings_model_name,
-            dimensions=embeddings_dimension,
+            dimensions=embeddings_dimensions,
         )
     else:
         raise ValueError(
@@ -89,8 +89,8 @@ def create_agent(
 
     tools.append(get_collection_size)
 
-    @tool
-    def list_collections(return_direct=True) -> str:
+    @tool(return_direct=True)
+    def list_collections() -> str:
         """List all collections in the vector store."""
         collections = vector_store_service.list_collections()
         collections_text = "\n".join([f"- {collection}" for collection in collections])
@@ -142,8 +142,6 @@ def create_agent(
         )
     )
     tools.append(search_label)
-
-    # ---------------------------------------------------------------
 
     system_prompt = SYSTEM_PROMPT.replace(
         "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
