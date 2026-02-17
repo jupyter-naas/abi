@@ -61,12 +61,16 @@ x-abi-template: &abi_template
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
   depends_on:
-    # fuseki:
-    #   condition: service_healthy  # Wait for knowledge graph to be ready
     postgres:
       condition: service_healthy
-    # qdrant:
-    #   condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    qdrant:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    fuseki:
+      condition: service_healthy
   networks:
     - abi-network
 
@@ -381,11 +385,11 @@ services:
     environment:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
-    # healthcheck:
-    #   test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-    #   interval: 10s
-    #   timeout: 5s
-    #   retries: 5
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - abi-network
 
