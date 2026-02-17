@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional, Set, Union
 
+from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from rdflib import OWL, URIRef
 from rdflib.query import ResultRow
@@ -76,7 +77,6 @@ class TriplesUtils:
                 }}
             }}
         """
-        print(sparql_query)
         rdf_types: List[Dict] = []
         results = self.triple_store.query(sparql_query)
         for row in results:
@@ -147,3 +147,23 @@ class TriplesUtils:
                 return True
 
         return False
+
+    def load_schemas(self, graph_name: URIRef | str, dir_path: str):
+        """Load schemas from a list of filepaths.
+
+        Args:
+            graph_name: The graph name to load schemas from
+            dir_path: The directory path to load schemas from
+        """
+        import glob
+        import os
+
+        from rdflib import Graph, URIRef
+
+        filepaths = glob.glob(os.path.join(dir_path, "**/*.ttl"), recursive=True)
+        logger.info(f"Loading {len(filepaths)} schemas from {dir_path}")
+
+        for filepath in filepaths:
+            graph = Graph()
+            graph.parse(filepath, format="turtle")
+            self.triple_store.insert(graph, graph_name=URIRef(graph_name))
