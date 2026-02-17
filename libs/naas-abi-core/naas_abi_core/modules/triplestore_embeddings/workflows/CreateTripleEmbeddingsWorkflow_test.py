@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from langchain_openai import OpenAIEmbeddings
 from naas_abi_core.engine.Engine import Engine
@@ -8,15 +10,20 @@ from naas_abi_core.modules.triplestore_embeddings.utils.Embeddings import (
 from naas_abi_core.modules.triplestore_embeddings.workflows.CreateTripleEmbeddingsWorkflow import (
     CreateTripleEmbeddingsWorkflow,
     CreateTripleEmbeddingsWorkflowConfiguration,
-    CreateTripleEmbeddingsWorkflowParameters,
 )
+
+# Set ENV=test to ensure test graph is used
+os.environ["TEST"] = "true"
+
+# Test graph name constant
+TEST_GRAPH_NAME = "http://ontology.naas.ai/abi/test/"
 
 engine = Engine()
 engine.load(module_names=["naas_abi_core.modules.triplestore_embeddings"])
 
 module: ABIModule = ABIModule.get_instance()
 
-collection_name = module.configuration.collection_name
+collection_name = module.configuration.collection_name + "_test"
 embeddings_dimension = module.configuration.embeddings_dimensions
 if module.configuration.embeddings_model_provider == "openai":
     embeddings_model = OpenAIEmbeddings(
@@ -29,6 +36,8 @@ else:
     )
 
 embeddings_utils = EmbeddingsUtils(embeddings_model=embeddings_model)
+triple_store_service = module.engine.services.triple_store
+vector_store_service = module.engine.services.vector_store
 
 
 @pytest.fixture
@@ -39,25 +48,13 @@ def workflow() -> CreateTripleEmbeddingsWorkflow:
         embeddings_model=embeddings_model,
         embeddings_dimension=embeddings_dimension,
         collection_name=collection_name,
+        graph_name=TEST_GRAPH_NAME,
     )
     workflow = CreateTripleEmbeddingsWorkflow(configuration)
     return workflow
 
 
-def test_create_triple_embeddings(workflow):
-    from rdflib import RDFS
-
-    result = workflow.create_triple_embeddings(
-        CreateTripleEmbeddingsWorkflowParameters(
-            s="http://ontology.naas.ai/abi/9187f182-f84a-4dca-ab3b-7e39f73c901b",
-            p=RDFS.label,
-            o="Florent Ravenel",
-        )
-    )
-    assert result["status"] == "success", result["message"]
-
-
-def test_trigger_create_triple_embeddings(workflow):
+def test_subscribe_create_triple_embeddings(workflow):
     import time
     from uuid import uuid4
 
@@ -73,11 +70,8 @@ def test_trigger_create_triple_embeddings(workflow):
     graph.add((URIRef(uri), RDF.type, class_uri))
     graph.add((URIRef(uri), RDFS.label, Literal(label)))
 
-    triple_store_service = module.engine.services.triple_store
-    triple_store_service.insert(graph)
+    triple_store_service.insert(graph, graph_name=URIRef(TEST_GRAPH_NAME))
     time.sleep(10)
-
-    vector_store_service = module.engine.services.vector_store
 
     vector = embeddings_utils.create_vector_embedding(label)
     search_results = vector_store_service.search_similar(
@@ -89,4 +83,4 @@ def test_trigger_create_triple_embeddings(workflow):
     )
     assert len(search_results) > 0, search_results
 
-    triple_store_service.remove(graph)
+    triple_store_service.remove(graph, graph_name=URIRef(TEST_GRAPH_NAME))

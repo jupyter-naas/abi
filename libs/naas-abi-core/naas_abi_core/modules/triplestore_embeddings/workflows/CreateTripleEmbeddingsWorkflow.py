@@ -34,6 +34,7 @@ class CreateTripleEmbeddingsWorkflowConfiguration(WorkflowConfiguration):
     embeddings_model: Embeddings
     embeddings_dimension: int
     collection_name: str = "triple_embeddings"
+    graph_name: URIRef | str | None = None
 
 
 class CreateTripleEmbeddingsWorkflowParameters(WorkflowParameters):
@@ -101,7 +102,9 @@ class CreateTripleEmbeddingsWorkflow(Workflow):
         metadata: Dict[str, Any] = {"uri": uri, "label": label}
 
         # Get RDF types from subject
-        rdf_types = self.__triples_utils.get_rdf_type_from_subject(parameters.s)
+        rdf_types = self.__triples_utils.get_rdf_type_from_subject(
+            parameters.s, self.__configuration.graph_name
+        )
         if len(rdf_types) == 0:
             logger.error(f"No RDF types found for {parameters.s}")
             return {
