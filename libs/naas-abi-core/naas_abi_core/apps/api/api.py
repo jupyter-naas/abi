@@ -10,12 +10,14 @@ from fastapi.openapi.models import OAuthFlowPassword
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
+
 # Authentication
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.security.oauth2 import OAuth2
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
 from naas_abi_core import logger
+
 # Docs
 from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML, TAGS_METADATA
 from naas_abi_core.engine.Engine import Engine
@@ -51,7 +53,6 @@ app.add_middleware(
 
 static_dir = os.path.join(os.path.dirname(str(files("naas_abi_core"))), "assets")
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
 
 
 # Custom OAuth2 class that accepts query parameter
@@ -213,7 +214,7 @@ app.include_router(pipelines_router)
 app.include_router(workflows_router)
 
 for module in engine.modules.values():
-    router = module.api(app)
+    module.api(app)
 
 
 def api():
@@ -227,9 +228,19 @@ def api():
             reload=os.environ.get("ENV") == "dev",
             reload_dirs=["src", "libs"],
             log_level="debug",
+            proxy_headers=True,
+            forwarded_allow_ips="*",
         )
     else:
-        uvicorn.run("naas_abi_core.apps.api.api:app", host="0.0.0.0", port=9879, reload_dirs=["src", "libs"], reload=True)
+        uvicorn.run(
+            "naas_abi_core.apps.api.api:app",
+            host="0.0.0.0",
+            port=9879,
+            reload_dirs=["src", "libs"],
+            reload=True,
+            proxy_headers=True,
+            forwarded_allow_ips="*",
+        )
 
 
 def test_init():

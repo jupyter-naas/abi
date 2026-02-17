@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { authFetch } from '@/stores/auth';
+import { getApiUrl } from '@/lib/config';
 
 /**
  * Org workspace landing page.
@@ -12,6 +13,7 @@ import { authFetch } from '@/stores/auth';
  * and redirects to the first available one.
  */
 export default function OrgWorkspacePage() {
+  const apiUrl = getApiUrl();
   const router = useRouter();
   const params = useParams();
   const orgSlug = params.orgSlug as string;
@@ -29,7 +31,7 @@ export default function OrgWorkspacePage() {
       try {
         // First get the org by slug to get the org ID
         const brandingRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/organizations/slug/${orgSlug}/branding`
+          `${apiUrl}/api/organizations/slug/${orgSlug}/branding`
         );
 
         if (!brandingRes.ok) {
@@ -38,7 +40,7 @@ export default function OrgWorkspacePage() {
         }
 
         // Fetch user's workspaces
-        const wsRes = await authFetch('/api/workspaces/');
+        const wsRes = await authFetch('/api/workspaces');
         if (!wsRes.ok) {
           setError('Failed to load workspaces');
           return;
@@ -60,7 +62,7 @@ export default function OrgWorkspacePage() {
     };
 
     fetchAndRedirect();
-  }, [token, orgSlug, router]);
+  }, [token, orgSlug, router, apiUrl]);
 
   if (error) {
     return (

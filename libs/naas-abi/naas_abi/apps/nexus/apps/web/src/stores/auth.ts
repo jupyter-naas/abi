@@ -37,8 +37,6 @@ export interface AuthState {
 
 import { getApiUrl } from '@/lib/config';
 
-const API_BASE = getApiUrl();
-
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -54,7 +52,8 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
-          const response = await fetch(`${API_BASE}/api/auth/login`, {
+          const apiBase = getApiUrl();
+          const response = await fetch(`${apiBase}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include', // Important: allows cookies to be set
@@ -67,7 +66,7 @@ export const useAuthStore = create<AuthState>()(
           }
           
           const data = await response.json();
-          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${API_BASE}${a}` : a);
+          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
           
           // Set auth flag cookie for middleware
           document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000'; // 30 days
@@ -95,7 +94,8 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
-          const response = await fetch(`${API_BASE}/api/auth/register`, {
+          const apiBase = getApiUrl();
+          const response = await fetch(`${apiBase}/api/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include', // Important: allows cookies to be set
@@ -108,7 +108,7 @@ export const useAuthStore = create<AuthState>()(
           }
           
           const data = await response.json();
-          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${API_BASE}${a}` : a);
+          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
           
           // Set auth flag cookie for middleware
           document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000'; // 30 days
@@ -182,7 +182,8 @@ export const useAuthStore = create<AuthState>()(
         }
         
         try {
-          const response = await fetch(`${API_BASE}/api/auth/me`, {
+          const apiBase = getApiUrl();
+          const response = await fetch(`${apiBase}/api/auth/me`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -194,7 +195,7 @@ export const useAuthStore = create<AuthState>()(
           }
           
           const user = await response.json();
-          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${API_BASE}${a}` : a);
+          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
           set({ user: { ...user, avatar: normalizeAvatar(user?.avatar) }, isAuthenticated: true });
           return true;
         } catch {
@@ -228,9 +229,10 @@ export function getAuthHeader(): Record<string, string> {
  */
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token;
+  const apiBase = getApiUrl();
   
   // Prepend API_BASE if URL is relative
-  const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
+  const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`;
   
   const headers = new Headers(options.headers);
   if (token) {

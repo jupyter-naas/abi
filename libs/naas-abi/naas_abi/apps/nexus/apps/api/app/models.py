@@ -5,16 +5,25 @@ SQLAlchemy 2.0 declarative models for all database tables.
 These replace raw SQL strings throughout the codebase.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from naas_abi.apps.nexus.apps.api.app.core.database import Base
-from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Index, Integer,
-                        String, Text, UniqueConstraint, func)
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 # ============================================
@@ -162,7 +171,7 @@ class WorkspaceModel(Base):
     slug = Column(String, unique=True, nullable=False, index=True)
     owner_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
-    
+
     # Workspace-level theming (personal workspace branding)
     logo_url = Column(Text, nullable=True)             # URL to workspace logo image
     logo_emoji = Column(String, nullable=True)         # Emoji icon (fallback if no logo URL)
@@ -171,7 +180,7 @@ class WorkspaceModel(Base):
     background_color = Column(String, nullable=True)   # Custom background color (hex)
     sidebar_color = Column(String, nullable=True)      # Custom sidebar background color (hex)
     font_family = Column(String, nullable=True)        # Custom font family name
-    
+
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

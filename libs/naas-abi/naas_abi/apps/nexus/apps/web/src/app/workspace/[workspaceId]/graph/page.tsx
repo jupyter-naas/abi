@@ -155,8 +155,10 @@ export default function GraphPage() {
             .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
             .then((data) => {
               const expandNeighborhood = (seedType: 'Person' | 'Organization', hops = 2) => {
-                const seed = new Set(
-                  data.nodes.filter((n: any) => n.type === seedType).map((n: any) => n.id)
+                const seed = new Set<string>(
+                  data.nodes
+                    .filter((n: any) => n.type === seedType)
+                    .map((n: any) => String(n.id))
                 );
                 const allowed = new Set<string>(seed);
                 for (let i = 0; i < hops; i++) {

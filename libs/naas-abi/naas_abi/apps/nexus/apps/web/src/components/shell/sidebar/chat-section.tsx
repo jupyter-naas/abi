@@ -311,7 +311,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
 
         {agentsExpanded && (
           <div className="ml-3 space-y-0.5">
-            {agents.filter(agent => agent.enabled).map((agent) => {
+            {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
               const AgentIcon = agentIconComponents[agent.icon] || agentIconComponents.sparkles;
               const isSelected = selectedAgent === agent.id;
 

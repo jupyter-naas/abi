@@ -2,6 +2,60 @@
 
 <!-- version list -->
 
+## v1.14.1 (2026-02-17)
+
+### Bug Fixes
+
+- Working on fixing nexus workspace access
+  ([`d29b007`](https://github.com/jupyter-naas/abi/commit/d29b00775bbe631d978f5d1d0f687fa187282cd0))
+
+
+## v1.14.0 (2026-02-16)
+
+### Features
+
+- Trigger release
+  ([`cf5dfe9`](https://github.com/jupyter-naas/abi/commit/cf5dfe9691af94ff1d791de0bd0d6a53cb877a32))
+
+
+## v1.13.3 (2026-02-16)
+
+### Bug Fixes
+
+- Make check-core
+  ([`5fcd0cd`](https://github.com/jupyter-naas/abi/commit/5fcd0cd53fb3f02ab12e6f9e65613afc65a7ffbc))
+
+
+## v1.13.2 (2026-02-16)
+
+### Bug Fixes
+
+- **deps**: Move greenlet to nexus-api package
+  ([`0a381ae`](https://github.com/jupyter-naas/abi/commit/0a381ae7f92ad326afe18cae21aeceb544c1a597))
+
+
+## v1.13.1 (2026-02-13)
+
+### Bug Fixes
+
+- Critical local development setup issues
+  ([`b63d50e`](https://github.com/jupyter-naas/abi/commit/b63d50efa54e6c7e3a09bc3b3552084c1c9586b0))
+
+
+## v1.13.0 (2026-02-13)
+
+### Features
+
+- Add named graph management
+  ([`e4557e2`](https://github.com/jupyter-naas/abi/commit/e4557e2e5d55a43e062cc105368c254035329709))
+
+- Add tests for Jena and Oxigrpah. Also implemented a generci test to be reuse. Improved portal
+  ([`43ab798`](https://github.com/jupyter-naas/abi/commit/43ab798f1db273bb319cf952d5874d2729b743fa))
+
+- Added apache Jena TB2 Fuseki adapter to the triple store service
+  ([`620c466`](https://github.com/jupyter-naas/abi/commit/620c46608f2f74e845ed754e0332049da651aae4))
+
+
 ## v1.12.0 (2026-02-12)
 
 ### Features

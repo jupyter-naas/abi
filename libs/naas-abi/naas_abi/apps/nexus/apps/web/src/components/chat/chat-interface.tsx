@@ -273,8 +273,7 @@ export function ChatInterface() {
       const supportsStreaming =
         !provider ||
         provider?.type === 'ollama' ||
-        provider?.type === 'cloudflare' ||
-        provider?.type === 'abi';
+        provider?.type === 'cloudflare';
       if (supportsStreaming) {
         setIsStreaming(true);
         setIsLoading(false); // Don't show loading dots for streaming
@@ -301,6 +300,9 @@ export function ChatInterface() {
         connectingTimerRef.current = setTimeout(() => {
           if (!gotFirstTokenRef.current) setShowConnecting(true);
         }, 700);
+
+        let thinkingContent = '';   // Accumulated thinking text
+        let responseContent = '';   // Accumulated response text
 
         try {
           const controller = new AbortController();
@@ -339,8 +341,6 @@ export function ChatInterface() {
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
         let fullContent = '';       // Full raw content (including <think> tags)
-        let thinkingContent = '';   // Accumulated thinking text
-        let responseContent = '';   // Accumulated response text
         let isInThinking = false;
 
         if (reader) {
@@ -1028,7 +1028,7 @@ const MessageBubble = React.memo(function MessageBubble({
               )}
               <TypingDots />
               {!responseWithoutCaret && showConnecting && (
-                <span className="ml-2 text-xs text-muted-foreground">Connecting to model…</span>
+                <span className="ml-2 text-xs text-muted-foreground">Processing…</span>
               )}
               {showStop && (
                 <button

@@ -63,7 +63,10 @@ export function AgentSelector() {
 
   // Filter to only enabled agents
   const enabledAgents = agents.filter(a => a.enabled);
-  const selected = enabledAgents.find((a) => a.id === selectedAgent) || enabledAgents[0];
+  // Prefer SupervisorAgent as default, fallback to first enabled agent
+  const abiAgent = enabledAgents.find(a => a.id === 'abi');
+  const defaultAgent = abiAgent || enabledAgents[0];
+  const selected = enabledAgents.find((a) => a.id === selectedAgent) || defaultAgent;
 
   useEffect(() => {
     setMounted(true);
@@ -96,11 +99,11 @@ export function AgentSelector() {
       )
     : enabledAgents;
 
-  const defaultAgents = filteredAgents.filter(a => a.isDefault);
-  const customAgents = filteredAgents.filter(a => !a.isDefault);
+  const defaultAgents = filteredAgents.filter(a => a.isDefault).sort((a, b) => a.name.localeCompare(b.name));
+  const customAgents = filteredAgents.filter(a => !a.isDefault).sort((a, b) => a.name.localeCompare(b.name));
 
   // Show default on server to prevent hydration mismatch
-  const displayAgent = mounted ? selected : enabledAgents[0];
+  const displayAgent = mounted ? selected : defaultAgent;
 
   if (!displayAgent) {
     return null;

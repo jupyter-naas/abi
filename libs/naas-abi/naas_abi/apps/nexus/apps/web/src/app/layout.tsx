@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
+import Script from 'next/script';
 import { ThemeProvider } from '@/components/theme-provider';
 import { WebSocketProvider } from '@/contexts/websocket-context';
 import './globals.css';
@@ -15,11 +16,17 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'NEXUS | naas.ai',
+  title: 'ABI Nexus | naas.ai',
   description:
-    'The coordination platform where agents, knowledge, and humans connect into actionable intelligence.',
+    'The coordination platform where AI agents, knowledge, and humans connect into actionable intelligence.',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon.ico', sizes: '16x16', type: 'image/x-icon' },
+      { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: '/favicon.ico',
   },
 };
 
@@ -31,6 +38,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
+        <Script src="/runtime-config.js" strategy="beforeInteractive" />
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

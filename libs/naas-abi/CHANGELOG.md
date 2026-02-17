@@ -2,6 +2,112 @@
 
 <!-- version list -->
 
+## v1.7.8 (2026-02-17)
+
+
+## v1.7.7 (2026-02-17)
+
+
+## v1.7.6 (2026-02-17)
+
+
+## v1.7.5 (2026-02-17)
+
+### Bug Fixes
+
+- Add missing data in naas_abi release
+  ([`4aa9316`](https://github.com/jupyter-naas/abi/commit/4aa9316facc963b4ef4f1653f41b594ea7ae5479))
+
+
+## v1.7.4 (2026-02-17)
+
+
+## v1.7.3 (2026-02-17)
+
+### Bug Fixes
+
+- Install nexus-api deps from naas_abi pyproject directly
+  ([`a0a5734`](https://github.com/jupyter-naas/abi/commit/a0a57344e2d34adae689b52695b1f586c09b0ab3))
+
+
+## v1.7.2 (2026-02-17)
+
+### Bug Fixes
+
+- Build nexus for arm64
+  ([`859a31b`](https://github.com/jupyter-naas/abi/commit/859a31b68d121bbf5a1370d8daa1661db47831a3))
+
+
+## v1.7.1 (2026-02-16)
+
+
+## v1.7.0 (2026-02-16)
+
+### Features
+
+- Trigger release
+  ([`cf5dfe9`](https://github.com/jupyter-naas/abi/commit/cf5dfe9691af94ff1d791de0bd0d6a53cb877a32))
+
+
+## v1.6.1 (2026-02-16)
+
+### Bug Fixes
+
+- Make check-core
+  ([`5fcd0cd`](https://github.com/jupyter-naas/abi/commit/5fcd0cd53fb3f02ab12e6f9e65613afc65a7ffbc))
+
+
+## v1.6.0 (2026-02-16)
+
+### Features
+
+- Working on nexus container release to ghcr
+  ([`7f6f441`](https://github.com/jupyter-naas/abi/commit/7f6f441f07c409337e4082ea721a7b71080b49a8))
+
+
+## v1.5.2 (2026-02-16)
+
+### Bug Fixes
+
+- Remaning issues
+  ([`e9480ea`](https://github.com/jupyter-naas/abi/commit/e9480ea53bb33b2358e73dc9fead3915738bc2b8))
+
+
+## v1.5.1 (2026-02-16)
+
+### Bug Fixes
+
+- **deps**: Move greenlet to nexus-api package
+  ([`0a381ae`](https://github.com/jupyter-naas/abi/commit/0a381ae7f92ad326afe18cae21aeceb544c1a597))
+
+- **infra**: Rollback unstable weekend runtime wiring
+  ([`aac4a33`](https://github.com/jupyter-naas/abi/commit/aac4a33f2309ebff4a5889f72e45d13192955dd4))
+
+
+## v1.5.0 (2026-02-13)
+
+### Bug Fixes
+
+- Improve favicon display across browsers
+  ([`a26d1aa`](https://github.com/jupyter-naas/abi/commit/a26d1aa674494496045e145604c88535472865dd))
+
+- **infra**: Resolve CORS/500 errors and optimize Docker startup
+  ([`661f2cd`](https://github.com/jupyter-naas/abi/commit/661f2cde9390eb34c914e856644b1355d6b4907f))
+
+### Features
+
+- Rename to ABI NEXUS in browser tab
+  ([`a8725a6`](https://github.com/jupyter-naas/abi/commit/a8725a6dc1f08879face965fcbe7c7a6487d1b71))
+
+
+## v1.4.1 (2026-02-13)
+
+### Bug Fixes
+
+- AI Pane SupervisorAgent duplicate streaming and defaults
+  ([`f571323`](https://github.com/jupyter-naas/abi/commit/f5713236933003a4e8ace09e58cca4542b355504))
+
+
 ## v1.4.0 (2026-02-12)
 
 ### Bug Fixes

@@ -67,14 +67,12 @@ export function AIPane() {
   const [showHistory, setShowHistory] = useState(false);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  // AI Pane has its own agent selection, defaulting to ABI (the supervisor)
-  const [paneAgent, setPaneAgent] = useState<string>('abi');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
 
-  const { contextPanelOpen, toggleContextPanel, currentWorkspaceId } = useWorkspaceStore();
+  const { contextPanelOpen, toggleContextPanel, currentWorkspaceId, paneAgent, setPaneAgent } = useWorkspaceStore();
   const { agents, getAgent } = useAgentsStore();
   const { providers } = useIntegrationsStore();
   const { getSecretByKey } = useSecretsStore();
@@ -237,13 +235,16 @@ export function AIPane() {
       const agentData = getAgent(paneAgent);
       const systemPrompt = agentData?.systemPrompt || null;
       
-      // Build message history
+      // Build message history for the API (must include the current user message)
+      // Note: React setState is async, so `messages` doesn't have userMessage yet.
+      // We manually append it, matching how chat-interface uses getState() for fresh data.
       const fullHistory = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
 
       // Add placeholder for streaming response
       const assistantId = (Date.now() + 1).toString();
       const thinkingStartTime = Date.now();
       setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '▌' }]);
+      setIsLoading(false); // Stop loading indicator, streaming will show the cursor
 
       const token = useAuthStore.getState().token;
       const response = await fetch(`${API_BASE}/api/chat/stream`, {
@@ -253,6 +254,7 @@ export function AIPane() {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
+          workspace_id: currentWorkspaceId,
           message: userContent,
           messages: fullHistory,
           agent: paneAgent,
@@ -272,7 +274,6 @@ export function AIPane() {
       let isInThinking = false;
 
       if (reader) {
-        let hasError = false;
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -290,6 +291,7 @@ export function AIPane() {
                 if (parsed.content) {
                   const token = parsed.content as string;
                   
+                  // Track <think> tags
                   if (token.includes('<think>')) {
                     isInThinking = true;
                     const assembled = `<think>${thinkingContent}</think>`;
@@ -317,6 +319,7 @@ export function AIPane() {
                     continue;
                   }
                   
+                  // Regular response content
                   responseContent += token;
                   const assembled = thinkingContent
                     ? `<think>${thinkingContent}</think>\n\n${responseContent}▌`
@@ -326,31 +329,29 @@ export function AIPane() {
                   );
                 }
                 if (parsed.error) {
-                  hasError = true;
                   const errContent = `Error: ${parsed.error}`;
                   setMessages((prev) => 
                     prev.map((m) => m.id === assistantId ? { ...m, content: errContent } : m)
                   );
+                  throw new Error(parsed.error);
                 }
-              } catch {
-                // Ignore parse errors
+              } catch (parseError) {
+                // Only swallow JSON parsing failures for partial SSE chunks
+                if (!(parseError instanceof SyntaxError)) {
+                  throw parseError;
+                }
               }
             }
           }
         }
+        // Final: store full content with thinking duration
         const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
         const finalContent = thinkingContent
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
-        if (!finalContent && !hasError) {
-          setMessages((prev) => 
-            prev.map((m) => m.id === assistantId ? { ...m, content: 'No response received.', thinkingDuration } : m)
-          );
-        } else {
-          setMessages((prev) => 
-            prev.map((m) => m.id === assistantId ? { ...m, content: finalContent, thinkingDuration } : m)
-          );
-        }
+        setMessages((prev) => 
+          prev.map((m) => m.id === assistantId ? { ...m, content: finalContent, thinkingDuration } : m)
+        );
       }
     } catch (error) {
       console.error('AI Pane API error:', error);
@@ -548,7 +549,7 @@ export function AIPane() {
                 )}
               </div>
 
-              {/* Agent selector (AI Pane has its own selection, defaults to ABI) */}
+              {/* Agent selector (AI Pane has its own selection, defaults to SupervisorAgent) */}
               <div ref={modelMenuRef} className="relative">
                 <button
                   type="button"
@@ -559,7 +560,7 @@ export function AIPane() {
                     showAgentMenu && 'bg-muted'
                   )}
                 >
-                  <span>{currentAgent?.name || 'ABI'}</span>
+                  <span>{currentAgent?.name || 'SupervisorAgent'}</span>
                   <ChevronDown size={12} className="text-muted-foreground" />
                 </button>
                 
@@ -568,7 +569,7 @@ export function AIPane() {
                     <div className="px-3 py-1.5 text-xs text-muted-foreground">
                       Select agent
                     </div>
-                    {agents.filter(agent => agent.enabled).map((agent) => (
+                    {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
                       <button
                         key={agent.id}
                         type="button"

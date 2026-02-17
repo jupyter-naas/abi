@@ -4,26 +4,31 @@ All endpoints require authentication. Workspace-specific endpoints require membe
 """
 
 import os
-import shutil
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required, get_workspace_role,
-    require_workspace_access)
+    User,
+    get_current_user_required,
+    get_workspace_role,
+    require_workspace_access,
+)
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import _encrypt
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
-from naas_abi.apps.nexus.apps.api.app.models import (AgentConfigModel,
-                                                     ConversationModel,
-                                                     GraphEdgeModel,
-                                                     GraphNodeModel,
-                                                     OrganizationModel,
-                                                     UserModel,
-                                                     WorkspaceMemberModel,
-                                                     WorkspaceModel)
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.models import (
+    AgentConfigModel,
+    ConversationModel,
+    GraphEdgeModel,
+    GraphNodeModel,
+    OrganizationModel,
+    UserModel,
+    WorkspaceMemberModel,
+    WorkspaceModel,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -182,7 +187,7 @@ async def create_workspace(
         raise HTTPException(status_code=400, detail="Slug already exists")
 
     workspace_id = f"ws-{uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     ws = WorkspaceModel(
         id=workspace_id, name=workspace.name, slug=workspace.slug,
@@ -257,7 +262,7 @@ async def update_workspace(
     update_data = updates.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(ws, field, value)
-    ws.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    ws.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     await db.flush()
     return _to_schema(ws)
@@ -324,10 +329,10 @@ async def list_workspace_members(
 ) -> list[WorkspaceMember]:
     """List members of a workspace. Requires membership."""
     await require_workspace_access(current_user.id, workspace_id)
-    
+
     # Query with user details joined
     query = text("""
-        SELECT 
+        SELECT
             wm.id, wm.workspace_id, wm.user_id, wm.role, wm.created_at,
             u.email, u.name
         FROM workspace_members wm
@@ -335,10 +340,10 @@ async def list_workspace_members(
         WHERE wm.workspace_id = :workspace_id
         ORDER BY wm.created_at
     """)
-    
+
     result = await db.execute(query, {"workspace_id": workspace_id})
     rows = result.fetchall()
-    
+
     return [
         WorkspaceMember(
             id=row.id,
@@ -365,16 +370,16 @@ async def invite_workspace_member(
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ["admin", "owner"]:
         raise HTTPException(status_code=403, detail="Only admins can invite members")
-    
+
     # Check if user exists
     user_result = await db.execute(
         select(UserModel).where(UserModel.email == invite.email)
     )
     user = user_result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Check if already a member
     existing = await db.execute(
         select(WorkspaceMemberModel).where(
@@ -384,7 +389,7 @@ async def invite_workspace_member(
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="User is already a member")
-    
+
     # Add member
     member = WorkspaceMemberModel(
         id=str(uuid4()),
@@ -394,7 +399,7 @@ async def invite_workspace_member(
     )
     db.add(member)
     await db.commit()
-    
+
     return {"status": "invited", "member_id": member.id}
 
 
@@ -410,11 +415,11 @@ async def remove_workspace_member(
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ["admin", "owner"]:
         raise HTTPException(status_code=403, detail="Only admins can remove members")
-    
+
     # Cannot remove yourself
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
-    
+
     # Remove member
     result = await db.execute(
         select(WorkspaceMemberModel).where(
@@ -423,13 +428,13 @@ async def remove_workspace_member(
         )
     )
     member = result.scalar_one_or_none()
-    
+
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
-    
+
     await db.delete(member)
     await db.commit()
-    
+
     return {"status": "removed"}
 
 
@@ -446,7 +451,7 @@ async def update_workspace_member(
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ["admin", "owner"]:
         raise HTTPException(status_code=403, detail="Only admins can update members")
-    
+
     # Get member
     result = await db.execute(
         select(WorkspaceMemberModel).where(
@@ -455,15 +460,15 @@ async def update_workspace_member(
         )
     )
     member = result.scalar_one_or_none()
-    
+
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
-    
+
     # Update role
     if 'role' in updates and updates['role'] in ['admin', 'member', 'viewer']:
         member.role = updates['role']
         await db.commit()
-    
+
     return {"status": "updated"}
 
 
@@ -521,7 +526,7 @@ async def list_inference_servers(
 
     # Check access
     await require_workspace_access(current_user.id, workspace_id)
-    
+
     # Get servers
     result = await db.execute(
         select(InferenceServerModel)
@@ -529,7 +534,7 @@ async def list_inference_servers(
         .order_by(InferenceServerModel.created_at.desc())
     )
     servers = result.scalars().all()
-    
+
     return [
         InferenceServer(
             id=s.id,
@@ -563,7 +568,7 @@ async def create_inference_server(
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ['admin', 'owner']:
         raise HTTPException(status_code=403, detail="Only admins can add servers")
-    
+
     # Create server
     server = InferenceServerModel(
         id=str(uuid4()),
@@ -576,13 +581,13 @@ async def create_inference_server(
         api_key=_encrypt(server_data.api_key) if server_data.api_key else None,
         health_path=server_data.health_path,
         models_path=server_data.models_path,
-        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
-        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        created_at=datetime.now(UTC).replace(tzinfo=None),
+        updated_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(server)
     await db.commit()
     await db.refresh(server)
-    
+
     return InferenceServer(
         id=server.id,
         workspace_id=server.workspace_id,
@@ -614,7 +619,7 @@ async def update_inference_server(
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ['admin', 'owner']:
         raise HTTPException(status_code=403, detail="Only admins can update servers")
-    
+
     # Get server
     result = await db.execute(
         select(InferenceServerModel).where(
@@ -623,10 +628,10 @@ async def update_inference_server(
         )
     )
     server = result.scalar_one_or_none()
-    
+
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    
+
     # Update fields
     if updates.name is not None:
         server.name = updates.name
@@ -642,11 +647,11 @@ async def update_inference_server(
         server.health_path = updates.health_path
     if updates.models_path is not None:
         server.models_path = updates.models_path
-    
-    server.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    server.updated_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
     await db.refresh(server)
-    
+
     return InferenceServer(
         id=server.id,
         workspace_id=server.workspace_id,
@@ -677,7 +682,7 @@ async def delete_inference_server(
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ['admin', 'owner']:
         raise HTTPException(status_code=403, detail="Only admins can delete servers")
-    
+
     # Get server
     result = await db.execute(
         select(InferenceServerModel).where(
@@ -686,14 +691,14 @@ async def delete_inference_server(
         )
     )
     server = result.scalar_one_or_none()
-    
+
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    
+
     # Delete
     await db.delete(server)
     await db.commit()
-    
+
     return {"status": "deleted"}
 
 
@@ -718,34 +723,34 @@ async def upload_workspace_logo(
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ['admin', 'owner']:
         raise HTTPException(status_code=403, detail="Only admins can upload logos")
-    
+
     # Validate file type
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
-    
+
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
         )
-    
+
     # Check file size
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File too large (max 5MB)")
-    
+
     # Generate unique filename
     unique_filename = f"{workspace_id}-{uuid4().hex[:8]}{ext}"
     file_path = UPLOAD_DIR / unique_filename
-    
+
     # Save file
     with open(file_path, "wb") as f:
         f.write(content)
-    
+
     # Generate URL (assuming nginx serves /uploads)
     logo_url = f"/uploads/logos/{unique_filename}"
-    
+
     # Update workspace
     result = await db.execute(
         select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
@@ -755,17 +760,17 @@ async def upload_workspace_logo(
         # Clean up uploaded file
         file_path.unlink(missing_ok=True)
         raise HTTPException(status_code=404, detail="Workspace not found")
-    
+
     # Delete old logo file if it exists and is a local upload
     if workspace.logo_url and workspace.logo_url.startswith("/uploads/logos/"):
         old_file = UPLOAD_DIR / os.path.basename(workspace.logo_url)
         old_file.unlink(missing_ok=True)
-    
+
     workspace.logo_url = logo_url
-    workspace.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
     await db.refresh(workspace)
-    
+
     return {
         "logo_url": logo_url,
         "filename": unique_filename,

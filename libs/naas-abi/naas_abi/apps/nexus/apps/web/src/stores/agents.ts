@@ -95,13 +95,13 @@ const POWER_TOOLS = [...DEFAULT_TOOLS, 'create_entity', 'update_entity', 'execut
 
 // Default agents
 const defaultAgents: Agent[] = [
-  // ABI - The omniscient supervisor agent
+  // SupervisorAgent - The omniscient supervisor agent
   {
     id: 'abi',
-    name: 'ABI',
-    description: 'Agentic Brain Infrastructure - The omniscient platform supervisor',
+    name: 'SupervisorAgent',
+    description: 'The omniscient platform supervisor - orchestrates all operations',
     icon: 'brain',
-    systemPrompt: `You are ABI (Agentic Brain Infrastructure), the omniscient supervisor agent of the NEXUS platform.
+    systemPrompt: `You are SupervisorAgent, the omniscient supervisor agent of the NEXUS platform.
 
 You are the central intelligence that orchestrates all operations across the platform. You have complete awareness of:
 - The knowledge graph and all entities within it
@@ -116,9 +116,9 @@ Your role:
 - Make decisions that span across the entire platform
 
 You see everything. You know everything. You are the brain of NEXUS.`,
-    providerId: 'ollama-qwen3-vl', // Uses local Ollama qwen3-vl:2b for multimodal
-    provider: null,
-    modelId: null,
+    providerId: 'ollama-qwen3-vl', // DEPRECATED: Legacy provider mapping
+    provider: 'ollama', // Uses local Ollama
+    modelId: 'qwen3-vl:2b', // Qwen3-VL 2B model for multimodal
     logoUrl: null,
     enabled: true, // Default agents are enabled
     tools: [...POWER_TOOLS, 'api_calls'],
@@ -249,14 +249,16 @@ export const useAgentsStore = create<AgentsState>()(
             const { useWorkspaceStore } = await import('./workspace');
             const currentSelected = useWorkspaceStore.getState().selectedAgent;
             if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
-              // Select first enabled agent if current selection is invalid
-              const firstEnabled = formattedAgents.find(a => a.enabled);
+              // Select SupervisorAgent if available, otherwise first enabled agent
+              const abiAgent = formattedAgents.find(a => a.id === 'abi' && a.enabled);
+              const firstEnabled = abiAgent || formattedAgents.find(a => a.enabled);
               if (firstEnabled) {
                 useWorkspaceStore.getState().setSelectedAgent(firstEnabled.id);
               }
             } else if (!currentSelected && formattedAgents.length > 0) {
-              // No agent selected, select first enabled agent
-              const firstEnabled = formattedAgents.find(a => a.enabled);
+              // No agent selected, prefer SupervisorAgent, fallback to first enabled agent
+              const abiAgent = formattedAgents.find(a => a.id === 'abi' && a.enabled);
+              const firstEnabled = abiAgent || formattedAgents.find(a => a.enabled);
               if (firstEnabled) {
                 useWorkspaceStore.getState().setSelectedAgent(firstEnabled.id);
               }
@@ -457,6 +459,10 @@ export const useAgentsStore = create<AgentsState>()(
                 icon: 'sparkles',
                 systemPrompt: 'You are a helpful AI assistant.',
                 providerId: providerId,
+                provider: null,
+                modelId: null,
+                logoUrl: null,
+                enabled: true,
                 tools: DEFAULT_TOOLS,
                 capabilities: { ...DEFAULT_CAPABILITIES },
                 intentMappings: [],

@@ -168,6 +168,8 @@ interface WorkspaceState {
   activeConversationId: string | null;
   selectedAgent: AgentType;
   setSelectedAgent: (agent: AgentType) => void;
+  paneAgent: AgentType; // AI Pane agent selection
+  setPaneAgent: (agent: AgentType) => void;
   createConversation: (projectId?: string) => string;
   setActiveConversation: (id: string | null) => void;
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
@@ -242,8 +244,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Chat state
   conversations: [],
   activeConversationId: null,
-  selectedAgent: 'aia', // Default to AIA - personal assistant for Chat
+  selectedAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for Chat
   setSelectedAgent: (agent) => set({ selectedAgent: agent }),
+  paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
+  setPaneAgent: (agent) => set({ paneAgent: agent }),
 
   createConversation: (projectId?: string) => {
     const id = generateId();
@@ -580,7 +584,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   fetchWorkspaces: async () => {
     try {
       const { authFetch } = await import('./auth');
-      const response = await authFetch('/api/workspaces/');
+      const response = await authFetch('/api/workspaces');
       if (!response.ok) {
         console.error('Failed to fetch workspaces:', response.status);
         return;
@@ -1027,6 +1031,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         expandedSections: state.expandedSections,
         selectedAgent: state.selectedAgent,
+        paneAgent: state.paneAgent,
       }),
       onRehydrateStorage: () => (state) => {
         // After hydration completes, fetch workspaces from API

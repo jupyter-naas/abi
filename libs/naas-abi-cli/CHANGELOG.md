@@ -2,6 +2,90 @@
 
 <!-- version list -->
 
+## v1.15.6 (2026-02-17)
+
+### Bug Fixes
+
+- Working on fixing nexus workspace access
+  ([`d29b007`](https://github.com/jupyter-naas/abi/commit/d29b00775bbe631d978f5d1d0f687fa187282cd0))
+
+
+## v1.15.5 (2026-02-17)
+
+### Bug Fixes
+
+- Add missing data in naas_abi release
+  ([`4aa9316`](https://github.com/jupyter-naas/abi/commit/4aa9316facc963b4ef4f1653f41b594ea7ae5479))
+
+
+## v1.15.4 (2026-02-17)
+
+### Bug Fixes
+
+- Add migrations to release
+  ([`b928c24`](https://github.com/jupyter-naas/abi/commit/b928c24bc1c0034029192b80d1b7cbc06083dd81))
+
+
+## v1.15.3 (2026-02-17)
+
+
+## v1.15.2 (2026-02-17)
+
+
+## v1.15.1 (2026-02-17)
+
+### Bug Fixes
+
+- Generate config.yaml on new project
+  ([`cfdc888`](https://github.com/jupyter-naas/abi/commit/cfdc88819326cc52cdf608257c84cb5d03859de1))
+
+
+## v1.15.0 (2026-02-16)
+
+### Features
+
+- Trigger release
+  ([`cf5dfe9`](https://github.com/jupyter-naas/abi/commit/cf5dfe9691af94ff1d791de0bd0d6a53cb877a32))
+
+
+## v1.14.0 (2026-02-16)
+
+### Features
+
+- Working on abi new project setup and stack management
+  ([`2fa9392`](https://github.com/jupyter-naas/abi/commit/2fa939201d32c065cc9284e3e876aac953d66c1b))
+
+- Working on nexus container release to ghcr
+  ([`7f6f441`](https://github.com/jupyter-naas/abi/commit/7f6f441f07c409337e4082ea721a7b71080b49a8))
+
+- Working on tui
+  ([`01165ef`](https://github.com/jupyter-naas/abi/commit/01165ef2ac49966d0d343d6fe6381b659f32ef93))
+
+
+## v1.13.4 (2026-02-16)
+
+### Bug Fixes
+
+- **infra**: Rollback unstable weekend runtime wiring
+  ([`aac4a33`](https://github.com/jupyter-naas/abi/commit/aac4a33f2309ebff4a5889f72e45d13192955dd4))
+
+
+## v1.13.3 (2026-02-13)
+
+### Bug Fixes
+
+- **infra**: Resolve CORS/500 errors and optimize Docker startup
+  ([`661f2cd`](https://github.com/jupyter-naas/abi/commit/661f2cde9390eb34c914e856644b1355d6b4907f))
+
+
+## v1.13.2 (2026-02-13)
+
+### Bug Fixes
+
+- Make the generation default to Jena
+  ([`470cdce`](https://github.com/jupyter-naas/abi/commit/470cdce3e4e3e970b043c21131ae39a8d4ad1622))
+
+
 ## v1.13.1 (2026-02-12)
 
 ### Bug Fixes

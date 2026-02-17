@@ -5,31 +5,37 @@ Async sessions with SQLAlchemy ORM.
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required, require_workspace_access)
-from naas_abi.apps.nexus.apps.api.app.core.database import (AsyncSessionLocal,
-                                                            get_db)
-from naas_abi.apps.nexus.apps.api.app.models import (AgentConfigModel,
-                                                     ConversationModel,
-                                                     MessageModel)
-from naas_abi.apps.nexus.apps.api.app.services.model_registry import \
-    get_all_provider_names
-from naas_abi.apps.nexus.apps.api.app.services.providers import AVAILABLE_TOOLS
-from naas_abi.apps.nexus.apps.api.app.services.providers import \
-    Message as ProviderMessage
+    User,
+    get_current_user_required,
+    require_workspace_access,
+)
+from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.models import (
+    AgentConfigModel,
+    ConversationModel,
+    MessageModel,
+)
+from naas_abi.apps.nexus.apps.api.app.services.model_registry import get_all_provider_names
+from naas_abi.apps.nexus.apps.api.app.services.providers import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.providers import (
-    ProviderConfig, check_ollama_status)
-from naas_abi.apps.nexus.apps.api.app.services.providers import \
-    complete_chat as complete_with_provider
+    ProviderConfig,
+    check_ollama_status,
+    execute_tool,
+    stream_with_abi_inprocess,
+    stream_with_cloudflare,
+    stream_with_ollama,
+)
 from naas_abi.apps.nexus.apps.api.app.services.providers import (
-    execute_tool, stream_with_abi_inprocess, stream_with_cloudflare,
-    stream_with_ollama, stream_with_ollama_tools)
+    complete_chat as complete_with_provider,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,7 +89,7 @@ class ProviderConfigRequest(BaseModel):
     api_key: str | None = None
     account_id: str | None = None
     model: str
-    
+
     def model_post_init(self, __context):
         """Validate provider type against model registry."""
         if self.type not in VALID_PROVIDER_TYPES:
@@ -202,7 +208,7 @@ def _select_provider_model(ollama_status: dict, has_images: bool) -> str:
 
 
 async def _resolve_provider(
-    provider: ProviderConfigRequest | None, 
+    provider: ProviderConfigRequest | None,
     has_images: bool,
     agent_id: str | None = None,
     workspace_id: str | None = None,
@@ -210,7 +216,7 @@ async def _resolve_provider(
     """Resolve the provider, falling back to agent's configured provider, then Ollama auto-detect."""
     if provider and provider.enabled:
         return provider
-    
+
     # If agent is specified, look up its provider + model
     if agent_id:
         async with AsyncSessionLocal() as db:
@@ -221,27 +227,26 @@ async def _resolve_provider(
                     .where(AgentConfigModel.id == agent_id)
                 )
                 agent = result.scalar_one_or_none()
-                
+
                 if agent and agent.provider and agent.model_id:
                     # Get workspace_id from agent
                     workspace_id = agent.workspace_id
-                    
+
                     # **NEW: Handle ABI provider via workspace's external ABI server**
                     if agent.provider == "abi":
-                        from naas_abi.apps.nexus.apps.api.app.models import \
-                            InferenceServerModel
+                        from naas_abi.apps.nexus.apps.api.app.models import InferenceServerModel
                         abi_result = await db.execute(
                             select(InferenceServerModel)
                             .where(InferenceServerModel.workspace_id == workspace_id)
                             .where(InferenceServerModel.type == 'abi')
-                            .where(InferenceServerModel.enabled == True)
+                            .where(InferenceServerModel.enabled)
                         )
                         abi_server = abi_result.scalar_one_or_none()
-                        
+
                         if abi_server:
                             import logging
                             logging.info(f"✓ Resolved ABI provider: {abi_server.endpoint}")
-                            
+
                             return ProviderConfigRequest(
                                 id=f"abi-{abi_server.id}",
                                 name=f"ABI ({abi_server.name})",
@@ -268,7 +273,7 @@ async def _resolve_provider(
                                 account_id=None,
                                 model=agent.model_id,
                             )
-                    
+
                     # Map provider to secret key
                     secret_key_map = {
                         "xai": "XAI_API_KEY",
@@ -278,7 +283,7 @@ async def _resolve_provider(
                         "google": "GOOGLE_API_KEY",
                         "openrouter": "OPENROUTER_API_KEY",
                     }
-                    
+
                     endpoint_map = {
                         "xai": "https://api.x.ai/v1",
                         "openai": "https://api.openai.com/v1",
@@ -287,28 +292,28 @@ async def _resolve_provider(
                         "google": "https://generativelanguage.googleapis.com/v1beta",
                         "openrouter": "https://openrouter.ai/api/v1",
                     }
-                    
+
                     secret_key = secret_key_map.get(agent.provider)
                     if secret_key:
                         # Query secret from database
-                        from naas_abi.apps.nexus.apps.api.app.models import \
-                            SecretModel
+                        from naas_abi.apps.nexus.apps.api.app.models import SecretModel
                         secret_result = await db.execute(
                             select(SecretModel)
                             .where(SecretModel.workspace_id == workspace_id)
                             .where(SecretModel.key == secret_key)
                         )
                         secret = secret_result.scalar_one_or_none()
-                        
+
                         if secret:
                             # Decrypt the secret value
-                            from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import \
-                                _decrypt
+                            from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import (
+                                _decrypt,
+                            )
                             api_key = _decrypt(secret.encrypted_value)
-                            
+
                             import logging
                             logging.info(f"✓ Resolved agent provider: {agent.provider} (model: {agent.model_id})")
-                            
+
                             return ProviderConfigRequest(
                                 id=f"agent-{agent.provider}",
                                 name=f"{agent.provider.upper()} (via Agent)",
@@ -327,13 +332,12 @@ async def _resolve_provider(
                 # if selected agent id is not in AgentConfigModel, treat the id as ABI agent name
                 # and resolve workspace ABI server to route chat to /agents/{agent_id}/stream-completion.
                 if not agent and workspace_id and agent_id:
-                    from naas_abi.apps.nexus.apps.api.app.models import \
-                        InferenceServerModel
+                    from naas_abi.apps.nexus.apps.api.app.models import InferenceServerModel
                     abi_result = await db.execute(
                         select(InferenceServerModel)
                         .where(InferenceServerModel.workspace_id == workspace_id)
                         .where(InferenceServerModel.type == 'abi')
-                        .where(InferenceServerModel.enabled == True)
+                        .where(InferenceServerModel.enabled)
                     )
                     abi_server = abi_result.scalar_one_or_none()
                     if abi_server:
@@ -365,7 +369,7 @@ async def _resolve_provider(
             except Exception as e:
                 import logging
                 logging.warning(f"Failed to resolve agent provider: {e}")
-    
+
     # Fallback to Ollama auto-detect (force qwen3-vl:2b if available)
     ollama_status = await check_ollama_status()
     if ollama_status["status"] == "online" and ollama_status["models"]:
@@ -427,27 +431,27 @@ async def _get_or_create_conversation(
 
 
 async def _build_provider_messages_with_agents(
-    request: ChatRequest, 
+    request: ChatRequest,
     current_agent_id: str,
     db: AsyncSession
 ) -> list[ProviderMessage]:
     """Build provider messages with agent attribution for multi-agent conversations.
-    
+
     Injects system messages to explicitly mark which agent generated each response.
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     if not request.messages:
         return [ProviderMessage(role="user", content=request.message, images=request.images)]
-    
+
     # Get agent names for attribution
     agent_ids = set()
     for m in request.messages:
         if m.role == "assistant" and m.agent:
             agent_ids.add(m.agent)
     agent_ids.add(current_agent_id)
-    
+
     # Fetch agent names
     agents_map = {}
     if agent_ids:
@@ -455,10 +459,10 @@ async def _build_provider_messages_with_agents(
             select(AgentConfigModel).where(AgentConfigModel.id.in_(agent_ids))
         )
         agents_map = {agent.id: agent.name for agent in result.scalars().all()}
-    
+
     current_agent_name = agents_map.get(current_agent_id, "Unknown Agent")
     logger.info(f"🤖 Building messages for {current_agent_name}")
-    
+
     messages = []
     for m in request.messages:
         # For assistant messages from OTHER agents, inject a system message first
@@ -468,16 +472,16 @@ async def _build_provider_messages_with_agents(
             logger.info(f"  → Injecting system marker: {agent_name} != {current_agent_name}")
             messages.append(
                 ProviderMessage(
-                    role="system", 
+                    role="system",
                     content=system_msg,
                     images=None
                 )
             )
-        
+
         messages.append(
             ProviderMessage(role=m.role, content=m.content, images=m.images)
         )
-    
+
     # Add final system reminder before the user's current message
     if any(m.role == "assistant" for m in request.messages):
         messages.append(
@@ -488,7 +492,7 @@ async def _build_provider_messages_with_agents(
             )
         )
         logger.info(f"  → Total messages built: {len(messages)}")
-    
+
     return messages
 
 
@@ -562,7 +566,7 @@ async def create_conversation(
     """Create a new conversation."""
     await require_workspace_access(current_user.id, conv.workspace_id)
     conv_id = f"conv-{uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     row = ConversationModel(
         id=conv_id, workspace_id=conv.workspace_id, user_id=current_user.id,
@@ -609,7 +613,7 @@ async def complete_chat(
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
     """Send a message and get an agent response."""
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     conversation_id = await _get_or_create_conversation(db, request, current_user, now)
 
     # Save user message
@@ -628,11 +632,11 @@ async def complete_chat(
         try:
             provider_messages = await _build_provider_messages_with_agents(request, request.agent, db)
             system_prompt = request.system_prompt or AGENT_SYSTEM_PROMPTS.get(request.agent, AGENT_SYSTEM_PROMPTS["aia"])
-            
+
             # Add multi-agent context if conversation has messages from multiple agents
             if request.messages and any(m.role == "assistant" for m in request.messages):
-                system_prompt += f"\n\n🔄 CRITICAL MULTI-AGENT NOTICE: You are in a conversation where MULTIPLE different AI models have responded. You are currently responding as the SELECTED agent. Previous assistant responses may be from DIFFERENT AI agents (Grok, Claude, Qwen, etc.). DO NOT claim authorship of other agents' responses. DO NOT apologize for what other AIs said. DO NOT correct other AIs' identities. When asked 'who are you?', ONLY identify yourself based on YOUR model, not what previous agents said. Each assistant message may be from a different AI - treat them as separate participants."
-            
+                system_prompt += "\n\n🔄 CRITICAL MULTI-AGENT NOTICE: You are in a conversation where MULTIPLE different AI models have responded. You are currently responding as the SELECTED agent. Previous assistant responses may be from DIFFERENT AI agents (Grok, Claude, Qwen, etc.). DO NOT claim authorship of other agents' responses. DO NOT apologize for what other AIs said. DO NOT correct other AIs' identities. When asked 'who are you?', ONLY identify yourself based on YOUR model, not what previous agents said. Each assistant message may be from a different AI - treat them as separate participants."
+
             provider_config = ProviderConfig(
                 id=provider.id, name=provider.name, type=provider.type,
                 enabled=provider.enabled, endpoint=provider.endpoint,
@@ -678,7 +682,7 @@ async def complete_chat(
         message=Message(
             id=assistant_msg_id, conversation_id=conversation_id,
             role="assistant", content=response_content, agent=request.agent,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         ),
         context_used=[], provider_used=provider_used,
     )
@@ -690,17 +694,13 @@ async def stream_chat(
     current_user: User = Depends(get_current_user_required),
 ):
     """Stream a chat response using Server-Sent Events."""
-    print("=" * 80)
-    print(f"STREAM CHAT CALLED: agent={request.agent}")
-    print("=" * 80)
-    
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"🎯 Stream request: agent={request.agent}, provider={'None' if not request.provider else request.provider.type}")
-    
+
     has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
     provider = await _resolve_provider(request.provider, has_images, request.agent, request.workspace_id)
-    
+
     logger.info(f"✓ Resolved provider: {provider.type if provider else 'None'}, model={provider.model if provider else 'N/A'}")
 
     if not provider:
@@ -718,7 +718,7 @@ async def stream_chat(
             yield "data: [DONE]\n\n"
         return StreamingResponse(unsupported_stream(), media_type="text/event-stream")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     # Get or create conversation and build messages using a dedicated session
     async with AsyncSessionLocal() as db:
@@ -732,11 +732,11 @@ async def stream_chat(
 
     # Build system prompt with multi-agent context
     system_prompt = request.system_prompt or AGENT_SYSTEM_PROMPTS.get(request.agent, AGENT_SYSTEM_PROMPTS["aia"])
-    
+
     # Add multi-agent context if conversation has messages from multiple agents
     if request.messages and any(m.role == "assistant" for m in request.messages):
-        system_prompt += f"\n\n🔄 CRITICAL MULTI-AGENT NOTICE: You are in a conversation where MULTIPLE different AI models have responded. You are currently responding as the SELECTED agent. Previous assistant responses may be from DIFFERENT AI agents (Grok, Claude, Qwen, etc.). DO NOT claim authorship of other agents' responses. DO NOT apologize for what other AIs said. DO NOT correct other AIs' identities. When asked 'who are you?', ONLY identify yourself based on YOUR model, not what previous agents said. Each assistant message may be from a different AI - treat them as separate participants."
-    
+        system_prompt += "\n\n🔄 CRITICAL MULTI-AGENT NOTICE: You are in a conversation where MULTIPLE different AI models have responded. You are currently responding as the SELECTED agent. Previous assistant responses may be from DIFFERENT AI agents (Grok, Claude, Qwen, etc.). DO NOT claim authorship of other agents' responses. DO NOT apologize for what other AIs said. DO NOT correct other AIs' identities. When asked 'who are you?', ONLY identify yourself based on YOUR model, not what previous agents said. Each assistant message may be from a different AI - treat them as separate participants."
+
     search_context = await _run_search_if_needed(request)
 
     if search_context:
@@ -761,7 +761,7 @@ async def stream_chat(
     # a row to update incrementally as chunks arrive.
     user_msg_id = f"msg-{uuid4().hex[:12]}"
     assistant_msg_id = f"msg-{uuid4().hex[:12]}"
-    msg_now = datetime.now(timezone.utc).replace(tzinfo=None)
+    msg_now = datetime.now(UTC).replace(tzinfo=None)
     try:
         async with AsyncSessionLocal() as pre_db:
             pre_db.add(MessageModel(
@@ -805,7 +805,7 @@ async def stream_chat(
 
             # Route to appropriate streaming function
             openai_compatible = ["xai", "openai", "anthropic", "mistral", "google", "openrouter", "perplexity"]
-            
+
             if provider.type == "ollama":
                 # Ensure we await the async generator properly
                 async for chunk in stream_with_ollama(provider_messages, provider_config, system_prompt):
@@ -872,8 +872,9 @@ async def stream_chat(
                 if not inprocess_emitted:
                     raise RuntimeError("In-process ABI stream returned no content")
             elif provider.type in openai_compatible:
-                from naas_abi.apps.nexus.apps.api.app.services.providers import \
-                    stream_with_openai_compatible
+                from naas_abi.apps.nexus.apps.api.app.services.providers import (
+                    stream_with_openai_compatible,
+                )
                 async for chunk in stream_with_openai_compatible(provider_messages, provider_config, system_prompt):
                     full_response += chunk
                     buffered_chars += len(chunk)
@@ -906,7 +907,7 @@ async def stream_chat(
                     )
                     conv = result.scalar_one_or_none()
                     if conv:
-                        conv.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                        conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
                     await save_db.commit()
                 except Exception:
                     await save_db.rollback()
@@ -930,7 +931,7 @@ async def stream_chat(
                     )
                     conv = result.scalar_one_or_none()
                     if conv:
-                        conv.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                        conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
                     await err_db.commit()
             except Exception:
                 logger.warning("Failed to persist partial content on error", exc_info=True)
@@ -964,10 +965,10 @@ async def update_conversation(
         row.pinned = updates['pinned']
     if 'archived' in updates:
         row.archived = updates['archived']
-    
-    row.updated_at = datetime.now(timezone.utc)
+
+    row.updated_at = datetime.now(UTC)
     await db.commit()
-    
+
     return {"status": "updated"}
 
 
@@ -1003,26 +1004,26 @@ async def export_conversation(
 ):
     """
     Export a conversation in the specified format.
-    
+
     Supports: txt, json, md
-    
+
     Logs export event for audit trail.
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     # Get conversation
     result = await db.execute(
         select(ConversationModel).where(ConversationModel.id == conversation_id)
     )
     conv = result.scalar_one_or_none()
-    
+
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     # Verify access
     await require_workspace_access(current_user.id, conv.workspace_id)
-    
+
     # Get all messages
     msg_result = await db.execute(
         select(MessageModel)
@@ -1030,17 +1031,17 @@ async def export_conversation(
         .order_by(MessageModel.created_at)
     )
     messages = msg_result.scalars().all()
-    
+
     # Log export event for audit trail
     logger.info(
         f"📥 EXPORT: user={current_user.id}, conversation={conversation_id}, "
         f"format={format}, messages={len(messages)}, workspace={conv.workspace_id}"
     )
-    
+
     # Generate export content based on format
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     title = conv.title or "Untitled Conversation"
-    
+
     if format == "txt":
         content = f"Conversation: {title}\n"
         content += f"ID: {conversation_id}\n"
@@ -1049,17 +1050,17 @@ async def export_conversation(
         content += f"Workspace: {conv.workspace_id}\n"
         content += f"Messages: {len(messages)}\n"
         content += f"\n{'=' * 80}\n\n"
-        
+
         for msg in messages:
             role = msg.role.upper()
             if msg.role == "assistant" and msg.agent:
                 role = f"ASSISTANT ({msg.agent})"
-            
+
             content += f"[{role}]\n"
             content += f"Timestamp: {msg.created_at.isoformat()}\n"
             content += f"{msg.content}\n"
             content += f"\n{'-' * 80}\n\n"
-        
+
         return StreamingResponse(
             iter([content]),
             media_type="text/plain",
@@ -1067,7 +1068,7 @@ async def export_conversation(
                 "Content-Disposition": f'attachment; filename="conversation-{conversation_id}.txt"'
             }
         )
-    
+
     elif format == "json":
         data = {
             "conversation": {
@@ -1093,10 +1094,10 @@ async def export_conversation(
                 for msg in messages
             ]
         }
-        
+
         import json as json_lib
         content = json_lib.dumps(data, indent=2)
-        
+
         return StreamingResponse(
             iter([content]),
             media_type="application/json",
@@ -1104,7 +1105,7 @@ async def export_conversation(
                 "Content-Disposition": f'attachment; filename="conversation-{conversation_id}.json"'
             }
         )
-    
+
     elif format == "md":
         content = f"# {title}\n\n"
         content += f"**Conversation ID:** `{conversation_id}`  \n"
@@ -1112,19 +1113,19 @@ async def export_conversation(
         content += f"**User:** {current_user.id}  \n"
         content += f"**Workspace:** {conv.workspace_id}  \n"
         content += f"**Messages:** {len(messages)}  \n"
-        content += f"\n---\n\n"
-        
+        content += "\n---\n\n"
+
         for msg in messages:
             if msg.role == "user":
-                content += f"## 👤 User\n\n"
+                content += "## 👤 User\n\n"
             else:
                 agent_info = f" ({msg.agent})" if msg.agent else ""
                 content += f"## 🤖 Assistant{agent_info}\n\n"
-            
+
             content += f"*{msg.created_at.isoformat()}*\n\n"
             content += f"{msg.content}\n\n"
             content += "---\n\n"
-        
+
         return StreamingResponse(
             iter([content]),
             media_type="text/markdown",
@@ -1132,7 +1133,7 @@ async def export_conversation(
                 "Content-Disposition": f'attachment; filename="conversation-{conversation_id}.md"'
             }
         )
-    
+
     raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, FastAPI
+from fastapi import FastAPI
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,

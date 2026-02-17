@@ -8,6 +8,33 @@ from ..utils.Copier import Copier
 
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
 
+DEFAULT_ENV_VALUES: dict[str, str] = {
+    "POSTGRES_USER": "abi",
+    "POSTGRES_DB": "abi",
+    "POSTGRES_HOST": "postgres",
+    "POSTGRES_PORT": "5432",
+    "QDRANT_HOST": "qdrant",
+    "QDRANT_PORT": "6333",
+    "REDIS_PORT": "6379",
+    "MINIO_HOST": "minio",
+    "MINIO_PORT": "9000",
+    "MINIO_ROOT_USER": "abi",
+    "ABI_HOST": "abi",
+    "PUBLIC_WEB_HOST": "localhost",
+    "PUBLIC_API_HOST": "api.localhost",
+    "RABBITMQ_USER": "abi",
+    "NEXUS_WEB_IMAGE": "ghcr.io/jupyter-naas/nexus-web",
+    "NEXUS_WEB_TAG": "latest",
+    "NEXUS_WEB_PORT": "3042",
+}
+
+RANDOM_ENV_KEYS: tuple[str, ...] = (
+    "POSTGRES_PASSWORD",
+    "MINIO_ROOT_PASSWORD",
+    "RABBITMQ_PASSWORD",
+    "FUSEKI_ADMIN_PASSWORD",
+)
+
 
 def _ensure_env_var(env_path: str, key: str, value: str) -> None:
     existing_content = ""
@@ -86,4 +113,8 @@ def setup_local_deploy(project_path: str) -> None:
         _append_local_env_once(local_env_template_path, local_env_target_path)
         os.remove(local_env_template_path)
 
-    _ensure_env_var(local_env_target_path, "FUSEKI_ADMIN_PASSWORD", str(uuid4()))
+    for key, value in DEFAULT_ENV_VALUES.items():
+        _ensure_env_var(local_env_target_path, key, value)
+
+    for key in RANDOM_ENV_KEYS:
+        _ensure_env_var(local_env_target_path, key, str(uuid4()))

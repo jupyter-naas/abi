@@ -14,6 +14,7 @@ from .new import new
 from .run import run
 from .secret import secrets
 from .setup import setup
+from .stack import logs, stack, start, stop
 
 
 @click.group("abi")
@@ -31,6 +32,10 @@ _main.add_command(init)
 _main.add_command(deploy)
 _main.add_command(run)
 _main.add_command(setup)
+_main.add_command(start)
+_main.add_command(stop)
+_main.add_command(logs)
+_main.add_command(stack)
 ran = False
 
 

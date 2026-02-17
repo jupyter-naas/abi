@@ -57,7 +57,7 @@ x-abi-template: &abi_template
     - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
     - VECTOR_STORE_ADAPTER=qdrant
     - QDRANT_HOST=${QDRANT_HOST}
-    - QDRANT_PORT=6333
+    - QDRANT_PORT=${QDRANT_PORT}
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
   depends_on:
@@ -83,8 +83,26 @@ services:
       - NODE_ENV=development
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
-      - NEXT_PUBLIC_API_URL=http://localhost:9879
+      - NEXT_PUBLIC_API_URL=https://${PUBLIC_API_HOST:-api.localhost}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
+    networks:
+      - abi-network
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - 80:80
+      - 443:443
+    environment:
+      - PUBLIC_WEB_HOST=${PUBLIC_WEB_HOST:-localhost}
+      - PUBLIC_API_HOST=${PUBLIC_API_HOST:-api.localhost}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - nexus-web
+      - abi
     networks:
       - abi-network
   # -----------------------------------------------------------------------------
@@ -125,7 +143,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB} # Database for agent conversations and memory
     ports:
-      - 5432:5432  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:5432/abi_memory
+      - ${POSTGRES_PORT}:${POSTGRES_PORT}  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:${POSTGRES_PORT}/abi_memory
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent data storage
       - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro  # Bootstrap additional databases
@@ -149,7 +167,7 @@ services:
     volumes:
       - fuseki_data:/fuseki
     environment:
-      - ADMIN_PASSWORD=abi
+      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
       - FUSEKI_DATASET_1=ds
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3030/$/ping || exit 1"]
@@ -188,16 +206,16 @@ services:
     ports:
       - 3001:3001  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
     volumes:
-      - ./scripts:/app/scripts
+      #- ./scripts:/app/scripts
         # - ./uv.lock:/app/uv.lock
-      - ./config.local.yaml:/app/config.yaml # We mount the config.local.yaml as it's configured to run from within the containers network.
-      - ./pyproject.toml:/app/pyproject.toml
-      - ./src:/app/src
-      - ./lib:/app/lib
-      - ./libs:/app/libs
-      - ./README.md:/app/README.md
-      - ./storage:/app/storage
-      - .env:/app/.env
+      #- ./pyproject.toml:/app/pyproject.toml
+      #- ./src:/app/src
+      #- ./lib:/app/lib
+      #- ./libs:/app/libs
+      #- ./README.md:/app/README.md
+      #- ./storage:/app/storage
+      #- .env:/app/.env
+      - .:/app/
       - venv_cache:/app/.venv
       - dagster_home:/app/.dagster  # Dagster metadata and run history
       - ./docker/dagster/dagster.yaml:/app/.dagster/dagster.yaml:ro
@@ -207,7 +225,7 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - DAGSTER_S3_LOG_BUCKET=dagster-logs
-      - MINIO_ENDPOINT_URL=http://${MINIO_HOST}:9000
+      - MINIO_ENDPOINT_URL=http://${MINIO_HOST}:${MINIO_PORT}
       - MINIO_REGION_NAME=us-east-1
       - DAGSTER_PG_HOSTNAME=${POSTGRES_HOST}
       - DAGSTER_PG_USERNAME=${POSTGRES_USER}
@@ -230,7 +248,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - 9000:9000  # S3 API endpoint - http://localhost:9000
+      - ${MINIO_PORT}:${MINIO_PORT}  # S3 API endpoint - http://localhost:${MINIO_PORT}
       - 9001:9001  # MinIO console - http://localhost:9001
     volumes:
       - minio_data:/data
@@ -244,7 +262,7 @@ services:
       - minio
     entrypoint: >-
       /bin/sh -c "
-      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
+      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:${MINIO_PORT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
       /usr/bin/mc mb -p ${MINIO_ROOT_USER}/dagster-logs || true &&
       /usr/bin/mc mb -p ${MINIO_ROOT_USER}/abi || true
       "
@@ -260,8 +278,8 @@ services:
       - 5672:5672   # AMQP
       - 15672:15672 # Management UI - http://localhost:15672
     environment:
-      RABBITMQ_DEFAULT_USER: abi
-      RABBITMQ_DEFAULT_PASS: abi
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -298,7 +316,7 @@ services:
     ports:
       - 8082:8081  # Redis Commander UI - http://localhost:8082
     environment:
-      - REDIS_HOSTS=local:redis:6379
+      - REDIS_HOSTS=local:redis:${REDIS_PORT}
     depends_on:
       - redis
     networks:
@@ -381,6 +399,8 @@ volumes:
   rabbitmq_data:  # RabbitMQ message bus data
   redis_data:     # Redis persistence data
   synapse_data:   # Matrix Synapse data
+  caddy_data:     # Caddy certificates and ACME data
+  caddy_config:   # Caddy runtime configuration
 
 # =============================================================================
 # NETWORK CONFIGURATION

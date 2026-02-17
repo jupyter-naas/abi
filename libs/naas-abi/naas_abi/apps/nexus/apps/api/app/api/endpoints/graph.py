@@ -2,19 +2,21 @@
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required, require_workspace_access)
+    User,
+    get_current_user_required,
+    require_workspace_access,
+)
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, Field
-from rdflib import Graph
+from rdflib import Graph, Namespace, URIRef
 from rdflib import Literal as RDFLiteral
-from rdflib import Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, XSD
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -120,7 +122,7 @@ def _as_utc_naive(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt.astimezone(UTC).replace(tzinfo=None)
     return dt
 
 
@@ -427,7 +429,7 @@ async def create_node(
     await require_workspace_access(current_user.id, node.workspace_id)
     store = get_triple_store(request)
     node_id = f"node-{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     created = GraphNode(
         id=node_id,
         workspace_id=node.workspace_id,
@@ -466,7 +468,7 @@ async def update_node(
     if existing is None:
         raise HTTPException(status_code=404, detail="Node not found")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     updated = GraphNode(
         id=existing.id,
         workspace_id=existing.workspace_id,
@@ -547,7 +549,7 @@ async def create_edge(
             raise HTTPException(status_code=404, detail=f"{label} node not found")
 
     edge_id = f"edge-{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     created = GraphEdge(
         id=edge_id,
         workspace_id=edge.workspace_id,
