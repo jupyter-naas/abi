@@ -1,4 +1,6 @@
+import base64
 import hashlib
+import os
 from types import SimpleNamespace
 from typing import Any, Callable, Tuple, cast
 
@@ -74,6 +76,60 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
 
     def list_graphs(self) -> list[URIRef]:
         return self.graphs_to_return
+
+
+class _InMemoryTripleStoreAdapter(ITripleStorePort):
+    def __init__(self) -> None:
+        self.graph = Graph()
+        self.insert_calls: list[tuple[Graph, URIRef | None]] = []
+        self.remove_calls: list[tuple[Graph, URIRef | None]] = []
+
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+        if graph_name is not None:
+            raise NotImplementedError
+        self.insert_calls.append((triples, graph_name))
+        self.graph += triples
+
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
+        if graph_name is not None:
+            raise NotImplementedError
+        self.remove_calls.append((triples, graph_name))
+        self.graph -= triples
+
+    def get(self) -> Graph:
+        return self.graph
+
+    def query(self, query: str) -> rdflib.query.Result:
+        return self.graph.query(query)
+
+    def query_view(self, view: str, query: str) -> rdflib.query.Result:
+        return self.graph.query(query)
+
+    def get_subject_graph(self, subject: URIRef) -> Graph:
+        subject_graph = Graph()
+        for s, p, o in self.graph.triples((subject, None, None)):
+            subject_graph.add((s, p, o))
+        return subject_graph
+
+    def handle_view_event(
+        self,
+        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        event: OntologyEvent,
+        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+    ):
+        return None
+
+    def create_graph(self, graph_name: URIRef):
+        raise NotImplementedError
+
+    def clear_graph(self, graph_name: URIRef | None = None):
+        raise NotImplementedError
+
+    def drop_graph(self, graph_name: URIRef):
+        raise NotImplementedError
+
+    def list_graphs(self) -> list[URIRef]:
+        raise NotImplementedError
 
 
 def _sha(value: object) -> str:
@@ -237,3 +293,91 @@ def test_named_graph_management_methods_delegate_to_adapter():
     assert adapter.clear_graph_calls == [graph_name, None]
     assert adapter.drop_graph_calls == [other_graph]
     assert listed == [graph_name, other_graph]
+
+
+def test_load_schema_does_not_reload_when_schema_is_unchanged(tmp_path):
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+
+    # Ignore constructor bootstrapping insert of SCHEMA_TTL.
+    adapter.insert_calls.clear()
+
+    schema_file = tmp_path / "schema.ttl"
+    schema_file.write_text(
+        """@prefix ex: <http://example.org/> .
+
+ex:Thing a ex:Class .
+""",
+        encoding="utf-8",
+    )
+
+    service.load_schema(str(schema_file))
+    first_insert_count = len(adapter.insert_calls)
+
+    service.load_schema(str(schema_file))
+
+    assert len(adapter.insert_calls) == first_insert_count
+
+
+def test_load_schema_cleans_duplicate_metadata_entries_for_same_filepath(tmp_path):
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+
+    # Ignore constructor bootstrapping insert of SCHEMA_TTL.
+    adapter.insert_calls.clear()
+    adapter.remove_calls.clear()
+
+    schema_file = tmp_path / "duplicate-schema.ttl"
+    schema_content = """@prefix ex: <http://example.org/> .
+
+ex:Thing a ex:Class .
+"""
+    schema_file.write_text(schema_content, encoding="utf-8")
+
+    service.load_schema(str(schema_file))
+
+    content_hash = hashlib.sha256(schema_content.encode("utf-8")).hexdigest()
+    base64_content = base64.b64encode(schema_content.encode("utf-8")).decode("utf-8")
+    file_last_update_time = os.path.getmtime(schema_file)
+
+    duplicate_subject = URIRef("http://triple-store.internal/duplicate-schema-entry")
+    duplicate_metadata = Graph().parse(
+        data=f'''@prefix internal: <http://triple-store.internal#> .
+
+<{duplicate_subject}> a internal:Schema ;
+    internal:hash "{content_hash}" ;
+    internal:filePath "{schema_file}" ;
+    internal:fileLastUpdateTime "{file_last_update_time}" ;
+    internal:content "{base64_content}" .
+''',
+        format="turtle",
+    )
+    service.insert(duplicate_metadata)
+
+    before_rows = list(
+        service.query(
+            f'''PREFIX internal: <http://triple-store.internal#>
+SELECT ?s WHERE {{
+    ?s a internal:Schema ;
+       internal:filePath "{schema_file}" .
+}}'''
+        )
+    )
+    assert len(before_rows) == 2
+
+    insert_count_before_reload = len(adapter.insert_calls)
+
+    service.load_schema(str(schema_file))
+
+    after_rows = list(
+        service.query(
+            f'''PREFIX internal: <http://triple-store.internal#>
+SELECT ?s WHERE {{
+    ?s a internal:Schema ;
+       internal:filePath "{schema_file}" .
+}}'''
+        )
+    )
+    assert len(after_rows) == 1
+    assert len(adapter.insert_calls) == insert_count_before_reload
+    assert len(adapter.remove_calls) >= 1

@@ -2,10 +2,12 @@ from unittest.mock import MagicMock
 
 import pika
 import pytest
-from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import \
-    RabbitMQAdapter
-from naas_abi_core.services.bus.tests.bus__secondary_adapter__generic_test import \
-    GenericBusSecondaryAdapterTest
+from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import (
+    RabbitMQAdapter,
+)
+from naas_abi_core.services.bus.tests.bus__secondary_adapter__generic_test import (
+    GenericBusSecondaryAdapterTest,
+)
 
 
 class TestRabbitMQAdapter(GenericBusSecondaryAdapterTest):
@@ -58,6 +60,16 @@ def test_topic_publish_connects_and_publishes(adapter, channel):
     assert kwargs["routing_key"] == "routing.key"
     assert kwargs["body"] == b"payload"
     assert kwargs["properties"].delivery_mode == 2
+
+
+def test_topic_publish_reuses_declared_exchange(adapter, channel):
+    adapter.topic_publish("topic", "routing.key.1", b"payload-1")
+    adapter.topic_publish("topic", "routing.key.2", b"payload-2")
+
+    channel.exchange_declare.assert_called_once_with(
+        exchange="topic", exchange_type="topic", durable=True
+    )
+    assert channel.basic_publish.call_count == 2
 
 
 def test_topic_publish_error_closes_connection(monkeypatch, connection, channel):
