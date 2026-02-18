@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.17.2 (2026-02-18)
+
+### Bug Fixes
+
+- Cors
+  ([`b8c5fd5`](https://github.com/jupyter-naas/abi/commit/b8c5fd5a2f65f936d7015267067b72a4c1321b33))
+
+- Working on abi start
+  ([`570ddf3`](https://github.com/jupyter-naas/abi/commit/570ddf312799e2cecae09d8aae2bc80d48f20b79))
+
+
 ## v1.17.1 (2026-02-18)
 
 ### Bug Fixes
