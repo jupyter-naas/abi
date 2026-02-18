@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-cli"
-version = "1.16.0"
+version = "1.17.0"
 description = "Abi cli allowing you to build your AI system."
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 requires-python = ">=3.10,<4"
