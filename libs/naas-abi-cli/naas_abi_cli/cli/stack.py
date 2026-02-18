@@ -1,6 +1,4 @@
 import time
-import urllib.error
-import urllib.request
 import webbrowser
 
 import click
@@ -8,7 +6,9 @@ from rich.console import Console
 from rich.table import Table
 
 from .stack_runtime import (
+    ComposeServiceState,
     compose_logs_follow,
+    compose_service_logs,
     compose_service_list,
     compose_service_states,
     run_compose,
@@ -19,26 +19,96 @@ from .stack_tui import StackTUI
 SERVICE_PORTAL_URL = "http://127.0.0.1:8080/"
 
 
-def _wait_until_reachable(url: str, timeout_seconds: int = 120) -> bool:
+def _is_container_in_error(
+    service_name: str, state: ComposeServiceState | None
+) -> bool:
+    if state is None:
+        return False
+
+    if state.health == "unhealthy":
+        return True
+
+    if state.state in {"dead", "removing"}:
+        return True
+
+    if state.state != "exited":
+        return False
+
+    service = SERVICE_CATALOG.get(service_name)
+    if service and service.is_one_shot and state.exit_code == 0:
+        return False
+
+    return state.exit_code != 0
+
+
+def _show_error_logs(error_services: list[str]) -> None:
+    for service_name in error_services:
+        click.echo(f"\nService '{service_name}' reported an error. Recent logs:")
+        logs = compose_service_logs(service_name, tail=160).strip()
+        if logs:
+            click.echo(logs)
+        else:
+            click.echo("No logs were returned for this service.")
+
+
+def _wait_for_stack_readiness(
+    timeout_seconds: int = 180,
+    poll_interval_seconds: float = 2,
+) -> tuple[bool, list[str]]:
+    services = compose_service_list()
     deadline = time.time() + timeout_seconds
+
     while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=2):
-                return True
-        except (urllib.error.URLError, TimeoutError):
-            time.sleep(1)
-    return False
+        states_by_name = compose_service_states()
+
+        error_services = sorted(
+            service_name
+            for service_name in services
+            if _is_container_in_error(service_name, states_by_name.get(service_name))
+        )
+        if error_services:
+            return False, error_services
+
+        abi_state = states_by_name.get("abi")
+        abi_healthy = abi_state is not None and abi_state.health == "healthy"
+
+        all_ready = abi_healthy
+        if all_ready:
+            for service_name in services:
+                readiness = evaluate_service_readiness(
+                    service_name, states_by_name.get(service_name)
+                )
+                if not readiness.ready:
+                    all_ready = False
+                    break
+
+        if all_ready:
+            return True, []
+
+        time.sleep(poll_interval_seconds)
+
+    return False, []
 
 
 def _start_stack() -> None:
     run_compose(["up", "-d"])
-    click.echo(f"Waiting for service portal at {SERVICE_PORTAL_URL}")
-    if _wait_until_reachable(SERVICE_PORTAL_URL):
+    click.echo("Waiting for containers to become healthy and ready...")
+    ready, error_services = _wait_for_stack_readiness()
+
+    if error_services:
+        _show_error_logs(error_services)
+        click.echo(
+            "\nThe stack did not start correctly because one or more containers are in error."
+        )
+        return
+
+    if ready:
         webbrowser.open(SERVICE_PORTAL_URL)
         click.echo(f"Opened {SERVICE_PORTAL_URL}")
     else:
         click.echo(
-            f"Service portal is not ready yet. Open it manually at {SERVICE_PORTAL_URL}."
+            "Timed out while waiting for the stack to become ready. "
+            f"Open it manually at {SERVICE_PORTAL_URL} once services are healthy."
         )
 
 
