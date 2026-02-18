@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.12 (2026-02-18)
+
+### Bug Fixes
+
+- Working on multi env management
+  ([`482e67c`](https://github.com/jupyter-naas/abi/commit/482e67c01a4446bbac7fbf9d29948d91851707f4))
+
+
 ## v1.7.11 (2026-02-17)
 
 
