@@ -49,7 +49,7 @@ services:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
       config:
-        jena_tdb2_url: "http://localhost:3030/ds"
+        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@localhost:3030/ds"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
