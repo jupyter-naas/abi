@@ -54,9 +54,9 @@ x-abi-template: &abi_template
     - ENV=max
     - LOG_LEVEL=DEBUG
     - PYTHONPATH=/app
-    - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+    - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
     - VECTOR_STORE_ADAPTER=qdrant
-    - QDRANT_HOST=${QDRANT_HOST}
+    - QDRANT_HOST=qdrant
     - QDRANT_PORT=${QDRANT_PORT}
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
@@ -129,7 +129,7 @@ services:
       context: .
       dockerfile: libs/naas-abi-core/naas_abi_core/apps/mcp/Dockerfile.mcp
     environment:
-      - ABI_API_BASE=http://${ABI_HOST}:9879
+      - ABI_API_BASE=http://abi:9879
       - ABI_API_KEY=abi
       - MCP_TRANSPORT=http
     ports:
@@ -194,7 +194,7 @@ services:
     ports:
       - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
     environment:
-      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:3030/ds/query
+      - DEFAULT_SPARQL_ENDPOINT=http://fuseki:3030/ds/query
     depends_on:
       - fuseki
     networks:
@@ -231,9 +231,9 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - DAGSTER_S3_LOG_BUCKET=dagster-logs
-      - MINIO_ENDPOINT_URL=http://${MINIO_HOST}:${MINIO_PORT}
+      - MINIO_ENDPOINT_URL=http://minio:${MINIO_PORT}
       - MINIO_REGION_NAME=us-east-1
-      - DAGSTER_PG_HOSTNAME=${POSTGRES_HOST}
+      - DAGSTER_PG_HOSTNAME=postgres
       - DAGSTER_PG_USERNAME=${POSTGRES_USER}
       - DAGSTER_PG_PASSWORD=${POSTGRES_PASSWORD}
       - DAGSTER_PG_DB=${POSTGRES_DB}
@@ -274,7 +274,7 @@ services:
         condition: service_healthy
     entrypoint: >-
       /bin/sh -c "
-      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:${MINIO_PORT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
+      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://minio:${MINIO_PORT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
       /usr/bin/mc mb -p ${MINIO_ROOT_USER}/dagster-logs || true &&
       /usr/bin/mc mb -p ${MINIO_ROOT_USER}/abi || true
       "
