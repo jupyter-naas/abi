@@ -1,13 +1,4 @@
 {% raw %}
-deploy:
-  workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
-  space_name: "abi-api"
-  naas_api_key: "{{ secret.NAAS_API_KEY }}"
-  env:
-    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
-    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
-    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
-
 api:
   title: "ABI API"
   description: "API for ABI"
