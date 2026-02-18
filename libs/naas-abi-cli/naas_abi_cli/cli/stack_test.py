@@ -1,4 +1,8 @@
 import importlib
+
+import click
+import pytest
+
 from naas_abi_cli.cli.stack_runtime import ComposeServiceState
 from naas_abi_cli.cli.stack_services import ReadinessResult
 
@@ -101,3 +105,42 @@ def test_wait_for_stack_readiness_returns_error_services(monkeypatch) -> None:
     )
     assert ready is False
     assert error_services == ["postgres"]
+
+
+def test_start_stack_retries_compose_up_before_succeeding(monkeypatch) -> None:
+    attempts = {"count": 0}
+    messages: list[str] = []
+
+    def _flaky_compose(args: list[str]) -> None:
+        assert args == ["up", "-d"]
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise click.ClickException("temporary failure")
+
+    monkeypatch.setattr(stack_module, "run_compose", _flaky_compose)
+    monkeypatch.setattr(stack_module, "_wait_for_stack_readiness", lambda: (True, []))
+    monkeypatch.setattr(stack_module.webbrowser, "open", lambda url: True)
+    monkeypatch.setattr(
+        stack_module.click, "echo", lambda message: messages.append(message)
+    )
+
+    stack_module._start_stack()
+
+    assert attempts["count"] == 3
+    assert any("Retrying" in message for message in messages)
+
+
+def test_start_stack_fails_after_two_retries(monkeypatch) -> None:
+    attempts = {"count": 0}
+
+    def _always_failing_compose(args: list[str]) -> None:
+        assert args == ["up", "-d"]
+        attempts["count"] += 1
+        raise click.ClickException("still failing")
+
+    monkeypatch.setattr(stack_module, "run_compose", _always_failing_compose)
+
+    with pytest.raises(click.ClickException, match="still failing"):
+        stack_module._start_stack()
+
+    assert attempts["count"] == 3

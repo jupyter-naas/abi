@@ -5,7 +5,10 @@ api:
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
   cors_origins:
-    - "http://localhost:9879"
+    - "http://{{ secret.PUBLIC_WEB_HOST }}"
+    - "https://{{ secret.PUBLIC_WEB_HOST }}"
+    - "http://{{ secret.PUBLIC_API_HOST }}"
+    - "https://{{ secret.PUBLIC_API_HOST }}"
 
 global_config:
   ai_mode: "cloud"

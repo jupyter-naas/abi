@@ -75,9 +75,9 @@ x-abi-template: &abi_template
     minio:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "curl -fsS http://localhost:9879/ >/dev/null || exit 1"]
+    test: ["CMD-SHELL", "for i in 1 2 3; do curl -fsS http://localhost:9879/ >/dev/null || exit 1; sleep 2; done"]
     interval: 10s
-    timeout: 5s
+    timeout: 15s
     start_period: 30s
     retries: 10
   networks:
@@ -138,6 +138,9 @@ services:
       context: .
       dockerfile: ./.deploy/docker/images/Dockerfile
     restart: unless-stopped
+    depends_on:
+      abi:
+        condition: service_healthy
     command:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
     environment:
