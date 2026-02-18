@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.0 (2026-02-18)
+
+### Features
+
+- Working on fixing multienv
+  ([`ba7d7d0`](https://github.com/jupyter-naas/abi/commit/ba7d7d0396b46ba81e0458a872dabd29b7ac32ae))
+
+
 ## v1.15.7 (2026-02-17)
 
 ### Bug Fixes
