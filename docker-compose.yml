@@ -78,7 +78,7 @@ x-abi-template: &abi_template
     interval: 10s
     timeout: 5s
     start_period: 30s
-    retries: 5
+    retries: 10
   networks:
     - abi-network
 
@@ -164,7 +164,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -186,7 +186,7 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://localhost:3030/ >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -270,7 +270,7 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -307,7 +307,7 @@ services:
       interval: 10s
       timeout: 5s
       start_period: 30s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -325,7 +325,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -406,7 +406,7 @@ services:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 

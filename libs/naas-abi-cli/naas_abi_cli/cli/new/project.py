@@ -76,3 +76,9 @@ def new_project(
         cwd=project_path,
         check=True,
     )
+
+    subprocess.run(
+        ["uv", "run", "abi", "config", "validate"],
+        cwd=project_path,
+        check=True,
+    )
