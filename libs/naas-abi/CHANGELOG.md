@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.13 (2026-02-18)
+
+### Bug Fixes
+
+- Nexus web build and service portal links for local dev
+  ([`a41432e`](https://github.com/jupyter-naas/abi/commit/a41432e81cfa57a4d2b3af481ba61d5c8fa9297a))
+
+
 ## v1.7.12 (2026-02-18)
 
 ### Bug Fixes
