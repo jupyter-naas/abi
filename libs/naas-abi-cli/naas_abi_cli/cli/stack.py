@@ -1,4 +1,3 @@
-import time
 import webbrowser
 
 import click
@@ -41,6 +40,16 @@ def _is_container_in_error(
     return state.exit_code != 0
 
 
+def _get_error_services() -> list[str]:
+    services = compose_service_list()
+    states_by_name = compose_service_states()
+    return sorted(
+        service_name
+        for service_name in services
+        if _is_container_in_error(service_name, states_by_name.get(service_name))
+    )
+
+
 def _show_error_logs(error_services: list[str]) -> None:
     for service_name in error_services:
         click.echo(f"\nService '{service_name}' reported an error. Recent logs:")
@@ -51,51 +60,11 @@ def _show_error_logs(error_services: list[str]) -> None:
             click.echo("No logs were returned for this service.")
 
 
-def _wait_for_stack_readiness(
-    timeout_seconds: int = 180,
-    poll_interval_seconds: float = 2,
-) -> tuple[bool, list[str]]:
-    services = compose_service_list()
-    deadline = time.time() + timeout_seconds
-
-    while time.time() < deadline:
-        states_by_name = compose_service_states()
-
-        error_services = sorted(
-            service_name
-            for service_name in services
-            if _is_container_in_error(service_name, states_by_name.get(service_name))
-        )
-        if error_services:
-            return False, error_services
-
-        abi_state = states_by_name.get("abi")
-        abi_healthy = abi_state is not None and abi_state.health == "healthy"
-
-        all_ready = abi_healthy
-        if all_ready:
-            for service_name in services:
-                readiness = evaluate_service_readiness(
-                    service_name, states_by_name.get(service_name)
-                )
-                if not readiness.ready:
-                    all_ready = False
-                    break
-
-        if all_ready:
-            return True, []
-
-        time.sleep(poll_interval_seconds)
-
-    return False, []
-
-
 def _start_stack() -> None:
     max_retries = 2
     for attempt in range(max_retries + 1):
         try:
             run_compose(["up", "-d"])
-            break
         except click.ClickException:
             if attempt == max_retries:
                 raise
@@ -103,25 +72,26 @@ def _start_stack() -> None:
                 "'docker compose up -d' failed. "
                 f"Retrying ({attempt + 1}/{max_retries})..."
             )
+            continue
 
-    click.echo("Waiting for containers to become healthy and ready...")
-    ready, error_services = _wait_for_stack_readiness()
+        error_services = _get_error_services()
+        if error_services:
+            if attempt == max_retries:
+                _show_error_logs(error_services)
+                raise click.ClickException(
+                    "One or more containers are in error after startup: "
+                    f"{', '.join(error_services)}"
+                )
 
-    if error_services:
-        _show_error_logs(error_services)
-        click.echo(
-            "\nThe stack did not start correctly because one or more containers are in error."
-        )
-        return
+            click.echo(
+                "One or more containers are in error. "
+                f"Retrying 'docker compose up -d' ({attempt + 1}/{max_retries})..."
+            )
+            continue
 
-    if ready:
         webbrowser.open(SERVICE_PORTAL_URL)
         click.echo(f"Opened {SERVICE_PORTAL_URL}")
-    else:
-        click.echo(
-            "Timed out while waiting for the stack to become ready. "
-            f"Open it manually at {SERVICE_PORTAL_URL} once services are healthy."
-        )
+        return
 
 
 def _stop_stack(volumes: bool) -> None:
