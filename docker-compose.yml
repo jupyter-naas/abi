@@ -95,7 +95,7 @@ services:
       - NODE_ENV=development
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
-      - NEXUS_API_URL=${PUBLIC_API_SCHEME:-http}://${PUBLIC_API_HOST:-api.localhost}
+      - NEXUS_API_URL=localhost:9879
       - NEXT_PUBLIC_API_URL=${PUBLIC_API_SCHEME:-http}://${PUBLIC_API_HOST:-api.localhost}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     networks:

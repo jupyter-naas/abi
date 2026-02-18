@@ -14,6 +14,7 @@ api:
   favicon_path: "assets/favicon.ico"
   cors_origins:
     - "http://localhost:9879"
+    - "http://localhost:3042"
 
 global_config:
   ai_mode: "cloud"
@@ -25,6 +26,7 @@ modules:
       nexus_config:
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
         redis_url: "redis://localhost:6379/0"
+        cors_origins_str: "http://localhost:3042,http://127.0.0.1:3042"
 
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
