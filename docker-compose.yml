@@ -50,6 +50,7 @@ x-abi-template: &abi_template
     # - ./.env:/app/.env
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
+    - dagster_home:/app/.dagster  # Dagster metadata/cache isolated from host
   environment:
     - ENV=local
     - LOG_LEVEL=DEBUG
