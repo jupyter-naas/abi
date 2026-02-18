@@ -91,11 +91,15 @@ services:
       - 3042:3000
     volumes:
       - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
+      # Keep container build/runtime artifacts isolated from host workspace
+      # to avoid stale `.next` and dependency resolution issues.
+      - nexus_web_node_modules:/app/apps/web/node_modules
+      - nexus_web_next:/app/apps/web/.next
     environment:
       - NODE_ENV=development
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
-      - NEXUS_API_URL=localhost:9879
+      - NEXUS_API_URL=http://abi:9879
       - NEXT_PUBLIC_API_URL=${PUBLIC_API_SCHEME:-http}://${PUBLIC_API_HOST:-api.localhost}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     networks:
@@ -431,6 +435,8 @@ volumes:
   synapse_data:   # Matrix Synapse data
   caddy_data:     # Caddy certificates and ACME data
   caddy_config:   # Caddy runtime configuration
+  nexus_web_node_modules: # Isolated web dependencies
+  nexus_web_next:         # Isolated Next.js build cache
 
 # =============================================================================
 # NETWORK CONFIGURATION
