@@ -73,6 +73,12 @@ x-abi-template: &abi_template
       condition: service_healthy
     minio:
       condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://localhost:9879/ >/dev/null || exit 1"]
+    interval: 10s
+    timeout: 5s
+    start_period: 30s
+    retries: 5
   networks:
     - abi-network
 
@@ -300,6 +306,7 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
       timeout: 5s
+      start_period: 30s
       retries: 5
     networks:
       - abi-network
