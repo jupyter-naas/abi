@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.15.0 (2026-02-18)
+
+### Bug Fixes
+
+- Working on multi env management
+  ([`482e67c`](https://github.com/jupyter-naas/abi/commit/482e67c01a4446bbac7fbf9d29948d91851707f4))
+
+### Features
+
+- Handle different .env files
+  ([`fe0f6ae`](https://github.com/jupyter-naas/abi/commit/fe0f6ae9865c5f2417f958f0db2e4d3d327703e8))
+
+
 ## v1.14.1 (2026-02-17)
 
 ### Bug Fixes
