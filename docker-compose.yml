@@ -71,6 +71,8 @@ x-abi-template: &abi_template
       condition: service_healthy
     fuseki:
       condition: service_healthy
+    minio:
+      condition: service_healthy
   networks:
     - abi-network
 
@@ -174,7 +176,7 @@ services:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
       - FUSEKI_DATASET_1=ds
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3030/$/ping || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3030/ >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -256,6 +258,11 @@ services:
       - 9001:9001  # MinIO console - http://localhost:9001
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - abi-network
 
@@ -263,7 +270,8 @@ services:
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     entrypoint: >-
       /bin/sh -c "
       until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:${MINIO_PORT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
@@ -386,7 +394,7 @@ services:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:6333/healthz || exit 1"]
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
       interval: 10s
       timeout: 5s
       retries: 5
