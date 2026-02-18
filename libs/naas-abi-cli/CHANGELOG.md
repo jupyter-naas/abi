@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.17.1 (2026-02-18)
+
+### Bug Fixes
+
+- Overall
+  ([`8874852`](https://github.com/jupyter-naas/abi/commit/88748528ad867109f84db8f9f8e71eac5be774b6))
+
+
 ## v1.17.0 (2026-02-18)
 
 
