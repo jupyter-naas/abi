@@ -91,7 +91,19 @@ def _wait_for_stack_readiness(
 
 
 def _start_stack() -> None:
-    run_compose(["up", "-d"])
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            run_compose(["up", "-d"])
+            break
+        except click.ClickException:
+            if attempt == max_retries:
+                raise
+            click.echo(
+                "'docker compose up -d' failed. "
+                f"Retrying ({attempt + 1}/{max_retries})..."
+            )
+
     click.echo("Waiting for containers to become healthy and ready...")
     ready, error_services = _wait_for_stack_readiness()
 

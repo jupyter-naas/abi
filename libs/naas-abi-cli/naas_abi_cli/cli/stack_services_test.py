@@ -1,3 +1,4 @@
+from naas_abi_cli.cli import stack_services
 from naas_abi_cli.cli.stack_runtime import ComposeServiceState
 from naas_abi_cli.cli.stack_services import evaluate_service_readiness
 
@@ -44,3 +45,41 @@ def test_readiness_is_false_when_not_running_without_health() -> None:
     readiness = evaluate_service_readiness("qdrant", state)
     assert readiness.ready is False
     assert readiness.source == "compose"
+
+
+def test_readiness_for_abi_requires_port_9879(monkeypatch) -> None:
+    state = ComposeServiceState(
+        service="abi",
+        container_name="project-abi-1",
+        state="running",
+        health="healthy",
+        exit_code=None,
+        status="Up",
+    )
+
+    monkeypatch.setattr(
+        stack_services, "_check_http", lambda url, timeout=1.5: (False, "down")
+    )
+
+    readiness = evaluate_service_readiness("abi", state)
+    assert readiness.ready is False
+    assert readiness.source == "http"
+
+
+def test_readiness_for_abi_is_true_when_port_9879_is_alive(monkeypatch) -> None:
+    state = ComposeServiceState(
+        service="abi",
+        container_name="project-abi-1",
+        state="running",
+        health="healthy",
+        exit_code=None,
+        status="Up",
+    )
+
+    monkeypatch.setattr(
+        stack_services, "_check_http", lambda url, timeout=1.5: (True, "HTTP 200")
+    )
+
+    readiness = evaluate_service_readiness("abi", state)
+    assert readiness.ready is True
+    assert readiness.source == "http"
