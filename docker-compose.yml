@@ -385,8 +385,14 @@ services:
     image: nginx:alpine
     ports:
       - 8080:80  # Service portal - http://localhost:8080
+    environment:
+      - PUBLIC_WEB_HOST=${PUBLIC_WEB_HOST:-localhost}
+      - PUBLIC_API_HOST=${PUBLIC_API_HOST:-api.localhost}
+      - NGINX_ENVSUBST_TEMPLATE_DIR=/usr/share/nginx/templates
+      - NGINX_ENVSUBST_TEMPLATE_SUFFIX=.template
+      - NGINX_ENVSUBST_OUTPUT_DIR=/usr/share/nginx/html
     volumes:
-      - ./docker/service-portal:/usr/share/nginx/html:ro
+      - ./docker/service-portal:/usr/share/nginx/templates:ro
     networks:
       - abi-network
 
