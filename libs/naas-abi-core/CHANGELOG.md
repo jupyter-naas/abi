@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.0 (2026-02-18)
+
+### Features
+
+- Improve schema duplication management and ingestion speed
+  ([`f1f4e21`](https://github.com/jupyter-naas/abi/commit/f1f4e213650d5c1b45bbc090163a16a993a177e4))
+
+
 ## v1.15.0 (2026-02-18)
 
 ### Bug Fixes
