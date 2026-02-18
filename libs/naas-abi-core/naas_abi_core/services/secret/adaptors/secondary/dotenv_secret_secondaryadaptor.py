@@ -9,6 +9,14 @@ from naas_abi_core.utils.Logger import logger
 class DotenvSecretSecondaryAdaptor(ISecretAdapter):
     def __init__(self, path: str = ".env"):
         self.path = path
+
+        if not os.path.exists(self.path):
+            raise FileNotFoundError(
+                "Dotenv secret adapter is configured to use "
+                f"'{self.path}', but this file does not exist. "
+                "Please create it or update services.secret.secret_adapters[].config.path."
+            )
+
         logger.debug(f"dotenv is using the file: {self.path}")
         logger.debug(f"dotenv discoverable file is: {find_dotenv()}")
 

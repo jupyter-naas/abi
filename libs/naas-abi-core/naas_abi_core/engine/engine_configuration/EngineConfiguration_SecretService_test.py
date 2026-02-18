@@ -36,10 +36,13 @@ def test_secret_service_configuration():
     assert isinstance(secret_service, Secret)
 
 
-def test_secret_service_configuration_dotenv_custom_path():
+def test_secret_service_configuration_dotenv_custom_path(tmp_path, monkeypatch):
     from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
         DotenvSecretSecondaryAdaptor,
     )
+
+    (tmp_path / ".env.remote").write_text("ENV=remote\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
 
     configuration = SecretServiceConfiguration(
         secret_adapters=[
@@ -54,6 +57,22 @@ def test_secret_service_configuration_dotenv_custom_path():
 
     assert isinstance(secret_adapter, DotenvSecretSecondaryAdaptor)
     assert secret_adapter.path == ".env.remote"
+
+
+def test_secret_service_configuration_dotenv_missing_file():
+    import pytest
+
+    configuration = SecretServiceConfiguration(
+        secret_adapters=[
+            SecretAdapterConfiguration(
+                adapter="dotenv",
+                config=DotenvSecretConfiguration(path=".env.this-file-does-not-exist"),
+            )
+        ]
+    )
+
+    with pytest.raises(FileNotFoundError):
+        configuration.secret_adapters[0].load()
 
 
 def test_secret_service_configuration_naas():
