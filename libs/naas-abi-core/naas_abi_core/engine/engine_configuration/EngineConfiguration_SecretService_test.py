@@ -28,11 +28,32 @@ def test_secret_service_configuration():
     assert secret_adapter is not None
     assert isinstance(secret_adapter, ISecretAdapter)
     assert isinstance(secret_adapter, DotenvSecretSecondaryAdaptor)
+    assert secret_adapter.path == ".env"
 
     secret_service = configuration.load()
 
     assert secret_service is not None
     assert isinstance(secret_service, Secret)
+
+
+def test_secret_service_configuration_dotenv_custom_path():
+    from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+        DotenvSecretSecondaryAdaptor,
+    )
+
+    configuration = SecretServiceConfiguration(
+        secret_adapters=[
+            SecretAdapterConfiguration(
+                adapter="dotenv",
+                config=DotenvSecretConfiguration(path=".env.remote"),
+            )
+        ]
+    )
+
+    secret_adapter = configuration.secret_adapters[0].load()
+
+    assert isinstance(secret_adapter, DotenvSecretSecondaryAdaptor)
+    assert secret_adapter.path == ".env.remote"
 
 
 def test_secret_service_configuration_naas():
