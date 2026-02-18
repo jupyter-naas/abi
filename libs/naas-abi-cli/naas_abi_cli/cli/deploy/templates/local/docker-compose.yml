@@ -94,8 +94,8 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
-      - NEXUS_API_URL=${PUBLIC_API_SCHEME:-http}://${PUBLIC_API_HOST:-api.localhost}
-      - NEXT_PUBLIC_API_URL=${PUBLIC_API_SCHEME:-http}://${PUBLIC_API_HOST:-api.localhost}
+      - NEXUS_API_URL=${NEXUS_API_URL}
+      - NEXT_PUBLIC_API_URL=${NEXUS_API_URL}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     networks:
       - abi-network

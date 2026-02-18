@@ -1,5 +1,6 @@
 import os
 import shutil
+from ipaddress import ip_address
 from uuid import uuid4
 
 import naas_abi_cli
@@ -36,6 +37,60 @@ RANDOM_ENV_KEYS: tuple[str, ...] = (
 )
 
 
+def _split_host_and_port(host: str) -> tuple[str, str | None]:
+    normalized_host = host.strip()
+
+    if normalized_host.startswith("["):
+        bracket_end = normalized_host.find("]")
+        if bracket_end == -1:
+            return normalized_host, None
+
+        host_part = normalized_host[1:bracket_end]
+        remainder = normalized_host[bracket_end + 1 :]
+        if remainder.startswith(":") and remainder[1:].isdigit():
+            return host_part, remainder[1:]
+        return host_part, None
+
+    host_parts = normalized_host.rsplit(":", 1)
+    if len(host_parts) == 2 and host_parts[1].isdigit() and ":" not in host_parts[0]:
+        return host_parts[0], host_parts[1]
+
+    return normalized_host, None
+
+
+def _is_localhost_or_ip(host: str) -> bool:
+    host_without_port, _ = _split_host_and_port(host)
+
+    if host_without_port.lower() == "localhost":
+        return True
+
+    try:
+        ip_address(host_without_port)
+        return True
+    except ValueError:
+        return False
+
+
+def _build_nexus_api_url(
+    public_api_host: str,
+    public_api_scheme: str | None = None,
+    abi_port: str = "9879",
+) -> str:
+    scheme = public_api_scheme
+    if scheme is None:
+        scheme = "http" if _is_localhost_or_ip(public_api_host) else "https"
+
+    _, explicit_port = _split_host_and_port(public_api_host)
+
+    if explicit_port is not None:
+        return f"{scheme}://{public_api_host}"
+
+    if _is_localhost_or_ip(public_api_host):
+        return f"{scheme}://{public_api_host}:{abi_port}"
+
+    return f"{scheme}://{public_api_host}"
+
+
 def _ensure_env_var(env_path: str, key: str, value: str) -> None:
     existing_content = ""
     if os.path.exists(env_path):
@@ -50,6 +105,22 @@ def _ensure_env_var(env_path: str, key: str, value: str) -> None:
         if existing_content and not existing_content.endswith("\n"):
             env_file.write("\n")
         env_file.write(f"{key}={value}\n")
+
+
+def _get_env_var(env_path: str, key: str) -> str | None:
+    if not os.path.exists(env_path):
+        return None
+
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for line in env_file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if not stripped.startswith(f"{key}="):
+                continue
+            return stripped.split("=", 1)[1]
+
+    return None
 
 
 def _append_local_env_once(source_env_path: str, destination_env_path: str) -> None:
@@ -100,6 +171,9 @@ def setup_local_deploy(project_path: str) -> None:
                 "MINIO_ROOT_PASSWORD": str(uuid4()),
                 "RABBITMQ_PASSWORD": str(uuid4()),
                 "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
+                "NEXUS_API_URL": _build_nexus_api_url(
+                    public_api_host=DEFAULT_ENV_VALUES["PUBLIC_API_HOST"]
+                ),
             }
         )
 
@@ -118,3 +192,17 @@ def setup_local_deploy(project_path: str) -> None:
 
     for key in RANDOM_ENV_KEYS:
         _ensure_env_var(local_env_target_path, key, str(uuid4()))
+
+    public_api_host = (
+        _get_env_var(local_env_target_path, "PUBLIC_API_HOST")
+        or DEFAULT_ENV_VALUES["PUBLIC_API_HOST"]
+    )
+    public_api_scheme = _get_env_var(local_env_target_path, "PUBLIC_API_SCHEME")
+    _ensure_env_var(
+        local_env_target_path,
+        "NEXUS_API_URL",
+        _build_nexus_api_url(
+            public_api_host=public_api_host,
+            public_api_scheme=public_api_scheme,
+        ),
+    )
