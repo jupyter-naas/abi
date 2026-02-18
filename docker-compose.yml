@@ -51,7 +51,7 @@ x-abi-template: &abi_template
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
   environment:
-    - ENV=max
+    - ENV=local
     - LOG_LEVEL=DEBUG
     - PYTHONPATH=/app
     - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
@@ -89,7 +89,8 @@ services:
       - NODE_ENV=development
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
-      - NEXT_PUBLIC_API_URL=https://${PUBLIC_API_HOST:-api.localhost}
+      - NEXUS_API_URL=${PUBLIC_API_SCHEME:-http}://${PUBLIC_API_HOST:-api.localhost}
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_SCHEME:-http}://${PUBLIC_API_HOST:-api.localhost}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     networks:
       - abi-network
@@ -226,6 +227,7 @@ services:
       - dagster_home:/app/.dagster  # Dagster metadata and run history
       - ./docker/dagster/dagster.yaml:/app/.dagster/dagster.yaml:ro
     environment:
+      - ENV=local
       - PYTHONPATH=/app
       - DAGSTER_HOME=/app/.dagster
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
