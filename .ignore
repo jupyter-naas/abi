@@ -1,2 +1,4 @@
+!config*yaml
+!.ignore
 !.env
 !.env*
