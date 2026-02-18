@@ -166,8 +166,8 @@
             <h2>ABI API</h2>
             <p>Core ABI service and operator UI.</p>
             <div class="links">
-              <a href="http://localhost:9879" target="_blank" rel="noreferrer">REST API</a>
-              <a href="http://localhost:8501" target="_blank" rel="noreferrer">Streamlit UI</a>
+              <a href="https://${PUBLIC_API_HOST}" target="_blank" rel="noreferrer">REST API</a>
+              <a href="https://${PUBLIC_API_HOST}/docs" target="_blank" rel="noreferrer">OpenAPI Docs</a>
             </div>
           </div>
 
@@ -175,7 +175,7 @@
             <h2>Nexus</h2>
             <p>Artifact repository manager.</p>
             <div class="links">
-              <a href="http://127.0.0.1:3042" target="_blank" rel="noreferrer">Nexus UI</a>
+              <a href="https://${PUBLIC_WEB_HOST}" target="_blank" rel="noreferrer">Nexus UI</a>
             </div>
           </div>
         </div>
