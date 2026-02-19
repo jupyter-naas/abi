@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.17.3 (2026-02-19)
+
+### Bug Fixes
+
+- Sort modules & agents ascending on abi agent list
+  ([`bcf1534`](https://github.com/jupyter-naas/abi/commit/bcf15345d076c257048ca8cf3b90791dae94bd58))
+
+
 ## v1.17.2 (2026-02-18)
 
 ### Bug Fixes
