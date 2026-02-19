@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 # Standard library imports for type hints
+import atexit
 import os
 import re
+import threading
 import uuid
 
 # Dataclass imports for configuration
@@ -60,6 +62,45 @@ from langgraph.types import Command
 from sse_starlette.sse import EventSourceResponse
 
 
+_shared_checkpointer: BaseCheckpointSaver | None = None
+_shared_checkpointer_url: str | None = None
+_shared_postgres_connection: Any | None = None
+_shared_checkpointer_lock = threading.Lock()
+
+
+def _close_shared_checkpointer() -> None:
+    global _shared_checkpointer
+    global _shared_checkpointer_url
+    global _shared_postgres_connection
+
+    conn = _shared_postgres_connection
+    _shared_checkpointer = None
+    _shared_checkpointer_url = None
+    _shared_postgres_connection = None
+
+    if conn is None:
+        return
+
+    try:
+        if getattr(conn, "closed", False) is False:
+            conn.close()
+            logger.debug("Closed shared PostgreSQL checkpointer connection")
+    except Exception as e:
+        logger.warning(f"Failed to close shared checkpointer connection: {e}")
+
+
+def close_shared_checkpointer() -> None:
+    with _shared_checkpointer_lock:
+        _close_shared_checkpointer()
+
+
+def _reset_shared_checkpointer_for_tests() -> None:
+    close_shared_checkpointer()
+
+
+atexit.register(_close_shared_checkpointer)
+
+
 def create_checkpointer() -> BaseCheckpointSaver:
     """Create a checkpointer based on environment configuration.
 
@@ -69,62 +110,87 @@ def create_checkpointer() -> BaseCheckpointSaver:
     postgres_url = os.getenv("POSTGRES_URL")
 
     if postgres_url:
-        try:
-            import time
+        global _shared_checkpointer
+        global _shared_checkpointer_url
+        global _shared_postgres_connection
 
-            from langgraph.checkpoint.postgres import PostgresSaver
-            from psycopg import Connection
-            from psycopg.rows import dict_row
+        with _shared_checkpointer_lock:
+            if (
+                _shared_checkpointer is not None
+                and _shared_checkpointer_url == postgres_url
+            ):
+                logger.debug("Reusing shared PostgreSQL checkpointer")
+                return _shared_checkpointer
 
-            logger.debug(
-                f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}"
-            )
+            if (
+                _shared_checkpointer is not None
+                and _shared_checkpointer_url is not None
+                and _shared_checkpointer_url != postgres_url
+            ):
+                logger.warning(
+                    "POSTGRES_URL changed at runtime, recreating shared checkpointer"
+                )
+                _close_shared_checkpointer()
 
-            # Try connection with retries (PostgreSQL might still be starting)
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    # Create connection with proper configuration (matching from_conn_string)
-                    conn = Connection.connect(
-                        postgres_url,
-                        autocommit=True,
-                        prepare_threshold=0,
-                        row_factory=dict_row,
-                    )
-                    checkpointer = PostgresSaver(conn)
+            try:
+                import time
 
-                    # Setup tables if they don't exist
-                    checkpointer.setup()
-                    logger.debug("PostgreSQL checkpointer tables initialized")
+                from langgraph.checkpoint.postgres import PostgresSaver
+                from psycopg import Connection
+                from psycopg.rows import dict_row
 
-                    return checkpointer
+                logger.debug(
+                    f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}"
+                )
 
-                except Exception as conn_error:
-                    if attempt < max_retries - 1:
-                        logger.warning(
-                            f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds..."
+                # Try connection with retries (PostgreSQL might still be starting)
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        # Create connection with proper configuration (matching from_conn_string)
+                        conn = Connection.connect(
+                            postgres_url,
+                            autocommit=True,
+                            prepare_threshold=0,
+                            row_factory=dict_row,
                         )
-                        time.sleep(2)
-                    else:
-                        raise conn_error
+                        checkpointer = PostgresSaver(conn)
 
-        except ImportError:
-            logger.error(
-                "PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory."
-            )
-        except Exception as e:
-            # Provide more helpful error messages
-            error_msg = str(e)
-            if "nodename nor servname provided" in error_msg:
+                        # Setup tables if they don't exist
+                        checkpointer.setup()
+                        logger.debug("PostgreSQL checkpointer tables initialized")
+
+                        _shared_checkpointer = checkpointer
+                        _shared_checkpointer_url = postgres_url
+                        _shared_postgres_connection = conn
+
+                        return checkpointer
+
+                    except Exception as conn_error:
+                        if attempt < max_retries - 1:
+                            logger.warning(
+                                f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds..."
+                            )
+                            time.sleep(2)
+                        else:
+                            raise conn_error
+
+            except ImportError:
                 logger.error(
-                    f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}"
+                    "PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory."
                 )
-                logger.error(
-                    "Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL"
-                )
-            else:
-                logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
-            logger.error("Falling back to in-memory checkpointer")
+            except Exception as e:
+                error_msg = str(e)
+                if "nodename nor servname provided" in error_msg:
+                    logger.error(
+                        f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}"
+                    )
+                    logger.error(
+                        "Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL"
+                    )
+                else:
+                    logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
+                logger.error("Falling back to in-memory checkpointer")
 
         # Fallback to in-memory checkpointer
         return MemorySaver()
