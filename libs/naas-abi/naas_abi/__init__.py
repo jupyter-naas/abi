@@ -1,11 +1,14 @@
 from fastapi import FastAPI
-from naas_abi_core.module.Module import (BaseModule, ModuleConfiguration,
-                                         ModuleDependencies)
-from naas_abi_core.services.object_storage.ObjectStorageService import \
-    ObjectStorageService
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -39,7 +42,7 @@ class TenantConfig(BaseModel):
 
 
 class UserSeedConfig(BaseModel):
-    """User definition applied on startup (upsert by email)."""
+    """User definition applied on startup (create by email if missing)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -307,8 +310,7 @@ class ABIModule(BaseModule):
 
     def on_load(self):
         super().on_load()
-        from naas_abi_core.services.triple_store.TripleStorePorts import \
-            OntologyEvent
+        from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
         from rdflib import URIRef
 
         self.engine.services.triple_store.subscribe(
@@ -320,8 +322,7 @@ class ABIModule(BaseModule):
     def api(self, app: FastAPI) -> None:
         # Initialize Nexus settings
 
-        from naas_abi.apps.nexus.apps.api.app.core import \
-            config as nexus_config
+        from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
         # We override settings with module config from `nexus_config`.
         settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)

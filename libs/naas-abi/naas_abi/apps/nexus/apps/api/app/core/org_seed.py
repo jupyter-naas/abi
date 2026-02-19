@@ -2,7 +2,7 @@
 Apply config-driven provisioning on startup.
 
 This provisions:
-- users (upsert by email)
+- users (create by email if missing)
 - organizations (upsert by slug)
 - organization members
 - workspaces (upsert by slug)
@@ -111,9 +111,7 @@ async def _get_user_by_email(session: AsyncSession, email: str) -> UserModel | N
 
 
 async def _get_user_by_id(session: AsyncSession, user_id: str) -> UserModel | None:
-    result = await session.execute(
-        select(UserModel).where(UserModel.id == user_id)
-    )
+    result = await session.execute(select(UserModel).where(UserModel.id == user_id))
     return result.scalar_one_or_none()
 
 
@@ -201,13 +199,10 @@ async def _upsert_users(
             session.add(user)
             logger.info("Created user email=%s from config", normalized_email)
         else:
-            user.name = user_cfg.name
-            user.avatar = user_cfg.avatar
-            user.company = user_cfg.company
-            user.role = user_cfg.role
-            user.bio = user_cfg.bio
-            user.updated_at = now
-            logger.info("Updated user email=%s from config", normalized_email)
+            logger.info(
+                "User email=%s already exists; skipping config-driven updates",
+                normalized_email,
+            )
 
         users_by_email[normalized_email] = user
 
@@ -253,7 +248,11 @@ async def _upsert_workspace(
     organization: OrganizationModel,
     users_by_email: dict[str, UserModel],
 ) -> None:
-    owner = await _resolve_user(session, users_by_email, str(workspace_cfg.owner_email) if workspace_cfg.owner_email else None)
+    owner = await _resolve_user(
+        session,
+        users_by_email,
+        str(workspace_cfg.owner_email) if workspace_cfg.owner_email else None,
+    )
     if owner is None:
         owner = await _get_user_by_id(session, organization.owner_id)
 

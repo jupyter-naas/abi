@@ -11,14 +11,16 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Known-insecure secret keys that must be rejected
-_INSECURE_SECRETS = frozenset({
-    "",
-    "change-me-in-production",
-    "change-me-in-production-use-a-long-random-string",
-    "secret",
-    "password",
-    "changeme",
-})
+_INSECURE_SECRETS = frozenset(
+    {
+        "",
+        "change-me-in-production",
+        "change-me-in-production-use-a-long-random-string",
+        "secret",
+        "password",
+        "changeme",
+    }
+)
 
 
 class TenantConfig(BaseModel):
@@ -49,7 +51,7 @@ class TenantConfig(BaseModel):
 
 
 class UserSeedConfig(BaseModel):
-    """User definition applied on startup (upsert by email)."""
+    """User definition applied on startup (create by email if missing)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -181,7 +183,11 @@ class Settings(BaseSettings):
         # From JSON array (CORS_ORIGINS in .env)
         if self.cors_origins:
             try:
-                parsed = json.loads(self.cors_origins) if isinstance(self.cors_origins, str) else self.cors_origins
+                parsed = (
+                    json.loads(self.cors_origins)
+                    if isinstance(self.cors_origins, str)
+                    else self.cors_origins
+                )
                 if isinstance(parsed, list):
                     for o in parsed:
                         if isinstance(o, str) and o.strip():
@@ -260,7 +266,6 @@ def get_settings() -> Settings:
 settings = get_settings()
 
 
-
 def validate_settings_on_startup() -> None:
     """Validate critical settings before the app starts serving requests.
 
@@ -279,7 +284,7 @@ def validate_settings_on_startup() -> None:
                 "authentication tokens.\n"
                 "\n"
                 "Generate a secure key:\n"
-                "  python -c \"import secrets; print(secrets.token_urlsafe(64))\"\n"
+                '  python -c "import secrets; print(secrets.token_urlsafe(64))"\n'
                 "\n"
                 "Set it in your .env file:\n"
                 "  SECRET_KEY=<your-generated-key>\n"
