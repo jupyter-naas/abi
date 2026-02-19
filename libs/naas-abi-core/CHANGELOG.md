@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.17.0 (2026-02-19)
+
+### Features
+
+- Create openrouter agent for all available models on init
+  ([`7b58aca`](https://github.com/jupyter-naas/abi/commit/7b58aca8e9bcdb6683e7281d628f7fa11b2b53d4))
+
+
 ## v1.16.0 (2026-02-18)
 
 ### Features
