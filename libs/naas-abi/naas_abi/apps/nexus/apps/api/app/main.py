@@ -44,6 +44,10 @@ async def _startup(app: FastAPI) -> None:
         if callable(ensure_seed_fn):
             await cast(Callable[[], Awaitable[bool]], ensure_seed_fn)()
 
+    # Apply config-driven user/org/workspace seeds from config.yaml.
+    from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
+    await apply_configuration_seeds(getattr(app.state, "secret_service", None))
+
     # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
     print("Checking Ollama status...")
     # Gate autostart behind config flag to avoid process management in prod

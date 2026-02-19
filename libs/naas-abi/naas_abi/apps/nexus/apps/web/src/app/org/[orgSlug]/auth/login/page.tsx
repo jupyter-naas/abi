@@ -116,6 +116,7 @@ export default function OrgLoginPage() {
 
   // Dynamic styles based on org branding
   const primaryColor = branding?.primaryColor || '#34D399';
+  const accentColor = branding?.accentColor || primaryColor;
   const bgColor = branding?.backgroundColor;
   const cardColor = branding?.loginCardColor;
   // Allow 0px; default to 0 if undefined/null
@@ -152,7 +153,8 @@ export default function OrgLoginPage() {
     backgroundColor: inputColor || undefined,
     border: inputColor ? 'none' : undefined,
     color: inputTextColor,
-  };
+    '--tw-ring-color': `${accentColor}33`,
+  } as React.CSSProperties;
 
   // Card size from reference: 440px max-width, 2.5rem 3rem 3rem padding
   const cardMaxWidth = branding?.loginCardMaxWidth || '440px';
@@ -306,7 +308,7 @@ export default function OrgLoginPage() {
                 !inputRadius && 'rounded-lg',
                 !inputColor && 'placeholder:text-muted-foreground',
                 inputColor && 'org-input',
-                'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                'focus:outline-none focus:ring-2',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
               style={inputStyle}
@@ -346,7 +348,7 @@ export default function OrgLoginPage() {
                   !inputRadius && 'rounded-lg',
                   !inputColor && 'placeholder:text-muted-foreground',
                   inputColor && 'org-input',
-                  'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                  'focus:outline-none focus:ring-2',
                   'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
                 style={inputStyle}
