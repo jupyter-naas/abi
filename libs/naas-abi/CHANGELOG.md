@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.1 (2026-02-19)
+
+### Bug Fixes
+
+- Does not make abi load every agent
+  ([`ec600b1`](https://github.com/jupyter-naas/abi/commit/ec600b1c85bb3e2b29c3959291dd8eaa1a20109f))
+
+
 ## v1.8.0 (2026-02-19)
 
 ### Bug Fixes
