@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.1 (2026-02-19)
+
+### Bug Fixes
+
+- Update cache ttl + filter out not tools supported
+  ([`831be2f`](https://github.com/jupyter-naas/abi/commit/831be2f80f6ed805cc045dfde9ae06ffa7501c4e))
+
+
 ## v1.6.0 (2026-02-19)
 
 ### Bug Fixes
