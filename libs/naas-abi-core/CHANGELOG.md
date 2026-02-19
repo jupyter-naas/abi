@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.17.2 (2026-02-19)
+
+### Bug Fixes
+
+- Postgres checkpointer overload
+  ([`891749e`](https://github.com/jupyter-naas/abi/commit/891749e5d00dc4494f29b81944c1f09b48e4de8d))
+
+
 ## v1.17.1 (2026-02-19)
 
 ### Bug Fixes
