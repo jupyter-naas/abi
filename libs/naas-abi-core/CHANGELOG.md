@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.17.1 (2026-02-19)
+
+### Bug Fixes
+
+- Make naas_abi having access to every modules
+  ([`d932b80`](https://github.com/jupyter-naas/abi/commit/d932b80bf99875db053585d34152c9483d4071c4))
+
+- Make naas_abi having access to everything
+  ([`aa6f7c3`](https://github.com/jupyter-naas/abi/commit/aa6f7c3bf871205bd9f38d79cee3829a768b2ef4))
+
+
 ## v1.17.0 (2026-02-19)
 
 ### Features
