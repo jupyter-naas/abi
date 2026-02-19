@@ -9,8 +9,16 @@ from langgraph.checkpoint.memory import MemorySaver
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentSharedState,
+    _reset_shared_checkpointer_for_tests,
     create_checkpointer,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_shared_checkpointer_cache():
+    _reset_shared_checkpointer_for_tests()
+    yield
+    _reset_shared_checkpointer_for_tests()
 
 
 class TestCreateCheckpointer:
@@ -52,6 +60,29 @@ class TestCreateCheckpointer:
                     # Verify setup() was called
                     mock_postgres_saver.setup.assert_called_once()
                     assert checkpointer == mock_postgres_saver
+
+    def test_create_checkpointer_reuses_shared_postgres_instance(self):
+        """Test that repeated calls reuse the same PostgreSQL checkpointer."""
+        test_url = "postgresql://user:pass@localhost:5432/testdb"
+
+        mock_postgres_saver = MagicMock()
+        mock_postgres_saver.setup = MagicMock()
+        mock_postgres_class = MagicMock(return_value=mock_postgres_saver)
+        mock_connection = MagicMock()
+        mock_connection_connect = MagicMock(return_value=mock_connection)
+
+        with patch.dict(os.environ, {"POSTGRES_URL": test_url}):
+            with patch(
+                "langgraph.checkpoint.postgres.PostgresSaver", mock_postgres_class
+            ):
+                with patch("psycopg.Connection.connect", mock_connection_connect):
+                    checkpointer1 = create_checkpointer()
+                    checkpointer2 = create_checkpointer()
+
+                    assert checkpointer1 is checkpointer2
+                    mock_connection_connect.assert_called_once()
+                    mock_postgres_class.assert_called_once_with(mock_connection)
+                    mock_postgres_saver.setup.assert_called_once()
 
     def test_create_checkpointer_postgres_import_error(self):
         """Test fallback to MemorySaver when PostgresSaver import fails."""
