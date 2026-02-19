@@ -1,8 +1,7 @@
 import click
+from naas_abi_core.engine.Engine import Engine
 from rich.console import Console
 from rich.table import Table
-
-from naas_abi_core.engine.Engine import Engine
 
 
 @click.group("agent")
@@ -23,8 +22,14 @@ def list():
     table.add_column("Agent", style="green")
 
     modules = engine.modules
-    for module in modules:
-        for agent in modules[module].agents:
+
+    # Sort modules alphabetically
+    sorted_modules = sorted(modules.keys())
+
+    for module in sorted_modules:
+        # Sort agents alphabetically by name
+        sorted_agents = sorted(modules[module].agents, key=lambda agent: agent.__name__)
+        for agent in sorted_agents:
             table.add_row(module, agent.__name__)
 
     console.print(table)
