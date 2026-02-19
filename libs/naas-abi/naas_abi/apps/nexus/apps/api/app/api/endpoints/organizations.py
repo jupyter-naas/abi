@@ -10,15 +10,16 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User, get_current_user_required)
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.models import (OrganizationDomainModel,
-                                                     OrganizationMemberModel,
-                                                     OrganizationModel,
-                                                     WorkspaceMemberModel,
-                                                     WorkspaceModel)
+from naas_abi.apps.nexus.apps.api.app.models import (
+    OrganizationDomainModel,
+    OrganizationMemberModel,
+    OrganizationModel,
+    WorkspaceMemberModel,
+    WorkspaceModel,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -6,9 +6,8 @@ so the frontend can apply them without authentication.
 """
 
 from fastapi import APIRouter
-from pydantic import BaseModel
-
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from pydantic import BaseModel
 
 router = APIRouter()
 
