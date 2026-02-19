@@ -1,18 +1,20 @@
 import datetime
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import requests
-from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
-from naas_abi_marketplace.applications.openrouter import ABIModule
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
+from naas_abi_core.utils.StorageUtils import StorageUtils
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openrouter")
 
@@ -28,8 +30,9 @@ class OpenRouterAPIIntegrationConfiguration(IntegrationConfiguration):
     """
 
     api_key: str
+    object_storage: ObjectStorageService
     base_url: str = "https://openrouter.ai/api/v1"
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str = "openrouter"
 
 
 class OpenRouterAPIIntegration(Integration):
@@ -56,7 +59,7 @@ class OpenRouterAPIIntegration(Integration):
         """Initialize OpenRouter API client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.__storage_utils = StorageUtils(configuration.object_storage)
 
         self.headers = {
             "Authorization": f"Bearer {self.__configuration.api_key}",
@@ -170,7 +173,7 @@ class OpenRouterAPIIntegration(Integration):
         """
         return self._make_request("GET", "/models/count")
 
-    def list_all_models(self, params: Optional[Dict] = None) -> List:
+    def list_models(self, params: Optional[Dict] = None) -> List:
         """
         List all models and their properties, along with splits by provider (owner).
 
@@ -266,7 +269,7 @@ def as_tools(configuration: OpenRouterAPIIntegrationConfiguration):
         StructuredTool(
             name="openrouter_list_models",
             description="List all available models from OpenRouter",
-            func=lambda: integration.list_all_models(),
+            func=lambda: integration.list_models(),
             args_schema=EmptySchema,
         ),
         StructuredTool(
