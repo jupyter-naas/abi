@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import Script from 'next/script';
 import { ThemeProvider } from '@/components/theme-provider';
+import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
 import './globals.css';
 
@@ -45,9 +46,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <WebSocketProvider>
-            {children}
-          </WebSocketProvider>
+          <TenantProvider>
+            <WebSocketProvider>
+              {children}
+            </WebSocketProvider>
+          </TenantProvider>
         </ThemeProvider>
       </body>
     </html>
