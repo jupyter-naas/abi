@@ -19,13 +19,8 @@ from typing import Any
 from uuid import uuid4
 
 import bcrypt
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import sessionmaker
-
 from naas_abi.apps.nexus.apps.api.app.core.config import (
     OrganizationSeedConfig,
-    UserSeedConfig,
     WorkspaceSeedConfig,
     settings,
 )
@@ -38,6 +33,9 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceMemberModel,
     WorkspaceModel,
 )
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
 
