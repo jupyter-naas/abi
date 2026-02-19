@@ -33,6 +33,11 @@ modules:
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
+  - module: naas_abi_marketplace.applications.openrouter
+    enabled: true
+    config:
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+
 services:
   secret:
     secret_adapters:

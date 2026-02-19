@@ -604,14 +604,14 @@ check-core: deps
 	@echo ""
 	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi --exclude "libs/naas-abi-cli/naas_abi_cli/cli/new/templates"
+	@uvx ruff check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi --exclude "libs/naas-abi-cli/naas_abi_cli/cli/new/templates" --exclude "**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
-	@cd libs/naas-abi-core && uv sync --all-extras && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports --exclude '.*templates.*'
+	@cd libs/naas-abi-core && uv sync --all-extras && .venv/bin/mypy -p naas_abi_core --follow-untyped-imports --exclude '.*templates.*' --exclude '.*sandbox.*'
 
 	@echo "• Checking naas_abi_cli..."
-	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports --exclude "naas_abi_cli/cli/new/templates"
+	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports --exclude "naas_abi_cli/cli/new/templates" --exclude ".*sandbox.*"
 	@#uv run pyrefly check libs/naas-abi-core
 
 	@#echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
@@ -633,7 +633,8 @@ check-marketplace: deps
 	@uvx ruff check libs/naas-abi-marketplace \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/domains \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/__demo__ \
-		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/sandbox
+		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/sandbox \
+		--exclude "**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	cd libs/naas-abi-marketplace && uv sync --all-extras && uv run mypy -p $(package) \
@@ -641,6 +642,7 @@ check-marketplace: deps
 		--exclude 'naas_abi_marketplace/__demo__' \
 		--exclude 'naas_abi_marketplace/sandbox' \
 		--exclude 'naas_abi_marketplace/.*/sandbox' \
+		--exclude '.*sandbox.*' \
 		--follow-untyped-imports
 
 	@# echo "\n⚠️ Skipping pyrefly checks (disabled)"

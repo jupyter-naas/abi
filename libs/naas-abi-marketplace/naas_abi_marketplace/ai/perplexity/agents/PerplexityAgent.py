@@ -1,4 +1,5 @@
 from typing import Optional
+
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -69,21 +70,16 @@ def create_agent(
 
     # Define tools
     tools: list = []
+    from naas_abi_marketplace.ai.perplexity import ABIModule
     from naas_abi_marketplace.ai.perplexity.integrations.PerplexityIntegration import (
         PerplexityIntegrationConfiguration,
         as_tools,
     )
-    from naas_abi_marketplace.ai.perplexity import ABIModule
 
-    base_url = "https://api.perplexity.ai"
     api_key = ABIModule.get_instance().configuration.perplexity_api_key
-    if api_key:
-        base_url = "https://openrouter.ai/api/v1"
-        api_key = ABIModule.get_instance().configuration.openrouter_api_key
 
     integration_config = PerplexityIntegrationConfiguration(
         api_key=api_key,
-        base_url=base_url,
         system_prompt="""# ROLE
     You are Perplexity, an advanced AI research agent powered by the Perplexity AI search engine.
     You excel at real-time information gathering, fact-checking, and providing up-to-date insights across all fields of knowledge.
