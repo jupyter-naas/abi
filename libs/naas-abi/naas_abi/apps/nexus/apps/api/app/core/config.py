@@ -5,8 +5,9 @@ Application configuration using pydantic-settings.
 import json
 import sys
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Known-insecure secret keys that must be rejected
@@ -20,6 +21,119 @@ _INSECURE_SECRETS = frozenset({
 })
 
 
+class TenantConfig(BaseModel):
+    """Tenant branding surfaced to the browser (tab title, favicon, etc.)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tab_title: str = "ABI Nexus | naas.ai"
+    favicon_url: str | None = None
+    logo_url: str | None = None
+    logo_rectangle_url: str | None = None
+    logo_emoji: str | None = None
+    primary_color: str = "#34D399"
+    accent_color: str = "#1FA574"
+    background_color: str = "#FFFFFF"
+    font_family: str | None = None
+    font_url: str | None = None
+    login_card_max_width: str = "440px"
+    login_card_padding: str = "2.5rem 3rem 3rem"
+    login_card_color: str = "#FFFFFF"
+    login_text_color: str | None = None
+    login_input_color: str = "#F4F4F4"
+    login_border_radius: str = "0"
+    login_bg_image_url: str | None = None
+    show_terms_footer: bool = False
+    show_powered_by: bool = True
+    login_footer_text: str | None = None
+
+
+class UserSeedConfig(BaseModel):
+    """User definition applied on startup (upsert by email)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    name: str
+    avatar: str | None = None
+    company: str | None = None
+    role: str | None = None
+    bio: str | None = None
+    store_credentials_in_secrets: bool = True
+
+
+class OrganizationMemberSeedConfig(BaseModel):
+    """Organization member assignment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    role: Literal["owner", "admin", "member"] = "member"
+
+
+class WorkspaceMemberSeedConfig(BaseModel):
+    """Workspace member assignment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    role: Literal["owner", "admin", "member", "viewer"] = "member"
+
+
+class WorkspaceSeedConfig(BaseModel):
+    """Workspace definition applied on startup (upsert by slug)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    slug: str
+    owner_email: EmailStr | None = None
+    members: list[WorkspaceMemberSeedConfig] = Field(default_factory=list)
+
+    logo_url: str | None = None
+    logo_emoji: str | None = None
+    primary_color: str | None = "#22c55e"
+    accent_color: str | None = None
+    background_color: str | None = None
+    sidebar_color: str | None = None
+    font_family: str | None = None
+
+
+class OrganizationSeedConfig(BaseModel):
+    """Organization definition applied on startup (upsert by slug)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    slug: str
+    owner_email: EmailStr | None = None
+    members: list[OrganizationMemberSeedConfig] = Field(default_factory=list)
+    workspaces: list[WorkspaceSeedConfig] = Field(default_factory=list)
+
+    logo_url: str | None = None
+    logo_rectangle_url: str | None = None
+    logo_emoji: str | None = None
+    primary_color: str = "#22c55e"
+    accent_color: str | None = None
+    background_color: str | None = None
+    font_family: str | None = None
+    font_url: str | None = None
+
+    login_card_max_width: str | None = None
+    login_card_padding: str | None = None
+    login_card_color: str | None = None
+    login_text_color: str | None = None
+    login_input_color: str | None = None
+    login_border_radius: str | None = None
+    login_bg_image_url: str | None = None
+    show_terms_footer: bool = True
+    show_powered_by: bool = True
+    login_footer_text: str | None = None
+    secondary_logo_url: str | None = None
+    show_logo_separator: bool = False
+    default_theme: str | None = None
+
+
 class Settings(BaseSettings):
     """Application settings."""
 
@@ -29,6 +143,15 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",  # Ignore extra environment variables
     )
+
+    # Tenant branding (tab title, favicon)
+    tenant: TenantConfig = Field(default_factory=TenantConfig)
+
+    # User seed configs (upserted by email on startup)
+    users: list[UserSeedConfig] = Field(default_factory=list)
+
+    # Organization seed configs (upserted by slug on startup)
+    organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
 
     # App
     app_name: str = "NEXUS API"
@@ -135,8 +258,6 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-
-
 
 
 
