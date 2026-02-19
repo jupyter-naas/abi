@@ -231,9 +231,9 @@ export const useAgentsStore = create<AgentsState>()(
               description: a.description || '',
               icon: 'sparkles' as Agent['icon'],
               systemPrompt: a.system_prompt || '',
-              providerId: a.model || null, // DEPRECATED: keep for backward compat
-              provider: a.provider || null, // Provider name (xai, openai, etc.)
-              modelId: a.model || null, // Model ID (grok-beta, gpt-4o, etc.)
+              providerId: a.provider_id ?? a.model ?? null, // provider_id for OpenRouter; model for legacy
+              provider: a.provider || null,
+              modelId: a.model || null,
               logoUrl: a.logo_url || null, // Logo URL from API
               enabled: a.enabled || false, // Whether agent is available for chat
               tools: [],
@@ -393,13 +393,18 @@ export const useAgentsStore = create<AgentsState>()(
           ),
         }));
         
-        // Update on backend
+        // Update on backend (workspace_id required for discovered/non-DB agents)
         try {
           const { authFetch } = await import('./auth');
           const { getApiUrl } = await import('@/lib/config');
+          const { useWorkspaceStore } = await import('./workspace');
           const API_BASE = getApiUrl();
+          const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
+          const url = workspaceId
+            ? `${API_BASE}/api/agents/${id}?workspace_id=${workspaceId}`
+            : `${API_BASE}/api/agents/${id}`;
           
-          const response = await authFetch(`${API_BASE}/api/agents/${id}`, {
+          const response = await authFetch(url, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabled: newEnabled }),

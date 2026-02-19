@@ -53,7 +53,8 @@ type Model = {
   credentials: string;
   status: 'enabled' | 'disabled';
   configured: boolean;
-  // Registry metadata
+  providerIdForIntegration?: string;
+  logo_url?: string | null;
   context_window?: number;
   supports_streaming?: boolean;
   supports_vision?: boolean;
@@ -93,28 +94,42 @@ export function ModelsPanel() {
     fetchProviders();
   }, []);
 
-  const fetchProviders = async (fetchLive = false) => {
+  const fetchProviders = async () => {
     try {
-      const response = await authFetch(`${getApiBase()}/api/providers/available`);
-      if (response.ok) {
-        const data = await response.json();
-        setProviders(data);
-        
-        // Generate models from providers (using registry data)
+      const response = await authFetch(`${getApiBase()}/api/providers/available`, { credentials: 'include' });
+      if (!response.ok) {
+        console.error(`[ModelsPanel] providers/available ${response.status} ${response.statusText}`);
+        setModels([]);
+        setProviders([]);
+        return;
+      }
+      const data = await response.json();
+      setProviders(data);
+      await useIntegrationsStore.getState().refreshProviders(data);
+      const integrationProviders = useIntegrationsStore.getState().providers;
+
         const generatedModels: Model[] = [];
         for (const provider of data) {
           for (const modelInfo of provider.models) {
+            const modelId = `${provider.id}-${modelInfo.id}`;
+            const providerIdForIntegration =
+              provider.type === 'openrouter'
+                ? `openrouter-${modelInfo.id.replace(/\//g, '-')}`
+                : provider.id;
+            const integrationProvider = integrationProviders.find((p) => p.id === providerIdForIntegration);
+            const isEnabled = integrationProvider?.enabled ?? (provider.has_api_key && provider.type !== 'openrouter');
+            const configured = !!provider.has_api_key;
+
             generatedModels.push({
-              id: `${provider.id}-${modelInfo.id}`,
+              id: modelId,
               name: modelInfo.name,
               provider: provider.name,
               model: modelInfo.id,
-              credentials: provider.has_api_key
-                ? `${provider.type.toUpperCase()}_API_KEY`
-                : 'Not required',
-              status: provider.has_api_key ? 'enabled' : 'disabled',
-              configured: provider.has_api_key,
-              // Registry metadata
+              credentials: configured ? `${provider.type.toUpperCase()}_API_KEY` : 'Not required',
+              status: configured && isEnabled ? 'enabled' : 'disabled',
+              configured,
+              providerIdForIntegration,
+              logo_url: modelInfo.logo_url ?? undefined,
               context_window: modelInfo.context_window,
               supports_streaming: modelInfo.supports_streaming,
               supports_vision: modelInfo.supports_vision,
@@ -124,11 +139,6 @@ export function ModelsPanel() {
           }
         }
         setModels(generatedModels);
-        // Also refresh the integrations store to avoid drift in other parts of the UI
-        try {
-          await useIntegrationsStore.getState().refreshProviders();
-        } catch {}
-      }
     } catch (error) {
       console.error('Failed to fetch providers:', error);
     } finally {
@@ -143,10 +153,12 @@ export function ModelsPanel() {
   };
 
   const toggleModel = (modelId: string) => {
-    setModels(models.map(m => 
-      m.id === modelId 
-        ? { ...m, status: m.status === 'enabled' ? 'disabled' : 'enabled' }
-        : m
+    const model = models.find((m) => m.id === modelId);
+    if (!model?.configured) return;
+    const providerId = (model as Model & { providerIdForIntegration?: string }).providerIdForIntegration ?? modelId;
+    useIntegrationsStore.getState().toggleProvider(providerId);
+    setModels(models.map((m) =>
+      m.id === modelId ? { ...m, status: m.status === 'enabled' ? 'disabled' : 'enabled' } : m
     ));
   };
 
@@ -355,10 +367,8 @@ export function ModelsPanel() {
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-muted">
                             {(() => {
-                              const p = providers.find(p => p.name === model.provider);
-                              const url = p?.logo_url as string | undefined;
+                              const url = model.logo_url ?? (providers.find(p => p.name === model.provider)?.logo_url as string | undefined);
                               return url ? (
-                                // Use API base for relative /logos/* paths
                                 <img src={url.startsWith('http') ? url : `${getApiBase()}${url}`} alt={model.provider} className="h-full w-full object-cover" />
                               ) : (
                                 providerIcons[model.provider.toLowerCase()] || <Cloud size={18} />

@@ -235,6 +235,7 @@ export default function AgentsPage() {
 
   const handleProviderChange = (agentId: string, providerId: string | null) => {
     setAgentProvider(agentId, providerId);
+    useIntegrationsStore.getState().setAgentProvider(agentId, providerId ?? '');
     if (selectedAgent?.id === agentId) {
       setSelectedAgent({ ...selectedAgent, providerId });
     }

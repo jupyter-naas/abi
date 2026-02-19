@@ -257,6 +257,9 @@ async def bulk_import_secrets(
         if not key:
             continue
 
+        # Normalize key to env var style so providers API finds it (OPENROUTER_API_KEY)
+        key = key.upper().replace("-", "_")
+
         encrypted = _encrypt(value)
 
         result = await db.execute(

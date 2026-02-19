@@ -3,6 +3,7 @@ Agents API endpoints - Agent management and lifecycle.
 """
 
 import ast
+import os
 import importlib
 import logging
 import re
@@ -21,7 +22,9 @@ from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import AgentConfigModel
 from naas_abi.apps.nexus.apps.api.app.services.model_registry import (
+    fetch_openrouter_models,
     get_all_models,
+    get_logo_for_openrouter_model,
     get_logo_for_provider,
 )
 from pydantic import BaseModel, Field
@@ -30,6 +33,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+
+def _agent_provider_id(provider: str | None, model_id: str | None) -> str | None:
+    """Compute integration store provider_id for agent lookup."""
+    if not provider:
+        return None
+    if provider == "openrouter" and model_id:
+        return f"openrouter-{model_id.replace('/', '-')}"
+    return provider
 
 
 class AgentCapability(BaseModel):
@@ -51,6 +63,7 @@ class AgentConfig(BaseModel):
     capabilities: list[AgentCapability] = []
     model: str = "gpt-4"
     provider: str | None = None  # Provider name (xai, openai, anthropic, etc.)
+    provider_id: str | None = None  # Integration store ID for lookup (openrouter-* for OpenRouter)
     logo_url: str | None = None  # URL to agent/provider logo
     enabled: bool = False  # Whether agent is available for chat
     temperature: float = 0.7
@@ -298,6 +311,7 @@ async def list_agents(
     # Return agents from database
     agent_list = []
     for agent in agents:
+        provider_id = _agent_provider_id(agent.provider, agent.model_id)
         agent_list.append(
             AgentConfig(
                 id=agent.id,
@@ -306,8 +320,9 @@ async def list_agents(
                 description=agent.description or "",
                 system_prompt=agent.system_prompt or "",
                 model=agent.model_id or "unknown",
-                provider=agent.provider,  # Include provider name
-                logo_url=agent.logo_url,  # Include logo URL
+                provider=agent.provider,
+                provider_id=provider_id,
+                logo_url=agent.logo_url,
                 enabled=agent.enabled
                 if hasattr(agent, "enabled")
                 else False,  # Include enabled status
@@ -374,6 +389,7 @@ async def create_agent(
         system_prompt=agent_model.system_prompt,
         model=agent_model.model_id or "unknown",
         provider=agent_model.provider,
+        provider_id=_agent_provider_id(agent_model.provider, agent_model.model_id),
         logo_url=agent_model.logo_url,
         enabled=agent_model.enabled if hasattr(agent_model, "enabled") else False,
         temperature=agent_model.temperature or 0.7,
@@ -395,19 +411,48 @@ class AgentUpdate(BaseModel):
     max_tokens: int | None = None
 
 
+def _get_discovered_agent_by_id(agent_id: str) -> AgentConfig | None:
+    """Find a discovered agent by id (from ABI modules, naas_abi dir, or default_agents)."""
+    for discovered in _discover_loaded_abi_agents() + _discover_agents_from_naas_abi_directory():
+        if discovered.id == agent_id:
+            return discovered
+    return default_agents.get(agent_id)
+
+
 @router.patch("/{agent_id}")
 async def update_agent(
     agent_id: str,
     updates: AgentUpdate,
+    workspace_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> AgentConfig:
-    """Update an agent."""
+    """Update an agent. Creates discovered agents in DB on first toggle when workspace_id provided."""
     result = await db.execute(select(AgentConfigModel).where(AgentConfigModel.id == agent_id))
     agent = result.scalar_one_or_none()
 
     if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+        # Agent not in DB - may be discovered (ABI, default). Create on first toggle.
+        discovered = _get_discovered_agent_by_id(agent_id)
+        if discovered and workspace_id and updates.enabled is not None:
+            await require_workspace_access(current_user.id, workspace_id)
+            agent_model = AgentConfigModel(
+                id=agent_id,
+                workspace_id=workspace_id,
+                name=discovered.name,
+                description=discovered.description or "",
+                system_prompt=discovered.system_prompt,
+                model_id=discovered.model,
+                provider=discovered.provider,
+                logo_url=discovered.logo_url,
+                enabled=updates.enabled,
+            )
+            db.add(agent_model)
+            await db.commit()
+            await db.refresh(agent_model)
+            agent = agent_model
+        else:
+            raise HTTPException(status_code=404, detail="Agent not found")
 
     await require_workspace_access(current_user.id, agent.workspace_id)
 
@@ -436,10 +481,11 @@ async def update_agent(
         system_prompt=agent.system_prompt or "",
         model=agent.model_id or "unknown",
         provider=agent.provider,
+        provider_id=_agent_provider_id(agent.provider, agent.model_id),
         logo_url=agent.logo_url,
         enabled=agent.enabled if hasattr(agent, "enabled") else False,
-        temperature=0.7,  # Default value - not stored in DB
-        max_tokens=4096,  # Default value - not stored in DB
+        temperature=0.7,
+        max_tokens=4096,
         created_at=agent.created_at,
         updated_at=agent.updated_at,
     )
@@ -579,8 +625,42 @@ async def sync_agents_from_models(
                 status_code=500, detail=f"Failed to connect to ABI server: {str(e)}"
             ) from e
     else:
-        # Sync from model registry (existing logic)
-        all_models = get_all_models()
+        # Sync from model registry + OpenRouter (if API key available)
+        from naas_abi.apps.nexus.apps.api.app.models import SecretModel
+
+        all_models: list[dict] = list(get_all_models())
+
+        # Add OpenRouter models if user has API key (same logic as providers endpoint)
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            for wid in [workspace_id]:
+                for key_variant in ("OPENROUTER_API_KEY", "openrouter_api_key"):
+                    r = await db.execute(
+                        select(SecretModel).where(
+                            SecretModel.workspace_id == wid,
+                            SecretModel.key == key_variant,
+                        )
+                    )
+                    secret = r.scalar_one_or_none()
+                    if secret:
+                        from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import (
+                            _decrypt,
+                        )
+
+                        try:
+                            api_key = _decrypt(secret.encrypted_value)
+                            break
+                        except Exception:
+                            pass
+                if api_key:
+                    break
+        if api_key:
+            openrouter_models = await fetch_openrouter_models(api_key)
+            # Filter out duplicates by model id
+            static_ids = {m["id"] for m in all_models}
+            for m in openrouter_models:
+                if m["id"] not in static_ids:
+                    all_models.append(m)
 
         for model_info in all_models:
             model_id = model_info["id"]
@@ -615,7 +695,12 @@ async def sync_agents_from_models(
 
 Always be respectful, clear, and focused on helping the user achieve their goals."""
 
-            # Create agent
+            # Create agent (per-model logo for OpenRouter)
+            logo_url = (
+                get_logo_for_openrouter_model(model_id)
+                if model_info["provider"] == "openrouter"
+                else get_logo_for_provider(model_info["provider"])
+            )
             agent_model = AgentConfigModel(
                 id=str(uuid4()),
                 workspace_id=workspace_id,
@@ -624,7 +709,7 @@ Always be respectful, clear, and focused on helping the user achieve their goals
                 system_prompt=system_prompt,
                 model_id=model_id,
                 provider=model_info["provider"],
-                logo_url=get_logo_for_provider(model_info["provider"]),
+                logo_url=logo_url,
                 enabled=False,  # Disabled by default
             )
 
@@ -675,7 +760,9 @@ async def get_agent(
         system_prompt=agent.system_prompt or "",
         model=agent.model_id or "unknown",
         provider=agent.provider,
+        provider_id=_agent_provider_id(agent.provider, agent.model_id),
         logo_url=agent.logo_url,
+        enabled=agent.enabled if hasattr(agent, "enabled") else False,
         temperature=0.7,
         max_tokens=4096,
         created_at=agent.created_at,

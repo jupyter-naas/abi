@@ -268,12 +268,11 @@ export function ChatInterface() {
         agent: m.agent || null,  // Include agent ID for multi-agent conversations
       }));
 
-      // Use streaming for Ollama, Cloudflare and ABI, regular for others
-      // Default to streaming if no provider (Ollama fallback)
+      // Use streaming for Ollama, Cloudflare, OpenRouter, and other OpenAI-compatible providers
+      const streamingTypes = ['ollama', 'cloudflare', 'openrouter', 'openai', 'anthropic', 'xai', 'mistral', 'google', 'perplexity'];
       const supportsStreaming =
         !provider ||
-        provider?.type === 'ollama' ||
-        provider?.type === 'cloudflare';
+        (provider && streamingTypes.includes(provider.type));
       if (supportsStreaming) {
         setIsStreaming(true);
         setIsLoading(false); // Don't show loading dots for streaming

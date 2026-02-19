@@ -39,12 +39,16 @@ favicon_path = engine.configuration.api.favicon_path
 favicon_name = os.path.basename(favicon_path)
 
 origins = engine.configuration.api.cors_origins
-
-logger.debug(f"CORS origins: {origins}")
+env = os.environ.get("ENV", "production")
+# In dev/local, accept any localhost/127.0.0.1 origin to avoid port mismatch
+use_regex = env in ("dev", "local", "development")
+origin_regex = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+logger.debug(f"CORS origins: {origins}" + (f" (dev: regex={origin_regex})" if use_regex else ""))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[] if use_regex else origins,
+    allow_origin_regex=origin_regex if use_regex else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

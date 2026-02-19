@@ -28,17 +28,27 @@ import { useSecretsStore } from '@/stores/secrets';
 import { ProviderForm } from './provider-form';
 import { YamlEditor } from './yaml-editor';
 
-const providerIcons: Record<ProviderType, React.ReactNode> = {
+const providerIcons: Record<string, React.ReactNode> = {
   anthropic: <Cloud size={18} />,
   openai: <Cloud size={18} />,
+  openrouter: <Cloud size={18} />,
+  xai: <Cloud size={18} />,
+  mistral: <Cloud size={18} />,
+  google: <Cloud size={18} />,
+  perplexity: <Cloud size={18} />,
   cloudflare: <Cloud size={18} />,
   ollama: <Server size={18} />,
   custom: <Code size={18} />,
 };
 
-const providerLabels: Record<ProviderType, string> = {
+const providerLabels: Record<string, string> = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
+  openrouter: 'OpenRouter',
+  xai: 'xAI (Grok)',
+  mistral: 'Mistral',
+  google: 'Google',
+  perplexity: 'Perplexity',
   cloudflare: 'Cloudflare',
   ollama: 'Ollama',
   custom: 'Custom',

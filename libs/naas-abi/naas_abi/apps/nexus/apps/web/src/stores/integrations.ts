@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { authFetch } from './auth';
 
-export type ProviderType = 'anthropic' | 'ollama' | 'openai' | 'cloudflare' | 'custom';
+export type ProviderType = 'anthropic' | 'ollama' | 'openai' | 'cloudflare' | 'custom' | 'openrouter' | 'xai' | 'mistral' | 'google' | 'perplexity';
 
 export interface ProviderConfig {
   id: string;
@@ -11,6 +11,7 @@ export interface ProviderConfig {
   type: ProviderType;
   enabled: boolean;
   endpoint?: string; // For Ollama/custom
+  logoUrl?: string; // Per-model logo (OpenRouter: anthropic/openai/etc)
   apiKeySecretKey?: string; // Reference to secret key (e.g., "OPENAI_API_KEY")
   accountIdSecretKey?: string; // Reference to secret key for Cloudflare Account ID
   // Legacy fields - kept for backwards compatibility, will be migrated
@@ -32,7 +33,7 @@ interface IntegrationsState {
   agentMappings: AgentProviderMapping[];
   
   // Provider actions
-  refreshProviders: () => Promise<void>;
+  refreshProviders: (prefetched?: Array<{ id: string; name: string; type: ProviderType; has_api_key: boolean; models: Array<{ id: string; name: string; logo_url?: string | null }> }>) => Promise<void>;
   addProvider: (provider: Omit<ProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateProvider: (id: string, updates: Partial<ProviderConfig>) => void;
   deleteProvider: (id: string) => void;
@@ -65,30 +66,83 @@ export const useIntegrationsStore = create<IntegrationsState>()(
       ],
 
       // Fetch available providers from API and populate store to avoid drift
-      refreshProviders: async () => {
+      // For OpenRouter: create one provider per model (Cursor-style) so each model appears in sidebar
+      refreshProviders: async (prefetched?: Array<{ id: string; name: string; type: ProviderType; has_api_key: boolean; models: Array<{ id: string; name: string }> }>) => {
         try {
-          const API_BASE = getApiUrl();
-          const res = await authFetch(`${API_BASE}/api/providers/available`);
-          if (!res.ok) return;
-          const data: Array<{ id: string; name: string; type: ProviderType; has_api_key: boolean; models: Array<{ id: string; name: string }> }> = await res.json();
-          const mapped: ProviderConfig[] = data.map((p) => {
-            // Choose a sensible default model (first in registry list)
-            const defaultModel = p.models?.[0]?.id || '';
+          let data: Array<{ id: string; name: string; type: ProviderType; has_api_key: boolean; models: Array<{ id: string; name: string; logo_url?: string | null }> }>;
+          if (prefetched !== undefined) {
+            data = prefetched;
+          } else {
+            const API_BASE = getApiUrl();
+            const res = await authFetch(`${API_BASE}/api/providers/available`, { credentials: 'include' });
+            if (!res.ok) {
+              console.error(`[refreshProviders] API ${res.status} ${res.statusText}`);
+              return;
+            }
+            data = await res.json();
+          }
+          const ENDPOINT_MAP: Record<string, string> = {
+            ollama: OLLAMA_DEFAULT,
+            openrouter: 'https://openrouter.ai/api/v1',
+            openai: 'https://api.openai.com/v1',
+            anthropic: 'https://api.anthropic.com/v1',
+            xai: 'https://api.x.ai/v1',
+            mistral: 'https://api.mistral.ai/v1',
+            google: 'https://generativelanguage.googleapis.com/v1beta',
+            perplexity: 'https://api.perplexity.ai',
+            cloudflare: '',
+          };
+          const mapped: ProviderConfig[] = [];
+          for (const p of data) {
             const isOllama = p.type === 'ollama';
-            return {
+            const hasKey = p.has_api_key;
+            const models = p.models ?? [];
+
+            // OpenRouter: one provider per model (like Cursor) - each model selectable, per-model logo
+            if (p.type === 'openrouter' && models.length > 0) {
+              for (const m of models) {
+                const providerId = `openrouter-${m.id.replace(/\//g, '-')}`;
+                mapped.push({
+                  id: providerId,
+                  name: `${p.name} - ${m.name}`,
+                  type: p.type,
+                  enabled: hasKey,
+                  endpoint: ENDPOINT_MAP[p.type],
+                  model: m.id,
+                  logoUrl: m.logo_url ?? undefined,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                } as ProviderConfig);
+              }
+              continue;
+            }
+
+            // Other providers: single provider with first model
+            const defaultModel = models[0]?.id || '';
+            mapped.push({
               id: p.id,
               name: p.name,
               type: p.type,
-              enabled: isOllama ? true : p.has_api_key,
-              endpoint: isOllama ? OLLAMA_DEFAULT : undefined,
+              enabled: isOllama ? true : hasKey,
+              endpoint: ENDPOINT_MAP[p.type] || undefined,
               model: defaultModel,
               createdAt: new Date(),
               updatedAt: new Date(),
-            } as ProviderConfig;
+            } as ProviderConfig);
+          }
+          set((state) => {
+            // Migrate old agent mappings: "openrouter" -> first OpenRouter provider
+            const openrouterProviders = mapped.filter((x) => x.type === 'openrouter');
+            const firstOpenRouterId = openrouterProviders[0]?.id;
+            const updatedMappings = state.agentMappings.map((m) => {
+              if (m.providerId === 'openrouter' && firstOpenRouterId) {
+                return { ...m, providerId: firstOpenRouterId };
+              }
+              return m;
+            });
+            return { providers: mapped, agentMappings: updatedMappings };
           });
-          set({ providers: mapped });
         } catch (e) {
-          // Silently ignore; UI can retry
           console.warn('Failed to refresh providers', e);
         }
       },
@@ -187,6 +241,8 @@ export const useIntegrationsStore = create<IntegrationsState>()(
     }),
     {
       name: 'nexus-integrations',
+      // Only persist agent mappings; providers are always fetched fresh so refresh works
+      partialize: (s) => ({ agentMappings: s.agentMappings }),
     }
   )
 );

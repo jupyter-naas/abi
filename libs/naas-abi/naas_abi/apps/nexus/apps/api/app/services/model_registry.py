@@ -341,54 +341,114 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
         },
     ],
 
+    # OpenRouter - Cursor-style model selection; single API for 400+ models
+    # See https://openrouter.ai/models for full list
     "openrouter": [
+        # Anthropic (Claude)
         {
             "id": "anthropic/claude-opus-4.6",
-            "name": "Claude Opus 4.6 (via OpenRouter)",
+            "name": "Opus 4.6",
             "provider": "openrouter",
             "context_window": 1000000,
             "supports_streaming": True,
             "supports_vision": True,
             "supports_function_calling": True,
             "max_output_tokens": 16384,
-            "released": "2026-02-04",
+            "released": "2026-02-05",
         },
         {
-            "id": "anthropic/claude-3.5-sonnet",
-            "name": "Claude 3.5 Sonnet (via OpenRouter)",
+            "id": "anthropic/claude-sonnet-4.6",
+            "name": "Sonnet 4.6",
+            "provider": "openrouter",
+            "context_window": 1000000,
+            "supports_streaming": True,
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "max_output_tokens": 128000,
+            "released": "2026-02-17",
+        },
+        {
+            "id": "anthropic/claude-sonnet-4.5",
+            "name": "Sonnet 4.5",
             "provider": "openrouter",
             "context_window": 200000,
             "supports_streaming": True,
             "supports_vision": True,
             "supports_function_calling": True,
             "max_output_tokens": 8192,
-            "released": "2024-10-22",
+            "released": "2025-09-29",
         },
         {
-            "id": "openai/gpt-4-turbo",
-            "name": "GPT-4 Turbo (via OpenRouter)",
+            "id": "anthropic/claude-haiku-4.5",
+            "name": "Haiku 4.5",
+            "provider": "openrouter",
+            "context_window": 200000,
+            "supports_streaming": True,
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "max_output_tokens": 8192,
+            "released": "2025-10-01",
+        },
+        # OpenAI (GPT) - Codex optimized for coding workflows
+        {
+            "id": "openai/gpt-5.2-codex",
+            "name": "GPT-5.2 Codex",
+            "provider": "openrouter",
+            "context_window": 400000,
+            "supports_streaming": True,
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "max_output_tokens": 65536,
+            "released": "2026-01-14",
+        },
+        {
+            "id": "openai/gpt-5-mini",
+            "name": "GPT-5 Mini",
             "provider": "openrouter",
             "context_window": 128000,
             "supports_streaming": True,
             "supports_vision": True,
             "supports_function_calling": True,
-            "max_output_tokens": 4096,
-            "released": "2024-04-09",
+            "max_output_tokens": 16384,
+            "released": "2025-01-01",
         },
         {
-            "id": "meta-llama/llama-3.3-70b-instruct",
-            "name": "Llama 3.3 70B (via OpenRouter)",
+            "id": "openai/gpt-5",
+            "name": "GPT-5",
             "provider": "openrouter",
-            "context_window": 131072,
+            "context_window": 128000,
             "supports_streaming": True,
-            "supports_vision": False,
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "max_output_tokens": 16384,
+            "released": "2025-01-01",
+        },
+        {
+            "id": "openai/gpt-4.1-mini",
+            "name": "GPT-4.1 Mini",
+            "provider": "openrouter",
+            "context_window": 128000,
+            "supports_streaming": True,
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "max_output_tokens": 16384,
+            "released": "2025-01-01",
+        },
+        # Google (Gemini)
+        {
+            "id": "google/gemini-2.5-flash",
+            "name": "Gemini 2.5 Flash",
+            "provider": "openrouter",
+            "context_window": 1048576,
+            "supports_streaming": True,
+            "supports_vision": True,
             "supports_function_calling": True,
             "max_output_tokens": 8192,
-            "released": "2024-12-06",
+            "released": "2025-06-01",
         },
         {
-            "id": "google/gemini-2.0-flash-exp:free",
-            "name": "Gemini 2.0 Flash Free (via OpenRouter)",
+            "id": "google/gemini-2.0-flash-exp",
+            "name": "Gemini 2.0 Flash",
             "provider": "openrouter",
             "context_window": 1048576,
             "supports_streaming": True,
@@ -396,6 +456,65 @@ MODEL_REGISTRY: dict[str, list[ModelInfo]] = {
             "supports_function_calling": True,
             "max_output_tokens": 8192,
             "released": "2024-12-11",
+        },
+        # Moonshot (Kimi)
+        {
+            "id": "moonshotai/kimi-k2.5",
+            "name": "Kimi K2",
+            "provider": "openrouter",
+            "context_window": 262144,
+            "supports_streaming": True,
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "max_output_tokens": 262144,
+            "released": "2026-01-27",
+        },
+        # Qwen (Coder)
+        {
+            "id": "qwen/qwen3-coder-next",
+            "name": "Qwen 2.5 Coder",
+            "provider": "openrouter",
+            "context_window": 262144,
+            "supports_streaming": True,
+            "supports_vision": False,
+            "supports_function_calling": True,
+            "max_output_tokens": 65536,
+            "released": "2026-02-03",
+        },
+        {
+            "id": "qwen/qwen3.5-plus-02-15",
+            "name": "Qwen 3.5 Plus",
+            "provider": "openrouter",
+            "context_window": 1000000,
+            "supports_streaming": True,
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "max_output_tokens": 65536,
+            "released": "2026-02-15",
+        },
+        # xAI (Grok)
+        {
+            "id": "x-ai/grok-4",
+            "name": "Grok Code",
+            "provider": "openrouter",
+            "context_window": 131072,
+            "supports_streaming": True,
+            "supports_vision": False,
+            "supports_function_calling": True,
+            "max_output_tokens": 4096,
+            "released": "2025-01-01",
+        },
+        # Perplexity
+        {
+            "id": "perplexity/sonar-pro",
+            "name": "Sonar Pro",
+            "provider": "openrouter",
+            "context_window": 200000,
+            "supports_streaming": True,
+            "supports_vision": False,
+            "supports_function_calling": False,
+            "max_output_tokens": 4096,
+            "released": "2024-01-01",
         },
     ],
 
@@ -529,3 +648,80 @@ PROVIDER_LOGOS = {
 def get_logo_for_provider(provider: str) -> str | None:
     """Get default logo URL for a provider."""
     return PROVIDER_LOGOS.get(provider)
+
+
+# OpenRouter model id prefix -> upstream provider logo (e.g. anthropic/claude-... -> anthropic)
+OPENROUTER_UPSTREAM_LOGOS: dict[str, str] = {
+    "anthropic": "/logos/anthropic.jpg",
+    "openai": "/logos/openai.jpg",
+    "google": "/logos/google.png",
+    "xai": "/logos/xai.jpg",
+    "x-ai": "/logos/xai.jpg",
+    "mistral": "/logos/mistral.png",
+    "moonshotai": "/logos/openrouter.jpeg",  # no moonshot logo, use openrouter
+    "qwen": "/logos/openrouter.jpeg",
+    "perplexity": "/logos/perplexity.png",
+    "writer": "/logos/openrouter.jpeg",
+    "minimax": "/logos/openrouter.jpeg",
+    "stepfun": "/logos/openrouter.jpeg",
+    "upstage": "/logos/openrouter.jpeg",
+    "cohere": "/logos/openrouter.jpeg",
+    "meta-llama": "/logos/openrouter.jpeg",
+    "deepseek": "/logos/openrouter.jpeg",
+}
+
+
+def get_logo_for_openrouter_model(model_id: str) -> str:
+    """Resolve logo for OpenRouter model from upstream provider (anthropic/claude -> anthropic logo)."""
+    if "/" in model_id:
+        prefix = model_id.split("/")[0].lower()
+        return OPENROUTER_UPSTREAM_LOGOS.get(prefix, "/logos/openrouter.jpeg")
+    return "/logos/openrouter.jpeg"
+
+
+async def fetch_openrouter_models(api_key: str) -> list[ModelInfo]:
+    """Fetch models from OpenRouter API (400+ models). Falls back to static registry on error."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            r.raise_for_status()
+            data = r.json()
+    except Exception as e:
+        import logging
+
+        logging.warning("OpenRouter models fetch failed, using static registry: %s", e)
+        return MODEL_REGISTRY.get("openrouter", [])
+
+    models_data = data.get("data", [])
+    result: list[ModelInfo] = []
+    for m in models_data:
+        model_id = m.get("id", "")
+        name = m.get("name", model_id)
+        # Clean name: "Anthropic: Claude Sonnet 4.6" -> "Claude Sonnet 4.6"
+        if ": " in name:
+            name = name.split(": ", 1)[1]
+        top = m.get("top_provider") or {}
+        context = top.get("context_length") or m.get("context_length") or 128000
+        max_out = top.get("max_completion_tokens")
+        arch = m.get("architecture") or {}
+        mods = arch.get("input_modalities") or []
+        has_vision = "image" in mods or "video" in mods
+        result.append(
+            {
+                "id": model_id,
+                "name": name,
+                "provider": "openrouter",
+                "context_window": context,
+                "supports_streaming": True,
+                "supports_vision": has_vision,
+                "supports_function_calling": "tools" in str(m.get("supported_parameters", [])),
+                "max_output_tokens": max_out,
+                "released": "2024-01-01",
+            }
+        )
+    return result

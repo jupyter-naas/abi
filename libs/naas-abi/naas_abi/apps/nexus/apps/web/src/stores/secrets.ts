@@ -152,6 +152,10 @@ export const useSecretsStore = create<SecretsState>()(
         // Refresh the secrets list
         await get().fetchSecrets(workspaceId);
         
+        // Sync providers (OpenRouter, etc.) so they materialize in sidebar
+        const { useIntegrationsStore } = await import('@/stores/integrations');
+        await useIntegrationsStore.getState().refreshProviders();
+        
         return result;
       } catch (error) {
         set({ error: error instanceof Error ? error.message : 'Failed to import secrets' });

@@ -53,12 +53,16 @@ export const useAuthStore = create<AuthState>()(
         
         try {
           const apiBase = getApiUrl();
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15_000);
           const response = await fetch(`${apiBase}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include', // Important: allows cookies to be set
             body: JSON.stringify({ email, password }),
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
           
           if (!response.ok) {
             const data = await response.json();
@@ -81,10 +85,13 @@ export const useAuthStore = create<AuthState>()(
           
           return true;
         } catch (error) {
-          set({
-            isLoading: false,
-            error: error instanceof Error ? error.message : 'Login failed',
-          });
+          const msg =
+            error instanceof Error
+              ? error.name === 'AbortError'
+                ? 'Request timed out — check your connection and CORS'
+                : error.message
+              : 'Login failed';
+          set({ isLoading: false, error: msg });
           return false;
         }
       },

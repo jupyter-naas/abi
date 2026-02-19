@@ -18,6 +18,7 @@ interface ProviderFormProps {
 }
 
 const providerTypes: { value: ProviderType; label: string; needsEndpoint: boolean; needsApiKey: boolean; needsAccountId: boolean }[] = [
+  { value: 'openrouter', label: 'OpenRouter (400+ models)', needsEndpoint: false, needsApiKey: true, needsAccountId: false },
   { value: 'anthropic', label: 'Anthropic (Claude)', needsEndpoint: false, needsApiKey: true, needsAccountId: false },
   { value: 'openai', label: 'OpenAI', needsEndpoint: false, needsApiKey: true, needsAccountId: false },
   { value: 'cloudflare', label: 'Cloudflare Workers AI', needsEndpoint: false, needsApiKey: true, needsAccountId: true },
@@ -26,6 +27,7 @@ const providerTypes: { value: ProviderType; label: string; needsEndpoint: boolea
 ];
 
 const defaultModels: Record<ProviderType, string[]> = {
+  openrouter: ['anthropic/claude-opus-4.6', 'anthropic/claude-sonnet-4.6', 'openai/gpt-5.2-codex', 'moonshotai/kimi-k2.5', 'qwen/qwen3-coder-next'],
   anthropic: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-haiku-20241022'],
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini'],
   cloudflare: [

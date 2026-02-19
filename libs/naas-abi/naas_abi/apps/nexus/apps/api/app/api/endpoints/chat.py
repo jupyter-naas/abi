@@ -4,6 +4,7 @@ Async sessions with SQLAlchemy ORM.
 """
 
 import json
+import os
 import logging
 from datetime import datetime
 from typing import Literal
@@ -207,6 +208,57 @@ def _select_provider_model(ollama_status: dict, has_images: bool) -> str:
     return available[0]
 
 
+async def _enrich_provider_from_secrets(
+    provider: ProviderConfigRequest,
+    workspace_id: str | None,
+) -> ProviderConfigRequest:
+    """Fill missing api_key and endpoint from workspace secrets or env."""
+    if not workspace_id:
+        return provider
+
+    secret_key_map = {
+        "xai": "XAI_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "mistral": "MISTRAL_API_KEY",
+        "google": "GOOGLE_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+        "perplexity": "PERPLEXITY_API_KEY",
+    }
+    endpoint_map = {
+        "openrouter": "https://openrouter.ai/api/v1",
+        "xai": "https://api.x.ai/v1",
+        "openai": "https://api.openai.com/v1",
+        "anthropic": "https://api.anthropic.com/v1",
+        "mistral": "https://api.mistral.ai/v1",
+        "google": "https://generativelanguage.googleapis.com/v1beta",
+        "perplexity": "https://api.perplexity.ai",
+    }
+
+    api_key = provider.api_key
+    if not api_key and provider.type in secret_key_map:
+        from naas_abi.apps.nexus.apps.api.app.models import SecretModel
+        from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import _decrypt
+        async with AsyncSessionLocal() as db:
+            secret_result = await db.execute(
+                select(SecretModel)
+                .where(SecretModel.workspace_id == workspace_id)
+                .where(SecretModel.key == secret_key_map[provider.type])
+            )
+            secret = secret_result.scalar_one_or_none()
+        if secret:
+            api_key = _decrypt(secret.encrypted_value)
+        else:
+            api_key = os.environ.get(secret_key_map[provider.type], "")
+    endpoint = provider.endpoint or endpoint_map.get(provider.type)
+    return ProviderConfigRequest(
+        id=provider.id, name=provider.name, type=provider.type,
+        enabled=provider.enabled, endpoint=endpoint,
+        api_key=api_key, account_id=provider.account_id,
+        model=provider.model,
+    )
+
+
 async def _resolve_provider(
     provider: ProviderConfigRequest | None,
     has_images: bool,
@@ -215,6 +267,10 @@ async def _resolve_provider(
 ) -> ProviderConfigRequest | None:
     """Resolve the provider, falling back to agent's configured provider, then Ollama auto-detect."""
     if provider and provider.enabled:
+        if workspace_id and (not provider.api_key or not provider.endpoint) and provider.type in (
+            "openrouter", "xai", "openai", "anthropic", "mistral", "google", "perplexity"
+        ):
+            return await _enrich_provider_from_secrets(provider, workspace_id)
         return provider
 
     # If agent is specified, look up its provider + model
@@ -637,9 +693,20 @@ async def complete_chat(
             if request.messages and any(m.role == "assistant" for m in request.messages):
                 system_prompt += "\n\n🔄 CRITICAL MULTI-AGENT NOTICE: You are in a conversation where MULTIPLE different AI models have responded. You are currently responding as the SELECTED agent. Previous assistant responses may be from DIFFERENT AI agents (Grok, Claude, Qwen, etc.). DO NOT claim authorship of other agents' responses. DO NOT apologize for what other AIs said. DO NOT correct other AIs' identities. When asked 'who are you?', ONLY identify yourself based on YOUR model, not what previous agents said. Each assistant message may be from a different AI - treat them as separate participants."
 
+            endpoint = provider.endpoint
+            if not endpoint and provider.type in ("openrouter", "xai", "openai", "anthropic", "mistral", "google", "perplexity"):
+                endpoint = {
+                    "openrouter": "https://openrouter.ai/api/v1",
+                    "xai": "https://api.x.ai/v1",
+                    "openai": "https://api.openai.com/v1",
+                    "anthropic": "https://api.anthropic.com/v1",
+                    "mistral": "https://api.mistral.ai/v1",
+                    "google": "https://generativelanguage.googleapis.com/v1beta",
+                    "perplexity": "https://api.perplexity.ai",
+                }.get(provider.type)
             provider_config = ProviderConfig(
                 id=provider.id, name=provider.name, type=provider.type,
-                enabled=provider.enabled, endpoint=provider.endpoint,
+                enabled=provider.enabled, endpoint=endpoint,
                 api_key=provider.api_key, account_id=provider.account_id,
                 model=provider.model,
             )
@@ -749,9 +816,20 @@ async def stream_chat(
                 )
                 break
 
+    endpoint = provider.endpoint
+    if not endpoint and provider.type in ("openrouter", "xai", "openai", "anthropic", "mistral", "google", "perplexity"):
+        endpoint = {
+            "openrouter": "https://openrouter.ai/api/v1",
+            "xai": "https://api.x.ai/v1",
+            "openai": "https://api.openai.com/v1",
+            "anthropic": "https://api.anthropic.com/v1",
+            "mistral": "https://api.mistral.ai/v1",
+            "google": "https://generativelanguage.googleapis.com/v1beta",
+            "perplexity": "https://api.perplexity.ai",
+        }.get(provider.type)
     provider_config = ProviderConfig(
         id=provider.id, name=provider.name, type=provider.type,
-        enabled=provider.enabled, endpoint=provider.endpoint,
+        enabled=provider.enabled, endpoint=endpoint,
         api_key=provider.api_key, account_id=provider.account_id,
         model=provider.model,
     )

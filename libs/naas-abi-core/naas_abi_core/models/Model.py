@@ -7,33 +7,54 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from naas_abi_core.models.OpenRouter import ChatOpenRouter
 from pydantic import Field
 
+# Cursor-style model mapping: internal model_id -> OpenRouter provider/model
+# Used when AI_MODE=cloud and OPENROUTER_API_KEY is set
 OPENROUTER_MODEL_MAPPING: Dict[str, str] = {
+    # OpenAI (GPT)
     "gpt-5": "openai/gpt-5",
     "gpt-5-mini": "openai/gpt-5-mini",
     "gpt-5-nano": "openai/gpt-5-nano",
+    "gpt-5.2-codex": "openai/gpt-5.2-codex",
     "gpt-4.1": "openai/gpt-4.1",
     "gpt-4.1-mini": "openai/gpt-4.1-mini",
     "o3-deep-research": "openai/o3-deep-research",
     "o4-mini-deep-research": "openai/o4-mini-deep-research",
     "o3-mini": "openai/o3-mini",
-    "sonar-pro-search": "perplexity/sonar-pro-search",
-    "sonar-reasoning-pro": "perplexity/sonar-reasoning-pro",
-    "sonar-pro": "perplexity/sonar-pro",
-    "sonar-deep-research": "perplexity/sonar-deep-research",
-    "sonar-reasoning": "perplexity/sonar-reasoning",
-    "sonar": "perplexity/sonar",
+    # Anthropic (Claude)
+    "claude-opus-4.6": "anthropic/claude-opus-4.6",
+    "claude-sonnet-4.6": "anthropic/claude-sonnet-4.6",
+    "claude-sonnet-4.5": "anthropic/claude-sonnet-4.5",
+    "claude-haiku-4.5": "anthropic/claude-haiku-4.5",
     "claude-haiku-4-5-20251001": "anthropic/claude-haiku-4.5",
     "claude-sonnet-4-5-20250929": "anthropic/claude-sonnet-4.5",
     "claude-opus-4-1-20250805": "anthropic/claude-opus-4.1",
     "claude-opus-4-20250514": "anthropic/claude-opus-4",
     "claude-sonnet-4-20250514": "anthropic/claude-sonnet-4",
     "claude-3-7-sonnet-20250219": "anthropic/claude-3.7-sonnet",
+    # Perplexity
+    "sonar-pro-search": "perplexity/sonar-pro-search",
+    "sonar-reasoning-pro": "perplexity/sonar-reasoning-pro",
+    "sonar-pro": "perplexity/sonar-pro",
+    "sonar-deep-research": "perplexity/sonar-deep-research",
+    "sonar-reasoning": "perplexity/sonar-reasoning",
+    "sonar": "perplexity/sonar",
+    # Qwen
     "qwen3:8b": "qwen/qwen3-8b",
+    "qwen2.5-coder": "qwen/qwen3-coder-next",
+    "qwen3-coder-next": "qwen/qwen3-coder-next",
+    # Mistral
     "mistral-large-2411": "mistralai/mistral-large-2411",
     "mistral-medium-2508": "mistralai/mistral-medium-3.1",
     "mistral-small-2506": "mistralai/mistral-small",
+    # xAI (Grok)
     "grok-4": "x-ai/grok-4",
+    "grok-code": "x-ai/grok-4",
+    # Google (Gemini)
     "gemini-2.5-flash": "google/gemini-2.5-flash",
+    "gemini-2.0-flash-exp": "google/gemini-2.0-flash-exp",
+    # Moonshot (Kimi)
+    "kimi-k2": "moonshotai/kimi-k2.5",
+    "kimi-k2.5": "moonshotai/kimi-k2.5",
 }
 
 

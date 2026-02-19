@@ -13,10 +13,12 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
-from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
+from naas_abi.apps.nexus.apps.api.app.core.config import (
+    settings, validate_settings_on_startup)
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
-from naas_abi.apps.nexus.apps.api.app.services.ollama import ensure_ollama_ready, get_ollama_status
+from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+    ensure_ollama_ready, get_ollama_status)
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -53,9 +55,7 @@ async def _startup(app: FastAPI) -> None:
     else:
         # Do not attempt to start; only report current status
         from naas_abi.apps.nexus.apps.api.app.services.ollama import (
-            get_installed_models,
-            is_ollama_running,
-        )
+            get_installed_models, is_ollama_running)
         running = await is_ollama_running()
         models = await get_installed_models() if running else []
         ollama_result = {
@@ -162,7 +162,8 @@ async def ollama_pull_model(model: str = "qwen3-vl:2b"):
     """Trigger a model pull. Returns immediately, pull runs in background."""
     import asyncio
 
-    from naas_abi.apps.nexus.apps.api.app.services.ollama import is_ollama_running, pull_model
+    from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+        is_ollama_running, pull_model)
 
     if not await is_ollama_running():
         return {"success": False, "error": "Ollama is not running"}
@@ -195,16 +196,22 @@ def _register_startup_handlers(app: FastAPI) -> None:
 
 
 def _configure_middleware(app: FastAPI) -> None:
-    # CORS - allow frontend origin; local dev always includes localhost:3000
+    # CORS - in dev/local, use regex to allow any localhost/127.0.0.1 (fixes port mismatch)
+    is_dev = settings.environment == "development" or settings.nexus_env == "local"
+    origin_regex = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
     cors_origins = settings.cors_origins_list
     logger = logging.getLogger(__name__)
-    logger.info(f"[CORS] Configured origins: {cors_origins}")
+    logger.info(
+        f"[CORS] {'regex (localhost/127.0.0.1)' if is_dev else 'origins'}: "
+        f"{origin_regex if is_dev else cors_origins}"
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins,
+        allow_origins=[] if is_dev else cors_origins,
+        allow_origin_regex=origin_regex if is_dev else None,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
+        allow_headers=["*"],
         expose_headers=["Content-Length", "Content-Range"],
     )
     app.add_middleware(SecurityHeadersMiddleware)

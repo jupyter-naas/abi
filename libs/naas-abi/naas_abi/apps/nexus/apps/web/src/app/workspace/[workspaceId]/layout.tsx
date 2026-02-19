@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { WorkspaceLayout } from '@/components/shell/workspace-layout';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
+import { useIntegrationsStore } from '@/stores/integrations';
 
 // Catches unhandled promise rejections (not caught by React error boundaries)
 function AsyncErrorCatcher() {
@@ -148,6 +149,13 @@ export default function WorkspaceIdLayout({
       }
     }
   }, [workspaceId, currentWorkspaceId, workspaces, setCurrentWorkspace, router]);
+
+  // Refresh providers (OpenRouter, etc.) when workspace loads — syncs with secrets
+  useEffect(() => {
+    if (authReady && token && currentWorkspaceId) {
+      useIntegrationsStore.getState().refreshProviders();
+    }
+  }, [authReady, token, currentWorkspaceId]);
 
   // Show nothing while checking auth
   if (!authReady || !token) {

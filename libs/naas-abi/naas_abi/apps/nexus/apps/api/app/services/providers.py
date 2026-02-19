@@ -505,6 +505,40 @@ async def complete_with_custom(
         return data["choices"][0]["message"]["content"]
 
 
+async def complete_with_openai_compatible(
+    messages: list[Message],
+    config: ProviderConfig,
+    system_prompt: str | None = None,
+) -> str:
+    """Non-streaming chat for OpenAI-compatible APIs (OpenRouter, XAI, Mistral, etc)."""
+    if not config.endpoint:
+        raise ValueError(f"Endpoint required for {config.type}")
+
+    api_messages = []
+    if system_prompt:
+        api_messages.append({"role": "system", "content": system_prompt})
+    for msg in messages:
+        api_messages.append({"role": msg.role, "content": msg.content})
+
+    headers = {"Content-Type": "application/json"}
+    if config.api_key:
+        headers["Authorization"] = f"Bearer {config.api_key}"
+    if "openrouter" in (config.endpoint or ""):
+        headers["HTTP-Referer"] = "https://nexus.local"
+        headers["X-Title"] = "Nexus"
+
+    endpoint = (config.endpoint or "").rstrip("/")
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            f"{endpoint}/chat/completions",
+            headers=headers,
+            json={"model": config.model, "messages": api_messages, "max_tokens": 4096},
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+
 async def complete_chat(
     messages: list[Message],
     config: ProviderConfig,
@@ -516,7 +550,10 @@ async def complete_chat(
     if not config.enabled:
         raise ValueError(f"Provider '{config.name}' is not enabled")
 
-    if config.type == "anthropic":
+    openai_compatible = ["openrouter", "xai", "mistral", "google", "perplexity"]
+    if config.type in openai_compatible:
+        return await complete_with_openai_compatible(messages, config, system_prompt)
+    elif config.type == "anthropic":
         return await complete_with_anthropic(messages, config, system_prompt)
     elif config.type == "openai":
         return await complete_with_openai(messages, config, system_prompt)

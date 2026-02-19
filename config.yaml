@@ -5,7 +5,9 @@ deploy:
   env:
     NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
     OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
+    OPENROUTER_API_KEY: "{{ secret.OPENROUTER_API_KEY }}"
     ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
+    AI_MODE: "cloud"
 
 api:
   title: "ABI API"
@@ -15,6 +17,8 @@ api:
   cors_origins:
     - "http://localhost:9879"
     - "http://localhost:3042"
+    - "http://127.0.0.1:9879"
+    - "http://127.0.0.1:3042"
 
 global_config:
   ai_mode: "cloud"
