@@ -125,7 +125,11 @@ class EngineProxy:
     @property
     def modules(self) -> Dict[str, BaseModule]:
         if self.__unlocked:
-            return self.__engine.modules
+            return {
+                module_name: module
+                for module_name, module in self.__engine.modules.items()
+                if module_name != self.__module_name
+            }
 
         _modules = {}
 
