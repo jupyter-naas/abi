@@ -142,7 +142,13 @@ You excel at providing accurate, helpful, and contextually appropriate responses
                 for model_data in models:
                     architecture = model_data.get("architecture", {})
                     input_modalities = architecture.get("input_modalities", [])
-                    if "text" not in input_modalities:
+                    supported_parameters = model_data.get("supported_parameters", [])
+
+                    # Skip models that don't support text input OR don't support tools
+                    if (
+                        "text" not in input_modalities
+                        or "tools" not in supported_parameters
+                    ):
                         continue
 
                     try:

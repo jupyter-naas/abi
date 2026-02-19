@@ -72,7 +72,7 @@ class OpenRouterAPIIntegration(Integration):
         + endpoint
         + ("_".join(f"{k}_{v}" for k, v in params.items()) if params else ""),
         cache_type=DataType.JSON,
-        ttl=datetime.timedelta(days=7),
+        ttl=datetime.timedelta(days=1),
     )
     def _make_request(
         self,
