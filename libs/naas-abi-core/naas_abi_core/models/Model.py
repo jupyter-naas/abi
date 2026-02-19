@@ -1,40 +1,9 @@
-import os
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Dict, Optional
+from typing import Annotated, Optional
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from naas_abi_core.models.OpenRouter import ChatOpenRouter
 from pydantic import Field
-
-OPENROUTER_MODEL_MAPPING: Dict[str, str] = {
-    "gpt-5": "openai/gpt-5",
-    "gpt-5-mini": "openai/gpt-5-mini",
-    "gpt-5-nano": "openai/gpt-5-nano",
-    "gpt-4.1": "openai/gpt-4.1",
-    "gpt-4.1-mini": "openai/gpt-4.1-mini",
-    "o3-deep-research": "openai/o3-deep-research",
-    "o4-mini-deep-research": "openai/o4-mini-deep-research",
-    "o3-mini": "openai/o3-mini",
-    "sonar-pro-search": "perplexity/sonar-pro-search",
-    "sonar-reasoning-pro": "perplexity/sonar-reasoning-pro",
-    "sonar-pro": "perplexity/sonar-pro",
-    "sonar-deep-research": "perplexity/sonar-deep-research",
-    "sonar-reasoning": "perplexity/sonar-reasoning",
-    "sonar": "perplexity/sonar",
-    "claude-haiku-4-5-20251001": "anthropic/claude-haiku-4.5",
-    "claude-sonnet-4-5-20250929": "anthropic/claude-sonnet-4.5",
-    "claude-opus-4-1-20250805": "anthropic/claude-opus-4.1",
-    "claude-opus-4-20250514": "anthropic/claude-opus-4",
-    "claude-sonnet-4-20250514": "anthropic/claude-sonnet-4",
-    "claude-3-7-sonnet-20250219": "anthropic/claude-3.7-sonnet",
-    "qwen3:8b": "qwen/qwen3-8b",
-    "mistral-large-2411": "mistralai/mistral-large-2411",
-    "mistral-medium-2508": "mistralai/mistral-medium-3.1",
-    "mistral-small-2506": "mistralai/mistral-small",
-    "grok-4": "x-ai/grok-4",
-    "gemini-2.5-flash": "google/gemini-2.5-flash",
-}
 
 
 class ModelType(Enum):
@@ -116,24 +85,7 @@ class Model:
     ):
         self.model_id = model_id
         self.provider = provider
-
-        # If OPENROUTER_API_KEY is set, use ChatOpenRouter as BaseChatModel
-        if (
-            os.getenv("OPENROUTER_API_KEY")
-            and os.getenv("AI_MODE") == "cloud"
-            and isinstance(model, BaseChatModel)
-            and not isinstance(model, ChatOpenRouter)
-        ):
-            if model_id in OPENROUTER_MODEL_MAPPING:
-                self.model = ChatOpenRouter(
-                    model_name=OPENROUTER_MODEL_MAPPING[model_id]
-                )
-            else:
-                raise ValueError(f"""Model '{model_id}' from provider '{provider}' not found in OPENROUTER_MODEL_MAPPING. 
-                Please add it to the mapping in lib/abi/models/Model.py.""")
-        else:
-            self.model = model
-
+        self.model = model
         self.name = name
         self.owner = owner
         self.description = description
