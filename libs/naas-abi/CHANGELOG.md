@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.8.0 (2026-02-19)
+
+### Bug Fixes
+
+- Do not update already existing users
+  ([`8754e4b`](https://github.com/jupyter-naas/abi/commit/8754e4b32324ecbaec35d7a0cd30bab13235c101))
+
+- Make checks
+  ([`b789da0`](https://github.com/jupyter-naas/abi/commit/b789da0cf1153e81f812fd94aa08abad00f33bf5))
+
+### Features
+
+- **nexus**: Make tenant/org branding and provisioning fully config-driven
+  ([`9ce64e5`](https://github.com/jupyter-naas/abi/commit/9ce64e59dc208af2cca659f71f99954b5d1626a8))
+
+
 ## v1.7.14 (2026-02-19)
 
 
