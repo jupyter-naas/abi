@@ -112,29 +112,29 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     return {"access_token": "abi", "token_type": "bearer"}
 
 
-# Create Agents API Router
-agents_router = APIRouter(
-    prefix="/agents",
-    tags=["Agents"],
-    responses={401: {"description": "Unauthorized"}},
-    dependencies=[Depends(is_token_valid)],  # Apply token verification
-)
+# # Create Agents API Router
+# agents_router = APIRouter(
+#     prefix="/agents",
+#     tags=["Agents"],
+#     responses={401: {"description": "Unauthorized"}},
+#     dependencies=[Depends(is_token_valid)],  # Apply token verification
+# )
 
-# Create Pipelines API Router
-pipelines_router = APIRouter(
-    prefix="/pipelines",
-    tags=["Pipelines"],
-    responses={401: {"description": "Unauthorized"}},
-    dependencies=[Depends(is_token_valid)],  # Apply token verification
-)
+# # Create Pipelines API Router
+# pipelines_router = APIRouter(
+#     prefix="/pipelines",
+#     tags=["Pipelines"],
+#     responses={401: {"description": "Unauthorized"}},
+#     dependencies=[Depends(is_token_valid)],  # Apply token verification
+# )
 
-# Create Pipelines API Router
-workflows_router = APIRouter(
-    prefix="/workflows",
-    tags=["Workflows"],
-    responses={401: {"description": "Unauthorized"}},
-    dependencies=[Depends(is_token_valid)],  # Apply token verification
-)
+# # Create Pipelines API Router
+# workflows_router = APIRouter(
+#     prefix="/workflows",
+#     tags=["Workflows"],
+#     responses={401: {"description": "Unauthorized"}},
+#     dependencies=[Depends(is_token_valid)],  # Apply token verification
+# )
 
 
 def get_git_tag():
@@ -158,7 +158,7 @@ def custom_openapi():
         description=DESCRIPTION,
         version=get_git_tag(),
         routes=app.routes,
-        tags=TAGS_METADATA,
+        # tags=TAGS_METADATA,
     )
     openapi_schema["info"]["x-logo"] = {
         "url": f"/static/{logo_name}",
@@ -194,24 +194,24 @@ def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
 
-# Add agents to the API
-all_agents: list = []
-for module in engine.modules.values():
-    for agent in module.agents:
-        if agent is not None:
-            all_agents.append(agent.New())
-        else:
-            logger.warning(f"Skipping {agent.name} agent (missing API key)")
+# # Add agents to the API
+# all_agents: list = []
+# for module in engine.modules.values():
+#     for agent in module.agents:
+#         if agent is not None:
+#             all_agents.append(agent.New())
+#         else:
+#             logger.warning(f"Skipping {agent.name} agent (missing API key)")
 
-# Sort agents by name and add to router
-for agent in sorted(all_agents, key=lambda a: a.name):
-    logger.debug(f"Adding agent to API: {agent.name}")
-    agent.as_api(agents_router)
+# # Sort agents by name and add to router
+# for agent in sorted(all_agents, key=lambda a: a.name):
+#     logger.debug(f"Adding agent to API: {agent.name}")
+#     agent.as_api(agents_router)
 
-# Include routers
-app.include_router(agents_router)
-app.include_router(pipelines_router)
-app.include_router(workflows_router)
+# # Include routers
+# app.include_router(agents_router)
+# app.include_router(pipelines_router)
+# app.include_router(workflows_router)
 
 for module in engine.modules.values():
     module.api(app)
