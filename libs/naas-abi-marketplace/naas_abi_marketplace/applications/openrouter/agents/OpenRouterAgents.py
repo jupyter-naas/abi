@@ -137,7 +137,7 @@ You excel at providing accurate, helpful, and contextually appropriate responses
         agents: list[type[Agent]] = []
         # Load models and create agent classes
         try:
-            models = self.openrouter_integration.list_models()
+            models = self.openrouter_integration.list_models(save_json=False)
 
             # Create agent classes for each model
             if models and isinstance(models, list):
