@@ -470,7 +470,7 @@ async def seed_all() -> None:
         await seed_organizations(conn)
         await seed_workspaces(conn)
         await seed_memberships(conn)
-        await seed_agents(conn)
+        # await seed_agents(conn)
         await seed_conversations(conn)
         await seed_graphs(conn)
 
