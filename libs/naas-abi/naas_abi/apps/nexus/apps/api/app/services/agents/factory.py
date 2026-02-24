@@ -1,0 +1,12 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.secondary.postgres import (
+    AgentSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.agents.service import AgentService
+
+
+class AgentFactory:
+    @staticmethod
+    def ServicePostgres(db: AsyncSession) -> AgentService:
+        return AgentService(AgentSecondaryAdapterPostgres(db))
