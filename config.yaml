@@ -28,6 +28,9 @@ modules:
         redis_url: "redis://localhost:6379/0"
         cors_origins_str: "http://localhost:3042,http://127.0.0.1:3042"
 
+  - module: naas_abi_core.modules.triplestore_embeddings
+    enabled: true
+
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
@@ -45,18 +48,14 @@ services:
         config: {}
   object_storage:
     object_storage_adapter:
-      adapter: "s3"
+      adapter: "fs"
       config:
-        bucket_name: "abi"
-        base_prefix: "abi/datastore"
-        access_key_id: "{{ secret.MINIO_ROOT_USER }}"
-        secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
-        endpoint_url: "http://localhost:9000"
+        base_path: "storage/datastore"
   triple_store:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@localhost:3030/ds"
+        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@fuseki:3030/ds"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
