@@ -11,7 +11,7 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
 class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
     def __init__(self, base_path: str):
         self.base_path = base_path
-        self.__create_path(base_path)
+        # self.__create_path(base_path)
 
     def __create_path(self, prefix: str) -> None:
         os.makedirs(os.path.join(self.base_path, prefix), exist_ok=True)
