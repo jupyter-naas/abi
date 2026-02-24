@@ -218,8 +218,14 @@ class CreateSearchToolWorkflow(Workflow):
                     "collection_name", parameters.collection_name
                 )
                 search_filter = kwargs.get("search_filter", parameters.search_filter)
-                k = kwargs.get("k", parameters.k)
-                threshold = kwargs.get("threshold", parameters.threshold)
+                k_param = kwargs.get("k", parameters.k)
+                k = k_param if isinstance(k_param, int) else 10
+                threshold_param = kwargs.get("threshold", parameters.threshold)
+                threshold = (
+                    float(threshold_param)
+                    if isinstance(threshold_param, (int, float))
+                    else 0.5
+                )
 
                 if not name:
                     return [{"error": f"{parameters.search_param_name} is required"}]

@@ -61,7 +61,7 @@ def create_agent(
     from naas_abi_core.services.vector_store.VectorStoreService import (
         VectorStoreService,
     )
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model  # type: ignore[import-not-found]
 
     module: ABIModule = ABIModule.get_instance()
 
