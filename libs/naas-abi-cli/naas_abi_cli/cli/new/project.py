@@ -19,10 +19,16 @@ from .utils import to_kebab_case, to_pascal_case, to_snake_case
     default=True,
     help="Generate local docker-compose and deployment scaffolding (default: enabled).",
 )
+@click.option(
+    "--with-headscale/--without-headscale",
+    default=False,
+    help="Include a headscale service in local deploy scaffolding (default: disabled).",
+)
 def new_project(
     project_name: str | None,
     project_path: str | None,
     with_local_deploy: bool,
+    with_headscale: bool,
 ):
     project_name = to_kebab_case(project_name)
     # Defaults must be evaluated at runtime so they reflect the caller's CWD.
@@ -61,7 +67,7 @@ def new_project(
     new_module(project_name, os.path.join(project_path, "src"), quiet=True)
 
     if with_local_deploy:
-        setup_local_deploy(project_path)
+        setup_local_deploy(project_path, include_headscale=with_headscale)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     subprocess.run(
