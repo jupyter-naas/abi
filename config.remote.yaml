@@ -24,8 +24,8 @@ modules:
     enabled: true
     config:
       nexus_config:
-        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
-        redis_url: "redis://localhost:6379/0"
+        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/nexus"
+        redis_url: "redis://{{ secret.REDIS_HOST }}:{{ secret.REDIS_PORT }}/0"
         cors_origins_str: "http://localhost:3042,http://127.0.0.1:3042"
 
   - module: naas_abi_marketplace.ai.chatgpt
@@ -33,16 +33,12 @@ modules:
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
-  - module: naas_abi_marketplace.applications.openrouter
-    enabled: true
-    config:
-      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
-
 services:
   secret:
     secret_adapters:
       - adapter: "dotenv"
-        config: {}
+        config:
+          - path: .env.remote
   object_storage:
     object_storage_adapter:
       adapter: "s3"
@@ -51,25 +47,25 @@ services:
         base_prefix: "abi/datastore"
         access_key_id: "{{ secret.MINIO_ROOT_USER }}"
         secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
-        endpoint_url: "http://localhost:9000"
+        endpoint_url: "http://{{ secret.MINIO_HOST }}:{{ secret.MINIO_PORT }}"
   triple_store:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@localhost:3030/ds"
+        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@{{ secret.FUSEKI_HOST }}:{{ secret.FUSEKI_PORT }}/ds"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
       config:
-        host: "localhost"
-        port: 6333
+        host: "{{ secret.QDRANT_HOST }}"
+        port: "{{ secret.QDRANT_PORT }}"
   bus:
     bus_adapter:
       adapter: "rabbitmq"
       config:
-        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@localhost:5672"
+        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@{{ secret.RABBITMQ_HOST }}:{{ secret.RABBITMQ_PORT }}"
   kv:
     kv_adapter:
       adapter: "redis"
       config:
-        redis_url: "redis://localhost:6379"
+        redis_url: "redis://{{ secret.REDIS_HOST }}:{{ secret.REDIS_PORT }}"

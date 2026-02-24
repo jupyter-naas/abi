@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.6.1 (2026-02-19)
+
+### Bug Fixes
+
+- Update cache ttl + filter out not tools supported
+  ([`831be2f`](https://github.com/jupyter-naas/abi/commit/831be2f80f6ed805cc045dfde9ae06ffa7501c4e))
+
+
+## v1.6.0 (2026-02-19)
+
+### Bug Fixes
+
+- Module integration config
+  ([`681c25c`](https://github.com/jupyter-naas/abi/commit/681c25c7995029c2aeb21c57adab76056537220f))
+
+- Side effect remove OpenRouter from naas_abi_core models
+  ([`1d7b185`](https://github.com/jupyter-naas/abi/commit/1d7b1850e83e4ed7e1cf9ee53ee9eea0c26e7e0f))
+
+### Features
+
+- Create openrouter agent for all available models on init
+  ([`7b58aca`](https://github.com/jupyter-naas/abi/commit/7b58aca8e9bcdb6683e7281d628f7fa11b2b53d4))
+
+
 ## v1.5.0 (2026-02-10)
 
 ### Bug Fixes

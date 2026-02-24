@@ -1,6 +1,3 @@
-import time
-import urllib.error
-import urllib.request
 import webbrowser
 
 import click
@@ -8,7 +5,9 @@ from rich.console import Console
 from rich.table import Table
 
 from .stack_runtime import (
+    ComposeServiceState,
     compose_logs_follow,
+    compose_service_logs,
     compose_service_list,
     compose_service_states,
     run_compose,
@@ -19,27 +18,80 @@ from .stack_tui import StackTUI
 SERVICE_PORTAL_URL = "http://127.0.0.1:8080/"
 
 
-def _wait_until_reachable(url: str, timeout_seconds: int = 120) -> bool:
-    deadline = time.time() + timeout_seconds
-    while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=2):
-                return True
-        except (urllib.error.URLError, TimeoutError):
-            time.sleep(1)
-    return False
+def _is_container_in_error(
+    service_name: str, state: ComposeServiceState | None
+) -> bool:
+    if state is None:
+        return False
+
+    if state.health == "unhealthy":
+        return True
+
+    if state.state in {"dead", "removing"}:
+        return True
+
+    if state.state != "exited":
+        return False
+
+    service = SERVICE_CATALOG.get(service_name)
+    if service and service.is_one_shot and state.exit_code == 0:
+        return False
+
+    return state.exit_code != 0
+
+
+def _get_error_services() -> list[str]:
+    services = compose_service_list()
+    states_by_name = compose_service_states()
+    return sorted(
+        service_name
+        for service_name in services
+        if _is_container_in_error(service_name, states_by_name.get(service_name))
+    )
+
+
+def _show_error_logs(error_services: list[str]) -> None:
+    for service_name in error_services:
+        click.echo(f"\nService '{service_name}' reported an error. Recent logs:")
+        logs = compose_service_logs(service_name, tail=160).strip()
+        if logs:
+            click.echo(logs)
+        else:
+            click.echo("No logs were returned for this service.")
 
 
 def _start_stack() -> None:
-    run_compose(["up", "-d"])
-    click.echo(f"Waiting for service portal at {SERVICE_PORTAL_URL}")
-    if _wait_until_reachable(SERVICE_PORTAL_URL):
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            run_compose(["up", "-d"])
+        except click.ClickException:
+            if attempt == max_retries:
+                raise
+            click.echo(
+                "'docker compose up -d' failed. "
+                f"Retrying ({attempt + 1}/{max_retries})..."
+            )
+            continue
+
+        error_services = _get_error_services()
+        if error_services:
+            if attempt == max_retries:
+                _show_error_logs(error_services)
+                raise click.ClickException(
+                    "One or more containers are in error after startup: "
+                    f"{', '.join(error_services)}"
+                )
+
+            click.echo(
+                "One or more containers are in error. "
+                f"Retrying 'docker compose up -d' ({attempt + 1}/{max_retries})..."
+            )
+            continue
+
         webbrowser.open(SERVICE_PORTAL_URL)
         click.echo(f"Opened {SERVICE_PORTAL_URL}")
-    else:
-        click.echo(
-            f"Service portal is not ready yet. Open it manually at {SERVICE_PORTAL_URL}."
-        )
+        return
 
 
 def _stop_stack(volumes: bool) -> None:

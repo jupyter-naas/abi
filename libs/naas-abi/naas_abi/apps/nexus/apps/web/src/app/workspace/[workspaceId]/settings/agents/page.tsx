@@ -9,7 +9,7 @@ import { useServersStore } from '@/stores/servers';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 
-const API_BASE = getApiUrl();
+const getApiBase = () => getApiUrl();
 
 const iconMap = {
   bot: Bot,
@@ -115,10 +115,10 @@ export default function AgentsPage() {
       let url: string;
       if (source === 'server' && serverId) {
         // Use dedicated ABI sync endpoint
-        url = `${API_BASE}/api/abi/workspaces/${workspaceId}/abi-servers/${serverId}/sync`;
+        url = `${getApiBase()}/api/abi/workspaces/${workspaceId}/abi-servers/${serverId}/sync`;
       } else {
         // Use model registry sync
-        url = `${API_BASE}/api/agents/sync?workspace_id=${workspaceId}`;
+        url = `${getApiBase()}/api/agents/sync?workspace_id=${workspaceId}`;
       }
 
       const response = await authFetch(url, {

@@ -95,6 +95,7 @@ export default function OrgRegisterPage() {
 
   // Dynamic styles based on org branding
   const primaryColor = branding?.primaryColor || '#34D399';
+  const accentColor = branding?.accentColor || primaryColor;
   const bgColor = branding?.backgroundColor;
   const cardColor = branding?.loginCardColor;
   const borderRadius = branding?.loginBorderRadius;
@@ -123,7 +124,8 @@ export default function OrgRegisterPage() {
     backgroundColor: inputColor || undefined,
     border: inputColor ? 'none' : undefined,
     color: inputTextColor,
-  };
+    '--tw-ring-color': `${accentColor}33`,
+  } as React.CSSProperties;
 
   const cardMaxWidth = branding?.loginCardMaxWidth || '440px';
   const cardPadding = branding?.loginCardPadding || '2.5rem 3rem 3rem';
@@ -252,7 +254,7 @@ export default function OrgRegisterPage() {
                 !inputRadius && 'rounded-lg',
                 !inputColor && 'placeholder:text-muted-foreground',
                 inputColor && 'org-input',
-                'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                'focus:outline-none focus:ring-2',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
               style={inputStyle}
@@ -282,7 +284,7 @@ export default function OrgRegisterPage() {
                 !inputRadius && 'rounded-lg',
                 !inputColor && 'placeholder:text-muted-foreground',
                 inputColor && 'org-input',
-                'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                'focus:outline-none focus:ring-2',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
               style={inputStyle}
@@ -313,7 +315,7 @@ export default function OrgRegisterPage() {
                   !inputRadius && 'rounded-lg',
                   !inputColor && 'placeholder:text-muted-foreground',
                   inputColor && 'org-input',
-                  'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                  'focus:outline-none focus:ring-2',
                   'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
                 style={inputStyle}
@@ -362,7 +364,7 @@ export default function OrgRegisterPage() {
                 !inputRadius && 'rounded-lg',
                 !inputColor && 'placeholder:text-muted-foreground',
                 inputColor && 'org-input',
-                'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                'focus:outline-none focus:ring-2',
                 'disabled:cursor-not-allowed disabled:opacity-50',
                 confirmPassword.length > 0 && !passwordsMatch && 'border border-destructive'
               )}

@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from .stack_runtime import ComposeServiceState
 
 
+ABI_REQUIRED_URL = "http://127.0.0.1:9879"
+
+
 @dataclass(frozen=True)
 class ServiceDefinition:
     key: str
@@ -30,7 +33,7 @@ SERVICE_CATALOG: dict[str, ServiceDefinition] = {
         display_name="ABI API",
         category="Essentials",
         description="Core ABI service and APIs.",
-        urls=("http://127.0.0.1:9879", "http://127.0.0.1:8501"),
+        urls=(ABI_REQUIRED_URL, "http://127.0.0.1:8501"),
     ),
     "mcp-server": ServiceDefinition(
         key="mcp-server",
@@ -167,9 +170,6 @@ def evaluate_service_readiness(
     if state is None:
         return ReadinessResult(False, "compose", "Container not created")
 
-    if state.health == "healthy":
-        return ReadinessResult(True, "docker-health", "Container reports healthy")
-
     if state.health == "unhealthy":
         return ReadinessResult(False, "docker-health", "Container reports unhealthy")
 
@@ -178,6 +178,20 @@ def evaluate_service_readiness(
         if state.state == "exited" and state.exit_code == 0:
             return ReadinessResult(True, "compose", "One-shot init completed")
         return ReadinessResult(False, "compose", "One-shot init not completed")
+
+    if service_name == "abi":
+        if state.state != "running":
+            return ReadinessResult(
+                False, "compose", f"Container state is {state.state}"
+            )
+
+        ready, detail = _check_http(ABI_REQUIRED_URL, timeout=http_timeout)
+        if ready:
+            return ReadinessResult(True, "http", detail)
+        return ReadinessResult(False, "http", detail)
+
+    if state.health == "healthy":
+        return ReadinessResult(True, "docker-health", "Container reports healthy")
 
     if state.state != "running":
         return ReadinessResult(False, "compose", f"Container state is {state.state}")

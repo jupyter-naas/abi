@@ -285,9 +285,13 @@ class EngineModuleLoader:
 
                     # This effectively creates a new instance of the module.
                     # It will call the constructor of the ABIModule class inside the module.
+                    is_unlocked_proxy = module_name == "naas_abi"
                     module = module.ABIModule(
                         EngineProxy(
-                            engine, module_name, self.__module_dependencies[module_name]
+                            engine,
+                            module_name,
+                            self.__module_dependencies[module_name],
+                            unlocked=is_unlocked_proxy,
                         ),
                         cfg,
                     )

@@ -2,6 +2,52 @@
 
 <!-- version list -->
 
+## v1.17.3 (2026-02-19)
+
+### Bug Fixes
+
+- Sort modules & agents ascending on abi agent list
+  ([`bcf1534`](https://github.com/jupyter-naas/abi/commit/bcf15345d076c257048ca8cf3b90791dae94bd58))
+
+
+## v1.17.2 (2026-02-18)
+
+### Bug Fixes
+
+- Cors
+  ([`b8c5fd5`](https://github.com/jupyter-naas/abi/commit/b8c5fd5a2f65f936d7015267067b72a4c1321b33))
+
+- Working on abi start
+  ([`570ddf3`](https://github.com/jupyter-naas/abi/commit/570ddf312799e2cecae09d8aae2bc80d48f20b79))
+
+
+## v1.17.1 (2026-02-18)
+
+### Bug Fixes
+
+- Overall
+  ([`8874852`](https://github.com/jupyter-naas/abi/commit/88748528ad867109f84db8f9f8e71eac5be774b6))
+
+
+## v1.17.0 (2026-02-18)
+
+
+## v1.16.0 (2026-02-18)
+
+### Features
+
+- Working on fixing multienv
+  ([`ba7d7d0`](https://github.com/jupyter-naas/abi/commit/ba7d7d0396b46ba81e0458a872dabd29b7ac32ae))
+
+
+## v1.15.7 (2026-02-17)
+
+### Bug Fixes
+
+- Update the local docker compose template
+  ([`08f4c1f`](https://github.com/jupyter-naas/abi/commit/08f4c1ff374dcfe66732f9a3d48e57ad367a460c))
+
+
 ## v1.15.6 (2026-02-17)
 
 ### Bug Fixes

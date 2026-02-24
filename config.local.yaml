@@ -24,19 +24,14 @@ modules:
     enabled: true
     config:
       nexus_config:
-        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
-        redis_url: "redis://localhost:6379/0"
+        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
+        redis_url: "redis://redis:6379/0"
         cors_origins_str: "http://localhost:3042,http://127.0.0.1:3042"
 
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-
-  - module: naas_abi_marketplace.applications.openrouter
-    enabled: true
-    config:
-      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 
 services:
   secret:
@@ -51,25 +46,25 @@ services:
         base_prefix: "abi/datastore"
         access_key_id: "{{ secret.MINIO_ROOT_USER }}"
         secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
-        endpoint_url: "http://localhost:9000"
+        endpoint_url: "http://minio:9000"
   triple_store:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@localhost:3030/ds"
+        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@fuseki:3030/ds"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
       config:
-        host: "localhost"
+        host: "qdrant"
         port: 6333
   bus:
     bus_adapter:
       adapter: "rabbitmq"
       config:
-        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@localhost:5672"
+        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@rabbitmq:5672"
   kv:
     kv_adapter:
       adapter: "redis"
       config:
-        redis_url: "redis://localhost:6379"
+        redis_url: "redis://redis:6379"

@@ -50,13 +50,14 @@ x-abi-template: &abi_template
     # - ./.env:/app/.env
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
+    - dagster_home:/app/.dagster  # Dagster metadata/cache isolated from host
   environment:
-    - ENV=max
+    - ENV=local
     - LOG_LEVEL=DEBUG
     - PYTHONPATH=/app
-    - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+    - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
     - VECTOR_STORE_ADAPTER=qdrant
-    - QDRANT_HOST=${QDRANT_HOST}
+    - QDRANT_HOST=qdrant
     - QDRANT_PORT=${QDRANT_PORT}
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
@@ -71,6 +72,14 @@ x-abi-template: &abi_template
       condition: service_healthy
     fuseki:
       condition: service_healthy
+    minio:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "for i in 1 2 3; do curl -fsS http://localhost:9879/ >/dev/null || exit 1; sleep 2; done"]
+    interval: 10s
+    timeout: 15s
+    start_period: 30s
+    retries: 10
   networks:
     - abi-network
 
@@ -83,11 +92,16 @@ services:
       - 3042:3000
     volumes:
       - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
+      # Keep container build/runtime artifacts isolated from host workspace
+      # to avoid stale `.next` and dependency resolution issues.
+      - nexus_web_node_modules:/app/apps/web/node_modules
+      - nexus_web_next:/app/apps/web/.next
     environment:
       - NODE_ENV=development
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
-      - NEXT_PUBLIC_API_URL=https://${PUBLIC_API_HOST:-api.localhost}
+      - NEXUS_API_URL=http://abi:9879
+      - NEXT_PUBLIC_API_URL=http://127.0.0.1:9879
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     networks:
       - abi-network
@@ -126,8 +140,11 @@ services:
     build:
       context: .
       dockerfile: libs/naas-abi-core/naas_abi_core/apps/mcp/Dockerfile.mcp
+    depends_on:
+      abi:
+        condition: service_healthy
     environment:
-      - ABI_API_BASE=http://${ABI_HOST}:9879
+      - ABI_API_BASE=http://abi:9879
       - ABI_API_KEY=abi
       - MCP_TRANSPORT=http
     ports:
@@ -155,7 +172,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -174,10 +191,10 @@ services:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
       - FUSEKI_DATASET_1=ds
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3030/$/ping || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3030/ >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -192,7 +209,7 @@ services:
     ports:
       - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
     environment:
-      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:3030/ds/query
+      - DEFAULT_SPARQL_ENDPOINT=http://fuseki:3030/ds/query
     depends_on:
       - fuseki
     networks:
@@ -224,14 +241,15 @@ services:
       - dagster_home:/app/.dagster  # Dagster metadata and run history
       - ./docker/dagster/dagster.yaml:/app/.dagster/dagster.yaml:ro
     environment:
+      - ENV=local
       - PYTHONPATH=/app
       - DAGSTER_HOME=/app/.dagster
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
       - DAGSTER_S3_LOG_BUCKET=dagster-logs
-      - MINIO_ENDPOINT_URL=http://${MINIO_HOST}:${MINIO_PORT}
+      - MINIO_ENDPOINT_URL=http://minio:${MINIO_PORT}
       - MINIO_REGION_NAME=us-east-1
-      - DAGSTER_PG_HOSTNAME=${POSTGRES_HOST}
+      - DAGSTER_PG_HOSTNAME=postgres
       - DAGSTER_PG_USERNAME=${POSTGRES_USER}
       - DAGSTER_PG_PASSWORD=${POSTGRES_PASSWORD}
       - DAGSTER_PG_DB=${POSTGRES_DB}
@@ -256,6 +274,11 @@ services:
       - 9001:9001  # MinIO console - http://localhost:9001
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - abi-network
 
@@ -263,10 +286,11 @@ services:
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     entrypoint: >-
       /bin/sh -c "
-      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://${MINIO_HOST}:${MINIO_PORT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
+      until /usr/bin/mc alias set ${MINIO_ROOT_USER} http://minio:${MINIO_PORT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
       /usr/bin/mc mb -p ${MINIO_ROOT_USER}/dagster-logs || true &&
       /usr/bin/mc mb -p ${MINIO_ROOT_USER}/abi || true
       "
@@ -290,7 +314,8 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      start_period: 30s
+      retries: 10
     networks:
       - abi-network
 
@@ -308,7 +333,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -365,8 +390,14 @@ services:
     image: nginx:alpine
     ports:
       - 8080:80  # Service portal - http://localhost:8080
+    environment:
+      - PUBLIC_WEB_HOST=${PUBLIC_WEB_HOST:-localhost}
+      - PUBLIC_API_HOST=${PUBLIC_API_HOST:-api.localhost}
+      - NGINX_ENVSUBST_TEMPLATE_DIR=/usr/share/nginx/templates
+      - NGINX_ENVSUBST_TEMPLATE_SUFFIX=.template
+      - NGINX_ENVSUBST_OUTPUT_DIR=/usr/share/nginx/html
     volumes:
-      - ./docker/service-portal:/usr/share/nginx/html:ro
+      - ./docker/service-portal:/usr/share/nginx/templates:ro
     networks:
       - abi-network
 
@@ -386,10 +417,10 @@ services:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:6333/healthz || exit 1"]
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - abi-network
 
@@ -405,6 +436,8 @@ volumes:
   synapse_data:   # Matrix Synapse data
   caddy_data:     # Caddy certificates and ACME data
   caddy_config:   # Caddy runtime configuration
+  nexus_web_node_modules: # Isolated web dependencies
+  nexus_web_next:         # Isolated Next.js build cache
 
 # =============================================================================
 # NETWORK CONFIGURATION

@@ -2,6 +2,60 @@
 
 <!-- version list -->
 
+## v1.8.1 (2026-02-19)
+
+### Bug Fixes
+
+- Does not make abi load every agent
+  ([`ec600b1`](https://github.com/jupyter-naas/abi/commit/ec600b1c85bb3e2b29c3959291dd8eaa1a20109f))
+
+
+## v1.8.0 (2026-02-19)
+
+### Bug Fixes
+
+- Do not update already existing users
+  ([`8754e4b`](https://github.com/jupyter-naas/abi/commit/8754e4b32324ecbaec35d7a0cd30bab13235c101))
+
+- Make checks
+  ([`b789da0`](https://github.com/jupyter-naas/abi/commit/b789da0cf1153e81f812fd94aa08abad00f33bf5))
+
+### Features
+
+- **nexus**: Make tenant/org branding and provisioning fully config-driven
+  ([`9ce64e5`](https://github.com/jupyter-naas/abi/commit/9ce64e59dc208af2cca659f71f99954b5d1626a8))
+
+
+## v1.7.14 (2026-02-19)
+
+
+## v1.7.13 (2026-02-18)
+
+### Bug Fixes
+
+- Nexus web build and service portal links for local dev
+  ([`a41432e`](https://github.com/jupyter-naas/abi/commit/a41432e81cfa57a4d2b3af481ba61d5c8fa9297a))
+
+
+## v1.7.12 (2026-02-18)
+
+### Bug Fixes
+
+- Working on multi env management
+  ([`482e67c`](https://github.com/jupyter-naas/abi/commit/482e67c01a4446bbac7fbf9d29948d91851707f4))
+
+
+## v1.7.11 (2026-02-17)
+
+
+## v1.7.10 (2026-02-17)
+
+### Bug Fixes
+
+- **nexus**: File manager api url
+  ([`09b3fde`](https://github.com/jupyter-naas/abi/commit/09b3fdecae31770a8620284c052b953c1810a7d4))
+
+
 ## v1.7.9 (2026-02-17)
 
 

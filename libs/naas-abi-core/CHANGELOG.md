@@ -2,6 +2,54 @@
 
 <!-- version list -->
 
+## v1.17.2 (2026-02-19)
+
+### Bug Fixes
+
+- Postgres checkpointer overload
+  ([`891749e`](https://github.com/jupyter-naas/abi/commit/891749e5d00dc4494f29b81944c1f09b48e4de8d))
+
+
+## v1.17.1 (2026-02-19)
+
+### Bug Fixes
+
+- Make naas_abi having access to every modules
+  ([`d932b80`](https://github.com/jupyter-naas/abi/commit/d932b80bf99875db053585d34152c9483d4071c4))
+
+- Make naas_abi having access to everything
+  ([`aa6f7c3`](https://github.com/jupyter-naas/abi/commit/aa6f7c3bf871205bd9f38d79cee3829a768b2ef4))
+
+
+## v1.17.0 (2026-02-19)
+
+### Features
+
+- Create openrouter agent for all available models on init
+  ([`7b58aca`](https://github.com/jupyter-naas/abi/commit/7b58aca8e9bcdb6683e7281d628f7fa11b2b53d4))
+
+
+## v1.16.0 (2026-02-18)
+
+### Features
+
+- Improve schema duplication management and ingestion speed
+  ([`f1f4e21`](https://github.com/jupyter-naas/abi/commit/f1f4e213650d5c1b45bbc090163a16a993a177e4))
+
+
+## v1.15.0 (2026-02-18)
+
+### Bug Fixes
+
+- Working on multi env management
+  ([`482e67c`](https://github.com/jupyter-naas/abi/commit/482e67c01a4446bbac7fbf9d29948d91851707f4))
+
+### Features
+
+- Handle different .env files
+  ([`fe0f6ae`](https://github.com/jupyter-naas/abi/commit/fe0f6ae9865c5f2417f958f0db2e4d3d327703e8))
+
+
 ## v1.14.1 (2026-02-17)
 
 ### Bug Fixes

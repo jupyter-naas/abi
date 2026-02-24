@@ -18,4 +18,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "[ -d node_modules ] || pnpm install --frozen-lockfile; pnpm build; pnpm start --hostname 0.0.0.0 --port ${PORT:-3000} & SERVER_PID=$!; trap 'kill $SERVER_PID 2>/dev/null || true' INT TERM EXIT; while inotifywait -r -e modify,create,delete,move --exclude '(^|/)(node_modules|\\.next|\\.git)(/|$)' .; do if pnpm build; then kill $SERVER_PID 2>/dev/null || true; wait $SERVER_PID 2>/dev/null || true; pnpm start --hostname 0.0.0.0 --port ${PORT:-3000} & SERVER_PID=$!; fi; done"]
+CMD ["sh", "-ec", "pnpm dev"]
+
+#CMD ["sh", "-ec", "if [ ! -f node_modules/.modules.yaml ]; then pnpm install --frozen-lockfile; fi; pnpm build; pnpm start --hostname 0.0.0.0 --port ${PORT:-3000} & SERVER_PID=$!; trap 'kill $SERVER_PID 2>/dev/null || true' INT TERM EXIT; while inotifywait -r -e modify,create,delete,move --exclude '(^|/)(node_modules|\\.next|\\.git)(/|$)' .; do if pnpm build; then kill $SERVER_PID 2>/dev/null || true; wait $SERVER_PID 2>/dev/null || true; pnpm start --hostname 0.0.0.0 --port ${PORT:-3000} & SERVER_PID=$!; fi; done"]

@@ -166,8 +166,8 @@
             <h2>ABI API</h2>
             <p>Core ABI service and operator UI.</p>
             <div class="links">
-              <a href="http://localhost:9879" target="_blank" rel="noreferrer">REST API</a>
-              <a href="http://localhost:8501" target="_blank" rel="noreferrer">Streamlit UI</a>
+              <a href="http://127.0.0.1:9879" target="_blank" rel="noreferrer">REST API</a>
+              <a href="http://127.0.0.1:9879/docs" target="_blank" rel="noreferrer">OpenAPI Docs</a>
             </div>
           </div>
 

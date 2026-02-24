@@ -142,9 +142,9 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             try:
                 topic = f"ts.insert.g.{graph_topic}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                logger.debug(
-                    f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}"
-                )
+                # logger.debug(
+                #     f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}"
+                # )
                 self.services.bus.topic_publish(
                     "triple_store",
                     topic,
@@ -169,9 +169,9 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             try:
                 topic = f"ts.delete.g.{graph_topic}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                logger.debug(
-                    f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}"
-                )
+                # logger.debug(
+                #     f"Publishing triple to topic: {topic} -- {triple_bytes.decode('utf-8')}"
+                # )
                 self.services.bus.topic_publish(
                     "triple_store",
                     topic,
@@ -323,6 +323,36 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         else:
             read_query_func = self.query
 
+        def _load_schema_metadata(subject: URIRef) -> dict[str, str]:
+            triples: rdflib.query.Result = read_query_func(
+                f"""PREFIX internal: <http://triple-store.internal#>
+                    SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
+            )
+
+            schema_dict: dict[str, str] = {}
+            for row in triples:
+                assert isinstance(row, rdflib.query.ResultRow)
+                p, o = row
+                schema_dict[str(p).replace("http://triple-store.internal#", "")] = str(
+                    o
+                )
+
+            return schema_dict
+
+        def _remove_schema_subject(subject: URIRef) -> None:
+            triples: rdflib.query.Result = read_query_func(
+                f"""SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
+            )
+
+            cleanup_graph = Graph()
+            for row in triples:
+                assert isinstance(row, rdflib.query.ResultRow)
+                p, o = row
+                cleanup_graph.add((subject, p, o))
+
+            if len(cleanup_graph) > 0:
+                self.remove(cleanup_graph)
+
         try:
             query = f'''PREFIX internal: <http://triple-store.internal#>
             SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'''
@@ -330,37 +360,12 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             # Check if schema with filePath == filepath already exists and grab all triples.
             schema_triples: rdflib.query.Result = read_query_func(query)
 
-            logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
+            schema_rows = list(schema_triples)
+            logger.debug(f"len(schema_rows): {len(schema_rows)}")
             # If schema with filePath == filepath already exists, we check if the file has been modified.
-            schema_exists_in_store = len(list(schema_triples)) == 1
+            schema_exists_in_store = len(schema_rows) > 0
             logger.debug(f"Schema exists in store: {schema_exists_in_store}")
             if schema_exists_in_store:
-                result_rows = list(schema_triples)
-                logger.debug(f"Result rows: {result_rows}")
-                assert len(result_rows) == 1
-                assert isinstance(result_rows[0], rdflib.query.ResultRow)
-                _SUBJECT_TUPLE_INDEX = 0
-                subject = result_rows[0][_SUBJECT_TUPLE_INDEX]
-
-                # Select * from subject
-                triples: rdflib.query.Result = read_query_func(
-                    f"""PREFIX internal: <http://triple-store.internal#>
-                        SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
-                )
-
-                # Load schema into a dict
-                schema_dict = {}
-                for row in triples:
-                    assert isinstance(row, rdflib.query.ResultRow)
-                    p, o = row
-
-                    schema_dict[str(p).replace("http://triple-store.internal#", "")] = (
-                        str(o)
-                    )
-
-                # Get file last update time
-                file_last_update_time = os.path.getmtime(filepath)
-
                 # Open file and get content.
                 with open(filepath, "r") as file:
                     new_content = file.read()
@@ -369,8 +374,46 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                     new_content.encode("utf-8")
                 ).hexdigest()
 
+                schema_entries: list[tuple[URIRef, dict[str, str]]] = []
+                for row in schema_rows:
+                    assert isinstance(row, rdflib.query.ResultRow)
+                    _SUBJECT_TUPLE_INDEX = 0
+                    subject = row[_SUBJECT_TUPLE_INDEX]
+                    assert isinstance(subject, URIRef)
+                    schema_entries.append((subject, _load_schema_metadata(subject)))
+
+                matching_entry = next(
+                    (
+                        (subject, schema_dict)
+                        for subject, schema_dict in schema_entries
+                        if schema_dict.get("hash") == new_content_hash
+                    ),
+                    None,
+                )
+
+                if matching_entry is not None:
+                    subject, schema_dict = matching_entry
+                else:
+                    subject, schema_dict = schema_entries[0]
+
+                # Get file last update time
+                file_last_update_time = os.path.getmtime(filepath)
+
+                duplicate_subjects = [
+                    candidate_subject
+                    for candidate_subject, _ in schema_entries
+                    if candidate_subject != subject
+                ]
+
                 # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
                 if schema_dict["hash"] == new_content_hash:
+                    if len(duplicate_subjects) > 0:
+                        logger.debug(
+                            f"Cleaning up {len(duplicate_subjects)} duplicate schema metadata entries for {filepath}."
+                        )
+                        for duplicate_subject in duplicate_subjects:
+                            _remove_schema_subject(duplicate_subject)
+
                     logger.debug("Schema is up to date, no need to update.")
                     return
 
@@ -419,6 +462,13 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                         format="turtle",
                     )
                 )
+
+                if len(duplicate_subjects) > 0:
+                    logger.debug(
+                        f"Cleaning up {len(duplicate_subjects)} duplicate schema metadata entries for {filepath}."
+                    )
+                    for duplicate_subject in duplicate_subjects:
+                        _remove_schema_subject(duplicate_subject)
 
                 # Return as we don't need to continue as we have already updated the schema.
                 return

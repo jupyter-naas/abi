@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
+import { useTenant } from '@/contexts/tenant-context';
 
 /**
  * Returns true if a hex color is "light" (should use dark text).
@@ -23,6 +24,7 @@ function isLightColor(hex: string): boolean {
 export default function LoginPage() {
   const router = useRouter();
   const { login, isLoading, error, clearError, isAuthenticated } = useAuthStore();
+  const tenant = useTenant();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -74,16 +76,17 @@ export default function LoginPage() {
   }
 
   // Default branding configuration - matches org login style
-  const primaryColor = '#34D399';
-  const accentColor = '#1FA574';
-  const bgColor = '#FFFFFF';
-  const cardColor = '#FFFFFF';
-  const borderRadius = '0';
-  const cardMaxWidth = '440px';
-  const cardPadding = '2.5rem 3rem 3rem';
+  const primaryColor = tenant.primary_color || '#34D399';
+  const accentColor = tenant.accent_color || '#1FA574';
+  const bgColor = tenant.background_color || '#FFFFFF';
+  const cardColor = tenant.login_card_color || '#FFFFFF';
+  const borderRadius = tenant.login_border_radius || '0';
+  const cardMaxWidth = tenant.login_card_max_width || '440px';
+  const cardPadding = tenant.login_card_padding || '2.5rem 3rem 3rem';
+  const bgImageUrl = tenant.login_bg_image_url;
 
   // Smart text color: auto-detect from card color
-  const textColor = cardColor && isLightColor(cardColor) ? '#1a1a1a' : '#ffffff';
+  const textColor = tenant.login_text_color || (cardColor && isLightColor(cardColor) ? '#1a1a1a' : '#ffffff');
   const cardIsLight = isLightColor(cardColor);
   const mutedTextColor = cardIsLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
   const subtitleColor = cardIsLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.45)';
@@ -91,21 +94,31 @@ export default function LoginPage() {
   const cardRadius = `${borderRadius}px`;
   const inputRadius = `${borderRadius}px`;
   const buttonRadius = `${borderRadius}px`;
+  const focusRingColor = `${accentColor}33`;
 
   const inputStyle: React.CSSProperties = {
     borderRadius: inputRadius,
-    backgroundColor: '#F4F4F4',
+    backgroundColor: tenant.login_input_color || '#F4F4F4',
     border: 'none',
     color: textColor,
-  };
+    '--tw-ring-color': focusRingColor,
+  } as React.CSSProperties;
   
   return (
     <div
       className="flex min-h-screen flex-col items-center justify-center px-4"
       style={{
         backgroundColor: bgColor,
+        backgroundImage: bgImageUrl ? `url(${bgImageUrl})` : undefined,
+        backgroundSize: bgImageUrl ? 'cover' : undefined,
+        backgroundPosition: bgImageUrl ? 'center' : undefined,
+        backgroundRepeat: bgImageUrl ? 'no-repeat' : undefined,
+        fontFamily: tenant.font_family || undefined,
       }}
     >
+      {tenant.font_url && (
+        <link rel="stylesheet" href={tenant.font_url} />
+      )}
       {/* Login Card */}
       <div
         className="w-full"
@@ -118,6 +131,30 @@ export default function LoginPage() {
           color: textColor,
         }}
       >
+        {(tenant.logo_rectangle_url || tenant.logo_url || tenant.logo_emoji) && (
+          <div className="mb-6 flex items-center justify-center">
+            {tenant.logo_rectangle_url ? (
+              <img
+                src={tenant.logo_rectangle_url}
+                alt={tenant.tab_title}
+                className="h-24 max-w-full object-contain"
+              />
+            ) : tenant.logo_url ? (
+              <img
+                src={tenant.logo_url}
+                alt={tenant.tab_title}
+                className="h-12 w-12 rounded-xl object-contain"
+              />
+            ) : (
+              <div
+                className="flex h-12 w-12 items-center justify-center rounded-xl text-white font-bold text-xl"
+                style={{ backgroundColor: primaryColor }}
+              >
+                {tenant.logo_emoji || 'N'}
+              </div>
+            )}
+          </div>
+        )}
         <div className="mb-6 text-center">
           <TypingWelcome textColor={textColor} mutedColor={mutedTextColor} />
         </div>
@@ -153,7 +190,7 @@ export default function LoginPage() {
               disabled={isLoading}
               className={cn(
                 'flex h-11 w-full px-4 py-2 text-sm',
-                'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                'focus:outline-none focus:ring-2',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
               aria-invalid={!!fieldErrors.email}
@@ -204,7 +241,7 @@ export default function LoginPage() {
                 disabled={isLoading}
                 className={cn(
                   'flex h-11 w-full px-4 py-2 pr-10 text-sm',
-                  'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                  'focus:outline-none focus:ring-2',
                   'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
                 aria-invalid={!!fieldErrors.password}
@@ -277,24 +314,28 @@ export default function LoginPage() {
           </Link>
         </p>
       </div>
-      {/* 
-      Commented out - can be enabled if needed:
-      
-      <p className="mt-8 text-center text-sm" style={{ color: subtitleColor }}>
-        By signing in, you agree to our{' '}
-        <Link href="/terms" className="hover:underline">
-          Terms of Service
-        </Link>
-        {' '}and{' '}
-        <Link href="/privacy" className="hover:underline">
-          Privacy Policy
-        </Link>
-      </p>
-
-      <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
-        Powered by NEXUS
-      </p>
-      */}
+      {tenant.show_terms_footer && (
+        <p className="mt-8 text-center text-sm" style={{ color: subtitleColor }}>
+          By signing in, you agree to our{' '}
+          <Link href="/terms" className="hover:underline">
+            Terms of Service
+          </Link>
+          {' '}and{' '}
+          <Link href="/privacy" className="hover:underline">
+            Privacy Policy
+          </Link>
+        </p>
+      )}
+      {tenant.show_powered_by && (
+        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
+          Powered by NEXUS
+        </p>
+      )}
+      {tenant.login_footer_text && (
+        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
+          {tenant.login_footer_text}
+        </p>
+      )}
     </div>
   );
 }

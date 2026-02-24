@@ -1,5 +1,4 @@
 import pytest
-
 from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIIntegration import (
     OpenAIIntegration,
     OpenAIIntegrationConfiguration,
@@ -16,9 +15,13 @@ def integration() -> OpenAIIntegration:
 
     module = ABIModule.get_instance()
     openai_api_key = module.configuration.openai_api_key
+    object_storage = module.engine.services.object_storage
+    datastore_path = module.configuration.datastore_path
 
     configuration = OpenAIIntegrationConfiguration(
         api_key=openai_api_key,
+        datastore_path=datastore_path,
+        object_storage=object_storage,
     )
     return OpenAIIntegration(configuration)
 
@@ -32,6 +35,7 @@ def test_retrieve_model(integration: OpenAIIntegration):
     response = integration.retrieve_model(model_id="gpt-4.1-mini")
     assert response is not None, response
 
+
 def test_create_chat_completion(integration: OpenAIIntegration):
     response = integration.create_chat_completion(
         prompt="What is the capital of France?",
@@ -40,6 +44,7 @@ def test_create_chat_completion(integration: OpenAIIntegration):
     )
     assert response is not None, response
     assert "Paris" in response["content"], response
+
 
 def test_create_chat_completion_o3_mini(integration: OpenAIIntegration):
     response = integration.create_chat_completion(
