@@ -742,20 +742,109 @@ function OntologySplitView({
   onCreateRelationship: () => void;
 }) {
   const [query, setQuery] = useState('');
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
+  const [didInitExpanded, setDidInitExpanded] = useState(false);
   const isClassMode = mode === 'classes';
   const modeLabel = isClassMode ? 'Classes' : 'Relations';
   const modeIcon = isClassMode ? Box : Link2;
   const ModeIcon = modeIcon;
 
-  const filteredItems = useMemo(() => {
+  useEffect(() => {
+    if (!didInitExpanded && items.length > 0) {
+      setExpandedNodeIds(new Set(items.map((item) => item.id)));
+      setDidInitExpanded(true);
+    }
+  }, [didInitExpanded, items]);
+
+  const visibleItemIds = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return items;
-    return items.filter((item) => {
-      return (
-        item.name.toLowerCase().includes(normalizedQuery)
-        || item.description?.toLowerCase().includes(normalizedQuery)
-      );
+    if (!normalizedQuery) {
+      return new Set(items.map((item) => item.id));
+    }
+
+    const matchingIds = new Set(
+      items
+        .filter((item) =>
+          item.name.toLowerCase().includes(normalizedQuery)
+          || item.description?.toLowerCase().includes(normalizedQuery)
+        )
+        .map((item) => item.id)
+    );
+
+    // Keep ancestors visible so search results remain in hierarchy context.
+    const byId = new Map(items.map((item) => [item.id, item]));
+    for (const matchId of Array.from(matchingIds)) {
+      let current = byId.get(matchId);
+      const seen = new Set<string>();
+      while (current?.parentId && !seen.has(current.parentId)) {
+        seen.add(current.parentId);
+        matchingIds.add(current.parentId);
+        current = byId.get(current.parentId);
+      }
+    }
+
+    return matchingIds;
+  }, [items, query]);
+
+  type TreeNode = { item: OntologyItem; children: TreeNode[] };
+
+  const hierarchicalItems = useMemo(() => {
+    const visibleItems = items.filter((item) => visibleItemIds.has(item.id));
+    const byId = new Map(visibleItems.map((item) => [item.id, item]));
+    const childrenByParent = new Map<string | null, OntologyItem[]>();
+
+    const attach = (parentKey: string | null, item: OntologyItem) => {
+      const current = childrenByParent.get(parentKey) || [];
+      current.push(item);
+      childrenByParent.set(parentKey, current);
+    };
+
+    visibleItems.forEach((item) => {
+      const parentKey = item.parentId && byId.has(item.parentId) ? item.parentId : null;
+      attach(parentKey, item);
     });
+
+    const sortByName = (list: OntologyItem[]) =>
+      [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+    const buildNodes = (parentKey: string | null, ancestry: Set<string>): TreeNode[] => {
+      return sortByName(childrenByParent.get(parentKey) || []).map((item) => {
+        if (ancestry.has(item.id)) {
+          return { item, children: [] };
+        }
+        const nextAncestry = new Set(ancestry);
+        nextAncestry.add(item.id);
+        return { item, children: buildNodes(item.id, nextAncestry) };
+      });
+    };
+
+    return buildNodes(null, new Set<string>());
+  }, [items, visibleItemIds]);
+
+  const searchExpandedNodeIds = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return new Set<string>();
+
+    const byId = new Map(items.map((item) => [item.id, item]));
+    const autoExpanded = new Set<string>();
+
+    items.forEach((item) => {
+      const isMatch = item.name.toLowerCase().includes(normalizedQuery)
+        || item.description?.toLowerCase().includes(normalizedQuery);
+      if (!isMatch) return;
+
+      let current = item;
+      const seen = new Set<string>();
+      while (current.parentId && !seen.has(current.parentId)) {
+        seen.add(current.parentId);
+        autoExpanded.add(current.parentId);
+        const parent = byId.get(current.parentId);
+        if (!parent) break;
+        current = parent;
+      }
+    });
+
+    return autoExpanded;
   }, [items, query]);
 
   const selectedItemInMode = selectedItem && selectedItem.type === (isClassMode ? 'entity' : 'relationship')
@@ -783,25 +872,71 @@ function OntologySplitView({
         </div>
 
         <div className="flex-1 space-y-1 overflow-y-auto p-2">
-          {filteredItems.length === 0 ? (
+          {hierarchicalItems.length === 0 ? (
             <p className="px-2 py-4 text-center text-sm text-muted-foreground">No {modeLabel.toLowerCase()} found.</p>
           ) : (
-            filteredItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => onSelectItem(item.id)}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors',
-                  selectedItemInMode?.id === item.id
-                    ? 'bg-workspace-accent-10 text-workspace-accent'
-                    : 'hover:bg-background'
-                )}
-                title={item.description}
-              >
-                <ModeIcon size={14} className={isClassMode ? 'text-blue-500' : 'text-green-500'} />
-                <span className="truncate">{item.name}</span>
-              </button>
-            ))
+            hierarchicalItems.map((node) => {
+              const renderNode = (current: TreeNode, depth: number) => (
+                <div key={current.item.id}>
+                  {(() => {
+                    const hasChildren = current.children.length > 0;
+                    const isExpanded = expandedNodeIds.has(current.item.id)
+                      || searchExpandedNodeIds.has(current.item.id);
+
+                    return (
+                      <>
+                        <div
+                          className={cn(
+                            'flex w-full items-center gap-1 rounded-md py-1 pr-2 text-left text-sm transition-colors',
+                            selectedItemInMode?.id === current.item.id
+                              ? 'bg-workspace-accent-10 text-workspace-accent'
+                              : 'hover:bg-background'
+                          )}
+                          style={{ paddingLeft: `${8 + depth * 16}px` }}
+                          title={current.item.description}
+                        >
+                          {hasChildren ? (
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setExpandedNodeIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(current.item.id)) {
+                                    next.delete(current.item.id);
+                                  } else {
+                                    next.add(current.item.id);
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="rounded p-0.5 text-muted-foreground hover:bg-muted"
+                            >
+                              <ChevronRight
+                                size={14}
+                                className={cn('transition-transform', isExpanded && 'rotate-90')}
+                              />
+                            </button>
+                          ) : (
+                            <span className="w-[18px]" />
+                          )}
+
+                          <button
+                            onClick={() => onSelectItem(current.item.id)}
+                            className="flex flex-1 items-center gap-2 py-1 text-left"
+                          >
+                            <ModeIcon size={14} className={isClassMode ? 'text-blue-500' : 'text-green-500'} />
+                            <span className="truncate">{current.item.name}</span>
+                          </button>
+                        </div>
+                        {hasChildren && isExpanded && current.children.map((child) => renderNode(child, depth + 1))}
+                      </>
+                    );
+                  })()}
+                </div>
+              );
+
+              return renderNode(node, 0);
+            })
           )}
         </div>
       </div>
@@ -848,12 +983,10 @@ function OntologySplitView({
 type OntologyOverviewStats = {
   name: string;
   path: string;
-  ontologies_count?: number;
   classes: number;
-  object_properties: number;
-  data_properties: number;
+  relationships: number;
   named_individuals: number;
-  imports: number;
+  data_properties: number;
 };
 
 function OntologyOverviewView({
@@ -876,23 +1009,40 @@ function OntologyOverviewView({
       setStatsError(null);
       try {
         const baseUrl = getApiUrl();
-        const statsUrl = ontologyPath
-          ? `${baseUrl}/api/ontology/overview/stats?ontology_path=${encodeURIComponent(ontologyPath)}`
-          : `${baseUrl}/api/ontology/overview/stats/all`;
-        const response = await authFetch(
-          statsUrl
-        );
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ontology stats: ${response.status}`);
+        const query = ontologyPath
+          ? `?ontology_path=${encodeURIComponent(ontologyPath)}`
+          : '';
+        const [classesResponse, relationshipsResponse, typesResponse] = await Promise.all([
+          authFetch(`${baseUrl}/api/ontology/classes${query}`),
+          authFetch(`${baseUrl}/api/ontology/relationships${query}`),
+          authFetch(`${baseUrl}/api/ontology/counts/types${query}`),
+        ]);
+        if (!classesResponse.ok || !relationshipsResponse.ok || !typesResponse.ok) {
+          throw new Error(
+            `Failed to fetch overview items: classes=${classesResponse.status}, relationships=${relationshipsResponse.status}, types=${typesResponse.status}`
+          );
         }
-        const data = await response.json();
+        const classesData = await classesResponse.json();
+        const relationshipsData = await relationshipsResponse.json();
+        const typesData = await typesResponse.json();
+        const classes = Array.isArray(classesData?.items) ? classesData.items.length : 0;
+        const relationships = Array.isArray(relationshipsData?.items) ? relationshipsData.items.length : 0;
+        const namedIndividuals = Number(typesData?.named_individuals || 0);
+        const dataProperties = Number(typesData?.data_properties || 0);
         if (!cancelled) {
-          setStats(data as OntologyOverviewStats);
+          setStats({
+            name: ontologyPath ? ontologyPath.split('/').pop() || ontologyPath : 'All ontologies',
+            path: ontologyPath || '*',
+            classes,
+            relationships,
+            named_individuals: namedIndividuals,
+            data_properties: dataProperties,
+          });
         }
       } catch (error) {
         if (!cancelled) {
           setStats(null);
-          setStatsError('Failed to load ontology stats.');
+          setStatsError('Failed to load overview counts.');
         }
       } finally {
         if (!cancelled) {
@@ -949,31 +1099,25 @@ function OntologyOverviewView({
 
       {!loadingStats && !statsError && stats && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {typeof stats.ontologies_count === 'number' && (
-            <div className="rounded-lg border bg-background p-4">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Ontologies</p>
-              <p className="mt-1 text-2xl font-semibold">{stats.ontologies_count}</p>
-            </div>
-          )}
           <div className="rounded-lg border bg-background p-4">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">Classes</p>
             <p className="mt-1 text-2xl font-semibold">{stats.classes}</p>
           </div>
           <div className="rounded-lg border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Object Properties</p>
-            <p className="mt-1 text-2xl font-semibold">{stats.object_properties}</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Relationships</p>
+            <p className="mt-1 text-2xl font-semibold">{stats.relationships}</p>
           </div>
           <div className="rounded-lg border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Data Properties</p>
-            <p className="mt-1 text-2xl font-semibold">{stats.data_properties}</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Items</p>
+            <p className="mt-1 text-2xl font-semibold">{stats.classes + stats.relationships}</p>
           </div>
           <div className="rounded-lg border bg-background p-4">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">Named Individuals</p>
             <p className="mt-1 text-2xl font-semibold">{stats.named_individuals}</p>
           </div>
           <div className="rounded-lg border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Imports</p>
-            <p className="mt-1 text-2xl font-semibold">{stats.imports}</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Data Properties</p>
+            <p className="mt-1 text-2xl font-semibold">{stats.data_properties}</p>
           </div>
         </div>
       )}
