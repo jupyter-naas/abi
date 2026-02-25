@@ -5,10 +5,13 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from pydantic import BaseModel, Field
+from rdflib import Graph
+from rdflib.namespace import OWL, RDF
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -53,6 +56,27 @@ class ReferenceOntology(BaseModel):
 class OntologyFileItem(BaseModel):
     name: str
     path: str
+
+
+class OntologyOverviewStats(BaseModel):
+    name: str
+    path: str
+    classes: int
+    object_properties: int
+    data_properties: int
+    named_individuals: int
+    imports: int
+
+
+class OntologyOverviewAggregateStats(BaseModel):
+    name: str
+    path: str
+    ontologies_count: int
+    classes: int
+    object_properties: int
+    data_properties: int
+    named_individuals: int
+    imports: int
 
 
 class EntityCreate(BaseModel):
@@ -100,6 +124,77 @@ def _resolve_ontology_directory() -> Path:
     if root is None:
         root = Path(__file__).resolve().parents[6]
     return root / "ontology"
+
+
+def _list_registered_ontology_paths() -> set[str]:
+    """Return ontology file paths declared by all loaded ABI modules."""
+    abi_module = ABIModule.get_instance()
+    paths: set[str] = set()
+    for module in abi_module.engine.modules.values():
+        ontologies = getattr(module, "ontologies", None) or []
+        for ontology in ontologies:
+            paths.add(str(ontology))
+    return paths
+
+
+def _compute_ontology_overview_stats(ontology_path: str) -> OntologyOverviewStats:
+    extension = Path(ontology_path).suffix.lower()
+    parse_format = {
+        ".ttl": "turtle",
+        ".owl": "xml",
+        ".rdf": "xml",
+        ".nt": "nt",
+    }.get(extension)
+
+    graph = Graph()
+    try:
+        graph.parse(ontology_path, format=parse_format)
+    except Exception:
+        # Fallback to rdflib format auto-detection when explicit mapping fails.
+        graph.parse(ontology_path)
+
+    classes_count = len(set(graph.subjects(RDF.type, OWL.Class)))
+    object_properties_count = len(set(graph.subjects(RDF.type, OWL.ObjectProperty)))
+    data_properties_count = len(set(graph.subjects(RDF.type, OWL.DatatypeProperty)))
+    named_individuals_count = len(set(graph.subjects(RDF.type, OWL.NamedIndividual)))
+    imports_count = len(set(graph.objects(None, OWL.imports)))
+
+    return OntologyOverviewStats(
+        name=Path(ontology_path).name,
+        path=ontology_path,
+        classes=classes_count,
+        object_properties=object_properties_count,
+        data_properties=data_properties_count,
+        named_individuals=named_individuals_count,
+        imports=imports_count,
+    )
+
+
+def _load_ontology_graph(ontology_path: str) -> Graph:
+    extension = Path(ontology_path).suffix.lower()
+    parse_format = {
+        ".ttl": "turtle",
+        ".owl": "xml",
+        ".rdf": "xml",
+        ".nt": "nt",
+    }.get(extension)
+
+    graph = Graph()
+    try:
+        graph.parse(ontology_path, format=parse_format)
+    except Exception:
+        # Fallback to rdflib format auto-detection when explicit mapping fails.
+        graph.parse(ontology_path)
+    return graph
+
+
+def _resolve_target_ontology_paths(ontology_path: str | None) -> list[str]:
+    registered_paths = sorted(_list_registered_ontology_paths())
+    if ontology_path:
+        if ontology_path not in registered_paths:
+            raise HTTPException(status_code=404, detail="Ontology path not found")
+        return [ontology_path]
+    return registered_paths
 
 
 def parse_ttl(content: str, file_path: str) -> ReferenceOntology:
@@ -166,17 +261,19 @@ async def list_ontology_items():
     classes = await list_classes()
     relationships = await list_relations()
     return {
-        "items": [*classes, *relationships],
+        "items": [*classes.get("items", []), *relationships.get("items", [])],
     }
 
 
 @router.get("/classes")
-async def list_classes():
-    """List all ontology classes (OWL Classes) with label, definition, and subclassOf."""
-    triple_store_service = ABIModule.get_instance().engine.services.triple_store
+async def list_classes(
+    ontology_path: str | None = Query(None, alias="ontology_path"),
+):
+    """List ontology classes by file path (or all registered ontologies when omitted)."""
+    target_paths = _resolve_target_ontology_paths(ontology_path)
+    by_iri: dict[str, OntologyItem] = {}
 
-    # Query OWL Classes
-    class_results = triple_store_service.query("""
+    query = """
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -185,37 +282,47 @@ async def list_classes():
             ?s rdf:type owl:Class .
             OPTIONAL { ?s rdfs:label ?label . }
             OPTIONAL { ?s skos:definition ?definition . }
-            OPTIONAL { ?s skos:example ?example . }
             OPTIONAL { ?s rdfs:subClassOf ?subclassOf . }
         }
-    """)
+    """
 
-    items = []
-    for row in class_results:
-        iri = str(row.get("s"))
-        label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
-        definition = str(row.get("definition")) if row.get("definition") else None
-        subclass_of = str(row.get("subclassOf")) if row.get("subclassOf") else None
-        items.append(
-            OntologyItem(
+    for path in target_paths:
+        graph = _load_ontology_graph(path)
+        for row in graph.query(query):
+            iri = str(row.get("s"))
+            label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
+            definition = str(row.get("definition")) if row.get("definition") else None
+            subclass_of = str(row.get("subclassOf")) if row.get("subclassOf") else None
+
+            existing = by_iri.get(iri)
+            if existing:
+                if existing.base_class is None and subclass_of is not None:
+                    existing.base_class = subclass_of
+                if existing.description is None and definition is not None:
+                    existing.description = definition
+                continue
+
+            by_iri[iri] = OntologyItem(
                 id=iri,
                 name=label,
                 type="entity",
                 description=definition,
                 base_class=subclass_of,
             )
-        )
 
-    return items
+    items = sorted(by_iri.values(), key=lambda item: item.name.lower())
+    return {"items": items}
 
 
 @router.get("/relationships")
-async def list_relations():
-    """List all ontology relationships (OWL ObjectProperties) with label, definition, and subPropertyOf."""
-    triple_store_service = ABIModule.get_instance().engine.services.triple_store
+async def list_relations(
+    ontology_path: str | None = Query(None, alias="ontology_path"),
+):
+    """List ontology object properties by file path (or all registered ontologies when omitted)."""
+    target_paths = _resolve_target_ontology_paths(ontology_path)
+    by_iri: dict[str, OntologyItem] = {}
 
-    # Query OWL ObjectProperties
-    prop_results = triple_store_service.query("""
+    query = """
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -224,28 +331,91 @@ async def list_relations():
             ?s rdf:type owl:ObjectProperty .
             OPTIONAL { ?s rdfs:label ?label . }
             OPTIONAL { ?s skos:definition ?definition . }
-            OPTIONAL { ?s skos:example ?example . }
             OPTIONAL { ?s rdfs:subPropertyOf ?subPropertyOf . }
         }
-    """)
+    """
 
-    items = []
-    for row in prop_results:
-        iri = str(row.get("s"))
-        label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
-        definition = str(row.get("definition")) if row.get("definition") else None
-        sub_property_of = str(row.get("subPropertyOf")) if row.get("subPropertyOf") else None
-        items.append(
-            OntologyItem(
+    for path in target_paths:
+        graph = _load_ontology_graph(path)
+        for row in graph.query(query):
+            iri = str(row.get("s"))
+            label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
+            definition = str(row.get("definition")) if row.get("definition") else None
+            sub_property_of = str(row.get("subPropertyOf")) if row.get("subPropertyOf") else None
+
+            existing = by_iri.get(iri)
+            if existing:
+                if existing.base_class is None and sub_property_of is not None:
+                    existing.base_class = sub_property_of
+                if existing.description is None and definition is not None:
+                    existing.description = definition
+                continue
+
+            by_iri[iri] = OntologyItem(
                 id=iri,
                 name=label,
                 type="relationship",
                 description=definition,
-                base_class=sub_property_of,  # For relationships, we set this to subPropertyOf
+                base_class=sub_property_of,
             )
-        )
 
-    return items
+    items = sorted(by_iri.values(), key=lambda item: item.name.lower())
+    return {"items": items}
+
+
+@router.get("/overview/stats")
+async def get_ontology_overview_stats(
+    ontology_path: str = Query(..., alias="ontology_path", min_length=1),
+) -> OntologyOverviewStats:
+    """Return ontology element counts for a specific ontology path."""
+    try:
+        registered_paths = _list_registered_ontology_paths()
+        if ontology_path not in registered_paths:
+            raise HTTPException(status_code=404, detail="Ontology path not found")
+        return _compute_ontology_overview_stats(ontology_path)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail="Failed to compute ontology overview stats"
+        ) from exc
+
+
+@router.get("/overview/stats/all")
+async def get_all_ontologies_overview_stats() -> OntologyOverviewAggregateStats:
+    """Return consolidated overview stats across all registered ontologies."""
+    try:
+        ontology_paths = sorted(_list_registered_ontology_paths())
+        totals = {
+            "classes": 0,
+            "object_properties": 0,
+            "data_properties": 0,
+            "named_individuals": 0,
+            "imports": 0,
+        }
+
+        for ontology_path in ontology_paths:
+            stats = _compute_ontology_overview_stats(ontology_path)
+            totals["classes"] += stats.classes
+            totals["object_properties"] += stats.object_properties
+            totals["data_properties"] += stats.data_properties
+            totals["named_individuals"] += stats.named_individuals
+            totals["imports"] += stats.imports
+
+        return OntologyOverviewAggregateStats(
+            name="All ontologies",
+            path="*",
+            ontologies_count=len(ontology_paths),
+            classes=totals["classes"],
+            object_properties=totals["object_properties"],
+            data_properties=totals["data_properties"],
+            named_individuals=totals["named_individuals"],
+            imports=totals["imports"],
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail="Failed to compute consolidated ontology overview stats"
+        ) from exc
 
 
 @router.post("/entity")
@@ -397,3 +567,23 @@ async def list_ontology_files() -> dict[str, list[OntologyFileItem]]:
         return {"items": ontology_files}
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to list ontology files") from exc
+
+
+@router.get("/export")
+async def export_ontology_file(
+    ontology_path: str = Query(..., alias="ontology_path", min_length=1),
+):
+    """Export a selected ontology file as attachment."""
+    registered_paths = _list_registered_ontology_paths()
+    if ontology_path not in registered_paths:
+        raise HTTPException(status_code=404, detail="Ontology path not found")
+
+    path = Path(ontology_path)
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Ontology file does not exist")
+
+    return FileResponse(
+        path=str(path),
+        filename=path.name,
+        media_type="application/octet-stream",
+    )
