@@ -12,6 +12,7 @@ LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
 HEADSCALE_SERVICE_MARKER = "  headscale:"
 
 DEFAULT_ENV_VALUES: dict[str, str] = {
+    "BASE_DOMAIN": "localhost",
     "POSTGRES_USER": "abi",
     "POSTGRES_DB": "abi",
     "POSTGRES_HOST": "postgres",
@@ -29,11 +30,11 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "NEXUS_WEB_IMAGE": "ghcr.io/jupyter-naas/nexus-web",
     "NEXUS_WEB_TAG": "latest",
     "NEXUS_WEB_PORT": "3042",
-    "HEADSCALE_SERVER_URL": "localhost",
+    "HEADSCALE_SERVER_URL": "headscale.localhost",
     "HEADSCALE_SERVER_PORT": "8083",
     "HEADSCALE_METRICS_PORT": "9090",
     "HEADSCALE_GRPC_PORT": "50443",
-    "HEADSCALE_INTERNAL_DOMAIN": "tail.local",
+    "HEADSCALE_INTERNAL_DOMAIN": "vpn.localhost",
     "HEADSCALE_ACME_EMAIL": "",
 }
 
@@ -71,7 +72,7 @@ HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
 """
 
 
-def _copy_headscale_templates(deploy_path: str) -> None:
+def _copy_headscale_templates(deploy_path: str, values: dict[str, object]) -> None:
     copier = Copier(
         templates_path=os.path.join(
             os.path.dirname(naas_abi_cli.__file__),
@@ -79,7 +80,7 @@ def _copy_headscale_templates(deploy_path: str) -> None:
         ),
         destination_path=os.path.join(deploy_path, "docker/headscale"),
     )
-    copier.copy(values=DEFAULT_ENV_VALUES)
+    copier.copy(values=values)
 
 
 def _ensure_headscale_service(docker_compose_target_path: str) -> None:
@@ -171,6 +172,36 @@ def _build_nexus_api_url(
     return f"{scheme}://{public_api_host}"
 
 
+def _build_hosts_from_domain(domain: str) -> dict[str, str]:
+    normalized_domain = domain.strip().lower()
+    return {
+        "PUBLIC_WEB_HOST": f"nexus.{normalized_domain}",
+        "PUBLIC_API_HOST": f"api.{normalized_domain}",
+        "HEADSCALE_SERVER_URL": f"headscale.{normalized_domain}",
+        "HEADSCALE_INTERNAL_DOMAIN": f"vpn.{normalized_domain}",
+    }
+
+
+def _print_domain_recap(
+    base_domain: str,
+    public_api_host: str,
+    public_web_host: str,
+    nexus_api_url: str,
+    include_headscale: bool,
+    headscale_server_url: str,
+    headscale_internal_domain: str,
+) -> None:
+    print("\nLocal deploy domain recap")
+    print(f"- base domain: {base_domain}")
+    print(f"- API host: {public_api_host}")
+    print(f"- Nexus host: {public_web_host}")
+    print(f"- NEXUS_API_URL: {nexus_api_url}")
+    if include_headscale:
+        print(f"- Headscale host: {headscale_server_url}")
+        print(f"- VPN domain: {headscale_internal_domain}")
+    print()
+
+
 def _ensure_env_var(env_path: str, key: str, value: str) -> None:
     existing_content = ""
     if os.path.exists(env_path):
@@ -228,8 +259,7 @@ def _append_local_env_once(source_env_path: str, destination_env_path: str) -> N
 def setup_local_deploy(
     project_path: str,
     include_headscale: bool = False,
-    public_web_host: str | None = None,
-    public_api_host: str | None = None,
+    base_domain: str | None = None,
 ) -> None:
     project_path = os.path.abspath(os.path.expanduser(project_path))
 
@@ -239,17 +269,39 @@ def setup_local_deploy(
     local_env_template_path = os.path.join(deploy_path, ".env")
     local_env_target_path = os.path.join(project_path, ".env")
 
-    if public_web_host is None:
-        public_web_host = Prompt.ask(
-            f"Public web host (example: {DEFAULT_ENV_VALUES['PUBLIC_WEB_HOST']})",
-            default=DEFAULT_ENV_VALUES["PUBLIC_WEB_HOST"],
+    if base_domain is None:
+        base_domain = Prompt.ask(
+            f"Base domain (example: {DEFAULT_ENV_VALUES['BASE_DOMAIN']})",
+            default=DEFAULT_ENV_VALUES["BASE_DOMAIN"],
         )
-    if public_api_host is None:
-        public_api_host = Prompt.ask(
-            f"Public API host (example: {DEFAULT_ENV_VALUES['PUBLIC_API_HOST']})",
-            default=DEFAULT_ENV_VALUES["PUBLIC_API_HOST"],
-        )
+
+    generated_hosts = _build_hosts_from_domain(base_domain)
+    public_web_host = generated_hosts["PUBLIC_WEB_HOST"]
+    public_api_host = generated_hosts["PUBLIC_API_HOST"]
+    headscale_server_url = generated_hosts["HEADSCALE_SERVER_URL"]
+    headscale_internal_domain = generated_hosts["HEADSCALE_INTERNAL_DOMAIN"]
     nexus_api_url = _build_nexus_api_url(public_api_host=public_api_host)
+
+    _print_domain_recap(
+        base_domain=base_domain,
+        public_api_host=public_api_host,
+        public_web_host=public_web_host,
+        nexus_api_url=nexus_api_url,
+        include_headscale=include_headscale,
+        headscale_server_url=headscale_server_url,
+        headscale_internal_domain=headscale_internal_domain,
+    )
+
+    template_values = {
+        **DEFAULT_ENV_VALUES,
+        **generated_hosts,
+        "NEXUS_API_URL": nexus_api_url,
+        "INCLUDE_HEADSCALE": include_headscale,
+        "POSTGRES_PASSWORD": str(uuid4()),
+        "MINIO_ROOT_PASSWORD": str(uuid4()),
+        "RABBITMQ_PASSWORD": str(uuid4()),
+        "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
+    }
 
     if not os.path.exists(deploy_path):
         os.makedirs(deploy_path, exist_ok=False)
@@ -260,19 +312,7 @@ def setup_local_deploy(
             ),
             destination_path=deploy_path,
         )
-        copier.copy(
-            values={
-                **DEFAULT_ENV_VALUES,
-                "PUBLIC_WEB_HOST": public_web_host,
-                "PUBLIC_API_HOST": public_api_host,
-                "NEXUS_API_URL": nexus_api_url,
-                "INCLUDE_HEADSCALE": include_headscale,
-                "POSTGRES_PASSWORD": str(uuid4()),
-                "MINIO_ROOT_PASSWORD": str(uuid4()),
-                "RABBITMQ_PASSWORD": str(uuid4()),
-                "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
-            }
-        )
+        copier.copy(values=template_values)
 
     if os.path.exists(docker_compose_template_path):
         if os.path.exists(docker_compose_target_path):
@@ -289,10 +329,21 @@ def setup_local_deploy(
             continue
         if key in {"PUBLIC_WEB_HOST", "PUBLIC_API_HOST"}:
             continue
+        if key in {"BASE_DOMAIN", "HEADSCALE_SERVER_URL", "HEADSCALE_INTERNAL_DOMAIN"}:
+            continue
         _ensure_env_var(local_env_target_path, key, value)
 
     _ensure_env_var(local_env_target_path, "PUBLIC_WEB_HOST", public_web_host)
     _ensure_env_var(local_env_target_path, "PUBLIC_API_HOST", public_api_host)
+    if include_headscale:
+        _ensure_env_var(
+            local_env_target_path, "HEADSCALE_SERVER_URL", headscale_server_url
+        )
+        _ensure_env_var(
+            local_env_target_path,
+            "HEADSCALE_INTERNAL_DOMAIN",
+            headscale_internal_domain,
+        )
 
     for key in RANDOM_ENV_KEYS:
         _ensure_env_var(local_env_target_path, key, str(uuid4()))
@@ -312,5 +363,5 @@ def setup_local_deploy(
     )
 
     if include_headscale:
-        _copy_headscale_templates(deploy_path)
+        _copy_headscale_templates(deploy_path, values=template_values)
         _ensure_headscale_service(docker_compose_target_path)
