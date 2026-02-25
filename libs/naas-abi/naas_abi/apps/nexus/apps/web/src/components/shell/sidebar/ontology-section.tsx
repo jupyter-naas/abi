@@ -62,6 +62,8 @@ const OntologyItemComponent = React.memo(function OntologyItemComponent({
 
 export function OntologySection({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
+  const [entitiesExpanded, setEntitiesExpanded] = useState(true);
+  const [relationshipsExpanded, setRelationshipsExpanded] = useState(true);
   const { currentWorkspaceId } = useWorkspaceStore();
   const {
     items: ontologyItems,
@@ -138,10 +140,17 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
       {/* Entities */}
       {entities.length > 0 && (
         <div className="space-y-0.5">
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Entities ({entities.length})
-          </p>
-          {entities.map((item) => (
+          <button
+            onClick={() => setEntitiesExpanded((prev) => !prev)}
+            className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10"
+          >
+            <ChevronRight
+              size={10}
+              className={cn('flex-shrink-0 transition-transform', entitiesExpanded && 'rotate-90')}
+            />
+            <span>Entities ({entities.length})</span>
+          </button>
+          {entitiesExpanded && entities.map((item) => (
             <OntologyItemComponent
               key={item.id}
               item={item}
@@ -158,10 +167,17 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
       {/* Relationships */}
       {relationships.length > 0 && (
         <div className="space-y-0.5">
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Relationships ({relationships.length})
-          </p>
-          {relationships.map((item) => (
+          <button
+            onClick={() => setRelationshipsExpanded((prev) => !prev)}
+            className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10"
+          >
+            <ChevronRight
+              size={10}
+              className={cn('flex-shrink-0 transition-transform', relationshipsExpanded && 'rotate-90')}
+            />
+            <span>Relationships ({relationships.length})</span>
+          </button>
+          {relationshipsExpanded && relationships.map((item) => (
             <OntologyItemComponent
               key={item.id}
               item={item}
