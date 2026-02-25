@@ -220,27 +220,22 @@ for module in engine.modules.values():
 def api():
     import uvicorn
 
-    if os.environ.get("ENV") == "dev":
-        uvicorn.run(
-            "naas_abi_core.apps.api.api:app",
-            host="0.0.0.0",
-            port=9879,
-            reload=os.environ.get("ENV") == "dev",
-            reload_dirs=["src", "libs"],
-            log_level="debug",
-            proxy_headers=True,
-            forwarded_allow_ips="*",
-        )
-    else:
-        uvicorn.run(
-            "naas_abi_core.apps.api.api:app",
-            host="0.0.0.0",
-            port=9879,
-            reload_dirs=["src", "libs"],
-            reload=True,
-            proxy_headers=True,
-            forwarded_allow_ips="*",
-        )
+    reload_enabled = engine.configuration.api.reload
+
+    run_kwargs = {
+        "app": "naas_abi_core.apps.api.api:app",
+        "host": "0.0.0.0",
+        "port": 9879,
+        "reload": reload_enabled,
+        "proxy_headers": True,
+        "forwarded_allow_ips": "*",
+        "log_level": "debug" if reload_enabled else "info",
+    }
+
+    if reload_enabled:
+        run_kwargs["reload_dirs"] = ["src", "libs"]
+
+    uvicorn.run(**run_kwargs)
 
 
 def test_init():
