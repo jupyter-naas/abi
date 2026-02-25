@@ -985,6 +985,7 @@ function OntologyOverviewView({
 const ENTITY_CENTER_SECTIONS = [
   'Overview',
   'Properties',
+  'Action types',
   'Security',
   'Datasources',
   'Capabilities',
@@ -1030,6 +1031,9 @@ function EntityDetailView({
 
   const baseClass = allClasses.find((c) => c.iri === item.baseClass);
   const propertyCount = item.entityProperties?.length || 0;
+  const additionalSectionTables = ENTITY_CENTER_SECTIONS.filter(
+    (section) => !['Overview', 'Properties', 'Action types'].includes(section)
+  );
 
   const startEdit = (field: string, value: string) => {
     setEditingField(field);
@@ -1073,7 +1077,6 @@ function EntityDetailView({
         {/* Header */}
         <div className="flex items-center justify-between border-b bg-background px-6 py-4">
           <div className="flex items-center gap-3">
-            <Box size={28} className="text-blue-500" />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-semibold">{item.name}</h1>
@@ -1118,41 +1121,23 @@ function EntityDetailView({
 
                 {/* Metadata table */}
                 <div className="rounded-lg border divide-y">
-                  {/* Plural name */}
+                  {/* URIRef */}
                   <div className="flex items-center px-4 py-3">
-                    <span className="w-40 text-sm text-muted-foreground">Plural name</span>
-                    {editingField === 'pluralName' ? (
-                      <div className="flex flex-1 items-center gap-2">
-                        <input
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          className="flex-1 rounded border bg-background px-2 py-1 text-sm"
-                          autoFocus
-                        />
-                        <button onClick={() => saveEdit('pluralName')} className="text-workspace-accent">
-                          <Check size={16} />
-                        </button>
-                        <button onClick={() => setEditingField(null)} className="text-muted-foreground">
-                          <X size={16} />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-1 items-center justify-between">
-                        <span className="text-sm">{item.pluralName || `${item.name}s`}</span>
-                        <button
-                          onClick={() => startEdit('pluralName', item.pluralName || `${item.name}s`)}
-                          className="text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                      </div>
-                    )}
+                    <span className="w-40 text-sm text-muted-foreground">URIRef</span>
+                    <span className="font-mono text-sm text-muted-foreground truncate">{item.id}</span>
                   </div>
 
-                  {/* Description */}
+                  {/* Inheritance */}
+                  <div className="flex items-center px-4 py-3">
+                    <span className="w-40 text-sm text-muted-foreground">
+                      {item.type === 'relationship' ? 'Subproperty of' : 'Subclass of'}
+                    </span>
+                    <span className="text-sm">{item.parentName || 'None'}</span>
+                  </div>
+
+                  {/* Definition */}
                   <div className="flex items-start px-4 py-3 group">
-                    <span className="w-40 text-sm text-muted-foreground">Description</span>
+                    <span className="w-40 text-sm text-muted-foreground">Definition</span>
                     {editingField === 'description' ? (
                       <div className="flex flex-1 items-start gap-2">
                         <textarea
@@ -1182,6 +1167,12 @@ function EntityDetailView({
                         </button>
                       </div>
                     )}
+                  </div>
+
+                  {/* Example */}
+                  <div className="flex items-center px-4 py-3">
+                    <span className="w-40 text-sm text-muted-foreground">Example</span>
+                    <span className="text-sm">{baseClass?.examples || 'No example'}</span>
                   </div>
 
                   {/* Aliases */}
@@ -1250,44 +1241,6 @@ function EntityDetailView({
                     <span className="text-sm">{item.contributors?.join(', ') || 'None'}</span>
                   </div>
 
-                  {/* Base class / Ontology */}
-                  <div className="flex items-center px-4 py-3">
-                    <span className="w-40 text-sm text-muted-foreground">Base class</span>
-                    <span className="text-sm">
-                      {baseClass ? (
-                        <span className="flex items-center gap-1">
-                          <Box size={12} className="text-blue-500" />
-                          {baseClass.label}
-                          <span className="text-muted-foreground">({baseClass.ontologyName})</span>
-                        </span>
-                      ) : (
-                        'None'
-                      )}
-                    </span>
-                  </div>
-
-                  {/* API name */}
-                  <div className="flex items-center px-4 py-3">
-                    <span className="w-40 text-sm text-muted-foreground">API name</span>
-                    <span className="font-mono text-sm text-muted-foreground truncate">
-                      {item.apiName || item.id}
-                    </span>
-                  </div>
-
-                  {/* Sections moved from left menu */}
-                  <div className="flex items-start px-4 py-3">
-                    <span className="w-40 text-sm text-muted-foreground">Sections</span>
-                    <div className="flex flex-1 flex-wrap gap-2">
-                      {ENTITY_CENTER_SECTIONS.map((section) => (
-                        <span
-                          key={section}
-                          className="rounded bg-muted px-2 py-0.5 text-sm text-muted-foreground"
-                        >
-                          {section}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Properties Section */}
@@ -1410,6 +1363,17 @@ function EntityDetailView({
                     )}
                   </div>
                 </div>
+
+                {additionalSectionTables.map((section) => (
+                  <div key={section} className="mt-6 rounded-lg border">
+                    <div className="flex items-center justify-between border-b px-4 py-3">
+                      <span className="font-medium">{section}</span>
+                    </div>
+                    <div className="p-4 text-sm text-muted-foreground">
+                      No {section.toLowerCase()} configured yet
+                    </div>
+                  </div>
+                ))}
               </div>
 
               {/* Right Status Panel */}
@@ -1454,19 +1418,6 @@ function EntityDetailView({
                   </div>
                 </div>
 
-                {/* IDs */}
-                <div className="rounded-lg border p-4">
-                  <div className="mb-3">
-                    <span className="text-sm text-muted-foreground">ID</span>
-                    <p className="truncate font-mono text-xs">{item.id}</p>
-                  </div>
-                  {item.apiName && (
-                    <div>
-                      <span className="text-sm text-muted-foreground">API Name</span>
-                      <p className="truncate font-mono text-xs">{item.apiName}</p>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
         </div>

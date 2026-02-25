@@ -22,8 +22,8 @@ class OntologyItem(BaseModel):
     name: str
     type: str  # entity, relationship, schema, folder
     description: str | None = None
-    base_class: str | None = None
     parent_id: str | None = None
+    parent_name: str | None = None
     created_at: datetime = datetime.now()
     updated_at: datetime = datetime.now()
 
@@ -197,6 +197,53 @@ def _resolve_target_ontology_paths(ontology_path: str | None) -> list[str]:
     return registered_paths
 
 
+def _sparql_iri(value: str) -> str | None:
+    """Return a safe SPARQL IRI token or None when value is invalid."""
+    candidate = (value or "").strip()
+    if not candidate:
+        return None
+    # Basic guard to avoid malformed query injection.
+    if any(char in candidate for char in ('<', '>', '"', "'", " ")):
+        return None
+    return f"<{candidate}>"
+
+
+def _get_parent_labels_from_triple_store(parent_ids: set[str]) -> dict[str, str]:
+    """Resolve parent labels from the configured triple store service."""
+    if not parent_ids:
+        return {}
+
+    iri_values = [
+        iri
+        for value in sorted(parent_ids)
+        if (iri := _sparql_iri(value)) is not None
+    ]
+    if not iri_values:
+        return {}
+
+    try:
+        triple_store_service = ABIModule.get_instance().engine.services.triple_store
+    except Exception:
+        return {}
+
+    query = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?parentId ?label WHERE {{
+            VALUES ?parentId {{ {' '.join(iri_values)} }}
+            OPTIONAL {{ ?parentId rdfs:label ?label . }}
+        }}
+    """
+
+    labels: dict[str, str] = {}
+    rows = triple_store_service.query(query)
+    for row in rows:
+        parent_id = str(getattr(row, "parentId", "") or "")
+        label = str(getattr(row, "label", "") or "")
+        if parent_id and label and parent_id not in labels:
+            labels[parent_id] = label
+    return labels
+
+
 def parse_ttl(content: str, file_path: str) -> ReferenceOntology:
     """Parse TTL/Turtle format ontology file."""
     classes: list[ReferenceClass] = []
@@ -278,11 +325,11 @@ async def list_classes(
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-        SELECT ?s ?label ?definition ?subclassOf WHERE {
+        SELECT ?s ?label ?definition ?parentId WHERE {
             ?s rdf:type owl:Class .
             OPTIONAL { ?s rdfs:label ?label . }
             OPTIONAL { ?s skos:definition ?definition . }
-            OPTIONAL { ?s rdfs:subClassOf ?subclassOf . }
+            OPTIONAL { ?s rdfs:subClassOf ?parentId . }
         }
     """
 
@@ -292,12 +339,11 @@ async def list_classes(
             iri = str(row.get("s"))
             label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
             definition = str(row.get("definition")) if row.get("definition") else None
-            subclass_of = str(row.get("subclassOf")) if row.get("subclassOf") else None
-
+            parent_id = str(row.get("parentId")) if row.get("parentId") else None
             existing = by_iri.get(iri)
             if existing:
-                if existing.base_class is None and subclass_of is not None:
-                    existing.base_class = subclass_of
+                if existing.parent_id is None and parent_id is not None:
+                    existing.parent_id = parent_id
                 if existing.description is None and definition is not None:
                     existing.description = definition
                 continue
@@ -307,8 +353,15 @@ async def list_classes(
                 name=label,
                 type="entity",
                 description=definition,
-                base_class=subclass_of,
+                parent_id=parent_id,
             )
+
+    parent_labels = _get_parent_labels_from_triple_store(
+        {item.parent_id for item in by_iri.values() if item.parent_id}
+    )
+    for item in by_iri.values():
+        if item.parent_id:
+            item.parent_name = parent_labels.get(item.parent_id)
 
     items = sorted(by_iri.values(), key=lambda item: item.name.lower())
     return {"items": items}
@@ -327,11 +380,11 @@ async def list_relations(
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-        SELECT ?s ?label ?definition ?subPropertyOf WHERE {
+        SELECT ?s ?label ?definition ?parentId WHERE {
             ?s rdf:type owl:ObjectProperty .
             OPTIONAL { ?s rdfs:label ?label . }
             OPTIONAL { ?s skos:definition ?definition . }
-            OPTIONAL { ?s rdfs:subPropertyOf ?subPropertyOf . }
+            OPTIONAL { ?s rdfs:subPropertyOf ?parentId . }
         }
     """
 
@@ -341,12 +394,11 @@ async def list_relations(
             iri = str(row.get("s"))
             label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
             definition = str(row.get("definition")) if row.get("definition") else None
-            sub_property_of = str(row.get("subPropertyOf")) if row.get("subPropertyOf") else None
-
+            parent_id = str(row.get("parentId")) if row.get("parentId") else None
             existing = by_iri.get(iri)
             if existing:
-                if existing.base_class is None and sub_property_of is not None:
-                    existing.base_class = sub_property_of
+                if existing.parent_id is None and parent_id is not None:
+                    existing.parent_id = parent_id
                 if existing.description is None and definition is not None:
                     existing.description = definition
                 continue
@@ -356,8 +408,15 @@ async def list_relations(
                 name=label,
                 type="relationship",
                 description=definition,
-                base_class=sub_property_of,
+                parent_id=parent_id,
             )
+
+    parent_labels = _get_parent_labels_from_triple_store(
+        {item.parent_id for item in by_iri.values() if item.parent_id}
+    )
+    for item in by_iri.values():
+        if item.parent_id:
+            item.parent_name = parent_labels.get(item.parent_id)
 
     items = sorted(by_iri.values(), key=lambda item: item.name.lower())
     return {"items": items}
@@ -426,7 +485,7 @@ async def create_entity(data: EntityCreate):
         name=data.name,
         type="entity",
         description=data.description,
-        base_class=data.base_class,
+        parent_id=data.base_class,
     )
     ontology_items.append(item)
     return item
@@ -440,7 +499,7 @@ async def create_relationship(data: RelationshipCreate):
         name=data.name,
         type="relationship",
         description=data.description,
-        base_class=data.base_property,
+        parent_id=data.base_property,
     )
     ontology_items.append(item)
     return item

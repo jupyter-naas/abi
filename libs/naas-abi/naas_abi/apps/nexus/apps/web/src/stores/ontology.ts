@@ -60,6 +60,7 @@ export interface OntologyItem {
   
   // For items based on reference ontologies
   baseClass?: string; // IRI of the base class
+  parentName?: string;
   referenceOntologyId?: string;
   
   // Metadata
@@ -261,13 +262,29 @@ export const useOntologyStore = create<OntologyState>()(
             return sourceItems.map((item) => {
               const typedItem = item as Partial<OntologyItem> & {
                 base_class?: string;
+                parent_id?: string;
+                parent_name?: string;
+                sub_class_of?: string;
+                sub_property_of?: string;
+                subClassOf?: string;
+                subPropertyOf?: string;
                 created_at?: string;
                 updated_at?: string;
               };
               return {
                 ...typedItem,
                 workspaceId: typedItem.workspaceId || workspaceId,
-                baseClass: typedItem.baseClass || typedItem.base_class,
+                parentId: typedItem.parentId || typedItem.parent_id,
+                parentName: typedItem.parentName || typedItem.parent_name,
+                baseClass:
+                  typedItem.baseClass ||
+                  typedItem.base_class ||
+                  typedItem.parentId ||
+                  typedItem.parent_id ||
+                  typedItem.subClassOf ||
+                  typedItem.sub_class_of ||
+                  typedItem.subPropertyOf ||
+                  typedItem.sub_property_of,
                 createdAt: typedItem.createdAt ? new Date(typedItem.createdAt) : (
                   typedItem.created_at ? new Date(typedItem.created_at) : new Date()
                 ),
@@ -325,6 +342,12 @@ export const useOntologyStore = create<OntologyState>()(
           const normalizedItems = sourceItems.map((item) => {
             const typedItem = item as Partial<OntologyItem> & {
               base_class?: string;
+              parent_id?: string;
+              parent_name?: string;
+              sub_class_of?: string;
+              sub_property_of?: string;
+              subClassOf?: string;
+              subPropertyOf?: string;
               created_at?: string;
               updated_at?: string;
             };
@@ -332,7 +355,17 @@ export const useOntologyStore = create<OntologyState>()(
               ...typedItem,
               type: expectedType,
               workspaceId: typedItem.workspaceId || workspaceId,
-              baseClass: typedItem.baseClass || typedItem.base_class,
+              parentId: typedItem.parentId || typedItem.parent_id,
+              parentName: typedItem.parentName || typedItem.parent_name,
+              baseClass:
+                typedItem.baseClass ||
+                typedItem.base_class ||
+                typedItem.parentId ||
+                typedItem.parent_id ||
+                typedItem.subClassOf ||
+                typedItem.sub_class_of ||
+                typedItem.subPropertyOf ||
+                typedItem.sub_property_of,
               createdAt: typedItem.createdAt ? new Date(typedItem.createdAt) : (
                 typedItem.created_at ? new Date(typedItem.created_at) : new Date()
               ),
