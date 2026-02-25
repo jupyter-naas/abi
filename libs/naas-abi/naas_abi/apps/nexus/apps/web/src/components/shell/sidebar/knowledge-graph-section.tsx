@@ -87,11 +87,13 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
         const wsRes = await authFetch(`${apiUrl}/api/graph/workspaces/${currentWorkspaceId}`);
         if (wsRes.ok) {
           const wsData = await wsRes.json();
-          // Only expose exactly two graphs per workspace: Persons and Organizations
-          const personCount = wsData.nodes?.filter((n: any) => n.type === 'Person').length || 0;
-          const orgCount = wsData.nodes?.filter((n: any) => n.type === 'Organization').length || 0;
-          graphs.push({ id: `${currentWorkspaceId}#layer=person`, name: 'Persons', type: 'workspace', nodeCount: personCount });
-          graphs.push({ id: `${currentWorkspaceId}#layer=organization`, name: 'Organizations', type: 'workspace', nodeCount: orgCount });
+          const workspaceNodeCount = wsData.nodes?.length || 0;
+          graphs.push({
+            id: currentWorkspaceId,
+            name: currentWorkspace?.name ? `${currentWorkspace.name} Graph` : 'Workspace Graph',
+            type: 'workspace',
+            nodeCount: workspaceNodeCount,
+          });
         }
 
         setAvailableGraphs(graphs);
