@@ -178,10 +178,11 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
         <SearchSection collapsed={collapsed} />
         <ChatSection collapsed={collapsed} />
-        <FilesSection collapsed={collapsed} />
-        <LabSection collapsed={collapsed} />
         <OntologySection collapsed={collapsed} />
         <KnowledgeGraphSection collapsed={collapsed} />
+
+        <FilesSection collapsed={collapsed} />
+        <LabSection collapsed={collapsed} />
         <AppsSection collapsed={collapsed} />
       </nav>
     </aside>
