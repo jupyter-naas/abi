@@ -124,66 +124,19 @@ export default function GraphPage() {
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
       
-      // Determine which graphs to fetch based on visibility
-      // Graph IDs match the workspace_id in the database
-      let graphsToFetch: string[] = [];
-      // Only support the two virtual layers per workspace page now
-      if (visibleGraphIds.length > 0) {
-        graphsToFetch = visibleGraphIds.filter((id) => id.startsWith(`${workspaceId}#layer=`));
-      }
-      if (graphsToFetch.length === 0) {
-        graphsToFetch = [`${workspaceId}#layer=person`, `${workspaceId}#layer=organization`];
-      }
+      // Determine which workspace graphs to fetch based on visibility.
+      // Graph IDs map to workspace IDs in the API route.
+      const graphsToFetch: string[] = visibleGraphIds.length > 0
+        ? visibleGraphIds.filter((id) => !id.includes('#layer='))
+        : [workspaceId];
+      const workspaceGraphIds = graphsToFetch.length > 0 ? graphsToFetch : [workspaceId];
       
       // Fetch all visible graphs in parallel
       const responses = await Promise.all(
-        graphsToFetch.map((graphId) => {
-          // Support virtual layers: person, organization, personview, orgview
-          const [baseId, layerParam] = graphId.split('#layer=');
-          const layer = layerParam === 'person' ? 'Person' 
-            : layerParam === 'organization' ? 'Organization' 
-            : undefined;
-          // For Person/Organization layers we want 1-hop neighborhood around those nodes,
-          // so fetch the full workspace graph and prune client-side. Only use node_type
-          // for any future strict filters.
-          const isAdjacencyLayer = layerParam === 'person' || layerParam === 'organization' || layerParam === 'personview' || layerParam === 'orgview';
-          const url = isAdjacencyLayer
-            ? `${apiUrl}/api/graph/workspaces/${baseId}`
-            : (layer ? `${apiUrl}/api/graph/workspaces/${baseId}?node_type=${encodeURIComponent(layer)}`
-                     : `${apiUrl}/api/graph/workspaces/${baseId}`);
+        workspaceGraphIds.map((graphId) => {
+          const url = `${apiUrl}/api/graph/workspaces/${graphId}`;
           return authFetch(url)
             .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-            .then((data) => {
-              const expandNeighborhood = (seedType: 'Person' | 'Organization', hops = 2) => {
-                const seed = new Set<string>(
-                  data.nodes
-                    .filter((n: any) => n.type === seedType)
-                    .map((n: any) => String(n.id))
-                );
-                const allowed = new Set<string>(seed);
-                for (let i = 0; i < hops; i++) {
-                  let grew = false;
-                  for (const e of data.edges as any[]) {
-                    if (allowed.has(e.source_id) || allowed.has(e.target_id)) {
-                      if (!allowed.has(e.source_id)) { allowed.add(e.source_id); grew = true; }
-                      if (!allowed.has(e.target_id)) { allowed.add(e.target_id); grew = true; }
-                    }
-                  }
-                  if (!grew) break;
-                }
-                data.nodes = data.nodes.filter((n: any) => allowed.has(n.id));
-                data.edges = data.edges.filter((e: any) => allowed.has(e.source_id) && allowed.has(e.target_id));
-              };
-
-              if (layerParam === 'personview' || layerParam === 'person') {
-                // Show Person → Role → Process (2 hops) neighborhood
-                expandNeighborhood('Person', 2);
-              } else if (layerParam === 'orgview' || layerParam === 'organization') {
-                // Show Organization → (Person/Process) → neighbors (2 hops)
-                expandNeighborhood('Organization', 2);
-              }
-              return data;
-            })
             .catch(() => ({ nodes: [], edges: [] }));
         })
       );
