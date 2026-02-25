@@ -3,6 +3,7 @@
 import os
 import re
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi import ABIModule
@@ -49,6 +50,11 @@ class ReferenceOntology(BaseModel):
     imported_at: datetime
 
 
+class OntologyFileItem(BaseModel):
+    name: str
+    path: str
+
+
 class EntityCreate(BaseModel):
     """Create a new ontology entity."""
 
@@ -80,6 +86,20 @@ class ImportRequest(BaseModel):
 
 # In-memory storage (replace with database later)
 ontology_items: list[OntologyItem] = []
+
+
+def _resolve_ontology_directory() -> Path:
+    """Resolve repository ontology directory for the NEXUS app."""
+    p = Path(__file__).resolve()
+    root = None
+    for _ in range(8):
+        if p.name == "apps":
+            root = p.parent
+            break
+        p = p.parent
+    if root is None:
+        root = Path(__file__).resolve().parents[6]
+    return root / "ontology"
 
 
 def parse_ttl(content: str, file_path: str) -> ReferenceOntology:
@@ -345,3 +365,35 @@ async def get_bfo7_reference() -> dict:
         raise HTTPException(
             status_code=500, detail="Failed to load BFO7 reference ontology"
         ) from exc
+
+
+@router.get("/ontologies")
+async def list_ontology_files() -> dict[str, list[OntologyFileItem]]:
+    """
+    List ontology files loaded into the platform from all registered modules.
+    This covers all ontologies as recognized by the ABIModule engine,
+    matching the method in `list_ontologies.py` and the provided file context.
+    """
+    try:
+        abi_module = ABIModule.get_instance()
+
+        ontology_files: list[OntologyFileItem] = []
+        seen_paths: set[str] = set()
+        for module in abi_module.engine.modules.values():
+            ontologies = getattr(module, "ontologies", None) or []
+            for ontology in ontologies:
+                ontology_path = str(ontology)
+                if ontology_path in seen_paths:
+                    continue
+                seen_paths.add(ontology_path)
+                ontology_files.append(
+                    OntologyFileItem(
+                        name=os.path.basename(ontology_path),
+                        path=ontology_path,
+                    )
+                )
+
+        ontology_files.sort(key=lambda item: item.name.lower())
+        return {"items": ontology_files}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to list ontology files") from exc
