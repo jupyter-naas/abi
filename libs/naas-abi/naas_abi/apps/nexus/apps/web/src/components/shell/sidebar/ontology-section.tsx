@@ -1,71 +1,21 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  BrainCircuit, ChevronRight, Folder, Box, Link2, Network,
+  BrainCircuit, ChevronRight, Box, Link2,
   FolderPlus, RefreshCw, Import, Plus, BookOpen, FileCode,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useOntologyStore, type OntologyItem } from '@/stores/ontology';
+import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 
-const OntologyItemComponent = React.memo(function OntologyItemComponent({
-  item,
-  isActive,
-  onClick,
-}: {
-  item: OntologyItem;
-  isActive: boolean;
-  onClick: () => void;
-}) {
-  const isFolder = item.type === 'folder';
-  const [expanded, setExpanded] = useState(false);
-
-  const getIcon = () => {
-    switch (item.type) {
-      case 'entity':
-        return <Box size={14} className="flex-shrink-0 text-blue-500" />;
-      case 'relationship':
-        return <Link2 size={14} className="flex-shrink-0 text-green-500" />;
-      case 'folder':
-        return <Folder size={14} className="flex-shrink-0 text-muted-foreground" />;
-      default:
-        return <Network size={14} className="flex-shrink-0 text-muted-foreground" />;
-    }
-  };
-
-  return (
-    <button
-      onClick={isFolder ? () => setExpanded(!expanded) : onClick}
-      className={cn(
-        'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors',
-        'hover:bg-workspace-accent-10',
-        isActive && 'bg-workspace-accent-15 text-workspace-accent'
-      )}
-      title={item.description}
-    >
-      {isFolder && (
-        <ChevronRight
-          size={12}
-          className={cn('flex-shrink-0 transition-transform', expanded && 'rotate-90')}
-        />
-      )}
-      {!isFolder && <span className="w-3" />}
-      {getIcon()}
-      <span className="flex-1 truncate">{item.name}</span>
-    </button>
-  );
-});
-
 export function OntologySection({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
-  const [classesExpanded, setClassesExpanded] = useState(true);
-  const [relationshipsExpanded, setRelationshipsExpanded] = useState(true);
   const [ontologiesExpanded, setOntologiesExpanded] = useState(true);
   const [ontologyFiles, setOntologyFiles] = useState<Array<{ name: string; path: string }>>([]);
   const [loadingOntologyFiles, setLoadingOntologyFiles] = useState(false);
@@ -73,17 +23,12 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
   const {
     items: ontologyItems,
     loading: ontologyLoading,
-    selectedItemId,
-    setSelectedItem,
     createFolder: createOntologyFolder,
     refreshItems: refreshOntology,
     referenceOntologies,
     expandedReferences,
     toggleReference,
   } = useOntologyStore();
-
-  const classes = ontologyItems.filter((item) => item.type === 'entity');
-  const relationships = ontologyItems.filter((item) => item.type === 'relationship');
 
   useEffect(() => {
     const fetchOntologyFiles = async () => {
@@ -184,7 +129,7 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
                 key={ontologyFile.path}
                 onClick={() => {
                   const params = new URLSearchParams({
-                    view: 'schema',
+                    view: 'overview',
                     ontology: ontologyFile.path,
                   });
                   router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
@@ -206,60 +151,6 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
           </div>
         )}
       </div>
-
-      {/* Classes */}
-      {classes.length > 0 && (
-        <div className="space-y-0.5">
-          <button
-            onClick={() => setClassesExpanded((prev) => !prev)}
-            className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10"
-          >
-            <ChevronRight
-              size={10}
-              className={cn('flex-shrink-0 transition-transform', classesExpanded && 'rotate-90')}
-            />
-            <span>Classes ({classes.length})</span>
-          </button>
-          {classesExpanded && classes.map((item) => (
-            <OntologyItemComponent
-              key={item.id}
-              item={item}
-              isActive={selectedItemId === item.id}
-              onClick={() => {
-                setSelectedItem(item.id);
-                router.push(getWorkspacePath(currentWorkspaceId, '/ontology'));
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Relationships */}
-      {relationships.length > 0 && (
-        <div className="space-y-0.5">
-          <button
-            onClick={() => setRelationshipsExpanded((prev) => !prev)}
-            className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10"
-          >
-            <ChevronRight
-              size={10}
-              className={cn('flex-shrink-0 transition-transform', relationshipsExpanded && 'rotate-90')}
-            />
-            <span>Relationships ({relationships.length})</span>
-          </button>
-          {relationshipsExpanded && relationships.map((item) => (
-            <OntologyItemComponent
-              key={item.id}
-              item={item}
-              isActive={selectedItemId === item.id}
-              onClick={() => {
-                setSelectedItem(item.id);
-                router.push(getWorkspacePath(currentWorkspaceId, '/ontology'));
-              }}
-            />
-          ))}
-        </div>
-      )}
 
       {/* Reference Ontologies */}
       {referenceOntologies.length > 0 && (

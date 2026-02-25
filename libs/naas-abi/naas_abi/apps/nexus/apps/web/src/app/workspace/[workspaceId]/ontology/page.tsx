@@ -3,20 +3,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
+import { authFetch } from '@/stores/auth';
+import { getApiUrl } from '@/lib/config';
 import {
   Network,
   Plus,
-  FileCode,
   Eye,
   Download,
   Upload,
   FolderOpen,
   X,
-  BookOpen,
   Box,
   Link2,
   ChevronRight,
-  Trash2,
   Loader2,
   Check,
   Search,
@@ -25,14 +24,8 @@ import {
   ExternalLink,
   Mail,
   Pencil,
-  Shield,
-  Database,
-  Zap,
   LayoutGrid,
-  Settings,
-  BarChart3,
   Users,
-  Key,
   Type,
   Hash,
   Calendar,
@@ -41,18 +34,23 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useOntologyStore, type ReferenceOntology, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
+import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
 
-type ViewMode = 'editor' | 'import' | 'references' | 'schema' | 'create-entity' | 'create-relationship';
+type ViewMode = 'overview' | 'classes' | 'relations' | 'editor' | 'import' | 'create-entity' | 'create-relationship';
 
 export default function OntologyPage() {
   const searchParams = useSearchParams();
-  const initialView = (searchParams.get('view') as ViewMode) || 'editor';
+  const requestedInitialView = (searchParams?.get('view') as ViewMode) || 'overview';
+  const initialView: ViewMode = requestedInitialView === 'editor' ? 'classes' : requestedInitialView;
   
   const [viewMode, setViewMode] = useState<ViewMode>(initialView);
+  const [lastCatalogView, setLastCatalogView] = useState<'classes' | 'relations'>(
+    initialView === 'relations' ? 'relations' : 'classes'
+  );
   const [importPath, setImportPath] = useState('');
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   
   // Creation form state
   const [formName, setFormName] = useState('');
@@ -63,13 +61,21 @@ export default function OntologyPage() {
   
   // Update view mode and pre-fill form when URL changes
   useEffect(() => {
-    const view = searchParams.get('view') as ViewMode;
-    if (view && ['editor', 'import', 'references', 'schema', 'create-entity', 'create-relationship'].includes(view)) {
-      setViewMode(view);
+    const view = searchParams?.get('view') as ViewMode;
+    if (view && ['overview', 'classes', 'relations', 'editor', 'import', 'create-entity', 'create-relationship'].includes(view)) {
+      const normalizedView = view === 'editor' ? 'classes' : view;
+      setViewMode(normalizedView);
+      if (normalizedView === 'classes' || normalizedView === 'relations') {
+        setLastCatalogView(normalizedView);
+      } else if (normalizedView === 'create-entity') {
+        setLastCatalogView('classes');
+      } else if (normalizedView === 'create-relationship') {
+        setLastCatalogView('relations');
+      }
       
       // Pre-fill base class/property from URL if provided
-      const baseClass = searchParams.get('baseClass');
-      const baseProperty = searchParams.get('baseProperty');
+      const baseClass = searchParams?.get('baseClass');
+      const baseProperty = searchParams?.get('baseProperty');
       if (baseClass) {
         setFormBaseRef(baseClass);
       } else if (baseProperty) {
@@ -83,14 +89,25 @@ export default function OntologyPage() {
     selectedItemId,
     referenceOntologies,
     importReferenceOntology,
-    removeReferenceOntology,
     createEntity,
     createRelationship,
     setSelectedItem,
     updateItem,
+    fetchItemsForView,
   } = useOntologyStore();
 
   const selectedItem = items.find((i) => i.id === selectedItemId);
+  const classItems = useMemo(() => items.filter((item) => item.type === 'entity'), [items]);
+  const relationshipItems = useMemo(() => items.filter((item) => item.type === 'relationship'), [items]);
+  const selectedOntologyPath = searchParams?.get('ontology') || null;
+
+  useEffect(() => {
+    if (viewMode === 'classes') {
+      fetchItemsForView('classes', selectedOntologyPath);
+    } else if (viewMode === 'relations') {
+      fetchItemsForView('relations', selectedOntologyPath);
+    }
+  }, [viewMode, fetchItemsForView, selectedOntologyPath]);
 
   // Aggregate all classes and properties from all references
   const allClasses = useMemo(() => {
@@ -146,7 +163,7 @@ export default function OntologyPage() {
       const result = await importReferenceOntology(importPath.trim());
       if (result) {
         setImportPath('');
-        setViewMode('references');
+        setViewMode('overview');
       } else {
         setImportError('Failed to import ontology. Check the file path.');
       }
@@ -155,14 +172,6 @@ export default function OntologyPage() {
     } finally {
       setImporting(false);
     }
-  };
-
-  const handleCreateFromClass = (cls: { label: string; definition?: string; iri: string }) => {
-    // Pre-fill form and open create-entity view
-    setFormName('');
-    setFormDescription(cls.definition || '');
-    setFormBaseRef(cls.iri);
-    setViewMode('create-entity');
   };
 
   const resetForm = () => {
@@ -174,11 +183,13 @@ export default function OntologyPage() {
 
   const openCreateEntity = () => {
     resetForm();
+    setLastCatalogView('classes');
     setViewMode('create-entity');
   };
 
   const openCreateRelationship = () => {
     resetForm();
+    setLastCatalogView('relations');
     setViewMode('create-relationship');
   };
 
@@ -188,7 +199,8 @@ export default function OntologyPage() {
     try {
       await createEntity(formName.trim(), formDescription.trim() || undefined, formBaseRef || undefined);
       resetForm();
-      setViewMode('editor');
+      setViewMode('classes');
+      setLastCatalogView('classes');
     } finally {
       setCreating(false);
     }
@@ -200,7 +212,8 @@ export default function OntologyPage() {
     try {
       await createRelationship(formName.trim(), formDescription.trim() || undefined, formBaseRef || undefined);
       resetForm();
-      setViewMode('editor');
+      setViewMode('relations');
+      setLastCatalogView('relations');
     } finally {
       setCreating(false);
     }
@@ -208,6 +221,39 @@ export default function OntologyPage() {
 
   const selectedBaseClass = allClasses.find((c) => c.iri === formBaseRef);
   const selectedBaseProperty = allProperties.find((p) => p.iri === formBaseRef);
+
+  const handleExportCurrentOntology = async () => {
+    if (!selectedOntologyPath || exporting) return;
+
+    setExporting(true);
+    try {
+      const baseUrl = getApiUrl();
+      const response = await authFetch(
+        `${baseUrl}/api/ontology/export?ontology_path=${encodeURIComponent(selectedOntologyPath)}`
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to export ontology: ${response.status}`);
+      }
+
+      const contentDisposition = response.headers.get('content-disposition') || '';
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+      const filename = filenameMatch?.[1] || selectedOntologyPath.split('/').pop() || 'ontology.ttl';
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Failed to export ontology:', error);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -218,50 +264,63 @@ export default function OntologyPage() {
         <div className="flex h-10 items-center justify-between border-b bg-muted/30 px-4">
           <div className="flex gap-1">
             <button
-              onClick={() => setViewMode('editor')}
+              onClick={() => setViewMode('overview')}
               className={cn(
                 'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
-                viewMode === 'editor' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
+                viewMode === 'overview' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
               )}
             >
-              <FileCode size={14} />
-              Editor
+              <Eye size={14} />
+              Overview
             </button>
             <button
-              onClick={() => setViewMode('import')}
+              onClick={() => {
+                setLastCatalogView('classes');
+                setViewMode('classes');
+              }}
               className={cn(
                 'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
-                viewMode === 'import' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
+                viewMode === 'classes' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
               )}
+            >
+              <Box size={14} />
+              Classes
+            </button>
+            <button
+              onClick={() => {
+                setLastCatalogView('relations');
+                setViewMode('relations');
+              }}
+              className={cn(
+                'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
+                viewMode === 'relations' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
+              )}
+            >
+              <Link2 size={14} />
+              Relations
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setViewMode('import')}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
             >
               <Upload size={14} />
               Import
             </button>
             <button
-              onClick={() => setViewMode('references')}
+              onClick={handleExportCurrentOntology}
+              disabled={!selectedOntologyPath || exporting}
               className={cn(
-                'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
-                viewMode === 'references' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
+                "flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground",
+                (!selectedOntologyPath || exporting) && "cursor-not-allowed opacity-50"
               )}
+              title={!selectedOntologyPath ? 'Select an ontology file to export' : 'Export selected ontology'}
             >
-              <BookOpen size={14} />
-              References ({referenceOntologies.length})
-            </button>
-            <button
-              onClick={() => setViewMode('schema')}
-              className={cn(
-                'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
-                viewMode === 'schema' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
-              )}
-            >
-              <Network size={14} />
-              Schema
+              <Download size={14} />
+              {exporting ? 'Exporting...' : 'Export'}
             </button>
           </div>
-          <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-            <Download size={14} />
-            Export
-          </button>
         </div>
 
         {/* Content */}
@@ -343,94 +402,25 @@ export default function OntologyPage() {
             </div>
           )}
 
-          {viewMode === 'references' && (
-            <div className="flex flex-1 flex-col bg-card p-6">
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold">Reference Ontologies</h2>
-                <p className="text-sm text-muted-foreground">
-                  Imported ontologies you can use as templates when creating entities.
-                </p>
-              </div>
-
-              {referenceOntologies.length === 0 ? (
-                <div className="flex flex-1 flex-col items-center justify-center">
-                  <BookOpen size={48} className="mb-4 text-muted-foreground/50" />
-                  <p className="mb-4 text-muted-foreground">No reference ontologies imported yet.</p>
-                  <button
-                    onClick={() => setViewMode('import')}
-                    className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-                  >
-                    <Upload size={16} />
-                    Import Ontology
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {referenceOntologies.map((ref) => (
-                    <ReferenceCard
-                      key={ref.id}
-                      reference={ref}
-                      onRemove={() => removeReferenceOntology(ref.id)}
-                      onCreateFromClass={handleCreateFromClass}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {viewMode === 'schema' && (
-            <BFOTaxonomyView
-              classes={allClasses}
-              properties={allProperties}
-              hasReferences={referenceOntologies.length > 0}
-              onImportClick={() => setViewMode('import')}
+          {viewMode === 'overview' && (
+            <OntologyOverviewView
+              ontologyPath={selectedOntologyPath}
+              onCreateEntity={openCreateEntity}
+              onCreateRelationship={openCreateRelationship}
             />
           )}
 
-          {viewMode === 'editor' && (
-            <div className="flex flex-1 overflow-hidden bg-card">
-              {selectedItem ? (
-                <EntityDetailView 
-                  item={selectedItem} 
-                  allClasses={allClasses}
-                  onUpdate={(updates) => updateItem(selectedItem.id, updates)}
-                />
-              ) : (
-                <div className="flex flex-1 items-center justify-center">
-                  <div className="text-center">
-                    <div className="mb-4 flex justify-center">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-                        <Network size={32} className="text-muted-foreground" />
-                      </div>
-                    </div>
-                    <h2 className="mb-2 text-lg font-semibold">Ontology Editor</h2>
-                    <p className="mb-6 max-w-md text-muted-foreground">
-                      Define classes, properties, and relations. Import reference ontologies to use as templates.
-                    </p>
-                    <div className="flex justify-center gap-3">
-                      <button
-                        onClick={() => setViewMode('import')}
-                        className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
-                      >
-                        <Upload size={16} />
-                        Import Reference
-                      </button>
-                      <button
-                        onClick={openCreateEntity}
-                        className={cn(
-                          'flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
-                          'hover:opacity-90'
-                        )}
-                      >
-                        <Plus size={16} />
-                        Create Entity
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+          {(viewMode === 'classes' || viewMode === 'relations' || viewMode === 'editor') && (
+            <OntologySplitView
+              mode={viewMode === 'relations' ? 'relations' : 'classes'}
+              items={viewMode === 'relations' ? relationshipItems : classItems}
+              selectedItem={selectedItem}
+              onSelectItem={setSelectedItem}
+              allClasses={allClasses}
+              onUpdateItem={(itemId, updates) => updateItem(itemId, updates)}
+              onCreateEntity={openCreateEntity}
+              onCreateRelationship={openCreateRelationship}
+            />
           )}
 
           {/* Create Entity Form */}
@@ -443,7 +433,7 @@ export default function OntologyPage() {
                     <h2 className="text-lg font-semibold">Create New Entity</h2>
                   </div>
                   <button
-                    onClick={() => setViewMode('editor')}
+                    onClick={() => setViewMode(lastCatalogView)}
                     className="rounded p-2 text-muted-foreground hover:bg-muted"
                   >
                     <X size={20} />
@@ -558,7 +548,7 @@ export default function OntologyPage() {
                   {/* Actions */}
                   <div className="flex gap-3 pt-4">
                     <button
-                      onClick={() => setViewMode('editor')}
+                      onClick={() => setViewMode(lastCatalogView)}
                       className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
                     >
                       Cancel
@@ -590,7 +580,7 @@ export default function OntologyPage() {
                     <h2 className="text-lg font-semibold">Create New Relationship</h2>
                   </div>
                   <button
-                    onClick={() => setViewMode('editor')}
+                    onClick={() => setViewMode(lastCatalogView)}
                     className="rounded p-2 text-muted-foreground hover:bg-muted"
                   >
                     <X size={20} />
@@ -705,7 +695,7 @@ export default function OntologyPage() {
                   {/* Actions */}
                   <div className="flex gap-3 pt-4">
                     <button
-                      onClick={() => setViewMode('editor')}
+                      onClick={() => setViewMode(lastCatalogView)}
                       className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
                     >
                       Cancel
@@ -732,298 +722,259 @@ export default function OntologyPage() {
   );
 }
 
-function BFOTaxonomyView({
-  classes,
-  properties,
-  hasReferences,
-  onImportClick,
+function OntologySplitView({
+  mode,
+  items,
+  selectedItem,
+  onSelectItem,
+  allClasses,
+  onUpdateItem,
+  onCreateEntity,
+  onCreateRelationship,
 }: {
-  classes: Array<ReferenceClass & { ontologyName: string }>;
-  properties: Array<ReferenceProperty & { ontologyName: string }>;
-  hasReferences: boolean;
-  onImportClick: () => void;
+  mode: 'classes' | 'relations';
+  items: OntologyItem[];
+  selectedItem?: OntologyItem;
+  onSelectItem: (itemId: string | null) => void;
+  allClasses: Array<ReferenceClass & { ontologyName: string }>;
+  onUpdateItem: (itemId: string, updates: Partial<OntologyItem>) => void;
+  onCreateEntity: () => void;
+  onCreateRelationship: () => void;
 }) {
-  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, ' ');
-  const bucketTerms: Record<string, string[]> = {
-    'Material Entity': ['material entity', 'materialentity'],
-    Site: ['site'],
-    Quality: ['quality'],
-    Role: ['role'],
-    Disposition: ['disposition'],
-    GDC: ['gdc', 'generically dependent continuant'],
-    Process: ['process'],
-    'Temporal Region': ['temporal region', 'temporalregion'],
-  };
+  const [query, setQuery] = useState('');
+  const isClassMode = mode === 'classes';
+  const modeLabel = isClassMode ? 'Classes' : 'Relations';
+  const modeIcon = isClassMode ? Box : Link2;
+  const ModeIcon = modeIcon;
 
-  const bucketCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    Object.keys(bucketTerms).forEach((key) => {
-      counts[key] = 0;
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return items;
+    return items.filter((item) => {
+      return (
+        item.name.toLowerCase().includes(normalizedQuery)
+        || item.description?.toLowerCase().includes(normalizedQuery)
+      );
     });
+  }, [items, query]);
 
-    classes.forEach((cls) => {
-      const haystack = `${normalize(cls.label)} ${normalize(cls.iri)}`;
-      Object.entries(bucketTerms).forEach(([bucket, terms]) => {
-        if (terms.some((term) => haystack.includes(term))) {
-          counts[bucket] += 1;
-        }
-      });
-    });
-
-    return counts;
-  }, [classes]);
-
-  const groupedByOntology = useMemo(() => {
-    const grouped: Record<string, { classes: number; properties: number }> = {};
-    classes.forEach((cls) => {
-      const key = cls.ontologyName || 'Unknown';
-      grouped[key] = grouped[key] || { classes: 0, properties: 0 };
-      grouped[key].classes += 1;
-    });
-    properties.forEach((prop) => {
-      const key = prop.ontologyName || 'Unknown';
-      grouped[key] = grouped[key] || { classes: 0, properties: 0 };
-      grouped[key].properties += 1;
-    });
-    return Object.entries(grouped)
-      .map(([name, counts]) => ({ name, ...counts }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [classes, properties]);
+  const selectedItemInMode = selectedItem && selectedItem.type === (isClassMode ? 'entity' : 'relationship')
+    ? selectedItem
+    : undefined;
 
   return (
-    <div className="flex flex-1 flex-col bg-card p-6">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold">Schema</h2>
-        <p className="text-sm text-muted-foreground">
-          Browse classes and properties from your imported ontologies.
-        </p>
+    <div className="flex flex-1 overflow-hidden bg-card">
+      <div className="flex w-80 flex-shrink-0 flex-col border-r bg-muted/20">
+        <div className="border-b p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <ModeIcon size={18} className={isClassMode ? 'text-blue-500' : 'text-green-500'} />
+            <h2 className="font-semibold">{modeLabel}</h2>
+            <span className="text-xs text-muted-foreground">({items.length})</span>
+          </div>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search ${modeLabel.toLowerCase()}...`}
+              className="w-full rounded-md border bg-background py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 space-y-1 overflow-y-auto p-2">
+          {filteredItems.length === 0 ? (
+            <p className="px-2 py-4 text-center text-sm text-muted-foreground">No {modeLabel.toLowerCase()} found.</p>
+          ) : (
+            filteredItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => onSelectItem(item.id)}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors',
+                  selectedItemInMode?.id === item.id
+                    ? 'bg-workspace-accent-10 text-workspace-accent'
+                    : 'hover:bg-background'
+                )}
+                title={item.description}
+              >
+                <ModeIcon size={14} className={isClassMode ? 'text-blue-500' : 'text-green-500'} />
+                <span className="truncate">{item.name}</span>
+              </button>
+            ))
+          )}
+        </div>
       </div>
 
-      {!hasReferences ? (
-        <div className="flex flex-1 flex-col items-center justify-center">
-          <Network size={48} className="mb-4 text-muted-foreground/50" />
-          <p className="mb-4 text-muted-foreground">No reference ontologies imported yet.</p>
-          <button
-            onClick={onImportClick}
-            className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-          >
-            <Upload size={16} />
-            Import Ontology
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-80 flex-shrink-0 overflow-auto border-r pr-4">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-medium">
-              <Network size={14} />
-              BFO Taxonomy
-            </h3>
-            <div className="space-y-1 text-xs">
-              <div className="rounded px-2 py-1 font-semibold hover:bg-muted">Entity</div>
-              <div className="ml-4 border-l pl-2">
-                <div className="rounded px-2 py-1 font-medium hover:bg-muted">Continuant</div>
-                <div className="ml-4 border-l pl-2 space-y-1">
-                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
-                    <span>Material Entity</span>
-                    <span className="text-muted-foreground">{bucketCounts['Material Entity']}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
-                    <span>Site</span>
-                    <span className="text-muted-foreground">{bucketCounts.Site}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
-                    <span>Quality</span>
-                    <span className="text-muted-foreground">{bucketCounts.Quality}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
-                    <span>Role</span>
-                    <span className="text-muted-foreground">{bucketCounts.Role}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
-                    <span>Disposition</span>
-                    <span className="text-muted-foreground">{bucketCounts.Disposition}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
-                    <span>GDC</span>
-                    <span className="text-muted-foreground">{bucketCounts.GDC}</span>
-                  </div>
-                </div>
-                <div className="rounded px-2 py-1 font-medium hover:bg-muted">Occurrent</div>
-                <div className="ml-4 border-l pl-2 space-y-1">
-                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
-                    <span>Process</span>
-                    <span className="text-muted-foreground">{bucketCounts.Process}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
-                    <span>Temporal Region</span>
-                    <span className="text-muted-foreground">{bucketCounts['Temporal Region']}</span>
-                  </div>
+      <div className="flex flex-1 overflow-hidden">
+        {selectedItemInMode ? (
+          <EntityDetailView
+            item={selectedItemInMode}
+            allClasses={allClasses}
+            onUpdate={(updates) => onUpdateItem(selectedItemInMode.id, updates)}
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                  <ModeIcon size={32} className={isClassMode ? 'text-blue-500' : 'text-green-500'} />
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="flex-1 space-y-4 overflow-auto pl-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border bg-background p-4">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Ontologies</p>
-                <p className="mt-1 text-2xl font-semibold">{groupedByOntology.length}</p>
-              </div>
-              <div className="rounded-lg border bg-background p-4">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Classes</p>
-                <p className="mt-1 text-2xl font-semibold">{classes.length}</p>
-              </div>
-              <div className="rounded-lg border bg-background p-4">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Properties</p>
-                <p className="mt-1 text-2xl font-semibold">{properties.length}</p>
-              </div>
-            </div>
-
-            <div className="rounded-lg border bg-background p-4">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Ontology Summary
+              <h2 className="mb-2 text-lg font-semibold">{modeLabel} Editor</h2>
+              <p className="mb-6 max-w-md text-muted-foreground">
+                Select a {isClassMode ? 'class' : 'relation'} from the left list or create a new {isClassMode ? 'class' : 'relation'}.
               </p>
-              <div className="space-y-2">
-                {groupedByOntology.map((entry) => (
-                  <div key={entry.name} className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                    <span className="font-medium">{entry.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {entry.classes} class(es) • {entry.properties} propert{entry.properties === 1 ? 'y' : 'ies'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-lg border bg-background p-4">
-                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Classes
-                </p>
-                <div className="space-y-2">
-                  {classes.slice(0, 30).map((cls) => (
-                    <div key={cls.iri} className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                      <Box size={14} className="text-blue-500" />
-                      <span className="truncate">{cls.label}</span>
-                      <span className="ml-auto text-[10px] text-muted-foreground">{cls.ontologyName}</span>
-                    </div>
-                  ))}
-                  {classes.length > 30 && (
-                    <p className="text-xs text-muted-foreground">+{classes.length - 30} more classes</p>
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={isClassMode ? onCreateEntity : onCreateRelationship}
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                    'hover:opacity-90'
                   )}
-                </div>
-              </div>
-
-              <div className="rounded-lg border bg-background p-4">
-                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Properties
-                </p>
-                <div className="space-y-2">
-                  {properties.slice(0, 30).map((prop) => (
-                    <div key={prop.iri} className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                      <Link2 size={14} className="text-green-500" />
-                      <span className="truncate">{prop.label}</span>
-                      <span className="ml-auto text-[10px] text-muted-foreground">{prop.ontologyName}</span>
-                    </div>
-                  ))}
-                  {properties.length > 30 && (
-                    <p className="text-xs text-muted-foreground">+{properties.length - 30} more properties</p>
-                  )}
-                </div>
+                >
+                  <Plus size={16} />
+                  {isClassMode ? 'Create Class' : 'Create Relationship'}
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
-function ReferenceCard({
-  reference,
-  onRemove,
-  onCreateFromClass,
+type OntologyOverviewStats = {
+  name: string;
+  path: string;
+  ontologies_count?: number;
+  classes: number;
+  object_properties: number;
+  data_properties: number;
+  named_individuals: number;
+  imports: number;
+};
+
+function OntologyOverviewView({
+  ontologyPath,
+  onCreateEntity,
+  onCreateRelationship,
 }: {
-  reference: ReferenceOntology;
-  onRemove: () => void;
-  onCreateFromClass: (cls: { label: string; definition?: string; iri: string }) => void;
+  ontologyPath: string | null;
+  onCreateEntity: () => void;
+  onCreateRelationship: () => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [stats, setStats] = useState<OntologyOverviewStats | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStats = async () => {
+      setLoadingStats(true);
+      setStatsError(null);
+      try {
+        const baseUrl = getApiUrl();
+        const statsUrl = ontologyPath
+          ? `${baseUrl}/api/ontology/overview/stats?ontology_path=${encodeURIComponent(ontologyPath)}`
+          : `${baseUrl}/api/ontology/overview/stats/all`;
+        const response = await authFetch(
+          statsUrl
+        );
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ontology stats: ${response.status}`);
+        }
+        const data = await response.json();
+        if (!cancelled) {
+          setStats(data as OntologyOverviewStats);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStats(null);
+          setStatsError('Failed to load ontology stats.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingStats(false);
+        }
+      }
+    };
+
+    fetchStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [ontologyPath]);
 
   return (
-    <div className="rounded-lg border bg-background">
-      <div className="flex items-center justify-between p-4">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-3"
-        >
-          <ChevronRight
-            size={16}
-            className={cn('transition-transform', expanded && 'rotate-90')}
-          />
-          <BookOpen size={20} className="text-amber-500" />
-          <div className="text-left">
-            <h3 className="font-medium">{reference.name}</h3>
-            <p className="text-xs text-muted-foreground">
-              {reference.classes.length} classes • {reference.properties.length} properties
-            </p>
-          </div>
-        </button>
-        <button
-          onClick={onRemove}
-          className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-red-500"
-          title="Remove reference"
-        >
-          <Trash2 size={16} />
-        </button>
+    <div className="flex flex-1 flex-col bg-card p-6">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold">Overview</h2>
+          <p className="text-sm text-muted-foreground truncate" title={ontologyPath || 'All ontologies'}>
+            {stats?.name || ontologyPath || 'All ontologies'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onCreateEntity}
+            className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          >
+            <Box size={14} className="text-blue-500" />
+            Create Entity
+          </button>
+          <button
+            onClick={onCreateRelationship}
+            className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          >
+            <Link2 size={14} className="text-green-500" />
+            Create Relationship
+          </button>
+        </div>
       </div>
 
-      {expanded && (
-        <div className="border-t p-4">
-          <div className="mb-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Classes
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {reference.classes.map((cls) => (
-                <button
-                  key={cls.iri}
-                  onClick={() => onCreateFromClass(cls)}
-                  className="flex items-center gap-2 rounded-md border bg-muted/30 p-2 text-left text-sm hover:bg-muted"
-                  title={cls.definition || cls.iri}
-                >
-                  <Box size={14} className="flex-shrink-0 text-blue-500" />
-                  <span className="truncate">{cls.label}</span>
-                  <Plus size={12} className="ml-auto flex-shrink-0 text-muted-foreground" />
-                </button>
-              ))}
-            </div>
-          </div>
+      {loadingStats && (
+        <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+          <Loader2 size={16} className="animate-spin" />
+          Loading overview stats...
+        </div>
+      )}
 
-          {reference.properties.length > 0 && (
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Properties
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {reference.properties.slice(0, 9).map((prop) => (
-                  <div
-                    key={prop.iri}
-                    className="flex items-center gap-2 rounded-md border bg-muted/30 p-2 text-sm"
-                    title={prop.definition || prop.iri}
-                  >
-                    <Link2 size={14} className="flex-shrink-0 text-green-500" />
-                    <span className="truncate">{prop.label}</span>
-                  </div>
-                ))}
-                {reference.properties.length > 9 && (
-                  <div className="flex items-center justify-center rounded-md border bg-muted/30 p-2 text-sm text-muted-foreground">
-                    +{reference.properties.length - 9} more
-                  </div>
-                )}
-              </div>
+      {!loadingStats && statsError && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+          {statsError}
+        </div>
+      )}
+
+      {!loadingStats && !statsError && stats && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {typeof stats.ontologies_count === 'number' && (
+            <div className="rounded-lg border bg-background p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Ontologies</p>
+              <p className="mt-1 text-2xl font-semibold">{stats.ontologies_count}</p>
             </div>
           )}
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Classes</p>
+            <p className="mt-1 text-2xl font-semibold">{stats.classes}</p>
+          </div>
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Object Properties</p>
+            <p className="mt-1 text-2xl font-semibold">{stats.object_properties}</p>
+          </div>
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Data Properties</p>
+            <p className="mt-1 text-2xl font-semibold">{stats.data_properties}</p>
+          </div>
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Named Individuals</p>
+            <p className="mt-1 text-2xl font-semibold">{stats.named_individuals}</p>
+          </div>
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Imports</p>
+            <p className="mt-1 text-2xl font-semibold">{stats.imports}</p>
+          </div>
         </div>
       )}
     </div>
@@ -1031,19 +982,17 @@ function ReferenceCard({
 }
 
 // Entity Detail View - Inspired by Palantir Foundry
-type EntityTab = 'overview' | 'properties' | 'security' | 'datasources' | 'capabilities' | 'views' | 'interfaces' | 'automations' | 'usage';
-
-const ENTITY_TABS: { id: EntityTab; label: string; icon: React.ElementType }[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutGrid },
-  { id: 'properties', label: 'Properties', icon: List },
-  { id: 'security', label: 'Security', icon: Shield },
-  { id: 'datasources', label: 'Datasources', icon: Database },
-  { id: 'capabilities', label: 'Capabilities', icon: Zap },
-  { id: 'views', label: 'Object views', icon: LayoutGrid },
-  { id: 'interfaces', label: 'Interfaces', icon: Settings },
-  { id: 'automations', label: 'Automations', icon: Zap },
-  { id: 'usage', label: 'Usage', icon: BarChart3 },
-];
+const ENTITY_CENTER_SECTIONS = [
+  'Overview',
+  'Properties',
+  'Security',
+  'Datasources',
+  'Capabilities',
+  'Object views',
+  'Interfaces',
+  'Automations',
+  'Usage',
+] as const;
 
 const STATUS_COLORS: Record<EntityStatus, string> = {
   active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -1072,7 +1021,6 @@ function EntityDetailView({
   allClasses: Array<ReferenceClass & { ontologyName: string }>;
   onUpdate: (updates: Partial<OntologyItem>) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<EntityTab>('overview');
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [newAlias, setNewAlias] = useState('');
@@ -1118,67 +1066,8 @@ function EntityDetailView({
     }
   };
 
-  const togglePropertyFlag = (propId: string, flag: 'isPrimaryKey' | 'isTitle') => {
-    const updated = (item.entityProperties || []).map((p) => {
-      if (p.id === propId) {
-        return { ...p, [flag]: !p[flag] };
-      }
-      // If setting as primary key or title, remove from others
-      if (flag === 'isPrimaryKey' || flag === 'isTitle') {
-        return { ...p, [flag]: false };
-      }
-      return p;
-    });
-    // Set the flag on the target property
-    const final = updated.map((p) => (p.id === propId ? { ...p, [flag]: !item.entityProperties?.find((ep) => ep.id === propId)?.[flag] } : p));
-    onUpdate({ entityProperties: final });
-  };
-
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* Left Navigation */}
-      <div className="flex w-56 flex-shrink-0 flex-col border-r bg-muted/20">
-        {/* Entity info */}
-        <div className="border-b p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <Box size={20} className="text-blue-500" />
-            <span className="font-medium truncate">{item.name}</span>
-            {item.status === 'active' && (
-              <div className="ml-auto h-2 w-2 rounded-full bg-green-500" title="Active" />
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {item.objectCount || 0} objects
-          </p>
-        </div>
-
-        {/* Tabs */}
-        <nav className="flex-1 overflow-y-auto p-2">
-          {ENTITY_TABS.map((tab) => {
-            const Icon = tab.icon;
-            const count = tab.id === 'properties' ? propertyCount : undefined;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
-                  activeTab === tab.id
-                    ? 'bg-workspace-accent-10 text-workspace-accent font-medium'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <Icon size={16} />
-                <span className="flex-1 text-left">{tab.label}</span>
-                {count !== undefined && (
-                  <span className="text-xs">{count}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
@@ -1211,8 +1100,7 @@ function EntityDetailView({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'overview' && (
-            <div className="flex gap-6">
+          <div className="flex gap-6">
               {/* Main metadata */}
               <div className="flex-1 space-y-1">
                 {/* Group */}
@@ -1384,6 +1272,21 @@ function EntityDetailView({
                     <span className="font-mono text-sm text-muted-foreground truncate">
                       {item.apiName || item.id}
                     </span>
+                  </div>
+
+                  {/* Sections moved from left menu */}
+                  <div className="flex items-start px-4 py-3">
+                    <span className="w-40 text-sm text-muted-foreground">Sections</span>
+                    <div className="flex flex-1 flex-wrap gap-2">
+                      {ENTITY_CENTER_SECTIONS.map((section) => (
+                        <span
+                          key={section}
+                          className="rounded bg-muted px-2 py-0.5 text-sm text-muted-foreground"
+                        >
+                          {section}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -1566,98 +1469,6 @@ function EntityDetailView({
                 </div>
               </div>
             </div>
-          )}
-
-          {activeTab === 'properties' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Properties</h2>
-                <button
-                  onClick={() => setShowAddProperty(true)}
-                  className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-                >
-                  <Plus size={16} />
-                  Add Property
-                </button>
-              </div>
-              <div className="rounded-lg border divide-y">
-                {(item.entityProperties || []).map((prop) => {
-                  const TypeIcon = PROPERTY_TYPE_ICONS[prop.type] || Type;
-                  return (
-                    <div key={prop.id} className="flex items-center p-4">
-                      <TypeIcon size={18} className="mr-3 text-muted-foreground" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{prop.displayName}</span>
-                          {prop.isTitle && (
-                            <span className="rounded bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 text-xs text-blue-700 dark:text-blue-300">
-                              Title
-                            </span>
-                          )}
-                          {prop.isPrimaryKey && (
-                            <span className="rounded bg-purple-100 dark:bg-purple-900/30 px-1.5 py-0.5 text-xs text-purple-700 dark:text-purple-300">
-                              Primary key
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {prop.type} • {prop.name}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => togglePropertyFlag(prop.id, 'isTitle')}
-                          className={cn(
-                            'rounded px-2 py-1 text-xs',
-                            prop.isTitle ? 'bg-blue-100 text-blue-700' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                          )}
-                        >
-                          Title
-                        </button>
-                        <button
-                          onClick={() => togglePropertyFlag(prop.id, 'isPrimaryKey')}
-                          className={cn(
-                            'rounded px-2 py-1 text-xs',
-                            prop.isPrimaryKey ? 'bg-purple-100 text-purple-700' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                          )}
-                        >
-                          <Key size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-                {propertyCount === 0 && (
-                  <div className="p-8 text-center">
-                    <List size={32} className="mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-muted-foreground">No properties defined yet</p>
-                    <button
-                      onClick={() => setShowAddProperty(true)}
-                      className="mt-2 text-sm text-workspace-accent hover:underline"
-                    >
-                      Add your first property
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab !== 'overview' && activeTab !== 'properties' && (
-            <div className="flex flex-1 flex-col items-center justify-center py-12">
-              <div className="rounded-2xl bg-muted p-4">
-                {activeTab === 'security' && <Shield size={32} className="text-muted-foreground" />}
-                {activeTab === 'datasources' && <Database size={32} className="text-muted-foreground" />}
-                {activeTab === 'capabilities' && <Zap size={32} className="text-muted-foreground" />}
-                {activeTab === 'views' && <LayoutGrid size={32} className="text-muted-foreground" />}
-                {activeTab === 'interfaces' && <Settings size={32} className="text-muted-foreground" />}
-                {activeTab === 'automations' && <Zap size={32} className="text-muted-foreground" />}
-                {activeTab === 'usage' && <BarChart3 size={32} className="text-muted-foreground" />}
-              </div>
-              <h3 className="mt-4 text-lg font-medium capitalize">{activeTab}</h3>
-              <p className="mt-1 text-muted-foreground">Coming soon</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
