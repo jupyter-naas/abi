@@ -422,6 +422,34 @@ services:
     networks:
       - abi-network
 
+{% if INCLUDE_HEADSCALE %}
+  # -----------------------------------------------------------------------------
+  # Headscale - Self-hosted Tailscale control server
+  # -----------------------------------------------------------------------------
+  headscale:
+    image: docker.io/headscale/headscale:stable
+    pull_policy: always
+    restart: unless-stopped
+    command: ["headscale", "serve"]
+    ports:
+      - ${HEADSCALE_SERVER_PORT}:8080
+      - ${HEADSCALE_METRICS_PORT}:9090
+      - ${HEADSCALE_GRPC_PORT}:50443
+    volumes:
+      - ./.deploy/docker/headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - ./.deploy/docker/headscale/extra-records.json:/var/lib/headscale/extra-records.json:ro
+      - headscale_data:/var/lib/headscale
+      - headscale_run:/var/run/headscale
+    healthcheck:
+      test: ["CMD", "headscale", "health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - abi-network
+{% endif %}
+
 # =============================================================================
 # PERSISTENT VOLUMES
 # =============================================================================
@@ -453,6 +481,10 @@ volumes:
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
+{% if INCLUDE_HEADSCALE %}
+  headscale_data: # Headscale state and sqlite database
+  headscale_run:  # Headscale unix socket runtime data
+{% endif %}
   minio_data:     # MinIO object storage data
   rabbitmq_data:  # RabbitMQ message bus data
   redis_data:     # Redis persistence data
