@@ -56,6 +56,8 @@ class ReferenceOntology(BaseModel):
 class OntologyFileItem(BaseModel):
     name: str
     path: str
+    module_name: str
+    submodule_name: str | None = None
 
 
 class OntologyOverviewStats(BaseModel):
@@ -210,7 +212,7 @@ def _sparql_iri(value: str) -> str | None:
     if not candidate:
         return None
     # Basic guard to avoid malformed query injection.
-    if any(char in candidate for char in ('<', '>', '"', "'", " ")):
+    if any(char in candidate for char in ("<", ">", '"', "'", " ")):
         return None
     return f"<{candidate}>"
 
@@ -220,11 +222,7 @@ def _get_parent_labels_from_triple_store(parent_ids: set[str]) -> dict[str, str]
     if not parent_ids:
         return {}
 
-    iri_values = [
-        iri
-        for value in sorted(parent_ids)
-        if (iri := _sparql_iri(value)) is not None
-    ]
+    iri_values = [iri for value in sorted(parent_ids) if (iri := _sparql_iri(value)) is not None]
     if not iri_values:
         return {}
 
@@ -236,7 +234,7 @@ def _get_parent_labels_from_triple_store(parent_ids: set[str]) -> dict[str, str]
     query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT ?parentId ?label WHERE {{
-            VALUES ?parentId {{ {' '.join(iri_values)} }}
+            VALUES ?parentId {{ {" ".join(iri_values)} }}
             OPTIONAL {{ ?parentId rdfs:label ?label . }}
         }}
     """
@@ -644,29 +642,44 @@ async def get_bfo7_reference() -> dict:
 async def list_ontology_files() -> dict[str, list[OntologyFileItem]]:
     """
     List ontology files loaded into the platform from all registered modules.
-    This covers all ontologies as recognized by the ABIModule engine,
-    matching the method in `list_ontologies.py` and the provided file context.
+    Deduplicates ontology files across all modules but ensures at least
+    one 'naas-abi' (or abi) entry is present for each unique file.
     """
     try:
         abi_module = ABIModule.get_instance()
 
         ontology_files: list[OntologyFileItem] = []
         seen_paths: set[str] = set()
-        for module in abi_module.engine.modules.values():
-            ontologies = getattr(module, "ontologies", None) or []
-            for ontology in ontologies:
-                ontology_path = str(ontology)
-                if ontology_path in seen_paths:
-                    continue
-                seen_paths.add(ontology_path)
-                ontology_files.append(
-                    OntologyFileItem(
-                        name=os.path.basename(ontology_path),
-                        path=ontology_path,
-                    )
-                )
 
-        ontology_files.sort(key=lambda item: item.name.lower())
+        # Gather all ontologies, and keep a record if any belong to naas-abi/abi.
+        for module in abi_module.engine.modules.values():
+            module_name = str(module.__module__.split(".")[-1])
+            for ontology in module.ontologies:
+                ontology_path = str(ontology)
+                submodule_name = ontology_path.split("/")[-2]
+                if "sparqlquery" in ontology_path.lower():
+                    continue
+                if ontology_path not in seen_paths:
+                    seen_paths.add(ontology_path)
+                    if module_name.lower() in ontology_path.lower():
+                        ontology_files.append(
+                            OntologyFileItem(
+                                name=os.path.basename(ontology_path),
+                                path=ontology_path,
+                                module_name=module_name,
+                            )
+                        )
+                    elif "/naas-abi/" in ontology_path.lower():
+                        ontology_files.append(
+                            OntologyFileItem(
+                                name=os.path.basename(ontology_path),
+                                path=ontology_path,
+                                module_name="abi",
+                                submodule_name=submodule_name,
+                            )
+                        )
+
+        ontology_files.sort(key=lambda item: (item.module_name.lower(), item.name.lower()))
         return {"items": ontology_files}
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to list ontology files") from exc
