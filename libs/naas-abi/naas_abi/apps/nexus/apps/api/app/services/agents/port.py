@@ -11,8 +11,8 @@ class AgentRecord:
     workspace_id: str
     name: str
     class_name: str | None
-    description: str | None
-    system_prompt: str | None
+    description: str
+    system_prompt: str
     model_id: str | None
     provider: str | None
     logo_url: str | None

@@ -3,7 +3,7 @@ import subprocess
 from importlib.resources import files
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.models import OAuthFlowPassword
@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from naas_abi_core import logger
 
 # Docs
-from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML, TAGS_METADATA
+from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML
 from naas_abi_core.engine.Engine import Engine
 
 engine = Engine()

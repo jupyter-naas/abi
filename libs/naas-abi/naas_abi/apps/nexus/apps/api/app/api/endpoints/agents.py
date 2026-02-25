@@ -20,12 +20,13 @@ from naas_abi.apps.nexus.apps.api.app.services.agents import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
+
 def get_agent_service(db: AsyncSession = Depends(get_db)) -> AgentService:
     return AgentFactory.ServicePostgres(db)
+
 
 @router.get("/")
 async def list_agents(
@@ -43,13 +44,13 @@ async def list_agents(
     existing_agents_by_name = {agent.name: agent for agent in agent_list}
 
     # Add agents from engine modules to the API
-    from naas_abi_core.models.Model import ChatModel
     from langchain_core.language_models.chat_models import BaseChatModel
     from naas_abi import ABIModule
+    from naas_abi_core.models.Model import ChatModel
     from naas_abi_core.services.agent.Agent import Agent
 
     abi_module = ABIModule.get_instance()
-    module_agents = list(abi_module.agents)    
+    module_agents = list(abi_module.agents)
     agents: list[type[Agent]] = []
     agents.extend(module_agents)
 
@@ -58,7 +59,7 @@ async def list_agents(
             if agent_cls is None:
                 continue
             agents.append(agent_cls)
-    
+
     for agent_cls in agents:
         agent_instance = agent_cls.New()
         class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
@@ -74,9 +75,7 @@ async def list_agents(
                         listed_agent.class_name = class_name
                         break
             except Exception as e:
-                logger.warning(
-                    f"Failed to backfill class_name for agent {existing_agent.id}: {e}"
-                )
+                logger.warning(f"Failed to backfill class_name for agent {existing_agent.id}: {e}")
         if not existing_agent:
             logger.debug(f"Creating agent: {agent_instance.name}")
             try:
@@ -84,18 +83,18 @@ async def list_agents(
                 description = agent_instance.description
                 system_prompt = agent_instance.configuration.system_prompt
                 model_id = "unknown"
-                context_window = 4096
-                temperature = 0.7
+                # context_window = 4096
+                # temperature = 0.7
                 enabled = False
                 if isinstance(agent_instance.chat_model, ChatModel):
                     if hasattr(agent_instance.chat_model, "model_id"):
                         model_id = agent_instance.chat_model.model_id
-                    if hasattr(agent_instance.chat_model, "context_window"):
-                        context_window = agent_instance.chat_model.context_window
-                    if hasattr(agent_instance.chat_model, "model") and hasattr(
-                        agent_instance.chat_model.model, "temperature"
-                    ):
-                        temperature = agent_instance.chat_model.model.temperature
+                    # if hasattr(agent_instance.chat_model, "context_window"):
+                    #     context_window = agent_instance.chat_model.context_window
+                    # if hasattr(agent_instance.chat_model, "model") and hasattr(
+                    #     agent_instance.chat_model.model, "temperature"
+                    # ):
+                    #     temperature = agent_instance.chat_model.model.temperature
                 elif isinstance(agent_instance.chat_model, BaseChatModel):
                     if hasattr(agent_instance.chat_model, "model") and isinstance(
                         agent_instance.chat_model.model, str
@@ -105,10 +104,10 @@ async def list_agents(
                         agent_instance.chat_model.model_name, str
                     ):
                         model_id = agent_instance.chat_model.model_name
-                    if hasattr(agent_instance.chat_model, "temperature") and isinstance(
-                        agent_instance.chat_model.temperature, float
-                    ):
-                        temperature = agent_instance.chat_model.temperature
+                    # if hasattr(agent_instance.chat_model, "temperature") and isinstance(
+                    #     agent_instance.chat_model.temperature, float
+                    # ):
+                    #     temperature = agent_instance.chat_model.temperature
 
                 if agent_instance.name == "Abi":
                     enabled = True
@@ -118,7 +117,7 @@ async def list_agents(
                     description=description,
                     workspace_id=workspace_id,
                     class_name=class_name,
-                    system_prompt=system_prompt,
+                    system_prompt=str(system_prompt),
                     model_id=model_id,
                     provider="abi",
                     enabled=enabled,
