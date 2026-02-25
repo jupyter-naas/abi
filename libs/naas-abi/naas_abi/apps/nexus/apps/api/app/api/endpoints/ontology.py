@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from pydantic import BaseModel, Field
 
@@ -141,8 +142,90 @@ def parse_ttl(content: str, file_path: str) -> ReferenceOntology:
 
 @router.get("")
 async def list_ontology_items():
-    """List all ontology items."""
-    return {"items": ontology_items}
+    """List all ontology items (OWL Classes and Object Properties) with label, definition, type, and subclassOf."""
+    classes = await list_classes()
+    relationships = await list_relations()
+    return {
+        "items": [*classes, *relationships],
+    }
+
+
+@router.get("/classes")
+async def list_classes():
+    """List all ontology classes (OWL Classes) with label, definition, and subclassOf."""
+    triple_store_service = ABIModule.get_instance().engine.services.triple_store
+
+    # Query OWL Classes
+    class_results = triple_store_service.query("""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+        SELECT ?s ?label ?definition ?subclassOf WHERE {
+            ?s rdf:type owl:Class .
+            OPTIONAL { ?s rdfs:label ?label . }
+            OPTIONAL { ?s skos:definition ?definition . }
+            OPTIONAL { ?s skos:example ?example . }
+            OPTIONAL { ?s rdfs:subClassOf ?subclassOf . }
+        }
+    """)
+
+    items = []
+    for row in class_results:
+        iri = str(row.get("s"))
+        label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
+        definition = str(row.get("definition")) if row.get("definition") else None
+        subclass_of = str(row.get("subclassOf")) if row.get("subclassOf") else None
+        items.append(
+            OntologyItem(
+                id=iri,
+                name=label,
+                type="entity",
+                description=definition,
+                base_class=subclass_of,
+            )
+        )
+
+    return items
+
+
+@router.get("/relationships")
+async def list_relations():
+    """List all ontology relationships (OWL ObjectProperties) with label, definition, and subPropertyOf."""
+    triple_store_service = ABIModule.get_instance().engine.services.triple_store
+
+    # Query OWL ObjectProperties
+    prop_results = triple_store_service.query("""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+        SELECT ?s ?label ?definition ?subPropertyOf WHERE {
+            ?s rdf:type owl:ObjectProperty .
+            OPTIONAL { ?s rdfs:label ?label . }
+            OPTIONAL { ?s skos:definition ?definition . }
+            OPTIONAL { ?s skos:example ?example . }
+            OPTIONAL { ?s rdfs:subPropertyOf ?subPropertyOf . }
+        }
+    """)
+
+    items = []
+    for row in prop_results:
+        iri = str(row.get("s"))
+        label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
+        definition = str(row.get("definition")) if row.get("definition") else None
+        sub_property_of = str(row.get("subPropertyOf")) if row.get("subPropertyOf") else None
+        items.append(
+            OntologyItem(
+                id=iri,
+                name=label,
+                type="relationship",
+                description=definition,
+                base_class=sub_property_of,  # For relationships, we set this to subPropertyOf
+            )
+        )
+
+    return items
 
 
 @router.post("/entity")
