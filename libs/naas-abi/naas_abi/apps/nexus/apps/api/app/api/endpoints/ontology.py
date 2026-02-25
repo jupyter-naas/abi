@@ -79,6 +79,13 @@ class OntologyOverviewAggregateStats(BaseModel):
     imports: int
 
 
+class OntologyTypeCounts(BaseModel):
+    name: str
+    path: str
+    named_individuals: int
+    data_properties: int
+
+
 class EntityCreate(BaseModel):
     """Create a new ontology entity."""
 
@@ -327,9 +334,13 @@ async def list_classes(
         PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
         SELECT ?s ?label ?definition ?parentId WHERE {
             ?s rdf:type owl:Class .
+            FILTER(isIRI(?s))
             OPTIONAL { ?s rdfs:label ?label . }
             OPTIONAL { ?s skos:definition ?definition . }
-            OPTIONAL { ?s rdfs:subClassOf ?parentId . }
+            OPTIONAL {
+                ?s rdfs:subClassOf ?parentId .
+                FILTER(isIRI(?parentId))
+            }
         }
     """
 
@@ -382,9 +393,13 @@ async def list_relations(
         PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
         SELECT ?s ?label ?definition ?parentId WHERE {
             ?s rdf:type owl:ObjectProperty .
+            FILTER(isIRI(?s))
             OPTIONAL { ?s rdfs:label ?label . }
             OPTIONAL { ?s skos:definition ?definition . }
-            OPTIONAL { ?s rdfs:subPropertyOf ?parentId . }
+            OPTIONAL {
+                ?s rdfs:subPropertyOf ?parentId .
+                FILTER(isIRI(?parentId))
+            }
         }
     """
 
@@ -474,6 +489,35 @@ async def get_all_ontologies_overview_stats() -> OntologyOverviewAggregateStats:
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail="Failed to compute consolidated ontology overview stats"
+        ) from exc
+
+
+@router.get("/counts/types")
+async def get_ontology_type_counts(
+    ontology_path: str | None = Query(None, alias="ontology_path"),
+) -> OntologyTypeCounts:
+    """Return counts for owl:NamedIndividual and owl:DatatypeProperty."""
+    try:
+        target_paths = _resolve_target_ontology_paths(ontology_path)
+        named_individuals = 0
+        data_properties = 0
+
+        for path in target_paths:
+            graph = _load_ontology_graph(path)
+            named_individuals += len(set(graph.subjects(RDF.type, OWL.NamedIndividual)))
+            data_properties += len(set(graph.subjects(RDF.type, OWL.DatatypeProperty)))
+
+        return OntologyTypeCounts(
+            name=Path(ontology_path).name if ontology_path else "All ontologies",
+            path=ontology_path or "*",
+            named_individuals=named_individuals,
+            data_properties=data_properties,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail="Failed to compute ontology type counts"
         ) from exc
 
 
