@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
@@ -93,6 +93,7 @@ const VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[
 
 export default function GraphPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
   
   // Local state for graph data from API (not persisted to localStorage)
@@ -113,6 +114,7 @@ export default function GraphPage() {
   const [queryError, setQueryError] = useState<string | null>(null);
   const [editorHeight, setEditorHeight] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
+  const selectedOntology = searchParams.get('ontology');
 
   // Load graphs from API - fetches all visible graphs and merges them
   const loadFromApi = useCallback(async () => {
@@ -185,6 +187,18 @@ export default function GraphPage() {
   useEffect(() => {
     loadFromApi();
   }, [loadFromApi]);
+
+  useEffect(() => {
+    const requestedView = searchParams.get('view');
+    if (
+      requestedView &&
+      (['visual', 'table', 'sparql', 'schema', 'statistics'] as const).includes(
+        requestedView as GraphViewType
+      )
+    ) {
+      setActiveViewType(requestedView as GraphViewType);
+    }
+  }, [searchParams, setActiveViewType]);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   
@@ -356,6 +370,11 @@ export default function GraphPage() {
             <div className="flex items-center gap-2">
               <Database size={14} className="text-workspace-accent" />
               <span className="text-sm font-medium">Knowledge Graph</span>
+              {selectedOntology && (
+                <span className="text-xs text-muted-foreground">
+                  • Ontology: {selectedOntology}
+                </span>
+              )}
               <span className="text-xs text-muted-foreground">
                 ({nodes.length} nodes, {edges.length} edges)
               </span>

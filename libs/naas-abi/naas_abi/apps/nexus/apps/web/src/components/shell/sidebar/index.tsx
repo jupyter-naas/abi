@@ -180,7 +180,6 @@ export function Sidebar() {
         <ChatSection collapsed={collapsed} />
         <OntologySection collapsed={collapsed} />
         <KnowledgeGraphSection collapsed={collapsed} />
-
         <FilesSection collapsed={collapsed} />
         <LabSection collapsed={collapsed} />
         <AppsSection collapsed={collapsed} />

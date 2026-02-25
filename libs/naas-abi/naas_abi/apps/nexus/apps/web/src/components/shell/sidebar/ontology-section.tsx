@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BrainCircuit, ChevronRight, Folder, Box, Link2, Network,
-  FolderPlus, RefreshCw, Import, Plus, BookOpen,
+  FolderPlus, RefreshCw, Import, Plus, BookOpen, FileCode,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type OntologyItem } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { authFetch } from '@/stores/auth';
+import { getApiUrl } from '@/lib/config';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 
@@ -62,8 +64,11 @@ const OntologyItemComponent = React.memo(function OntologyItemComponent({
 
 export function OntologySection({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
-  const [entitiesExpanded, setEntitiesExpanded] = useState(true);
+  const [classesExpanded, setClassesExpanded] = useState(true);
   const [relationshipsExpanded, setRelationshipsExpanded] = useState(true);
+  const [ontologiesExpanded, setOntologiesExpanded] = useState(true);
+  const [ontologyFiles, setOntologyFiles] = useState<Array<{ name: string; path: string }>>([]);
+  const [loadingOntologyFiles, setLoadingOntologyFiles] = useState(false);
   const { currentWorkspaceId } = useWorkspaceStore();
   const {
     items: ontologyItems,
@@ -77,15 +82,38 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
     toggleReference,
   } = useOntologyStore();
 
-  const entities = ontologyItems.filter((item) => item.type === 'entity');
+  const classes = ontologyItems.filter((item) => item.type === 'entity');
   const relationships = ontologyItems.filter((item) => item.type === 'relationship');
+
+  useEffect(() => {
+    const fetchOntologyFiles = async () => {
+      setLoadingOntologyFiles(true);
+      try {
+        const apiUrl = getApiUrl();
+        const response = await authFetch(`${apiUrl}/api/ontology/ontologies`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ontology files: ${response.status}`);
+        }
+        const data = await response.json();
+        const files = Array.isArray(data.items) ? data.items : [];
+        setOntologyFiles(files);
+      } catch (error) {
+        console.error('Failed to fetch ontology files:', error);
+        setOntologyFiles([]);
+      } finally {
+        setLoadingOntologyFiles(false);
+      }
+    };
+
+    fetchOntologyFiles();
+  }, []);
 
   return (
     <CollapsibleSection
       id="ontology"
       icon={<BrainCircuit size={18} />}
       label="Ontology"
-      description="Define entities, relationships, and schemas"
+      description="Define classes, relationships, and schemas"
       href={getWorkspacePath(currentWorkspaceId, '/ontology')}
       collapsed={collapsed}
     >
@@ -94,7 +122,7 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
         <button
           onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology?view=create-entity'))}
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="New Entity"
+          title="New Class"
         >
           <Box size={14} />
         </button>
@@ -137,20 +165,62 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
         </button>
       </div>
 
-      {/* Entities */}
-      {entities.length > 0 && (
+      {/* Ontologies */}
+      <div className="space-y-0.5">
+        <button
+          onClick={() => setOntologiesExpanded((prev) => !prev)}
+          className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10"
+        >
+          <ChevronRight
+            size={10}
+            className={cn('flex-shrink-0 transition-transform', ontologiesExpanded && 'rotate-90')}
+          />
+          <span>Ontologies ({ontologyFiles.length})</span>
+        </button>
+        {ontologiesExpanded && (
+          <div className="space-y-0.5">
+            {ontologyFiles.map((ontologyFile) => (
+              <button
+                key={ontologyFile.path}
+                onClick={() => {
+                  const params = new URLSearchParams({
+                    view: 'schema',
+                    ontology: ontologyFile.path,
+                  });
+                  router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
+                }}
+                className="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10"
+                title={ontologyFile.path}
+              >
+                <FileCode size={12} className="flex-shrink-0 text-workspace-accent" />
+                <span className="flex-1 truncate">{ontologyFile.name}</span>
+                <Plus size={10} className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground" />
+              </button>
+            ))}
+            {!loadingOntologyFiles && ontologyFiles.length === 0 && (
+              <p className="px-2 py-1 text-xs text-muted-foreground">No ontology files found</p>
+            )}
+            {loadingOntologyFiles && (
+              <p className="px-2 py-1 text-xs text-muted-foreground">Loading ontologies...</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Classes */}
+      {classes.length > 0 && (
         <div className="space-y-0.5">
           <button
-            onClick={() => setEntitiesExpanded((prev) => !prev)}
+            onClick={() => setClassesExpanded((prev) => !prev)}
             className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10"
           >
             <ChevronRight
               size={10}
-              className={cn('flex-shrink-0 transition-transform', entitiesExpanded && 'rotate-90')}
+              className={cn('flex-shrink-0 transition-transform', classesExpanded && 'rotate-90')}
             />
-            <span>Entities ({entities.length})</span>
+            <span>Classes ({classes.length})</span>
           </button>
-          {entitiesExpanded && entities.map((item) => (
+          {classesExpanded && classes.map((item) => (
             <OntologyItemComponent
               key={item.id}
               item={item}
@@ -249,7 +319,7 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
       )}
 
       {/* Empty state */}
-      {ontologyItems.length === 0 && referenceOntologies.length === 0 && (
+      {ontologyItems.length === 0 && referenceOntologies.length === 0 && ontologyFiles.length === 0 && (
         <p className="px-2 py-2 text-xs text-muted-foreground">
           {ontologyLoading ? 'Loading...' : 'No items yet'}
         </p>

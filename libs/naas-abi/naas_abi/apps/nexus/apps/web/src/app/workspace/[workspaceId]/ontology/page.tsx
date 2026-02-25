@@ -43,7 +43,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceOntology, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
 
-type ViewMode = 'editor' | 'import' | 'references' | 'create-entity' | 'create-relationship';
+type ViewMode = 'editor' | 'import' | 'references' | 'schema' | 'create-entity' | 'create-relationship';
 
 export default function OntologyPage() {
   const searchParams = useSearchParams();
@@ -64,7 +64,7 @@ export default function OntologyPage() {
   // Update view mode and pre-fill form when URL changes
   useEffect(() => {
     const view = searchParams.get('view') as ViewMode;
-    if (view && ['editor', 'import', 'references', 'create-entity', 'create-relationship'].includes(view)) {
+    if (view && ['editor', 'import', 'references', 'schema', 'create-entity', 'create-relationship'].includes(view)) {
       setViewMode(view);
       
       // Pre-fill base class/property from URL if provided
@@ -247,6 +247,16 @@ export default function OntologyPage() {
               <BookOpen size={14} />
               References ({referenceOntologies.length})
             </button>
+            <button
+              onClick={() => setViewMode('schema')}
+              className={cn(
+                'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
+                viewMode === 'schema' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
+              )}
+            >
+              <Network size={14} />
+              Schema
+            </button>
           </div>
           <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
             <Download size={14} />
@@ -367,6 +377,15 @@ export default function OntologyPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {viewMode === 'schema' && (
+            <BFOTaxonomyView
+              classes={allClasses}
+              properties={allProperties}
+              hasReferences={referenceOntologies.length > 0}
+              onImportClick={() => setViewMode('import')}
+            />
           )}
 
           {viewMode === 'editor' && (
@@ -709,6 +728,213 @@ export default function OntologyPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function BFOTaxonomyView({
+  classes,
+  properties,
+  hasReferences,
+  onImportClick,
+}: {
+  classes: Array<ReferenceClass & { ontologyName: string }>;
+  properties: Array<ReferenceProperty & { ontologyName: string }>;
+  hasReferences: boolean;
+  onImportClick: () => void;
+}) {
+  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, ' ');
+  const bucketTerms: Record<string, string[]> = {
+    'Material Entity': ['material entity', 'materialentity'],
+    Site: ['site'],
+    Quality: ['quality'],
+    Role: ['role'],
+    Disposition: ['disposition'],
+    GDC: ['gdc', 'generically dependent continuant'],
+    Process: ['process'],
+    'Temporal Region': ['temporal region', 'temporalregion'],
+  };
+
+  const bucketCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    Object.keys(bucketTerms).forEach((key) => {
+      counts[key] = 0;
+    });
+
+    classes.forEach((cls) => {
+      const haystack = `${normalize(cls.label)} ${normalize(cls.iri)}`;
+      Object.entries(bucketTerms).forEach(([bucket, terms]) => {
+        if (terms.some((term) => haystack.includes(term))) {
+          counts[bucket] += 1;
+        }
+      });
+    });
+
+    return counts;
+  }, [classes]);
+
+  const groupedByOntology = useMemo(() => {
+    const grouped: Record<string, { classes: number; properties: number }> = {};
+    classes.forEach((cls) => {
+      const key = cls.ontologyName || 'Unknown';
+      grouped[key] = grouped[key] || { classes: 0, properties: 0 };
+      grouped[key].classes += 1;
+    });
+    properties.forEach((prop) => {
+      const key = prop.ontologyName || 'Unknown';
+      grouped[key] = grouped[key] || { classes: 0, properties: 0 };
+      grouped[key].properties += 1;
+    });
+    return Object.entries(grouped)
+      .map(([name, counts]) => ({ name, ...counts }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [classes, properties]);
+
+  return (
+    <div className="flex flex-1 flex-col bg-card p-6">
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold">Schema</h2>
+        <p className="text-sm text-muted-foreground">
+          Browse classes and properties from your imported ontologies.
+        </p>
+      </div>
+
+      {!hasReferences ? (
+        <div className="flex flex-1 flex-col items-center justify-center">
+          <Network size={48} className="mb-4 text-muted-foreground/50" />
+          <p className="mb-4 text-muted-foreground">No reference ontologies imported yet.</p>
+          <button
+            onClick={onImportClick}
+            className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            <Upload size={16} />
+            Import Ontology
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-80 flex-shrink-0 overflow-auto border-r pr-4">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-medium">
+              <Network size={14} />
+              BFO Taxonomy
+            </h3>
+            <div className="space-y-1 text-xs">
+              <div className="rounded px-2 py-1 font-semibold hover:bg-muted">Entity</div>
+              <div className="ml-4 border-l pl-2">
+                <div className="rounded px-2 py-1 font-medium hover:bg-muted">Continuant</div>
+                <div className="ml-4 border-l pl-2 space-y-1">
+                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
+                    <span>Material Entity</span>
+                    <span className="text-muted-foreground">{bucketCounts['Material Entity']}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
+                    <span>Site</span>
+                    <span className="text-muted-foreground">{bucketCounts.Site}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
+                    <span>Quality</span>
+                    <span className="text-muted-foreground">{bucketCounts.Quality}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
+                    <span>Role</span>
+                    <span className="text-muted-foreground">{bucketCounts.Role}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
+                    <span>Disposition</span>
+                    <span className="text-muted-foreground">{bucketCounts.Disposition}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
+                    <span>GDC</span>
+                    <span className="text-muted-foreground">{bucketCounts.GDC}</span>
+                  </div>
+                </div>
+                <div className="rounded px-2 py-1 font-medium hover:bg-muted">Occurrent</div>
+                <div className="ml-4 border-l pl-2 space-y-1">
+                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
+                    <span>Process</span>
+                    <span className="text-muted-foreground">{bucketCounts.Process}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded px-2 py-1 hover:bg-muted">
+                    <span>Temporal Region</span>
+                    <span className="text-muted-foreground">{bucketCounts['Temporal Region']}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 space-y-4 overflow-auto pl-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border bg-background p-4">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Ontologies</p>
+                <p className="mt-1 text-2xl font-semibold">{groupedByOntology.length}</p>
+              </div>
+              <div className="rounded-lg border bg-background p-4">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Classes</p>
+                <p className="mt-1 text-2xl font-semibold">{classes.length}</p>
+              </div>
+              <div className="rounded-lg border bg-background p-4">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Properties</p>
+                <p className="mt-1 text-2xl font-semibold">{properties.length}</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-background p-4">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Ontology Summary
+              </p>
+              <div className="space-y-2">
+                {groupedByOntology.map((entry) => (
+                  <div key={entry.name} className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                    <span className="font-medium">{entry.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {entry.classes} class(es) • {entry.properties} propert{entry.properties === 1 ? 'y' : 'ies'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border bg-background p-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Classes
+                </p>
+                <div className="space-y-2">
+                  {classes.slice(0, 30).map((cls) => (
+                    <div key={cls.iri} className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                      <Box size={14} className="text-blue-500" />
+                      <span className="truncate">{cls.label}</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">{cls.ontologyName}</span>
+                    </div>
+                  ))}
+                  {classes.length > 30 && (
+                    <p className="text-xs text-muted-foreground">+{classes.length - 30} more classes</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-background p-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Properties
+                </p>
+                <div className="space-y-2">
+                  {properties.slice(0, 30).map((prop) => (
+                    <div key={prop.iri} className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                      <Link2 size={14} className="text-green-500" />
+                      <span className="truncate">{prop.label}</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">{prop.ontologyName}</span>
+                    </div>
+                  ))}
+                  {properties.length > 30 && (
+                    <p className="text-xs text-muted-foreground">+{properties.length - 30} more properties</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
