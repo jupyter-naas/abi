@@ -241,7 +241,10 @@ export const useOntologyStore = create<OntologyState>()(
             throw new Error(`Failed to fetch ontology: ${response.status}`);
           }
           const data = await response.json();
-          set({ items: data.items || [], loading: false });
+          const sortedItems = [...(data.items || [])].sort((a, b) =>
+            (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+          );
+          set({ items: sortedItems, loading: false });
         } catch (err) {
           console.error('Failed to fetch ontology:', err);
           set({ 
