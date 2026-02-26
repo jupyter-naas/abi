@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
@@ -25,6 +25,7 @@ import {
   Share2,
   Workflow,
   Loader2,
+  UserPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -80,7 +81,7 @@ interface GraphEdge {
 
 const VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', icon: Eye },
-  { id: 'entities', label: 'Entities', icon: Network },
+  { id: 'entities', label: 'Individuals', icon: Network },
   { id: 'sparql', label: 'SPARQL', icon: Code },
   { id: 'table', label: 'Table', icon: Table },
 ];
@@ -94,9 +95,17 @@ const LEGACY_VIEW_MAP: Record<string, GraphViewType> = {
 const isGraphViewType = (value: string): value is GraphViewType =>
   VIEW_TYPES.some((view) => view.id === value);
 
+type GraphPageMode = 'graph' | 'create-individual';
+
+interface OntologyClassOption {
+  id: string;
+  name: string;
+}
+
 export default function GraphPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const workspaceId = params.workspaceId as string;
   
   // Local state for graph data from API (not persisted to localStorage)
@@ -117,6 +126,13 @@ export default function GraphPage() {
   const [queryError, setQueryError] = useState<string | null>(null);
   const [editorHeight, setEditorHeight] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
+  const [pageMode, setPageMode] = useState<GraphPageMode>('graph');
+  const [individualLabel, setIndividualLabel] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [availableClasses, setAvailableClasses] = useState<OntologyClassOption[]>([]);
+  const [classesLoading, setClassesLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creatingIndividual, setCreatingIndividual] = useState(false);
 
   // Load graphs from API - fetches all visible graphs and merges them
   const loadFromApi = useCallback(async () => {
@@ -192,6 +208,11 @@ export default function GraphPage() {
 
   useEffect(() => {
     const requestedView = searchParams.get('view');
+    if (requestedView === 'create-individual') {
+      setPageMode('create-individual');
+      return;
+    }
+    setPageMode('graph');
     if (requestedView) {
       const normalizedView = LEGACY_VIEW_MAP[requestedView] || requestedView;
       if (isGraphViewType(normalizedView)) {
@@ -199,6 +220,96 @@ export default function GraphPage() {
       }
     }
   }, [searchParams, setActiveViewType]);
+
+  const loadOntologyClasses = useCallback(async () => {
+    setClassesLoading(true);
+    try {
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/ontology/classes`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch classes: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const sourceItems = Array.isArray(data) ? data : (data as { items?: unknown[] })?.items || [];
+      const normalizedClasses = sourceItems
+        .map((item) => {
+          const typedItem = item as { id?: string; iri?: string; name?: string; label?: string };
+          const id = typedItem.id || typedItem.iri || '';
+          const name = typedItem.name || typedItem.label || typedItem.iri || '';
+          if (!id || !name) {
+            return null;
+          }
+          return { id, name };
+        })
+        .filter((item): item is OntologyClassOption => item !== null)
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      setAvailableClasses(normalizedClasses);
+    } catch (err) {
+      console.error('Failed to fetch ontology classes:', err);
+      setAvailableClasses([]);
+    } finally {
+      setClassesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pageMode === 'create-individual') {
+      loadOntologyClasses();
+    }
+  }, [pageMode, loadOntologyClasses]);
+
+  const resetCreateIndividualForm = () => {
+    setIndividualLabel('');
+    setSelectedClassId('');
+    setCreateError(null);
+  };
+
+  const closeCreateIndividualForm = () => {
+    resetCreateIndividualForm();
+    setPageMode('graph');
+    setActiveViewType('entities');
+    router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const handleCreateIndividual = async () => {
+    const normalizedLabel = individualLabel.trim();
+    if (!normalizedLabel) return;
+
+    setCreatingIndividual(true);
+    setCreateError(null);
+    try {
+      const selectedClass = availableClasses.find((item) => item.id === selectedClassId);
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/graph/nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          type: 'Individual',
+          label: normalizedLabel,
+          properties: selectedClass
+            ? {
+              class_id: selectedClass.id,
+              class_label: selectedClass.name,
+            }
+            : {},
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed with status ${response.status}`);
+      }
+
+      await loadFromApi();
+      closeCreateIndividualForm();
+    } catch (err) {
+      console.error('Failed to create individual:', err);
+      setCreateError('Failed to create individual. Please try again.');
+    } finally {
+      setCreatingIndividual(false);
+    }
+  };
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   
@@ -367,53 +478,138 @@ export default function GraphPage() {
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Toolbar */}
           <div className="flex h-10 items-center justify-between border-b bg-muted/30 px-4">
-            <div className="flex items-center gap-1">
-              {VIEW_TYPES.map((view) => {
-                const Icon = view.icon;
-                return (
+            {pageMode === 'graph' ? (
+              <>
+                <div className="flex items-center gap-1">
+                  {VIEW_TYPES.map((view) => {
+                    const Icon = view.icon;
+                    return (
+                      <button
+                        key={view.id}
+                        onClick={() => setActiveViewType(view.id)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
+                          activeViewType === view.id
+                            ? 'bg-background'
+                            : 'text-muted-foreground hover:bg-background'
+                        )}
+                      >
+                        <Icon size={14} />
+                        {view.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2">
                   <button
-                    key={view.id}
-                    onClick={() => setActiveViewType(view.id)}
-                    className={cn(
-                      'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
-                      activeViewType === view.id
-                        ? 'bg-background'
-                        : 'text-muted-foreground hover:bg-background'
-                    )}
+                    onClick={loadFromApi}
+                    disabled={loading}
+                    className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted disabled:opacity-50"
                   >
-                    <Icon size={14} />
-                    {view.label}
+                    {loading ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={14} />
+                    )}
+                    Refresh
                   </button>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadFromApi}
-                disabled={loading}
-                className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted disabled:opacity-50"
-              >
-                {loading ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <RefreshCw size={14} />
-                )}
-                Refresh
-              </button>
-              <button className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted">
-                <Upload size={14} />
-                Import
-              </button>
-              <button className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted">
-                <Download size={14} />
-                Export
-              </button>
-            </div>
+                  <button className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted">
+                    <Upload size={14} />
+                    Import
+                  </button>
+                  <button className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted">
+                    <Download size={14} />
+                    Export
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <UserPlus size={14} />
+                Create New Individual
+              </div>
+            )}
           </div>
 
           {/* Content based on view type */}
           <div className="flex flex-1 overflow-hidden">
-            {activeViewType === 'overview' && (
+            {pageMode === 'create-individual' && (
+              <div className="flex flex-1 flex-col bg-card p-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <UserPlus size={24} className="text-workspace-accent" />
+                      <h2 className="text-lg font-semibold">Create New Individual</h2>
+                    </div>
+                    <button
+                      onClick={closeCreateIndividualForm}
+                      className="rounded p-2 text-muted-foreground hover:bg-muted"
+                      title="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Label *</label>
+                      <input
+                        type="text"
+                        value={individualLabel}
+                        onChange={(event) => setIndividualLabel(event.target.value)}
+                        placeholder="e.g., Acme Corporation, Process-001"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Class</label>
+                      <select
+                        value={selectedClassId}
+                        onChange={(event) => setSelectedClassId(event.target.value)}
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        disabled={classesLoading}
+                      >
+                        <option value="">
+                          {classesLoading ? 'Loading classes...' : 'Select a class'}
+                        </option>
+                        {availableClasses.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {createError && (
+                      <p className="text-sm text-red-500">{createError}</p>
+                    )}
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        onClick={closeCreateIndividualForm}
+                        className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleCreateIndividual}
+                        disabled={!individualLabel.trim() || creatingIndividual}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                          'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                        )}
+                      >
+                        {creatingIndividual ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                        Create Individual
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {pageMode === 'graph' && activeViewType === 'overview' && (
               <div className="flex-1 overflow-auto p-6">
                 <h2 className="mb-6 text-lg font-semibold">Overview</h2>
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -442,7 +638,7 @@ export default function GraphPage() {
               </div>
             )}
 
-            {activeViewType === 'entities' && (
+            {pageMode === 'graph' && activeViewType === 'entities' && (
               <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
                 {/* Search overlay */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
@@ -554,7 +750,7 @@ export default function GraphPage() {
               </div>
             )}
 
-            {activeViewType === 'table' && (
+            {pageMode === 'graph' && activeViewType === 'table' && (
               <div className="flex-1 overflow-auto p-4">
                 <div className="rounded-lg border">
                   <table className="w-full">
@@ -602,7 +798,7 @@ export default function GraphPage() {
               </div>
             )}
 
-            {activeViewType === 'sparql' && (
+            {pageMode === 'graph' && activeViewType === 'sparql' && (
               <div className="flex flex-1 flex-col p-4">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -741,7 +937,7 @@ LIMIT 100`}
         </div>
 
         {/* Right Panel - Node Inspector */}
-        {selectedNode && (
+        {pageMode === 'graph' && selectedNode && (
           <div className="w-72 border-l bg-card">
             <div className="flex h-10 items-center justify-between border-b px-4">
               <span className="text-sm font-medium">Inspector</span>

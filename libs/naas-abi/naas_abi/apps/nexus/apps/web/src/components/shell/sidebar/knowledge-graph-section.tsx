@@ -67,7 +67,6 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   const { currentWorkspaceId } = useWorkspaceStore();
   const currentWorkspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
   const {
-    setActiveViewType,
     visibleGraphIds,
     toggleGraphVisibility,
     setVisibleGraphs,
@@ -127,38 +126,6 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     }
   };
 
-  const createIndividual = async () => {
-    if (!currentWorkspaceId) return;
-    const label = window.prompt('Individual label');
-    const normalizedLabel = label?.trim();
-    if (!normalizedLabel) return;
-
-    try {
-      const apiUrl = getApiUrl();
-      const response = await authFetch(`${apiUrl}/api/graph/nodes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspace_id: currentWorkspaceId,
-          type: 'Individual',
-          label: normalizedLabel,
-          properties: {},
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed with status ${response.status}`);
-      }
-
-      await fetchGraphs();
-      setActiveViewType('entities');
-      router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-    } catch (err) {
-      console.error('Failed to create individual:', err);
-      window.alert('Failed to create individual');
-    }
-  };
-
   useEffect(() => {
     fetchGraphs();
   }, [currentWorkspaceId, currentWorkspace?.name, visibleGraphIds.length, setVisibleGraphs]);
@@ -174,7 +141,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     >
       <div className="flex items-center gap-0.5 px-1 pb-1">
         <button
-          onClick={createIndividual}
+          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=create-individual'))}
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="New Individual"
         >
