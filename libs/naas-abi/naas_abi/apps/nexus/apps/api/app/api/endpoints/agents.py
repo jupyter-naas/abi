@@ -44,9 +44,7 @@ async def list_agents(
     existing_agents_by_name = {agent.name: agent for agent in agent_list}
 
     # Add agents from engine modules to the API
-    from langchain_core.language_models.chat_models import BaseChatModel
     from naas_abi import ABIModule
-    from naas_abi_core.models.Model import ChatModel
     from naas_abi_core.services.agent.Agent import Agent
 
     abi_module = ABIModule.get_instance()
@@ -61,73 +59,35 @@ async def list_agents(
             agents.append(agent_cls)
 
     for agent_cls in agents:
-        agent_instance = agent_cls.New()
-        class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
-        existing_agent = existing_agents_by_name.get(agent_instance.name)
-        if existing_agent and not existing_agent.class_name:
-            try:
-                await agent_service.update_agent(
-                    existing_agent.id,
-                    AgentUpdateInput(class_name=class_name),
-                )
-                for listed_agent in agent_list:
-                    if listed_agent.id == existing_agent.id:
-                        listed_agent.class_name = class_name
-                        break
-            except Exception as e:
-                logger.warning(f"Failed to backfill class_name for agent {existing_agent.id}: {e}")
-        if not existing_agent:
-            logger.debug(f"Creating agent: {agent_instance.name}")
-            try:
-                name = agent_instance.name
-                description = agent_instance.description
-                system_prompt = agent_instance.configuration.system_prompt
-                model_id = "unknown"
-                # context_window = 4096
-                # temperature = 0.7
-                enabled = False
-                if isinstance(agent_instance.chat_model, ChatModel):
-                    if hasattr(agent_instance.chat_model, "model_id"):
-                        model_id = agent_instance.chat_model.model_id
-                    # if hasattr(agent_instance.chat_model, "context_window"):
-                    #     context_window = agent_instance.chat_model.context_window
-                    # if hasattr(agent_instance.chat_model, "model") and hasattr(
-                    #     agent_instance.chat_model.model, "temperature"
-                    # ):
-                    #     temperature = agent_instance.chat_model.model.temperature
-                elif isinstance(agent_instance.chat_model, BaseChatModel):
-                    if hasattr(agent_instance.chat_model, "model") and isinstance(
-                        agent_instance.chat_model.model, str
-                    ):
-                        model_id = agent_instance.chat_model.model
-                    elif hasattr(agent_instance.chat_model, "model_name") and isinstance(
-                        agent_instance.chat_model.model_name, str
-                    ):
-                        model_id = agent_instance.chat_model.model_name
-                    # if hasattr(agent_instance.chat_model, "temperature") and isinstance(
-                    #     agent_instance.chat_model.temperature, float
-                    # ):
-                    #     temperature = agent_instance.chat_model.temperature
+        if not hasattr(agent_cls, "name"):
+            logger.warning(f"Skipping agent {agent_cls} because it has no name or description")
+            continue
 
-                if agent_instance.name == "Abi":
-                    enabled = True
-                # Create agent in database
-                agent_create = AgentCreateInput(
-                    name=name,
-                    description=description,
-                    workspace_id=workspace_id,
-                    class_name=class_name,
-                    system_prompt=str(system_prompt),
-                    model_id=model_id,
-                    provider="abi",
-                    enabled=enabled,
-                )
-                created_agent = await agent_service.create_agent(agent_create)
-                agent_list.append(created_agent)
-                existing_agents_by_name[name] = created_agent
-            except Exception as e:
-                logger.error(f"Error creating agent {agent_create}: {e}")
-                continue
+        name = agent_cls.name
+        description = agent_cls.description
+        class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
+        existing_agent = existing_agents_by_name.get(str(name))
+        enabled = False
+        if name == "Abi":
+            enabled = True
+
+        if not existing_agent:
+            logger.debug(f"Creating agent: {name}")
+
+            # Create agent in database
+            agent_create = AgentCreateInput(
+                name=str(name),
+                description=str(description),
+                workspace_id=workspace_id,
+                class_name=class_name,
+                provider="abi",
+                enabled=enabled,
+            )
+            created_agent = await agent_service.create_agent(agent_create)
+
+            # Add created agent to list
+            agent_list.append(created_agent)
+            existing_agents_by_name[str(name)] = created_agent
 
     return agent_list
 
