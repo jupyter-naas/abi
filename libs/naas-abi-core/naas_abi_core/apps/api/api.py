@@ -3,7 +3,7 @@ import subprocess
 from importlib.resources import files
 from typing import Annotated, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.models import OAuthFlowPassword
@@ -142,29 +142,29 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     return {"access_token": "abi", "token_type": "bearer"}
 
 
-# # Create Agents API Router
-# agents_router = APIRouter(
-#     prefix="/agents",
-#     tags=["Agents"],
-#     responses={401: {"description": "Unauthorized"}},
-#     dependencies=[Depends(is_token_valid)],  # Apply token verification
-# )
+# Create Agents API Router
+agents_router = APIRouter(
+    prefix="/agents",
+    tags=["Agents"],
+    responses={401: {"description": "Unauthorized"}},
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
+)
 
-# # Create Pipelines API Router
-# pipelines_router = APIRouter(
-#     prefix="/pipelines",
-#     tags=["Pipelines"],
-#     responses={401: {"description": "Unauthorized"}},
-#     dependencies=[Depends(is_token_valid)],  # Apply token verification
-# )
+# Create Pipelines API Router
+pipelines_router = APIRouter(
+    prefix="/pipelines",
+    tags=["Pipelines"],
+    responses={401: {"description": "Unauthorized"}},
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
+)
 
-# # Create Pipelines API Router
-# workflows_router = APIRouter(
-#     prefix="/workflows",
-#     tags=["Workflows"],
-#     responses={401: {"description": "Unauthorized"}},
-#     dependencies=[Depends(is_token_valid)],  # Apply token verification
-# )
+# Create Pipelines API Router
+workflows_router = APIRouter(
+    prefix="/workflows",
+    tags=["Workflows"],
+    responses={401: {"description": "Unauthorized"}},
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
+)
 
 
 def get_git_tag():
