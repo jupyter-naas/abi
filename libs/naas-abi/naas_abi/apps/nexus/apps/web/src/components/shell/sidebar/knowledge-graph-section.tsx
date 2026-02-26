@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Waypoints, GitBranch, LayoutGrid, FileCode, Network, Box,
+  Waypoints,
   RefreshCw, Eye, EyeOff, Database, User, UserPlus, ChevronRight,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -67,7 +67,6 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   const { currentWorkspaceId } = useWorkspaceStore();
   const currentWorkspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
   const {
-    activeViewType,
     setActiveViewType,
     visibleGraphIds,
     toggleGraphVisibility,
@@ -76,24 +75,34 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
 
   const [availableGraphs, setAvailableGraphs] = useState<GraphItem[]>([]);
   const [graphsExpanded, setGraphsExpanded] = useState(true);
-  const [viewsExpanded, setViewsExpanded] = useState(true);
 
   const fetchGraphs = async () => {
     if (!currentWorkspaceId) return;
     try {
       const apiUrl = getApiUrl();
-      const graphs: GraphItem[] = [];
+      const defaultWorkspaceGraph: GraphItem = {
+        id: currentWorkspaceId,
+        name: currentWorkspace?.name ? `${currentWorkspace.name} Graph` : 'Workspace Graph',
+        type: 'workspace',
+        nodeCount: 0,
+      };
+
+      // Always keep at least one graph visible in sidebar, even when a fetch fails.
+      const graphs: GraphItem[] = [defaultWorkspaceGraph];
 
       const wsRes = await authFetch(`${apiUrl}/api/graph/workspaces/${currentWorkspaceId}`);
       if (wsRes.ok) {
         const wsData = await wsRes.json();
-        const workspaceNodeCount = wsData.nodes?.length || 0;
-        graphs.push({
-          id: currentWorkspaceId,
-          name: currentWorkspace?.name ? `${currentWorkspace.name} Graph` : 'Workspace Graph',
-          type: 'workspace',
-          nodeCount: workspaceNodeCount,
-        });
+        graphs[0].nodeCount = wsData.nodes?.length || 0;
+      }
+
+      const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
+      if (namesRes.ok) {
+        const namesData = await namesRes.json();
+        const graphNames = Array.isArray(namesData?.graph_names) ? namesData.graph_names : [];
+        if (graphNames.length > 0) {
+          graphs[0].name = graphNames[0];
+        }
       }
 
       setAvailableGraphs(graphs);
@@ -142,7 +151,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       }
 
       await fetchGraphs();
-      setActiveViewType('visual');
+      setActiveViewType('entities');
       router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
     } catch (err) {
       console.error('Failed to create individual:', err);
@@ -153,14 +162,6 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   useEffect(() => {
     fetchGraphs();
   }, [currentWorkspaceId, currentWorkspace?.name, visibleGraphIds.length, setVisibleGraphs]);
-
-  const viewIcons: Record<string, React.ReactNode> = {
-    visual: <GitBranch size={12} />,
-    table: <LayoutGrid size={12} />,
-    sparql: <FileCode size={12} />,
-    schema: <Network size={12} />,
-    statistics: <Box size={12} />,
-  };
 
   return (
     <CollapsibleSection
@@ -224,43 +225,6 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
         </div>
       )}
 
-      <div className={cn('px-1', viewsExpanded && 'pb-2')}>
-        <button
-          onClick={() => setViewsExpanded((prev) => !prev)}
-          className={cn(
-            'flex w-full items-center gap-1 rounded-md px-1 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10',
-            viewsExpanded && 'mb-1'
-          )}
-        >
-          <ChevronRight
-            size={10}
-            className={cn('flex-shrink-0 transition-transform', viewsExpanded && 'rotate-90')}
-          />
-          <span>Views</span>
-        </button>
-        {viewsExpanded && (
-          <div className="space-y-0.5">
-            {(['visual', 'table', 'sparql', 'schema', 'statistics'] as const).map((view) => (
-              <button
-                key={view}
-                onClick={() => {
-                  setActiveViewType(view);
-                  router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-                }}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors capitalize',
-                  activeViewType === view
-                    ? 'bg-workspace-accent-10 text-workspace-accent'
-                    : 'hover:bg-muted'
-                )}
-              >
-                {viewIcons[view]}
-                <span>{view}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
     </CollapsibleSection>
   );
 }

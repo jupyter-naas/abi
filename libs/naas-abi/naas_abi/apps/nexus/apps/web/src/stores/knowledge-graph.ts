@@ -40,7 +40,7 @@ export interface NamedGraph {
 }
 
 // View types for exploring the graph
-export type GraphViewType = 'visual' | 'table' | 'sparql' | 'schema' | 'statistics';
+export type GraphViewType = 'overview' | 'entities' | 'table' | 'sparql';
 
 export interface GraphView {
   id: string;
@@ -156,7 +156,7 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphState>()(
       selectedNodeId: null,
       selectedEdgeId: null,
       views: [],
-      activeViewType: 'visual',
+      activeViewType: 'overview',
       queries: [],
       currentQuery: '',
       queryResults: [],
