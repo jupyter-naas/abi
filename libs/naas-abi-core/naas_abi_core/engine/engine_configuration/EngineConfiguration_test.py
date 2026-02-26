@@ -5,7 +5,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 )
 
 
-def _configuration_yaml(title: str, dotenv_path: str) -> str:
+def _configuration_yaml(
+    title: str, dotenv_path: str, reload: bool | None = None
+) -> str:
+    reload_line = f"\n  reload: {str(reload).lower()}" if reload is not None else ""
     return f"""
 api:
   title: "{title}"
@@ -13,7 +16,7 @@ api:
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
   cors_origins:
-    - "http://localhost:9879"
+    - "http://localhost:9879"{reload_line}
 
 global_config:
   ai_mode: "cloud"
@@ -74,6 +77,22 @@ def test_load_configuration_uses_dotenv_configured_in_secret_service(
     configuration = EngineConfiguration.load_configuration()
 
     assert configuration.api.title == "DEV"
+    assert configuration.api.reload is True
+
+
+def test_load_configuration_allows_disabling_api_reload(tmp_path, monkeypatch):
+    (tmp_path / ".env.bootstrap").write_text("ENV=local\n", encoding="utf-8")
+    (tmp_path / "config.yaml").write_text(
+        _configuration_yaml(title="BASE", dotenv_path=".env.bootstrap", reload=False),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ENV", raising=False)
+
+    configuration = EngineConfiguration.load_configuration()
+
+    assert configuration.api.reload is False
 
 
 def test_load_configuration_fails_if_configured_dotenv_file_is_missing(

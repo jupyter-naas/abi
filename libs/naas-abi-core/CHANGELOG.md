@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.17.3 (2026-02-25)
+
+### Bug Fixes
+
+- Improve api loading time
+  ([`e6d6671`](https://github.com/jupyter-naas/abi/commit/e6d66711d065a89800f0fcec722cd68d05034e24))
+
+- Make it possible to not have the api reload by default
+  ([`308e4a9`](https://github.com/jupyter-naas/abi/commit/308e4a96eb6481d0171deb508e1f3fe45a8264cb))
+
+
 ## v1.17.2 (2026-02-19)
 
 ### Bug Fixes

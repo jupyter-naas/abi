@@ -3,7 +3,7 @@ import subprocess
 from importlib.resources import files
 from typing import Annotated, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.models import OAuthFlowPassword
@@ -21,24 +21,54 @@ from naas_abi_core import logger
 # Docs
 from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML
 from naas_abi_core.engine.Engine import Engine
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+    ApiConfiguration,
+    EngineConfiguration,
+)
 
-engine = Engine()
-engine.load()
+
+def _load_api_runtime_configuration() -> ApiConfiguration:
+    try:
+        return EngineConfiguration.load_configuration().api
+    except Exception as exc:
+        logger.warning(
+            f"Failed to load API runtime configuration from engine configuration: {exc}"
+        )
+        return ApiConfiguration()
+
+
+class LazyEngine:
+    def __init__(self):
+        self._engine: Engine | None = None
+
+    def get(self) -> Engine:
+        if self._engine is None:
+            runtime_engine = Engine()
+            runtime_engine.load()
+            self._engine = runtime_engine
+        return self._engine
+
+    def __getattr__(self, name: str):
+        return getattr(self.get(), name)
+
+
+engine = LazyEngine()
+api_runtime_configuration = _load_api_runtime_configuration()
 
 # Init API
-TITLE = engine.configuration.api.title
-DESCRIPTION = engine.configuration.api.description
+TITLE = api_runtime_configuration.title
+DESCRIPTION = api_runtime_configuration.description
 app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
 
 # Set logo path
-logo_path = engine.configuration.api.logo_path
+logo_path = api_runtime_configuration.logo_path
 logo_name = os.path.basename(logo_path)
 
 # Set favicon path
-favicon_path = engine.configuration.api.favicon_path
+favicon_path = api_runtime_configuration.favicon_path
 favicon_name = os.path.basename(favicon_path)
 
-origins = engine.configuration.api.cors_origins
+origins = api_runtime_configuration.cors_origins
 
 logger.debug(f"CORS origins: {origins}")
 
@@ -112,29 +142,29 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     return {"access_token": "abi", "token_type": "bearer"}
 
 
-# # Create Agents API Router
-# agents_router = APIRouter(
-#     prefix="/agents",
-#     tags=["Agents"],
-#     responses={401: {"description": "Unauthorized"}},
-#     dependencies=[Depends(is_token_valid)],  # Apply token verification
-# )
+# Create Agents API Router
+agents_router = APIRouter(
+    prefix="/agents",
+    tags=["Agents"],
+    responses={401: {"description": "Unauthorized"}},
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
+)
 
-# # Create Pipelines API Router
-# pipelines_router = APIRouter(
-#     prefix="/pipelines",
-#     tags=["Pipelines"],
-#     responses={401: {"description": "Unauthorized"}},
-#     dependencies=[Depends(is_token_valid)],  # Apply token verification
-# )
+# Create Pipelines API Router
+pipelines_router = APIRouter(
+    prefix="/pipelines",
+    tags=["Pipelines"],
+    responses={401: {"description": "Unauthorized"}},
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
+)
 
-# # Create Pipelines API Router
-# workflows_router = APIRouter(
-#     prefix="/workflows",
-#     tags=["Workflows"],
-#     responses={401: {"description": "Unauthorized"}},
-#     dependencies=[Depends(is_token_valid)],  # Apply token verification
-# )
+# Create Pipelines API Router
+workflows_router = APIRouter(
+    prefix="/workflows",
+    tags=["Workflows"],
+    responses={401: {"description": "Unauthorized"}},
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
+)
 
 
 def get_git_tag():
@@ -194,53 +224,64 @@ def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
 
-# # Add agents to the API
-# all_agents: list = []
-# for module in engine.modules.values():
-#     for agent in module.agents:
-#         if agent is not None:
-#             all_agents.append(agent.New())
-#         else:
-#             logger.warning(f"Skipping {agent.name} agent (missing API key)")
+def _load_runtime_routes():
+    if getattr(app.state, "runtime_routes_loaded", False):
+        return
 
-# # Sort agents by name and add to router
-# for agent in sorted(all_agents, key=lambda a: a.name):
-#     logger.debug(f"Adding agent to API: {agent.name}")
-#     agent.as_api(agents_router)
+    runtime_engine = engine.get()
 
-# # Include routers
-# app.include_router(agents_router)
-# app.include_router(pipelines_router)
-# app.include_router(workflows_router)
+    # Add agents to the API
+    all_agents: list = []
+    for module in runtime_engine.modules.values():
+        for agent in module.agents:
+            if agent is not None:
+                all_agents.append(agent.New())
+            else:
+                logger.warning("Skipping agent (missing API key)")
 
-for module in engine.modules.values():
-    module.api(app)
+    # Sort agents by name and add to router
+    for runtime_agent in sorted(all_agents, key=lambda item: item.name):
+        logger.debug(f"Adding agent to API: {runtime_agent.name}")
+        runtime_agent.as_api(agents_router)
+
+    # Include routers only once
+    app.include_router(agents_router)
+    app.include_router(pipelines_router)
+    app.include_router(workflows_router)
+
+    for module in runtime_engine.modules.values():
+        module.api(app)
+
+    app.state.runtime_routes_loaded = True
+
+
+def get_app() -> FastAPI:
+    _load_runtime_routes()
+    return app
 
 
 def api():
     import uvicorn
 
-    if os.environ.get("ENV") == "dev":
-        uvicorn.run(
-            "naas_abi_core.apps.api.api:app",
-            host="0.0.0.0",
-            port=9879,
-            reload=os.environ.get("ENV") == "dev",
-            reload_dirs=["src", "libs"],
-            log_level="debug",
-            proxy_headers=True,
-            forwarded_allow_ips="*",
-        )
+    reload_enabled = api_runtime_configuration.reload
+
+    run_kwargs: dict = {
+        "host": "0.0.0.0",
+        "port": 9879,
+        "reload": reload_enabled,
+        "proxy_headers": True,
+        "forwarded_allow_ips": "*",
+        "log_level": "debug" if reload_enabled else "info",
+    }
+
+    if reload_enabled:
+        run_kwargs["app"] = "naas_abi_core.apps.api.api:get_app"
+        run_kwargs["factory"] = True
+        run_kwargs["reload_dirs"] = ["src", "libs"]
     else:
-        uvicorn.run(
-            "naas_abi_core.apps.api.api:app",
-            host="0.0.0.0",
-            port=9879,
-            reload_dirs=["src", "libs"],
-            reload=True,
-            proxy_headers=True,
-            forwarded_allow_ips="*",
-        )
+        run_kwargs["app"] = get_app()
+
+    uvicorn.run(**run_kwargs)
 
 
 def test_init():
