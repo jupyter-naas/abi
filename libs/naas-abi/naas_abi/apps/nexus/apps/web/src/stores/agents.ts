@@ -63,6 +63,7 @@ export interface Agent {
   modelId: string | null; // Model ID (grok-beta, gpt-4o, claude-3-5-sonnet, etc.)
   logoUrl: string | null; // URL to agent/provider logo
   enabled: boolean; // Whether agent is available for chat
+  suggestions?: Array<{ label: string; value: string }>; // Optional class-level prompt suggestions
   tools: string[]; // Array of enabled tool IDs
   capabilities: AgentCapabilities; // Agent capabilities (memory, reasoning, vision)
   intentMappings: IntentMapping[]; // Intent to action mappings
@@ -236,6 +237,15 @@ export const useAgentsStore = create<AgentsState>()(
               modelId: a.model || null, // Model ID (grok-beta, gpt-4o, etc.)
               logoUrl: a.logo_url || null, // Logo URL from API
               enabled: a.enabled || false, // Whether agent is available for chat
+              suggestions: Array.isArray(a.suggestions)
+                ? a.suggestions.filter(
+                    (s: unknown): s is { label: string; value: string } =>
+                      typeof s === 'object' &&
+                      s !== null &&
+                      typeof (s as { label?: unknown }).label === 'string' &&
+                      typeof (s as { value?: unknown }).value === 'string'
+                  )
+                : undefined,
               tools: [],
               capabilities: { memory: false, reasoning: false, vision: false },
               intentMappings: [],
