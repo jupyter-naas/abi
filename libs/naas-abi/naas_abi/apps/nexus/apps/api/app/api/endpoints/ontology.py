@@ -121,20 +121,6 @@ class ImportRequest(BaseModel):
 ontology_items: list[OntologyItem] = []
 
 
-def _resolve_ontology_directory() -> Path:
-    """Resolve repository ontology directory for the NEXUS app."""
-    p = Path(__file__).resolve()
-    root = None
-    for _ in range(8):
-        if p.name == "apps":
-            root = p.parent
-            break
-        p = p.parent
-    if root is None:
-        root = Path(__file__).resolve().parents[6]
-    return root / "ontology"
-
-
 def _list_registered_ontology_paths() -> set[str]:
     """Return ontology file paths declared by all loaded ABI modules."""
     abi_module = ABIModule.get_instance()
@@ -657,11 +643,14 @@ async def list_ontology_files() -> dict[str, list[OntologyFileItem]]:
             for ontology in module.ontologies:
                 ontology_path = str(ontology)
                 submodule_name = ontology_path.split("/")[-2]
-                if "sparqlquery" in ontology_path.lower():
+                if (
+                    "sparqlquery" in ontology_path.lower()
+                    or "sparqlqueries" in ontology_path.lower()
+                ):
                     continue
                 if ontology_path not in seen_paths:
-                    seen_paths.add(ontology_path)
                     if module_name.lower() in ontology_path.lower():
+                        seen_paths.add(ontology_path)
                         ontology_files.append(
                             OntologyFileItem(
                                 name=os.path.basename(ontology_path),
@@ -670,6 +659,7 @@ async def list_ontology_files() -> dict[str, list[OntologyFileItem]]:
                             )
                         )
                     elif "/naas-abi/" in ontology_path.lower():
+                        seen_paths.add(ontology_path)
                         ontology_files.append(
                             OntologyFileItem(
                                 name=os.path.basename(ontology_path),

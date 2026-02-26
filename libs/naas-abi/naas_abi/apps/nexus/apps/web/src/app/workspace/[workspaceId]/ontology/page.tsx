@@ -305,7 +305,7 @@ export default function OntologyPage() {
               onClick={() => setViewMode('import')}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
             >
-              <Upload size={14} />
+              <Download size={14} />
               Import
             </button>
             <button
@@ -317,7 +317,7 @@ export default function OntologyPage() {
               )}
               title={!selectedOntologyPath ? 'Select an ontology file to export' : 'Export selected ontology'}
             >
-              <Download size={14} />
+              <Upload size={14} />
               {exporting ? 'Exporting...' : 'Export'}
             </button>
           </div>
