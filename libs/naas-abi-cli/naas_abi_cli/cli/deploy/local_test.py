@@ -28,11 +28,7 @@ def test_build_nexus_api_url_allows_scheme_override() -> None:
 def test_setup_local_deploy_does_not_include_headscale_by_default(
     tmp_path: Path,
 ) -> None:
-    setup_local_deploy(
-        str(tmp_path),
-        public_web_host="localhost",
-        public_api_host="api.localhost",
-    )
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
 
     compose_path = tmp_path / "docker-compose.yml"
     env_path = tmp_path / ".env"
@@ -48,8 +44,7 @@ def test_setup_local_deploy_can_include_headscale(tmp_path: Path) -> None:
     setup_local_deploy(
         str(tmp_path),
         include_headscale=True,
-        public_web_host="localhost",
-        public_api_host="api.localhost",
+        base_domain="localhost",
     )
 
     compose_path = tmp_path / "docker-compose.yml"
@@ -74,8 +69,7 @@ def test_setup_local_deploy_uses_selected_hosts_for_generated_env(
 ) -> None:
     setup_local_deploy(
         str(tmp_path),
-        public_web_host="nexus.example.com",
-        public_api_host="api.example.com",
+        base_domain="example.com",
     )
 
     env_content = (tmp_path / ".env").read_text(encoding="utf-8")
@@ -83,3 +77,16 @@ def test_setup_local_deploy_uses_selected_hosts_for_generated_env(
     assert "PUBLIC_WEB_HOST=nexus.example.com" in env_content
     assert "PUBLIC_API_HOST=api.example.com" in env_content
     assert "NEXUS_API_URL=https://api.example.com" in env_content
+
+
+def test_setup_local_deploy_generates_headscale_and_vpn_domains(tmp_path: Path) -> None:
+    setup_local_deploy(
+        str(tmp_path),
+        include_headscale=True,
+        base_domain="example.com",
+    )
+
+    env_content = (tmp_path / ".env").read_text(encoding="utf-8")
+
+    assert "HEADSCALE_SERVER_URL=headscale.example.com" in env_content
+    assert "HEADSCALE_INTERNAL_DOMAIN=vpn.example.com" in env_content
