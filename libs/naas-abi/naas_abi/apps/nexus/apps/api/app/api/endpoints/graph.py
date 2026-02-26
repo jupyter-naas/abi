@@ -97,6 +97,10 @@ class GraphQueryResult(BaseModel):
     query_explanation: str | None = None
 
 
+class GraphNamesResponse(BaseModel):
+    graph_names: list[str]
+
+
 # ============ Helpers ============
 
 
@@ -223,6 +227,13 @@ def _remove_subject_graph(store: TripleStoreService, subject: URIRef) -> bool:
         return False
     store.remove(subject_graph)
     return True
+
+
+def _list_named_graphs(store: TripleStoreService) -> list[str]:
+    graph_names = [str(graph_name) for graph_name in store.list_graphs()]
+    if len(graph_names) == 0:
+        return ["default"]
+    return graph_names
 
 
 def _query_nodes(
@@ -409,6 +420,15 @@ def _get_edge_by_id(store: TripleStoreService, edge_id: str) -> GraphEdge | None
 
 
 # ============ Endpoints ============
+
+
+@router.get("/names")
+async def list_graph_names(
+    request: Request,
+) -> GraphNamesResponse:
+    """List all named graphs available in the triple store."""
+    store = get_triple_store(request)
+    return GraphNamesResponse(graph_names=_list_named_graphs(store))
 
 
 @router.get("/workspaces/{workspace_id}")

@@ -5,17 +5,12 @@ import { useParams, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
   Filter,
   Search,
-  Plus,
+  Eye,
   Network,
-  Table,
   Code,
-  BarChart3,
-  Layers,
+  Table,
   Play,
   Save,
   Trash2,
@@ -84,12 +79,20 @@ interface GraphEdge {
 }
 
 const VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
-  { id: 'visual', label: 'Visual', icon: Network },
-  { id: 'table', label: 'Table', icon: Table },
+  { id: 'overview', label: 'Overview', icon: Eye },
+  { id: 'entities', label: 'Entities', icon: Network },
   { id: 'sparql', label: 'SPARQL', icon: Code },
-  { id: 'schema', label: 'Schema', icon: Layers },
-  { id: 'statistics', label: 'Statistics', icon: BarChart3 },
+  { id: 'table', label: 'Table', icon: Table },
 ];
+
+const LEGACY_VIEW_MAP: Record<string, GraphViewType> = {
+  visual: 'entities',
+  schema: 'overview',
+  statistics: 'overview',
+};
+
+const isGraphViewType = (value: string): value is GraphViewType =>
+  VIEW_TYPES.some((view) => view.id === value);
 
 export default function GraphPage() {
   const params = useParams();
@@ -114,7 +117,6 @@ export default function GraphPage() {
   const [queryError, setQueryError] = useState<string | null>(null);
   const [editorHeight, setEditorHeight] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
-  const selectedOntology = searchParams.get('ontology');
 
   // Load graphs from API - fetches all visible graphs and merges them
   const loadFromApi = useCallback(async () => {
@@ -190,13 +192,11 @@ export default function GraphPage() {
 
   useEffect(() => {
     const requestedView = searchParams.get('view');
-    if (
-      requestedView &&
-      (['visual', 'table', 'sparql', 'schema', 'statistics'] as const).includes(
-        requestedView as GraphViewType
-      )
-    ) {
-      setActiveViewType(requestedView as GraphViewType);
+    if (requestedView) {
+      const normalizedView = LEGACY_VIEW_MAP[requestedView] || requestedView;
+      if (isGraphViewType(normalizedView)) {
+        setActiveViewType(normalizedView);
+      }
     }
   }, [searchParams, setActiveViewType]);
 
@@ -367,17 +367,25 @@ export default function GraphPage() {
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Toolbar */}
           <div className="flex h-10 items-center justify-between border-b bg-muted/30 px-4">
-            <div className="flex items-center gap-2">
-              <Database size={14} className="text-workspace-accent" />
-              <span className="text-sm font-medium">Knowledge Graph</span>
-              {selectedOntology && (
-                <span className="text-xs text-muted-foreground">
-                  • Ontology: {selectedOntology}
-                </span>
-              )}
-              <span className="text-xs text-muted-foreground">
-                ({nodes.length} nodes, {edges.length} edges)
-              </span>
+            <div className="flex items-center gap-1">
+              {VIEW_TYPES.map((view) => {
+                const Icon = view.icon;
+                return (
+                  <button
+                    key={view.id}
+                    onClick={() => setActiveViewType(view.id)}
+                    className={cn(
+                      'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
+                      activeViewType === view.id
+                        ? 'bg-background'
+                        : 'text-muted-foreground hover:bg-background'
+                    )}
+                  >
+                    <Icon size={14} />
+                    {view.label}
+                  </button>
+                );
+              })}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -405,7 +413,36 @@ export default function GraphPage() {
 
           {/* Content based on view type */}
           <div className="flex flex-1 overflow-hidden">
-            {activeViewType === 'visual' && (
+            {activeViewType === 'overview' && (
+              <div className="flex-1 overflow-auto p-6">
+                <h2 className="mb-6 text-lg font-semibold">Overview</h2>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  <StatCard title="Total Nodes" value={stats.totalNodes} icon={Circle} />
+                  <StatCard title="Total Edges" value={stats.totalEdges} icon={Link2} />
+                  <StatCard title="Avg Degree" value={stats.avgDegree.toFixed(2)} icon={Share2} />
+                  <StatCard title="Density" value={(stats.density * 100).toFixed(1) + '%'} icon={Workflow} />
+                </div>
+
+                {Object.keys(stats.nodesByType).length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="mb-4 font-medium">Nodes by Type</h3>
+                    <div className="rounded-lg border">
+                      {Object.entries(stats.nodesByType).map(([type, count]) => (
+                        <div key={type} className="flex items-center justify-between border-b p-3 last:border-b-0">
+                          <span className="flex items-center gap-2">
+                            <Box size={14} className="text-blue-500" />
+                            {type}
+                          </span>
+                          <span className="font-medium">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeViewType === 'entities' && (
               <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
                 {/* Search overlay */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
@@ -700,295 +737,6 @@ LIMIT 100`}
               </div>
             )}
 
-            {activeViewType === 'schema' && (
-              <div className="flex-1 overflow-auto">
-                <div className="flex h-full">
-                  {/* Left: BFO Hierarchy Tree */}
-                  <div className="w-80 border-r p-4 overflow-auto">
-                    <h3 className="mb-4 font-medium text-sm flex items-center gap-2">
-                      <Layers size={14} />
-                      BFO Taxonomy
-                    </h3>
-                    
-                    {/* Tree visualization */}
-                    <div className="text-xs font-mono">
-                      {/* Entity root */}
-                      <div className="select-none">
-                        <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer font-semibold">
-                          <span className="text-muted-foreground">▼</span>
-                          <span>Entity</span>
-                        </div>
-                        
-                        {/* Continuant branch */}
-                        <div className="ml-4 border-l border-border pl-2">
-                          <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer font-medium">
-                            <span className="text-muted-foreground">▼</span>
-                            <span>Continuant</span>
-                            <span className="text-muted-foreground text-[10px]">(persists)</span>
-                          </div>
-                          
-                          {/* Independent Continuant */}
-                          <div className="ml-4 border-l border-border pl-2">
-                            <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer">
-                              <span className="text-muted-foreground">▼</span>
-                              <span>Independent Continuant</span>
-                            </div>
-                            <div className="ml-4 border-l border-border pl-2">
-                              <div 
-                                className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                style={{ backgroundColor: stats.nodesByType['Material Entity'] ? '#3b82f620' : undefined }}
-                              >
-                                <div className="w-2.5 h-2.5 rounded-full bg-[#3b82f6]" />
-                                <span className="font-medium">Material Entity</span>
-                                <span className="text-[10px] px-1 rounded bg-[#3b82f6] text-white">WHO</span>
-                                {stats.nodesByType['Material Entity'] && (
-                                  <span className="ml-auto text-muted-foreground">{stats.nodesByType['Material Entity']}</span>
-                                )}
-                              </div>
-                              <div 
-                                className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                style={{ backgroundColor: stats.nodesByType['Site'] ? '#f9731620' : undefined }}
-                              >
-                                <div className="w-2.5 h-2.5 rounded-full bg-[#f97316]" />
-                                <span className="font-medium">Site</span>
-                                <span className="text-[10px] px-1 rounded bg-[#f97316] text-white">WHERE</span>
-                                {stats.nodesByType['Site'] && (
-                                  <span className="ml-auto text-muted-foreground">{stats.nodesByType['Site']}</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Specifically Dependent Continuant */}
-                          <div className="ml-4 border-l border-border pl-2">
-                            <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer">
-                              <span className="text-muted-foreground">▼</span>
-                              <span>Specifically Dependent</span>
-                            </div>
-                            <div className="ml-4 border-l border-border pl-2">
-                              <div 
-                                className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                style={{ backgroundColor: stats.nodesByType['Quality'] ? '#ec489920' : undefined }}
-                              >
-                                <div className="w-2.5 h-2.5 rounded-full bg-[#ec4899]" />
-                                <span className="font-medium">Quality</span>
-                                <span className="text-[10px] px-1 rounded bg-[#ec4899] text-white">HOW IT IS</span>
-                                {stats.nodesByType['Quality'] && (
-                                  <span className="ml-auto text-muted-foreground">{stats.nodesByType['Quality']}</span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer">
-                                <span className="text-muted-foreground">▼</span>
-                                <span>Realizable Entity</span>
-                                <span className="text-[10px] px-1 rounded bg-[#eab308] text-white">WHY</span>
-                              </div>
-                              <div className="ml-4 border-l border-border pl-2">
-                                <div 
-                                  className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                  style={{ backgroundColor: stats.nodesByType['Role'] ? '#eab30820' : undefined }}
-                                >
-                                  <div className="w-2.5 h-2.5 rounded-full bg-[#eab308]" />
-                                  <span>Role</span>
-                                  <span className="text-[10px] text-muted-foreground">(external)</span>
-                                  {stats.nodesByType['Role'] && (
-                                    <span className="ml-auto text-muted-foreground">{stats.nodesByType['Role']}</span>
-                                  )}
-                                </div>
-                                <div 
-                                  className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                  style={{ backgroundColor: stats.nodesByType['Disposition'] ? '#eab30820' : undefined }}
-                                >
-                                  <div className="w-2.5 h-2.5 rounded-full bg-[#eab308]" />
-                                  <span>Disposition</span>
-                                  <span className="text-[10px] text-muted-foreground">(internal)</span>
-                                  {stats.nodesByType['Disposition'] && (
-                                    <span className="ml-auto text-muted-foreground">{stats.nodesByType['Disposition']}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* GDC */}
-                          <div className="ml-4 border-l border-border pl-2">
-                            <div 
-                              className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                              style={{ backgroundColor: stats.nodesByType['GDC'] ? '#06b6d420' : undefined }}
-                            >
-                              <div className="w-2.5 h-2.5 rounded-full bg-[#06b6d4]" />
-                              <span className="font-medium">Generically Dependent</span>
-                              <span className="text-[10px] px-1 rounded bg-[#06b6d4] text-white">HOW WE KNOW</span>
-                              {stats.nodesByType['GDC'] && (
-                                <span className="ml-auto text-muted-foreground">{stats.nodesByType['GDC']}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Occurrent branch */}
-                        <div className="ml-4 border-l border-border pl-2">
-                          <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer font-medium">
-                            <span className="text-muted-foreground">▼</span>
-                            <span>Occurrent</span>
-                            <span className="text-muted-foreground text-[10px]">(happens)</span>
-                          </div>
-                          <div className="ml-4 border-l border-border pl-2">
-                            <div 
-                              className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                              style={{ backgroundColor: stats.nodesByType['Process'] ? '#22c55e20' : undefined }}
-                            >
-                              <div className="w-2.5 h-2.5 rounded-full bg-[#22c55e]" />
-                              <span className="font-medium">Process</span>
-                              <span className="text-[10px] px-1 rounded bg-[#22c55e] text-white">WHAT</span>
-                              {stats.nodesByType['Process'] && (
-                                <span className="ml-auto text-muted-foreground">{stats.nodesByType['Process']}</span>
-                              )}
-                            </div>
-                            <div 
-                              className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                              style={{ backgroundColor: stats.nodesByType['Temporal Region'] ? '#a855f720' : undefined }}
-                            >
-                              <div className="w-2.5 h-2.5 rounded-full bg-[#a855f7]" />
-                              <span className="font-medium">Temporal Region</span>
-                              <span className="text-[10px] px-1 rounded bg-[#a855f7] text-white">WHEN</span>
-                              {stats.nodesByType['Temporal Region'] && (
-                                <span className="ml-auto text-muted-foreground">{stats.nodesByType['Temporal Region']}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Right: Relationship Schema */}
-                  <div className="flex-1 p-4 overflow-auto">
-                    <h3 className="mb-4 font-medium text-sm flex items-center gap-2">
-                      <Link2 size={14} />
-                      Relationship Types ({Object.keys(edges.reduce((acc, e) => ({ ...acc, [e.type]: true }), {})).length})
-                    </h3>
-                    
-                    {/* Visual relationship grid */}
-                    <div className="grid gap-2">
-                      {(() => {
-                        const edgeSchema: Record<string, { count: number; domains: Set<string>; ranges: Set<string> }> = {};
-                        edges.forEach((e) => {
-                          const srcNode = nodes.find((n) => n.id === e.source);
-                          const tgtNode = nodes.find((n) => n.id === e.target);
-                          if (!edgeSchema[e.type]) {
-                            edgeSchema[e.type] = { count: 0, domains: new Set(), ranges: new Set() };
-                          }
-                          edgeSchema[e.type].count++;
-                          if (srcNode) edgeSchema[e.type].domains.add(srcNode.type);
-                          if (tgtNode) edgeSchema[e.type].ranges.add(tgtNode.type);
-                        });
-                        
-                        return Object.entries(edgeSchema)
-                          .sort((a, b) => b[1].count - a[1].count)
-                          .map(([type, data]) => (
-                            <div key={type} className="rounded-lg border p-3 hover:bg-muted/30 transition-colors">
-                              <div className="flex items-center gap-3">
-                                {/* Domain types */}
-                                <div className="flex -space-x-1">
-                                  {Array.from(data.domains).slice(0, 3).map((d) => {
-                                    const colors: Record<string, string> = {
-                                      'Material Entity': '#3b82f6', 'Process': '#22c55e', 'Site': '#f97316',
-                                      'Temporal Region': '#a855f7', 'Quality': '#ec4899', 'Role': '#eab308',
-                                      'Disposition': '#eab308', 'GDC': '#06b6d4'
-                                    };
-                                    return (
-                                      <div
-                                        key={d}
-                                        className="w-5 h-5 rounded-full border-2 border-background flex items-center justify-center text-[8px] text-white font-bold"
-                                        style={{ backgroundColor: colors[d] || '#6b7280' }}
-                                        title={d}
-                                      >
-                                        {d[0]}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                
-                                {/* Arrow and predicate */}
-                                <div className="flex items-center gap-2 flex-1">
-                                  <div className="h-px flex-1 bg-border" />
-                                  <span className="px-2 py-0.5 rounded-full bg-workspace-accent/20 text-workspace-accent text-xs font-medium whitespace-nowrap">
-                                    {type}
-                                  </span>
-                                  <div className="flex items-center gap-1">
-                                    <div className="h-px w-8 bg-border" />
-                                    <div className="w-0 h-0 border-l-4 border-l-border border-y-4 border-y-transparent" />
-                                  </div>
-                                </div>
-                                
-                                {/* Range types */}
-                                <div className="flex -space-x-1">
-                                  {Array.from(data.ranges).slice(0, 3).map((r) => {
-                                    const colors: Record<string, string> = {
-                                      'Material Entity': '#3b82f6', 'Process': '#22c55e', 'Site': '#f97316',
-                                      'Temporal Region': '#a855f7', 'Quality': '#ec4899', 'Role': '#eab308',
-                                      'Disposition': '#eab308', 'GDC': '#06b6d4'
-                                    };
-                                    return (
-                                      <div
-                                        key={r}
-                                        className="w-5 h-5 rounded-full border-2 border-background flex items-center justify-center text-[8px] text-white font-bold"
-                                        style={{ backgroundColor: colors[r] || '#6b7280' }}
-                                        title={r}
-                                      >
-                                        {r[0]}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                
-                                {/* Count */}
-                                <span className="text-xs text-muted-foreground ml-2">{data.count}×</span>
-                              </div>
-                              
-                              {/* Domain/Range labels */}
-                              <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
-                                <span>{Array.from(data.domains).join(', ')}</span>
-                                <span>{Array.from(data.ranges).join(', ')}</span>
-                              </div>
-                            </div>
-                          ));
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeViewType === 'statistics' && (
-              <div className="flex-1 overflow-auto p-6">
-                <h2 className="mb-6 text-lg font-semibold">Graph Statistics</h2>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  <StatCard title="Total Nodes" value={stats.totalNodes} icon={Circle} />
-                  <StatCard title="Total Edges" value={stats.totalEdges} icon={Link2} />
-                  <StatCard title="Avg Degree" value={stats.avgDegree.toFixed(2)} icon={Share2} />
-                  <StatCard title="Density" value={(stats.density * 100).toFixed(1) + '%'} icon={Workflow} />
-                  <StatCard title="Components" value={stats.connectedComponents} icon={Layers} />
-                </div>
-
-                {Object.keys(stats.nodesByType).length > 0 && (
-                  <div className="mt-8">
-                    <h3 className="mb-4 font-medium">Nodes by Type</h3>
-                    <div className="rounded-lg border">
-                      {Object.entries(stats.nodesByType).map(([type, count]) => (
-                        <div key={type} className="flex items-center justify-between border-b p-3 last:border-b-0">
-                          <span className="flex items-center gap-2">
-                            <Box size={14} className="text-blue-500" />
-                            {type}
-                          </span>
-                          <span className="font-medium">{count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
