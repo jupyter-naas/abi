@@ -454,4 +454,5 @@ You can browse the data and run queries there."""
 class AbiAgent(IntentAgent):
     name: str = NAME
     description: str = DESCRIPTION
+    suggestions: list[dict] = SUGGESTIONS
     pass

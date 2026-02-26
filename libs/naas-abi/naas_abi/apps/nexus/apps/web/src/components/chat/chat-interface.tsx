@@ -147,6 +147,7 @@ export function ChatInterface() {
   const activeConversation = mounted
     ? workspaceConversations.find((c) => c.id === activeConversationId)
     : null;
+  const selectedAgentData = getAgent(selectedAgent);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -613,7 +614,11 @@ export function ChatInterface() {
       {/* Messages area */}
       <div className="flex-1 overflow-auto p-4 min-h-0">
         {!activeConversation || activeConversation.messages.length === 0 ? (
-          <EmptyState onSuggestionClick={(prompt) => setInput(prompt)} />
+          <EmptyState
+            selectedAgentName={selectedAgentData?.name || selectedAgent}
+            suggestions={selectedAgentData?.suggestions}
+            onSuggestionClick={(prompt) => setInput(prompt)}
+          />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
             {activeConversation.messages.map((message) => (
@@ -789,33 +794,43 @@ export function ChatInterface() {
   );
 }
 
-function EmptyState({ onSuggestionClick }: { onSuggestionClick: (prompt: string) => void }) {
+function EmptyState({
+  selectedAgentName,
+  suggestions,
+  onSuggestionClick,
+}: {
+  selectedAgentName: string;
+  suggestions?: Array<{ label: string; value: string }>;
+  onSuggestionClick: (prompt: string) => void;
+}) {
   return (
     <div className="flex h-full flex-col items-center justify-center">
       <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-workspace-accent-10">
         <Bot size={32} className="text-workspace-accent" />
       </div>
-      <h2 className="mb-2 text-xl font-semibold text-gradient">Welcome to NEXUS Chat</h2>
       <p className="mb-8 max-w-md text-center text-muted-foreground">
-        Start a conversation with an ABI-powered agent. Ask questions, explore your data, or get
+        Start a conversation with {selectedAgentName}. Ask questions, explore your data, or get
         help with tasks.
       </p>
-      <div className="grid max-w-xl gap-3 sm:grid-cols-2">
-        {[
-          'What can you help me with?',
-          'Show me my recent ontology changes',
-          'Search for entities related to...',
-          'Help me create a new workflow',
-        ].map((prompt) => (
-          <button
-            key={prompt}
-            onClick={() => onSuggestionClick(prompt)}
-            className="glass-card p-4 text-left text-sm transition-all hover:border-primary/30 hover:glow-primary-sm"
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
+      {Array.isArray(suggestions) && suggestions.length > 0 && (
+        <div className="grid w-full max-w-xl grid-cols-2 gap-3">
+          {suggestions.map((suggestion, index) => {
+            const isOddLastItem = suggestions.length % 2 === 1 && index === suggestions.length - 1;
+            return (
+            <button
+              key={`${suggestion.label}:${suggestion.value}`}
+              onClick={() => onSuggestionClick(suggestion.value)}
+              className={cn(
+                'glass-card p-4 text-center text-sm transition-all hover:border-primary/30 hover:glow-primary-sm',
+                isOddLastItem && 'col-span-2 w-full max-w-[calc(50%-0.375rem)] justify-self-center'
+              )}
+            >
+              {suggestion.label}
+            </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

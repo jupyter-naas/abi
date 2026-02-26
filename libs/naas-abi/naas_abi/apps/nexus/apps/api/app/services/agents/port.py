@@ -19,6 +19,7 @@ class AgentRecord:
     enabled: bool
     created_at: datetime
     updated_at: datetime
+    suggestions: list[dict[str, str]] | None = None
 
 
 @dataclass

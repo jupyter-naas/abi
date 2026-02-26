@@ -3,6 +3,7 @@ Agents API endpoints - Agent management and lifecycle.
 """
 
 import logging
+from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
@@ -26,6 +27,23 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 def get_agent_service(db: AsyncSession = Depends(get_db)) -> AgentService:
     return AgentFactory.ServicePostgres(db)
+
+
+def _extract_agent_suggestions(agent_cls: type) -> list[dict[str, str]] | None:
+    """Return normalized class suggestions when available."""
+    suggestions = getattr(agent_cls, "suggestions", None)
+    if not isinstance(suggestions, list):
+        return None
+
+    normalized: list[dict[str, str]] = []
+    for item in suggestions:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        value = item.get("value")
+        if isinstance(label, str) and isinstance(value, str):
+            normalized.append({"label": label, "value": value})
+    return normalized
 
 
 @router.get("/")
@@ -58,6 +76,8 @@ async def list_agents(
                 continue
             agents.append(agent_cls)
 
+    class_name_to_agent_class: dict[str, type[Agent]] = {}
+
     for agent_cls in agents:
         if not hasattr(agent_cls, "name"):
             logger.warning(f"Skipping agent {agent_cls} because it has no name or description")
@@ -66,6 +86,7 @@ async def list_agents(
         name = agent_cls.name
         description = agent_cls.description
         class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
+        class_name_to_agent_class[class_name] = agent_cls
         existing_agent = existing_agents_by_name.get(str(name))
         enabled = False
         if name == "Abi":
@@ -89,7 +110,16 @@ async def list_agents(
             agent_list.append(created_agent)
             existing_agents_by_name[str(name)] = created_agent
 
-    return agent_list
+    enriched_agent_list: list[AgentRecord] = []
+    for agent in agent_list:
+        suggestions = None
+        if agent.class_name:
+            agent_cls = class_name_to_agent_class.get(agent.class_name)
+            if agent_cls is not None:
+                suggestions = _extract_agent_suggestions(agent_cls)
+        enriched_agent_list.append(replace(agent, suggestions=suggestions))
+
+    return enriched_agent_list
 
 
 @router.post("/")
