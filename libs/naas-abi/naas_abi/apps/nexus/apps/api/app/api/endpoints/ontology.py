@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user
 from pydantic import BaseModel, Field
 from rdflib import Graph
 from rdflib.namespace import OWL, RDF
+from rdflib.term import URIRef
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -63,6 +64,7 @@ class OntologyFileItem(BaseModel):
 class OntologyOverviewStats(BaseModel):
     name: str
     path: str
+    total_items: int
     classes: int
     object_properties: int
     data_properties: int
@@ -74,6 +76,7 @@ class OntologyOverviewAggregateStats(BaseModel):
     name: str
     path: str
     ontologies_count: int
+    total_items: int
     classes: int
     object_properties: int
     data_properties: int
@@ -84,8 +87,29 @@ class OntologyOverviewAggregateStats(BaseModel):
 class OntologyTypeCounts(BaseModel):
     name: str
     path: str
-    named_individuals: int
     data_properties: int
+    named_individuals: int
+
+
+class OntologyOverviewGraphNode(BaseModel):
+    id: str
+    label: str
+    type: str
+    properties: dict[str, str]
+
+
+class OntologyOverviewGraphEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    type: str
+    label: str
+    properties: dict[str, str]
+
+
+class OntologyOverviewGraph(BaseModel):
+    nodes: list[OntologyOverviewGraphNode]
+    edges: list[OntologyOverviewGraphEdge]
 
 
 class EntityCreate(BaseModel):
@@ -121,50 +145,6 @@ class ImportRequest(BaseModel):
 ontology_items: list[OntologyItem] = []
 
 
-def _list_registered_ontology_paths() -> set[str]:
-    """Return ontology file paths declared by all loaded ABI modules."""
-    abi_module = ABIModule.get_instance()
-    paths: set[str] = set()
-    for module in abi_module.engine.modules.values():
-        ontologies = getattr(module, "ontologies", None) or []
-        for ontology in ontologies:
-            paths.add(str(ontology))
-    return paths
-
-
-def _compute_ontology_overview_stats(ontology_path: str) -> OntologyOverviewStats:
-    extension = Path(ontology_path).suffix.lower()
-    parse_format = {
-        ".ttl": "turtle",
-        ".owl": "xml",
-        ".rdf": "xml",
-        ".nt": "nt",
-    }.get(extension)
-
-    graph = Graph()
-    try:
-        graph.parse(ontology_path, format=parse_format)
-    except Exception:
-        # Fallback to rdflib format auto-detection when explicit mapping fails.
-        graph.parse(ontology_path)
-
-    classes_count = len(set(graph.subjects(RDF.type, OWL.Class)))
-    object_properties_count = len(set(graph.subjects(RDF.type, OWL.ObjectProperty)))
-    data_properties_count = len(set(graph.subjects(RDF.type, OWL.DatatypeProperty)))
-    named_individuals_count = len(set(graph.subjects(RDF.type, OWL.NamedIndividual)))
-    imports_count = len(set(graph.objects(None, OWL.imports)))
-
-    return OntologyOverviewStats(
-        name=Path(ontology_path).name,
-        path=ontology_path,
-        classes=classes_count,
-        object_properties=object_properties_count,
-        data_properties=data_properties_count,
-        named_individuals=named_individuals_count,
-        imports=imports_count,
-    )
-
-
 def _load_ontology_graph(ontology_path: str) -> Graph:
     extension = Path(ontology_path).suffix.lower()
     parse_format = {
@@ -183,18 +163,20 @@ def _load_ontology_graph(ontology_path: str) -> Graph:
     return graph
 
 
-def _resolve_target_ontology_paths(ontology_path: str | None) -> list[str]:
-    registered_paths = sorted(_list_registered_ontology_paths())
+def _resolve_target_ontology_paths(
+    ontology_path: str | None, ontologies: list[OntologyFileItem]
+) -> list[str]:
+    ontology_paths: list[str] = [item.path for item in ontologies]
     if ontology_path:
-        if ontology_path not in registered_paths:
+        if ontology_path not in ontology_paths:
             raise HTTPException(status_code=404, detail="Ontology path not found")
         return [ontology_path]
-    return registered_paths
+    return ontology_paths
 
 
 def _sparql_iri(value: str) -> str | None:
     """Return a safe SPARQL IRI token or None when value is invalid."""
-    candidate = (value or "").strip()
+    candidate = value.strip()
     if not candidate:
         return None
     # Basic guard to avoid malformed query injection.
@@ -307,8 +289,11 @@ async def list_ontology_items():
 async def list_classes(
     ontology_path: str | None = Query(None, alias="ontology_path"),
 ):
+    from rdflib.query import ResultRow
+
     """List ontology classes by file path (or all registered ontologies when omitted)."""
-    target_paths = _resolve_target_ontology_paths(ontology_path)
+    ontologies = await list_ontology_files()
+    target_paths = _resolve_target_ontology_paths(ontology_path, ontologies["items"])
     by_iri: dict[str, OntologyItem] = {}
 
     query = """
@@ -331,6 +316,7 @@ async def list_classes(
     for path in target_paths:
         graph = _load_ontology_graph(path)
         for row in graph.query(query):
+            assert isinstance(row, ResultRow)
             iri = str(row.get("s"))
             label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
             definition = str(row.get("definition")) if row.get("definition") else None
@@ -367,7 +353,10 @@ async def list_relations(
     ontology_path: str | None = Query(None, alias="ontology_path"),
 ):
     """List ontology object properties by file path (or all registered ontologies when omitted)."""
-    target_paths = _resolve_target_ontology_paths(ontology_path)
+    from rdflib.query import ResultRow
+
+    ontologies = await list_ontology_files()
+    target_paths = _resolve_target_ontology_paths(ontology_path, ontologies["items"])
     by_iri: dict[str, OntologyItem] = {}
 
     query = """
@@ -390,6 +379,7 @@ async def list_relations(
     for path in target_paths:
         graph = _load_ontology_graph(path)
         for row in graph.query(query):
+            assert isinstance(row, ResultRow)
             iri = str(row.get("s"))
             label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
             definition = str(row.get("definition")) if row.get("definition") else None
@@ -427,10 +417,46 @@ async def get_ontology_overview_stats(
 ) -> OntologyOverviewStats:
     """Return ontology element counts for a specific ontology path."""
     try:
-        registered_paths = _list_registered_ontology_paths()
-        if ontology_path not in registered_paths:
-            raise HTTPException(status_code=404, detail="Ontology path not found")
-        return _compute_ontology_overview_stats(ontology_path)
+        extension = Path(ontology_path).suffix.lower()
+        parse_format = {
+            ".ttl": "turtle",
+            ".owl": "xml",
+            ".rdf": "xml",
+            ".nt": "nt",
+        }.get(extension)
+
+        graph = Graph()
+        try:
+            graph.parse(ontology_path, format=parse_format)
+        except Exception:
+            # Fallback to rdflib format auto-detection when explicit mapping fails.
+            graph.parse(ontology_path)
+
+        def _count_iri_subjects(rdf_type: URIRef) -> int:
+            return len({subject for subject in graph.subjects(RDF.type, rdf_type) if isinstance(subject, URIRef)})
+
+        classes_count = _count_iri_subjects(OWL.Class)
+        object_properties_count = _count_iri_subjects(OWL.ObjectProperty)
+        data_properties_count = _count_iri_subjects(OWL.DatatypeProperty)
+        named_individuals_count = _count_iri_subjects(OWL.NamedIndividual)
+        total_items_count = (
+            classes_count
+            + object_properties_count
+            + data_properties_count
+            + named_individuals_count
+        )
+        imports_count = len(set(graph.objects(None, OWL.imports)))
+
+        return OntologyOverviewStats(
+            name=Path(ontology_path).name,
+            path=ontology_path,
+            total_items=total_items_count,
+            classes=classes_count,
+            object_properties=object_properties_count,
+            data_properties=data_properties_count,
+            named_individuals=named_individuals_count,
+            imports=imports_count,
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -443,8 +469,10 @@ async def get_ontology_overview_stats(
 async def get_all_ontologies_overview_stats() -> OntologyOverviewAggregateStats:
     """Return consolidated overview stats across all registered ontologies."""
     try:
-        ontology_paths = sorted(_list_registered_ontology_paths())
+        ontologies = await list_ontology_files()
+        ontology_paths = [item.path for item in ontologies.get("items", [])]
         totals = {
+            "total_items": 0,
             "classes": 0,
             "object_properties": 0,
             "data_properties": 0,
@@ -453,7 +481,8 @@ async def get_all_ontologies_overview_stats() -> OntologyOverviewAggregateStats:
         }
 
         for ontology_path in ontology_paths:
-            stats = _compute_ontology_overview_stats(ontology_path)
+            stats = await get_ontology_overview_stats(ontology_path)
+            totals["total_items"] += stats.total_items
             totals["classes"] += stats.classes
             totals["object_properties"] += stats.object_properties
             totals["data_properties"] += stats.data_properties
@@ -464,6 +493,7 @@ async def get_all_ontologies_overview_stats() -> OntologyOverviewAggregateStats:
             name="All ontologies",
             path="*",
             ontologies_count=len(ontology_paths),
+            total_items=totals["total_items"],
             classes=totals["classes"],
             object_properties=totals["object_properties"],
             data_properties=totals["data_properties"],
@@ -482,7 +512,8 @@ async def get_ontology_type_counts(
 ) -> OntologyTypeCounts:
     """Return counts for owl:NamedIndividual and owl:DatatypeProperty."""
     try:
-        target_paths = _resolve_target_ontology_paths(ontology_path)
+        ontologies = await list_ontology_files()
+        target_paths = _resolve_target_ontology_paths(ontology_path, ontologies["items"])
         named_individuals = 0
         data_properties = 0
 
@@ -494,8 +525,8 @@ async def get_ontology_type_counts(
         return OntologyTypeCounts(
             name=Path(ontology_path).name if ontology_path else "All ontologies",
             path=ontology_path or "*",
-            named_individuals=named_individuals,
             data_properties=data_properties,
+            named_individuals=named_individuals,
         )
     except HTTPException:
         raise
@@ -503,6 +534,212 @@ async def get_ontology_type_counts(
         raise HTTPException(
             status_code=500, detail="Failed to compute ontology type counts"
         ) from exc
+
+
+@router.get("/overview/graph")
+async def get_ontology_overview_graph(
+    ontology_path: str | None = Query(None, alias="ontology_path"),
+) -> OntologyOverviewGraph:
+    """Return graph data where nodes are classes and edges are class relations."""
+    from rdflib.query import ResultRow
+
+    try:
+        ontologies = await list_ontology_files()
+        target_paths = _resolve_target_ontology_paths(ontology_path, ontologies["items"])
+
+        classes_by_iri: dict[str, OntologyOverviewGraphNode] = {}
+        edges_by_id: dict[str, OntologyOverviewGraphEdge] = {}
+
+        class_query = """
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+            SELECT ?classIri ?label ?definition ?parentIri ?parentLabel WHERE {
+                ?classIri rdf:type owl:Class .
+                FILTER(isIRI(?classIri))
+                OPTIONAL { ?classIri rdfs:label ?label . }
+                OPTIONAL { ?classIri skos:definition ?definition . }
+                OPTIONAL {
+                    ?classIri rdfs:subClassOf ?parentIri .
+                    FILTER(isIRI(?parentIri))
+                    OPTIONAL { ?parentIri rdfs:label ?parentLabel . }
+                }
+            }
+        """
+
+        relation_query = """
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+            SELECT ?propertyIri ?propertyLabel ?propertyDefinition ?domain ?range ?parentPropertyIri WHERE {
+                ?propertyIri rdf:type owl:ObjectProperty .
+                FILTER(isIRI(?propertyIri))
+                OPTIONAL { ?propertyIri rdfs:label ?propertyLabel . }
+                OPTIONAL { ?propertyIri skos:definition ?propertyDefinition . }
+                OPTIONAL {
+                    ?propertyIri rdfs:domain ?domain .
+                    FILTER(isIRI(?domain))
+                }
+                OPTIONAL {
+                    ?propertyIri rdfs:range ?range .
+                    FILTER(isIRI(?range))
+                }
+                OPTIONAL {
+                    ?propertyIri rdfs:subPropertyOf ?parentPropertyIri .
+                    FILTER(isIRI(?parentPropertyIri))
+                }
+            }
+        """
+
+        subclass_query = """
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            SELECT ?childClass ?parentClass WHERE {
+                ?childClass rdfs:subClassOf ?parentClass .
+                FILTER(isIRI(?childClass) && isIRI(?parentClass))
+            }
+        """
+
+        for path in target_paths:
+            graph = _load_ontology_graph(path)
+
+            for row in graph.query(class_query):
+                assert isinstance(row, ResultRow)
+                class_iri = str(row.get("classIri"))
+                if not class_iri:
+                    continue
+                class_label = (
+                    str(row.get("label")) if row.get("label") else class_iri.split("/")[-1]
+                )
+                definition = str(row.get("definition")) if row.get("definition") else ""
+                parent_iri = str(row.get("parentIri")) if row.get("parentIri") else ""
+                parent_label = str(row.get("parentLabel")) if row.get("parentLabel") else ""
+
+                existing = classes_by_iri.get(class_iri)
+                if existing:
+                    if not existing.properties.get("definition") and definition:
+                        existing.properties["definition"] = definition
+                    if not existing.properties.get("parent_iri") and parent_iri:
+                        existing.properties["parent_iri"] = parent_iri
+                    if not existing.properties.get("parent_label") and parent_label:
+                        existing.properties["parent_label"] = parent_label
+                    continue
+
+                properties = {
+                    "iri": class_iri,
+                    "definition": definition,
+                    "parent_iri": parent_iri,
+                    "parent_label": parent_label,
+                }
+                classes_by_iri[class_iri] = OntologyOverviewGraphNode(
+                    id=class_iri,
+                    label=class_label,
+                    type="Entity",
+                    properties=properties,
+                )
+
+            for row in graph.query(relation_query):
+                assert isinstance(row, ResultRow)
+                property_iri = str(row.get("propertyIri"))
+                if not property_iri:
+                    continue
+
+                source_iri = str(row.get("domain")) if row.get("domain") else None
+                target_iri = str(row.get("range")) if row.get("range") else None
+                if not source_iri or not target_iri:
+                    continue
+
+                if source_iri not in classes_by_iri:
+                    classes_by_iri[source_iri] = OntologyOverviewGraphNode(
+                        id=source_iri,
+                        label=source_iri.split("/")[-1],
+                        type="Entity",
+                        properties={"iri": source_iri},
+                    )
+                if target_iri not in classes_by_iri:
+                    classes_by_iri[target_iri] = OntologyOverviewGraphNode(
+                        id=target_iri,
+                        label=target_iri.split("/")[-1],
+                        type="Entity",
+                        properties={"iri": target_iri},
+                    )
+
+                property_label = (
+                    str(row.get("propertyLabel"))
+                    if row.get("propertyLabel")
+                    else property_iri.split("/")[-1]
+                )
+                edge_id = f"{source_iri}|{property_iri}|{target_iri}"
+                if edge_id in edges_by_id:
+                    continue
+
+                property_definition = (
+                    str(row.get("propertyDefinition")) if row.get("propertyDefinition") else ""
+                )
+                parent_property_iri = (
+                    str(row.get("parentPropertyIri")) if row.get("parentPropertyIri") else ""
+                )
+                edges_by_id[edge_id] = OntologyOverviewGraphEdge(
+                    id=edge_id,
+                    source=source_iri,
+                    target=target_iri,
+                    type=property_label,
+                    label=property_label,
+                    properties={
+                        "relation_kind": "object_property",
+                        "iri": property_iri,
+                        "definition": property_definition,
+                        "parent_property_iri": parent_property_iri,
+                    },
+                )
+
+            for row in graph.query(subclass_query):
+                assert isinstance(row, ResultRow)
+                child_class = str(row.get("childClass")) if row.get("childClass") else ""
+                parent_class = str(row.get("parentClass")) if row.get("parentClass") else ""
+                if not child_class or not parent_class:
+                    continue
+
+                if child_class not in classes_by_iri:
+                    classes_by_iri[child_class] = OntologyOverviewGraphNode(
+                        id=child_class,
+                        label=child_class.split("/")[-1],
+                        type="Entity",
+                        properties={"iri": child_class, "definition": "", "parent_iri": "", "parent_label": ""},
+                    )
+                if parent_class not in classes_by_iri:
+                    classes_by_iri[parent_class] = OntologyOverviewGraphNode(
+                        id=parent_class,
+                        label=parent_class.split("/")[-1],
+                        type="Entity",
+                        properties={"iri": parent_class, "definition": "", "parent_iri": "", "parent_label": ""},
+                    )
+
+                edge_id = f"{child_class}|is-a|{parent_class}"
+                if edge_id in edges_by_id:
+                    continue
+                edges_by_id[edge_id] = OntologyOverviewGraphEdge(
+                    id=edge_id,
+                    source=child_class,
+                    target=parent_class,
+                    type="is a",
+                    label="is a",
+                    properties={
+                        "relation_kind": "subclass_of",
+                        "iri": "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+                        "definition": "Subclass relationship between two classes.",
+                        "parent_property_iri": "",
+                    },
+                )
+
+        nodes = sorted(classes_by_iri.values(), key=lambda node: node.label.lower())
+        edges = sorted(edges_by_id.values(), key=lambda edge: edge.label.lower())
+        return OntologyOverviewGraph(nodes=nodes, edges=edges)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to compute ontology overview graph") from exc
 
 
 @router.post("/entity")
@@ -680,10 +917,6 @@ async def export_ontology_file(
     ontology_path: str = Query(..., alias="ontology_path", min_length=1),
 ):
     """Export a selected ontology file as attachment."""
-    registered_paths = _list_registered_ontology_paths()
-    if ontology_path not in registered_paths:
-        raise HTTPException(status_code=404, detail="Ontology path not found")
-
     path = Path(ontology_path)
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="Ontology file does not exist")
