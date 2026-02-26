@@ -130,14 +130,22 @@ You excel at providing accurate, helpful, and contextually appropriate responses
 
         return agent_cls
 
-    def create_agents(self) -> list[type[Agent]]:
+    def create_agents(
+        self, include_models: list[str] | None = None
+    ) -> list[type[Agent]]:
+        include_models = include_models or []
         agents: list[type[Agent]] = []
         # Load models and create agent classes
         try:
-            models = self.openrouter_integration.list_models()
+            models = self.openrouter_integration.list_models(save_json=False)
 
             # Create agent classes for each model
             if models and isinstance(models, list):
+                if include_models:
+                    models = [m for m in models if m.get("id") in include_models]
+                    logger.info(
+                        f"Filtered to {len(models)} models (include_models={include_models})"
+                    )
                 logger.info(f"Creating {len(models)} agent classes from models...")
                 for model_data in models:
                     architecture = model_data.get("architecture", {})
