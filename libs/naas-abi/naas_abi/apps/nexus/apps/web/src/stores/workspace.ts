@@ -229,7 +229,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Sidebar
   sidebarCollapsed: false,
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-  expandedSections: ['chat', 'search', 'files', 'lab', 'ontology'] as SidebarSection[],
+  expandedSections: ['chat'] as SidebarSection[],
   toggleSection: (section) =>
     set((state) => ({
       expandedSections: state.expandedSections.includes(section)
