@@ -88,6 +88,7 @@ class ApiConfiguration(BaseModel):
     logo_path: str = "assets/logo.png"
     favicon_path: str = "assets/favicon.ico"
     cors_origins: List[str] = ["http://localhost:9879"]
+    reload: bool = True
 
 
 class FirstPassConfiguration(BaseModel):
