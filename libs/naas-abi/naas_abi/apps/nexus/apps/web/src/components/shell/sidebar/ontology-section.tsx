@@ -212,7 +212,6 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
                   size={10}
                   className={cn('flex-shrink-0 transition-transform', moduleExpanded && 'rotate-90')}
                 />
-                <Box size={12} className="flex-shrink-0 text-workspace-accent" />
                 <span className="flex-1 truncate">{moduleName}</span>
                 <span className="text-[10px] text-muted-foreground">
                   {filesWithoutSubmodule.length + submodules.reduce(
@@ -259,7 +258,6 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
                             size={10}
                             className={cn('flex-shrink-0 transition-transform', submoduleExpanded && 'rotate-90')}
                           />
-                          <Box size={11} className="flex-shrink-0 text-workspace-accent" />
                           <span className="flex-1 truncate">{submoduleName}</span>
                           <span className="text-[10px] text-muted-foreground">{submoduleFiles.length}</span>
                         </button>
