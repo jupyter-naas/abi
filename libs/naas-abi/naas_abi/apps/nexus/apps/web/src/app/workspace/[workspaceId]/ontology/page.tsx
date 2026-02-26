@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
@@ -37,6 +38,11 @@ import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
 
 type ViewMode = 'overview' | 'classes' | 'relations' | 'editor' | 'import' | 'create-entity' | 'create-relationship';
+
+const VisNetwork = dynamic(
+  () => import('@/components/graph/vis-network').then((mod) => mod.VisNetwork),
+  { ssr: false, loading: () => <div className="flex h-full items-center justify-center text-muted-foreground">Loading graph...</div> }
+);
 
 export default function OntologyPage() {
   const searchParams = useSearchParams();
@@ -983,10 +989,27 @@ function OntologySplitView({
 type OntologyOverviewStats = {
   name: string;
   path: string;
+  total_items: number;
   classes: number;
   relationships: number;
-  named_individuals: number;
   data_properties: number;
+  named_individuals: number;
+};
+
+type OntologyOverviewGraphNode = {
+  id: string;
+  label: string;
+  type: string;
+  properties: Record<string, unknown>;
+};
+
+type OntologyOverviewGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  label?: string;
+  properties?: Record<string, unknown>;
 };
 
 function OntologyOverviewView({
@@ -1001,6 +1024,13 @@ function OntologyOverviewView({
   const [stats, setStats] = useState<OntologyOverviewStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [graphNodes, setGraphNodes] = useState<OntologyOverviewGraphNode[]>([]);
+  const [graphEdges, setGraphEdges] = useState<OntologyOverviewGraphEdge[]>([]);
+  const [loadingGraph, setLoadingGraph] = useState(false);
+  const [graphError, setGraphError] = useState<string | null>(null);
+  const [graphSearchQuery, setGraphSearchQuery] = useState('');
+  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
+  const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1009,34 +1039,32 @@ function OntologyOverviewView({
       setStatsError(null);
       try {
         const baseUrl = getApiUrl();
-        const query = ontologyPath
-          ? `?ontology_path=${encodeURIComponent(ontologyPath)}`
-          : '';
-        const [classesResponse, relationshipsResponse, typesResponse] = await Promise.all([
-          authFetch(`${baseUrl}/api/ontology/classes${query}`),
-          authFetch(`${baseUrl}/api/ontology/relationships${query}`),
-          authFetch(`${baseUrl}/api/ontology/counts/types${query}`),
-        ]);
-        if (!classesResponse.ok || !relationshipsResponse.ok || !typesResponse.ok) {
-          throw new Error(
-            `Failed to fetch overview items: classes=${classesResponse.status}, relationships=${relationshipsResponse.status}, types=${typesResponse.status}`
-          );
+        const endpoint = ontologyPath
+          ? `${baseUrl}/api/ontology/overview/stats?ontology_path=${encodeURIComponent(ontologyPath)}`
+          : `${baseUrl}/api/ontology/overview/stats/all`;
+        const response = await authFetch(endpoint);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch overview items: status=${response.status}`);
         }
-        const classesData = await classesResponse.json();
-        const relationshipsData = await relationshipsResponse.json();
-        const typesData = await typesResponse.json();
-        const classes = Array.isArray(classesData?.items) ? classesData.items.length : 0;
-        const relationships = Array.isArray(relationshipsData?.items) ? relationshipsData.items.length : 0;
-        const namedIndividuals = Number(typesData?.named_individuals || 0);
-        const dataProperties = Number(typesData?.data_properties || 0);
+        const overviewData = await response.json();
+        const classes = Number(overviewData?.classes || 0);
+        const relationships = Number(overviewData?.object_properties || 0);
+        const dataProperties = Number(overviewData?.data_properties || 0);
+        const namedIndividuals = Number(overviewData?.named_individuals || 0);
+        const totalItems = Number(
+          overviewData?.total_items || classes + relationships + dataProperties + namedIndividuals
+        );
         if (!cancelled) {
           setStats({
-            name: ontologyPath ? ontologyPath.split('/').pop() || ontologyPath : 'All ontologies',
-            path: ontologyPath || '*',
+            name:
+              (typeof overviewData?.name === 'string' && overviewData.name)
+              || (ontologyPath ? ontologyPath.split('/').pop() || ontologyPath : 'All ontologies'),
+            path: (typeof overviewData?.path === 'string' && overviewData.path) || ontologyPath || '*',
+            total_items: totalItems,
             classes,
             relationships,
-            named_individuals: namedIndividuals,
             data_properties: dataProperties,
+            named_individuals: namedIndividuals,
           });
         }
       } catch (error) {
@@ -1056,6 +1084,69 @@ function OntologyOverviewView({
       cancelled = true;
     };
   }, [ontologyPath]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchOverviewGraph = async () => {
+      setLoadingGraph(true);
+      setGraphError(null);
+      try {
+        const baseUrl = getApiUrl();
+        const query = ontologyPath
+          ? `?ontology_path=${encodeURIComponent(ontologyPath)}`
+          : '';
+        const response = await authFetch(`${baseUrl}/api/ontology/overview/graph${query}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch overview graph: status=${response.status}`);
+        }
+        const graphData = await response.json();
+        if (!cancelled) {
+          setGraphNodes(Array.isArray(graphData?.nodes) ? graphData.nodes : []);
+          setGraphEdges(Array.isArray(graphData?.edges) ? graphData.edges : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setGraphNodes([]);
+          setGraphEdges([]);
+          setGraphError('Failed to load ontology graph.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingGraph(false);
+        }
+      }
+    };
+
+    fetchOverviewGraph();
+    return () => {
+      cancelled = true;
+    };
+  }, [ontologyPath]);
+
+  const filteredGraphNodes = useMemo(() => {
+    if (!graphSearchQuery.trim()) return graphNodes;
+    const query = graphSearchQuery.toLowerCase();
+    return graphNodes.filter((node) =>
+      node.label.toLowerCase().includes(query) ||
+      node.id.toLowerCase().includes(query) ||
+      node.type.toLowerCase().includes(query)
+    );
+  }, [graphNodes, graphSearchQuery]);
+
+  const filteredGraphEdges = useMemo(() => {
+    if (!graphSearchQuery.trim()) return graphEdges;
+    const visibleNodeIds = new Set(filteredGraphNodes.map((node) => node.id));
+    return graphEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
+  }, [graphEdges, filteredGraphNodes, graphSearchQuery]);
+
+  const graphNodesById = useMemo(
+    () => new Map(graphNodes.map((node) => [node.id, node])),
+    [graphNodes]
+  );
+  const selectedGraphNode = selectedGraphNodeId ? graphNodesById.get(selectedGraphNodeId) : null;
+  const selectedGraphEdge = selectedGraphEdgeId
+    ? graphEdges.find((edge) => edge.id === selectedGraphEdgeId) || null
+    : null;
 
   return (
     <div className="flex flex-1 flex-col bg-card p-6">
@@ -1098,28 +1189,179 @@ function OntologyOverviewView({
       )}
 
       {!loadingStats && !statsError && stats && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-lg border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Classes</p>
-            <p className="mt-1 text-2xl font-semibold">{stats.classes}</p>
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-lg border bg-background p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Items</p>
+              <p className="mt-1 text-2xl font-semibold">{stats.total_items}</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Classes</p>
+              <p className="mt-1 text-2xl font-semibold">{stats.classes}</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Relations</p>
+              <p className="mt-1 text-2xl font-semibold">{stats.relationships}</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Data Properties</p>
+              <p className="mt-1 text-2xl font-semibold">{stats.data_properties}</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Named Individuals</p>
+              <p className="mt-1 text-2xl font-semibold">{stats.named_individuals}</p>
+            </div>
           </div>
-          <div className="rounded-lg border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Relationships</p>
-            <p className="mt-1 text-2xl font-semibold">{stats.relationships}</p>
+          <div className="mt-6">
+            <h3 className="mb-3 text-sm font-medium">Classes and Object Properties</h3>
+            <div className="h-[560px] rounded-lg border overflow-hidden">
+              <div className="flex h-full">
+                <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
+                  <div className="absolute left-4 top-4 z-10 flex gap-2">
+                    <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
+                      <Search size={14} className="text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={graphSearchQuery}
+                        onChange={(event) => setGraphSearchQuery(event.target.value)}
+                        placeholder="Search classes..."
+                        className="w-52 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                      />
+                      {graphSearchQuery && (
+                        <button
+                          onClick={() => setGraphSearchQuery('')}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    {graphSearchQuery && (
+                      <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+                        Showing {filteredGraphNodes.length} of {graphNodes.length} classes
+                      </span>
+                    )}
+                  </div>
+
+                  {loadingGraph ? (
+                    <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 size={16} className="animate-spin" />
+                      Loading ontology graph...
+                    </div>
+                  ) : graphError ? (
+                    <div className="flex h-full items-center justify-center px-6">
+                      <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                        {graphError}
+                      </div>
+                    </div>
+                  ) : filteredGraphNodes.length === 0 ? (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      No classes found for this ontology.
+                    </div>
+                  ) : (
+                    <VisNetwork
+                      nodes={filteredGraphNodes}
+                      edges={filteredGraphEdges}
+                      selectedNodeId={selectedGraphNodeId}
+                      onNodeSelect={(nodeId) => {
+                        setSelectedGraphNodeId(nodeId);
+                        setSelectedGraphEdgeId(null);
+                      }}
+                      onEdgeSelect={(edgeId) => {
+                        setSelectedGraphEdgeId(edgeId);
+                        if (edgeId) {
+                          setSelectedGraphNodeId(null);
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+
+                {(selectedGraphNode || selectedGraphEdge) && (
+                  <div className="w-80 border-l bg-card">
+                    <div className="flex h-10 items-center justify-between border-b px-4">
+                      <span className="text-sm font-medium">Inspector</span>
+                      <button
+                        onClick={() => {
+                          setSelectedGraphNodeId(null);
+                          setSelectedGraphEdgeId(null);
+                        }}
+                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        title="Close inspector"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4 p-4 text-sm">
+                      {selectedGraphNode && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Box size={16} className="text-blue-500" />
+                            <span className="font-medium">{selectedGraphNode.label}</span>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Type</p>
+                            <p>Class</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">URIRef</p>
+                            <p className="break-all font-mono text-xs">
+                              {String(selectedGraphNode.properties?.iri || selectedGraphNode.id)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Definition</p>
+                            <p>{String(selectedGraphNode.properties?.definition || 'No definition')}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Subclass Of</p>
+                            <p>{String(selectedGraphNode.properties?.parent_label || selectedGraphNode.properties?.parent_iri || 'None')}</p>
+                          </div>
+                        </>
+                      )}
+
+                      {selectedGraphEdge && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Link2 size={16} className="text-green-500" />
+                            <span className="font-medium">{selectedGraphEdge.label || selectedGraphEdge.type}</span>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Type</p>
+                            <p>Relation</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Kind</p>
+                            <p>{String(selectedGraphEdge.properties?.relation_kind || 'object_property')}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">URIRef</p>
+                            <p className="break-all font-mono text-xs">
+                              {String(selectedGraphEdge.properties?.iri || selectedGraphEdge.id)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">From</p>
+                            <p>{graphNodesById.get(selectedGraphEdge.source)?.label || selectedGraphEdge.source}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">To</p>
+                            <p>{graphNodesById.get(selectedGraphEdge.target)?.label || selectedGraphEdge.target}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Definition</p>
+                            <p>{String(selectedGraphEdge.properties?.definition || 'No definition')}</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="rounded-lg border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Items</p>
-            <p className="mt-1 text-2xl font-semibold">{stats.classes + stats.relationships}</p>
-          </div>
-          <div className="rounded-lg border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Named Individuals</p>
-            <p className="mt-1 text-2xl font-semibold">{stats.named_individuals}</p>
-          </div>
-          <div className="rounded-lg border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Data Properties</p>
-            <p className="mt-1 text-2xl font-semibold">{stats.data_properties}</p>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
