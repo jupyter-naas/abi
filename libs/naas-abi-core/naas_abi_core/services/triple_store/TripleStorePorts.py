@@ -107,7 +107,7 @@ class ITripleStoreService(ABC):
     def subscribe(
         self,
         topic: tuple[URIRef | None, URIRef | None, URIRef | None],
-        callback: Callable[[bytes], None],
+        callback: Callable[[tuple[str, str, str]], None],
         event_type: OntologyEvent | None = None,
         graph_name: URIRef | str | None = "*",
     ) -> None:
@@ -120,14 +120,14 @@ class ITripleStoreService(ABC):
         element of the `topic` tuple can be a URIRef to filter on that subject, predicate, or object.
         Specifying None in any position acts as a wildcard, matching any value for that component.
 
-        The provided callback will be invoked with the serialized triple event (as bytes) for
-        each matching occurrence.
+        The provided callback will be invoked with a tuple of three strings (subject, predicate, object)
+        for each matching occurrence.
 
         Args:
             topic (tuple[URIRef | None, URIRef | None, URIRef | None]):
                 The subject, predicate, object pattern to match. Use None for any element to match all.
-            callback (Callable[[bytes], None]):
-                Function that is called with serialized triple event bytes when a match occurs.
+            callback (Callable[[tuple[str, str, str]], None]):
+                Function that is called with a tuple of (subject, predicate, object) as strings when a match occurs.
             event_type (OntologyEvent | None, optional):
                 Restrict matches to INSERT, DELETE, or receive both event types if None. Defaults to None.
 
@@ -135,8 +135,9 @@ class ITripleStoreService(ABC):
             str: A unique subscription ID that can later be used to unsubscribe.
 
         Example:
-            >>> def print_triple(triple: bytes):
-            ...     print(triple)
+            >>> def print_triple(triple: tuple[str, str, str]):
+            ...     s, p, o = triple
+            ...     print(f"Subject: {s}, Predicate: {p}, Object: {o}")
             >>> subscription_id = triple_store_service.subscribe(
             ...     (None, RDF.type, None), print_triple, OntologyEvent.INSERT)
         """

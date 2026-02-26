@@ -184,6 +184,7 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_core.modules.triplestore_embeddings",
             "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_marketplace.ai.claude#soft",
             "naas_abi_marketplace.ai.deepseek#soft",
@@ -293,20 +294,12 @@ class ABIModule(BaseModule):
         """
 
         datastore_path: str = "abi"
-        workspace_id: str | None = None
-        storage_name: str | None = None
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
 
     # def on_initialized(self):
-    #     if (
-    #         self.configuration.anthropic_api_key is not None
-    #         and "naas_abi_marketplace.ai.claude" not in self.engine.modules
-    #     ):
-    #         raise ValueError(
-    #             "anthropic_api_key is provided but naas_abi_marketplace.ai.claude is not available"
-    #         )
+    #     pass
 
     def on_load(self):
         super().on_load()

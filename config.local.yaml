@@ -28,10 +28,18 @@ modules:
         redis_url: "redis://redis:6379/0"
         cors_origins_str: "http://localhost:3042,http://127.0.0.1:3042"
 
+  - module: naas_abi_core.modules.triplestore_embeddings
+    enabled: true
+
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
+  - module: naas_abi_marketplace.applications.openrouter
+    enabled: true
+    config:
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 
 services:
   secret:

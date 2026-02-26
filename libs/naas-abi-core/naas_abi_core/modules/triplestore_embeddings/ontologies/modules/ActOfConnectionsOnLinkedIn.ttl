@@ -11,7 +11,7 @@
 @prefix linkedin: <http://ontology.naas.ai/abi/linkedin/> .
 
 # Ontology: Act of connections on LinkedIn
-<http://ontology.naas.ai/abi/linkedin/ActOfConnection> a owl:Ontology ;
+<http://ontology.naas.ai/abi/ActOfConnectionsOnLinkedIn> a owl:Ontology ;
   owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>, 
   <https://www.commoncoreontologies.org/AgentOntology>, 
   <https://www.commoncoreontologies.org/InformationEntityOntology>,
@@ -128,7 +128,7 @@ abi:ISO8601UTCDateTime a owl:Class ;
 # Material entity (WHO): Person
 cco:ont00001262 a owl:Class ;
     rdfs:label "Person"@en ;
-    owl:hasKey ( linkedin:hasProfilePage linkedin:locatedIn ) ;
+    owl:hasKey ( linkedin:isOwnerOf ) ;
     rdfs:subClassOf cco:ont00000562,  # independent continuant
     [
         a owl:Restriction ;
@@ -140,12 +140,8 @@ cco:ont00001262 a owl:Class ;
         owl:allValuesFrom linkedin:Location  # site
     ] ,
     [ a owl:Restriction ;
-        owl:onProperty linkedin:hasProfilePage ;
-        owl:allValuesFrom linkedin:ProfilePage
-    ] ,
-    [ a owl:Restriction ;
         owl:onProperty linkedin:isOwnerOf ;
-        owl:allValuesFrom linkedin:ConnectionsExportFile
+        owl:allValuesFrom linkedin:ProfilePage
     ] ,
     [ a owl:Restriction ;
         owl:onProperty linkedin:hasCurrentJobPosition ; # has linkedin current job position
@@ -191,7 +187,7 @@ abi:given_name a owl:DatatypeProperty ;
 
 cco:ont00001180 rdf:type owl:Class ;
     rdfs:label "Organization"@en ;
-    owl:hasKey ( linkedin:hasOrganizationLabel linkedin:locatedIn ) ;
+    owl:hasKey ( linkedin:isOwnerOf ) ;
     rdfs:subClassOf cco:ont00000300 ,
     [ a owl:Restriction ;
         owl:onProperty linkedin:agentInvolvedIn ; # agent involved in
@@ -202,7 +198,11 @@ cco:ont00001180 rdf:type owl:Class ;
         owl:allValuesFrom linkedin:Location  # site
     ] ,
     [ a owl:Restriction ;
-        owl:onProperty linkedin:hasOrganizationLabel ; # has organization label
+        owl:onProperty linkedin:isOwnerOf ;
+        owl:allValuesFrom linkedin:ConnectionsExportFile
+    ] ,
+    [ a owl:Restriction ;
+        owl:onProperty linkedin:holdsQuality ; # holds quality
         owl:allValuesFrom linkedin:CurrentOrganization  # LinkedIn Current Organization
     ] .
 
@@ -216,12 +216,10 @@ linkedin:agentInvolvedIn a owl:ObjectProperty ;
 linkedin:locatedIn a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000171 ; # located in
     rdfs:label "is located in"@en ;
-    rdfs:domain [ a owl:Class ;
-        owl:unionOf ( cco:ont00001262 cco:ont00001180 ) # Person or Organization
-    ] ;
+    rdfs:domain cco:ont00001262 ; # Person
     rdfs:range linkedin:Location ; # LinkedIn User Site
-    skos:definition "A person or organization is located in y if and only if y is a UserSite that represents the location associated with the person or organization on LinkedIn. This property connects a Person or Organization to the LinkedIn user site they are located in as indicated on their LinkedIn profile."@en ;
-    skos:example "Olivia Alexander (a person) is located in 'Unknown User Site'. TechCorp Ltd (an organization) is located in 'San Francisco, California'."@en .
+    skos:definition "A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile."@en ;
+    skos:example "Olivia Alexander (a person) is located in 'Unknown User Site'."@en .
 
 linkedin:hasCurrentJobPosition a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
@@ -263,31 +261,22 @@ linkedin:hasConnectionRole a owl:ObjectProperty ;
     skos:definition "A person has LinkedIn connection role y if and only if y is a ConnectionRole (a quality) that inheres in the person and expresses their role in a connection as recorded on LinkedIn. This property connects a Person to the specific role they hold in a connection, as indicated on their LinkedIn profile."@en ;
     skos:example "Jane Smith (a person) has LinkedIn connection role 'First-degree connection', meaning that 'First-degree connection' is the connection role quality inhering in Jane Smith on his LinkedIn profile."@en .
 
-linkedin:hasOrganizationLabel a owl:ObjectProperty ;
+linkedin:holdsQuality a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
-    rdfs:label "has organization label"@en ;
+    rdfs:label "holds linkedin quality"@en ;
     rdfs:domain cco:ont00001180 ; # Organization
     rdfs:range linkedin:CurrentOrganization ; # Current Organization
-    skos:definition "A organization has LinkedIn organization label y if and only if y is a CurrentOrganization (a quality) that inheres in the organization and expresses a specific quality or characteristic as recorded on LinkedIn. This property connects a Organization to the specific quality or characteristic they hold that can be indicated on their LinkedIn organization page or on people's LinkedIn profile page who are part of the organization."@en ;
-    skos:example "TechCorp Ltd (an organization) has LinkedIn organization label 'TechCorp Ltd', meaning that 'TechCorp Ltd' is the quality inhering in TechCorp Ltd on his LinkedIn organization page."@en .
-
-linkedin:hasProfilePage a owl:ObjectProperty ;
-    rdfs:label "is owner of"@en ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
-    owl:inverseOf linkedin:isProfilePageOf ;
-    rdfs:domain cco:ont00001262 ; # Person
-    rdfs:range linkedin:ProfilePage ; # Profile Page
-    skos:definition "b has profile page c =Def b is a person or organization, c is a LinkedIn profile page, and b has a LinkedIn profile page."@en ;
-    skos:example "John Doe has LinkedIn profile page 'https://www.linkedin.com/in/johndoe/', which contains his professional information and connections."@en .
+    skos:definition "A organization holds quality y if and only if y is a CurrentOrganization (a quality) that inheres in the organization and expresses a specific quality or characteristic as recorded on LinkedIn. This property connects a Organization to the specific quality or characteristic they hold that can be indicated on their LinkedIn organization page or on people's LinkedIn profile page who are part of the organization."@en ;
+    skos:example "TechCorp Ltd (an organization) holds quality 'TechCorp Ltd', meaning that 'TechCorp Ltd' is the quality inhering in TechCorp Ltd on his LinkedIn organization page."@en .
 
 linkedin:isOwnerOf a owl:ObjectProperty ;
     rdfs:label "is owner of"@en ;
     rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
     owl:inverseOf linkedin:isOwnedBy ;
     rdfs:domain cco:ont00001262 ; # Person
-    rdfs:range linkedin:ConnectionsExportFile ; # Connections Export File
-    skos:definition "b is owner of c =Def b is a person and c is a connections export file, and b has ownership or control over c as the individual who exported their LinkedIn connections data."@en ;
-    skos:example "John Doe is owner of a connections export file downloaded on 23 Oct 2025, which contains the list of his LinkedIn connections."@en .
+    rdfs:range linkedin:ProfilePage ; # Profile Page
+    skos:definition "b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information."@en ;
+    skos:example "John Doe is the owner of his LinkedIn profile page, which contains his professional information and connections."@en .
 
 # Site (WHERE) : LinkedIn Location
 linkedin:Location a owl:Class ;
@@ -318,19 +307,18 @@ linkedin:ProfilePage a owl:Class ;
         ]
     ] ,
     [ a owl:Restriction ;
-        owl:onProperty linkedin:isProfilePageOf ;
+        owl:onProperty linkedin:isOwnedBy ;
         owl:someValuesFrom cco:ont00001262  # Person
     ] .
 
 linkedin:ConnectionsExportFile a owl:Class ;
     rdfs:label "Connections Export File"@en ;
-    owl:hasKey ( linkedin:file_path ) ;
     skos:definition "A file that contains a list of connections exported from LinkedIn."@en ;
     skos:example "John Doe's connections exported to a CSV file on 23 Oct 2025."@en ;
     rdfs:subClassOf bfo:BFO_0000031 ,
     [ a owl:Restriction ;
         owl:onProperty linkedin:isOwnedBy ;
-        owl:allValuesFrom cco:ont00001262  # Commercial Organization
+        owl:allValuesFrom cco:ont00001180  # Commercial Organization
     ] .
 
 linkedin:file_path a owl:DatatypeProperty ;
@@ -349,19 +337,8 @@ linkedin:isOwnedBy a owl:ObjectProperty ;
     rdfs:label "is owned by"@en ;
     rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on (or choose another relevant superproperty if needed)
     owl:inverseOf linkedin:isOwnerOf ;
-    rdfs:domain linkedin:ConnectionsExportFile ; # Person
-    rdfs:range cco:ont00001180 ; # Commercial Organization
-    skos:definition "c is owned by b =Def c is a Connections Export File and b is the Commercial Organization that has ownership or control over c."@en ;
-    skos:example "A Connections Export File downloaded from LinkedIn is owned by Acme Corporation."@en .
-
-linkedin:isProfilePageOf a owl:ObjectProperty ;
-    rdfs:label "is profile page of"@en ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on (or choose another relevant superproperty if needed)
-    owl:inverseOf linkedin:hasProfilePage ;
-    rdfs:domain linkedin:ProfilePage; 
-    rdfs:range cco:ont00001262; 
-    skos:definition "c is profile page of b =Def c is a LinkedIn Profile Page and b is the Person whose professional identity is represented by c."@en ;
-    skos:example "The LinkedIn profile page at https://www.linkedin.com/in/johndoe is profile page of John Doe."@en .
+    skos:definition "c is owned by b =Def c is an Information Content Entity (e.g., LinkedIn profile page) and b is the material entity that has ownership or control over c as information."@en ;
+    skos:example "A LinkedIn profile page is owned by John Doe."@en .
 
 # Quality (HOW IT IS)
 linkedin:CurrentJobPosition a owl:Class ;
