@@ -1,0 +1,4 @@
+FROM qwen2.5-coder:7b
+
+# AIA identity and system prompt are injected at runtime by the CLI (SOUL.md + SYSTEM_PROMPT).
+# This Modelfile creates a model named "aia" so the default `aia` command works.
