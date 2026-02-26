@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.18.1 (2026-02-25)
+
+
+## v1.18.0 (2026-02-24)
+
+### Features
+
+- Working on adding headscale to the default deployment
+  ([`253c40f`](https://github.com/jupyter-naas/abi/commit/253c40f750e5c9a8930fbebdff69bbb4379e05c8))
+
+
 ## v1.17.3 (2026-02-19)
 
 ### Bug Fixes
