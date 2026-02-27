@@ -96,6 +96,7 @@ const DEFAULT_TOOLS = ['search_knowledge', 'search_files', 'read_ontology'];
 export const useAgentsStore = create<AgentsState>()(
   persist(
     (set, get) => ({
+      agents: [],
 
       fetchAgents: async (workspaceId: string) => {
         try {
