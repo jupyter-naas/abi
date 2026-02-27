@@ -14,14 +14,11 @@ import {
   Play,
   Save,
   Trash2,
-  Download,
-  Upload,
   Box,
   Link2,
   Circle,
   RefreshCw,
   X,
-  Database,
   Share2,
   Workflow,
   Loader2,
@@ -79,10 +76,9 @@ interface GraphEdge {
   label?: string;
 }
 
-const VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
+const GRAPH_VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', icon: Eye },
-  { id: 'entities', label: 'Individuals', icon: Network },
-  { id: 'sparql', label: 'SPARQL', icon: Code },
+  { id: 'entities', label: 'Network', icon: Network },
   { id: 'table', label: 'Table', icon: Table },
 ];
 
@@ -93,9 +89,9 @@ const LEGACY_VIEW_MAP: Record<string, GraphViewType> = {
 };
 
 const isGraphViewType = (value: string): value is GraphViewType =>
-  VIEW_TYPES.some((view) => view.id === value);
+  GRAPH_VIEW_TYPES.some((view) => view.id === value);
 
-type GraphPageMode = 'graph' | 'create-individual';
+type GraphPageMode = 'graph' | 'create-individual' | 'sparql';
 
 interface OntologyClassOption {
   id: string;
@@ -212,6 +208,10 @@ export default function GraphPage() {
       setPageMode('create-individual');
       return;
     }
+    if (requestedView === 'sparql') {
+      setPageMode('sparql');
+      return;
+    }
     setPageMode('graph');
     if (requestedView) {
       const normalizedView = LEGACY_VIEW_MAP[requestedView] || requestedView;
@@ -220,6 +220,12 @@ export default function GraphPage() {
       }
     }
   }, [searchParams, setActiveViewType]);
+
+  useEffect(() => {
+    if (pageMode === 'graph' && activeViewType === 'sparql') {
+      setActiveViewType('entities');
+    }
+  }, [pageMode, activeViewType, setActiveViewType]);
 
   const loadOntologyClasses = useCallback(async () => {
     setClassesLoading(true);
@@ -267,6 +273,12 @@ export default function GraphPage() {
 
   const closeCreateIndividualForm = () => {
     resetCreateIndividualForm();
+    setPageMode('graph');
+    setActiveViewType('entities');
+    router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const closeSparqlView = () => {
     setPageMode('graph');
     setActiveViewType('entities');
     router.push(`/workspace/${workspaceId}/graph`);
@@ -481,7 +493,7 @@ export default function GraphPage() {
             {pageMode === 'graph' ? (
               <>
                 <div className="flex items-center gap-1">
-                  {VIEW_TYPES.map((view) => {
+                  {GRAPH_VIEW_TYPES.map((view) => {
                     const Icon = view.icon;
                     return (
                       <button
@@ -500,29 +512,13 @@ export default function GraphPage() {
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={loadFromApi}
-                    disabled={loading}
-                    className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <RefreshCw size={14} />
-                    )}
-                    Refresh
-                  </button>
-                  <button className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted">
-                    <Upload size={14} />
-                    Import
-                  </button>
-                  <button className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted">
-                    <Download size={14} />
-                    Export
-                  </button>
-                </div>
+                <div className="flex items-center gap-2" />
               </>
+            ) : pageMode === 'sparql' ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Code size={14} />
+                SPARQL Query
+              </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <UserPlus size={14} />
@@ -612,7 +608,7 @@ export default function GraphPage() {
             {pageMode === 'graph' && activeViewType === 'overview' && (
               <div className="flex-1 overflow-auto p-6">
                 <h2 className="mb-6 text-lg font-semibold">Overview</h2>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-4 gap-6">
                   <StatCard title="Total Nodes" value={stats.totalNodes} icon={Circle} />
                   <StatCard title="Total Edges" value={stats.totalEdges} icon={Link2} />
                   <StatCard title="Avg Degree" value={stats.avgDegree.toFixed(2)} icon={Share2} />
@@ -623,7 +619,9 @@ export default function GraphPage() {
                   <div className="mt-8">
                     <h3 className="mb-4 font-medium">Nodes by Type</h3>
                     <div className="rounded-lg border">
-                      {Object.entries(stats.nodesByType).map(([type, count]) => (
+                      {Object.entries(stats.nodesByType)
+                        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                        .map(([type, count]) => (
                         <div key={type} className="flex items-center justify-between border-b p-3 last:border-b-0">
                           <span className="flex items-center gap-2">
                             <Box size={14} className="text-blue-500" />
@@ -798,7 +796,7 @@ export default function GraphPage() {
               </div>
             )}
 
-            {pageMode === 'graph' && activeViewType === 'sparql' && (
+            {pageMode === 'sparql' && (
               <div className="flex flex-1 flex-col p-4">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -820,9 +818,14 @@ export default function GraphPage() {
                       Save
                     </button>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Database size={12} />
-                    <span>Graphs: {visibleGraphIds.length > 0 ? visibleGraphIds.join(', ') : workspaceId}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={closeSparqlView}
+                      className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title="Close SPARQL"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
                 </div>
 
