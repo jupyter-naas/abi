@@ -118,7 +118,10 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       );
       if (wsRes.ok) {
         const wsData = await wsRes.json();
-        graphs[0].nodeCount = wsData.nodes?.length || 0;
+        const uniqueNodes = Array.isArray(wsData?.nodes)
+          ? Array.from(new Map(wsData.nodes.map((node: { id: string }) => [node.id, node])).values())
+          : [];
+        graphs[0].nodeCount = uniqueNodes.length;
       }
 
       setAvailableGraphs(graphs);
