@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Waypoints,
+  Waypoints, Plus, Filter, MoreVertical, Edit2, Trash2,
   RefreshCw, Eye, EyeOff, Database, User, UserPlus, ChevronRight, Code,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
@@ -65,22 +65,136 @@ const GraphItemRow = React.memo(function GraphItemRow({
   );
 });
 
+const ViewItemRow = React.memo(function ViewItemRow({
+  name,
+  isActive,
+  onSelect,
+  onRename,
+  onDelete,
+  isRenaming,
+  onStartRename,
+  onCancelRename,
+}: {
+  name: string;
+  isActive: boolean;
+  onSelect: () => void;
+  onRename: (newName: string) => void;
+  onDelete: () => void;
+  isRenaming: boolean;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [editValue, setEditValue] = useState(name);
+
+  const handleRenameSubmit = () => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== name) {
+      onRename(trimmed);
+    }
+    onCancelRename();
+  };
+
+  if (isRenaming) {
+    return (
+      <div className="flex items-center gap-2 rounded-md px-2 py-1 text-xs">
+        <Filter size={12} className="flex-shrink-0 text-muted-foreground" />
+        <input
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleRenameSubmit();
+            } else if (e.key === 'Escape') {
+              onCancelRename();
+            }
+          }}
+          onBlur={handleRenameSubmit}
+          autoFocus
+          className="flex-1 border-b border-workspace-accent bg-transparent text-xs outline-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={onSelect}
+        className={cn(
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10',
+          isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-muted-foreground'
+        )}
+      >
+        <Filter size={12} />
+        <span className="flex-1 truncate">{name}</span>
+        <span
+          className="rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+          onClick={(event) => {
+            event.stopPropagation();
+            setShowMenu((prev) => !prev);
+          }}
+        >
+          <MoreVertical size={12} />
+        </span>
+      </button>
+
+      {showMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+          <div className="absolute right-0 top-full z-50 mt-1 w-32 rounded-md border border-border bg-popover p-1 shadow-lg">
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onStartRename();
+                setShowMenu(false);
+              }}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
+            >
+              <Edit2 size={12} />
+              Rename
+            </button>
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+                setShowMenu(false);
+              }}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 size={12} />
+              Delete
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
+
 export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { currentWorkspaceId } = useWorkspaceStore();
-  const currentWorkspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
   const {
     selectedGraphId,
     visibleGraphIds,
+    views,
+    activeSavedViewId,
     selectGraph,
     toggleGraphVisibility,
     setVisibleGraphs,
+    setActiveSavedView,
+    updateSavedView,
+    deleteView,
   } = useKnowledgeGraphStore();
 
   const [availableGraphs, setAvailableGraphs] = useState<GraphItem[]>([]);
   const [graphsExpanded, setGraphsExpanded] = useState(true);
+  const [viewsExpanded, setViewsExpanded] = useState(true);
+  const [renamingViewId, setRenamingViewId] = useState<string | null>(null);
   const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
   const isGraphRoute = pathname.startsWith(graphPath);
   const requestedView = searchParams.get('view');
@@ -92,37 +206,36 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     if (!currentWorkspaceId) return;
     try {
       const apiUrl = getApiUrl();
-      const defaultWorkspaceGraph: GraphItem = {
-        id: currentWorkspaceId,
-        name: currentWorkspace?.name ? `${currentWorkspace.name} Graph` : 'Workspace Graph',
-        type: 'workspace',
-        nodeCount: 0,
-      };
-
-      // Always keep at least one graph visible in sidebar, even when a fetch fails.
-      const graphs: GraphItem[] = [defaultWorkspaceGraph];
-      let networkGraphName = defaultWorkspaceGraph.name;
-
+      let graphNames: string[] = ['default'];
       const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
       if (namesRes.ok) {
         const namesData = await namesRes.json();
-        const graphNames = Array.isArray(namesData?.graph_names) ? namesData.graph_names : [];
-        if (graphNames.length > 0 && typeof graphNames[0] === 'string') {
-          networkGraphName = graphNames[0];
-          graphs[0].name = graphNames[0];
-        }
+        const parsed = Array.isArray(namesData?.graph_names) ? namesData.graph_names : [];
+        const normalized = parsed.filter((name): name is string => typeof name === 'string' && name.length > 0);
+        if (normalized.length > 0) graphNames = normalized;
       }
 
-      const wsRes = await authFetch(
-        `${apiUrl}/api/graph/network/${encodeURIComponent(networkGraphName)}?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+      const graphs: GraphItem[] = await Promise.all(
+        graphNames.map(async (graphName) => {
+          let nodeCount = 0;
+          const wsRes = await authFetch(
+            `${apiUrl}/api/graph/network/${encodeURIComponent(graphName)}?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+          );
+          if (wsRes.ok) {
+            const wsData = await wsRes.json();
+            const uniqueNodes = Array.isArray(wsData?.nodes)
+              ? Array.from(new Map(wsData.nodes.map((node: { id: string }) => [node.id, node])).values())
+              : [];
+            nodeCount = uniqueNodes.length;
+          }
+          return {
+            id: graphName,
+            name: graphName,
+            type: 'workspace' as const,
+            nodeCount,
+          };
+        })
       );
-      if (wsRes.ok) {
-        const wsData = await wsRes.json();
-        const uniqueNodes = Array.isArray(wsData?.nodes)
-          ? Array.from(new Map(wsData.nodes.map((node: { id: string }) => [node.id, node])).values())
-          : [];
-        graphs[0].nodeCount = uniqueNodes.length;
-      }
 
       setAvailableGraphs(graphs);
 
@@ -152,7 +265,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
 
   useEffect(() => {
     fetchGraphs();
-  }, [currentWorkspaceId, currentWorkspace?.name, visibleGraphIds.length, setVisibleGraphs]);
+  }, [currentWorkspaceId, visibleGraphIds.length, setVisibleGraphs]);
 
   return (
     <CollapsibleSection
@@ -233,6 +346,63 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
           )}
         </div>
       )}
+
+      <div className={cn('px-1', viewsExpanded && 'pb-2')}>
+        <button
+          onClick={() => setViewsExpanded((prev) => !prev)}
+          className={cn(
+            'flex w-full items-center gap-1 rounded-md px-1 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10',
+            viewsExpanded && 'mb-1'
+          )}
+        >
+          <ChevronRight
+            size={10}
+            className={cn('flex-shrink-0 transition-transform', viewsExpanded && 'rotate-90')}
+          />
+          <span className="flex-1 text-left">Views ({views.length})</span>
+          <span
+            onClick={(event) => {
+              event.stopPropagation();
+              router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=new-view'));
+            }}
+            className="rounded p-0.5 hover:bg-muted"
+            title="New View"
+          >
+            <Plus size={12} />
+          </span>
+        </button>
+        {viewsExpanded && (
+          <div className="space-y-0.5">
+            {views.length === 0 ? (
+              <p className="px-2 py-1 text-xs text-muted-foreground">No saved views</p>
+            ) : (
+              views.map((view) => (
+                <ViewItemRow
+                  key={view.id}
+                  name={view.name}
+                  isActive={activeSavedViewId === view.id}
+                  isRenaming={renamingViewId === view.id}
+                  onStartRename={() => setRenamingViewId(view.id)}
+                  onCancelRename={() => setRenamingViewId(null)}
+                  onRename={(newName) => updateSavedView(view.id, { name: newName })}
+                  onDelete={() => {
+                    if (confirm(`Delete view "${view.name}"?`)) {
+                      deleteView(view.id);
+                    }
+                  }}
+                  onSelect={() => {
+                    setActiveSavedView(view.id);
+                    if (view.graphIds && view.graphIds.length > 0) {
+                      setVisibleGraphs(view.graphIds);
+                    }
+                    router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
+                  }}
+                />
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
     </CollapsibleSection>
   );

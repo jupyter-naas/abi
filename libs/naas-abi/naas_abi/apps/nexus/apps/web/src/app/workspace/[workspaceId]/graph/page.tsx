@@ -96,9 +96,14 @@ const LEGACY_VIEW_MAP: Record<string, GraphViewType> = {
 const isGraphViewType = (value: string): value is GraphViewType =>
   GRAPH_VIEW_TYPES.some((view) => view.id === value);
 
-type GraphPageMode = 'graph' | 'create-individual' | 'sparql';
+type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'sparql';
 
 interface OntologyClassOption {
+  id: string;
+  name: string;
+}
+
+interface GraphOption {
   id: string;
   name: string;
 }
@@ -120,7 +125,15 @@ export default function GraphPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const { activeViewType, setActiveViewType, visibleGraphIds } = useKnowledgeGraphStore();
+  const {
+    activeViewType,
+    setActiveViewType,
+    visibleGraphIds,
+    setVisibleGraphs,
+    views,
+    activeSavedViewId,
+    createSavedView,
+  } = useKnowledgeGraphStore();
   const [zoomLevel, setZoomLevel] = useState(1);
   const [currentQuery, setCurrentQuery] = useState('');
   const [queryResults, setQueryResults] = useState<Record<string, string>[] | null>(null);
@@ -134,6 +147,16 @@ export default function GraphPage() {
   const [classesLoading, setClassesLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingIndividual, setCreatingIndividual] = useState(false);
+  const [viewName, setViewName] = useState('');
+  const [viewSubject, setViewSubject] = useState('');
+  const [viewPredicate, setViewPredicate] = useState('');
+  const [viewObject, setViewObject] = useState('');
+  const [graphOptions, setGraphOptions] = useState<GraphOption[]>([]);
+  const [selectedViewGraphIds, setSelectedViewGraphIds] = useState<string[]>([]);
+  const activeSavedView = useMemo(
+    () => views.find((view) => view.id === activeSavedViewId) ?? null,
+    [views, activeSavedViewId]
+  );
 
   // Load graphs from API - fetches all visible graphs and merges them
   const loadFromApi = useCallback(async () => {
@@ -144,7 +167,7 @@ export default function GraphPage() {
       const apiUrl = getApiUrl();
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
-      let networkGraphName = workspaceId;
+      let defaultGraphName = 'default';
 
       try {
         const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
@@ -152,24 +175,37 @@ export default function GraphPage() {
           const namesData = await namesRes.json();
           const graphNames = Array.isArray(namesData?.graph_names) ? namesData.graph_names : [];
           if (graphNames.length > 0 && typeof graphNames[0] === 'string') {
-            networkGraphName = graphNames[0];
+            defaultGraphName = graphNames[0];
           }
+          const normalized = graphNames.filter((name): name is string => typeof name === 'string' && name.length > 0);
+          setGraphOptions((normalized.length > 0 ? normalized : ['default']).map((name) => ({ id: name, name })));
+        } else {
+          setGraphOptions([{ id: 'default', name: 'default' }]);
         }
       } catch {
         // Keep workspaceId fallback when graph names cannot be loaded.
+        setGraphOptions([{ id: 'default', name: 'default' }]);
       }
       
-      // Determine which workspace graphs to fetch based on visibility.
-      // Graph IDs map to workspace IDs in the API route.
-      const graphsToFetch: string[] = visibleGraphIds.length > 0
-        ? visibleGraphIds.filter((id) => !id.includes('#layer='))
-        : [workspaceId];
-      const workspaceGraphIds = graphsToFetch.length > 0 ? graphsToFetch : [workspaceId];
+      // Determine which named graphs to fetch.
+      const graphNamesToFetch: string[] =
+        activeSavedView?.graphIds && activeSavedView.graphIds.length > 0
+          ? activeSavedView.graphIds
+          : visibleGraphIds.length > 0
+            ? visibleGraphIds.filter((id) => !id.includes('#layer='))
+            : [defaultGraphName];
+      const safeGraphNames = graphNamesToFetch.length > 0 ? graphNamesToFetch : [defaultGraphName];
       
       // Fetch all visible graphs in parallel
       const responses = await Promise.all(
-        workspaceGraphIds.map((graphId) => {
-          const url = `${apiUrl}/api/graph/network/${encodeURIComponent(networkGraphName)}?workspace_id=${encodeURIComponent(graphId)}`;
+        safeGraphNames.map((graphName) => {
+          const params = new URLSearchParams({
+            workspace_id: workspaceId,
+          });
+          if (activeSavedView) {
+            params.set('view_name', activeSavedView.name);
+          }
+          const url = `${apiUrl}/api/graph/network/${encodeURIComponent(graphName)}?${params.toString()}`;
           return authFetch(url)
             .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
             .catch(() => ({ nodes: [], edges: [] }));
@@ -217,7 +253,7 @@ export default function GraphPage() {
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, visibleGraphIds]);
+  }, [workspaceId, visibleGraphIds, activeSavedView]);
 
   // Load on mount and when workspace or visible graphs change
   useEffect(() => {
@@ -226,6 +262,10 @@ export default function GraphPage() {
 
   useEffect(() => {
     const requestedView = searchParams.get('view');
+    if (requestedView === 'new-view') {
+      setPageMode('create-view');
+      return;
+    }
     if (requestedView === 'create-individual') {
       setPageMode('create-individual');
       return;
@@ -304,6 +344,34 @@ export default function GraphPage() {
     setPageMode('graph');
     setActiveViewType('entities');
     router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const closeCreateViewForm = () => {
+    setPageMode('graph');
+    setViewName('');
+    setViewSubject('');
+    setViewPredicate('');
+    setViewObject('');
+    setSelectedViewGraphIds([]);
+    router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const handleCreateView = () => {
+    const normalizedName = viewName.trim();
+    if (!normalizedName) return;
+    const graphIds = selectedViewGraphIds.length > 0 ? selectedViewGraphIds : ['default'];
+    createSavedView(
+      normalizedName,
+      graphIds,
+      {
+        subject: viewSubject.trim(),
+        predicate: viewPredicate.trim(),
+        object: viewObject.trim(),
+      }
+    );
+    setVisibleGraphs(graphIds);
+    setActiveViewType('entities');
+    closeCreateViewForm();
   };
 
   const handleCreateIndividual = async () => {
@@ -627,6 +695,114 @@ export default function GraphPage() {
               </div>
             )}
 
+            {pageMode === 'create-view' && (
+              <div className="flex flex-1 flex-col bg-card p-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Filter size={24} className="text-workspace-accent" />
+                      <h2 className="text-lg font-semibold">Create New View</h2>
+                    </div>
+                    <button
+                      onClick={closeCreateViewForm}
+                      className="rounded p-2 text-muted-foreground hover:bg-muted"
+                      title="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Name *</label>
+                      <input
+                        type="text"
+                        value={viewName}
+                        onChange={(event) => setViewName(event.target.value)}
+                        placeholder="e.g., Agents only"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Subject (s)</label>
+                      <input
+                        type="text"
+                        value={viewSubject}
+                        onChange={(event) => setViewSubject(event.target.value)}
+                        placeholder="Optional subject filter"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Predicate (p)</label>
+                      <input
+                        type="text"
+                        value={viewPredicate}
+                        onChange={(event) => setViewPredicate(event.target.value)}
+                        placeholder="Optional predicate filter"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Object (o)</label>
+                      <input
+                        type="text"
+                        value={viewObject}
+                        onChange={(event) => setViewObject(event.target.value)}
+                        placeholder="Optional object filter"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Graphs</label>
+                      <div className="space-y-1 rounded-lg border p-3">
+                        {graphOptions.map((graph) => (
+                          <label key={graph.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={selectedViewGraphIds.includes(graph.id)}
+                              onChange={(event) => {
+                                if (event.target.checked) {
+                                  setSelectedViewGraphIds((prev) => [...prev, graph.id]);
+                                } else {
+                                  setSelectedViewGraphIds((prev) => prev.filter((id) => id !== graph.id));
+                                }
+                              }}
+                            />
+                            <span>{graph.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        onClick={closeCreateViewForm}
+                        className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleCreateView}
+                        disabled={!viewName.trim()}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                          'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                        )}
+                      >
+                        <Filter size={16} />
+                        Create View
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {pageMode === 'graph' && activeViewType === 'overview' && (
               <div className="flex-1 overflow-auto p-6">
                 <h2 className="mb-6 text-lg font-semibold">Overview</h2>
@@ -767,6 +943,7 @@ export default function GraphPage() {
                     <BFOLegend />
                   </>
                 )}
+
               </div>
             )}
 

@@ -47,6 +47,7 @@ export interface GraphView {
   name: string;
   type: GraphViewType;
   graphId?: string; // Optional - view can span multiple graphs
+  graphIds?: string[];
   query?: string; // For SPARQL views
   filters?: Record<string, unknown>;
   layout?: 'force' | 'hierarchical' | 'circular' | 'grid';
@@ -92,6 +93,7 @@ interface KnowledgeGraphState {
   // Views
   views: GraphView[];
   activeViewType: GraphViewType;
+  activeSavedViewId: string | null;
   
   // Queries
   queries: SavedQuery[];
@@ -125,8 +127,11 @@ interface KnowledgeGraphState {
   
   // Actions - Views
   createView: (name: string, type: GraphViewType) => GraphView;
+  createSavedView: (name: string, graphIds: string[], filters: Record<string, unknown>) => GraphView;
+  updateSavedView: (id: string, updates: Partial<GraphView>) => void;
   deleteView: (id: string) => void;
   setActiveViewType: (type: GraphViewType) => void;
+  setActiveSavedView: (id: string | null) => void;
   
   // Actions - Queries
   saveQuery: (name: string, query: string, language: SavedQuery['language']) => SavedQuery;
@@ -157,6 +162,7 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphState>()(
       selectedEdgeId: null,
       views: [],
       activeViewType: 'overview',
+      activeSavedViewId: null,
       queries: [],
       currentQuery: '',
       queryResults: [],
@@ -332,12 +338,36 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphState>()(
         set((state) => ({ views: [...state.views, view] }));
         return view;
       },
+      createSavedView: (name, graphIds, filters) => {
+        const view: GraphView = {
+          id: `view-${Date.now()}`,
+          name,
+          type: 'entities',
+          graphIds,
+          filters,
+          createdAt: new Date(),
+        };
+        set((state) => ({
+          views: [...state.views, view],
+          activeSavedViewId: view.id,
+        }));
+        return view;
+      },
+      updateSavedView: (id, updates) => {
+        set((state) => ({
+          views: state.views.map((view) => (view.id === id ? { ...view, ...updates } : view)),
+        }));
+      },
 
       deleteView: (id) => {
-        set((state) => ({ views: state.views.filter((v) => v.id !== id) }));
+        set((state) => ({
+          views: state.views.filter((v) => v.id !== id),
+          activeSavedViewId: state.activeSavedViewId === id ? null : state.activeSavedViewId,
+        }));
       },
 
       setActiveViewType: (type) => set({ activeViewType: type }),
+      setActiveSavedView: (id) => set({ activeSavedViewId: id }),
 
       // Query actions
       saveQuery: (name, query, language) => {
@@ -587,6 +617,7 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphState>()(
       partialize: (state) => ({
         graphs: state.graphs,
         views: state.views,
+        activeSavedViewId: state.activeSavedViewId,
         queries: state.queries,
         selectedGraphId: state.selectedGraphId,
       }),
