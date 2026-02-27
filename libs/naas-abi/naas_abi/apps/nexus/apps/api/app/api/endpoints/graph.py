@@ -431,7 +431,7 @@ async def list_graph_names(
     return GraphNamesResponse(graph_names=_list_named_graphs(store))
 
 
-@router.get("/workspaces/{workspace_id}")
+@router.get("/network")
 async def get_workspace_graph(
     request: Request,
     workspace_id: str,
@@ -619,9 +619,7 @@ async def list_edges(
 
     relation_filter = ""
     if type:
-        relation_filter = (
-            f"FILTER(LCASE(STR(COALESCE(?predicate_label, ?predicate))) = LCASE({_sparql_str(type)}))"
-        )
+        relation_filter = f"FILTER(LCASE(STR(COALESCE(?predicate_label, ?predicate))) = LCASE({_sparql_str(type)}))"
 
     # Query object-property triples linking Named Individuals.
     # Keep only URIRefs (subject/predicate/object) to exclude blank nodes.

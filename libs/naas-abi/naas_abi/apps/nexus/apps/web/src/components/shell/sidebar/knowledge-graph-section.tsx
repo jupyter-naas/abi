@@ -5,7 +5,7 @@ import {
   Waypoints,
   RefreshCw, Eye, EyeOff, Database, User, UserPlus, ChevronRight, Code,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
@@ -24,11 +24,13 @@ interface GraphItem {
 const GraphItemRow = React.memo(function GraphItemRow({
   graph,
   isVisible,
+  isSelected,
   onToggle,
   onClick,
 }: {
   graph: GraphItem;
   isVisible: boolean;
+  isSelected: boolean;
   onToggle: () => void;
   onClick: () => void;
 }) {
@@ -37,6 +39,7 @@ const GraphItemRow = React.memo(function GraphItemRow({
       className={cn(
         'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer',
         isVisible ? 'text-foreground' : 'text-muted-foreground',
+        isSelected && 'bg-workspace-accent-10 text-workspace-accent',
         'hover:bg-workspace-accent-10'
       )}
       onClick={onClick}
@@ -64,16 +67,26 @@ const GraphItemRow = React.memo(function GraphItemRow({
 
 export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { currentWorkspaceId } = useWorkspaceStore();
   const currentWorkspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
   const {
+    selectedGraphId,
     visibleGraphIds,
+    selectGraph,
     toggleGraphVisibility,
     setVisibleGraphs,
   } = useKnowledgeGraphStore();
 
   const [availableGraphs, setAvailableGraphs] = useState<GraphItem[]>([]);
   const [graphsExpanded, setGraphsExpanded] = useState(true);
+  const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
+  const isGraphRoute = pathname.startsWith(graphPath);
+  const requestedView = searchParams.get('view');
+  const isCreateIndividualView = requestedView === 'create-individual';
+  const isSparqlView = requestedView === 'sparql';
+  const showGraphRowSelection = isGraphRoute && !isCreateIndividualView && !isSparqlView;
 
   const fetchGraphs = async () => {
     if (!currentWorkspaceId) return;
@@ -89,7 +102,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       // Always keep at least one graph visible in sidebar, even when a fetch fails.
       const graphs: GraphItem[] = [defaultWorkspaceGraph];
 
-      const wsRes = await authFetch(`${apiUrl}/api/graph/workspaces/${currentWorkspaceId}`);
+      const wsRes = await authFetch(`${apiUrl}/api/graph/network?workspace_id=${encodeURIComponent(currentWorkspaceId)}`);
       if (wsRes.ok) {
         const wsData = await wsRes.json();
         graphs[0].nodeCount = wsData.nodes?.length || 0;
@@ -117,6 +130,10 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       } else if (filteredVisible.length !== visibleGraphIds.length) {
         setVisibleGraphs(filteredVisible);
       }
+
+      if (!selectedGraphId || !allowedIds.includes(selectedGraphId)) {
+        selectGraph(graphs[0]?.id ?? null);
+      }
     } catch (err) {
       // Silently handle 403 (permission denied) - user doesn't have access to this workspace
       if (err instanceof Error && err.message.includes('403')) {
@@ -136,27 +153,36 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       icon={<Waypoints size={18} />}
       label="Knowledge Graph"
       description="Visualize and explore your knowledge"
-      href={getWorkspacePath(currentWorkspaceId, '/graph')}
+      href={graphPath}
       collapsed={collapsed}
     >
       <div className="flex items-center gap-0.5 px-1 pb-1">
         <button
           onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=create-individual'))}
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className={cn(
+            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+            isGraphRoute && isCreateIndividualView && 'bg-workspace-accent-10 text-workspace-accent'
+          )}
           title="New Individual"
         >
           <UserPlus size={14} />
         </button>
         <button
           onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph'))}
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className={cn(
+            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+            showGraphRowSelection && !selectedGraphId && 'bg-workspace-accent-10 text-workspace-accent'
+          )}
           title="Refresh"
         >
           <RefreshCw size={14} />
         </button>
         <button
           onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=sparql'))}
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className={cn(
+            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+            isGraphRoute && isSparqlView && 'bg-workspace-accent-10 text-workspace-accent'
+          )}
           title="SPARQL"
         >
           <Code size={14} />
@@ -185,8 +211,10 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                   key={graph.id}
                   graph={graph}
                   isVisible={visibleGraphIds.includes(graph.id)}
+                  isSelected={showGraphRowSelection && selectedGraphId === graph.id}
                   onToggle={() => toggleGraphVisibility(graph.id)}
                   onClick={() => {
+                    selectGraph(graph.id);
                     if (!visibleGraphIds.includes(graph.id)) {
                       toggleGraphVisibility(graph.id);
                     }

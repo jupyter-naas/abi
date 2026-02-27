@@ -150,7 +150,7 @@ export default function GraphPage() {
       // Fetch all visible graphs in parallel
       const responses = await Promise.all(
         workspaceGraphIds.map((graphId) => {
-          const url = `${apiUrl}/api/graph/workspaces/${graphId}`;
+          const url = `${apiUrl}/api/graph/network?workspace_id=${encodeURIComponent(graphId)}`;
           return authFetch(url)
             .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
             .catch(() => ({ nodes: [], edges: [] }));
