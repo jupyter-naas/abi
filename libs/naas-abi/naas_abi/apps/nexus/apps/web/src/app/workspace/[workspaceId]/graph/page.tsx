@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
@@ -23,10 +23,16 @@ import {
   Workflow,
   Loader2,
   UserPlus,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
-import { useKnowledgeGraphStore, type GraphViewType } from '@/stores/knowledge-graph';
+import {
+  useKnowledgeGraphStore,
+  type GraphViewType,
+  type GraphTripleFilter,
+  type GraphView,
+} from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
 
 // Dynamically import vis-network to avoid SSR issues
@@ -108,6 +114,151 @@ interface GraphOption {
   name: string;
 }
 
+interface FilterOption {
+  uri: string;
+  label: string;
+}
+
+interface FilterOptionsResponse {
+  subjects: FilterOption[];
+  predicates: FilterOption[];
+  objects: FilterOption[];
+}
+
+interface ViewFilterDraft {
+  subject_uri: string;
+  predicate_uri: string;
+  object_uri: string;
+}
+
+function FilterOptionDropdown({
+  options,
+  value,
+  onChange,
+  placeholder,
+}: {
+  options: FilterOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+        setSearchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const t = searchQuery.trim().toLowerCase();
+    const list = !t
+      ? options
+      : options.filter(
+          (o) => o.label.toLowerCase().includes(t) || o.uri.toLowerCase().includes(t)
+        );
+    if (value && !list.some((o) => o.uri === value)) {
+      const sel = options.find((o) => o.uri === value);
+      if (sel) return [sel, ...list];
+    }
+    return list;
+  }, [options, searchQuery, value]);
+
+  const selected = options.find((o) => o.uri === value);
+  const displayLabel = selected ? `${selected.label} (${selected.uri})` : '';
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'flex w-full items-center justify-between rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary',
+          'hover:bg-muted/50'
+        )}
+      >
+        <span className={cn('truncate', !value && 'text-muted-foreground')}>
+          {displayLabel || placeholder}
+        </span>
+        <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[16rem] max-h-64 overflow-hidden rounded-lg border bg-background shadow-lg">
+          <div className="sticky top-0 border-b bg-background p-2">
+            <input
+              type="text"
+              placeholder={`Search ${placeholder.toLowerCase()}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+                setSearchQuery('');
+              }}
+              className={cn(
+                'flex w-full items-center px-3 py-2 text-left text-sm',
+                'hover:bg-muted',
+                !value && 'bg-muted'
+              )}
+            >
+              <span className="text-muted-foreground">{placeholder}</span>
+            </button>
+            {filtered.map((option) => (
+              <button
+                key={option.uri}
+                type="button"
+                onClick={() => {
+                  onChange(option.uri);
+                  setOpen(false);
+                  setSearchQuery('');
+                }}
+                className={cn(
+                  'flex w-full items-center px-3 py-2 text-left text-sm',
+                  'hover:bg-muted',
+                  value === option.uri && 'bg-muted'
+                )}
+              >
+                <span className="truncate">
+                  {option.label} ({option.uri})
+                </span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                No matches for &quot;{searchQuery}&quot;
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ApiGraphView {
+  id: string;
+  workspace_id: string;
+  name: string;
+  graph_names: string[];
+  filters: GraphTripleFilter[];
+  created_at?: string;
+}
+
 export default function GraphPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -132,7 +283,8 @@ export default function GraphPage() {
     setVisibleGraphs,
     views,
     activeSavedViewId,
-    createSavedView,
+    setActiveSavedView,
+    setViews,
   } = useKnowledgeGraphStore();
   const [zoomLevel, setZoomLevel] = useState(1);
   const [currentQuery, setCurrentQuery] = useState('');
@@ -148,21 +300,32 @@ export default function GraphPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingIndividual, setCreatingIndividual] = useState(false);
   const [viewName, setViewName] = useState('');
-  const [viewSubject, setViewSubject] = useState('');
-  const [viewPredicate, setViewPredicate] = useState('');
-  const [viewObject, setViewObject] = useState('');
   const [graphOptions, setGraphOptions] = useState<GraphOption[]>([]);
   const [selectedViewGraphIds, setSelectedViewGraphIds] = useState<string[]>([]);
+  const [viewFilters, setViewFilters] = useState<ViewFilterDraft[]>([
+    { subject_uri: '', predicate_uri: '', object_uri: '' },
+  ]);
+  const [filterOptions, setFilterOptions] = useState<FilterOptionsResponse>({
+    subjects: [],
+    predicates: [],
+    objects: [],
+  });
+  const [viewFormError, setViewFormError] = useState<string | null>(null);
+  const [editingViewId, setEditingViewId] = useState<string | null>(null);
   const activeSavedView = useMemo(
     () => views.find((view) => view.id === activeSavedViewId) ?? null,
     [views, activeSavedViewId]
+  );
+  const editingView = useMemo(
+    () => (editingViewId ? views.find((view) => view.id === editingViewId) ?? null : null),
+    [views, editingViewId]
   );
 
   // Load graphs from API - fetches all visible graphs and merges them
   const loadFromApi = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const apiUrl = getApiUrl();
       const allNodes: GraphNode[] = [];
@@ -173,12 +336,16 @@ export default function GraphPage() {
         const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
         if (namesRes.ok) {
           const namesData = await namesRes.json();
-          const graphNames = Array.isArray(namesData?.graph_names) ? namesData.graph_names : [];
-          if (graphNames.length > 0 && typeof graphNames[0] === 'string') {
-            defaultGraphName = graphNames[0];
+          const graphs = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
+          const normalized = graphs
+            .filter((g: unknown) => g && typeof g === 'object' && 'id' in g && typeof (g as { id: unknown }).id === 'string')
+            .map((g: { id: string; label?: string }) => ({ id: g.id, label: g.label ?? g.id }));
+          if (normalized.length > 0) {
+            defaultGraphName = normalized[0].id;
+            setGraphOptions(normalized.map((g) => ({ id: g.id, name: g.label })));
+          } else {
+            setGraphOptions([{ id: 'default', name: 'default' }]);
           }
-          const normalized = graphNames.filter((name): name is string => typeof name === 'string' && name.length > 0);
-          setGraphOptions((normalized.length > 0 ? normalized : ['default']).map((name) => ({ id: name, name })));
         } else {
           setGraphOptions([{ id: 'default', name: 'default' }]);
         }
@@ -186,30 +353,36 @@ export default function GraphPage() {
         // Keep workspaceId fallback when graph names cannot be loaded.
         setGraphOptions([{ id: 'default', name: 'default' }]);
       }
-      
-      // Determine which named graphs to fetch.
-      const graphNamesToFetch: string[] =
-        activeSavedView?.graphIds && activeSavedView.graphIds.length > 0
-          ? activeSavedView.graphIds
-          : visibleGraphIds.length > 0
+
+      // Determine fetch strategy: view_id only if view selected, graph_id only if graph(s) selected.
+      const paramsBase = new URLSearchParams({ workspace_id: workspaceId });
+      let urlsToFetch: string[];
+
+      if (activeSavedView) {
+        // View selected: single request with view_id only (backend gets graphs + filters from view)
+        paramsBase.set('view_id', activeSavedView.id);
+        urlsToFetch = [`${apiUrl}/api/graph/network?${paramsBase.toString()}`];
+      } else {
+        // Graph(s) selected: one request per graph with graph_id only
+        const graphIdsToFetch =
+          visibleGraphIds.length > 0
             ? visibleGraphIds.filter((id) => !id.includes('#layer='))
             : [defaultGraphName];
-      const safeGraphNames = graphNamesToFetch.length > 0 ? graphNamesToFetch : [defaultGraphName];
-      
-      // Fetch all visible graphs in parallel
+        const safeGraphIds =
+          graphIdsToFetch.length > 0 ? graphIdsToFetch : [defaultGraphName];
+        urlsToFetch = safeGraphIds.map((graphId) => {
+          const params = new URLSearchParams({ workspace_id: workspaceId });
+          params.set('graph_id', graphId);
+          return `${apiUrl}/api/graph/network?${params.toString()}`;
+        });
+      }
+
       const responses = await Promise.all(
-        safeGraphNames.map((graphName) => {
-          const params = new URLSearchParams({
-            workspace_id: workspaceId,
-          });
-          if (activeSavedView) {
-            params.set('view_name', activeSavedView.name);
-          }
-          const url = `${apiUrl}/api/graph/network/${encodeURIComponent(graphName)}?${params.toString()}`;
-          return authFetch(url)
+        urlsToFetch.map((url) =>
+          authFetch(url)
             .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-            .catch(() => ({ nodes: [], edges: [] }));
-        })
+            .catch(() => ({ nodes: [], edges: [] }))
+        )
       );
       
       // Merge all graph data
@@ -255,25 +428,63 @@ export default function GraphPage() {
     }
   }, [workspaceId, visibleGraphIds, activeSavedView]);
 
+  const loadViewsFromApi = useCallback(async () => {
+    const apiUrl = getApiUrl();
+    const response = await authFetch(
+      `${apiUrl}/api/graph/views?workspace_id=${encodeURIComponent(workspaceId)}`
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to load views: ${response.status}`);
+    }
+    const data = await response.json();
+    const normalizedViews: GraphView[] = Array.isArray(data)
+      ? data.map((item: ApiGraphView) => ({
+        id: item.id,
+        name: item.name,
+        type: 'entities',
+        graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
+        filters: Array.isArray(item.filters) ? item.filters : [],
+        createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+      }))
+      : [];
+    setViews(normalizedViews);
+  }, [workspaceId, setViews]);
+
   // Load on mount and when workspace or visible graphs change
   useEffect(() => {
     loadFromApi();
   }, [loadFromApi]);
 
   useEffect(() => {
+    loadViewsFromApi().catch((err) => {
+      console.error('Failed to load graph views:', err);
+    });
+  }, [loadViewsFromApi]);
+
+  useEffect(() => {
     const requestedView = searchParams.get('view');
     if (requestedView === 'new-view') {
+      setEditingViewId(null);
+      setPageMode('create-view');
+      return;
+    }
+    if (requestedView === 'edit-view') {
+      const viewId = searchParams.get('view_id');
+      setEditingViewId(viewId);
       setPageMode('create-view');
       return;
     }
     if (requestedView === 'create-individual') {
+      setEditingViewId(null);
       setPageMode('create-individual');
       return;
     }
     if (requestedView === 'sparql') {
+      setEditingViewId(null);
       setPageMode('sparql');
       return;
     }
+    setEditingViewId(null);
     setPageMode('graph');
     if (requestedView) {
       const normalizedView = LEGACY_VIEW_MAP[requestedView] || requestedView;
@@ -327,6 +538,35 @@ export default function GraphPage() {
     }
   }, [pageMode, loadOntologyClasses]);
 
+  const loadFilterOptions = useCallback(async (graphIds: string[]) => {
+    const apiUrl = getApiUrl();
+    const params = new URLSearchParams({
+      workspace_id: workspaceId,
+    });
+    const names = graphIds.length > 0 ? graphIds : ['default'];
+    for (const graphId of names) {
+      params.append('graph_names', graphId);
+    }
+    const response = await authFetch(`${apiUrl}/api/graph/filter-options?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`Failed to load filter options: ${response.status}`);
+    }
+    const data = await response.json();
+    setFilterOptions({
+      subjects: Array.isArray(data?.subjects) ? data.subjects : [],
+      predicates: Array.isArray(data?.predicates) ? data.predicates : [],
+      objects: Array.isArray(data?.objects) ? data.objects : [],
+    });
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (pageMode !== 'create-view') return;
+    loadFilterOptions(selectedViewGraphIds).catch((err) => {
+      console.error('Failed to load filter options:', err);
+      setFilterOptions({ subjects: [], predicates: [], objects: [] });
+    });
+  }, [pageMode, selectedViewGraphIds, loadFilterOptions]);
+
   const resetCreateIndividualForm = () => {
     setIndividualLabel('');
     setSelectedClassId('');
@@ -348,31 +588,116 @@ export default function GraphPage() {
 
   const closeCreateViewForm = () => {
     setPageMode('graph');
+    setEditingViewId(null);
     setViewName('');
-    setViewSubject('');
-    setViewPredicate('');
-    setViewObject('');
     setSelectedViewGraphIds([]);
+    setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
+    setViewFormError(null);
     router.push(`/workspace/${workspaceId}/graph`);
   };
 
-  const handleCreateView = () => {
+  const handleCreateView = async () => {
     const normalizedName = viewName.trim();
-    if (!normalizedName) return;
+    if (!normalizedName) {
+      setViewFormError('Name is required.');
+      return;
+    }
     const graphIds = selectedViewGraphIds.length > 0 ? selectedViewGraphIds : ['default'];
-    createSavedView(
-      normalizedName,
-      graphIds,
-      {
-        subject: viewSubject.trim(),
-        predicate: viewPredicate.trim(),
-        object: viewObject.trim(),
+    const normalizedFilters = viewFilters
+      .map((item) => ({
+        subject_uri: item.subject_uri.trim(),
+        predicate_uri: item.predicate_uri.trim(),
+        object_uri: item.object_uri.trim(),
+      }))
+      .filter((item) => item.subject_uri || item.predicate_uri || item.object_uri);
+
+    if (normalizedFilters.length === 0) {
+      setViewFormError('Add at least one filter with at least one of subject, predicate, or object.');
+      return;
+    }
+
+    setViewFormError(null);
+    const apiUrl = getApiUrl();
+    const payload = {
+      workspace_id: workspaceId,
+      name: normalizedName,
+      graph_names: graphIds,
+      filters: normalizedFilters,
+    };
+
+    let savedViewId: string | null = null;
+    if (editingViewId) {
+      const response = await authFetch(
+        `${apiUrl}/api/graph/views/${encodeURIComponent(editingViewId)}?workspace_id=${encodeURIComponent(workspaceId)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!response.ok) {
+        setViewFormError('Failed to update view.');
+        return;
       }
-    );
+      const updated = await response.json();
+      savedViewId = typeof updated?.id === 'string' ? updated.id : editingViewId;
+    } else {
+      const response = await authFetch(`${apiUrl}/api/graph/views`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        setViewFormError('Failed to create view.');
+        return;
+      }
+      const created = await response.json();
+      savedViewId = typeof created?.id === 'string' ? created.id : null;
+    }
+
+    await loadViewsFromApi();
+    if (savedViewId) {
+      setActiveSavedView(savedViewId);
+    }
     setVisibleGraphs(graphIds);
     setActiveViewType('entities');
     closeCreateViewForm();
   };
+
+  useEffect(() => {
+    if (pageMode !== 'create-view') return;
+
+    if (editingView) {
+      setViewName(editingView.name ?? '');
+      setSelectedViewGraphIds(Array.isArray(editingView.graphIds) ? editingView.graphIds : []);
+      const normalizedFilters = Array.isArray(editingView.filters)
+        ? editingView.filters
+          .map((item) => ({
+            subject_uri: item.subject_uri ?? '',
+            predicate_uri: item.predicate_uri ?? '',
+            object_uri: item.object_uri ?? '',
+          }))
+          .filter(
+            (item) =>
+              (item.subject_uri && item.subject_uri.trim()) ||
+              (item.predicate_uri && item.predicate_uri.trim()) ||
+              (item.object_uri && item.object_uri.trim())
+          )
+        : [];
+      setViewFilters(
+        normalizedFilters.length > 0
+          ? normalizedFilters
+          : [{ subject_uri: '', predicate_uri: '', object_uri: '' }]
+      );
+      setViewFormError(null);
+      return;
+    }
+
+    setViewName('');
+    setSelectedViewGraphIds([]);
+    setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
+    setViewFormError(null);
+  }, [pageMode, editingView]);
 
   const handleCreateIndividual = async () => {
     const normalizedLabel = individualLabel.trim();
@@ -701,7 +1026,7 @@ export default function GraphPage() {
                   <div className="mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Filter size={24} className="text-workspace-accent" />
-                      <h2 className="text-lg font-semibold">Create New View</h2>
+                      <h2 className="text-lg font-semibold">{editingView ? 'Edit View' : 'Create New View'}</h2>
                     </div>
                     <button
                       onClick={closeCreateViewForm}
@@ -720,39 +1045,6 @@ export default function GraphPage() {
                         value={viewName}
                         onChange={(event) => setViewName(event.target.value)}
                         placeholder="e.g., Agents only"
-                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">Subject (s)</label>
-                      <input
-                        type="text"
-                        value={viewSubject}
-                        onChange={(event) => setViewSubject(event.target.value)}
-                        placeholder="Optional subject filter"
-                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">Predicate (p)</label>
-                      <input
-                        type="text"
-                        value={viewPredicate}
-                        onChange={(event) => setViewPredicate(event.target.value)}
-                        placeholder="Optional predicate filter"
-                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">Object (o)</label>
-                      <input
-                        type="text"
-                        value={viewObject}
-                        onChange={(event) => setViewObject(event.target.value)}
-                        placeholder="Optional object filter"
                         className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
@@ -779,6 +1071,87 @@ export default function GraphPage() {
                       </div>
                     </div>
 
+                    <div>
+                      <div className="mb-2 flex items-center justify-between">
+                        <label className="block text-sm font-medium">Filters</label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setViewFilters((prev) => [
+                              ...prev,
+                              { subject_uri: '', predicate_uri: '', object_uri: '' },
+                            ])
+                          }
+                          className="rounded border px-2 py-1 text-xs hover:bg-muted"
+                        >
+                          Add Filter
+                        </button>
+                      </div>
+                      <div className="space-y-3 rounded-lg border p-3">
+                        {viewFilters.map((item, index) => (
+                          <div key={`filter-${index}`} className="rounded-md border p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                              <p className="text-xs font-medium text-muted-foreground">Filter {index + 1}</p>
+                              {viewFilters.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setViewFilters((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
+                                  }
+                                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                                  title="Remove filter"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-3">
+                              <FilterOptionDropdown
+                                options={filterOptions.subjects}
+                                value={item.subject_uri}
+                                onChange={(v) =>
+                                  setViewFilters((prev) =>
+                                    prev.map((row, rowIndex) =>
+                                      rowIndex === index ? { ...row, subject_uri: v } : row
+                                    )
+                                  )
+                                }
+                                placeholder="Subject"
+                              />
+                              <FilterOptionDropdown
+                                options={filterOptions.predicates}
+                                value={item.predicate_uri}
+                                onChange={(v) =>
+                                  setViewFilters((prev) =>
+                                    prev.map((row, rowIndex) =>
+                                      rowIndex === index ? { ...row, predicate_uri: v } : row
+                                    )
+                                  )
+                                }
+                                placeholder="Predicate"
+                              />
+                              <FilterOptionDropdown
+                                options={filterOptions.objects}
+                                value={item.object_uri}
+                                onChange={(v) =>
+                                  setViewFilters((prev) =>
+                                    prev.map((row, rowIndex) =>
+                                      rowIndex === index ? { ...row, object_uri: v } : row
+                                    )
+                                  )
+                                }
+                                placeholder="Object"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {viewFormError && (
+                      <p className="text-sm text-red-500">{viewFormError}</p>
+                    )}
+
                     <div className="flex gap-3 pt-4">
                       <button
                         onClick={closeCreateViewForm}
@@ -795,7 +1168,7 @@ export default function GraphPage() {
                         )}
                       >
                         <Filter size={16} />
-                        Create View
+                        {editingView ? 'Save View' : 'Create View'}
                       </button>
                     </div>
                   </div>

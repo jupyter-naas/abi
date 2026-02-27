@@ -8,7 +8,7 @@ import {
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
+import { useKnowledgeGraphStore, type GraphTripleFilter, type GraphView } from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { CollapsibleSection } from './collapsible-section';
@@ -69,54 +69,16 @@ const ViewItemRow = React.memo(function ViewItemRow({
   name,
   isActive,
   onSelect,
-  onRename,
+  onEdit,
   onDelete,
-  isRenaming,
-  onStartRename,
-  onCancelRename,
 }: {
   name: string;
   isActive: boolean;
   onSelect: () => void;
-  onRename: (newName: string) => void;
+  onEdit: () => void;
   onDelete: () => void;
-  isRenaming: boolean;
-  onStartRename: () => void;
-  onCancelRename: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
-  const [editValue, setEditValue] = useState(name);
-
-  const handleRenameSubmit = () => {
-    const trimmed = editValue.trim();
-    if (trimmed && trimmed !== name) {
-      onRename(trimmed);
-    }
-    onCancelRename();
-  };
-
-  if (isRenaming) {
-    return (
-      <div className="flex items-center gap-2 rounded-md px-2 py-1 text-xs">
-        <Filter size={12} className="flex-shrink-0 text-muted-foreground" />
-        <input
-          type="text"
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              handleRenameSubmit();
-            } else if (e.key === 'Escape') {
-              onCancelRename();
-            }
-          }}
-          onBlur={handleRenameSubmit}
-          autoFocus
-          className="flex-1 border-b border-workspace-accent bg-transparent text-xs outline-none"
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="relative">
@@ -147,13 +109,13 @@ const ViewItemRow = React.memo(function ViewItemRow({
             <button
               onClick={(event) => {
                 event.stopPropagation();
-                onStartRename();
+                onEdit();
                 setShowMenu(false);
               }}
               className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
             >
               <Edit2 size={12} />
-              Rename
+              Edit
             </button>
             <button
               onClick={(event) => {
@@ -187,14 +149,13 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     toggleGraphVisibility,
     setVisibleGraphs,
     setActiveSavedView,
-    updateSavedView,
     deleteView,
+    setViews,
   } = useKnowledgeGraphStore();
 
   const [availableGraphs, setAvailableGraphs] = useState<GraphItem[]>([]);
   const [graphsExpanded, setGraphsExpanded] = useState(true);
   const [viewsExpanded, setViewsExpanded] = useState(true);
-  const [renamingViewId, setRenamingViewId] = useState<string | null>(null);
   const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
   const isGraphRoute = pathname.startsWith(graphPath);
   const requestedView = searchParams.get('view');
@@ -206,20 +167,22 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     if (!currentWorkspaceId) return;
     try {
       const apiUrl = getApiUrl();
-      let graphNames: string[] = ['default'];
+      let graphList: { id: string; label: string }[] = [{ id: 'default', label: 'default' }];
       const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
       if (namesRes.ok) {
         const namesData = await namesRes.json();
-        const parsed = Array.isArray(namesData?.graph_names) ? namesData.graph_names : [];
-        const normalized = parsed.filter((name): name is string => typeof name === 'string' && name.length > 0);
-        if (normalized.length > 0) graphNames = normalized;
+        const parsed = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
+        const normalized = parsed
+          .filter((g: unknown) => g && typeof g === 'object' && 'id' in g && typeof (g as { id: unknown }).id === 'string')
+          .map((g: { id: string; label?: string }) => ({ id: g.id, label: g.label ?? g.id }));
+        if (normalized.length > 0) graphList = normalized;
       }
 
       const graphs: GraphItem[] = await Promise.all(
-        graphNames.map(async (graphName) => {
+        graphList.map(async (graph) => {
           let nodeCount = 0;
           const wsRes = await authFetch(
-            `${apiUrl}/api/graph/network/${encodeURIComponent(graphName)}?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+            `${apiUrl}/api/graph/network?workspace_id=${encodeURIComponent(currentWorkspaceId)}&graph_id=${encodeURIComponent(graph.id)}`
           );
           if (wsRes.ok) {
             const wsData = await wsRes.json();
@@ -229,8 +192,8 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
             nodeCount = uniqueNodes.length;
           }
           return {
-            id: graphName,
-            name: graphName,
+            id: graph.id,
+            name: graph.label,
             type: 'workspace' as const,
             nodeCount,
           };
@@ -267,6 +230,40 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     fetchGraphs();
   }, [currentWorkspaceId, visibleGraphIds.length, setVisibleGraphs]);
 
+  useEffect(() => {
+    const fetchViews = async () => {
+      if (!currentWorkspaceId) return;
+      try {
+        const apiUrl = getApiUrl();
+        const response = await authFetch(
+          `${apiUrl}/api/graph/views?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+        );
+        if (!response.ok) return;
+        const data = await response.json();
+        const normalizedViews: GraphView[] = Array.isArray(data)
+          ? data.map((item: {
+            id: string;
+            name: string;
+            graph_names?: string[];
+            filters?: GraphTripleFilter[];
+            created_at?: string;
+          }) => ({
+            id: item.id,
+            name: item.name,
+            type: 'entities',
+            graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
+            filters: Array.isArray(item.filters) ? item.filters : [],
+            createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+          }))
+          : [];
+        setViews(normalizedViews);
+      } catch (error) {
+        console.error('Failed to fetch graph views:', error);
+      }
+    };
+    fetchViews();
+  }, [currentWorkspaceId, setViews]);
+
   return (
     <CollapsibleSection
       id="graph"
@@ -275,6 +272,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       description="Visualize and explore your knowledge"
       href={graphPath}
       collapsed={collapsed}
+      onNavigate={() => setActiveSavedView(null)}
     >
       <div className="flex items-center gap-0.5 px-1 pb-1">
         <button
@@ -288,7 +286,10 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
           <UserPlus size={14} />
         </button>
         <button
-          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph'))}
+          onClick={() => {
+            setActiveSavedView(null);
+            router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
+          }}
           className={cn(
             'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
             showGraphRowSelection && !selectedGraphId && 'bg-workspace-accent-10 text-workspace-accent'
@@ -334,6 +335,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                   isSelected={showGraphRowSelection && selectedGraphId === graph.id}
                   onToggle={() => toggleGraphVisibility(graph.id)}
                   onClick={() => {
+                    setActiveSavedView(null);
                     selectGraph(graph.id);
                     if (!visibleGraphIds.includes(graph.id)) {
                       toggleGraphVisibility(graph.id);
@@ -363,6 +365,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
           <span
             onClick={(event) => {
               event.stopPropagation();
+              selectGraph(null);
               router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=new-view'));
             }}
             className="rounded p-0.5 hover:bg-muted"
@@ -381,16 +384,36 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                   key={view.id}
                   name={view.name}
                   isActive={activeSavedViewId === view.id}
-                  isRenaming={renamingViewId === view.id}
-                  onStartRename={() => setRenamingViewId(view.id)}
-                  onCancelRename={() => setRenamingViewId(null)}
-                  onRename={(newName) => updateSavedView(view.id, { name: newName })}
+                  onEdit={() => {
+                    selectGraph(null);
+                    setActiveSavedView(view.id);
+                    router.push(
+                      getWorkspacePath(
+                        currentWorkspaceId,
+                        `/graph?view=edit-view&view_id=${encodeURIComponent(view.id)}`
+                      )
+                    );
+                  }}
                   onDelete={() => {
                     if (confirm(`Delete view "${view.name}"?`)) {
-                      deleteView(view.id);
+                      const run = async () => {
+                        try {
+                          const apiUrl = getApiUrl();
+                          const response = await authFetch(
+                            `${apiUrl}/api/graph/views/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(currentWorkspaceId)}`,
+                            { method: 'DELETE' }
+                          );
+                          if (!response.ok) return;
+                          deleteView(view.id);
+                        } catch (error) {
+                          console.error('Failed to delete view:', error);
+                        }
+                      };
+                      void run();
                     }
                   }}
                   onSelect={() => {
+                    selectGraph(null);
                     setActiveSavedView(view.id);
                     if (view.graphIds && view.graphIds.length > 0) {
                       setVisibleGraphs(view.graphIds);
