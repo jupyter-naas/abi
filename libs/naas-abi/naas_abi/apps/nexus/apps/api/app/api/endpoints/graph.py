@@ -421,6 +421,12 @@ def _get_edge_by_id(store: TripleStoreService, edge_id: str) -> GraphEdge | None
     return None
 
 
+def _get_view_filters(view_name: str | None) -> str:
+    if view_name is None:
+        return ""
+    return ""
+
+
 # ============ Endpoints ============
 
 
@@ -441,6 +447,7 @@ async def list_nodes(
     request: Request,
     workspace_id: str,
     graph_name: str = "default",
+    view_name: str | None = None,
     limit: int = Query(default=100, le=1000),
     offset: int = 0,
     current_user: User = Depends(get_current_user_required),
@@ -452,6 +459,7 @@ async def list_nodes(
 
     triple_store_service = ABIModule.get_instance().engine.services.triple_store
     graph_clause, graph_close = _graph_scope_clauses(graph_name)
+    view_filters = _get_view_filters(view_name)
 
     # Query for all Named Individuals (Nodes) along with their type, type label, and human label
     query = f"""
@@ -464,6 +472,7 @@ async def list_nodes(
         ?s ?p ?o .
         ?s a owl:NamedIndividual ;
            rdfs:label ?label .
+        {view_filters}
         FILTER(?p = rdf:type && ?o != owl:NamedIndividual)
         BIND(?s AS ?uri)
         BIND(?o AS ?type)
@@ -571,6 +580,7 @@ async def get_graph_network(
     request: Request,
     workspace_id: str,
     graph_name: str,
+    view_name: str | None = None,
     limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
 ) -> GraphData:
@@ -581,6 +591,7 @@ async def get_graph_network(
         request=request,
         workspace_id=workspace_id,
         graph_name=graph_name,
+        view_name=view_name,
         limit=limit,
         offset=0,
         current_user=current_user,
@@ -777,70 +788,3 @@ async def query_graph(
         edges=edges,
         query_explanation=f"Found {len(nodes)} nodes matching '{payload.query}'",
     )
-
-
-@router.get("/statistics/{workspace_id}")
-async def get_graph_statistics(
-    request: Request,
-    workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
-) -> dict[str, Any]:
-    """Get statistics for a workspace's graph."""
-    await require_workspace_access(current_user.id, workspace_id)
-    store = get_triple_store_service(request)
-
-    total_nodes = 0
-    for row in store.query(f"""
-        SELECT (COUNT(?node) AS ?count)
-        WHERE {{
-            ?node a <urn:nexus:kg:Node> ;
-                  <urn:nexus:kg:workspaceId> ?workspace_id .
-            FILTER(?workspace_id = {_sparql_str(workspace_id)})
-        }}
-    """):
-        total_nodes = int(str(row.count))
-
-    total_edges = 0
-    for row in store.query(f"""
-        SELECT (COUNT(?edge) AS ?count)
-        WHERE {{
-            ?edge a <urn:nexus:kg:Edge> ;
-                  <urn:nexus:kg:workspaceId> ?workspace_id .
-            FILTER(?workspace_id = {_sparql_str(workspace_id)})
-        }}
-    """):
-        total_edges = int(str(row.count))
-
-    nodes_by_type: dict[str, int] = {}
-    for row in store.query(f"""
-        SELECT ?type (COUNT(?node) AS ?count)
-        WHERE {{
-            ?node a <urn:nexus:kg:Node> ;
-                  <urn:nexus:kg:workspaceId> ?workspace_id ;
-                  <urn:nexus:kg:nodeType> ?type .
-            FILTER(?workspace_id = {_sparql_str(workspace_id)})
-        }}
-        GROUP BY ?type
-    """):
-        nodes_by_type[str(row.type)] = int(str(row.count))
-
-    edges_by_type: dict[str, int] = {}
-    for row in store.query(f"""
-        SELECT ?type (COUNT(?edge) AS ?count)
-        WHERE {{
-            ?edge a <urn:nexus:kg:Edge> ;
-                  <urn:nexus:kg:workspaceId> ?workspace_id ;
-                  <urn:nexus:kg:edgeType> ?type .
-            FILTER(?workspace_id = {_sparql_str(workspace_id)})
-        }}
-        GROUP BY ?type
-    """):
-        edges_by_type[str(row.type)] = int(str(row.count))
-
-    return {
-        "total_nodes": total_nodes,
-        "total_edges": total_edges,
-        "nodes_by_type": nodes_by_type,
-        "edges_by_type": edges_by_type,
-        "avg_degree": (2 * total_edges / total_nodes) if total_nodes > 0 else 0,
-    }
