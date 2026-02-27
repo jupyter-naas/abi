@@ -42,6 +42,12 @@ export interface NamedGraph {
 // View types for exploring the graph
 export type GraphViewType = 'overview' | 'entities' | 'table' | 'sparql';
 
+export interface GraphTripleFilter {
+  subject_uri: string;
+  predicate_uri: string;
+  object_uri: string;
+}
+
 export interface GraphView {
   id: string;
   name: string;
@@ -49,7 +55,7 @@ export interface GraphView {
   graphId?: string; // Optional - view can span multiple graphs
   graphIds?: string[];
   query?: string; // For SPARQL views
-  filters?: Record<string, unknown>;
+  filters?: GraphTripleFilter[];
   layout?: 'force' | 'hierarchical' | 'circular' | 'grid';
   createdAt: Date;
 }
@@ -127,9 +133,10 @@ interface KnowledgeGraphState {
   
   // Actions - Views
   createView: (name: string, type: GraphViewType) => GraphView;
-  createSavedView: (name: string, graphIds: string[], filters: Record<string, unknown>) => GraphView;
+  createSavedView: (name: string, graphIds: string[], filters: GraphTripleFilter[]) => GraphView;
   updateSavedView: (id: string, updates: Partial<GraphView>) => void;
   deleteView: (id: string) => void;
+  setViews: (views: GraphView[]) => void;
   setActiveViewType: (type: GraphViewType) => void;
   setActiveSavedView: (id: string | null) => void;
   
@@ -364,6 +371,17 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphState>()(
           views: state.views.filter((v) => v.id !== id),
           activeSavedViewId: state.activeSavedViewId === id ? null : state.activeSavedViewId,
         }));
+      },
+      setViews: (views) => {
+        set((state) => {
+          const activeStillExists = state.activeSavedViewId
+            ? views.some((view) => view.id === state.activeSavedViewId)
+            : true;
+          return {
+            views,
+            activeSavedViewId: activeStillExists ? state.activeSavedViewId : null,
+          };
+        });
       },
 
       setActiveViewType: (type) => set({ activeViewType: type }),
