@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Waypoints,
-  RefreshCw, Eye, EyeOff, Database, User, UserPlus, ChevronRight,
+  RefreshCw, Eye, EyeOff, Database, User, UserPlus, ChevronRight, Code,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -153,6 +153,13 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
           title="Refresh"
         >
           <RefreshCw size={14} />
+        </button>
+        <button
+          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=sparql'))}
+          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title="SPARQL"
+        >
+          <Code size={14} />
         </button>
       </div>
 
