@@ -54,6 +54,8 @@ interface ApiEdge {
   workspace_id: string;
   source_id: string;
   target_id: string;
+  source_label?: string;
+  target_label?: string;
   type: string;
   properties?: Record<string, unknown>;
 }
@@ -72,8 +74,11 @@ interface GraphEdge {
   id: string;
   source: string;
   target: string;
+  sourceLabel?: string;
+  targetLabel?: string;
   type: string;
   label?: string;
+  properties?: Record<string, unknown>;
 }
 
 const GRAPH_VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
@@ -139,6 +144,20 @@ export default function GraphPage() {
       const apiUrl = getApiUrl();
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
+      let networkGraphName = workspaceId;
+
+      try {
+        const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
+        if (namesRes.ok) {
+          const namesData = await namesRes.json();
+          const graphNames = Array.isArray(namesData?.graph_names) ? namesData.graph_names : [];
+          if (graphNames.length > 0 && typeof graphNames[0] === 'string') {
+            networkGraphName = graphNames[0];
+          }
+        }
+      } catch {
+        // Keep workspaceId fallback when graph names cannot be loaded.
+      }
       
       // Determine which workspace graphs to fetch based on visibility.
       // Graph IDs map to workspace IDs in the API route.
@@ -150,7 +169,7 @@ export default function GraphPage() {
       // Fetch all visible graphs in parallel
       const responses = await Promise.all(
         workspaceGraphIds.map((graphId) => {
-          const url = `${apiUrl}/api/graph/network?workspace_id=${encodeURIComponent(graphId)}`;
+          const url = `${apiUrl}/api/graph/network/${encodeURIComponent(networkGraphName)}?workspace_id=${encodeURIComponent(graphId)}`;
           return authFetch(url)
             .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
             .catch(() => ({ nodes: [], edges: [] }));
@@ -176,8 +195,11 @@ export default function GraphPage() {
             id: edge.id,
             source: edge.source_id,
             target: edge.target_id,
+            sourceLabel: edge.source_label,
+            targetLabel: edge.target_label,
             type: edge.type,
             label: edge.type,
+            properties: edge.properties || {},
           }));
           allEdges.push(...visEdges);
         }
@@ -1019,6 +1041,9 @@ LIMIT 100`}
                               <tbody>
                                 {outgoing.map((edge) => {
                                   const targetNode = nodes.find((n) => n.id === edge.target);
+                                  const targetLabelFromProperties = typeof edge.properties?.target_label === 'string'
+                                    ? edge.properties.target_label
+                                    : undefined;
                                   return (
                                     <tr
                                       key={edge.id}
@@ -1026,7 +1051,9 @@ LIMIT 100`}
                                       onClick={() => setSelectedNodeId(edge.target)}
                                     >
                                       <td className="py-0.5 pr-2 text-workspace-accent">{edge.type}</td>
-                                      <td className="py-0.5 truncate max-w-[120px]">{targetNode?.label || edge.target}</td>
+                                      <td className="py-0.5 truncate max-w-[120px]">
+                                        {targetNode?.label || edge.targetLabel || targetLabelFromProperties || edge.target}
+                                      </td>
                                     </tr>
                                   );
                                 })}

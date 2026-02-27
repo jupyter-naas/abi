@@ -39,12 +39,16 @@ NEXUS_UPDATED_AT = NEXUS.updatedAt
 # ============ Pydantic Schemas ============
 
 
+class GraphNamesResponse(BaseModel):
+    graph_names: list[str]
+
+
 class GraphNode(BaseModel):
     id: str
     workspace_id: str
     type: str
     label: str
-    properties: dict[str, Any] | None = None
+    properties: dict[str, Any] = {}
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -54,9 +58,17 @@ class GraphEdge(BaseModel):
     workspace_id: str
     source_id: str
     target_id: str
+    source_label: str
+    target_label: str
     type: str
     properties: dict[str, Any] = {}
     created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class GraphData(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
 
 
 class GraphNodeCreate(BaseModel):
@@ -80,11 +92,6 @@ class GraphEdgeCreate(BaseModel):
     properties: dict[str, Any] = {}
 
 
-class GraphData(BaseModel):
-    nodes: list[GraphNode]
-    edges: list[GraphEdge]
-
-
 class GraphQuery(BaseModel):
     query: str = Field(..., min_length=1, max_length=10_000)
     language: Literal["natural", "sparql"] = "natural"
@@ -97,14 +104,10 @@ class GraphQueryResult(BaseModel):
     query_explanation: str | None = None
 
 
-class GraphNamesResponse(BaseModel):
-    graph_names: list[str]
-
-
 # ============ Helpers ============
 
 
-def get_triple_store(request: Request) -> TripleStoreService:
+def get_triple_store_service(request: Request) -> TripleStoreService:
     store = getattr(request.app.state, "triple_store", None)
     if store is not None:
         return store
@@ -161,6 +164,12 @@ def _as_properties(value: Any) -> dict[str, Any]:
 
 def _sparql_str(value: str) -> str:
     return json.dumps(value)
+
+
+def _graph_scope_clauses(graph_name: str) -> tuple[str, str]:
+    if graph_name != "default":
+        return f"GRAPH <{graph_name}> {{", "}"
+    return "", ""
 
 
 def _node_uri(workspace_id: str, node_id: str) -> URIRef:
@@ -227,13 +236,6 @@ def _remove_subject_graph(store: TripleStoreService, subject: URIRef) -> bool:
         return False
     store.remove(subject_graph)
     return True
-
-
-def _list_named_graphs(store: TripleStoreService) -> list[str]:
-    graph_names = [str(graph_name) for graph_name in store.list_graphs()]
-    if len(graph_names) == 0:
-        return ["default"]
-    return graph_names
 
 
 def _query_nodes(
@@ -427,48 +429,29 @@ async def list_graph_names(
     request: Request,
 ) -> GraphNamesResponse:
     """List all named graphs available in the triple store."""
-    store = get_triple_store(request)
-    return GraphNamesResponse(graph_names=_list_named_graphs(store))
-
-
-@router.get("/network")
-async def get_workspace_graph(
-    request: Request,
-    workspace_id: str,
-    node_type: str | None = None,
-    limit: int = Query(default=1000, le=5000),
-    current_user: User = Depends(get_current_user_required),
-) -> GraphData:
-    """Get all nodes and edges for a workspace."""
-    await require_workspace_access(current_user.id, workspace_id)
-    store = get_triple_store(request)
-    nodes = await list_nodes(request, workspace_id, node_type, limit, 0, current_user)
-
-    node_ids = [n.id for n in nodes]
-    edges = _query_edges(
-        store=store,
-        workspace_id=workspace_id,
-        source_or_target_ids=node_ids,
-    )
-
-    return GraphData(nodes=nodes, edges=edges)
+    store = get_triple_store_service(request)
+    graph_names = [str(graph_name) for graph_name in store.list_graphs()]
+    if len(graph_names) == 0:
+        graph_names = ["default"]
+    return GraphNamesResponse(graph_names=graph_names)
 
 
 @router.get("/nodes")
 async def list_nodes(
     request: Request,
     workspace_id: str,
-    type: str | None = None,
+    graph_name: str = "default",
     limit: int = Query(default=100, le=1000),
     offset: int = 0,
     current_user: User = Depends(get_current_user_required),
 ) -> list[GraphNode]:
-    """List nodes, optionally filtered by type."""
+    """List nodes for a graph."""
     await require_workspace_access(current_user.id, workspace_id)
     from naas_abi import ABIModule
     from rdflib.query import ResultRow
 
     triple_store_service = ABIModule.get_instance().engine.services.triple_store
+    graph_clause, graph_close = _graph_scope_clauses(graph_name)
 
     # Query for all Named Individuals (Nodes) along with their type, type label, and human label
     query = f"""
@@ -477,11 +460,15 @@ async def list_nodes(
     PREFIX owl: <http://www.w3.org/2002/07/owl#>
     SELECT ?uri ?label ?type ?type_label
     WHERE {{
-        ?uri a owl:NamedIndividual ;
-             rdfs:label ?label ;
-             rdf:type ?type .
-        OPTIONAL {{ ?type rdfs:label ?type_label . }}
-        FILTER(?type != owl:NamedIndividual)
+        {graph_clause}
+        ?s ?p ?o .
+        ?s a owl:NamedIndividual ;
+           rdfs:label ?label .
+        FILTER(?p = rdf:type && ?o != owl:NamedIndividual)
+        BIND(?s AS ?uri)
+        BIND(?o AS ?type)
+        OPTIONAL {{ ?o rdfs:label ?type_label . }}
+        {graph_close}
     }}
     LIMIT {int(limit)}
     OFFSET {int(offset)}
@@ -493,19 +480,122 @@ async def list_nodes(
         assert isinstance(row, ResultRow)
         uri = str(row.uri)
         label = str(row.label)
-        type_label = str(row.type_label)
+        type_label = str(row.type_label) if row.type_label else str(row.type)
         nodes.append(
             GraphNode(
                 id=uri,
                 workspace_id=workspace_id,
                 type=type_label,
                 label=label,
-                properties=None,
-                created_at=None,
-                updated_at=None,
+                properties={},
             )
         )
     return nodes
+
+
+@router.get("/edges")
+async def list_edges(
+    request: Request,
+    workspace_id: str,
+    graph_name: str = "default",
+    nodes: list[GraphNode] | None = None,
+    limit: int = Query(default=100, le=1000),
+    offset: int = 0,
+    current_user: User = Depends(get_current_user_required),
+) -> list[GraphEdge]:
+    """List edges for a graph."""
+    await require_workspace_access(current_user.id, workspace_id)
+    from naas_abi import ABIModule
+    from rdflib.query import ResultRow
+
+    triple_store_service = ABIModule.get_instance().engine.services.triple_store
+    graph_clause, graph_close = _graph_scope_clauses(graph_name)
+    if nodes is None:
+        nodes = await list_nodes(
+            request=request,
+            workspace_id=workspace_id,
+            graph_name=graph_name,
+            limit=limit,
+            offset=offset,
+            current_user=current_user,
+        )
+
+    edges: list[GraphEdge] = []
+    for node in nodes:
+        query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?predicate ?predicate_label ?object ?object_label
+        WHERE {{
+            {graph_clause}
+            <{node.id}> ?predicate ?object .
+            FILTER(isIRI(?predicate) && isIRI(?object) && ?predicate != rdf:type)
+            OPTIONAL {{ ?predicate rdfs:label ?predicate_label . }}
+            OPTIONAL {{ ?object rdfs:label ?object_label . }}
+            {graph_close}
+        }}
+        LIMIT {int(limit)}
+        OFFSET {int(offset)}
+        """
+        rows = triple_store_service.query(query)
+        for row in rows:
+            assert isinstance(row, ResultRow)
+            source = node.id
+            target = str(row.object)
+            predicate = str(row.predicate)
+            predicate_label = (
+                "is a"
+                if predicate == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                else (str(row.predicate_label) if row.predicate_label else predicate)
+            )
+            edge_id = f"{source}|{predicate}|{target}"
+            object_label = str(row.object_label) if row.object_label else target
+            edges.append(
+                GraphEdge(
+                    id=edge_id,
+                    workspace_id=workspace_id,
+                    source_id=source,
+                    target_id=target,
+                    source_label=node.label,
+                    target_label=object_label,
+                    type=predicate_label,
+                    properties={"uri": predicate},
+                )
+            )
+    return edges
+
+
+@router.get("/network/{graph_name}")
+async def get_graph_network(
+    request: Request,
+    workspace_id: str,
+    graph_name: str,
+    limit: int = Query(default=500, le=5000),
+    current_user: User = Depends(get_current_user_required),
+) -> GraphData:
+    """Get all nodes and edges for a workspace."""
+    await require_workspace_access(current_user.id, workspace_id)
+
+    nodes = await list_nodes(
+        request=request,
+        workspace_id=workspace_id,
+        graph_name=graph_name,
+        limit=limit,
+        offset=0,
+        current_user=current_user,
+    )
+    edges = await list_edges(
+        request=request,
+        workspace_id=workspace_id,
+        graph_name=graph_name,
+        nodes=nodes,
+        limit=limit,
+        offset=0,
+        current_user=current_user,
+    )
+
+    return GraphData(nodes=nodes, edges=edges)
 
 
 @router.post("/nodes")
@@ -516,7 +606,7 @@ async def create_node(
 ) -> GraphNode:
     """Create a new node."""
     await require_workspace_access(current_user.id, node.workspace_id)
-    store = get_triple_store(request)
+    store = get_triple_store_service(request)
     node_id = f"node-{uuid.uuid4().hex[:12]}"
     now = datetime.now(UTC).replace(tzinfo=None)
     created = GraphNode(
@@ -538,7 +628,7 @@ async def get_node(
     node_id: str,
 ) -> GraphNode:
     """Get a node by ID."""
-    store = get_triple_store(request)
+    store = get_triple_store_service(request)
     node = _get_node_by_id(store, node_id)
     if node is None:
         raise HTTPException(status_code=404, detail="Node not found")
@@ -552,7 +642,7 @@ async def update_node(
     updates: GraphNodeUpdate,
 ) -> GraphNode:
     """Update a node."""
-    store = get_triple_store(request)
+    store = get_triple_store_service(request)
     existing = _get_node_by_id(store, node_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Node not found")
@@ -578,7 +668,7 @@ async def delete_node(
     node_id: str,
 ) -> dict[str, Any]:
     """Delete a node and its connected edges."""
-    store = get_triple_store(request)
+    store = get_triple_store_service(request)
     node = _get_node_by_id(store, node_id)
     if node is None:
         raise HTTPException(status_code=404, detail="Node not found")
@@ -601,68 +691,6 @@ async def delete_node(
     return {"status": "deleted", "edges_deleted": edge_count}
 
 
-@router.get("/edges")
-async def list_edges(
-    request: Request,
-    workspace_id: str,
-    type: str | None = None,
-    limit: int = Query(default=100, le=1000),
-    offset: int = 0,
-    current_user: User = Depends(get_current_user_required),
-) -> list[GraphEdge]:
-    """List edges, optionally filtered by type."""
-    await require_workspace_access(current_user.id, workspace_id)
-    from naas_abi import ABIModule
-    from rdflib.query import ResultRow
-
-    triple_store_service = ABIModule.get_instance().engine.services.triple_store
-
-    relation_filter = ""
-    if type:
-        relation_filter = f"FILTER(LCASE(STR(COALESCE(?predicate_label, ?predicate))) = LCASE({_sparql_str(type)}))"
-
-    # Query object-property triples linking Named Individuals.
-    # Keep only URIRefs (subject/predicate/object) to exclude blank nodes.
-    query = f"""
-    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    PREFIX owl: <http://www.w3.org/2002/07/owl#>
-    SELECT DISTINCT ?source ?target ?predicate ?predicate_label
-    WHERE {{
-        ?source a owl:NamedIndividual .
-        ?target a owl:NamedIndividual .
-        ?source ?predicate ?target .
-        OPTIONAL {{ ?predicate rdfs:label ?predicate_label . }}
-        FILTER(isIRI(?source) && isIRI(?predicate) && isIRI(?target))
-        {relation_filter}
-    }}
-    LIMIT {int(limit)}
-    OFFSET {int(offset)}
-    """
-
-    rows = triple_store_service.query(query)
-    edges: list[GraphEdge] = []
-    for row in rows:
-        assert isinstance(row, ResultRow)
-        source = str(row.source)
-        target = str(row.target)
-        predicate = str(row.predicate)
-        predicate_label = str(row.predicate_label) if row.predicate_label else predicate
-        edge_id = f"{source}|{predicate}|{target}"
-        edges.append(
-            GraphEdge(
-                id=edge_id,
-                workspace_id=workspace_id,
-                source_id=source,
-                target_id=target,
-                type=predicate_label,
-                properties={"predicate_iri": predicate},
-                created_at=None,
-            )
-        )
-    return edges
-
-
 @router.post("/edges")
 async def create_edge(
     request: Request,
@@ -671,7 +699,7 @@ async def create_edge(
 ) -> GraphEdge:
     """Create a new edge between nodes."""
     await require_workspace_access(current_user.id, edge.workspace_id)
-    store = get_triple_store(request)
+    store = get_triple_store_service(request)
 
     # Verify source and target exist
     for nid, label in [(edge.source_id, "Source"), (edge.target_id, "Target")]:
@@ -699,7 +727,7 @@ async def get_edge(
     edge_id: str,
 ) -> GraphEdge:
     """Get an edge by ID."""
-    store = get_triple_store(request)
+    store = get_triple_store_service(request)
     edge = _get_edge_by_id(store, edge_id)
     if edge is None:
         raise HTTPException(status_code=404, detail="Edge not found")
@@ -712,7 +740,7 @@ async def delete_edge(
     edge_id: str,
 ) -> dict[str, str]:
     """Delete an edge."""
-    store = get_triple_store(request)
+    store = get_triple_store_service(request)
     edge = _get_edge_by_id(store, edge_id)
     if edge is None:
         raise HTTPException(status_code=404, detail="Edge not found")
@@ -729,7 +757,7 @@ async def query_graph(
 ) -> GraphQueryResult:
     """Query the knowledge graph."""
     await require_workspace_access(current_user.id, workspace_id)
-    store = get_triple_store(http_request)
+    store = get_triple_store_service(http_request)
     nodes = _query_nodes(
         store=store,
         workspace_id=workspace_id,
@@ -759,7 +787,7 @@ async def get_graph_statistics(
 ) -> dict[str, Any]:
     """Get statistics for a workspace's graph."""
     await require_workspace_access(current_user.id, workspace_id)
-    store = get_triple_store(request)
+    store = get_triple_store_service(request)
 
     total_nodes = 0
     for row in store.query(f"""
