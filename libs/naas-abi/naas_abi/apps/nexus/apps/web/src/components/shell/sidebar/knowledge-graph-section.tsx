@@ -101,20 +101,24 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
 
       // Always keep at least one graph visible in sidebar, even when a fetch fails.
       const graphs: GraphItem[] = [defaultWorkspaceGraph];
-
-      const wsRes = await authFetch(`${apiUrl}/api/graph/network?workspace_id=${encodeURIComponent(currentWorkspaceId)}`);
-      if (wsRes.ok) {
-        const wsData = await wsRes.json();
-        graphs[0].nodeCount = wsData.nodes?.length || 0;
-      }
+      let networkGraphName = defaultWorkspaceGraph.name;
 
       const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
       if (namesRes.ok) {
         const namesData = await namesRes.json();
         const graphNames = Array.isArray(namesData?.graph_names) ? namesData.graph_names : [];
-        if (graphNames.length > 0) {
+        if (graphNames.length > 0 && typeof graphNames[0] === 'string') {
+          networkGraphName = graphNames[0];
           graphs[0].name = graphNames[0];
         }
+      }
+
+      const wsRes = await authFetch(
+        `${apiUrl}/api/graph/network/${encodeURIComponent(networkGraphName)}?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+      );
+      if (wsRes.ok) {
+        const wsData = await wsRes.json();
+        graphs[0].nodeCount = wsData.nodes?.length || 0;
       }
 
       setAvailableGraphs(graphs);
