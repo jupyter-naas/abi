@@ -11,7 +11,7 @@ from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from pydantic import BaseModel, Field
 from rdflib import Graph
-from rdflib.namespace import OWL, RDF
+from rdflib.namespace import OWL, RDF, RDFS
 from rdflib.term import URIRef
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -433,7 +433,13 @@ async def get_ontology_overview_stats(
             graph.parse(ontology_path)
 
         def _count_iri_subjects(rdf_type: URIRef) -> int:
-            return len({subject for subject in graph.subjects(RDF.type, rdf_type) if isinstance(subject, URIRef)})
+            return len(
+                {
+                    subject
+                    for subject in graph.subjects(RDF.type, rdf_type)
+                    if isinstance(subject, URIRef)
+                }
+            )
 
         classes_count = _count_iri_subjects(OWL.Class)
         object_properties_count = _count_iri_subjects(OWL.ObjectProperty)
@@ -467,38 +473,82 @@ async def get_ontology_overview_stats(
 
 @router.get("/overview/stats/all")
 async def get_all_ontologies_overview_stats() -> OntologyOverviewAggregateStats:
-    """Return consolidated overview stats across all registered ontologies."""
+    """Return consolidated overview stats across all registered ontologies using the triple store."""
     try:
+        from naas_abi import ABIModule
+
+        triple_store_service = ABIModule.get_instance().engine.services.triple_store
+
+        # SPARQL query to count classes, object properties, data properties, named individuals, imports
+        sparql = """
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT ?classes ?object_properties ?data_properties ?named_individuals ?imports
+        WHERE {
+        {
+            SELECT (COUNT(DISTINCT ?class) AS ?classes)
+            WHERE {
+            ?class a owl:Class .
+            }
+        }
+        {
+            SELECT (COUNT(DISTINCT ?obj_prop) AS ?object_properties)
+            WHERE {
+            ?obj_prop a owl:ObjectProperty .
+            }
+        }
+        {
+            SELECT (COUNT(DISTINCT ?data_prop) AS ?data_properties)
+            WHERE {
+            ?data_prop a owl:DatatypeProperty .
+            }
+        }
+        {
+            SELECT (COUNT(DISTINCT ?individual) AS ?named_individuals)
+            WHERE {
+            ?individual a owl:NamedIndividual .
+            }
+        }
+        {
+            SELECT (COUNT(DISTINCT ?import_iri) AS ?imports)
+            WHERE {
+            ?ontology owl:imports ?import_iri .
+            }
+        }
+        }
+        """
+
+        # Run the SPARQL query using the triple store service
+        result = triple_store_service.query(sparql)
+
+        row = None
+        for res in result:
+            row = res.asdict() if hasattr(res, "asdict") else dict(res)
+            break
+        if row is None:
+            row = {}
+
+        # Convert values to int safely, defaulting to 0 if missing
+        classes = int(row.get("classes", 0))
+        object_properties = int(row.get("object_properties", 0))
+        data_properties = int(row.get("data_properties", 0))
+        named_individuals = int(row.get("named_individuals", 0))
+        imports = int(row.get("imports", 0))
+        total_items = classes + object_properties + data_properties + named_individuals
+
+        # Get ontology count
         ontologies = await list_ontology_files()
         ontology_paths = [item.path for item in ontologies.get("items", [])]
-        totals = {
-            "total_items": 0,
-            "classes": 0,
-            "object_properties": 0,
-            "data_properties": 0,
-            "named_individuals": 0,
-            "imports": 0,
-        }
-
-        for ontology_path in ontology_paths:
-            stats = await get_ontology_overview_stats(ontology_path)
-            totals["total_items"] += stats.total_items
-            totals["classes"] += stats.classes
-            totals["object_properties"] += stats.object_properties
-            totals["data_properties"] += stats.data_properties
-            totals["named_individuals"] += stats.named_individuals
-            totals["imports"] += stats.imports
 
         return OntologyOverviewAggregateStats(
             name="All ontologies",
             path="*",
             ontologies_count=len(ontology_paths),
-            total_items=totals["total_items"],
-            classes=totals["classes"],
-            object_properties=totals["object_properties"],
-            data_properties=totals["data_properties"],
-            named_individuals=totals["named_individuals"],
-            imports=totals["imports"],
+            total_items=total_items,
+            classes=classes,
+            object_properties=object_properties,
+            data_properties=data_properties,
+            named_individuals=named_individuals,
+            imports=imports,
         )
     except Exception as exc:
         raise HTTPException(
@@ -540,206 +590,343 @@ async def get_ontology_type_counts(
 async def get_ontology_overview_graph(
     ontology_path: str | None = Query(None, alias="ontology_path"),
 ) -> OntologyOverviewGraph:
-    """Return graph data where nodes are classes and edges are class relations."""
+    """Return ontology dependency graph based on owl:imports relations."""
     from rdflib.query import ResultRow
 
     try:
         ontologies = await list_ontology_files()
         target_paths = _resolve_target_ontology_paths(ontology_path, ontologies["items"])
 
-        classes_by_iri: dict[str, OntologyOverviewGraphNode] = {}
+        # Single ontology selected: show classes + object properties (+ subclass links)
+        if ontology_path:
+            classes_by_iri: dict[str, OntologyOverviewGraphNode] = {}
+            edges_by_id: dict[str, OntologyOverviewGraphEdge] = {}
+
+            class_query = """
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+                SELECT ?classIri ?label ?definition ?parentIri ?parentLabel WHERE {
+                    ?classIri rdf:type owl:Class .
+                    FILTER(isIRI(?classIri))
+                    OPTIONAL { ?classIri rdfs:label ?label . }
+                    OPTIONAL { ?classIri skos:definition ?definition . }
+                    OPTIONAL {
+                        ?classIri rdfs:subClassOf ?parentIri .
+                        FILTER(isIRI(?parentIri))
+                        OPTIONAL { ?parentIri rdfs:label ?parentLabel . }
+                    }
+                }
+            """
+
+            relation_query = """
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+                SELECT ?propertyIri ?propertyLabel ?propertyDefinition ?domain ?range ?parentPropertyIri WHERE {
+                    ?propertyIri rdf:type owl:ObjectProperty .
+                    FILTER(isIRI(?propertyIri))
+                    OPTIONAL { ?propertyIri rdfs:label ?propertyLabel . }
+                    OPTIONAL { ?propertyIri skos:definition ?propertyDefinition . }
+                    OPTIONAL {
+                        ?propertyIri rdfs:domain ?domain .
+                        FILTER(isIRI(?domain))
+                    }
+                    OPTIONAL {
+                        ?propertyIri rdfs:range ?range .
+                        FILTER(isIRI(?range))
+                    }
+                    OPTIONAL {
+                        ?propertyIri rdfs:subPropertyOf ?parentPropertyIri .
+                        FILTER(isIRI(?parentPropertyIri))
+                    }
+                }
+            """
+
+            subclass_query = """
+                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                SELECT ?childClass ?parentClass WHERE {
+                    ?childClass rdfs:subClassOf ?parentClass .
+                    FILTER(isIRI(?childClass) && isIRI(?parentClass))
+                }
+            """
+
+            for path in target_paths:
+                graph = _load_ontology_graph(path)
+
+                for row in graph.query(class_query):
+                    assert isinstance(row, ResultRow)
+                    class_iri = str(row.get("classIri"))
+                    if not class_iri:
+                        continue
+                    class_label = (
+                        str(row.get("label")) if row.get("label") else class_iri.split("/")[-1]
+                    )
+                    definition = str(row.get("definition")) if row.get("definition") else ""
+                    parent_iri = str(row.get("parentIri")) if row.get("parentIri") else ""
+                    parent_label = str(row.get("parentLabel")) if row.get("parentLabel") else ""
+
+                    existing = classes_by_iri.get(class_iri)
+                    if existing:
+                        if not existing.properties.get("definition") and definition:
+                            existing.properties["definition"] = definition
+                        if not existing.properties.get("parent_iri") and parent_iri:
+                            existing.properties["parent_iri"] = parent_iri
+                        if not existing.properties.get("parent_label") and parent_label:
+                            existing.properties["parent_label"] = parent_label
+                        continue
+
+                    classes_by_iri[class_iri] = OntologyOverviewGraphNode(
+                        id=class_iri,
+                        label=class_label,
+                        type="Entity",
+                        properties={
+                            "iri": class_iri,
+                            "definition": definition,
+                            "parent_iri": parent_iri,
+                            "parent_label": parent_label,
+                        },
+                    )
+
+                for row in graph.query(relation_query):
+                    assert isinstance(row, ResultRow)
+                    property_iri = str(row.get("propertyIri"))
+                    if not property_iri:
+                        continue
+
+                    source_iri = str(row.get("domain")) if row.get("domain") else None
+                    target_iri = str(row.get("range")) if row.get("range") else None
+                    if not source_iri or not target_iri:
+                        continue
+
+                    if source_iri not in classes_by_iri:
+                        classes_by_iri[source_iri] = OntologyOverviewGraphNode(
+                            id=source_iri,
+                            label=source_iri.split("/")[-1],
+                            type="Entity",
+                            properties={"iri": source_iri},
+                        )
+                    if target_iri not in classes_by_iri:
+                        classes_by_iri[target_iri] = OntologyOverviewGraphNode(
+                            id=target_iri,
+                            label=target_iri.split("/")[-1],
+                            type="Entity",
+                            properties={"iri": target_iri},
+                        )
+
+                    property_label = (
+                        str(row.get("propertyLabel"))
+                        if row.get("propertyLabel")
+                        else property_iri.split("/")[-1]
+                    )
+                    edge_id = f"{source_iri}|{property_iri}|{target_iri}"
+                    if edge_id in edges_by_id:
+                        continue
+
+                    property_definition = (
+                        str(row.get("propertyDefinition")) if row.get("propertyDefinition") else ""
+                    )
+                    parent_property_iri = (
+                        str(row.get("parentPropertyIri")) if row.get("parentPropertyIri") else ""
+                    )
+                    edges_by_id[edge_id] = OntologyOverviewGraphEdge(
+                        id=edge_id,
+                        source=source_iri,
+                        target=target_iri,
+                        type=property_label,
+                        label=property_label,
+                        properties={
+                            "relation_kind": "object_property",
+                            "iri": property_iri,
+                            "definition": property_definition,
+                            "parent_property_iri": parent_property_iri,
+                        },
+                    )
+
+                for row in graph.query(subclass_query):
+                    assert isinstance(row, ResultRow)
+                    child_class = str(row.get("childClass")) if row.get("childClass") else ""
+                    parent_class = str(row.get("parentClass")) if row.get("parentClass") else ""
+                    if not child_class or not parent_class:
+                        continue
+
+                    if child_class not in classes_by_iri:
+                        classes_by_iri[child_class] = OntologyOverviewGraphNode(
+                            id=child_class,
+                            label=child_class.split("/")[-1],
+                            type="Entity",
+                            properties={
+                                "iri": child_class,
+                                "definition": "",
+                                "parent_iri": "",
+                                "parent_label": "",
+                            },
+                        )
+                    if parent_class not in classes_by_iri:
+                        classes_by_iri[parent_class] = OntologyOverviewGraphNode(
+                            id=parent_class,
+                            label=parent_class.split("/")[-1],
+                            type="Entity",
+                            properties={
+                                "iri": parent_class,
+                                "definition": "",
+                                "parent_iri": "",
+                                "parent_label": "",
+                            },
+                        )
+
+                    edge_id = f"{child_class}|is-a|{parent_class}"
+                    if edge_id in edges_by_id:
+                        continue
+                    edges_by_id[edge_id] = OntologyOverviewGraphEdge(
+                        id=edge_id,
+                        source=child_class,
+                        target=parent_class,
+                        type="is a",
+                        label="is a",
+                        properties={
+                            "relation_kind": "subclass_of",
+                            "iri": str(RDFS.subClassOf),
+                            "definition": "Subclass relationship between two classes.",
+                            "parent_property_iri": "",
+                        },
+                    )
+
+            nodes = sorted(classes_by_iri.values(), key=lambda node: node.label.lower())
+            edges = sorted(edges_by_id.values(), key=lambda edge: edge.label.lower())
+            return OntologyOverviewGraph(nodes=nodes, edges=edges)
+
+        # All ontologies selected: show ontology import dependencies
+        ontologies_by_iri: dict[str, OntologyOverviewGraphNode] = {}
         edges_by_id: dict[str, OntologyOverviewGraphEdge] = {}
 
-        class_query = """
+        ontology_query = """
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             PREFIX owl: <http://www.w3.org/2002/07/owl#>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-            SELECT ?classIri ?label ?definition ?parentIri ?parentLabel WHERE {
-                ?classIri rdf:type owl:Class .
-                FILTER(isIRI(?classIri))
-                OPTIONAL { ?classIri rdfs:label ?label . }
-                OPTIONAL { ?classIri skos:definition ?definition . }
-                OPTIONAL {
-                    ?classIri rdfs:subClassOf ?parentIri .
-                    FILTER(isIRI(?parentIri))
-                    OPTIONAL { ?parentIri rdfs:label ?parentLabel . }
-                }
+            SELECT ?ontologyIri ?label ?comment ?versionInfo WHERE {
+                ?ontologyIri rdf:type owl:Ontology .
+                FILTER(isIRI(?ontologyIri))
+                OPTIONAL { ?ontologyIri rdfs:label ?label . }
+                OPTIONAL { ?ontologyIri rdfs:comment ?comment . }
+                OPTIONAL { ?ontologyIri owl:versionInfo ?versionInfo . }
             }
         """
 
-        relation_query = """
+        imports_query = """
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             PREFIX owl: <http://www.w3.org/2002/07/owl#>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-            SELECT ?propertyIri ?propertyLabel ?propertyDefinition ?domain ?range ?parentPropertyIri WHERE {
-                ?propertyIri rdf:type owl:ObjectProperty .
-                FILTER(isIRI(?propertyIri))
-                OPTIONAL { ?propertyIri rdfs:label ?propertyLabel . }
-                OPTIONAL { ?propertyIri skos:definition ?propertyDefinition . }
-                OPTIONAL {
-                    ?propertyIri rdfs:domain ?domain .
-                    FILTER(isIRI(?domain))
-                }
-                OPTIONAL {
-                    ?propertyIri rdfs:range ?range .
-                    FILTER(isIRI(?range))
-                }
-                OPTIONAL {
-                    ?propertyIri rdfs:subPropertyOf ?parentPropertyIri .
-                    FILTER(isIRI(?parentPropertyIri))
-                }
+            SELECT ?sourceOntology ?targetOntology WHERE {
+                ?sourceOntology rdf:type owl:Ontology .
+                ?sourceOntology owl:imports ?targetOntology .
+                FILTER(isIRI(?sourceOntology) && isIRI(?targetOntology))
             }
         """
 
-        subclass_query = """
-            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            SELECT ?childClass ?parentClass WHERE {
-                ?childClass rdfs:subClassOf ?parentClass .
-                FILTER(isIRI(?childClass) && isIRI(?parentClass))
-            }
-        """
+        def _label_from_iri(iri: str) -> str:
+            if "#" in iri:
+                return iri.rsplit("#", 1)[-1]
+            return iri.rstrip("/").rsplit("/", 1)[-1]
 
         for path in target_paths:
             graph = _load_ontology_graph(path)
 
-            for row in graph.query(class_query):
+            for row in graph.query(ontology_query):
                 assert isinstance(row, ResultRow)
-                class_iri = str(row.get("classIri"))
-                if not class_iri:
+                ontology_iri = str(row.get("ontologyIri"))
+                if not ontology_iri:
                     continue
-                class_label = (
-                    str(row.get("label")) if row.get("label") else class_iri.split("/")[-1]
+                ontology_label = (
+                    str(row.get("label")) if row.get("label") else _label_from_iri(ontology_iri)
                 )
-                definition = str(row.get("definition")) if row.get("definition") else ""
-                parent_iri = str(row.get("parentIri")) if row.get("parentIri") else ""
-                parent_label = str(row.get("parentLabel")) if row.get("parentLabel") else ""
+                comment = str(row.get("comment")) if row.get("comment") else ""
+                version_info = str(row.get("versionInfo")) if row.get("versionInfo") else ""
 
-                existing = classes_by_iri.get(class_iri)
+                existing = ontologies_by_iri.get(ontology_iri)
                 if existing:
-                    if not existing.properties.get("definition") and definition:
-                        existing.properties["definition"] = definition
-                    if not existing.properties.get("parent_iri") and parent_iri:
-                        existing.properties["parent_iri"] = parent_iri
-                    if not existing.properties.get("parent_label") and parent_label:
-                        existing.properties["parent_label"] = parent_label
+                    if not existing.properties.get("comment") and comment:
+                        existing.properties["comment"] = comment
+                    if not existing.properties.get("version_info") and version_info:
+                        existing.properties["version_info"] = version_info
+                    if not existing.properties.get("source_path") and path:
+                        existing.properties["source_path"] = path
                     continue
 
                 properties = {
-                    "iri": class_iri,
-                    "definition": definition,
-                    "parent_iri": parent_iri,
-                    "parent_label": parent_label,
+                    "iri": ontology_iri,
+                    "comment": comment,
+                    "version_info": version_info,
+                    "source_path": path,
                 }
-                classes_by_iri[class_iri] = OntologyOverviewGraphNode(
-                    id=class_iri,
-                    label=class_label,
-                    type="Entity",
+                ontologies_by_iri[ontology_iri] = OntologyOverviewGraphNode(
+                    id=ontology_iri,
+                    label=ontology_label,
+                    type="Ontology",
                     properties=properties,
                 )
 
-            for row in graph.query(relation_query):
+            for row in graph.query(imports_query):
                 assert isinstance(row, ResultRow)
-                property_iri = str(row.get("propertyIri"))
-                if not property_iri:
-                    continue
-
-                source_iri = str(row.get("domain")) if row.get("domain") else None
-                target_iri = str(row.get("range")) if row.get("range") else None
+                source_iri = str(row.get("sourceOntology")) if row.get("sourceOntology") else ""
+                target_iri = str(row.get("targetOntology")) if row.get("targetOntology") else ""
                 if not source_iri or not target_iri:
                     continue
 
-                if source_iri not in classes_by_iri:
-                    classes_by_iri[source_iri] = OntologyOverviewGraphNode(
+                if source_iri not in ontologies_by_iri:
+                    ontologies_by_iri[source_iri] = OntologyOverviewGraphNode(
                         id=source_iri,
-                        label=source_iri.split("/")[-1],
-                        type="Entity",
-                        properties={"iri": source_iri},
+                        label=_label_from_iri(source_iri),
+                        type="Ontology",
+                        properties={
+                            "iri": source_iri,
+                            "comment": "",
+                            "version_info": "",
+                            "source_path": "",
+                        },
                     )
-                if target_iri not in classes_by_iri:
-                    classes_by_iri[target_iri] = OntologyOverviewGraphNode(
+                if target_iri not in ontologies_by_iri:
+                    ontologies_by_iri[target_iri] = OntologyOverviewGraphNode(
                         id=target_iri,
-                        label=target_iri.split("/")[-1],
-                        type="Entity",
-                        properties={"iri": target_iri},
+                        label=_label_from_iri(target_iri),
+                        type="Ontology",
+                        properties={
+                            "iri": target_iri,
+                            "comment": "",
+                            "version_info": "",
+                            "source_path": "",
+                        },
                     )
 
-                property_label = (
-                    str(row.get("propertyLabel"))
-                    if row.get("propertyLabel")
-                    else property_iri.split("/")[-1]
-                )
-                edge_id = f"{source_iri}|{property_iri}|{target_iri}"
+                edge_id = f"{source_iri}|imports|{target_iri}"
                 if edge_id in edges_by_id:
                     continue
 
-                property_definition = (
-                    str(row.get("propertyDefinition")) if row.get("propertyDefinition") else ""
-                )
-                parent_property_iri = (
-                    str(row.get("parentPropertyIri")) if row.get("parentPropertyIri") else ""
-                )
                 edges_by_id[edge_id] = OntologyOverviewGraphEdge(
                     id=edge_id,
                     source=source_iri,
                     target=target_iri,
-                    type=property_label,
-                    label=property_label,
+                    type="imports",
+                    label="imports",
                     properties={
-                        "relation_kind": "object_property",
-                        "iri": property_iri,
-                        "definition": property_definition,
-                        "parent_property_iri": parent_property_iri,
-                    },
-                )
-
-            for row in graph.query(subclass_query):
-                assert isinstance(row, ResultRow)
-                child_class = str(row.get("childClass")) if row.get("childClass") else ""
-                parent_class = str(row.get("parentClass")) if row.get("parentClass") else ""
-                if not child_class or not parent_class:
-                    continue
-
-                if child_class not in classes_by_iri:
-                    classes_by_iri[child_class] = OntologyOverviewGraphNode(
-                        id=child_class,
-                        label=child_class.split("/")[-1],
-                        type="Entity",
-                        properties={"iri": child_class, "definition": "", "parent_iri": "", "parent_label": ""},
-                    )
-                if parent_class not in classes_by_iri:
-                    classes_by_iri[parent_class] = OntologyOverviewGraphNode(
-                        id=parent_class,
-                        label=parent_class.split("/")[-1],
-                        type="Entity",
-                        properties={"iri": parent_class, "definition": "", "parent_iri": "", "parent_label": ""},
-                    )
-
-                edge_id = f"{child_class}|is-a|{parent_class}"
-                if edge_id in edges_by_id:
-                    continue
-                edges_by_id[edge_id] = OntologyOverviewGraphEdge(
-                    id=edge_id,
-                    source=child_class,
-                    target=parent_class,
-                    type="is a",
-                    label="is a",
-                    properties={
-                        "relation_kind": "subclass_of",
-                        "iri": "http://www.w3.org/2000/01/rdf-schema#subClassOf",
-                        "definition": "Subclass relationship between two classes.",
+                        "relation_kind": "imports",
+                        "iri": str(OWL.imports),
+                        "definition": "Ontology import dependency.",
                         "parent_property_iri": "",
                     },
                 )
 
-        nodes = sorted(classes_by_iri.values(), key=lambda node: node.label.lower())
+        nodes = sorted(ontologies_by_iri.values(), key=lambda node: node.label.lower())
         edges = sorted(edges_by_id.values(), key=lambda edge: edge.label.lower())
         return OntologyOverviewGraph(nodes=nodes, edges=edges)
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to compute ontology overview graph") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to compute ontology overview graph"
+        ) from exc
 
 
 @router.post("/entity")

@@ -1031,6 +1031,7 @@ function OntologyOverviewView({
   const [graphSearchQuery, setGraphSearchQuery] = useState('');
   const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(null);
+  const isAllOntologiesOverview = !ontologyPath;
 
   useEffect(() => {
     let cancelled = false;
@@ -1213,7 +1214,9 @@ function OntologyOverviewView({
             </div>
           </div>
           <div className="mt-6">
-            <h3 className="mb-3 text-sm font-medium">Classes and Object Properties</h3>
+            <h3 className="mb-3 text-sm font-medium">
+              {isAllOntologiesOverview ? 'Ontology Dependencies' : 'Classes and Object Properties'}
+            </h3>
             <div className="h-[560px] rounded-lg border overflow-hidden">
               <div className="flex h-full">
                 <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
@@ -1224,7 +1227,7 @@ function OntologyOverviewView({
                         type="text"
                         value={graphSearchQuery}
                         onChange={(event) => setGraphSearchQuery(event.target.value)}
-                        placeholder="Search classes..."
+                        placeholder={isAllOntologiesOverview ? 'Search ontologies...' : 'Search classes...'}
                         className="w-52 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                       />
                       {graphSearchQuery && (
@@ -1238,7 +1241,7 @@ function OntologyOverviewView({
                     </div>
                     {graphSearchQuery && (
                       <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                        Showing {filteredGraphNodes.length} of {graphNodes.length} classes
+                        Showing {filteredGraphNodes.length} of {graphNodes.length} {isAllOntologiesOverview ? 'ontologies' : 'classes'}
                       </span>
                     )}
                   </div>
@@ -1256,7 +1259,7 @@ function OntologyOverviewView({
                     </div>
                   ) : filteredGraphNodes.length === 0 ? (
                     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      No classes found for this ontology.
+                      {isAllOntologiesOverview ? 'No ontologies found for this selection.' : 'No classes found for this ontology.'}
                     </div>
                   ) : (
                     <VisNetwork
@@ -1302,7 +1305,7 @@ function OntologyOverviewView({
                           </div>
                           <div>
                             <p className="text-xs uppercase tracking-wide text-muted-foreground">Type</p>
-                            <p>Class</p>
+                            <p>{isAllOntologiesOverview ? 'Ontology' : 'Class'}</p>
                           </div>
                           <div>
                             <p className="text-xs uppercase tracking-wide text-muted-foreground">URIRef</p>
@@ -1311,12 +1314,36 @@ function OntologyOverviewView({
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Definition</p>
-                            <p>{String(selectedGraphNode.properties?.definition || 'No definition')}</p>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {isAllOntologiesOverview ? 'Comment' : 'Definition'}
+                            </p>
+                            <p>
+                              {String(
+                                isAllOntologiesOverview
+                                  ? selectedGraphNode.properties?.comment || 'No comment'
+                                  : selectedGraphNode.properties?.definition || 'No definition'
+                              )}
+                            </p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Subclass Of</p>
-                            <p>{String(selectedGraphNode.properties?.parent_label || selectedGraphNode.properties?.parent_iri || 'None')}</p>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {isAllOntologiesOverview ? 'Version Info' : 'Subclass Of'}
+                            </p>
+                            <p>
+                              {String(
+                                isAllOntologiesOverview
+                                  ? selectedGraphNode.properties?.version_info || 'N/A'
+                                  : selectedGraphNode.properties?.parent_label || selectedGraphNode.properties?.parent_iri || 'None'
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {isAllOntologiesOverview ? 'Source Path' : 'Node Type'}
+                            </p>
+                            <p className="break-all font-mono text-xs">
+                              {String(isAllOntologiesOverview ? selectedGraphNode.properties?.source_path || 'N/A' : selectedGraphNode.type || 'Entity')}
+                            </p>
                           </div>
                         </>
                       )}
@@ -1329,11 +1356,11 @@ function OntologyOverviewView({
                           </div>
                           <div>
                             <p className="text-xs uppercase tracking-wide text-muted-foreground">Type</p>
-                            <p>Relation</p>
+                            <p>{isAllOntologiesOverview ? 'Dependency' : 'Relation'}</p>
                           </div>
                           <div>
                             <p className="text-xs uppercase tracking-wide text-muted-foreground">Kind</p>
-                            <p>{String(selectedGraphEdge.properties?.relation_kind || 'object_property')}</p>
+                            <p>{String(selectedGraphEdge.properties?.relation_kind || (isAllOntologiesOverview ? 'imports' : 'object_property'))}</p>
                           </div>
                           <div>
                             <p className="text-xs uppercase tracking-wide text-muted-foreground">URIRef</p>
@@ -1342,15 +1369,21 @@ function OntologyOverviewView({
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">From</p>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {isAllOntologiesOverview ? 'Importer' : 'From'}
+                            </p>
                             <p>{graphNodesById.get(selectedGraphEdge.source)?.label || selectedGraphEdge.source}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">To</p>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {isAllOntologiesOverview ? 'Imported Ontology' : 'To'}
+                            </p>
                             <p>{graphNodesById.get(selectedGraphEdge.target)?.label || selectedGraphEdge.target}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Definition</p>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {isAllOntologiesOverview ? 'Description' : 'Definition'}
+                            </p>
                             <p>{String(selectedGraphEdge.properties?.definition || 'No definition')}</p>
                           </div>
                         </>
