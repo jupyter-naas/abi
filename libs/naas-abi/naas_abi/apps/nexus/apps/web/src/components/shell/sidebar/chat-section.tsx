@@ -241,8 +241,10 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
   } = useWorkspaceStore();
 
   const { agents } = useAgentsStore();
+  const safeAgents = Array.isArray(agents) ? agents : [];
 
-  const allConversations = getWorkspaceConversations();
+  const allConversations = getWorkspaceConversations() ?? [];
+  const safeProjects = Array.isArray(projects) ? projects : [];
   const conversations = useMemo(() => allConversations.filter((c) => !c.archived), [allConversations]);
 
   const pinnedConvs = useMemo(() => conversations.filter((c) => c.pinned), [conversations]);
@@ -250,11 +252,11 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
 
   const projectGroups = useMemo(() => {
     const projectConvs = conversations.filter((c) => c.projectId && !c.pinned);
-    return projects.map((project) => ({
+    return safeProjects.map((project) => ({
       ...project,
       conversations: projectConvs.filter((c) => c.projectId === project.id),
     }));
-  }, [conversations, projects]);
+  }, [conversations, safeProjects]);
 
   const handleNewChat = useCallback(() => {
     createConversation();
@@ -311,7 +313,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
 
         {agentsExpanded && (
           <div className="ml-3 space-y-0.5">
-            {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
+            {safeAgents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
               const AgentIcon = agentIconComponents[agent.icon] || agentIconComponents.sparkles;
               const isSelected = selectedAgent === agent.id;
 
