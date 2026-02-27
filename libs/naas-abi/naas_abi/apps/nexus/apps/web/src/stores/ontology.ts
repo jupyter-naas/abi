@@ -60,6 +60,7 @@ export interface OntologyItem {
   
   // For items based on reference ontologies
   baseClass?: string; // IRI of the base class
+  parentName?: string;
   referenceOntologyId?: string;
   
   // Metadata
@@ -121,6 +122,7 @@ interface OntologyState {
   
   // CRUD for user items
   fetchItems: () => Promise<void>;
+  fetchItemsForView: (view: 'classes' | 'relations', ontologyPath?: string | null) => Promise<void>;
   createEntity: (name: string, description?: string, baseClass?: string) => Promise<OntologyItem | null>;
   createRelationship: (name: string, description?: string, baseProperty?: string) => Promise<OntologyItem | null>;
   createFolder: (name: string) => Promise<OntologyItem | null>;
@@ -236,12 +238,73 @@ export const useOntologyStore = create<OntologyState>()(
         set({ loading: true, error: null });
         try {
           const baseUrl = getApiUrl();
-          const response = await authFetch(`${baseUrl}/api/ontology`);
-          if (!response.ok) {
-            throw new Error(`Failed to fetch ontology: ${response.status}`);
+          const workspaceId = getCurrentWorkspaceId() || 'default';
+          const [classesResponse, relationshipsResponse] = await Promise.all([
+            authFetch(`${baseUrl}/api/ontology/classes`),
+            authFetch(`${baseUrl}/api/ontology/relationships`),
+          ]);
+
+          if (!classesResponse.ok) {
+            throw new Error(`Failed to fetch classes: ${classesResponse.status}`);
           }
-          const data = await response.json();
-          set({ items: data.items || [], loading: false });
+          if (!relationshipsResponse.ok) {
+            throw new Error(`Failed to fetch relationships: ${relationshipsResponse.status}`);
+          }
+
+          const classesData = await classesResponse.json();
+          const relationshipsData = await relationshipsResponse.json();
+
+          const normalizeItems = (rawItems: unknown): OntologyItem[] => {
+            const sourceItems = Array.isArray(rawItems)
+              ? rawItems
+              : (rawItems as { items?: unknown[] })?.items || [];
+
+            return sourceItems.map((item) => {
+              const typedItem = item as Partial<OntologyItem> & {
+                base_class?: string;
+                parent_id?: string;
+                parent_name?: string;
+                sub_class_of?: string;
+                sub_property_of?: string;
+                subClassOf?: string;
+                subPropertyOf?: string;
+                created_at?: string;
+                updated_at?: string;
+              };
+              return {
+                ...typedItem,
+                workspaceId: typedItem.workspaceId || workspaceId,
+                parentId: typedItem.parentId || typedItem.parent_id,
+                parentName: typedItem.parentName || typedItem.parent_name,
+                baseClass:
+                  typedItem.baseClass ||
+                  typedItem.base_class ||
+                  typedItem.parentId ||
+                  typedItem.parent_id ||
+                  typedItem.subClassOf ||
+                  typedItem.sub_class_of ||
+                  typedItem.subPropertyOf ||
+                  typedItem.sub_property_of,
+                createdAt: typedItem.createdAt ? new Date(typedItem.createdAt) : (
+                  typedItem.created_at ? new Date(typedItem.created_at) : new Date()
+                ),
+                updatedAt: typedItem.updatedAt ? new Date(typedItem.updatedAt) : (
+                  typedItem.updated_at ? new Date(typedItem.updated_at) : new Date()
+                ),
+              } as OntologyItem;
+            });
+          };
+
+          const fetchedItems = [
+            ...normalizeItems(classesData),
+            ...normalizeItems(relationshipsData),
+          ];
+          const localFolders = get().items.filter((item) => item.type === 'folder');
+          const mergedItems = [...fetchedItems, ...localFolders];
+          const sortedItems = mergedItems.sort((a, b) =>
+            (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+          );
+          set({ items: sortedItems, loading: false });
         } catch (err) {
           console.error('Failed to fetch ontology:', err);
           set({ 
@@ -249,6 +312,81 @@ export const useOntologyStore = create<OntologyState>()(
             loading: false,
             error: null,
           });
+        }
+      },
+
+      fetchItemsForView: async (view, ontologyPath) => {
+        set({ loading: true, error: null });
+        try {
+          const baseUrl = getApiUrl();
+          const workspaceId = getCurrentWorkspaceId() || 'default';
+          const isClassesView = view === 'classes';
+          const pathSuffix = isClassesView ? '/api/ontology/classes' : '/api/ontology/relationships';
+          const query = ontologyPath
+            ? `?ontology_path=${encodeURIComponent(ontologyPath)}`
+            : '';
+          const response = await authFetch(
+            `${baseUrl}${pathSuffix}${query}`
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch ${view}: ${response.status}`);
+          }
+
+          const data = await response.json();
+          const sourceItems = Array.isArray(data)
+            ? data
+            : (data as { items?: unknown[] })?.items || [];
+          const expectedType: OntologyItemType = isClassesView ? 'entity' : 'relationship';
+
+          const normalizedItems = sourceItems.map((item) => {
+            const typedItem = item as Partial<OntologyItem> & {
+              base_class?: string;
+              parent_id?: string;
+              parent_name?: string;
+              sub_class_of?: string;
+              sub_property_of?: string;
+              subClassOf?: string;
+              subPropertyOf?: string;
+              created_at?: string;
+              updated_at?: string;
+            };
+            return {
+              ...typedItem,
+              type: expectedType,
+              workspaceId: typedItem.workspaceId || workspaceId,
+              parentId: typedItem.parentId || typedItem.parent_id,
+              parentName: typedItem.parentName || typedItem.parent_name,
+              baseClass:
+                typedItem.baseClass ||
+                typedItem.base_class ||
+                typedItem.parentId ||
+                typedItem.parent_id ||
+                typedItem.subClassOf ||
+                typedItem.sub_class_of ||
+                typedItem.subPropertyOf ||
+                typedItem.sub_property_of,
+              createdAt: typedItem.createdAt ? new Date(typedItem.createdAt) : (
+                typedItem.created_at ? new Date(typedItem.created_at) : new Date()
+              ),
+              updatedAt: typedItem.updatedAt ? new Date(typedItem.updatedAt) : (
+                typedItem.updated_at ? new Date(typedItem.updated_at) : new Date()
+              ),
+            } as OntologyItem;
+          });
+
+          set((state) => {
+            const preservedItems = state.items.filter((item) =>
+              isClassesView ? item.type !== 'entity' : item.type !== 'relationship'
+            );
+            const mergedItems = [...preservedItems, ...normalizedItems].sort((a, b) =>
+              (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+            );
+            return { items: mergedItems, loading: false };
+          });
+        } catch (err) {
+          console.error(`Failed to fetch ${view}:`, err);
+          set({ loading: false, error: null });
         }
       },
 

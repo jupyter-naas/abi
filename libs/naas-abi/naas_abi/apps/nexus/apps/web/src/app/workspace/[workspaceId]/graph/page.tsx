@@ -1,39 +1,38 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
   Filter,
   Search,
-  Plus,
+  Eye,
   Network,
-  Table,
   Code,
-  BarChart3,
-  Layers,
+  Table,
   Play,
   Save,
   Trash2,
-  Download,
-  Upload,
   Box,
   Link2,
   Circle,
   RefreshCw,
   X,
-  Database,
   Share2,
   Workflow,
   Loader2,
+  UserPlus,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
-import { useKnowledgeGraphStore, type GraphViewType } from '@/stores/knowledge-graph';
+import {
+  useKnowledgeGraphStore,
+  type GraphViewType,
+  type GraphTripleFilter,
+  type GraphView,
+} from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
 
 // Dynamically import vis-network to avoid SSR issues
@@ -61,6 +60,8 @@ interface ApiEdge {
   workspace_id: string;
   source_id: string;
   target_id: string;
+  source_label?: string;
+  target_label?: string;
   type: string;
   properties?: Record<string, unknown>;
 }
@@ -79,20 +80,189 @@ interface GraphEdge {
   id: string;
   source: string;
   target: string;
+  sourceLabel?: string;
+  targetLabel?: string;
   type: string;
   label?: string;
+  properties?: Record<string, unknown>;
 }
 
-const VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
-  { id: 'visual', label: 'Visual', icon: Network },
+const GRAPH_VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
+  { id: 'overview', label: 'Overview', icon: Eye },
+  { id: 'entities', label: 'Network', icon: Network },
   { id: 'table', label: 'Table', icon: Table },
-  { id: 'sparql', label: 'SPARQL', icon: Code },
-  { id: 'schema', label: 'Schema', icon: Layers },
-  { id: 'statistics', label: 'Statistics', icon: BarChart3 },
 ];
+
+const LEGACY_VIEW_MAP: Record<string, GraphViewType> = {
+  visual: 'entities',
+  schema: 'overview',
+  statistics: 'overview',
+};
+
+const isGraphViewType = (value: string): value is GraphViewType =>
+  GRAPH_VIEW_TYPES.some((view) => view.id === value);
+
+type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'sparql';
+
+interface OntologyClassOption {
+  id: string;
+  name: string;
+}
+
+interface GraphOption {
+  id: string;
+  name: string;
+}
+
+interface FilterOption {
+  uri: string;
+  label: string;
+}
+
+interface FilterOptionsResponse {
+  subjects: FilterOption[];
+  predicates: FilterOption[];
+  objects: FilterOption[];
+}
+
+interface ViewFilterDraft {
+  subject_uri: string;
+  predicate_uri: string;
+  object_uri: string;
+}
+
+function FilterOptionDropdown({
+  options,
+  value,
+  onChange,
+  placeholder,
+}: {
+  options: FilterOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+        setSearchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const t = searchQuery.trim().toLowerCase();
+    const list = !t
+      ? options
+      : options.filter(
+          (o) => o.label.toLowerCase().includes(t) || o.uri.toLowerCase().includes(t)
+        );
+    if (value && !list.some((o) => o.uri === value)) {
+      const sel = options.find((o) => o.uri === value);
+      if (sel) return [sel, ...list];
+    }
+    return list;
+  }, [options, searchQuery, value]);
+
+  const selected = options.find((o) => o.uri === value);
+  const displayLabel = selected ? `${selected.label} (${selected.uri})` : '';
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'flex w-full items-center justify-between rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary',
+          'hover:bg-muted/50'
+        )}
+      >
+        <span className={cn('truncate', !value && 'text-muted-foreground')}>
+          {displayLabel || placeholder}
+        </span>
+        <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[16rem] max-h-64 overflow-hidden rounded-lg border bg-background shadow-lg">
+          <div className="sticky top-0 border-b bg-background p-2">
+            <input
+              type="text"
+              placeholder={`Search ${placeholder.toLowerCase()}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+                setSearchQuery('');
+              }}
+              className={cn(
+                'flex w-full items-center px-3 py-2 text-left text-sm',
+                'hover:bg-muted',
+                !value && 'bg-muted'
+              )}
+            >
+              <span className="text-muted-foreground">{placeholder}</span>
+            </button>
+            {filtered.map((option) => (
+              <button
+                key={option.uri}
+                type="button"
+                onClick={() => {
+                  onChange(option.uri);
+                  setOpen(false);
+                  setSearchQuery('');
+                }}
+                className={cn(
+                  'flex w-full items-center px-3 py-2 text-left text-sm',
+                  'hover:bg-muted',
+                  value === option.uri && 'bg-muted'
+                )}
+              >
+                <span className="truncate">
+                  {option.label} ({option.uri})
+                </span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                No matches for &quot;{searchQuery}&quot;
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ApiGraphView {
+  id: string;
+  workspace_id: string;
+  name: string;
+  graph_names: string[];
+  filters: GraphTripleFilter[];
+  created_at?: string;
+}
 
 export default function GraphPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const workspaceId = params.workspaceId as string;
   
   // Local state for graph data from API (not persisted to localStorage)
@@ -106,86 +276,113 @@ export default function GraphPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const { activeViewType, setActiveViewType, visibleGraphIds } = useKnowledgeGraphStore();
+  const {
+    activeViewType,
+    setActiveViewType,
+    visibleGraphIds,
+    setVisibleGraphs,
+    views,
+    activeSavedViewId,
+    setActiveSavedView,
+    setViews,
+  } = useKnowledgeGraphStore();
   const [zoomLevel, setZoomLevel] = useState(1);
   const [currentQuery, setCurrentQuery] = useState('');
   const [queryResults, setQueryResults] = useState<Record<string, string>[] | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [editorHeight, setEditorHeight] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
+  const [pageMode, setPageMode] = useState<GraphPageMode>('graph');
+  const [individualLabel, setIndividualLabel] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [availableClasses, setAvailableClasses] = useState<OntologyClassOption[]>([]);
+  const [classesLoading, setClassesLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creatingIndividual, setCreatingIndividual] = useState(false);
+  const [viewName, setViewName] = useState('');
+  const [graphOptions, setGraphOptions] = useState<GraphOption[]>([]);
+  const [selectedViewGraphIds, setSelectedViewGraphIds] = useState<string[]>([]);
+  const [viewFilters, setViewFilters] = useState<ViewFilterDraft[]>([
+    { subject_uri: '', predicate_uri: '', object_uri: '' },
+  ]);
+  const [filterOptions, setFilterOptions] = useState<FilterOptionsResponse>({
+    subjects: [],
+    predicates: [],
+    objects: [],
+  });
+  const [viewFormError, setViewFormError] = useState<string | null>(null);
+  const [editingViewId, setEditingViewId] = useState<string | null>(null);
+  const activeSavedView = useMemo(
+    () => views.find((view) => view.id === activeSavedViewId) ?? null,
+    [views, activeSavedViewId]
+  );
+  const editingView = useMemo(
+    () => (editingViewId ? views.find((view) => view.id === editingViewId) ?? null : null),
+    [views, editingViewId]
+  );
 
   // Load graphs from API - fetches all visible graphs and merges them
   const loadFromApi = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const apiUrl = getApiUrl();
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
-      
-      // Determine which graphs to fetch based on visibility
-      // Graph IDs match the workspace_id in the database
-      let graphsToFetch: string[] = [];
-      // Only support the two virtual layers per workspace page now
-      if (visibleGraphIds.length > 0) {
-        graphsToFetch = visibleGraphIds.filter((id) => id.startsWith(`${workspaceId}#layer=`));
-      }
-      if (graphsToFetch.length === 0) {
-        graphsToFetch = [`${workspaceId}#layer=person`, `${workspaceId}#layer=organization`];
-      }
-      
-      // Fetch all visible graphs in parallel
-      const responses = await Promise.all(
-        graphsToFetch.map((graphId) => {
-          // Support virtual layers: person, organization, personview, orgview
-          const [baseId, layerParam] = graphId.split('#layer=');
-          const layer = layerParam === 'person' ? 'Person' 
-            : layerParam === 'organization' ? 'Organization' 
-            : undefined;
-          // For Person/Organization layers we want 1-hop neighborhood around those nodes,
-          // so fetch the full workspace graph and prune client-side. Only use node_type
-          // for any future strict filters.
-          const isAdjacencyLayer = layerParam === 'person' || layerParam === 'organization' || layerParam === 'personview' || layerParam === 'orgview';
-          const url = isAdjacencyLayer
-            ? `${apiUrl}/api/graph/workspaces/${baseId}`
-            : (layer ? `${apiUrl}/api/graph/workspaces/${baseId}?node_type=${encodeURIComponent(layer)}`
-                     : `${apiUrl}/api/graph/workspaces/${baseId}`);
-          return authFetch(url)
-            .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-            .then((data) => {
-              const expandNeighborhood = (seedType: 'Person' | 'Organization', hops = 2) => {
-                const seed = new Set<string>(
-                  data.nodes
-                    .filter((n: any) => n.type === seedType)
-                    .map((n: any) => String(n.id))
-                );
-                const allowed = new Set<string>(seed);
-                for (let i = 0; i < hops; i++) {
-                  let grew = false;
-                  for (const e of data.edges as any[]) {
-                    if (allowed.has(e.source_id) || allowed.has(e.target_id)) {
-                      if (!allowed.has(e.source_id)) { allowed.add(e.source_id); grew = true; }
-                      if (!allowed.has(e.target_id)) { allowed.add(e.target_id); grew = true; }
-                    }
-                  }
-                  if (!grew) break;
-                }
-                data.nodes = data.nodes.filter((n: any) => allowed.has(n.id));
-                data.edges = data.edges.filter((e: any) => allowed.has(e.source_id) && allowed.has(e.target_id));
-              };
+      let defaultGraphName = 'default';
 
-              if (layerParam === 'personview' || layerParam === 'person') {
-                // Show Person → Role → Process (2 hops) neighborhood
-                expandNeighborhood('Person', 2);
-              } else if (layerParam === 'orgview' || layerParam === 'organization') {
-                // Show Organization → (Person/Process) → neighbors (2 hops)
-                expandNeighborhood('Organization', 2);
-              }
-              return data;
-            })
-            .catch(() => ({ nodes: [], edges: [] }));
-        })
+      try {
+        const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
+        if (namesRes.ok) {
+          const namesData = await namesRes.json();
+          const graphs = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
+          const normalized = graphs
+            .filter((g: unknown) => g && typeof g === 'object' && 'id' in g && typeof (g as { id: unknown }).id === 'string')
+            .map((g: { id: string; label?: string }) => ({ id: g.id, label: g.label ?? g.id }));
+          if (normalized.length > 0) {
+            defaultGraphName = normalized[0].id;
+            setGraphOptions(normalized.map((g) => ({ id: g.id, name: g.label })));
+          } else {
+            setGraphOptions([{ id: 'default', name: 'default' }]);
+          }
+        } else {
+          setGraphOptions([{ id: 'default', name: 'default' }]);
+        }
+      } catch {
+        // Keep workspaceId fallback when graph names cannot be loaded.
+        setGraphOptions([{ id: 'default', name: 'default' }]);
+      }
+
+      // Determine fetch strategy: view_id only if view selected, graph_id only if graph(s) selected.
+      const paramsBase = new URLSearchParams({ workspace_id: workspaceId });
+      let urlsToFetch: string[];
+
+      if (activeSavedView) {
+        // View selected: single request with view_id only (backend gets graphs + filters from view)
+        paramsBase.set('view_id', activeSavedView.id);
+        urlsToFetch = [`${apiUrl}/api/graph/network?${paramsBase.toString()}`];
+      } else {
+        // Graph(s) selected: one request per graph with graph_id only
+        const graphIdsToFetch =
+          visibleGraphIds.length > 0
+            ? visibleGraphIds.filter((id) => !id.includes('#layer='))
+            : [defaultGraphName];
+        const safeGraphIds =
+          graphIdsToFetch.length > 0 ? graphIdsToFetch : [defaultGraphName];
+        urlsToFetch = safeGraphIds.map((graphId) => {
+          const params = new URLSearchParams({ workspace_id: workspaceId });
+          params.set('graph_id', graphId);
+          return `${apiUrl}/api/graph/network?${params.toString()}`;
+        });
+      }
+
+      const responses = await Promise.all(
+        urlsToFetch.map((url) =>
+          authFetch(url)
+            .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
+            .catch(() => ({ nodes: [], edges: [] }))
+        )
       );
       
       // Merge all graph data
@@ -207,8 +404,11 @@ export default function GraphPage() {
             id: edge.id,
             source: edge.source_id,
             target: edge.target_id,
+            sourceLabel: edge.source_label,
+            targetLabel: edge.target_label,
             type: edge.type,
             label: edge.type,
+            properties: edge.properties || {},
           }));
           allEdges.push(...visEdges);
         }
@@ -226,12 +426,317 @@ export default function GraphPage() {
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, visibleGraphIds]);
+  }, [workspaceId, visibleGraphIds, activeSavedView]);
+
+  const loadViewsFromApi = useCallback(async () => {
+    const apiUrl = getApiUrl();
+    const response = await authFetch(
+      `${apiUrl}/api/graph/views?workspace_id=${encodeURIComponent(workspaceId)}`
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to load views: ${response.status}`);
+    }
+    const data = await response.json();
+    const normalizedViews: GraphView[] = Array.isArray(data)
+      ? data.map((item: ApiGraphView) => ({
+        id: item.id,
+        name: item.name,
+        type: 'entities',
+        graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
+        filters: Array.isArray(item.filters) ? item.filters : [],
+        createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+      }))
+      : [];
+    setViews(normalizedViews);
+  }, [workspaceId, setViews]);
 
   // Load on mount and when workspace or visible graphs change
   useEffect(() => {
     loadFromApi();
   }, [loadFromApi]);
+
+  useEffect(() => {
+    loadViewsFromApi().catch((err) => {
+      console.error('Failed to load graph views:', err);
+    });
+  }, [loadViewsFromApi]);
+
+  useEffect(() => {
+    const requestedView = searchParams.get('view');
+    if (requestedView === 'new-view') {
+      setEditingViewId(null);
+      setPageMode('create-view');
+      return;
+    }
+    if (requestedView === 'edit-view') {
+      const viewId = searchParams.get('view_id');
+      setEditingViewId(viewId);
+      setPageMode('create-view');
+      return;
+    }
+    if (requestedView === 'create-individual') {
+      setEditingViewId(null);
+      setPageMode('create-individual');
+      return;
+    }
+    if (requestedView === 'sparql') {
+      setEditingViewId(null);
+      setPageMode('sparql');
+      return;
+    }
+    setEditingViewId(null);
+    setPageMode('graph');
+    if (requestedView) {
+      const normalizedView = LEGACY_VIEW_MAP[requestedView] || requestedView;
+      if (isGraphViewType(normalizedView)) {
+        setActiveViewType(normalizedView);
+      }
+    }
+  }, [searchParams, setActiveViewType]);
+
+  useEffect(() => {
+    if (pageMode === 'graph' && activeViewType === 'sparql') {
+      setActiveViewType('entities');
+    }
+  }, [pageMode, activeViewType, setActiveViewType]);
+
+  const loadOntologyClasses = useCallback(async () => {
+    setClassesLoading(true);
+    try {
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/ontology/classes`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch classes: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const sourceItems = Array.isArray(data) ? data : (data as { items?: unknown[] })?.items || [];
+      const normalizedClasses = sourceItems
+        .map((item) => {
+          const typedItem = item as { id?: string; iri?: string; name?: string; label?: string };
+          const id = typedItem.id || typedItem.iri || '';
+          const name = typedItem.name || typedItem.label || typedItem.iri || '';
+          if (!id || !name) {
+            return null;
+          }
+          return { id, name };
+        })
+        .filter((item): item is OntologyClassOption => item !== null)
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      setAvailableClasses(normalizedClasses);
+    } catch (err) {
+      console.error('Failed to fetch ontology classes:', err);
+      setAvailableClasses([]);
+    } finally {
+      setClassesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pageMode === 'create-individual') {
+      loadOntologyClasses();
+    }
+  }, [pageMode, loadOntologyClasses]);
+
+  const loadFilterOptions = useCallback(async (graphIds: string[]) => {
+    const apiUrl = getApiUrl();
+    const params = new URLSearchParams({
+      workspace_id: workspaceId,
+    });
+    const names = graphIds.length > 0 ? graphIds : ['default'];
+    for (const graphId of names) {
+      params.append('graph_names', graphId);
+    }
+    const response = await authFetch(`${apiUrl}/api/graph/filter-options?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`Failed to load filter options: ${response.status}`);
+    }
+    const data = await response.json();
+    setFilterOptions({
+      subjects: Array.isArray(data?.subjects) ? data.subjects : [],
+      predicates: Array.isArray(data?.predicates) ? data.predicates : [],
+      objects: Array.isArray(data?.objects) ? data.objects : [],
+    });
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (pageMode !== 'create-view') return;
+    loadFilterOptions(selectedViewGraphIds).catch((err) => {
+      console.error('Failed to load filter options:', err);
+      setFilterOptions({ subjects: [], predicates: [], objects: [] });
+    });
+  }, [pageMode, selectedViewGraphIds, loadFilterOptions]);
+
+  const resetCreateIndividualForm = () => {
+    setIndividualLabel('');
+    setSelectedClassId('');
+    setCreateError(null);
+  };
+
+  const closeCreateIndividualForm = () => {
+    resetCreateIndividualForm();
+    setPageMode('graph');
+    setActiveViewType('entities');
+    router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const closeSparqlView = () => {
+    setPageMode('graph');
+    setActiveViewType('entities');
+    router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const closeCreateViewForm = () => {
+    setPageMode('graph');
+    setEditingViewId(null);
+    setViewName('');
+    setSelectedViewGraphIds([]);
+    setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
+    setViewFormError(null);
+    router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const handleCreateView = async () => {
+    const normalizedName = viewName.trim();
+    if (!normalizedName) {
+      setViewFormError('Name is required.');
+      return;
+    }
+    const graphIds = selectedViewGraphIds.length > 0 ? selectedViewGraphIds : ['default'];
+    const normalizedFilters = viewFilters
+      .map((item) => ({
+        subject_uri: item.subject_uri.trim(),
+        predicate_uri: item.predicate_uri.trim(),
+        object_uri: item.object_uri.trim(),
+      }))
+      .filter((item) => item.subject_uri || item.predicate_uri || item.object_uri);
+
+    if (normalizedFilters.length === 0) {
+      setViewFormError('Add at least one filter with at least one of subject, predicate, or object.');
+      return;
+    }
+
+    setViewFormError(null);
+    const apiUrl = getApiUrl();
+    const payload = {
+      workspace_id: workspaceId,
+      name: normalizedName,
+      graph_names: graphIds,
+      filters: normalizedFilters,
+    };
+
+    let savedViewId: string | null = null;
+    if (editingViewId) {
+      const response = await authFetch(
+        `${apiUrl}/api/graph/views/${encodeURIComponent(editingViewId)}?workspace_id=${encodeURIComponent(workspaceId)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!response.ok) {
+        setViewFormError('Failed to update view.');
+        return;
+      }
+      const updated = await response.json();
+      savedViewId = typeof updated?.id === 'string' ? updated.id : editingViewId;
+    } else {
+      const response = await authFetch(`${apiUrl}/api/graph/views`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        setViewFormError('Failed to create view.');
+        return;
+      }
+      const created = await response.json();
+      savedViewId = typeof created?.id === 'string' ? created.id : null;
+    }
+
+    await loadViewsFromApi();
+    if (savedViewId) {
+      setActiveSavedView(savedViewId);
+    }
+    setVisibleGraphs(graphIds);
+    setActiveViewType('entities');
+    closeCreateViewForm();
+  };
+
+  useEffect(() => {
+    if (pageMode !== 'create-view') return;
+
+    if (editingView) {
+      setViewName(editingView.name ?? '');
+      setSelectedViewGraphIds(Array.isArray(editingView.graphIds) ? editingView.graphIds : []);
+      const normalizedFilters = Array.isArray(editingView.filters)
+        ? editingView.filters
+          .map((item) => ({
+            subject_uri: item.subject_uri ?? '',
+            predicate_uri: item.predicate_uri ?? '',
+            object_uri: item.object_uri ?? '',
+          }))
+          .filter(
+            (item) =>
+              (item.subject_uri && item.subject_uri.trim()) ||
+              (item.predicate_uri && item.predicate_uri.trim()) ||
+              (item.object_uri && item.object_uri.trim())
+          )
+        : [];
+      setViewFilters(
+        normalizedFilters.length > 0
+          ? normalizedFilters
+          : [{ subject_uri: '', predicate_uri: '', object_uri: '' }]
+      );
+      setViewFormError(null);
+      return;
+    }
+
+    setViewName('');
+    setSelectedViewGraphIds([]);
+    setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
+    setViewFormError(null);
+  }, [pageMode, editingView]);
+
+  const handleCreateIndividual = async () => {
+    const normalizedLabel = individualLabel.trim();
+    if (!normalizedLabel) return;
+
+    setCreatingIndividual(true);
+    setCreateError(null);
+    try {
+      const selectedClass = availableClasses.find((item) => item.id === selectedClassId);
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/graph/nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          type: 'Individual',
+          label: normalizedLabel,
+          properties: selectedClass
+            ? {
+              class_id: selectedClass.id,
+              class_label: selectedClass.name,
+            }
+            : {},
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed with status ${response.status}`);
+      }
+
+      await loadFromApi();
+      closeCreateIndividualForm();
+    } catch (err) {
+      console.error('Failed to create individual:', err);
+      setCreateError('Failed to create individual. Please try again.');
+    } finally {
+      setCreatingIndividual(false);
+    }
+  };
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   
@@ -400,40 +905,309 @@ export default function GraphPage() {
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Toolbar */}
           <div className="flex h-10 items-center justify-between border-b bg-muted/30 px-4">
-            <div className="flex items-center gap-2">
-              <Database size={14} className="text-workspace-accent" />
-              <span className="text-sm font-medium">Knowledge Graph</span>
-              <span className="text-xs text-muted-foreground">
-                ({nodes.length} nodes, {edges.length} edges)
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadFromApi}
-                disabled={loading}
-                className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted disabled:opacity-50"
-              >
-                {loading ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <RefreshCw size={14} />
-                )}
-                Refresh
-              </button>
-              <button className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted">
-                <Upload size={14} />
-                Import
-              </button>
-              <button className="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted">
-                <Download size={14} />
-                Export
-              </button>
-            </div>
+            {pageMode === 'graph' ? (
+              <>
+                <div className="flex items-center gap-1">
+                  {GRAPH_VIEW_TYPES.map((view) => {
+                    const Icon = view.icon;
+                    return (
+                      <button
+                        key={view.id}
+                        onClick={() => setActiveViewType(view.id)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
+                          activeViewType === view.id
+                            ? 'bg-background'
+                            : 'text-muted-foreground hover:bg-background'
+                        )}
+                      >
+                        <Icon size={14} />
+                        {view.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2" />
+              </>
+            ) : pageMode === 'sparql' ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Code size={14} />
+                SPARQL Query
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <UserPlus size={14} />
+                Create New Individual
+              </div>
+            )}
           </div>
 
           {/* Content based on view type */}
           <div className="flex flex-1 overflow-hidden">
-            {activeViewType === 'visual' && (
+            {pageMode === 'create-individual' && (
+              <div className="flex flex-1 flex-col bg-card p-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <UserPlus size={24} className="text-workspace-accent" />
+                      <h2 className="text-lg font-semibold">Create New Individual</h2>
+                    </div>
+                    <button
+                      onClick={closeCreateIndividualForm}
+                      className="rounded p-2 text-muted-foreground hover:bg-muted"
+                      title="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Label *</label>
+                      <input
+                        type="text"
+                        value={individualLabel}
+                        onChange={(event) => setIndividualLabel(event.target.value)}
+                        placeholder="e.g., Acme Corporation, Process-001"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Class</label>
+                      <select
+                        value={selectedClassId}
+                        onChange={(event) => setSelectedClassId(event.target.value)}
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        disabled={classesLoading}
+                      >
+                        <option value="">
+                          {classesLoading ? 'Loading classes...' : 'Select a class'}
+                        </option>
+                        {availableClasses.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {createError && (
+                      <p className="text-sm text-red-500">{createError}</p>
+                    )}
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        onClick={closeCreateIndividualForm}
+                        className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleCreateIndividual}
+                        disabled={!individualLabel.trim() || creatingIndividual}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                          'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                        )}
+                      >
+                        {creatingIndividual ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                        Create Individual
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {pageMode === 'create-view' && (
+              <div className="flex flex-1 flex-col bg-card p-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Filter size={24} className="text-workspace-accent" />
+                      <h2 className="text-lg font-semibold">{editingView ? 'Edit View' : 'Create New View'}</h2>
+                    </div>
+                    <button
+                      onClick={closeCreateViewForm}
+                      className="rounded p-2 text-muted-foreground hover:bg-muted"
+                      title="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Name *</label>
+                      <input
+                        type="text"
+                        value={viewName}
+                        onChange={(event) => setViewName(event.target.value)}
+                        placeholder="e.g., Agents only"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Graphs</label>
+                      <div className="space-y-1 rounded-lg border p-3">
+                        {graphOptions.map((graph) => (
+                          <label key={graph.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={selectedViewGraphIds.includes(graph.id)}
+                              onChange={(event) => {
+                                if (event.target.checked) {
+                                  setSelectedViewGraphIds((prev) => [...prev, graph.id]);
+                                } else {
+                                  setSelectedViewGraphIds((prev) => prev.filter((id) => id !== graph.id));
+                                }
+                              }}
+                            />
+                            <span>{graph.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-2 flex items-center justify-between">
+                        <label className="block text-sm font-medium">Filters</label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setViewFilters((prev) => [
+                              ...prev,
+                              { subject_uri: '', predicate_uri: '', object_uri: '' },
+                            ])
+                          }
+                          className="rounded border px-2 py-1 text-xs hover:bg-muted"
+                        >
+                          Add Filter
+                        </button>
+                      </div>
+                      <div className="space-y-3 rounded-lg border p-3">
+                        {viewFilters.map((item, index) => (
+                          <div key={`filter-${index}`} className="rounded-md border p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                              <p className="text-xs font-medium text-muted-foreground">Filter {index + 1}</p>
+                              {viewFilters.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setViewFilters((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
+                                  }
+                                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                                  title="Remove filter"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-3">
+                              <FilterOptionDropdown
+                                options={filterOptions.subjects}
+                                value={item.subject_uri}
+                                onChange={(v) =>
+                                  setViewFilters((prev) =>
+                                    prev.map((row, rowIndex) =>
+                                      rowIndex === index ? { ...row, subject_uri: v } : row
+                                    )
+                                  )
+                                }
+                                placeholder="Subject"
+                              />
+                              <FilterOptionDropdown
+                                options={filterOptions.predicates}
+                                value={item.predicate_uri}
+                                onChange={(v) =>
+                                  setViewFilters((prev) =>
+                                    prev.map((row, rowIndex) =>
+                                      rowIndex === index ? { ...row, predicate_uri: v } : row
+                                    )
+                                  )
+                                }
+                                placeholder="Predicate"
+                              />
+                              <FilterOptionDropdown
+                                options={filterOptions.objects}
+                                value={item.object_uri}
+                                onChange={(v) =>
+                                  setViewFilters((prev) =>
+                                    prev.map((row, rowIndex) =>
+                                      rowIndex === index ? { ...row, object_uri: v } : row
+                                    )
+                                  )
+                                }
+                                placeholder="Object"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {viewFormError && (
+                      <p className="text-sm text-red-500">{viewFormError}</p>
+                    )}
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        onClick={closeCreateViewForm}
+                        className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleCreateView}
+                        disabled={!viewName.trim()}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                          'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                        )}
+                      >
+                        <Filter size={16} />
+                        {editingView ? 'Save View' : 'Create View'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {pageMode === 'graph' && activeViewType === 'overview' && (
+              <div className="flex-1 overflow-auto p-6">
+                <h2 className="mb-6 text-lg font-semibold">Overview</h2>
+                <div className="grid grid-cols-4 gap-6">
+                  <StatCard title="Total Nodes" value={stats.totalNodes} icon={Circle} />
+                  <StatCard title="Total Edges" value={stats.totalEdges} icon={Link2} />
+                  <StatCard title="Avg Degree" value={stats.avgDegree.toFixed(2)} icon={Share2} />
+                  <StatCard title="Density" value={(stats.density * 100).toFixed(1) + '%'} icon={Workflow} />
+                </div>
+
+                {Object.keys(stats.nodesByType).length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="mb-4 font-medium">Nodes by Type</h3>
+                    <div className="rounded-lg border">
+                      {Object.entries(stats.nodesByType)
+                        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                        .map(([type, count]) => (
+                        <div key={type} className="flex items-center justify-between border-b p-3 last:border-b-0">
+                          <span className="flex items-center gap-2">
+                            <Box size={14} className="text-blue-500" />
+                            {type}
+                          </span>
+                          <span className="font-medium">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pageMode === 'graph' && activeViewType === 'entities' && (
               <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
                 {/* Search overlay */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
@@ -542,10 +1316,11 @@ export default function GraphPage() {
                     <BFOLegend />
                   </>
                 )}
+
               </div>
             )}
 
-            {activeViewType === 'table' && (
+            {pageMode === 'graph' && activeViewType === 'table' && (
               <div className="flex-1 overflow-auto p-4">
                 <div className="rounded-lg border">
                   <table className="w-full">
@@ -593,7 +1368,7 @@ export default function GraphPage() {
               </div>
             )}
 
-            {activeViewType === 'sparql' && (
+            {pageMode === 'sparql' && (
               <div className="flex flex-1 flex-col p-4">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -615,9 +1390,14 @@ export default function GraphPage() {
                       Save
                     </button>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Database size={12} />
-                    <span>Graphs: {visibleGraphIds.length > 0 ? visibleGraphIds.join(', ') : workspaceId}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={closeSparqlView}
+                      className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title="Close SPARQL"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
                 </div>
 
@@ -728,300 +1508,11 @@ LIMIT 100`}
               </div>
             )}
 
-            {activeViewType === 'schema' && (
-              <div className="flex-1 overflow-auto">
-                <div className="flex h-full">
-                  {/* Left: BFO Hierarchy Tree */}
-                  <div className="w-80 border-r p-4 overflow-auto">
-                    <h3 className="mb-4 font-medium text-sm flex items-center gap-2">
-                      <Layers size={14} />
-                      BFO Taxonomy
-                    </h3>
-                    
-                    {/* Tree visualization */}
-                    <div className="text-xs font-mono">
-                      {/* Entity root */}
-                      <div className="select-none">
-                        <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer font-semibold">
-                          <span className="text-muted-foreground">▼</span>
-                          <span>Entity</span>
-                        </div>
-                        
-                        {/* Continuant branch */}
-                        <div className="ml-4 border-l border-border pl-2">
-                          <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer font-medium">
-                            <span className="text-muted-foreground">▼</span>
-                            <span>Continuant</span>
-                            <span className="text-muted-foreground text-[10px]">(persists)</span>
-                          </div>
-                          
-                          {/* Independent Continuant */}
-                          <div className="ml-4 border-l border-border pl-2">
-                            <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer">
-                              <span className="text-muted-foreground">▼</span>
-                              <span>Independent Continuant</span>
-                            </div>
-                            <div className="ml-4 border-l border-border pl-2">
-                              <div 
-                                className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                style={{ backgroundColor: stats.nodesByType['Material Entity'] ? '#3b82f620' : undefined }}
-                              >
-                                <div className="w-2.5 h-2.5 rounded-full bg-[#3b82f6]" />
-                                <span className="font-medium">Material Entity</span>
-                                <span className="text-[10px] px-1 rounded bg-[#3b82f6] text-white">WHO</span>
-                                {stats.nodesByType['Material Entity'] && (
-                                  <span className="ml-auto text-muted-foreground">{stats.nodesByType['Material Entity']}</span>
-                                )}
-                              </div>
-                              <div 
-                                className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                style={{ backgroundColor: stats.nodesByType['Site'] ? '#f9731620' : undefined }}
-                              >
-                                <div className="w-2.5 h-2.5 rounded-full bg-[#f97316]" />
-                                <span className="font-medium">Site</span>
-                                <span className="text-[10px] px-1 rounded bg-[#f97316] text-white">WHERE</span>
-                                {stats.nodesByType['Site'] && (
-                                  <span className="ml-auto text-muted-foreground">{stats.nodesByType['Site']}</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Specifically Dependent Continuant */}
-                          <div className="ml-4 border-l border-border pl-2">
-                            <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer">
-                              <span className="text-muted-foreground">▼</span>
-                              <span>Specifically Dependent</span>
-                            </div>
-                            <div className="ml-4 border-l border-border pl-2">
-                              <div 
-                                className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                style={{ backgroundColor: stats.nodesByType['Quality'] ? '#ec489920' : undefined }}
-                              >
-                                <div className="w-2.5 h-2.5 rounded-full bg-[#ec4899]" />
-                                <span className="font-medium">Quality</span>
-                                <span className="text-[10px] px-1 rounded bg-[#ec4899] text-white">HOW IT IS</span>
-                                {stats.nodesByType['Quality'] && (
-                                  <span className="ml-auto text-muted-foreground">{stats.nodesByType['Quality']}</span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer">
-                                <span className="text-muted-foreground">▼</span>
-                                <span>Realizable Entity</span>
-                                <span className="text-[10px] px-1 rounded bg-[#eab308] text-white">WHY</span>
-                              </div>
-                              <div className="ml-4 border-l border-border pl-2">
-                                <div 
-                                  className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                  style={{ backgroundColor: stats.nodesByType['Role'] ? '#eab30820' : undefined }}
-                                >
-                                  <div className="w-2.5 h-2.5 rounded-full bg-[#eab308]" />
-                                  <span>Role</span>
-                                  <span className="text-[10px] text-muted-foreground">(external)</span>
-                                  {stats.nodesByType['Role'] && (
-                                    <span className="ml-auto text-muted-foreground">{stats.nodesByType['Role']}</span>
-                                  )}
-                                </div>
-                                <div 
-                                  className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                                  style={{ backgroundColor: stats.nodesByType['Disposition'] ? '#eab30820' : undefined }}
-                                >
-                                  <div className="w-2.5 h-2.5 rounded-full bg-[#eab308]" />
-                                  <span>Disposition</span>
-                                  <span className="text-[10px] text-muted-foreground">(internal)</span>
-                                  {stats.nodesByType['Disposition'] && (
-                                    <span className="ml-auto text-muted-foreground">{stats.nodesByType['Disposition']}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* GDC */}
-                          <div className="ml-4 border-l border-border pl-2">
-                            <div 
-                              className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                              style={{ backgroundColor: stats.nodesByType['GDC'] ? '#06b6d420' : undefined }}
-                            >
-                              <div className="w-2.5 h-2.5 rounded-full bg-[#06b6d4]" />
-                              <span className="font-medium">Generically Dependent</span>
-                              <span className="text-[10px] px-1 rounded bg-[#06b6d4] text-white">HOW WE KNOW</span>
-                              {stats.nodesByType['GDC'] && (
-                                <span className="ml-auto text-muted-foreground">{stats.nodesByType['GDC']}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Occurrent branch */}
-                        <div className="ml-4 border-l border-border pl-2">
-                          <div className="flex items-center gap-1 py-1 px-2 rounded hover:bg-muted cursor-pointer font-medium">
-                            <span className="text-muted-foreground">▼</span>
-                            <span>Occurrent</span>
-                            <span className="text-muted-foreground text-[10px]">(happens)</span>
-                          </div>
-                          <div className="ml-4 border-l border-border pl-2">
-                            <div 
-                              className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                              style={{ backgroundColor: stats.nodesByType['Process'] ? '#22c55e20' : undefined }}
-                            >
-                              <div className="w-2.5 h-2.5 rounded-full bg-[#22c55e]" />
-                              <span className="font-medium">Process</span>
-                              <span className="text-[10px] px-1 rounded bg-[#22c55e] text-white">WHAT</span>
-                              {stats.nodesByType['Process'] && (
-                                <span className="ml-auto text-muted-foreground">{stats.nodesByType['Process']}</span>
-                              )}
-                            </div>
-                            <div 
-                              className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted cursor-pointer"
-                              style={{ backgroundColor: stats.nodesByType['Temporal Region'] ? '#a855f720' : undefined }}
-                            >
-                              <div className="w-2.5 h-2.5 rounded-full bg-[#a855f7]" />
-                              <span className="font-medium">Temporal Region</span>
-                              <span className="text-[10px] px-1 rounded bg-[#a855f7] text-white">WHEN</span>
-                              {stats.nodesByType['Temporal Region'] && (
-                                <span className="ml-auto text-muted-foreground">{stats.nodesByType['Temporal Region']}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Right: Relationship Schema */}
-                  <div className="flex-1 p-4 overflow-auto">
-                    <h3 className="mb-4 font-medium text-sm flex items-center gap-2">
-                      <Link2 size={14} />
-                      Relationship Types ({Object.keys(edges.reduce((acc, e) => ({ ...acc, [e.type]: true }), {})).length})
-                    </h3>
-                    
-                    {/* Visual relationship grid */}
-                    <div className="grid gap-2">
-                      {(() => {
-                        const edgeSchema: Record<string, { count: number; domains: Set<string>; ranges: Set<string> }> = {};
-                        edges.forEach((e) => {
-                          const srcNode = nodes.find((n) => n.id === e.source);
-                          const tgtNode = nodes.find((n) => n.id === e.target);
-                          if (!edgeSchema[e.type]) {
-                            edgeSchema[e.type] = { count: 0, domains: new Set(), ranges: new Set() };
-                          }
-                          edgeSchema[e.type].count++;
-                          if (srcNode) edgeSchema[e.type].domains.add(srcNode.type);
-                          if (tgtNode) edgeSchema[e.type].ranges.add(tgtNode.type);
-                        });
-                        
-                        return Object.entries(edgeSchema)
-                          .sort((a, b) => b[1].count - a[1].count)
-                          .map(([type, data]) => (
-                            <div key={type} className="rounded-lg border p-3 hover:bg-muted/30 transition-colors">
-                              <div className="flex items-center gap-3">
-                                {/* Domain types */}
-                                <div className="flex -space-x-1">
-                                  {Array.from(data.domains).slice(0, 3).map((d) => {
-                                    const colors: Record<string, string> = {
-                                      'Material Entity': '#3b82f6', 'Process': '#22c55e', 'Site': '#f97316',
-                                      'Temporal Region': '#a855f7', 'Quality': '#ec4899', 'Role': '#eab308',
-                                      'Disposition': '#eab308', 'GDC': '#06b6d4'
-                                    };
-                                    return (
-                                      <div
-                                        key={d}
-                                        className="w-5 h-5 rounded-full border-2 border-background flex items-center justify-center text-[8px] text-white font-bold"
-                                        style={{ backgroundColor: colors[d] || '#6b7280' }}
-                                        title={d}
-                                      >
-                                        {d[0]}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                
-                                {/* Arrow and predicate */}
-                                <div className="flex items-center gap-2 flex-1">
-                                  <div className="h-px flex-1 bg-border" />
-                                  <span className="px-2 py-0.5 rounded-full bg-workspace-accent/20 text-workspace-accent text-xs font-medium whitespace-nowrap">
-                                    {type}
-                                  </span>
-                                  <div className="flex items-center gap-1">
-                                    <div className="h-px w-8 bg-border" />
-                                    <div className="w-0 h-0 border-l-4 border-l-border border-y-4 border-y-transparent" />
-                                  </div>
-                                </div>
-                                
-                                {/* Range types */}
-                                <div className="flex -space-x-1">
-                                  {Array.from(data.ranges).slice(0, 3).map((r) => {
-                                    const colors: Record<string, string> = {
-                                      'Material Entity': '#3b82f6', 'Process': '#22c55e', 'Site': '#f97316',
-                                      'Temporal Region': '#a855f7', 'Quality': '#ec4899', 'Role': '#eab308',
-                                      'Disposition': '#eab308', 'GDC': '#06b6d4'
-                                    };
-                                    return (
-                                      <div
-                                        key={r}
-                                        className="w-5 h-5 rounded-full border-2 border-background flex items-center justify-center text-[8px] text-white font-bold"
-                                        style={{ backgroundColor: colors[r] || '#6b7280' }}
-                                        title={r}
-                                      >
-                                        {r[0]}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                
-                                {/* Count */}
-                                <span className="text-xs text-muted-foreground ml-2">{data.count}×</span>
-                              </div>
-                              
-                              {/* Domain/Range labels */}
-                              <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
-                                <span>{Array.from(data.domains).join(', ')}</span>
-                                <span>{Array.from(data.ranges).join(', ')}</span>
-                              </div>
-                            </div>
-                          ));
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeViewType === 'statistics' && (
-              <div className="flex-1 overflow-auto p-6">
-                <h2 className="mb-6 text-lg font-semibold">Graph Statistics</h2>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  <StatCard title="Total Nodes" value={stats.totalNodes} icon={Circle} />
-                  <StatCard title="Total Edges" value={stats.totalEdges} icon={Link2} />
-                  <StatCard title="Avg Degree" value={stats.avgDegree.toFixed(2)} icon={Share2} />
-                  <StatCard title="Density" value={(stats.density * 100).toFixed(1) + '%'} icon={Workflow} />
-                  <StatCard title="Components" value={stats.connectedComponents} icon={Layers} />
-                </div>
-
-                {Object.keys(stats.nodesByType).length > 0 && (
-                  <div className="mt-8">
-                    <h3 className="mb-4 font-medium">Nodes by Type</h3>
-                    <div className="rounded-lg border">
-                      {Object.entries(stats.nodesByType).map(([type, count]) => (
-                        <div key={type} className="flex items-center justify-between border-b p-3 last:border-b-0">
-                          <span className="flex items-center gap-2">
-                            <Box size={14} className="text-blue-500" />
-                            {type}
-                          </span>
-                          <span className="font-medium">{count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
         {/* Right Panel - Node Inspector */}
-        {selectedNode && (
+        {pageMode === 'graph' && selectedNode && (
           <div className="w-72 border-l bg-card">
             <div className="flex h-10 items-center justify-between border-b px-4">
               <span className="text-sm font-medium">Inspector</span>
@@ -1100,6 +1591,9 @@ LIMIT 100`}
                               <tbody>
                                 {outgoing.map((edge) => {
                                   const targetNode = nodes.find((n) => n.id === edge.target);
+                                  const targetLabelFromProperties = typeof edge.properties?.target_label === 'string'
+                                    ? edge.properties.target_label
+                                    : undefined;
                                   return (
                                     <tr
                                       key={edge.id}
@@ -1107,7 +1601,9 @@ LIMIT 100`}
                                       onClick={() => setSelectedNodeId(edge.target)}
                                     >
                                       <td className="py-0.5 pr-2 text-workspace-accent">{edge.type}</td>
-                                      <td className="py-0.5 truncate max-w-[120px]">{targetNode?.label || edge.target}</td>
+                                      <td className="py-0.5 truncate max-w-[120px]">
+                                        {targetNode?.label || edge.targetLabel || targetLabelFromProperties || edge.target}
+                                      </td>
                                     </tr>
                                   );
                                 })}

@@ -15,17 +15,30 @@ export interface SectionProps {
   description?: string;
   href: string;
   collapsed: boolean;
+  suppressActiveHighlight?: boolean;
   children?: React.ReactNode;
   onAdd?: () => void;
   onNavigate?: () => void;
 }
 
-export function CollapsibleSection({ id, icon, label, description, href, collapsed, children, onAdd, onNavigate }: SectionProps) {
+export function CollapsibleSection({
+  id,
+  icon,
+  label,
+  description,
+  href,
+  collapsed,
+  suppressActiveHighlight = false,
+  children,
+  onAdd,
+  onNavigate,
+}: SectionProps) {
   const pathname = usePathname();
   const { expandedSections, toggleSection, sidebarCollapsed, toggleSidebar } = useWorkspaceStore();
   const isExpanded = expandedSections.includes(id);
   const isActive = pathname.startsWith(href);
   const hasChildren = Boolean(children);
+  const showSectionActive = isActive && !suppressActiveHighlight;
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -54,7 +67,7 @@ export function CollapsibleSection({ id, icon, label, description, href, collaps
         ref={sectionRef}
         className={cn(
           'group/section relative flex items-center gap-1 rounded-lg transition-all',
-          isActive && 'text-workspace-accent',
+          showSectionActive && 'text-workspace-accent',
           collapsed && 'justify-center'
         )}
         onMouseEnter={handleMouseEnter}
@@ -92,7 +105,7 @@ export function CollapsibleSection({ id, icon, label, description, href, collaps
           className={cn(
             'flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium transition-all',
             'hover:bg-workspace-accent-10 hover:text-workspace-accent',
-            isActive && 'bg-workspace-accent-10 text-workspace-accent',
+            showSectionActive && 'bg-workspace-accent-10 text-workspace-accent',
             collapsed && 'px-2 py-2.5 justify-center',
             !collapsed && !hasChildren && 'ml-6'
           )}

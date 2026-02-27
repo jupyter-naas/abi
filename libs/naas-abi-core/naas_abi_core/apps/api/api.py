@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from naas_abi_core import logger
 
 # Docs
-from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML, TAGS_METADATA
+from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML
 from naas_abi_core.engine.Engine import Engine
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     ApiConfiguration,
@@ -188,7 +188,7 @@ def custom_openapi():
         description=DESCRIPTION,
         version=get_git_tag(),
         routes=app.routes,
-        tags=TAGS_METADATA,
+        # tags=TAGS_METADATA,
     )
     openapi_schema["info"]["x-logo"] = {
         "url": f"/static/{logo_name}",

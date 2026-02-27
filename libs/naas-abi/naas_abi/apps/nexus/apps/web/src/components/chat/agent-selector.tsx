@@ -46,12 +46,6 @@ function AgentAvatar({ agent, size = 16 }: { agent: Agent; size?: number }) {
   return <AgentIcon icon={agent.icon} size={size} />;
 }
 
-function shouldShowTechnicalId(agent: Agent): boolean {
-  const normalizedName = agent.name.replace(/[\s_-]+/g, '').toLowerCase();
-  const normalizedId = agent.id.replace(/[\s_-]+/g, '').toLowerCase();
-  return normalizedName !== normalizedId;
-}
-
 export function AgentSelector() {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -169,14 +163,7 @@ export function AgentSelector() {
                     <AgentAvatar agent={agent} size={16} />
                   </div>
                   <div className="text-left flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="font-medium">{agent.name}</div>
-                      {shouldShowTechnicalId(agent) && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                          {agent.id}
-                        </span>
-                      )}
-                    </div>
+                    <div className="font-medium">{agent.name}</div>
                     <div className="text-xs text-muted-foreground truncate">{agent.description}</div>
                   </div>
                 </button>
@@ -209,14 +196,7 @@ export function AgentSelector() {
                     <AgentAvatar agent={agent} size={16} />
                   </div>
                   <div className="text-left flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="font-medium">{agent.name}</div>
-                      {shouldShowTechnicalId(agent) && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                          {agent.id}
-                        </span>
-                      )}
-                    </div>
+                    <div className="font-medium">{agent.name}</div>
                     <div className="text-xs text-muted-foreground truncate">{agent.description}</div>
                   </div>
                 </button>
