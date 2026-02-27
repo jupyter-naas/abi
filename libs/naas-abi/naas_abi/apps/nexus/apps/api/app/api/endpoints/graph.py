@@ -612,14 +612,57 @@ async def list_edges(
 ) -> list[GraphEdge]:
     """List edges, optionally filtered by type."""
     await require_workspace_access(current_user.id, workspace_id)
-    store = get_triple_store(request)
-    return _query_edges(
-        store=store,
-        workspace_id=workspace_id,
-        edge_type=type,
-        limit=limit,
-        offset=offset,
-    )
+    from naas_abi import ABIModule
+    from rdflib.query import ResultRow
+
+    triple_store_service = ABIModule.get_instance().engine.services.triple_store
+
+    relation_filter = ""
+    if type:
+        relation_filter = (
+            f"FILTER(LCASE(STR(COALESCE(?predicate_label, ?predicate))) = LCASE({_sparql_str(type)}))"
+        )
+
+    # Query object-property triples linking Named Individuals.
+    # Keep only URIRefs (subject/predicate/object) to exclude blank nodes.
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT DISTINCT ?source ?target ?predicate ?predicate_label
+    WHERE {{
+        ?source a owl:NamedIndividual .
+        ?target a owl:NamedIndividual .
+        ?source ?predicate ?target .
+        OPTIONAL {{ ?predicate rdfs:label ?predicate_label . }}
+        FILTER(isIRI(?source) && isIRI(?predicate) && isIRI(?target))
+        {relation_filter}
+    }}
+    LIMIT {int(limit)}
+    OFFSET {int(offset)}
+    """
+
+    rows = triple_store_service.query(query)
+    edges: list[GraphEdge] = []
+    for row in rows:
+        assert isinstance(row, ResultRow)
+        source = str(row.source)
+        target = str(row.target)
+        predicate = str(row.predicate)
+        predicate_label = str(row.predicate_label) if row.predicate_label else predicate
+        edge_id = f"{source}|{predicate}|{target}"
+        edges.append(
+            GraphEdge(
+                id=edge_id,
+                workspace_id=workspace_id,
+                source_id=source,
+                target_id=target,
+                type=predicate_label,
+                properties={"predicate_iri": predicate},
+                created_at=None,
+            )
+        )
+    return edges
 
 
 @router.post("/edges")
