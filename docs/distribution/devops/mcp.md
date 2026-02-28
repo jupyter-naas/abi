@@ -8,7 +8,7 @@ The Model Context Protocol (MCP) integration enables ABI agents to be exposed as
 
 The MCP integration consists of:
 
-- **MCP Server** (`src/mcp_server.py`): Lightweight server that exposes ABI agents as MCP tools
+- **MCP Server** (`libs/naas-abi-core/naas_abi_core/apps/mcp/mcp_server.py`): Lightweight server that exposes ABI agents as MCP tools
 - **Dynamic Agent Discovery**: Automatically discovers available agents from the ABI API
 - **Multiple Transport Support**: STDIO for local integrations, HTTP for remote deployments
 - **Authentication**: Secure API key-based authentication with ABI backend
@@ -41,19 +41,19 @@ The API will be available at `http://localhost:9879`
 #### Step 2: Run MCP Server (STDIO mode for Claude Desktop)
 ```bash
 # In terminal 2
-uv run python -m src.mcp_server
+make mcp
 ```
 
 #### Step 3: Run MCP Server (HTTP mode)
 ```bash
 # In terminal 2
-MCP_TRANSPORT=http uv run python -m src.mcp_server
+make mcp-http
 ```
 
 Then test the HTTP endpoint:
 ```bash
 # In terminal 3
-curl http://localhost:3000/
+curl http://localhost:8000/
 ```
 
 ### 2. Production Deployment
@@ -85,7 +85,7 @@ Add to your Claude Desktop MCP settings (`~/Library/Application Support/Claude/c
   "mcpServers": {
     "abi-local": {
       "command": "python",
-      "args": ["-m", "src.mcp_server"],
+      "args": ["mcp"],
       "env": {
         "ABI_API_KEY": "your_api_key_here"
       }
@@ -116,7 +116,7 @@ Add to your Claude Desktop MCP settings (`~/Library/Application Support/Claude/c
 Run the comprehensive test suite to validate your MCP integration:
 
 ```bash
-uv run python -m src.mcp_server_test
+make mcp-test
 ```
 
 This will validate:
@@ -182,9 +182,9 @@ uv run api
 - Check network connectivity
 
 ### MCP server fails to start
-- Check dependencies: `uv sync`
+- Check dependencies: `uv sync --all-extras`
 - Verify environment variables are set
-- Check port 3000 is not in use (for HTTP mode)
+- Check port 8000 is not in use (for HTTP mode)
 
 ### Agent calls fail
 - Verify `ABI_API_KEY` is set correctly

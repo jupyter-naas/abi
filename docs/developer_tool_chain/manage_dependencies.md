@@ -1,140 +1,86 @@
 # Managing Dependencies
 
-This document provides a comprehensive guide on how to manage dependencies in this project, which uses Poetry for dependency management and Docker for containerization.
+ABI uses [uv](https://docs.astral.sh/uv/) for Python dependency management across all packages in the monorepo.
 
-## Project Structure Overview
+## Project Structure
 
-The project consists of two main Python packages, each with its own dependency management:
+The repo contains four packages, each with its own `pyproject.toml`:
 
-1. `src` - The main project (root level)
-2. `lib/abi` - A local library that's included as a dependency in the main project
+```
+abi/
+├── pyproject.toml                     # Root workspace config
+├── libs/
+│   ├── naas-abi-core/pyproject.toml   # Core framework (pipeline, agent, triple store)
+│   ├── naas-abi/pyproject.toml        # Main ABI package (agents, ontologies, Nexus)
+│   ├── naas-abi-cli/pyproject.toml    # CLI tooling
+│   └── naas-abi-marketplace/pyproject.toml  # Community modules
+```
 
-Both packages use Poetry for dependency management, and all operations should be performed through the Makefile targets to ensure consistency.
+All packages are managed from the repo root via `uv` workspace commands.
+
+## Installing Dependencies
+
+```bash
+# Install all packages and their dependencies
+uv sync --all-extras
+```
+
+Run this after cloning, after pulling changes, or after any `pyproject.toml` modification.
 
 ## Adding Dependencies
 
-### Adding dependencies to the main project (`src`)
+### Add to root project
 
 ```bash
-make add dep=<library-name>
-```
-
-For example:
-```bash
+make add dep=<package-name>
+# e.g.
 make add dep=requests
-```
-
-To specify a specific version:
-```bash
 make add dep="requests==2.28.1"
-```
-
-To add a package with extras:
-```bash
 make add dep="uvicorn[standard]"
 ```
 
-This will:
-- Add the dependency to your root `pyproject.toml`
-- Update the `uv.lock` file
-- Install the package in your Docker environment
-
-### Adding dependencies to the `lib/abi` project
+### Add to the core abi library
 
 ```bash
-make abi-add dep=<library-name>
-```
-
-For example:
-```bash
+make abi-add dep=<package-name>
+# e.g.
 make abi-add dep=numpy
 ```
 
-This will:
-- Add the dependency to the `lib/pyproject.toml` file
-- Update the `lib/uv.lock` file
-- Install the package in your Docker environment
+Both commands update the relevant `pyproject.toml` and the `uv.lock` file automatically.
 
-## Updating Locked Dependencies
+## Updating the Lock File
 
-To update the lock files after manual changes to `pyproject.toml`:
+After manually editing a `pyproject.toml`:
 
 ```bash
 make lock
 ```
 
-## Installing All Dependencies
+## Running Commands with Dependencies
 
-To install all dependencies after cloning the project or after updating lock files:
-
-```bash
-make install
-```
-
-This command:
-- Installs all dependencies from both the main project and the `lib/abi` project
-- Updates the `lib/abi` package in the main project's environment
-
-## Accessing Shell with Dependencies Loaded
-
-To access a shell inside the Docker container with all dependencies loaded:
+uv handles the virtual environment automatically. Prefix any command with `uv run`:
 
 ```bash
-make sh
+uv run python your_script.py
+uv run abi stack start
+uv run pytest
 ```
-
-This allows you to run commands that depend on the installed packages without having to install Poetry or the dependencies locally.
 
 ## Development Dependencies
 
-Development dependencies in both `pyproject.toml` files are managed in the `[dependency-groups] dev =` section. These are automatically installed when you run `make install`.
+Development-only dependencies go in the `[dependency-groups] dev =` section of the relevant `pyproject.toml`. They are installed automatically with `uv sync --all-extras`.
 
-## Docker Integration
+## Resolving Dependency Conflicts
 
-All dependency management happens inside Docker containers, so you don't need to install Poetry or any Python packages locally on your machine. The project uses Docker Compose to ensure a consistent environment for all developers.
-
-The Docker setup ensures that:
-- All dependencies are isolated from your local system
-- Everyone on the team has the exact same development environment
-- Production builds have the same dependencies as your development environment
-
-## Common Dependency Management Tasks
-
-### Recreating the environment from scratch
-
-```bash
-make clean
-make install
-```
-
-### Adding a dependency only for development
-
-Edit the appropriate `pyproject.toml` file manually to add the dependency under `[dependency-groups] dev =`, then run:
-
-```bash
-make lock
-make install
-```
-
-### Resolving dependency conflicts
-
-If you encounter dependency conflicts when adding a new package:
-
-1. Check the error message for details on the conflict
-2. Modify the appropriate `pyproject.toml` file manually to adjust version constraints
-3. Run `make lock` to attempt to resolve the conflict
-4. Run `make install` if the lock was successful
-
-### Running tests with the current dependencies
-
-```bash
-make test
-```
+1. Check the error message for the conflicting constraint
+2. Edit the relevant `pyproject.toml` to adjust version pins
+3. Run `make lock` to re-solve the dependency graph
+4. Run `uv sync --all-extras` to install
 
 ## Best Practices
 
-1. Always use the Makefile targets to manage dependencies
-2. Keep the `uv.lock` files under version control
-3. When adding dependencies, consider which package (`src` or `lib/abi`) should own the dependency
-4. Regularly update dependencies to keep up with security patches
-5. When collaborating, pull changes and run `make install` to ensure your environment matches the updated lock files
+- Always use `make add` / `make abi-add` rather than editing `pyproject.toml` directly for new dependencies
+- Keep `uv.lock` committed to version control
+- After pulling changes from teammates, run `uv sync --all-extras` to stay in sync
+- Pin versions for packages where stability matters; leave open ranges for internal libs

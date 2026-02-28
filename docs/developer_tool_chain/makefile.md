@@ -1,436 +1,135 @@
-# ABI Project Makefile Documentation
+# Makefile Reference
 
-## Table of Contents
-- [ABI Project Makefile Documentation](#abi-project-makefile-documentation)
-  - [Table of Contents](#table-of-contents)
-  - [Introduction](#introduction)
-  - [Environment Setup](#environment-setup)
-    - [.venv](#venv)
-    - [dev-build](#dev-build)
-    - [install](#install)
-    - [add](#add)
-    - [abi-add](#abi-add)
-    - [lock](#lock)
-  - [Development](#development)
-    - [sh](#sh)
-    - [api](#api)
-    - [api-prod](#api-prod)
-    - [sparql-terminal](#sparql-terminal)
-  - [Testing](#testing)
-    - [test](#test)
-  - [Data Management](#data-management)
-    - [dvc-login](#dvc-login)
-    - [storage-pull](#storage-pull)
-    - [storage-push](#storage-push)
-    - [triplestore-prod-remove](#triplestore-prod-remove)
-    - [triplestore-prod-override](#triplestore-prod-override)
-    - [triplestore-prod-pull](#triplestore-prod-pull)
-  - [Building](#building)
-    - [build](#build)
-    - [build.linux.x86\_64](#buildlinuxx86_64)
-  - [Agents](#agents)
-    - [chat-naas-agent](#chat-naas-agent)
-    - [chat-abi-agent](#chat-abi-agent)
-    - [chat-ontology-agent](#chat-ontology-agent)
-    - [chat-support-agent](#chat-support-agent)
-  - [AI Model Management](#ai-model-management)
-    - [Listing Available Models](#listing-available-models)
-  - [Docker Compose](#docker-compose)
-    - [oxigraph-up](#oxigraph-up)
-    - [oxigraph-down](#oxigraph-down)
-    - [oxigraph-status](#oxigraph-status)
-    - [dev-up](#dev-up)
-    - [dev-down](#dev-down)
-    - [container-up](#container-up)
-    - [container-down](#container-down)
-  - [Cleanup](#cleanup)
-    - [clean](#clean)
-  - [Help](#help)
-    - [help](#help-1)
-  - [Default Target](#default-target)
-
-## Introduction
-
-A Makefile is a special file that contains a set of instructions (called targets) used to automate common tasks in software development. Each target defines a series of commands that will be executed when you run `make <target-name>` in your terminal.
-
-This documentation explains the Makefile used in the ABI project, which primarily uses Docker and Poetry for containerization and dependency management. The Makefile simplifies complex Docker and Poetry commands into easy-to-remember shortcuts.
+Run `make help` at any time to see all available commands with descriptions.
 
 ## Environment Setup
 
-### .venv
+| Command | Description |
+|---|---|
+| `make` | Default: runs help menu |
+| `uv sync --all-extras` | Install all dependencies (run after clone or pull) |
+| `make install` | Install dependencies via uv |
+| `make add dep=<pkg>` | Add a dependency to the root project |
+| `make abi-add dep=<pkg>` | Add a dependency to the `lib/abi` package |
+| `make lock` | Update uv.lock files after manual pyproject.toml changes |
+| `make build` | Build Docker image (linux/amd64) |
 
-```bash
-make .venv
-```
+## Starting Services
 
-This target sets up a virtual environment inside a Docker container using Poetry. It's a foundational target that many other targets depend on.
+| Command | Description |
+|---|---|
+| `make local-up` | Start all local services (Oxigraph, PostgreSQL, Dagster, etc.) |
+| `make local-down` | Stop and remove all local services |
+| `make local-stop` | Stop services without removing containers |
+| `make local-logs` | Tail logs for all running services |
+| `make oxigraph-up` | Start only the Oxigraph triple store |
+| `make oxigraph-down` | Stop only Oxigraph |
+| `make oxigraph-status` | Check Oxigraph container status |
 
-**What it does:** Creates a Python virtual environment with all project dependencies installed.
+## Running Agents (CLI)
 
-**When to use it:** You usually don't need to run this directly as other commands will trigger it when needed.
+| Command | Description |
+|---|---|
+| `make chat-abi-agent` | Start the main ABI agent in terminal |
+| `make chat-naas-agent` | Start the Naas platform agent |
+| `make chat-support-agent` | Start the support agent |
+| `make chat-ontology-agent` | Start the ontology engineer agent |
+| `make chat-qwen-agent` | Local Qwen3 8B model (privacy-focused) |
+| `make chat-deepseek-agent` | Local DeepSeek R1 8B |
+| `make chat-gemma-agent` | Local Gemma3 4B |
 
-### dev-build
+## API and MCP
 
-```bash
-make dev-build
-```
+| Command | Description |
+|---|---|
+| `make api` | Start the REST API server on port 9879 |
+| `make api-prod` | Run production API in Docker |
+| `make api-local` | Run API with Docker volume mounting |
+| `make mcp` | Start MCP server in STDIO mode (Claude Desktop) |
+| `make mcp-http` | Start MCP server in HTTP mode on port 8000 |
+| `make mcp-test` | Run MCP integration validation tests |
 
-**What it does:** Builds all the Docker containers defined in the docker-compose.yml file.
+## Knowledge Graph
 
-**When to use it:** When you first start working with the project or when the Docker configuration changes.
+| Command | Description |
+|---|---|
+| `make sparql-terminal` | Interactive SPARQL query terminal |
+| `make oxigraph-admin` | Oxigraph database admin interface |
+| `make oxigraph-explorer` | Web-based knowledge graph explorer (http://localhost:7878) |
+| `make triplestore-export-excel` | Export knowledge graph to Excel |
+| `make triplestore-export-turtle` | Export knowledge graph to Turtle/RDF |
+| `make triplestore-prod-pull` | Pull triple store from production |
+| `make triplestore-prod-override` | Override production with local data |
 
-### install
+## Orchestration (Dagster)
 
-```bash
-make install
-```
+| Command | Description |
+|---|---|
+| `make dagster-dev` | Start Dagster development server |
+| `make dagster-up` | Start Dagster in background |
+| `make dagster-down` | Stop Dagster |
+| `make dagster-ui` | Open Dagster web interface (http://localhost:3001) |
+| `make dagster-status` | Check asset status |
+| `make dagster-materialize` | Manually trigger all assets |
+| `make dagster-logs` | View Dagster logs |
 
-**What it does:** Installs all dependencies using Poetry and specifically updates the `abi` package.
+## Testing and Quality
 
-**When to use it:** When you first clone the repository or when dependencies have changed.
-
-### add
-
-```bash
-make add dep=<package-name>
-```
-
-**What it does:** Adds a new dependency to the project using Poetry.
-
-**When to use it:** When you need to add a new Python package to the project.
-
-**Parameters:**
-- `dep`: The name of the package to add (e.g., `make add dep=pandas`)
-
-### abi-add
-
-```bash
-make abi-add dep=<package-name>
-```
-
-**What it does:** Adds a new dependency specifically to the `lib` directory of the project.
-
-**When to use it:** When you need to add a new dependency to the library part of the project.
-
-**Parameters:**
-- `dep`: The name of the package to add
-
-### lock
-
-```bash
-make lock
-```
-
-**What it does:** Updates the Poetry lock file without installing packages.
-
-**When to use it:** When you want to update the dependency lock file after manual changes to pyproject.toml.
-
-## Development
-
-### sh
-
-```bash
-make sh
-```
-
-**What it does:** Opens an interactive bash shell in the ABI Docker container.
-
-**When to use it:** When you need to run custom commands inside the container or debug issues.
-
-### api
-
-```bash
-make api
-```
-
-**What it does:** Starts the API server on port 9879.
-
-**When to use it:** When you want to run the API locally for development.
-
-### api-prod
-
-```bash
-make api-prod
-```
-
-**What it does:** Builds and runs the production API server in a Docker container.
-
-**When to use it:** When you want to test the API in a production-like environment.
-
-### sparql-terminal
-
-```bash
-make sparql-terminal
-```
-
-**What it does:** Opens an interactive SPARQL terminal for querying the triplestore.
-
-**When to use it:** When you need to run SPARQL queries for debugging or data exploration.
-
-## Testing
-
-### test
-
-```bash
-make test
-```
-
-**What it does:** Runs all the Python tests using pytest.
-
-**When to use it:** When you want to verify that your code changes don't break existing functionality.
+| Command | Description |
+|---|---|
+| `make test` | Run all tests with pytest |
+| `make test-abi` | Test the abi library specifically |
+| `make test-api` | Test API functionality |
+| `make ftest` | Interactive fuzzy test selector |
+| `make check` | Run all code quality checks |
+| `make check-core` | Check core modules |
+| `make check-marketplace` | Check marketplace modules |
+| `make fmt` | Format code with ruff |
+| `make bandit` | Run security scan |
 
 ## Data Management
 
-### dvc-login
-
-```bash
-make dvc-login
-```
-
-**What it does:** Sets up Data Version Control (DVC) authentication.
-
-**When to use it:** When you need to authenticate with the DVC remote storage.
-
-### storage-pull
-
-```bash
-make storage-pull
-```
-
-**What it does:** Pulls data from the remote storage.
-
-**When to use it:** When you need to update your local data from the remote storage.
-
-### storage-push
-
-```bash
-make storage-push
-```
-
-**What it does:** Pushes local data changes to the remote storage.
-
-**When to use it:** After making changes to data that need to be shared with the team.
-
-### triplestore-prod-remove
-
-```bash
-make triplestore-prod-remove
-```
-
-**What it does:** Removes the production triplestore data.
-
-**When to use it:** When you need to clean up production triplestore data.
-
-### triplestore-prod-override
-
-```bash
-make triplestore-prod-override
-```
-
-**What it does:** Overrides the production triplestore with local data.
-
-**When to use it:** When you need to update the production triplestore with your local changes.
-
-### triplestore-prod-pull
-
-```bash
-make triplestore-prod-pull
-```
-
-**What it does:** Pulls triplestore data from production.
-
-**When to use it:** When you need to sync your local environment with the production triplestore.
-
-## Building
-
-### build
-
-```bash
-make build
-```
-
-**What it does:** Builds the Docker image for the project. This is an alias for `build.linux.x86_64`.
-
-**When to use it:** When you need to create a production-ready Docker image.
-
-### build.linux.x86_64
-
-```bash
-make build.linux.x86_64
-```
-
-**What it does:** Builds a Docker image specifically for Linux x86_64 architecture.
-
-**When to use it:** When you need a Docker image that will run on x86_64/amd64 platforms.
-
-## Agents
-
-### chat-naas-agent
-
-```bash
-make chat-naas-agent
-```
-
-**What it does:** Starts the Naas agent in terminal mode.
-
-**When to use it:** When you want to interact with the Naas agent through the terminal.
-
-### chat-abi-agent
-
-```bash
-make chat-abi-agent
-```
-
-**What it does:** Starts the Abi agent in terminal mode.
-
-**When to use it:** When you want to interact with the Abi agent through the terminal. This is the default target.
-
-### chat-ontology-agent
-
-```bash
-make chat-ontology-agent
-```
-
-**What it does:** Starts the Ontology agent in terminal mode.
-
-**When to use it:** When you want to interact with the Ontology agent through the terminal.
-
-### chat-support-agent
-
-```bash
-make chat-support-agent
-```
-
-**What it does:** Starts the Support agent in terminal mode.
-
-**When to use it:** When you want to interact with the Support agent through the terminal.
-
-## AI Model Management
-
-### Listing Available Models
-
-To see all AI models available on your system, use these direct commands:
-
-```bash
-# Docker Model Runner models
-docker model ls
-
-# Ollama models  
-ollama list
-
-# Both at once
-echo "🐳 DOCKER MODELS:" && docker model ls && echo -e "\n🦙 OLLAMA MODELS:" && ollama list
-```
-
-**Docker Model Runner** shows models with:
-- Model name and architecture
-- Parameters count and quantization
-- Model ID and creation date
-- Size on disk
-
-**Ollama** shows models with:
-- Model name and variant
-- Model ID (SHA hash)
-- Size and last modified date
-
-These commands give you immediate visibility into your local AI model inventory for development and testing.
-
-## Docker Compose
-
-### oxigraph-up
-
-```bash
-make oxigraph-up
-```
-
-**What it does:** Starts the Oxigraph triple store container.
-
-**When to use it:** When you need to start just the Oxigraph service without starting other containers.
-
-### oxigraph-down
-
-```bash
-make oxigraph-down
-```
-
-**What it does:** Stops the Oxigraph triple store container.
-
-**When to use it:** When you want to stop the Oxigraph service but keep other containers running.
-
-### oxigraph-status
-
-```bash
-make oxigraph-status
-```
-
-**What it does:** Shows the current status of the Oxigraph container.
-
-**When to use it:** When you want to check if Oxigraph is running and see its current state.
-
-### dev-up
-
-```bash
-make dev-up
-```
-
-**What it does:** Starts development services including Oxigraph and YasGUI (SPARQL web UI).
-
-**When to use it:** When you want to start the supporting services for development. Note: This does not start the ABI application itself, which is typically run with `uv` directly.
-
-### dev-down
-
-```bash
-make dev-down
-```
-
-**What it does:** Stops all development services.
-
-**When to use it:** When you want to shut down the development services.
-
-### container-up
-
-```bash
-make container-up
-```
-
-**What it does:** Starts the ABI application in container mode.
-
-**When to use it:** When you specifically need to run ABI in a Docker container instead of using `uv` directly. This is rarely needed in normal development.
-
-### container-down
-
-```bash
-make container-down
-```
-
-**What it does:** Stops the ABI container.
-
-**When to use it:** When you want to stop the ABI container that was started with `container-up`.
-
-## Cleanup
-
-### clean
-
-```bash
-make clean
-```
-
-**What it does:** Cleans up build artifacts, caches, and Docker containers.
-
-**When to use it:** When you want to do a clean rebuild or free up disk space by removing temporary files.
-
-## Help
-
-### help
-
-```bash
-make help
-```
-
-**What it does:** Displays a comprehensive help menu showing all available make targets organized by category.
-
-**When to use it:** When you're unfamiliar with the available commands or need a quick reference for what each command does.
-
-## Default Target
-
-The default target is `help`, which means if you run just `make` without specifying a target, it will display the help menu with all available commands.
+| Command | Description |
+|---|---|
+| `make datastore-pull` | Pull datastore from remote |
+| `make datastore-push` | Push local datastore to remote |
+| `make storage-pull` | Pull storage data |
+| `make storage-push` | Push storage changes |
+
+## Publishing
+
+| Command | Description |
+|---|---|
+| `make publish-remote-agents` | Publish agents to NaasAI workspace |
+| `make publish-remote-agents-dry-run` | Preview publishing without committing |
+| `make pull-request-description` | Generate PR description with AI |
+| `make docs-ontology` | Generate ontology documentation |
+
+## Docker
+
+| Command | Description |
+|---|---|
+| `make local-build` | Build all containers |
+| `make docker-cleanup` | Clean up Docker conflicts |
+| `make trivy-container-scan` | Security scan containers |
+| `make clean` | Remove build artifacts, caches, and containers |
+
+## Service URLs (when running)
+
+| Service | URL |
+|---|---|
+| Nexus Web UI | http://localhost:3042 |
+| Nexus API | http://localhost:9879 |
+| YasGUI (SPARQL) | http://localhost:3000 |
+| Service Portal | http://localhost:8080 |
+| MCP Server (HTTP) | http://localhost:8000 |
+| Oxigraph | http://localhost:7878 |
+| Dagster | http://localhost:3001 |
+| Fuseki | http://localhost:3030 |
+| PostgreSQL | localhost:5432 |
+| Qdrant | http://localhost:6333 |
+| MinIO | http://localhost:9000 / 9001 |
+| RabbitMQ | http://localhost:15672 |
+| Redis | localhost:6379 |
+| Matrix/Synapse | http://localhost:8008 |
+| Element Web | http://localhost:8081 |
