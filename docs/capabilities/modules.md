@@ -51,16 +51,20 @@ The ABI system uses a configuration-driven approach to load modules at runtime. 
 - **Dependency Management**: Control loading order and module dependencies
 - **Error Handling**: Graceful failure handling with detailed error messages
 
-**Configuration Example**:
+**Configuration Example** (from `config.yaml` or `config.local.yaml`):
 ```yaml
 modules:
-  - path: src/core/abi
+  - module: naas_abi
     enabled: true
-  - path: src/marketplace/applications/github
+  - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
-  - path: src/marketplace/applications/postgres
+    config:
+      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  - module: naas_abi_marketplace.applications.github
     enabled: false  # This module will not be loaded
 ```
+
+Modules are referenced by their **Python package name** (the importable path), not by filesystem path. Core modules live in `libs/naas-abi/` and `libs/naas-abi-marketplace/`. Custom modules you build can live anywhere that is importable.
 
 ### Module Structure
 
@@ -111,7 +115,7 @@ Set `enabled: false` in your `config.yaml` file:
 
 ```yaml
 modules:
-  - path: src/marketplace/applications/postgres
+  - module: naas_abi_marketplace.applications.postgres
     enabled: false  # This module will not be loaded
 ```
 

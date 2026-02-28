@@ -100,6 +100,9 @@ storage/vectorstore/*
 !libs/naas-abi/naas_abi/apps/nexus/demo/**
 !libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
 
+# Keep architecture diagrams
+!scripts/architecture/*.png
+
 
 *.pid
 sandbox/

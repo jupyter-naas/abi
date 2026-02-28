@@ -1,245 +1,112 @@
 # Apps
 
-> Note: this is a work in progress, still at specification stage and will be functional soon.
-
 ## Overview
 
-ABI Apps are interactive user interfaces built on top of ABI modules that provide specific UI/UX experiences for end users. Apps enable developers to create dedicated interfaces for their modules, making functionality accessible through visual interfaces rather than just APIs or command-line tools.
+ABI ships with four built-in user interfaces that cover the primary interaction modes. All UIs are started with `make local-up` or `uv run abi stack start` and served through Caddy as the reverse proxy.
 
-## Purpose and Benefits
+Access all interfaces through the **Service Portal** at http://localhost:8080.
 
-ABI Apps serve several key purposes in the ecosystem:
+---
 
-- **Accessibility**: Make complex ABI functionality available to non-technical users
-- **Visualization**: Provide rich visual representations of data and workflows
-- **Interactivity**: Enable real-time interaction with ABI modules and pipelines
-- **Customization**: Allow tailored user experiences for specific use cases
-- **Integration**: Bridge ABI capabilities with familiar UI frameworks
+## Built-in Interfaces
 
-## Supported Frameworks
+### Nexus Web UI
+**URL:** http://localhost:3042
 
-ABI Apps support multiple UI frameworks and interface types:
+The primary analyst and user interface. Built with React/Next.js. Provides:
+- Conversational AI interface to all registered agents
+- Workspace management
+- Knowledge graph browsing
+- Module and agent configuration
 
-1. **Streamlit**: Python-based framework ideal for data applications
-2. **Gradio**: Excellent for ML model demos and simple interfaces
-3. **Dash**: More complex framework for production-grade dashboards
-4. **Command-Line Interfaces (CLI)**: For terminal-based interaction and automation
-5. **Custom HTML/JS/CSS**: For fully customized web interfaces
+Backend API runs on http://localhost:9879.
 
-## App Architecture
+---
 
-ABI Apps follow a standard structure and are integrated with the module system:
+### YasGUI — SPARQL Workbench
+**URL:** http://localhost:3000
 
-```
-src/custom/modules/your_module_name/
-├── apps/                  # Contains UI applications
-│   ├── streamlit/         # Streamlit applications
-│   │   └── app.py         # Main Streamlit app
-│   ├── gradio/            # Gradio applications
-│   │   └── app.py         # Main Gradio app
-│   ├── cli/               # Command-line interfaces
-│   │   └── cli.py         # Main CLI tool
-│   └── assets/            # Shared assets for apps
-├── workflows/             # Module workflows used by apps
-├── pipelines/             # Module pipelines used by apps
-└── integrations/          # Module integrations used by apps
-```
+A browser-based SPARQL query editor connected to the Jena/Fuseki triple store. Use this to:
+- Run ad hoc SPARQL queries against the knowledge graph
+- Explore ontology structure and populated instances
+- Debug pipeline outputs directly in the graph
+- Export query results as CSV, JSON, or RDF
 
-## Creating a Streamlit App
+For terminal-based SPARQL queries, use `make sparql-terminal`.
 
-### Step 1: Set Up the Directory Structure
+---
 
-```bash
-mkdir -p src/custom/modules/your_module_name/apps/streamlit
-touch src/custom/modules/your_module_name/apps/streamlit/app.py
-```
+### Element — Matrix Client
+**URL:** http://localhost:8081
 
-### Step 2: Build Your Streamlit Application
+A web-based Matrix client connected to the local Synapse server. Use this for:
+- Multi-user collaboration workspaces
+- Federated messaging across ABI nodes
+- Team communication tied to the same infrastructure
 
-Create a Streamlit app that leverages your module's components:
+Matrix/Synapse server runs on http://localhost:8008.
 
-```python
-# src/custom/modules/your_module_name/apps/streamlit/app.py
-import streamlit as st
-from src.custom.your_module_name.workflows.YourWorkflow import YourWorkflow, YourWorkflowParameters, YourWorkflowConfiguration
-from src.custom.your_module_name.integrations.YourIntegration import YourIntegration, YourIntegrationConfiguration
-from src import secret
+---
 
-# Set up page config
-st.set_page_config(
-    page_title="Your ABI App",
-    page_icon="🧊",
-    layout="wide"
-)
+### CLI — Terminal Agent Interface
 
-# Display header
-st.title("Your ABI Application")
-st.markdown("This app demonstrates the capabilities of your ABI module.")
-
-# Initialize module components
-integration = YourIntegration(YourIntegrationConfiguration(
-    api_key=secret.get("YOUR_API_KEY")
-))
-
-workflow = YourWorkflow(YourWorkflowConfiguration(
-    integration_config=integration
-))
-
-# Create UI components
-user_input = st.text_input("Enter a value:")
-if st.button("Process"):
-    if user_input:
-        # Execute workflow with user input
-        result = workflow.run(YourWorkflowParameters(
-            parameter_1=user_input,
-            parameter_2=123
-        ))
-        
-        # Display results
-        st.success("Processing complete!")
-        st.json(result)
-    else:
-        st.error("Please enter a value")
-```
-
-## Creating a CLI App
-
-### Step 1: Set Up the Directory Structure
+The fastest way to interact with ABI agents without starting Docker services:
 
 ```bash
-mkdir -p src/custom/modules/your_module_name/apps/cli
-touch src/custom/modules/your_module_name/apps/cli/cli.py
+# Start the main ABI agent
+make chat-abi-agent
+
+# Other available agents
+make chat-naas-agent
+make chat-support-agent
+make chat-ontology-agent
+
+# Local (air-gapped) models via Ollama
+make chat-qwen-agent      # Qwen3 8B
+make chat-deepseek-agent  # DeepSeek R1 8B
+make chat-gemma-agent     # Gemma3 4B
 ```
 
-### Step 2: Build Your CLI Application
+---
 
-Create a CLI app using Click or another Python CLI framework:
+### MCP Server — Claude Desktop / VS Code Integration
+**HTTP URL:** http://localhost:8000
 
-```python
-# src/custom/modules/your_module_name/apps/cli/cli.py
-import click
-from src.custom.your_module_name.workflows.YourWorkflow import YourWorkflow, YourWorkflowParameters, YourWorkflowConfiguration
-from src.custom.your_module_name.integrations.YourIntegration import YourIntegration, YourIntegrationConfiguration
-from src import secret
-import json
-
-@click.group()
-def cli():
-    """Command line interface for your ABI module."""
-    pass
-
-@cli.command()
-@click.argument('input_value')
-@click.option('--parameter2', '-p', default=123, help='Value for parameter 2')
-def process(input_value, parameter2):
-    """Process data using your module's workflow."""
-    # Initialize module components
-    integration = YourIntegration(YourIntegrationConfiguration(
-        api_key=secret.get("YOUR_API_KEY")
-    ))
-    
-    workflow = YourWorkflow(YourWorkflowConfiguration(
-        integration_config=integration
-    ))
-    
-    # Execute workflow with arguments
-    result = workflow.run(YourWorkflowParameters(
-        parameter_1=input_value,
-        parameter_2=parameter2
-    ))
-    
-    # Display results
-    click.echo(json.dumps(result, indent=2))
-
-if __name__ == '__main__':
-    cli()
-```
-
-## Running Apps
-
-### Running a Streamlit App
+Exposes all ABI agents as MCP tools. Supports two transport modes:
 
 ```bash
-# From your ABI project root
-cd src/custom/modules/your_module_name/apps/streamlit
-streamlit run app.py
+make mcp        # STDIO mode — for Claude Desktop integration
+make mcp-http   # HTTP mode — for remote or VS Code integration
 ```
 
-### Running a CLI App
+See [MCP Integration](../distribution/devops/mcp.md) for Claude Desktop setup.
 
-```bash
-# From your ABI project root
-cd src/custom/modules/your_module_name/apps/cli
-python cli.py process "your input value" --parameter2 456
+---
+
+## Adding Custom Apps to a Module
+
+Custom UIs can be added to any module. ABI does not enforce a specific framework. Any Python app that imports your module's workflows and integrations works.
+
+**Recommended frameworks:**
+- **Streamlit** — fast dashboards and data apps
+- **Gradio** — ML demo interfaces
+- **Click** — CLI apps
+- **FastAPI** — REST APIs exposed via `as_api()` on workflows/pipelines
+
+**Module structure:**
+```
+your_module/
+├── apps/
+│   ├── streamlit/app.py
+│   ├── cli/cli.py
+│   └── assets/
+├── workflows/
+├── pipelines/
+└── integrations/
 ```
 
-### Integrating with ABI
-
-Apps can be registered in the module configuration to be automatically discovered:
-
-```python
-# src/custom/modules/your_module_name/__init__.py
-APPS = {
-    "streamlit": {
-        "main": "apps/streamlit/app.py",
-        "name": "Your Streamlit App",
-        "description": "Interactive web interface for your module"
-    },
-    "cli": {
-        "main": "apps/cli/cli.py",
-        "name": "Your CLI App",
-        "description": "Command-line interface for your module"
-    }
-}
-```
-
-## Deploying Apps
-
-ABI Apps can be deployed in several ways:
-
-1. **Local Deployment**: Run the app locally for development and testing
-2. **Container Deployment**: Package the app with Docker for cloud deployment
-3. **Naas.ai Deployment**: Deploy directly to the Naas.ai platform for sharing
-4. **CLI Distribution**: Package CLI apps as installable Python packages
-
-### Naas.ai Deployment
-
-To deploy your app to Naas.ai:
-
-```bash
-# From your ABI project root
-make publish-app module=your_module_name app=streamlit
-```
-
-This will package and upload your app to the Naas.ai platform, making it available at `https://app.naas.ai/your-username/your-app-name`.
-
-## Best Practices
-
-When developing ABI Apps:
-
-1. **Separate UI from Logic**: Keep business logic in workflows and pipelines, UI code in the app
-2. **Handle Errors Gracefully**: Provide clear error messages and recovery paths
-3. **Responsive Design**: Ensure your app works well on different screen sizes
-4. **Performance Optimization**: Cache results and optimize for responsive UI
-5. **Security Considerations**: Never expose credentials in client-side code
-6. **Documentation**: Include clear instructions for using the app
-7. **Testing**: Test your app with different inputs and use cases
-
-## Examples
-
-ABI includes several example apps that demonstrate best practices:
-
-- **Data Explorer**: Visualization tool for exploring ABI ontology data
-- **Pipeline Builder**: Visual interface for constructing and executing pipelines
-- **Integration Manager**: UI for managing external service connections
-- **ABI CLI**: Command-line interface for common ABI operations
-
-You can find these examples in the `src/core/common/apps/` directory.
-
-## Resources
-
-- [Streamlit Documentation](https://docs.streamlit.io/)
-- [Gradio Documentation](https://gradio.app/docs/)
-- [Dash Documentation](https://dash.plotly.com/)
-- [Click Documentation](https://click.palletsprojects.com/)
-- [ABI API Reference](../api/api-reference.md)
+**Best practices:**
+- Keep business logic in workflows and pipelines — not in the UI layer
+- Use `secret.get("KEY")` for credentials, never hardcode them in app files
+- Register custom API routes via the `as_api()` method on your workflow or pipeline class
+- For scheduled data collection, use Dagster orchestration rather than a background thread in the app
