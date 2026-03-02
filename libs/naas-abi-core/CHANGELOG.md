@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.18.2 (2026-03-02)
+
+### Bug Fixes
+
+- Manage secondary adapter dotenv with mutex
+  ([`ee76c11`](https://github.com/jupyter-naas/abi/commit/ee76c117e7b25f009c5313104fe30dc2d50599ac))
+
+
 ## v1.18.1 (2026-03-02)
 
 ### Bug Fixes
