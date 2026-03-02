@@ -328,10 +328,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             schema_triples: rdflib.query.Result = read_query_func(query)
 
             schema_rows = list(schema_triples)
-            logger.debug(f"len(schema_rows): {len(schema_rows)}")
+            # logger.debug(f"len(schema_rows): {len(schema_rows)}")
             # If schema with filePath == filepath already exists, we check if the file has been modified.
             schema_exists_in_store = len(schema_rows) > 0
-            logger.debug(f"Schema exists in store: {schema_exists_in_store}")
+            # logger.debug(f"Schema exists in store: {schema_exists_in_store}")
             if schema_exists_in_store:
                 # Open file and get content.
                 with open(filepath, "r") as file:

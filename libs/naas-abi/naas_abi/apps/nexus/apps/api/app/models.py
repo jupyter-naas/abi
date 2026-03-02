@@ -411,6 +411,7 @@ class AgentConfigModel(Base):
     id = Column(String, primary_key=True)
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
+    class_name = Column(String, nullable=True, index=True)  # Fully-qualified in-process ABI class path
     description = Column(Text, nullable=True)
     icon = Column(String, nullable=True)
     logo_url = Column(Text, nullable=True)  # URL to agent/provider logo
