@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.1 (2026-03-02)
+
+### Bug Fixes
+
+- Error build nexus web
+  ([`2f9bff2`](https://github.com/jupyter-naas/abi/commit/2f9bff2962a0510e3e3f05fdd63dc6c2cc319e40))
+
+
 ## v1.9.0 (2026-03-02)
 
 
