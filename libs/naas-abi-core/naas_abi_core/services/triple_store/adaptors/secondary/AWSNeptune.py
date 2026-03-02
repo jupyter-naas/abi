@@ -79,7 +79,7 @@ from rdflib import Graph, URIRef
 
 # Import SSH dependencies only when needed for type checking
 if TYPE_CHECKING:
-    from sshtunnel import SSHTunnelForwarder
+    from sshtunnel import SSHTunnelForwarder  # type: ignore
 
 from enum import Enum
 
@@ -354,7 +354,7 @@ class AWSNeptune(ITripleStorePort):
 
         return response
 
-    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+    def insert(self, triples: Graph, graph_name: URIRef):
         """
         Insert RDF triples into Neptune.
 
@@ -397,7 +397,7 @@ class AWSNeptune(ITripleStorePort):
 
         self.submit_query({QueryMode.UPDATE.value: query})
 
-    def remove(self, triples: Graph, graph_name: URIRef | None = None):
+    def remove(self, triples: Graph, graph_name: URIRef):
         """
         Remove RDF triples from Neptune.
 
@@ -430,8 +430,6 @@ class AWSNeptune(ITripleStorePort):
             >>> custom_graph = URIRef("http://example.org/graph/people")
             >>> neptune.remove(g, custom_graph)
         """
-        if graph_name is None:
-            graph_name = self.default_graph_name
         query = self.graph_to_query(triples, QueryType.DELETE_DATA, graph_name)
         self.submit_query({"update": query})
 
@@ -731,7 +729,7 @@ class AWSNeptune(ITripleStorePort):
         )
         print(result.text)
 
-    def clear_graph(self, graph_name: URIRef | None = None) -> None:
+    def clear_graph(self, graph_name: URIRef) -> None:
         """
         Remove all triples from a named graph.
 
@@ -739,7 +737,7 @@ class AWSNeptune(ITripleStorePort):
         the graph itself. The graph will be empty after this operation.
 
         Args:
-            graph_name (URIRef, optional): URI of the named graph to clear.
+            graph_name (URIRef): URI of the named graph to clear.
                 Defaults to Neptune's default graph.
 
         Raises:
@@ -759,10 +757,7 @@ class AWSNeptune(ITripleStorePort):
             >>> neptune.clear_graph(my_graph)
             >>> print("Graph cleared successfully")
         """
-        if graph_name is None:
-            self.submit_query({QueryMode.UPDATE.value: "CLEAR DEFAULT"})
-            return
-
+        assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
         self.submit_query({QueryMode.UPDATE.value: f"CLEAR GRAPH <{str(graph_name)}>"})

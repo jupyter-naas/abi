@@ -30,11 +30,11 @@ class OntologyEvent(Enum):
 
 class ITripleStorePort(ABC):
     @abstractmethod
-    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+    def insert(self, triples: Graph, graph_name: URIRef):
         pass
 
     @abstractmethod
-    def remove(self, triples: Graph, graph_name: URIRef | None = None):
+    def remove(self, triples: Graph, graph_name: URIRef):
         pass
 
     @abstractmethod
