@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.18.0 (2026-03-02)
+
+### Bug Fixes
+
+- Get subject graph
+  ([`a2c4b9c`](https://github.com/jupyter-naas/abi/commit/a2c4b9c9d840e7d8d6013a01bf8d74697d7cf603))
+
+### Refactoring
+
+- Get subject graph
+  ([`932b5e0`](https://github.com/jupyter-naas/abi/commit/932b5e04c631521c90834f758845795ad50cb66b))
+
+- Update adapters
+  ([`fbb9511`](https://github.com/jupyter-naas/abi/commit/fbb95114b5d960d36a1a41e4b28902820038edd4))
+
+
 ## v1.17.4 (2026-03-02)
 
 ### Bug Fixes
