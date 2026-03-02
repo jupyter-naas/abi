@@ -480,82 +480,83 @@ export function ChatInterface() {
         });
       }
     } catch (error) {
-      console.error('Chat API error:', error);
+      // console.error('Chat API error:', error);
       
       // Check if it's an Ollama connection error
+      // const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      // const isOllamaError = errorMessage.includes('Ollama') || errorMessage.includes('11434') || errorMessage.includes('Could not reach');
+      //
+      // if (isOllamaError) {
+      //   // If we added a placeholder message, update it with error instead of adding new one
+      //   if (conversationId && isStreaming) {
+      //     updateLastMessage(conversationId, `❌ Ollama is not running or not reachable.\n\nClick below to start it automatically.`);
+      //   }
+      //
+      //   // Show modal to user
+      //   if (confirm('❌ Ollama is not running.\n\nWould you like to start Ollama and pull the required model?\n\n(This may take a few minutes on first run)')) {
+      //     try {
+      //       // Update the message to show we're starting
+      //       if (conversationId) {
+      //         updateLastMessage(conversationId, '🔄 Starting Ollama and pulling model...\n\n⏳ This may take 1-2 minutes on first run.\n\nPlease wait...');
+      //       }
+      //
+      //       setIsLoading(true);
+      //
+      //       // Try to ensure Ollama is ready (will auto-start + pull model)
+      //       const ensureResponse = await fetch(`${getApiBase()}/api/ollama/ensure-ready`, {
+      //         method: 'POST',
+      //         headers: { 'Content-Type': 'application/json' },
+      //       });
+      //
+      //       const ensureData = await ensureResponse.json();
+      //
+      //       if (ensureData.ready) {
+      //         // Remove the loading message before retry
+      //         if (conversationId) {
+      //           useWorkspaceStore.setState(state => ({
+      //             conversations: state.conversations.map(c =>
+      //               c.id === conversationId
+      //                 ? { ...c, messages: c.messages.slice(0, -1) }
+      //                 : c
+      //             )
+      //           }));
+      //         }
+      //
+      //         // Retry the message automatically
+      //         alert('✅ Ollama is ready! Retrying your message...');
+      //         // Reconstruct and resubmit
+      //         await handleSubmit(new Event('submit') as any);
+      //         return;
+      //       } else {
+      //         // Update message with error
+      //         if (conversationId) {
+      //           updateLastMessage(conversationId, `⚠️ Could not start Ollama: ${ensureData.error || 'Unknown error'}\n\nPlease start Ollama manually and try again.`);
+      //         }
+      //       }
+      //     } catch (startError) {
+      //       console.error('Failed to start Ollama:', startError);
+      //       if (conversationId) {
+      //         updateLastMessage(conversationId, '⚠️ Failed to start Ollama automatically.\n\nPlease start it manually:\n• macOS: Open Ollama.app\n• Linux: Run `ollama serve`\n\nThen try your message again.');
+      //       }
+      //     } finally {
+      //       setIsLoading(false);
+      //     }
+      //   } else {
+      //     // User cancelled - remove the error message
+      //     if (conversationId) {
+      //       useWorkspaceStore.setState(state => ({
+      //         conversations: state.conversations.map(c =>
+      //           c.id === conversationId
+      //             ? { ...c, messages: c.messages.slice(0, -1) }
+      //             : c
+      //         )
+      //       }));
+      //     }
+      //   }
+      // } else {
+      // For other errors, update the placeholder if it exists, otherwise add new message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const isOllamaError = errorMessage.includes('Ollama') || errorMessage.includes('11434') || errorMessage.includes('Could not reach');
-      
-      if (isOllamaError) {
-        // If we added a placeholder message, update it with error instead of adding new one
-        if (conversationId && isStreaming) {
-          updateLastMessage(conversationId, `❌ Ollama is not running or not reachable.\n\nClick below to start it automatically.`);
-        }
-        
-        // Show modal to user
-        if (confirm('❌ Ollama is not running.\n\nWould you like to start Ollama and pull the required model?\n\n(This may take a few minutes on first run)')) {
-          try {
-            // Update the message to show we're starting
-            if (conversationId) {
-              updateLastMessage(conversationId, '🔄 Starting Ollama and pulling model...\n\n⏳ This may take 1-2 minutes on first run.\n\nPlease wait...');
-            }
-            
-            setIsLoading(true);
-            
-            // Try to ensure Ollama is ready (will auto-start + pull model)
-            const ensureResponse = await fetch(`${getApiBase()}/api/ollama/ensure-ready`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-            });
-            
-            const ensureData = await ensureResponse.json();
-            
-            if (ensureData.ready) {
-              // Remove the loading message before retry
-              if (conversationId) {
-                useWorkspaceStore.setState(state => ({
-                  conversations: state.conversations.map(c => 
-                    c.id === conversationId 
-                      ? { ...c, messages: c.messages.slice(0, -1) }
-                      : c
-                  )
-                }));
-              }
-              
-              // Retry the message automatically
-              alert('✅ Ollama is ready! Retrying your message...');
-              // Reconstruct and resubmit
-              await handleSubmit(new Event('submit') as any);
-              return;
-            } else {
-              // Update message with error
-              if (conversationId) {
-                updateLastMessage(conversationId, `⚠️ Could not start Ollama: ${ensureData.error || 'Unknown error'}\n\nPlease start Ollama manually and try again.`);
-              }
-            }
-          } catch (startError) {
-            console.error('Failed to start Ollama:', startError);
-            if (conversationId) {
-              updateLastMessage(conversationId, '⚠️ Failed to start Ollama automatically.\n\nPlease start it manually:\n• macOS: Open Ollama.app\n• Linux: Run `ollama serve`\n\nThen try your message again.');
-            }
-          } finally {
-            setIsLoading(false);
-          }
-        } else {
-          // User cancelled - remove the error message
-          if (conversationId) {
-            useWorkspaceStore.setState(state => ({
-              conversations: state.conversations.map(c => 
-                c.id === conversationId 
-                  ? { ...c, messages: c.messages.slice(0, -1) }
-                  : c
-              )
-            }));
-          }
-        }
-      } else {
-        // For other errors, update the placeholder if it exists, otherwise add new message
-        if (conversationId) {
+      if (conversationId) {
           if (isStreaming) {
             updateLastMessage(conversationId, `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`);
           } else {
@@ -566,7 +567,6 @@ export function ChatInterface() {
             });
           }
         }
-      }
     } finally {
       setIsLoading(false);
       setIsStreaming(false);

@@ -228,12 +228,18 @@ async def _resolve_provider(
                 )
                 agent = result.scalar_one_or_none()
 
-                if agent and agent.provider and agent.model_id:
+                if agent and agent.provider:
                     # Get workspace_id from agent
                     workspace_id = agent.workspace_id
 
                     # **NEW: Handle ABI provider via workspace's external ABI server**
                     if agent.provider == "abi":
+                        inprocess_agent_ref = (
+                            agent.class_name or agent.name or agent.model_id or agent.id
+                        )
+                        external_agent_ref = (
+                            agent.model_id or agent.class_name or agent.name or agent.id
+                        )
                         from naas_abi.apps.nexus.apps.api.app.models import InferenceServerModel
                         abi_result = await db.execute(
                             select(InferenceServerModel)
@@ -255,13 +261,13 @@ async def _resolve_provider(
                                 endpoint=abi_server.endpoint,
                                 api_key=abi_server.api_key,
                                 account_id=None,
-                                model=agent.model_id,
+                                model=external_agent_ref,
                             )
                         else:
                             import logging
                             logging.info(
                                 f"No ABI server configured for workspace {workspace_id}; "
-                                f"using in-process ABI agent '{agent.model_id}'"
+                                f"using in-process ABI agent '{inprocess_agent_ref}'"
                             )
                             return ProviderConfigRequest(
                                 id=f"abi-inprocess-{agent.id}",
@@ -271,7 +277,8 @@ async def _resolve_provider(
                                 endpoint="inprocess://abi",
                                 api_key=None,
                                 account_id=None,
-                                model=agent.model_id,
+                                # In-process resolver expects a stable ABI class ref or name.
+                                model=inprocess_agent_ref,
                             )
 
                     # Map provider to secret key
@@ -294,7 +301,7 @@ async def _resolve_provider(
                     }
 
                     secret_key = secret_key_map.get(agent.provider)
-                    if secret_key:
+                    if secret_key and agent.model_id:
                         # Query secret from database
                         from naas_abi.apps.nexus.apps.api.app.models import SecretModel
                         secret_result = await db.execute(
@@ -826,7 +833,9 @@ async def stream_chat(
                             logger.warning("Incremental flush failed", exc_info=True)
                         last_flush = loop.time()
                         buffered_chars = 0
+
             elif provider.type == "cloudflare":
+
                 async for chunk in stream_with_cloudflare(provider_messages, provider_config, system_prompt):
                     full_response += chunk
                     buffered_chars += len(chunk)
@@ -844,6 +853,7 @@ async def stream_chat(
                             logger.warning("Incremental flush failed", exc_info=True)
                         last_flush = loop.time()
                         buffered_chars = 0
+
             elif provider.type == "abi":
                 # ABI is integrated in-process; stream directly from loaded agent runtime.
                 inprocess_emitted = False
@@ -871,6 +881,7 @@ async def stream_chat(
                         buffered_chars = 0
                 if not inprocess_emitted:
                     raise RuntimeError("In-process ABI stream returned no content")
+
             elif provider.type in openai_compatible:
                 from naas_abi.apps.nexus.apps.api.app.services.providers import (
                     stream_with_openai_compatible,
@@ -918,7 +929,7 @@ async def stream_chat(
             import json as json_lib
             error_msg = str(e)
             escaped_error = json_lib.dumps(error_msg)[1:-1]
-            logger.error(f"Stream error: {error_msg}")
+            logger.error(f"Stream error: {error_msg}, {provider}, {request.agent}")
             # Best-effort save of partial content
             try:
                 async with AsyncSessionLocal() as err_db:
