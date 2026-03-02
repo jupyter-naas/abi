@@ -147,6 +147,7 @@ export function ChatInterface() {
   const activeConversation = mounted
     ? workspaceConversations.find((c) => c.id === activeConversationId)
     : null;
+  const selectedAgentData = getAgent(selectedAgent);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -613,7 +614,11 @@ export function ChatInterface() {
       {/* Messages area */}
       <div className="flex-1 overflow-auto p-4 min-h-0">
         {!activeConversation || activeConversation.messages.length === 0 ? (
-          <EmptyState onSuggestionClick={(prompt) => setInput(prompt)} />
+          <EmptyState
+            selectedAgentName={selectedAgentData?.name || selectedAgent}
+            suggestions={selectedAgentData?.suggestions}
+            onSuggestionClick={(prompt) => setInput(prompt)}
+          />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
             {activeConversation.messages.map((message) => (
@@ -789,33 +794,43 @@ export function ChatInterface() {
   );
 }
 
-function EmptyState({ onSuggestionClick }: { onSuggestionClick: (prompt: string) => void }) {
+function EmptyState({
+  selectedAgentName,
+  suggestions,
+  onSuggestionClick,
+}: {
+  selectedAgentName: string;
+  suggestions?: Array<{ label: string; value: string }>;
+  onSuggestionClick: (prompt: string) => void;
+}) {
   return (
     <div className="flex h-full flex-col items-center justify-center">
       <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-workspace-accent-10">
         <Bot size={32} className="text-workspace-accent" />
       </div>
-      <h2 className="mb-2 text-xl font-semibold text-gradient">Welcome to NEXUS Chat</h2>
       <p className="mb-8 max-w-md text-center text-muted-foreground">
-        Start a conversation with an ABI-powered agent. Ask questions, explore your data, or get
+        Start a conversation with {selectedAgentName}. Ask questions, explore your data, or get
         help with tasks.
       </p>
-      <div className="grid max-w-xl gap-3 sm:grid-cols-2">
-        {[
-          'What can you help me with?',
-          'Show me my recent ontology changes',
-          'Search for entities related to...',
-          'Help me create a new workflow',
-        ].map((prompt) => (
-          <button
-            key={prompt}
-            onClick={() => onSuggestionClick(prompt)}
-            className="glass-card p-4 text-left text-sm transition-all hover:border-primary/30 hover:glow-primary-sm"
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
+      {Array.isArray(suggestions) && suggestions.length > 0 && (
+        <div className="grid w-full max-w-xl grid-cols-2 gap-3">
+          {suggestions.map((suggestion, index) => {
+            const isOddLastItem = suggestions.length % 2 === 1 && index === suggestions.length - 1;
+            return (
+            <button
+              key={`${suggestion.label}:${suggestion.value}`}
+              onClick={() => onSuggestionClick(suggestion.value)}
+              className={cn(
+                'glass-card p-4 text-center text-sm transition-all hover:border-primary/30 hover:glow-primary-sm',
+                isOddLastItem && 'col-span-2 w-full max-w-[calc(50%-0.375rem)] justify-self-center'
+              )}
+            >
+              {suggestion.label}
+            </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -854,6 +869,7 @@ const MessageBubble = React.memo(function MessageBubble({
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const wasProcessingRef = useRef(false);
   
   // Get user name and agent info for display
@@ -919,6 +935,64 @@ const MessageBubble = React.memo(function MessageBubble({
 
   // Show thinking section if we have thinking content OR a finalized duration
   const hasThinkingSection = !isUser && (thinking || (message.thinkingDuration && message.thinkingDuration > 0));
+  const handleCopyCode = useCallback(async (code: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCodeKey(key);
+      setTimeout(() => setCopiedCodeKey((current) => (current === key ? null : current)), 1200);
+    } catch (error) {
+      console.error('Failed to copy code block:', error);
+    }
+  }, []);
+
+  const markdownComponents = useMemo(
+    () => ({
+      pre: ({
+        children,
+        ...props
+      }: React.HTMLAttributes<HTMLPreElement> & { children?: React.ReactNode }) => {
+        const codeChild = Array.isArray(children) ? children[0] : children;
+        const className = React.isValidElement(codeChild)
+          ? (codeChild.props as { className?: string }).className || ''
+          : '';
+        const language = className.match(/language-([\w-]+)/)?.[1];
+        const rawCodeChildren = React.isValidElement(codeChild)
+          ? (codeChild.props as { children?: React.ReactNode }).children
+          : undefined;
+        const codeContent =
+          typeof rawCodeChildren === 'string'
+            ? rawCodeChildren
+            : Array.isArray(rawCodeChildren)
+              ? rawCodeChildren
+                .filter((part): part is string => typeof part === 'string')
+                .join('')
+              : '';
+        const copyKey = `${language || 'plain'}:${codeContent}`;
+
+        return (
+          <div className="my-5">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {language || 'text'}
+              </div>
+              {codeContent && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyCode(codeContent, copyKey)}
+                  className="rounded border border-border/70 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="Copy code"
+                >
+                  {copiedCodeKey === copyKey ? 'Copied' : 'Copy'}
+                </button>
+              )}
+            </div>
+            <pre {...props}>{children}</pre>
+          </div>
+        );
+      },
+    }),
+    [copiedCodeKey, handleCopyCode]
+  );
 
   return (
     <div className={cn('flex items-start gap-3', isUser && 'flex-row-reverse')}>
@@ -1003,8 +1077,9 @@ const MessageBubble = React.memo(function MessageBubble({
         <div
           className={cn(
             'rounded-2xl px-4 py-3 text-sm',
-            isUser ? 'bg-workspace-accent text-white' : 'bg-muted prose prose-sm dark:prose-invert max-w-none',
-            !isUser && '[&_p]:my-1 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded'
+            isUser ? 'bg-workspace-accent text-white' : 'bg-muted max-w-none',
+            !isUser &&
+              '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'
           )}
         >
           {/* Sender name inside bubble (WhatsApp-style) */}
@@ -1023,7 +1098,9 @@ const MessageBubble = React.memo(function MessageBubble({
             <div className="flex items-baseline gap-1">
               {responseWithoutCaret && (
                 <div className="max-w-full [&>*]:m-0">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{responseWithoutCaret}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {responseWithoutCaret}
+                  </ReactMarkdown>
                 </div>
               )}
               <TypingDots />
@@ -1041,7 +1118,9 @@ const MessageBubble = React.memo(function MessageBubble({
               )}
             </div>
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{responseWithoutCaret}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {responseWithoutCaret}
+            </ReactMarkdown>
           )}
         </div>
       </div>

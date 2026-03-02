@@ -73,7 +73,8 @@ def test_image_url_to_asset_pipeline(
         )
     )
     graph.add((subject_uri, RDFS.label, Literal(node_id)))
-    triple_store_service.insert(graph)
+    graph_name = URIRef("http://ontology.naas.ai/graph/default")
+    triple_store_service.insert(graph, graph_name=graph_name)
 
     predicate_uri = "http://ontology.naas.ai/abi/logo"
     parameters = ImageURLtoAssetPipelineParameters(
@@ -93,4 +94,4 @@ def test_image_url_to_asset_pipeline(
     )
 
     # Remove graph
-    triple_store_service.remove(result)
+    triple_store_service.remove(result, graph_name=graph_name)
