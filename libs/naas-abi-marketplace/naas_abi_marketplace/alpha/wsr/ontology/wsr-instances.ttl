@@ -1,0 +1,278 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2000/01/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix wsr:    <http://ontology.naas.ai/wsr/> .
+@prefix wvi:   <http://ontology.naas.ai/wsr/instances/> .
+
+#################################################################
+# Ontology Declaration
+#################################################################
+
+wsr:WSRInstances a owl:Ontology ;
+  dc:title "WSR Instance Data"@en ;
+  dc:description "Named individuals encoding the specific sites, data sources, processes, and system actors of the WSR platform as of 2026-02-28."@en ;
+  owl:imports wsr:WSROntology ;
+  owl:versionInfo "0.1.0" ;
+  dc:date "2026-02-28"^^xsd:date .
+
+#################################################################
+# SITES — Geographic and operational locations
+#################################################################
+
+# ── Middle East Theater ──────────────────────────────────────────────────────
+
+wvi:MiddleEastTheater a wsr:ConflictZone ;
+  rdfs:label "Middle East Theater of Operations"@en ;
+  skos:definition "The active theater encompassing Iran, Israel, Lebanon, Syria, Iraq, the Persian Gulf, and adjacent airspace and maritime zones."@en ;
+  wsr:hasLatitude "30.0"^^xsd:decimal ;
+  wsr:hasLongitude "40.0"^^xsd:decimal .
+
+# ── Iranian Nuclear Sites ─────────────────────────────────────────────────────
+
+wvi:NatanzEnrichmentComplex a wsr:NuclearFacilitySite ;
+  rdfs:label "Natanz Enrichment Complex"@en ;
+  skos:definition "Primary uranium enrichment facility. Underground centrifuge halls. IAEA monitored. IR-1 and IR-6 centrifuges operational."@en ;
+  wsr:hasLatitude "33.724"^^xsd:decimal ;
+  wsr:hasLongitude "51.727"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:FordowFEP a wsr:NuclearFacilitySite ;
+  rdfs:label "Fordow Fuel Enrichment Plant"@en ;
+  skos:definition "Deep underground enrichment site near Qom. Approximately 80 metres below rock. Hardened against air strike. 60% enrichment reported."@en ;
+  wsr:hasLatitude "34.884"^^xsd:decimal ;
+  wsr:hasLongitude "50.997"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:IsfahanNuclearTechnologyCentre a wsr:NuclearFacilitySite ;
+  rdfs:label "Isfahan Nuclear Technology Centre"@en ;
+  skos:definition "Uranium conversion facility (UCF). Produces UF6 feed for centrifuges."@en ;
+  wsr:hasLatitude "32.607"^^xsd:decimal ;
+  wsr:hasLongitude "51.649"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:ArakHeavyWaterReactor a wsr:NuclearFacilitySite ;
+  rdfs:label "Arak Heavy Water Reactor (IR-40)"@en ;
+  skos:definition "IR-40 heavy water reactor site. Modified under JCPOA to reduce plutonium production capability."@en ;
+  wsr:hasLatitude "34.320"^^xsd:decimal ;
+  wsr:hasLongitude "49.166"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:BushehrNuclearPowerPlant a wsr:NuclearFacilitySite ;
+  rdfs:label "Bushehr Nuclear Power Plant"@en ;
+  skos:definition "Russian-built civilian nuclear power station on the Persian Gulf coast. 1000 MW capacity. Under Russian fuel supply agreement."@en ;
+  wsr:hasLatitude "28.829"^^xsd:decimal ;
+  wsr:hasLongitude "50.888"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+# ── Iranian Urban/Command Sites ───────────────────────────────────────────────
+
+wvi:TehranCapital a wsr:UrbanSite ;
+  rdfs:label "Tehran — Iranian Capital"@en ;
+  skos:definition "Seat of the Supreme Leader, President, and IRGC command. Political and military decision center."@en ;
+  wsr:hasLatitude "35.689"^^xsd:decimal ;
+  wsr:hasLongitude "51.389"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:IRGCAerospaceHQ a wsr:MilitaryBaseSite ;
+  rdfs:label "IRGC Aerospace Force HQ"@en ;
+  skos:definition "Commands Iranian ballistic missile and drone programs. Shahed UAV operations. Missile launch authorization node."@en ;
+  wsr:hasLatitude "35.750"^^xsd:decimal ;
+  wsr:hasLongitude "51.450"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+# ── Israeli Sites ─────────────────────────────────────────────────────────────
+
+wvi:TelAvivIDF a wsr:UrbanSite ;
+  rdfs:label "Tel Aviv — IDF Headquarters (Kirya)"@en ;
+  skos:definition "Israeli military and political center. IDF HQ (Kirya compound). Iron Dome batteries deployed."@en ;
+  wsr:hasLatitude "32.085"^^xsd:decimal ;
+  wsr:hasLongitude "34.782"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:NegevNuclearResearchCentre a wsr:NuclearFacilitySite ;
+  rdfs:label "Negev Nuclear Research Centre (Dimona)"@en ;
+  skos:definition "Israeli nuclear weapons research facility. Not under IAEA safeguards. Estimated 80–400 warheads. Strategic deterrence node."@en ;
+  wsr:hasLatitude "30.973"^^xsd:decimal ;
+  wsr:hasLongitude "35.143"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:NevatimAirBase a wsr:MilitaryBaseSite ;
+  rdfs:label "Nevatim Air Base"@en ;
+  skos:definition "Home of IAF F-35I Adir squadrons. Primary long-range strike platform. Key asset for any Iran strike package."@en ;
+  wsr:hasLatitude "31.208"^^xsd:decimal ;
+  wsr:hasLongitude "35.012"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:HaifaNavalBase a wsr:NavalOperatingArea ;
+  rdfs:label "Haifa — Israeli Navy HQ"@en ;
+  skos:definition "Israeli Navy headquarters. Rafael Advanced Defense Systems nearby. Submarine base (Dolphin-class). Critical port infrastructure."@en ;
+  wsr:hasLatitude "32.794"^^xsd:decimal ;
+  wsr:hasLongitude "34.990"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+# ── US CENTCOM Forward Bases ──────────────────────────────────────────────────
+
+wvi:AlUdeidAirBase a wsr:MilitaryBaseSite ;
+  rdfs:label "Al Udeid Air Base (Qatar)"@en ;
+  skos:definition "Largest US air base in Middle East. CENTCOM forward HQ. B-52, KC-135 operations. 10,000+ personnel."@en ;
+  wsr:hasLatitude "25.117"^^xsd:decimal ;
+  wsr:hasLongitude "51.314"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:AlDhafraAirBase a wsr:MilitaryBaseSite ;
+  rdfs:label "Al Dhafra Air Base (UAE)"@en ;
+  skos:definition "F-35A, U-2 reconnaissance, KC-10 tankers. Key ISR and strike enabler."@en ;
+  wsr:hasLatitude "24.248"^^xsd:decimal ;
+  wsr:hasLongitude "54.548"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:PersianGulfCSGArea a wsr:NavalOperatingArea ;
+  rdfs:label "Persian Gulf — Carrier Strike Group Operating Area"@en ;
+  skos:definition "Approximate operating area for US Navy CSG. Strait of Hormuz chokepoint. Iranian IRGC fast-boat threat zone."@en ;
+  wsr:hasLatitude "26.500"^^xsd:decimal ;
+  wsr:hasLongitude "56.200"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:StraitOfHormuz a wsr:NavalOperatingArea ;
+  rdfs:label "Strait of Hormuz"@en ;
+  skos:definition "~20% of global oil transit. Iranian mining and naval interdiction threat. Chokepoint for CENTCOM logistics."@en ;
+  wsr:hasLatitude "26.594"^^xsd:decimal ;
+  wsr:hasLongitude "56.451"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+# ── Regional Flashpoints ──────────────────────────────────────────────────────
+
+wvi:BeirutHezbollahZone a wsr:ConflictZone ;
+  rdfs:label "Beirut — Hezbollah Presence Zone"@en ;
+  skos:definition "Hezbollah political and military HQ in southern suburbs (Dahiyeh). Missile storage. Active front with Israel."@en ;
+  wsr:hasLatitude "33.888"^^xsd:decimal ;
+  wsr:hasLongitude "35.495"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+wvi:DamascusCorridorZone a wsr:ConflictZone ;
+  rdfs:label "Damascus — IRGC/Hezbollah Logistics Corridor"@en ;
+  skos:definition "IRGC and Hezbollah logistics corridor. Repeated IAF interdiction strikes on arms shipments."@en ;
+  wsr:hasLatitude "33.510"^^xsd:decimal ;
+  wsr:hasLongitude "36.291"^^xsd:decimal ;
+  bfo:BFO_0000171 wvi:MiddleEastTheater .
+
+#################################################################
+# MATERIAL ENTITIES — Data Source Endpoints and System Infrastructure
+#################################################################
+
+wvi:CelesTrakEndpoint a wsr:DataSourceEndpoint ;
+  rdfs:label "CelesTrak NORAD GP Endpoint"@en ;
+  skos:definition "Server endpoint operated by CelesTrak providing Two-Line Element sets for active satellites. URI: https://celestrak.org/NORAD/elements/gp.php"@en ;
+  wsr:hasSourceURL "https://celestrak.org/NORAD/elements/gp.php"^^xsd:anyURI ;
+  bfo:BFO_0000196 wvi:IntelligenceSourceRoleInstance .
+
+wvi:OpenSkyNetworkEndpoint a wsr:DataSourceEndpoint ;
+  rdfs:label "OpenSky Network REST API"@en ;
+  skos:definition "Server endpoint providing global civil aircraft state vectors via ADS-B aggregation. URI: https://opensky-network.org/api/states/all"@en ;
+  wsr:hasSourceURL "https://opensky-network.org/api/states/all"^^xsd:anyURI .
+
+wvi:ADBSLolEndpoint a wsr:DataSourceEndpoint ;
+  rdfs:label "ADSB.lol Military Feed"@en ;
+  skos:definition "Community-operated ADS-B aggregator with military aircraft tagging. URI: https://api.adsb.lol/v2/mil"@en ;
+  wsr:hasSourceURL "https://api.adsb.lol/v2/mil"^^xsd:anyURI .
+
+wvi:AirplanesLiveEndpoint a wsr:DataSourceEndpoint ;
+  rdfs:label "Airplanes.live Point Query API"@en ;
+  skos:definition "REST API for ADS-B data within a geographic radius. Used for Middle East theater monitoring. URI: https://api.airplanes.live/v2/point/"@en ;
+  wsr:hasSourceURL "https://api.airplanes.live/v2/point/"^^xsd:anyURI .
+
+wvi:USGSEarthquakeEndpoint a wsr:DataSourceEndpoint ;
+  rdfs:label "USGS Earthquake GeoJSON Feed"@en ;
+  skos:definition "USGS real-time earthquake event feed in GeoJSON format. URI: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"@en ;
+  wsr:hasSourceURL "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"^^xsd:anyURI .
+
+wvi:BBCMiddleEastRSS a wsr:DataSourceEndpoint ;
+  rdfs:label "BBC Middle East RSS Feed"@en ;
+  skos:definition "BBC World Service Middle East section RSS feed. URI: http://feeds.bbci.co.uk/news/world/middle_east/rss.xml"@en ;
+  wsr:hasSourceURL "http://feeds.bbci.co.uk/news/world/middle_east/rss.xml"^^xsd:anyURI .
+
+wvi:AlJazeeraRSS a wsr:DataSourceEndpoint ;
+  rdfs:label "Al Jazeera RSS Feed"@en ;
+  skos:definition "Al Jazeera English all-news RSS feed. URI: https://www.aljazeera.com/xml/rss/all.xml"@en ;
+  wsr:hasSourceURL "https://www.aljazeera.com/xml/rss/all.xml"^^xsd:anyURI .
+
+wvi:ReutersRSS a wsr:DataSourceEndpoint ;
+  rdfs:label "Reuters Top News RSS Feed"@en ;
+  skos:definition "Reuters top news RSS feed. URI: https://feeds.reuters.com/reuters/topNews"@en ;
+  wsr:hasSourceURL "https://feeds.reuters.com/reuters/topNews"^^xsd:anyURI .
+
+wvi:NominatimEndpoint a wsr:DataSourceEndpoint ;
+  rdfs:label "OpenStreetMap Nominatim Geocoder"@en ;
+  skos:definition "OpenStreetMap geocoding API. URI: https://nominatim.openstreetmap.org/search"@en ;
+  wsr:hasSourceURL "https://nominatim.openstreetmap.org/search"^^xsd:anyURI .
+
+wvi:WSRNextJSServer a wsr:ComputeInfrastructure ;
+  rdfs:label "WSR Next.js Application Server"@en ;
+  skos:definition "Next.js server running the WSR application API routes and serving the React frontend. Hosts the DataCachingProcess."@en .
+
+#################################################################
+# PROCESSES — Running instances of WSR intelligence processes
+#################################################################
+
+wvi:SatelliteTrackingInstance a wsr:SatelliteTrackingProcess ;
+  rdfs:label "WSR Satellite Tracking Process Instance"@en ;
+  wsr:hasRefreshInterval "3"^^xsd:integer ;
+  wsr:hasCacheTTL "3600"^^xsd:integer ;
+  bfo:BFO_0000057 wvi:CelesTrakEndpoint ;
+  bfo:BFO_0000066 wvi:OrbitalShellLEO .
+
+wvi:OrbitalShellLEO a wsr:OrbitalShell ;
+  rdfs:label "Low Earth Orbit Shell (200–2000 km)"@en .
+
+wvi:FlightTrackingInstance a wsr:FlightTrackingProcess ;
+  rdfs:label "WSR Civil Flight Tracking Process Instance"@en ;
+  wsr:hasRefreshInterval "30"^^xsd:integer ;
+  wsr:hasCacheTTL "30"^^xsd:integer ;
+  bfo:BFO_0000057 wvi:OpenSkyNetworkEndpoint .
+
+wvi:TheaterAircraftMonitoringInstance a wsr:TheaterAircraftMonitoringProcess ;
+  rdfs:label "WSR Middle East Theater Aircraft Monitoring Instance"@en ;
+  wsr:hasRefreshInterval "45"^^xsd:integer ;
+  wsr:hasCacheTTL "45"^^xsd:integer ;
+  bfo:BFO_0000057 wvi:AirplanesLiveEndpoint ;
+  wsr:occursInTheater wvi:MiddleEastTheater .
+
+wvi:EarthquakeMonitoringInstance a wsr:EarthquakeMonitoringProcess ;
+  rdfs:label "WSR Global Earthquake Monitoring Instance"@en ;
+  wsr:hasRefreshInterval "300"^^xsd:integer ;
+  wsr:hasCacheTTL "300"^^xsd:integer ;
+  bfo:BFO_0000057 wvi:USGSEarthquakeEndpoint .
+
+wvi:NewsAggregationInstance a wsr:NewsAggregationProcess ;
+  rdfs:label "WSR Theater News Aggregation Instance"@en ;
+  wsr:hasRefreshInterval "180"^^xsd:integer ;
+  wsr:hasCacheTTL "180"^^xsd:integer ;
+  bfo:BFO_0000057 wvi:BBCMiddleEastRSS ;
+  bfo:BFO_0000057 wvi:AlJazeeraRSS ;
+  bfo:BFO_0000057 wvi:ReutersRSS ;
+  wsr:occursInTheater wvi:MiddleEastTheater .
+
+wvi:ThreatAssessmentInstance a wsr:ThreatAssessmentProcess ;
+  rdfs:label "WSR Theater Threat Assessment Instance"@en ;
+  bfo:BFO_0000062 wvi:NewsAggregationInstance ;
+  wsr:occursInTheater wvi:MiddleEastTheater .
+
+wvi:ConflictZoneLoadingInstance a wsr:ConflictZoneLoadingProcess ;
+  rdfs:label "WSR Conflict Zone Loading Instance"@en ;
+  wsr:occursInTheater wvi:MiddleEastTheater .
+
+wvi:GlobeRenderingInstance a wsr:GlobeRenderingProcess ;
+  rdfs:label "WSR Cesium Globe Rendering Instance"@en ;
+  bfo:BFO_0000057 wvi:WSRNextJSServer .
+
+#################################################################
+# ROLES — Role instances borne by endpoints and entities
+#################################################################
+
+wvi:IntelligenceSourceRoleInstance a wsr:IntelligenceSourceRole ;
+  rdfs:label "Intelligence Source Role"@en ;
+  skos:definition "Role borne by all data source endpoints in the WSR system."@en .
