@@ -5,6 +5,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
+  Database,
   Filter,
   Search,
   Eye,
@@ -102,7 +103,7 @@ const LEGACY_VIEW_MAP: Record<string, GraphViewType> = {
 const isGraphViewType = (value: string): value is GraphViewType =>
   GRAPH_VIEW_TYPES.some((view) => view.id === value);
 
-type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'sparql';
+type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'create-graph' | 'sparql';
 
 interface OntologyClassOption {
   id: string;
@@ -312,6 +313,10 @@ export default function GraphPage() {
   });
   const [viewFormError, setViewFormError] = useState<string | null>(null);
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
+  const [graphName, setGraphName] = useState('');
+  const [graphSlug, setGraphSlug] = useState('');
+  const [graphFormError, setGraphFormError] = useState<string | null>(null);
+  const [creatingGraph, setCreatingGraph] = useState(false);
   const activeSavedView = useMemo(
     () => views.find((view) => view.id === activeSavedViewId) ?? null,
     [views, activeSavedViewId]
@@ -331,13 +336,16 @@ export default function GraphPage() {
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
       let defaultGraphName = 'default';
+      let normalized: { id: string; label?: string }[] = [];
 
       try {
-        const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
+        const namesRes = await authFetch(
+          `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`
+        );
         if (namesRes.ok) {
           const namesData = await namesRes.json();
           const graphs = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
-          const normalized = graphs
+          normalized = graphs
             .filter((g: unknown) => g && typeof g === 'object' && 'id' in g && typeof (g as { id: unknown }).id === 'string')
             .map((g: { id: string; label?: string }) => ({ id: g.id, label: g.label ?? g.id }));
           if (normalized.length > 0) {
@@ -354,6 +362,14 @@ export default function GraphPage() {
         setGraphOptions([{ id: 'default', name: 'default' }]);
       }
 
+      // Resolve label to graph id so we always pass graph_id (not label) to /network
+      const resolveToGraphId = (value: string) => {
+        const found = normalized.find(
+          (g) => g.id === value || (g.label ?? g.id) === value
+        );
+        return found ? found.id : value;
+      };
+
       // Determine fetch strategy: view_id only if view selected, graph_id only if graph(s) selected.
       const paramsBase = new URLSearchParams({ workspace_id: workspaceId });
       let urlsToFetch: string[];
@@ -363,16 +379,16 @@ export default function GraphPage() {
         paramsBase.set('view_id', activeSavedView.id);
         urlsToFetch = [`${apiUrl}/api/graph/network?${paramsBase.toString()}`];
       } else {
-        // Graph(s) selected: one request per graph with graph_id only
+        // Graph(s) selected: one request per graph with graph_id only (id, not label)
         const graphIdsToFetch =
           visibleGraphIds.length > 0
-            ? visibleGraphIds.filter((id) => !id.includes('#layer='))
+            ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
             : [defaultGraphName];
         const safeGraphIds =
           graphIdsToFetch.length > 0 ? graphIdsToFetch : [defaultGraphName];
-        urlsToFetch = safeGraphIds.map((graphId) => {
+        urlsToFetch = safeGraphIds.map((graphIdOrLabel: string) => {
           const params = new URLSearchParams({ workspace_id: workspaceId });
-          params.set('graph_id', graphId);
+          params.set('graph_id', resolveToGraphId(graphIdOrLabel));
           return `${apiUrl}/api/graph/network?${params.toString()}`;
         });
       }
@@ -482,6 +498,11 @@ export default function GraphPage() {
     if (requestedView === 'sparql') {
       setEditingViewId(null);
       setPageMode('sparql');
+      return;
+    }
+    if (requestedView === 'create-graph') {
+      setEditingViewId(null);
+      setPageMode('create-graph');
       return;
     }
     setEditingViewId(null);
@@ -594,6 +615,50 @@ export default function GraphPage() {
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
     setViewFormError(null);
     router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const closeCreateGraphForm = () => {
+    setPageMode('graph');
+    setGraphName('');
+    setGraphSlug('');
+    setGraphFormError(null);
+    router.push(`/workspace/${workspaceId}/graph`);
+  };
+
+  const handleCreateGraph = async () => {
+    const label = graphName.trim();
+    if (!label) {
+      setGraphFormError('Name is required.');
+      return;
+    }
+    setGraphFormError(null);
+    setCreatingGraph(true);
+    try {
+      const apiUrl = getApiUrl();
+      const body: { workspace_id: string; label: string; slug?: string } = {
+        workspace_id: workspaceId,
+        label,
+      };
+      if (graphSlug.trim()) body.slug = graphSlug.trim();
+      const response = await authFetch(`${apiUrl}/api/graph/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Failed to create graph: ${response.status}`);
+      }
+      const created = await response.json();
+      setVisibleGraphs([created.id]);
+      closeCreateGraphForm();
+      await loadFromApi();
+      window.dispatchEvent(new CustomEvent('graph-list-update'));
+    } catch (err) {
+      setGraphFormError(err instanceof Error ? err.message : 'Failed to create graph');
+    } finally {
+      setCreatingGraph(false);
+    }
   };
 
   const handleCreateView = async () => {
@@ -934,6 +999,16 @@ export default function GraphPage() {
                 <Code size={14} />
                 SPARQL Query
               </div>
+            ) : pageMode === 'create-graph' ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Database size={14} />
+                Create New Graph
+              </div>
+            ) : pageMode === 'create-view' ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Filter size={14} />
+                {editingView ? 'Edit View' : 'Create New View'}
+              </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <UserPlus size={14} />
@@ -1013,6 +1088,76 @@ export default function GraphPage() {
                       >
                         {creatingIndividual ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
                         Create Individual
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {pageMode === 'create-graph' && (
+              <div className="flex flex-1 flex-col bg-card p-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Database size={24} className="text-workspace-accent" />
+                      <h2 className="text-lg font-semibold">Create New Graph</h2>
+                    </div>
+                    <button
+                      onClick={closeCreateGraphForm}
+                      className="rounded p-2 text-muted-foreground hover:bg-muted"
+                      title="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    {graphFormError && (
+                      <p className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+                        {graphFormError}
+                      </p>
+                    )}
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Name *</label>
+                      <input
+                        type="text"
+                        value={graphName}
+                        onChange={(e) => setGraphName(e.target.value)}
+                        placeholder="e.g., My ontology, Project graph"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Slug (optional)</label>
+                      <input
+                        type="text"
+                        value={graphSlug}
+                        onChange={(e) => setGraphSlug(e.target.value)}
+                        placeholder="e.g., my-ontology (defaults from name)"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        URL-safe identifier. If empty, derived from name.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={closeCreateGraphForm}
+                        className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleCreateGraph}
+                        disabled={!graphName.trim() || creatingGraph}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                          'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                        )}
+                      >
+                        {creatingGraph ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
+                        Create Graph
                       </button>
                     </div>
                   </div>
