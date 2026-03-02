@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.3 (2026-03-02)
+
+### Bug Fixes
+
+- Type 'null' is not assignable to type 'string | number | boolean'.
+  ([`83e1a10`](https://github.com/jupyter-naas/abi/commit/83e1a10cfe64bd2de72d0abf80331f0f3b3cfc48))
+
+
 ## v1.9.2 (2026-03-02)
 
 
