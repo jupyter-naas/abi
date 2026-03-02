@@ -370,9 +370,9 @@ export default function GraphPage() {
         defaultGraphName = normalized[0].id;
       
         setGraphOptions(
-          normalized.map((g) => ({
+          normalized.map((g: { id: string; label?: string }) => ({
             id: g.id,
-            name: g.label, // always string now
+            name: g.label ?? g.id,
           }))
         );
       } catch {
