@@ -3,6 +3,7 @@ import hashlib
 import io
 import os
 import uuid
+from datetime import datetime
 from typing import Callable, List
 
 import rdflib
@@ -13,7 +14,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
 )
-from rdflib import RDF, Graph, URIRef
+from rdflib import DCTERMS, OWL, RDF, RDFS, XSD, Graph, Literal, URIRef
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -50,6 +51,7 @@ internal:content a owl:DatatypeProperty ;
     rdfs:label "content" ;
     rdfs:comment "Base64 encoded content of the schema file" .
 """
+GRAPH_CLASS = URIRef("http://ontology.naas.ai/abi/Graph")
 
 
 class TripleStoreService(ServiceBase, ITripleStoreService):
@@ -160,11 +162,43 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return self.__triple_store_adapter.query_view(view, query)
 
+    def _insert_graph_metadata(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+        label = graph_name.split("/")[-1].split("#")[-1]
+        g = Graph()
+        g.add((graph_name, RDF.type, OWL.NamedIndividual))
+        g.add((graph_name, RDF.type, GRAPH_CLASS))
+        g.add((graph_name, RDFS.label, Literal(label)))
+        g.add(
+            (
+                graph_name,
+                DCTERMS.created,
+                Literal(
+                    datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    datatype=XSD.dateTime,
+                ),
+            )
+        )
+        self.insert(g, graph_name=graph_name)
+
     def create_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+
         self.__triple_store_adapter.create_graph(graph_name)
 
-    def clear_graph(self, graph_name: URIRef | None = None) -> None:
+        # Insert schema graph into the new graph
+        self._insert_graph_metadata(graph_name)
+
+    def clear_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+
         self.__triple_store_adapter.clear_graph(graph_name)
+
+        # Insert schema graph into the new graph
+        self._insert_graph_metadata(graph_name)
 
     def drop_graph(self, graph_name: URIRef) -> None:
         self.__triple_store_adapter.drop_graph(graph_name)
@@ -214,12 +248,14 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         results = self.query(f"""
             PREFIX internal: <http://triple-store.internal#>
             SELECT ?schema ?filePath ?hash ?fileLastUpdateTime ?content
-            WHERE GRAPH <{str(self.__schema_graph)}> {{
+            WHERE {{
+                GRAPH <{str(self.__schema_graph)}> {{
                 ?schema a internal:Schema ;
                     internal:filePath ?filePath ;
                     internal:hash ?hash ;
                     internal:fileLastUpdateTime ?fileLastUpdateTime ;
                     internal:content ?content .
+                }}
             }}
         """)
 
@@ -262,8 +298,15 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         def _load_schema_metadata(subject: URIRef) -> dict[str, str]:
             triples: rdflib.query.Result = read_query_func(
-                f"""PREFIX internal: <http://triple-store.internal#>
-                    SELECT ?p ?o WHERE GRAPH <{str(self.__schema_graph)}> {{ <{subject}> ?p ?o . }}"""
+                f"""
+                PREFIX internal: <http://triple-store.internal#>
+                SELECT ?p ?o 
+                WHERE {{
+                    GRAPH <{str(self.__schema_graph)}> {{
+                        <{subject}> ?p ?o .
+                    }}
+                }}
+                """
             )
 
             schema_dict: dict[str, str] = {}
@@ -291,8 +334,16 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 self.remove(cleanup_graph, graph_name=self.__schema_graph)
 
         try:
-            query = f'''PREFIX internal: <http://triple-store.internal#>
-            SELECT * WHERE GRAPH <{str(self.__schema_graph)}> {{ ?s internal:filePath "{filepath}" . }}'''
+            query = f"""
+            PREFIX internal: <http://triple-store.internal#>
+
+            SELECT *
+            WHERE {{
+                GRAPH <{str(self.__schema_graph)}> {{
+                    ?s internal:filePath "{filepath}" .
+                }}
+            }}
+            """
             # logger.debug(f"Query: {query}")
             # Check if schema with filePath == filepath already exists and grab all triples.
             schema_triples: rdflib.query.Result = read_query_func(query)
@@ -459,8 +510,14 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
     def get_schema_graph(self) -> Graph:
         contents: rdflib.query.Result = self.query(
-            f"""PREFIX internal: <http://triple-store.internal#>
-            SELECT ?s ?o WHERE GRAPH <{str(self.__schema_graph)}> {{ ?s internal:content ?o . }}"""
+            f"""
+            PREFIX internal: <http://triple-store.internal#>
+            SELECT ?s ?o WHERE {{
+                GRAPH <{str(self.__schema_graph)}> {{
+                    ?s internal:content ?o .
+                }}
+            }}
+            """
         )
 
         graph = Graph()
