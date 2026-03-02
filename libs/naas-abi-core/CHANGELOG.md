@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.18.1 (2026-03-02)
+
+### Bug Fixes
+
+- Error rm schema
+  ([`fb3739a`](https://github.com/jupyter-naas/abi/commit/fb3739a5f40b6d7cda8110e8ef5b650729a76275))
+
+
 ## v1.18.0 (2026-03-02)
 
 ### Bug Fixes
