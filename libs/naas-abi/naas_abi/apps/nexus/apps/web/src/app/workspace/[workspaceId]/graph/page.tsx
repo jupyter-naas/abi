@@ -342,24 +342,41 @@ export default function GraphPage() {
         const namesRes = await authFetch(
           `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`
         );
-        if (namesRes.ok) {
-          const namesData = await namesRes.json();
-          const graphs = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
-          normalized = graphs
-            .filter((g: unknown) => g && typeof g === 'object' && 'id' in g && typeof (g as { id: unknown }).id === 'string')
-            .map((g: { id: string; label?: string }) => ({ id: g.id, label: g.label ?? g.id }));
-          if (normalized.length > 0) {
-            defaultGraphName = normalized[0].id;
-            setGraphOptions(normalized.map((g) => ({ id: g.id, name: g.label })));
-          } else {
-            setGraphOptions([{ id: 'default', name: 'default' }]);
-          }
-        } else {
-          setGraphOptions([{ id: 'default', name: 'default' }]);
+      
+        if (!namesRes.ok) {
+          setGraphOptions([]);
+          return;
         }
+      
+        const namesData = await namesRes.json();
+        const graphs = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
+      
+        // Proper type guard: id AND label must be string
+        const normalized = graphs.filter(
+          (g: unknown): g is { id: string; label: string } =>
+            typeof g === "object" &&
+            g !== null &&
+            "id" in g &&
+            "label" in g &&
+            typeof (g as any).id === "string" &&
+            typeof (g as any).label === "string"
+        );
+      
+        if (normalized.length === 0) {
+          setGraphOptions([]);
+          return;
+        }
+      
+        defaultGraphName = normalized[0].id;
+      
+        setGraphOptions(
+          normalized.map((g) => ({
+            id: g.id,
+            name: g.label, // always string now
+          }))
+        );
       } catch {
-        // Keep workspaceId fallback when graph names cannot be loaded.
-        setGraphOptions([{ id: 'default', name: 'default' }]);
+        setGraphOptions([]);
       }
 
       // Resolve label to graph id so we always pass graph_id (not label) to /network
