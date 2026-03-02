@@ -234,8 +234,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             callback,
         )
 
-    def get_subject_graph(self, subject: str) -> Graph:
-        return self.__triple_store_adapter.get_subject_graph(URIRef(subject))
+    def get_subject_graph(self, subject: str, graph_name: str = "*") -> Graph:
+        return self.__triple_store_adapter.get_subject_graph(
+            URIRef(subject), graph_name
+        )
 
     ############################################################
     # Schema Management
