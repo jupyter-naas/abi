@@ -59,13 +59,12 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+        with:
+          version: v0.69.2
+          cache: true
       - name: Scan
         env:
           UV_PYTHON: "3.11"
-        run: |
-          if ! command -v trivy >/dev/null 2>&1; then
-            wget https://github.com/aquasecurity/trivy/releases/download/v0.62.1/trivy_0.62.1_Linux-64bit.tar.gz
-            tar zxvf trivy_*.tar.gz
-            sudo mv trivy /usr/local/bin/
-          fi
-          make trivy-container-scan
+        run: make trivy-container-scan
