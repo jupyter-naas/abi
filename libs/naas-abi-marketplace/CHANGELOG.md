@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.7.0 (2026-03-02)
+
+### Bug Fixes
+
+- Add name and description to agent
+  ([`5d8d437`](https://github.com/jupyter-naas/abi/commit/5d8d437225de4c42dfb3473ea11c0645ecd86184))
+
+- Add parameters to filter agents
+  ([`cba9e91`](https://github.com/jupyter-naas/abi/commit/cba9e915865aa607b748928e323450d4a7380bb1))
+
+### Features
+
+- Add parameters to include agents by id
+  ([`c018a89`](https://github.com/jupyter-naas/abi/commit/c018a89953c6c73384e62bd2fff085233a4127fa))
+
+
 ## v1.6.1 (2026-02-19)
 
 ### Bug Fixes
