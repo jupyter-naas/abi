@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.17.4 (2026-03-02)
+
+### Bug Fixes
+
+- Error ruff
+  ([`5ef341a`](https://github.com/jupyter-naas/abi/commit/5ef341a036ee5fb09d0b0af2bc14a353030776bd))
+
+
 ## v1.17.3 (2026-02-25)
 
 ### Bug Fixes
