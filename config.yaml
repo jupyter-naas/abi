@@ -50,6 +50,9 @@ modules:
         - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
 
+  - module: naas_abi_marketplace.applications.git
+    enabled: true
+
 services:
   secret:
     secret_adapters:
