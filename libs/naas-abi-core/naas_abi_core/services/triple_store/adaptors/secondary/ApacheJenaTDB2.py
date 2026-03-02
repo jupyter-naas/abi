@@ -321,11 +321,8 @@ class ApacheJenaTDB2(ITripleStorePort):
         assert isinstance(graph_name, URIRef)
         self.query(f"CREATE GRAPH <{str(graph_name)}>")
 
-    def clear_graph(self, graph_name: URIRef | None = None) -> None:
-        if graph_name is None:
-            self.query("CLEAR DEFAULT")
-            return
-
+    def clear_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
         assert isinstance(graph_name, URIRef)
         self.query(f"CLEAR GRAPH <{str(graph_name)}>")
 

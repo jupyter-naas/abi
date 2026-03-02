@@ -63,7 +63,7 @@ class ITripleStorePort(ABC):
         pass
 
     @abstractmethod
-    def create_graph(self, graph_name: URIRef):
+    def create_graph(self, graph_name: URIRef, creator: str | None = None):
         """Create a named graph.
 
         Raises:
@@ -72,7 +72,7 @@ class ITripleStorePort(ABC):
         pass
 
     @abstractmethod
-    def clear_graph(self, graph_name: URIRef | None = None):
+    def clear_graph(self, graph_name: URIRef):
         """Clear triples from a graph.
 
         Raises:
@@ -260,7 +260,7 @@ class ITripleStoreService(ABC):
         pass
 
     @abstractmethod
-    def clear_graph(self, graph_name: URIRef | None = None):
+    def clear_graph(self, graph_name: URIRef):
         """Clear triples from a graph.
 
         Args:
