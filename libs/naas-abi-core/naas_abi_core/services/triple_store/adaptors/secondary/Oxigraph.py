@@ -514,7 +514,7 @@ class Oxigraph(ITripleStorePort):
         """
         return self.query(query)
 
-    def get_subject_graph(self, subject: URIRef) -> Graph:
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         """
         Get all triples for a specific subject as an RDFLib Graph.
 
@@ -531,7 +531,7 @@ class Oxigraph(ITripleStorePort):
         """
         query = f"""
         CONSTRUCT {{ <{str(subject)}> ?p ?o }}
-        WHERE {{ <{str(subject)}> ?p ?o }}
+        WHERE {{ GRAPH <{str(graph_name)}> {{ <{str(subject)}> ?p ?o }} }}
         """
 
         result = self.query(query)
@@ -620,7 +620,7 @@ if __name__ == "__main__":
 
         # Get subject graph
         print("- Getting subject graph...")
-        subject_graph = adapter.get_subject_graph(test_subject)
+        subject_graph = adapter.get_subject_graph(test_subject, test_graph_name)
         print(f"  Subject has {len(subject_graph)} triples")
 
         # Clean up

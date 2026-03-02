@@ -59,7 +59,7 @@ class ITripleStorePort(ABC):
         pass
 
     @abstractmethod
-    def get_subject_graph(self, subject: URIRef) -> Graph:
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         pass
 
     @abstractmethod
@@ -227,7 +227,7 @@ class ITripleStoreService(ABC):
         pass
 
     @abstractmethod
-    def get_subject_graph(self, subject: str) -> Graph:
+    def get_subject_graph(self, subject: str, graph_name: str | URIRef) -> Graph:
         """Get the RDF graph containing all triples for a specific subject.
 
         This method retrieves and returns an RDFlib Graph containing all triples

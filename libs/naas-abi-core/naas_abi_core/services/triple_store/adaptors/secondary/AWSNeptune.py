@@ -598,7 +598,7 @@ class AWSNeptune(ITripleStorePort):
         """
         return self.query(query)
 
-    def get_subject_graph(self, subject: URIRef) -> Graph:
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         """
         Get all triples for a specific subject as an RDFLib Graph.
 
@@ -620,7 +620,16 @@ class AWSNeptune(ITripleStorePort):
             >>> for _, predicate, obj in alice_graph:
             ...     print(f"Alice {predicate} {obj}")
         """
-        res = self.query(f"SELECT ?s ?p ?o WHERE  {{ <{str(subject)}> ?p ?o }}")
+        res = self.query(
+            f"""
+            SELECT ?s ?p ?o 
+            WHERE  {{
+                GRAPH <{str(graph_name)}> {{
+                    <{str(subject)}> ?p ?o
+                }}
+            }}
+            """
+        )
 
         graph = Graph()
         for row in res:
