@@ -323,7 +323,14 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         def _remove_schema_subject(subject: URIRef) -> None:
             triples: rdflib.query.Result = read_query_func(
-                f"""SELECT ?p ?o WHERE GRAPH <{str(self.__schema_graph)}> {{ <{subject}> ?p ?o . }}"""
+                f"""
+                SELECT ?p ?o 
+                WHERE {{ 
+                    GRAPH <{str(self.__schema_graph)}> {{ 
+                    <{str(subject)}> ?p ?o . 
+                    }} 
+                }}
+                """
             )
 
             cleanup_graph = Graph()
