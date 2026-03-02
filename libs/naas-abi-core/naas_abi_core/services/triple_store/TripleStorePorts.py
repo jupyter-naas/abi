@@ -63,7 +63,7 @@ class ITripleStorePort(ABC):
         pass
 
     @abstractmethod
-    def create_graph(self, graph_name: URIRef, creator: str | None = None):
+    def create_graph(self, graph_name: URIRef):
         """Create a named graph.
 
         Raises:
