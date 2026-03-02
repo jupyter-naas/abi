@@ -124,6 +124,8 @@ You excel at providing accurate, helpful, and contextually appropriate responses
             class_name,
             (Agent,),
             {
+                "name": model_name,
+                "description": model_description,
                 "New": classmethod(create_agent_func),
             },
         )

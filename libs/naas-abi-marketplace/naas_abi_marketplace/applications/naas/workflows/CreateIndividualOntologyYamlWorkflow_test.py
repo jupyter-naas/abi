@@ -60,7 +60,8 @@ def test_create_individual_ontology_yaml_workflow(
             ),
         )
     )
-    triple_store_service.insert(graph)
+    graph_name = URIRef("http://ontology.naas.ai/graph/default")
+    triple_store_service.insert(graph, graph_name=graph_name)
     time.sleep(3)
 
     # Run workflow
@@ -78,7 +79,7 @@ def test_create_individual_ontology_yaml_workflow(
     assert str(ontology_id) == str(naas_ontology_id), ontology_id
 
     # Remove graph
-    triple_store_service.remove(graph)
+    triple_store_service.remove(graph, graph_name=graph_name)
 
     # Remove ontology
     if ontology_id:
