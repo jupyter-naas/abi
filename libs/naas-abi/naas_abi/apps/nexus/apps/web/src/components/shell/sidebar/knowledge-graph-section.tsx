@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Waypoints, Plus, Filter, MoreVertical, Edit2, Trash2,
-  RefreshCw, Eye, EyeOff, Database, User, UserPlus, ChevronRight, Code,
+  Waypoints, Plus, Filter, MoreVertical, Edit2, Trash2, Eraser,
+  RefreshCw, Database, User, UserPlus, ChevronRight, Code,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -18,49 +18,86 @@ interface GraphItem {
   id: string;
   name: string;
   type: 'workspace' | 'user';
-  nodeCount: number;
+}
+
+function isSchemaGraph(graph: GraphItem): boolean {
+  return graph.name === 'schema' || graph.id === 'schema' || graph.id.endsWith('/schema');
 }
 
 const GraphItemRow = React.memo(function GraphItemRow({
   graph,
-  isVisible,
   isSelected,
-  onToggle,
   onClick,
+  onClear,
+  onDelete,
 }: {
   graph: GraphItem;
-  isVisible: boolean;
   isSelected: boolean;
-  onToggle: () => void;
   onClick: () => void;
+  onClear?: () => void;
+  onDelete?: () => void;
 }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const showActions = !isSchemaGraph(graph) && (onClear != null || onDelete != null);
+
   return (
-    <div
-      className={cn(
-        'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer',
-        isVisible ? 'text-foreground' : 'text-muted-foreground',
-        isSelected && 'bg-workspace-accent-10 text-workspace-accent',
-        'hover:bg-workspace-accent-10'
-      )}
-      onClick={onClick}
-    >
-      {graph.type === 'workspace' ? <Database size={12} /> : <User size={12} />}
-      <span className="flex-1 truncate">{graph.name}</span>
-      <span className="text-[10px] text-muted-foreground">{graph.nodeCount}</span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-        className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted/50 group-hover:opacity-100"
-        title={isVisible ? 'Hide graph' : 'Show graph'}
-      >
-        {isVisible ? (
-          <Eye size={12} className="text-workspace-accent" />
-        ) : (
-          <EyeOff size={12} />
+    <div className="relative">
+      <div
+        className={cn(
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer',
+          isSelected && 'bg-workspace-accent-10 text-workspace-accent',
+          'hover:bg-workspace-accent-10 text-foreground'
         )}
-      </button>
+        onClick={onClick}
+      >
+        {graph.type === 'workspace' ? <Database size={12} /> : <User size={12} />}
+        <span className="flex-1 truncate">{graph.name}</span>
+        {showActions && (
+          <span
+            className="rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu((prev) => !prev);
+            }}
+          >
+            <MoreVertical size={12} />
+          </span>
+        )}
+      </div>
+
+      {showMenu && showActions && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+          <div className="absolute right-0 top-full z-50 mt-1 w-32 rounded-md border border-border bg-popover p-1 shadow-lg">
+            {onClear && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClear();
+                  setShowMenu(false);
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
+              >
+                <Eraser size={12} />
+                Clear
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                  setShowMenu(false);
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 size={12} />
+                Delete
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 });
@@ -146,7 +183,6 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     views,
     activeSavedViewId,
     selectGraph,
-    toggleGraphVisibility,
     setVisibleGraphs,
     setActiveSavedView,
     deleteView,
@@ -168,7 +204,9 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     try {
       const apiUrl = getApiUrl();
       let graphList: { id: string; label: string }[] = [{ id: 'default', label: 'default' }];
-      const namesRes = await authFetch(`${apiUrl}/api/graph/names`);
+      const namesRes = await authFetch(
+        `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+      );
       if (namesRes.ok) {
         const namesData = await namesRes.json();
         const parsed = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
@@ -178,27 +216,11 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
         if (normalized.length > 0) graphList = normalized;
       }
 
-      const graphs: GraphItem[] = await Promise.all(
-        graphList.map(async (graph) => {
-          let nodeCount = 0;
-          const wsRes = await authFetch(
-            `${apiUrl}/api/graph/network?workspace_id=${encodeURIComponent(currentWorkspaceId)}&graph_id=${encodeURIComponent(graph.id)}`
-          );
-          if (wsRes.ok) {
-            const wsData = await wsRes.json();
-            const uniqueNodes = Array.isArray(wsData?.nodes)
-              ? Array.from(new Map(wsData.nodes.map((node: { id: string }) => [node.id, node])).values())
-              : [];
-            nodeCount = uniqueNodes.length;
-          }
-          return {
-            id: graph.id,
-            name: graph.label,
-            type: 'workspace' as const,
-            nodeCount,
-          };
-        })
-      );
+      const graphs: GraphItem[] = graphList.map((graph) => ({
+        id: graph.id,
+        name: graph.label,
+        type: 'workspace' as const,
+      }));
 
       setAvailableGraphs(graphs);
 
@@ -229,6 +251,14 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   useEffect(() => {
     fetchGraphs();
   }, [currentWorkspaceId, visibleGraphIds.length, setVisibleGraphs]);
+
+  useEffect(() => {
+    const onGraphListUpdate = () => {
+      void fetchGraphs();
+    };
+    window.addEventListener('graph-list-update', onGraphListUpdate);
+    return () => window.removeEventListener('graph-list-update', onGraphListUpdate);
+  }, [currentWorkspaceId]);
 
   useEffect(() => {
     const fetchViews = async () => {
@@ -310,44 +340,113 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
         </button>
       </div>
 
-      {availableGraphs.length > 0 && (
-        <div className={cn('px-1', graphsExpanded && 'pb-2')}>
-          <button
-            onClick={() => setGraphsExpanded((prev) => !prev)}
-            className={cn(
-              'flex w-full items-center gap-1 rounded-md px-1 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10',
-              graphsExpanded && 'mb-1'
-            )}
+      <div className={cn('px-1', graphsExpanded && 'pb-2')}>
+        <button
+          onClick={() => setGraphsExpanded((prev) => !prev)}
+          className={cn(
+            'flex w-full items-center gap-1 rounded-md px-1 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10',
+            graphsExpanded && 'mb-1'
+          )}
+        >
+          <ChevronRight
+            size={10}
+            className={cn('flex-shrink-0 transition-transform', graphsExpanded && 'rotate-90')}
+          />
+          <span className="flex-1 text-left">Graphs ({availableGraphs.length})</span>
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveSavedView(null);
+              router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=create-graph'));
+            }}
+            className="rounded p-0.5 hover:bg-muted"
+            title="New Graph"
           >
-            <ChevronRight
-              size={10}
-              className={cn('flex-shrink-0 transition-transform', graphsExpanded && 'rotate-90')}
-            />
-            <span>Graphs ({availableGraphs.length})</span>
-          </button>
-          {graphsExpanded && (
-            <div className="space-y-0.5">
-              {availableGraphs.map((graph) => (
+            <Plus size={12} />
+          </span>
+        </button>
+        {graphsExpanded && (
+          <div className="space-y-0.5">
+            {availableGraphs.length === 0 ? (
+              <p className="px-2 py-1 text-xs text-muted-foreground">No named graphs</p>
+            ) : (
+              availableGraphs.map((graph) => (
                 <GraphItemRow
                   key={graph.id}
                   graph={graph}
-                  isVisible={visibleGraphIds.includes(graph.id)}
                   isSelected={showGraphRowSelection && selectedGraphId === graph.id}
-                  onToggle={() => toggleGraphVisibility(graph.id)}
                   onClick={() => {
                     setActiveSavedView(null);
                     selectGraph(graph.id);
-                    if (!visibleGraphIds.includes(graph.id)) {
-                      toggleGraphVisibility(graph.id);
-                    }
+                    setVisibleGraphs([graph.id]);
                     router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
                   }}
+                  onClear={
+                    isSchemaGraph(graph)
+                      ? undefined
+                      : () => {
+                          if (!confirm(`Clear all triples in graph "${graph.name}"? This cannot be undone.`)) return;
+                          const run = async () => {
+                            try {
+                              const apiUrl = getApiUrl();
+                              const response = await authFetch(`${apiUrl}/api/graph/clear`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  workspace_id: currentWorkspaceId,
+                                  graph_uri: graph.id,
+                                }),
+                              });
+                              if (!response.ok) {
+                                const err = await response.json().catch(() => ({}));
+                                alert(err.detail || 'Failed to clear graph');
+                                return;
+                              }
+                            } catch (err) {
+                              console.error('Failed to clear graph:', err);
+                              alert('Failed to clear graph');
+                            }
+                          };
+                          void run();
+                        }
+                  }
+                  onDelete={
+                    isSchemaGraph(graph)
+                      ? undefined
+                      : () => {
+                          if (!confirm(`Delete graph "${graph.name}"? This cannot be undone.`)) return;
+                          const run = async () => {
+                            try {
+                              const apiUrl = getApiUrl();
+                              const response = await authFetch(`${apiUrl}/api/graph/delete`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  workspace_id: currentWorkspaceId,
+                                  graph_uri: graph.id,
+                                }),
+                              });
+                              if (!response.ok) {
+                                const err = await response.json().catch(() => ({}));
+                                alert(err.detail || 'Failed to delete graph');
+                                return;
+                              }
+                              window.dispatchEvent(new CustomEvent('graph-list-update'));
+                              await fetchGraphs();
+                            } catch (err) {
+                              console.error('Failed to delete graph:', err);
+                              alert('Failed to delete graph');
+                            }
+                          };
+                          void run();
+                        }
+                  }
                 />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       <div className={cn('px-1', viewsExpanded && 'pb-2')}>
         <button

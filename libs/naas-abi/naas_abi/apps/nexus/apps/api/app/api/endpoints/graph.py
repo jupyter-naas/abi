@@ -1,6 +1,7 @@
 """Knowledge Graph API endpoints backed by ABI TripleStoreService."""
 
 import json
+import re
 import uuid
 from datetime import datetime
 from typing import Any, Literal
@@ -17,14 +18,19 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 from pydantic import BaseModel, Field
 from rdflib import Graph, Namespace, URIRef
 from rdflib import Literal as RDFLiteral
-from rdflib.namespace import RDF, RDFS, XSD
+from rdflib.namespace import OWL, RDF, RDFS, XSD
+from rdflib.query import ResultRow
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
-NEXUS = Namespace("urn:nexus:kg:")
+NEXUS = Namespace("http://ontology.naas.ai/nexus/")
+NEXUS_GRAPH_NAMED = URIRef("http://ontology.naas.ai/graph/nexus")
+GRAPH_URI_PREFIX = "http://ontology.naas.ai/graph/"
+
+NEXUS_GRAPH = NEXUS.Graph
+NEXUS_VIEW = NEXUS.GraphView
 NEXUS_NODE = NEXUS.Node
 NEXUS_EDGE = NEXUS.Edge
-NEXUS_VIEW = NEXUS.View
 NEXUS_NODE_ID = NEXUS.nodeId
 NEXUS_NODE_TYPE = NEXUS.nodeType
 NEXUS_EDGE_ID = NEXUS.edgeId
@@ -47,6 +53,22 @@ NEXUS_UPDATED_AT = NEXUS.updatedAt
 class GraphInfo(BaseModel):
     id: str
     label: str
+
+
+class GraphCreate(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    label: str = Field(..., min_length=1, max_length=200)
+    slug: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class GraphClear(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1, max_length=200)
+
+
+class GraphDelete(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1, max_length=200)
 
 
 class GraphsResponse(BaseModel):
@@ -217,9 +239,7 @@ def _sparql_str(value: str) -> str:
 
 
 def _graph_scope_clauses(graph_name: str) -> tuple[str, str]:
-    if graph_name != "default":
-        return f"GRAPH <{graph_name}> {{", "}"
-    return "", ""
+    return f"GRAPH <{graph_name}> {{", "}"
 
 
 def _resolve_graphs_and_view(
@@ -234,11 +254,11 @@ def _resolve_graphs_and_view(
         view = _get_view_by_id(store, workspace_id, view_id)
         if view is None:
             raise HTTPException(status_code=404, detail="View not found")
-        graphs = [g for g in (view.graph_names or []) if g] or ["default"]
+        graphs = [g for g in (view.graph_names or []) if g]
         return graphs, view
     if graph_id:
         return [graph_id], None
-    return ["default"], None
+    return [], None
 
 
 def _multi_graph_union(pattern: str, graph_names: list[str]) -> str:
@@ -247,7 +267,7 @@ def _multi_graph_union(pattern: str, graph_names: list[str]) -> str:
         return pattern
     parts = []
     for g in graph_names:
-        open_c, close_c = _graph_scope_clauses(g)
+        open_c, close_c = _graph_scope_clauses(str(g))
         parts.append(f"{open_c}{pattern}{close_c}")
     return " UNION ".join(parts)
 
@@ -317,6 +337,7 @@ def _view_graph(view: GraphView) -> Graph:
     g = Graph()
     subject = _view_uri(view.workspace_id, view.id)
     g.add((subject, RDF.type, NEXUS_VIEW))
+    g.add((subject, RDF.type, OWL.NamedIndividual))
     g.add((subject, NEXUS_VIEW_ID, RDFLiteral(view.id)))
     g.add((subject, NEXUS_WORKSPACE_ID, RDFLiteral(view.workspace_id)))
     g.add((subject, NEXUS_VIEW_NAME, RDFLiteral(view.name)))
@@ -571,6 +592,7 @@ def _query_views(store: TripleStoreService, workspace_id: str) -> list[GraphView
     rows = store.query(f"""
         SELECT ?id ?workspace_id ?name ?graph_names ?filters ?created_at ?updated_at
         WHERE {{
+            GRAPH <{str(NEXUS_GRAPH_NAMED)}> {{
             ?view a <urn:nexus:kg:View> ;
                   <urn:nexus:kg:viewId> ?id ;
                   <urn:nexus:kg:workspaceId> ?workspace_id ;
@@ -580,6 +602,7 @@ def _query_views(store: TripleStoreService, workspace_id: str) -> list[GraphView
             OPTIONAL {{ ?view <urn:nexus:kg:createdAt> ?created_at . }}
             OPTIONAL {{ ?view <urn:nexus:kg:updatedAt> ?updated_at . }}
             FILTER(?workspace_id = {_sparql_str(workspace_id)})
+            }}
         }}
     """)
     views = [_row_to_view(row) for row in rows]
@@ -679,26 +702,122 @@ def _get_edge_by_id(store: TripleStoreService, edge_id: str) -> GraphEdge | None
 # ============ Endpoints ============
 
 
-@router.get("/names")
-async def list_graph_names(
+def _query_graphs(store: TripleStoreService) -> list[GraphInfo]:
+    query = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?uri ?label
+        WHERE {{
+            GRAPH <{str(NEXUS_GRAPH_NAMED)}> {{
+                ?uri a <{str(NEXUS_GRAPH)}> .
+                OPTIONAL {{ ?uri rdfs:label ?label . }}
+            }}
+        }}
+    """
+    rows = store.query(query)
+    graphs: list[GraphInfo] = []
+    for row in rows:
+        assert isinstance(row, ResultRow)
+        graph_uri = str(row.uri)
+        graph_label = str(row.label)
+        graphs.append(GraphInfo(id=graph_uri, label=graph_label))
+    return graphs
+
+
+@router.get("/list")
+async def list_graphs(
     request: Request,
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    force_update: bool = False,
 ) -> GraphsResponse:
-    """List all named graphs available in the triple store."""
+    """List all graphs available in the triple store and nexus ontology graph."""
+    await require_workspace_access(current_user.id, workspace_id)
+
+    # Get triple store service
     store = get_triple_store_service(request)
-    raw_names = [str(graph_name) for graph_name in store.list_graphs()]
-    if len(raw_names) == 0:
-        raw_names = ["default"]
-    graphs = [GraphInfo(id=uri, label=uri.split("/")[-1].split("#")[-1]) for uri in raw_names]
-    graphs.sort(key=lambda item: item.label.lower())
+
+    # Get graphs from nexus ontology graph
+    graphs: list[GraphInfo] = []
+    for graph_uri in store.list_graphs():
+        graphs.append(
+            GraphInfo(id=str(graph_uri), label=str(graph_uri).split("/")[-1].split("#")[-1])
+        )
     return GraphsResponse(graphs=graphs)
+
+
+def _label_to_slug(label: str) -> str:
+    """Derive a URL-safe slug from a label (lowercase, alphanumeric and hyphens)."""
+    s = label.strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    return s.strip("-") or "graph"
+
+
+@router.post("/create")
+async def create_graph(
+    request: Request,
+    payload: GraphCreate,
+    current_user: User = Depends(get_current_user_required),
+) -> GraphInfo:
+    """Create a new named graph. Label is required; slug is optional (derived from label)."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+
+    store = get_triple_store_service(request)
+
+    # Validate payload
+    slug = (payload.slug or _label_to_slug(payload.label)).strip().lower()
+    slug = re.sub(r"[^a-z0-9-]+", "-", slug).strip("-") or "graph"
+    new_graph_uri = URIRef(GRAPH_URI_PREFIX + slug)
+
+    # Check if graph already exists
+    for graph_uri in store.list_graphs():
+        if str(graph_uri) == str(new_graph_uri):
+            raise HTTPException(
+                status_code=409, detail=f"A graph with id '{graph_uri}' already exists."
+            )
+
+    store.create_graph(new_graph_uri)
+    return GraphInfo(id=str(new_graph_uri), label=payload.label.strip())
+
+
+@router.post("/clear")
+async def clear_graph(
+    request: Request,
+    payload: GraphClear,
+    current_user: User = Depends(get_current_user_required),
+) -> dict[str, str]:
+    await require_workspace_access(current_user.id, payload.workspace_id)
+
+    graph_uri = URIRef(payload.graph_uri)
+    if graph_uri == URIRef("http://ontology.naas.ai/graph/schema"):
+        raise HTTPException(status_code=400, detail="Schema graph cannot be cleared.")
+
+    get_triple_store_service(request).clear_graph(graph_uri)
+    return {"status": "cleared"}
+
+
+@router.post("/delete")
+async def delete_graph(
+    request: Request,
+    payload: GraphDelete,
+    current_user: User = Depends(get_current_user_required),
+) -> dict[str, str]:
+    await require_workspace_access(current_user.id, payload.workspace_id)
+
+    graph_uri = URIRef(payload.graph_uri)
+    if graph_uri == URIRef("http://ontology.naas.ai/graph/schema"):
+        raise HTTPException(status_code=400, detail="Schema graph cannot be deleted.")
+
+    get_triple_store_service(request).drop_graph(graph_uri)
+    return {"status": "deleted"}
 
 
 @router.get("/views")
 async def list_graph_views(
     request: Request,
-    workspace_id: str,
+    workspace_id: str = Query(..., description="Workspace ID"),
     current_user: User = Depends(get_current_user_required),
 ) -> list[GraphView]:
+    """List all saved views for the workspace. Includes newly created views."""
     await require_workspace_access(current_user.id, workspace_id)
     store = get_triple_store_service(request)
     return _query_views(store, workspace_id)
@@ -711,13 +830,19 @@ async def create_graph_view(
     current_user: User = Depends(get_current_user_required),
 ) -> GraphView:
     await require_workspace_access(current_user.id, payload.workspace_id)
+
+    # Get triple store service
+    store = get_triple_store_service(request)
+
+    # Validate payload
     if len(payload.filters) == 0:
         raise HTTPException(status_code=400, detail="At least one filter is required")
-    store = get_triple_store_service(request)
+
+    # Create view
     now = datetime.now(UTC).replace(tzinfo=None)
     normalized_graph_names = payload.graph_names or ["default"]
     created = GraphView(
-        id=f"view-{uuid.uuid4().hex[:12]}",
+        id=str(uuid.uuid4()),
         workspace_id=payload.workspace_id,
         name=payload.name.strip(),
         graph_names=[name for name in normalized_graph_names if name],
@@ -725,7 +850,8 @@ async def create_graph_view(
         created_at=now,
         updated_at=now,
     )
-    store.insert(_view_graph(created))
+    # Insert view into nexus ontology graph
+    store.insert(_view_graph(created), graph_name=NEXUS_GRAPH_NAMED)
     return created
 
 
@@ -859,6 +985,11 @@ async def get_graph_network(
 ) -> GraphData:
     """Get all nodes and edges. Filter by graph_id or view_id (view provides graphs + filters)."""
     await require_workspace_access(current_user.id, workspace_id)
+    # Decode graph_id if provided (to handle URL-encoded input)
+    from urllib.parse import unquote
+
+    if graph_id is not None:
+        graph_id = unquote(graph_id)
 
     nodes = await list_nodes(
         request=request,
@@ -936,6 +1067,7 @@ async def list_nodes(
     LIMIT {int(limit)}
     OFFSET {int(offset)}
     """
+    print(query)
 
     rows = triple_store_service.query(query)
     nodes: list[GraphNode] = []
