@@ -46,6 +46,7 @@ jobs:
         run: |
           # make test-api-init-container
           echo "🚨🚨🚨🚨🚨🚨🚨🚨🚨 Skipping API initialization tests (disabled) WE NEED TO REMEDIATE THIS 🚨🚨🚨🚨🚨🚨🚨🚨🚨"
+          
   container-scan:
     runs-on: ubuntu-latest
     steps:
@@ -62,6 +63,9 @@ jobs:
         env:
           UV_PYTHON: "3.11"
         run: |
-          wget https://github.com/aquasecurity/trivy/releases/download/v0.62.1/trivy_0.62.1_Linux-64bit.tar.gz && tar zxvf trivy_*.tar.gz && mv trivy /usr/local/bin/
-
+          if ! command -v trivy >/dev/null 2>&1; then
+            wget https://github.com/aquasecurity/trivy/releases/download/v0.62.1/trivy_0.62.1_Linux-64bit.tar.gz
+            tar zxvf trivy_*.tar.gz
+            sudo mv trivy /usr/local/bin/
+          fi
           make trivy-container-scan
