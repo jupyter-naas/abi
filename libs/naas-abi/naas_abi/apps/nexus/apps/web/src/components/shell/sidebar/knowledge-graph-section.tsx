@@ -494,12 +494,14 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                     );
                   }}
                   onDelete={() => {
+                    const workspaceId = currentWorkspaceId;
+                    if (!workspaceId) return;
                     if (confirm(`Delete view "${view.name}"?`)) {
                       const run = async () => {
                         try {
                           const apiUrl = getApiUrl();
                           const response = await authFetch(
-                            `${apiUrl}/api/graph/views/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(currentWorkspaceId)}`,
+                            `${apiUrl}/api/graph/views/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
                             { method: 'DELETE' }
                           );
                           if (!response.ok) return;
