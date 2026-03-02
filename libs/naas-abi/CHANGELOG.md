@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v1.8.2 (2026-03-02)
+
+### Bug Fixes
+
+- Add abi agents to nexus
+  ([`dee9936`](https://github.com/jupyter-naas/abi/commit/dee99363e27f5f36935dd23ffb9167dd1f6a25e1))
+
+- Add classname
+  ([`0423f88`](https://github.com/jupyter-naas/abi/commit/0423f8809b4bdf3bd60e235e050ac331e19b17f6))
+
+- Code cleaning
+  ([`2d2783f`](https://github.com/jupyter-naas/abi/commit/2d2783f8ffd9464985f88489ab3deb771e0f70d8))
+
+- Init hexa archi agents
+  ([`ad5a997`](https://github.com/jupyter-naas/abi/commit/ad5a997bc51bd9ed8b2b5092521aa6ddf0a6c92d))
+
+- Mypy errors
+  ([`1f53767`](https://github.com/jupyter-naas/abi/commit/1f53767e45700dc6dd9c4c256d79c4589de84614))
+
+- Ollama exception thrown
+  ([`9cbb53a`](https://github.com/jupyter-naas/abi/commit/9cbb53a5ea42badc20fbd44cdbaadcc7196daace))
+
+- Remove ollama error from front
+  ([`b7b19a9`](https://github.com/jupyter-naas/abi/commit/b7b19a92ae1b42512a2a50b3287b1aadd2e54c9e))
+
+- Rm seeding default agents
+  ([`d00665a`](https://github.com/jupyter-naas/abi/commit/d00665af79d4b52a1fa510d2a7fdddbf6aff4368))
+
+- Save agents to db
+  ([`2185ae7`](https://github.com/jupyter-naas/abi/commit/2185ae73ebd9ce8ae52bab19fc4511f1d5ca3efa))
+
+
 ## v1.8.1 (2026-02-19)
 
 ### Bug Fixes
