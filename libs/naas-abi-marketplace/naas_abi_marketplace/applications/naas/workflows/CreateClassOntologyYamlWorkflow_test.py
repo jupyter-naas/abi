@@ -54,7 +54,8 @@ def test_create_class_ontology_yaml_workflow(workflow: CreateClassOntologyYamlWo
             ),
         )
     )
-    triple_store_service.insert(graph)
+    graph_name = URIRef("http://ontology.naas.ai/graph/default")
+    triple_store_service.insert(graph, graph_name=graph_name)
     time.sleep(3)
 
     # Parameters
