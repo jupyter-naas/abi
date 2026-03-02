@@ -54,7 +54,7 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return rdflib.query.Result("SELECT")
 
-    def get_subject_graph(self, subject: URIRef) -> Graph:
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         return Graph()
 
     def handle_view_event(
@@ -105,7 +105,7 @@ class _InMemoryTripleStoreAdapter(ITripleStorePort):
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return self.graph.query(query)
 
-    def get_subject_graph(self, subject: URIRef) -> Graph:
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         subject_graph = Graph()
         for s, p, o in self.graph.triples((subject, None, None)):
             subject_graph.add((s, p, o))
