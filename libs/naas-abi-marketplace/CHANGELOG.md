@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.2 (2026-03-03)
+
+### Bug Fixes
+
+- Filter out agents with no names
+  ([`c53d5cc`](https://github.com/jupyter-naas/abi/commit/c53d5cccf24ffd59bebe26601ce82bb96bf3a484))
+
+
 ## v1.7.1 (2026-03-02)
 
 
