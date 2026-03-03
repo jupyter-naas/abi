@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Settings, Archive, Edit2, Trash2 } from 'lucide-react';
+import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Archive, Edit2, Trash2 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -320,34 +320,23 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
               const isSelected = isChatRoute && selectedAgent === agent.id;
 
               return (
-                <div
+                <button
                   key={agent.id}
+                  onClick={() => {
+                    setSelectedAgent(agent.id);
+                    router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+                  }}
                   className={cn(
-                    'group flex items-center gap-1 rounded-md px-1 py-1 text-xs transition-colors',
+                    'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs transition-colors',
                     'hover:bg-workspace-accent-10',
                     isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
                   )}
                 >
-                  <button
-                    onClick={() => {
-                      setSelectedAgent(agent.id);
-                      router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
-                    }}
-                    className="flex flex-1 items-center gap-1 text-left"
-                  >
-                    <AgentIcon size={12} className={cn(
-                      isSelected ? 'text-workspace-accent' : 'text-muted-foreground'
-                    )} />
-                    <span className="flex-1 truncate">{agent.name}</span>
-                  </button>
-                  <button
-                    onClick={() => router.push(getWorkspacePath(currentWorkspaceId, `/chat/agents/${agent.id}`))}
-                    className="rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
-                    title="Configure agent"
-                  >
-                    <Settings size={12} className="text-muted-foreground" />
-                  </button>
-                </div>
+                  <AgentIcon size={12} className={cn(
+                    isSelected ? 'text-workspace-accent' : 'text-muted-foreground'
+                  )} />
+                  <span className="flex-1 truncate">{agent.name}</span>
+                </button>
               );
             })}
           </div>
