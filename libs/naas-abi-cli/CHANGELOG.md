@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.0 (2026-03-03)
+
+### Features
+
+- Add api example in new abi module creation
+  ([`735931e`](https://github.com/jupyter-naas/abi/commit/735931ee331b57fec791dbede5949e5d019654b3))
+
+
 ## v1.18.1 (2026-02-25)
 
 
