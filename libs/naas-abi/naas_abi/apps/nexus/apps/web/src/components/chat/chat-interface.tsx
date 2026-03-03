@@ -616,6 +616,7 @@ export function ChatInterface() {
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
+            logoUrl={selectedAgentData?.logoUrl ?? undefined}
             suggestions={selectedAgentData?.suggestions}
             onSuggestionClick={(prompt) => setInput(prompt)}
           />
@@ -796,17 +797,29 @@ export function ChatInterface() {
 
 function EmptyState({
   selectedAgentName,
+  logoUrl,
   suggestions,
   onSuggestionClick,
 }: {
   selectedAgentName: string;
+  logoUrl?: string | null;
   suggestions?: Array<{ label: string; value: string }>;
   onSuggestionClick: (prompt: string) => void;
 }) {
+  const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
   return (
     <div className="flex h-full flex-col items-center justify-center">
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-workspace-accent-10">
-        <Bot size={32} className="text-workspace-accent" />
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-workspace-accent-10 overflow-hidden">
+        {resolvedLogoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolvedLogoUrl}
+            alt={selectedAgentName}
+            className="h-full w-full object-contain p-1"
+          />
+        ) : (
+          <Bot size={32} className="text-workspace-accent" />
+        )}
       </div>
       <p className="mb-8 max-w-md text-center text-muted-foreground">
         Start a conversation with {selectedAgentName}. Ask questions, explore your data, or get
