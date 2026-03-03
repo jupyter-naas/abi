@@ -9,6 +9,8 @@ from naas_abi_core.module.Module import (
 # from naas_abi_core.services.secret.Secret import Secret
 # from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 # from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
+# from naas_abi_core.services.bus.BusService import BusService
+# from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 
 
 class ABIModule(BaseModule):
@@ -20,7 +22,9 @@ class ABIModule(BaseModule):
             # Secret,
             # TripleStoreService,
             # ObjectStorageService,
-            # VectorStoreService
+            # VectorStoreService,
+            # BusService,
+            # KeyValueService,
         ],
     )
 
@@ -49,6 +53,9 @@ class ABIModule(BaseModule):
         # app.state.object_storage = self.engine.services.object_storage
         # app.state.secret_service = self.engine.services.secret
         # app.state.triple_store = self.engine.services.triple_store
+        # app.state.vector_store = self.engine.services.vector_store
+        # app.state.bus_service = self.engine.services.bus
+        # app.state.key_value_service = self.engine.services.kv
 
         # Example: mount your FastAPI routes/app factory.
         # from your_module.apps.api.app.main import create_app
