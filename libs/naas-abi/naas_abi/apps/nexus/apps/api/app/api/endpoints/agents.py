@@ -2,7 +2,6 @@
 Agents API endpoints - Agent management and lifecycle.
 """
 
-import logging
 from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,9 +18,9 @@ from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentService,
     AgentUpdateInput,
 )
+from naas_abi_core import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 
@@ -44,6 +43,26 @@ def _extract_agent_suggestions(agent_cls: type) -> list[dict[str, str]] | None:
         if isinstance(label, str) and isinstance(value, str):
             normalized.append({"label": label, "value": value})
     return normalized
+
+
+def _get_agent_class_name(agent_cls: type) -> str | None:
+    """Resolve agent name from class. Handles both class attributes and instance properties."""
+    name = getattr(agent_cls, "name", None)
+    if isinstance(name, str):
+        return name
+    if isinstance(name, property):
+        name = getattr(agent_cls, "NAME", None)
+    return name if isinstance(name, str) else None
+
+
+def _get_agent_class_description(agent_cls: type) -> str | None:
+    """Resolve agent description from class. Handles both class attributes and instance properties."""
+    desc = getattr(agent_cls, "description", None)
+    if isinstance(desc, str):
+        return desc
+    if isinstance(desc, property):
+        desc = getattr(agent_cls, "DESCRIPTION", None)
+    return desc if isinstance(desc, str) else None
 
 
 @router.get("/")
@@ -79,14 +98,14 @@ async def list_agents(
     class_name_to_agent_class: dict[str, type[Agent]] = {}
 
     for agent_cls in agents:
-        if not hasattr(agent_cls, "name") or (
-            hasattr(agent_cls, "name") and agent_cls.name is None
-        ):
-            logger.warning(f"Skipping agent {agent_cls} because it has no name or description")
+        name = _get_agent_class_name(agent_cls)
+        description = _get_agent_class_description(agent_cls)
+        if not name:
+            logger.warning(
+                f"Skipping agent {agent_cls} because it has no resolvable name (use class attribute 'name' or 'NAME')"
+            )
             continue
 
-        name = agent_cls.name
-        description = agent_cls.description
         class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
         class_name_to_agent_class[class_name] = agent_cls
         existing_agent = existing_agents_by_name.get(str(name))
@@ -94,13 +113,13 @@ async def list_agents(
         if name == "Abi":
             enabled = True
 
-        if not existing_agent and name is not None:
-            logger.debug(f"Creating agent: {name}")
+        if not existing_agent:
+            logger.debug(f"Creating agent in nexus backend: {name}")
 
             # Create agent in database
             agent_create = AgentCreateInput(
-                name=str(name),
-                description=str(description),
+                name=name,
+                description=description or "",
                 workspace_id=workspace_id,
                 class_name=class_name,
                 provider="abi",
