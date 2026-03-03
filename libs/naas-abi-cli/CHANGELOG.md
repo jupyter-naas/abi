@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.1 (2026-03-03)
+
+### Bug Fixes
+
+- Remove cli rerun
+  ([`e590251`](https://github.com/jupyter-naas/abi/commit/e5902510f8e00740508fa1de8610340981351557))
+
+
 ## v1.19.0 (2026-03-03)
 
 ### Features
