@@ -121,7 +121,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
     def get(self) -> Graph:
         return self.__live_graph
 
-    def get_subject_graph(self, subject: URIRef) -> Graph:
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         subject_hash = self.iri_hash(subject)
 
         if os.path.exists(self.hash_triples_path(subject_hash)):

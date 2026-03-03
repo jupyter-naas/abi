@@ -93,6 +93,19 @@ def _secret_prefix_for_email(email: str) -> str:
     return re.sub(r"[^A-Z0-9]", "_", _normalize_email(email).upper())
 
 
+def _get_user_credentials_from_secret_service(
+    secret_service: Any,
+    email: str,
+) -> tuple[str, str] | None:
+    """Return (email, password) if both exist in secret service, else None."""
+    email_prefix = _secret_prefix_for_email(email)
+    stored_email = secret_service.get(f"NEXUS_USER_{email_prefix}_EMAIL")
+    stored_password = secret_service.get(f"NEXUS_USER_{email_prefix}_PASSWORD")
+    if stored_email and stored_password:
+        return (str(stored_email), str(stored_password))
+    return None
+
+
 def _store_user_credentials_in_secret_service(
     secret_service: Any,
     email: str,
@@ -181,14 +194,30 @@ async def _upsert_users(
     for user_cfg in settings.users:
         normalized_email = _normalize_email(str(user_cfg.email))
         user = await _get_user_by_email(session, normalized_email)
-        generated_password: str | None = None
+        password_to_use: str | None = None
+        password_from_secrets = False
         if user is None:
-            generated_password = _generate_password()
+            # Prefer credentials from secret service when configured
+            if secret_service is not None and user_cfg.store_credentials_in_secrets:
+                stored = _get_user_credentials_from_secret_service(secret_service, normalized_email)
+                if stored is not None:
+                    _email, password_to_use = stored
+                    password_from_secrets = True
+                    logger.info(
+                        "Creating user email=%s using password from secret service",
+                        normalized_email,
+                    )
+            if password_to_use is None:
+                password_to_use = _generate_password()
+                logger.info(
+                    "Creating user email=%s with generated password",
+                    normalized_email,
+                )
             user = UserModel(
                 id=f"user-{uuid4().hex[:12]}",
                 email=normalized_email,
                 name=user_cfg.name,
-                hashed_password=_hash_password(generated_password),
+                hashed_password=_hash_password(password_to_use),
                 avatar=user_cfg.avatar,
                 company=user_cfg.company,
                 role=user_cfg.role,
@@ -198,6 +227,23 @@ async def _upsert_users(
             )
             session.add(user)
             logger.info("Created user email=%s from config", normalized_email)
+            # Store credentials in secret service only when we generated them (not when we read from secrets)
+            if (
+                secret_service is not None
+                and user_cfg.store_credentials_in_secrets
+                and password_to_use is not None
+                and not password_from_secrets
+            ):
+                _store_user_credentials_in_secret_service(
+                    secret_service=secret_service,
+                    email=normalized_email,
+                    password=password_to_use,
+                )
+            elif user_cfg.store_credentials_in_secrets and secret_service is None:
+                logger.warning(
+                    "User email=%s created with generated password, but no secret service is available to store credentials.",
+                    normalized_email,
+                )
         else:
             logger.info(
                 "User email=%s already exists; skipping config-driven updates",
@@ -205,22 +251,6 @@ async def _upsert_users(
             )
 
         users_by_email[normalized_email] = user
-
-        if (
-            secret_service is not None
-            and user_cfg.store_credentials_in_secrets
-            and generated_password is not None
-        ):
-            _store_user_credentials_in_secret_service(
-                secret_service=secret_service,
-                email=normalized_email,
-                password=generated_password,
-            )
-        elif generated_password is not None and user_cfg.store_credentials_in_secrets:
-            logger.warning(
-                "User email=%s created with generated password, but no secret service is available to store credentials.",
-                normalized_email,
-            )
 
     return users_by_email
 

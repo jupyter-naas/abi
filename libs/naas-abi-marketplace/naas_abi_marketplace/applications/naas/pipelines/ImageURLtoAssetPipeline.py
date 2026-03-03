@@ -118,7 +118,10 @@ class ImageURLtoAssetPipeline(Pipeline):
             logger.info(f"🛑 Image URL is already an asset: {parameters.image_url}")
             graph_insert = Graph()
             graph_insert.add((subject, predicate, Literal(parameters.image_url)))
-            self.__configuration.triple_store.insert(graph_insert)
+            self.__configuration.triple_store.insert(
+                graph_insert,
+                graph_name=URIRef("http://ontology.naas.ai/graph/default"),
+            )
             return graph_insert
 
         # Process new image URL
@@ -139,8 +142,9 @@ class ImageURLtoAssetPipeline(Pipeline):
             # Remove old URL and insert new asset URL
             graph_remove = Graph()
             graph_remove.add((subject, predicate, Literal(parameters.image_url)))
-            self.__configuration.triple_store.remove(graph_remove)
-            self.__configuration.triple_store.insert(graph_insert)
+            graph_name = URIRef("http://ontology.naas.ai/graph/default")
+            self.__configuration.triple_store.remove(graph_remove, graph_name=graph_name)
+            self.__configuration.triple_store.insert(graph_insert, graph_name=graph_name)
 
             return graph_insert
 

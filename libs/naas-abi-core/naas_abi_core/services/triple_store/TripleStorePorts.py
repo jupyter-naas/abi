@@ -30,11 +30,11 @@ class OntologyEvent(Enum):
 
 class ITripleStorePort(ABC):
     @abstractmethod
-    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+    def insert(self, triples: Graph, graph_name: URIRef):
         pass
 
     @abstractmethod
-    def remove(self, triples: Graph, graph_name: URIRef | None = None):
+    def remove(self, triples: Graph, graph_name: URIRef):
         pass
 
     @abstractmethod
@@ -59,7 +59,7 @@ class ITripleStorePort(ABC):
         pass
 
     @abstractmethod
-    def get_subject_graph(self, subject: URIRef) -> Graph:
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         pass
 
     @abstractmethod
@@ -72,7 +72,7 @@ class ITripleStorePort(ABC):
         pass
 
     @abstractmethod
-    def clear_graph(self, graph_name: URIRef | None = None):
+    def clear_graph(self, graph_name: URIRef):
         """Clear triples from a graph.
 
         Raises:
@@ -109,7 +109,7 @@ class ITripleStoreService(ABC):
         topic: tuple[URIRef | None, URIRef | None, URIRef | None],
         callback: Callable[[tuple[str, str, str]], None],
         event_type: OntologyEvent | None = None,
-        graph_name: URIRef | str | None = "*",
+        graph_name: URIRef | str = "*",
     ) -> None:
         """
         Register a callback function to receive notifications for triple store events matching the given
@@ -162,7 +162,7 @@ class ITripleStoreService(ABC):
     #     pass
 
     @abstractmethod
-    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+    def insert(self, triples: Graph, graph_name: URIRef):
         """Insert triples from the provided graph into the store.
 
         This method takes a graph of triples and inserts them into the triple store. The triples
@@ -170,7 +170,7 @@ class ITripleStoreService(ABC):
 
         Args:
             triples (Graph): The RDF graph containing triples to insert
-            graph_name (URIRef | None): Named graph URI target. None means default graph.
+            graph_name (URIRef): Named graph URI target.
 
         Returns:
             None
@@ -178,7 +178,7 @@ class ITripleStoreService(ABC):
         pass
 
     @abstractmethod
-    def remove(self, triples: Graph, graph_name: URIRef | None = None):
+    def remove(self, triples: Graph, graph_name: URIRef):
         """Remove triples from the provided graph from the store.
 
         This method takes a graph of triples and removes them from the triple store. The triples
@@ -186,7 +186,7 @@ class ITripleStoreService(ABC):
 
         Args:
             triples (Graph): The RDF graph containing triples to remove
-            graph_name (URIRef | None): Named graph URI target. None means default graph.
+            graph_name (URIRef): Named graph URI target.
 
         Returns:
             None
@@ -228,7 +228,7 @@ class ITripleStoreService(ABC):
         pass
 
     @abstractmethod
-    def get_subject_graph(self, subject: str) -> Graph:
+    def get_subject_graph(self, subject: str, graph_name: str | URIRef) -> Graph:
         """Get the RDF graph containing all triples for a specific subject.
 
         This method retrieves and returns an RDFlib Graph containing all triples
@@ -261,7 +261,7 @@ class ITripleStoreService(ABC):
         pass
 
     @abstractmethod
-    def clear_graph(self, graph_name: URIRef | None = None):
+    def clear_graph(self, graph_name: URIRef):
         """Clear triples from a graph.
 
         Args:

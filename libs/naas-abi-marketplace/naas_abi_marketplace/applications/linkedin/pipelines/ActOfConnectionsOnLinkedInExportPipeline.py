@@ -368,7 +368,10 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         # Insert shared entities into triple store
         logger.debug("==> Inserting shared entities into triple store")
         if len(shared_graph) > 0:
-            self.__configuration.triple_store.insert(shared_graph, self.__graph_name)
+            self.__configuration.triple_store.insert(
+                shared_graph,
+                graph_name=URIRef("http://ontology.naas.ai/graph/default"),
+            )
 
         # Store URIs for reuse in row processing
         init_person_uri = person_entity._uri
@@ -429,7 +432,8 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
                     # Insert row entities immediately into triple store
                     if len(row_graph) > 0:
                         self.__configuration.triple_store.insert(
-                            row_graph, self.__graph_name
+                            row_graph,
+                            graph_name=URIRef("http://ontology.naas.ai/graph/default"),
                         )
                     processed_count += 1
                     if processed_count % 10 == 0 or processed_count == total_rows:
