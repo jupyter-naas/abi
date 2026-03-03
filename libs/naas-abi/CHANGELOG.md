@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.5 (2026-03-03)
+
+### Bug Fixes
+
+- Exclude agent with no name
+  ([`641d7bd`](https://github.com/jupyter-naas/abi/commit/641d7bd7e9ff0acf21a716ff05830fa82d62307b))
+
+
 ## v1.9.4 (2026-03-03)
 
 ### Bug Fixes
