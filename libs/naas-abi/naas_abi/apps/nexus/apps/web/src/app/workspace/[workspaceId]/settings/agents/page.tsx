@@ -622,14 +622,19 @@ export default function AgentsPage() {
                             isExpanded ? 'bg-workspace-accent/10' : 'hover:bg-muted/30'
                           )}
                         >
-                          <td className="p-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+                          <td className="p-3 align-top">
+                            <div className="flex items-center gap-3 min-h-[3.25rem]">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
                                 <Icon size={18} />
                               </div>
-                              <div>
+                              <div className="min-w-0 flex-1">
                                 <p className="font-medium">{agent.name}</p>
-                                <p className="text-xs text-muted-foreground">{agent.description}</p>
+                                <p
+                                  className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]"
+                                  title={agent.description || undefined}
+                                >
+                                  {agent.description || '\u00A0'}
+                                </p>
                               </div>
                             </div>
                           </td>
