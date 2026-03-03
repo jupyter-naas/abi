@@ -198,7 +198,7 @@ The CLI is built using:
 - **naas-abi-marketplace**: Marketplace modules and agents
 - **naas-abi**: Main ABI package
 
-The CLI automatically detects if it's being run from within an ABI project (by checking for `pyproject.toml` with `naas-abi-cli` dependency) and uses `uv run` to ensure proper environment isolation.
+The CLI runs directly in the current environment and does not automatically re-run itself via `uv run`.
 
 ## Project Structure
 
@@ -230,4 +230,3 @@ The CLI integrates seamlessly with the ABI ecosystem:
 - [ABI Main README](../../../README.md) - Complete ABI framework documentation
 - [naas-abi-core](../naas-abi-core/) - Core engine documentation
 - [naas-abi-marketplace](../naas-abi-marketplace/) - Marketplace modules documentation
-
