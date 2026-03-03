@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v1.9.4 (2026-03-03)
+
+### Bug Fixes
+
+- Condition to exclude agent.name None
+  ([`e889924`](https://github.com/jupyter-naas/abi/commit/e889924299a26ec40a912ff47e8d7b9b9893213d))
+
+- Display logo url of agent in chat interface
+  ([`d7a74d9`](https://github.com/jupyter-naas/abi/commit/d7a74d9eaf36e799522bc389d7c9881bd481efdd))
+
+- File lint
+  ([`53fe441`](https://github.com/jupyter-naas/abi/commit/53fe4419cf9087ac09375a421d93f80db0dd5c55))
+
+- Get password from secret or add it
+  ([`540c7fc`](https://github.com/jupyter-naas/abi/commit/540c7fc39f8ab4fa3a6635915fbfa3257dad0e54))
+
+- Remove icon settings
+  ([`a8a76fe`](https://github.com/jupyter-naas/abi/commit/a8a76fe990edd1c4030ea63d6f58ac75fa87e2b1))
+
+### Refactoring
+
+- Display first 2 rows of agent description
+  ([`549622c`](https://github.com/jupyter-naas/abi/commit/549622cd94fda66a8b9a91e31995460222d46bf2))
+
+
 ## v1.9.3 (2026-03-02)
 
 ### Bug Fixes
