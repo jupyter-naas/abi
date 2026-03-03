@@ -79,7 +79,9 @@ async def list_agents(
     class_name_to_agent_class: dict[str, type[Agent]] = {}
 
     for agent_cls in agents:
-        if not hasattr(agent_cls, "name") or (agent_cls.name is None):
+        if not hasattr(agent_cls, "name") or (
+            hasattr(agent_cls, "name") and agent_cls.name is None
+        ):
             logger.warning(f"Skipping agent {agent_cls} because it has no name or description")
             continue
 
@@ -92,7 +94,7 @@ async def list_agents(
         if name == "Abi":
             enabled = True
 
-        if not existing_agent:
+        if not existing_agent and name is not None:
             logger.debug(f"Creating agent: {name}")
 
             # Create agent in database
