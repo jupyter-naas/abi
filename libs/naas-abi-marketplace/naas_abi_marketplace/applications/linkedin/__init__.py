@@ -9,6 +9,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
+from rdflib import Namespace, URIRef
 
 
 class _Configuration(ModuleConfiguration):
@@ -27,6 +28,8 @@ class _Configuration(ModuleConfiguration):
     JSESSIONID: str
     linkedin_profile_url: str
     datastore_path: str = "linkedin"
+    linkedin_graph_name: URIRef = URIRef("http://ontology.naas.ai/graph/linkedin/")
+    linkedin_namespace: Namespace = Namespace("http://ontology.naas.ai/abi/linkedin/")
 
 
 class ABIModule(BaseModule[_Configuration]):
