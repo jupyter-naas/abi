@@ -79,7 +79,7 @@ async def list_agents(
     class_name_to_agent_class: dict[str, type[Agent]] = {}
 
     for agent_cls in agents:
-        if not hasattr(agent_cls, "name"):
+        if not hasattr(agent_cls, "name") or (agent_cls.name is None):
             logger.warning(f"Skipping agent {agent_cls} because it has no name or description")
             continue
 
@@ -113,11 +113,13 @@ async def list_agents(
     enriched_agent_list: list[AgentRecord] = []
     for agent in agent_list:
         suggestions = None
+        logo_url = None
         if agent.class_name:
-            agent_cls = class_name_to_agent_class.get(agent.class_name)
-            if agent_cls is not None:
-                suggestions = _extract_agent_suggestions(agent_cls)
-        enriched_agent_list.append(replace(agent, suggestions=suggestions))
+            resolved_cls = class_name_to_agent_class.get(agent.class_name)
+            if resolved_cls is not None and isinstance(resolved_cls, type):
+                suggestions = _extract_agent_suggestions(resolved_cls)
+                logo_url = getattr(resolved_cls, "logo_url", None)
+        enriched_agent_list.append(replace(agent, suggestions=suggestions, logo_url=logo_url))
 
     return enriched_agent_list
 
