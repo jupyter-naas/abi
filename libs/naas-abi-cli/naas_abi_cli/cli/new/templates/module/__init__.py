@@ -1,3 +1,4 @@
+from fastapi import FastAPI
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -39,3 +40,17 @@ class ABIModule(BaseModule):
     # You can see it as the constructor of the module.
     def on_load(self):
         super().on_load()
+
+    # Optional FastAPI integration hook.
+    # This mirrors how `naas_abi` wires API settings and services into app.state.
+    # Override and adapt to your module if you expose HTTP routes.
+    def api(self, app: FastAPI) -> None:
+        # Example: expose services to your API layer.
+        # app.state.object_storage = self.engine.services.object_storage
+        # app.state.secret_service = self.engine.services.secret
+        # app.state.triple_store = self.engine.services.triple_store
+
+        # Example: mount your FastAPI routes/app factory.
+        # from your_module.apps.api.app.main import create_app
+        # create_app(app)
+        pass
