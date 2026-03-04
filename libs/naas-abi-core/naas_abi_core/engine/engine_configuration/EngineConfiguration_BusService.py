@@ -1,9 +1,11 @@
 from typing import Literal
 
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import \
-    GenericLoader
-from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
-    pydantic_model_validator
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
+    GenericLoader,
+)
+from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
+    pydantic_model_validator,
+)
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.services.bus.BusService import BusService
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -17,9 +19,11 @@ class BusAdapterRabbitMQConfiguration(BaseModel):
       config:
         rabbitmq_url: "{{ secret.RABBITMQ_URL }}"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     rabbitmq_url: str = "amqp://abi:abi@127.0.0.1:5672"
+
 
 class BusAdapterPythonQueueConfiguration(BaseModel):
     """Python queue bus adapter configuration.
@@ -28,9 +32,17 @@ class BusAdapterPythonQueueConfiguration(BaseModel):
       adapter: "python_queue"
       config: {}
     """
+
     model_config = ConfigDict(extra="forbid")
 
-    pass
+    persistence_path: str | None = None
+    journal_mode: Literal["DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"] = (
+        "WAL"
+    )
+    busy_timeout_ms: int = 5000
+    poll_interval_seconds: float = 0.05
+    lock_timeout_seconds: float = 1.0
+
 
 class BusAdapterConfiguration(GenericLoader):
     adapter: Literal["rabbitmq", "python_queue", "custom"]
@@ -42,11 +54,9 @@ class BusAdapterConfiguration(GenericLoader):
             assert self.config is not None, (
                 "config is required if adapter is not custom"
             )
-        
+
         if self.adapter == "rabbitmq":
-            assert self.config is not None, (
-                "config is required for rabbitmq adapter"
-            )
+            assert self.config is not None, "config is required for rabbitmq adapter"
             pydantic_model_validator(
                 BusAdapterRabbitMQConfiguration,
                 self.config,
@@ -68,15 +78,20 @@ class BusAdapterConfiguration(GenericLoader):
         # Lazy import: only import when actually loading
         if self.adapter == "rabbitmq":
             assert self.config is not None, "config is required for rabbitmq adapter"
-            from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import \
-                RabbitMQAdapter
+            from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import (
+                RabbitMQAdapter,
+            )
 
             return RabbitMQAdapter(**self.config)
         elif self.adapter == "python_queue":
-            from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import \
-                PythonQueueAdapter
+            from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
+                PythonQueueAdapter,
+            )
 
-            return PythonQueueAdapter()
+            assert self.config is not None, (
+                "config is required for python_queue adapter"
+            )
+            return PythonQueueAdapter(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:

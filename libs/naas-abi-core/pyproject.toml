@@ -38,6 +38,7 @@ dependencies = [
     "dagster-webserver>=1.11.12",
     "dagster-postgres>=0.27.12",
     "dagster-aws>=0.27.12",
+    "pyoxigraph>=0.5.5",
 ]
 license = { text = "MIT License" }
 
