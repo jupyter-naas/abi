@@ -90,3 +90,49 @@ def test_setup_local_deploy_generates_headscale_and_vpn_domains(tmp_path: Path) 
 
     assert "HEADSCALE_SERVER_URL=headscale.example.com" in env_content
     assert "HEADSCALE_INTERNAL_DOMAIN=vpn.example.com" in env_content
+
+
+def test_setup_local_deploy_regenerate_creates_backup_and_refreshes_compose(
+    tmp_path: Path,
+) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+
+    compose_path = tmp_path / "docker-compose.yml"
+    env_path = tmp_path / ".env"
+    compose_path.write_text("custom compose content\n", encoding="utf-8")
+    env_path.write_text(
+        "PUBLIC_WEB_HOST=custom.local\nCUSTOM_VAR=kept\n",
+        encoding="utf-8",
+    )
+
+    setup_local_deploy(
+        str(tmp_path),
+        base_domain="localhost",
+        regenerate=True,
+    )
+
+    backup_base = tmp_path / ".abi-backups/deploy-local"
+    backup_dirs = list(backup_base.iterdir())
+
+    assert len(backup_dirs) == 1
+    assert (backup_dirs[0] / "docker-compose.yml").read_text(encoding="utf-8") == (
+        "custom compose content\n"
+    )
+    assert "services:" in compose_path.read_text(encoding="utf-8")
+
+    refreshed_env_content = env_path.read_text(encoding="utf-8")
+    assert "PUBLIC_WEB_HOST=custom.local" in refreshed_env_content
+    assert "CUSTOM_VAR=kept" in refreshed_env_content
+
+
+def test_setup_local_deploy_regenerate_without_backup(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+
+    setup_local_deploy(
+        str(tmp_path),
+        base_domain="localhost",
+        regenerate=True,
+        backup=False,
+    )
+
+    assert not (tmp_path / ".abi-backups").exists()
