@@ -884,14 +884,37 @@ def _resolve_inprocess_abi_agent(agent_name: str):
     # - "module.path:AgentName"
     target_module = None
     target_agent = raw_target
-    for sep in ("/", ":"):
-        if sep in raw_target:
-            parts = raw_target.split(sep, 1)
-            target_module = parts[0].strip().lower() or None
-            target_agent = parts[1].strip()
-            break
+    if "/" in raw_target:
+        parts = raw_target.split("/", 1)
+        target_module = parts[0].strip().lower() or None
+        target_agent = parts[1].strip()
+    elif ":" in raw_target:
+        # Only treat ":" as module separator for module-qualified targets.
+        # Human labels like "Anthropic: Claude Opus 4.6" should remain intact.
+        left, right = raw_target.split(":", 1)
+        if "." in left or "/" in left:
+            target_module = left.strip().lower() or None
+            target_agent = right.strip()
 
     target_agent_norm = target_agent.lower()
+    raw_target_norm = raw_target.lower()
+
+    def _normalize(value: str) -> str:
+        return "".join(ch for ch in value.lower() if ch.isalnum())
+
+    target_agent_key = _normalize(target_agent)
+    raw_target_key = _normalize(raw_target)
+
+    # If a module prefix is provided but doesn't match any loaded module path,
+    # fall back to agent/class-name matching instead of hard-failing.
+    if target_module:
+        module_paths = [
+            module.__class__.__module__.lower()
+            for module in modules.values()
+            if module is not None
+        ]
+        if not any(target_module in module_path for module_path in module_paths):
+            target_module = None
 
     for module in modules.values():
         module_path = module.__class__.__module__
@@ -903,6 +926,7 @@ def _resolve_inprocess_abi_agent(agent_name: str):
             if agent_cls is None:
                 continue
             try:
+                instantiated_agent = None
                 agent_mod = sys.modules.get(agent_cls.__module__)
                 module_level_name = (
                     getattr(agent_mod, "NAME", None) if agent_mod is not None else None
@@ -910,6 +934,11 @@ def _resolve_inprocess_abi_agent(agent_name: str):
                 runtime_name = (
                     module_level_name or getattr(agent_cls, "NAME", None) or agent_cls.__name__
                 )
+                try:
+                    instantiated_agent = agent_cls.New()
+                    display_name = getattr(instantiated_agent, "name", None)
+                except Exception:
+                    display_name = None
                 class_name = agent_cls.__name__
                 class_name_stripped = (
                     class_name[:-5] if class_name.endswith("Agent") else class_name
@@ -923,9 +952,18 @@ def _resolve_inprocess_abi_agent(agent_name: str):
                     f"{module_path_norm}/{class_name.strip().lower()}",
                     f"{module_path_norm}/{class_name_stripped.strip().lower()}",
                 }
+                if display_name:
+                    candidate_names.add(str(display_name).strip().lower())
+                    candidate_names.add(f"{module_path_norm}/{str(display_name).strip().lower()}")
 
-                if target_agent_norm in candidate_names or raw_target.lower() in candidate_names:
-                    return agent_cls.New()
+                candidate_keys = {_normalize(c) for c in candidate_names}
+                if (
+                    target_agent_norm in candidate_names
+                    or raw_target_norm in candidate_names
+                    or target_agent_key in candidate_keys
+                    or raw_target_key in candidate_keys
+                ):
+                    return instantiated_agent or agent_cls.New()
             except Exception:
                 continue
 
@@ -968,7 +1006,20 @@ def _resolve_inprocess_abi_agent(agent_name: str):
                     f"{local_path}/{class_name.lower()}",
                     f"{local_path}/{class_name_stripped.lower()}",
                 }
-                if target_agent_norm in local_candidates or raw_target.lower() in local_candidates:
+                try:
+                    display_name = getattr(value.New(), "name", None) if hasattr(value, "New") else None
+                except Exception:
+                    display_name = None
+                if display_name:
+                    local_candidates.add(str(display_name).strip().lower())
+                    local_candidates.add(f"{local_path}/{str(display_name).strip().lower()}")
+                local_keys = {_normalize(c) for c in local_candidates}
+                if (
+                    target_agent_norm in local_candidates
+                    or raw_target_norm in local_candidates
+                    or target_agent_key in local_keys
+                    or raw_target_key in local_keys
+                ):
                     if not hasattr(value, "New") and callable(create_agent):
                         value.New = create_agent
                     if hasattr(value, "New"):

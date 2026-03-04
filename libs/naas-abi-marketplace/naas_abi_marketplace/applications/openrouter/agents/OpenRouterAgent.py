@@ -120,4 +120,8 @@ def create_agent(
 
 
 class OpenRouterAgent(IntentAgent):
+    name: str = NAME
+    description: str = DESCRIPTION
+    logo_url: str = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSMyMkLa1_OdyK9b4LZTiDiR7W5SkPRtydKKw&s"
+    suggestions: list[dict] = SUGGESTIONS
     pass

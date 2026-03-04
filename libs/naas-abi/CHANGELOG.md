@@ -2,6 +2,96 @@
 
 <!-- version list -->
 
+## v1.9.6 (2026-03-03)
+
+
+## v1.9.5 (2026-03-03)
+
+### Bug Fixes
+
+- Exclude agent with no name
+  ([`641d7bd`](https://github.com/jupyter-naas/abi/commit/641d7bd7e9ff0acf21a716ff05830fa82d62307b))
+
+
+## v1.9.4 (2026-03-03)
+
+### Bug Fixes
+
+- Condition to exclude agent.name None
+  ([`e889924`](https://github.com/jupyter-naas/abi/commit/e889924299a26ec40a912ff47e8d7b9b9893213d))
+
+- Display logo url of agent in chat interface
+  ([`d7a74d9`](https://github.com/jupyter-naas/abi/commit/d7a74d9eaf36e799522bc389d7c9881bd481efdd))
+
+- File lint
+  ([`53fe441`](https://github.com/jupyter-naas/abi/commit/53fe4419cf9087ac09375a421d93f80db0dd5c55))
+
+- Get password from secret or add it
+  ([`540c7fc`](https://github.com/jupyter-naas/abi/commit/540c7fc39f8ab4fa3a6635915fbfa3257dad0e54))
+
+- Remove icon settings
+  ([`a8a76fe`](https://github.com/jupyter-naas/abi/commit/a8a76fe990edd1c4030ea63d6f58ac75fa87e2b1))
+
+### Refactoring
+
+- Display first 2 rows of agent description
+  ([`549622c`](https://github.com/jupyter-naas/abi/commit/549622cd94fda66a8b9a91e31995460222d46bf2))
+
+
+## v1.9.3 (2026-03-02)
+
+### Bug Fixes
+
+- Type 'null' is not assignable to type 'string | number | boolean'.
+  ([`83e1a10`](https://github.com/jupyter-naas/abi/commit/83e1a10cfe64bd2de72d0abf80331f0f3b3cfc48))
+
+
+## v1.9.2 (2026-03-02)
+
+
+## v1.9.1 (2026-03-02)
+
+### Bug Fixes
+
+- Error build nexus web
+  ([`2f9bff2`](https://github.com/jupyter-naas/abi/commit/2f9bff2962a0510e3e3f05fdd63dc6c2cc319e40))
+
+
+## v1.9.0 (2026-03-02)
+
+
+## v1.8.2 (2026-03-02)
+
+### Bug Fixes
+
+- Add abi agents to nexus
+  ([`dee9936`](https://github.com/jupyter-naas/abi/commit/dee99363e27f5f36935dd23ffb9167dd1f6a25e1))
+
+- Add classname
+  ([`0423f88`](https://github.com/jupyter-naas/abi/commit/0423f8809b4bdf3bd60e235e050ac331e19b17f6))
+
+- Code cleaning
+  ([`2d2783f`](https://github.com/jupyter-naas/abi/commit/2d2783f8ffd9464985f88489ab3deb771e0f70d8))
+
+- Init hexa archi agents
+  ([`ad5a997`](https://github.com/jupyter-naas/abi/commit/ad5a997bc51bd9ed8b2b5092521aa6ddf0a6c92d))
+
+- Mypy errors
+  ([`1f53767`](https://github.com/jupyter-naas/abi/commit/1f53767e45700dc6dd9c4c256d79c4589de84614))
+
+- Ollama exception thrown
+  ([`9cbb53a`](https://github.com/jupyter-naas/abi/commit/9cbb53a5ea42badc20fbd44cdbaadcc7196daace))
+
+- Remove ollama error from front
+  ([`b7b19a9`](https://github.com/jupyter-naas/abi/commit/b7b19a92ae1b42512a2a50b3287b1aadd2e54c9e))
+
+- Rm seeding default agents
+  ([`d00665a`](https://github.com/jupyter-naas/abi/commit/d00665af79d4b52a1fa510d2a7fdddbf6aff4368))
+
+- Save agents to db
+  ([`2185ae7`](https://github.com/jupyter-naas/abi/commit/2185ae73ebd9ce8ae52bab19fc4511f1d5ca3efa))
+
+
 ## v1.8.1 (2026-02-19)
 
 ### Bug Fixes

@@ -141,12 +141,8 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
 
             self.__live_graph -= triples
 
-    def get_subject_graph(self, subject: str | URIRef) -> Graph:
-        subject_hash = (
-            self.iri_hash(URIRef(subject))
-            if isinstance(subject, str)
-            else self.iri_hash(subject)
-        )
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
+        subject_hash = self.iri_hash(subject)
 
         try:
             graph = self.load_triples(subject_hash)

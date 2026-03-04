@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Settings, Archive, Edit2, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Archive, Edit2, Trash2 } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
@@ -221,6 +221,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
 
 export function ChatSection({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [agentsExpanded, setAgentsExpanded] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -241,20 +242,23 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
   } = useWorkspaceStore();
 
   const { agents } = useAgentsStore();
+  const safeAgents = Array.isArray(agents) ? agents : [];
 
-  const allConversations = getWorkspaceConversations();
+  const allConversations = getWorkspaceConversations() ?? [];
+  const safeProjects = Array.isArray(projects) ? projects : [];
   const conversations = useMemo(() => allConversations.filter((c) => !c.archived), [allConversations]);
+  const isChatRoute = pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/chat'));
 
   const pinnedConvs = useMemo(() => conversations.filter((c) => c.pinned), [conversations]);
   const recentConvs = useMemo(() => conversations.filter((c) => !c.pinned && !c.projectId), [conversations]);
 
   const projectGroups = useMemo(() => {
     const projectConvs = conversations.filter((c) => c.projectId && !c.pinned);
-    return projects.map((project) => ({
+    return safeProjects.map((project) => ({
       ...project,
       conversations: projectConvs.filter((c) => c.projectId === project.id),
     }));
-  }, [conversations, projects]);
+  }, [conversations, safeProjects]);
 
   const handleNewChat = useCallback(() => {
     createConversation();
@@ -311,39 +315,28 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
 
         {agentsExpanded && (
           <div className="ml-3 space-y-0.5">
-            {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
+            {safeAgents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
               const AgentIcon = agentIconComponents[agent.icon] || agentIconComponents.sparkles;
-              const isSelected = selectedAgent === agent.id;
+              const isSelected = isChatRoute && selectedAgent === agent.id;
 
               return (
-                <div
+                <button
                   key={agent.id}
+                  onClick={() => {
+                    setSelectedAgent(agent.id);
+                    router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+                  }}
                   className={cn(
-                    'group flex items-center gap-1 rounded-md px-1 py-1 text-xs transition-colors',
+                    'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs transition-colors',
                     'hover:bg-workspace-accent-10',
                     isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
                   )}
                 >
-                  <button
-                    onClick={() => {
-                      setSelectedAgent(agent.id);
-                      router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
-                    }}
-                    className="flex flex-1 items-center gap-1 text-left"
-                  >
-                    <AgentIcon size={12} className={cn(
-                      isSelected ? 'text-workspace-accent' : 'text-muted-foreground'
-                    )} />
-                    <span className="flex-1 truncate">{agent.name}</span>
-                  </button>
-                  <button
-                    onClick={() => router.push(getWorkspacePath(currentWorkspaceId, `/chat/agents/${agent.id}`))}
-                    className="rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
-                    title="Configure agent"
-                  >
-                    <Settings size={12} className="text-muted-foreground" />
-                  </button>
-                </div>
+                  <AgentIcon size={12} className={cn(
+                    isSelected ? 'text-workspace-accent' : 'text-muted-foreground'
+                  )} />
+                  <span className="flex-1 truncate">{agent.name}</span>
+                </button>
               );
             })}
           </div>
@@ -362,7 +355,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
               id={conv.id}
               title={conv.title}
               pinned
-              isActive={activeConversationId === conv.id}
+              isActive={isChatRoute && activeConversationId === conv.id}
               onClick={() => handleSelectConversation(conv.id)}
               onPin={() => togglePinConversation(conv.id)}
               onArchive={() => toggleArchiveConversation(conv.id)}
@@ -392,7 +385,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
           key={project.id}
           name={project.name}
           conversations={project.conversations}
-          activeId={activeConversationId}
+          activeId={isChatRoute ? activeConversationId : null}
           onSelect={handleSelectConversation}
           onPin={togglePinConversation}
           onArchive={toggleArchiveConversation}
@@ -429,7 +422,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
               key={conv.id}
               id={conv.id}
               title={conv.title}
-              isActive={activeConversationId === conv.id}
+              isActive={isChatRoute && activeConversationId === conv.id}
               onClick={() => handleSelectConversation(conv.id)}
               onPin={() => togglePinConversation(conv.id)}
               onArchive={() => toggleArchiveConversation(conv.id)}

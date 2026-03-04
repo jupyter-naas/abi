@@ -47,6 +47,7 @@ class SearchResponse(BaseModel):
 
 class WebSearchRequest(BaseModel):
     """Web search request model."""
+
     query: str = Field(..., min_length=1, max_length=500)
     engine: Literal["wikipedia", "duckduckgo"] = "wikipedia"
     limit: int = Field(default=10, ge=1, le=50)
@@ -54,6 +55,7 @@ class WebSearchRequest(BaseModel):
 
 class WebSearchResult(BaseModel):
     """Web search result model."""
+
     id: str
     title: str
     snippet: str
@@ -64,6 +66,7 @@ class WebSearchResult(BaseModel):
 
 class WebSearchResponse(BaseModel):
     """Web search response model."""
+
     query: str
     engine: str
     results: list[WebSearchResult]
@@ -108,7 +111,9 @@ async def web_search(request: WebSearchRequest) -> WebSearchResponse:
     )
 
 
-async def search_wikipedia(client: httpx.AsyncClient, query: str, limit: int) -> list[WebSearchResult]:
+async def search_wikipedia(
+    client: httpx.AsyncClient, query: str, limit: int
+) -> list[WebSearchResult]:
     """Search Wikipedia using their public API with images and extracts."""
     results = []
     headers = {"User-Agent": "NEXUS/1.0 (https://github.com/jravenel/nexus; demo search)"}
@@ -147,26 +152,33 @@ async def search_wikipedia(client: httpx.AsyncClient, query: str, limit: int) ->
             # Get thumbnail URL if available
             thumbnail = page.get("thumbnail", {}).get("source")
 
-            results.append(WebSearchResult(
-                id=result_id,
-                title=page.get("title", ""),
-                snippet=page.get("extract", "")[:500],  # Limit snippet length
-                url=page.get("fullurl", f"https://en.wikipedia.org/wiki/{page.get('title', '').replace(' ', '_')}"),
-                relevance=1.0 - (i * 0.05),
-                metadata={
-                    "source": "wikipedia",
-                    "language": "en",
-                    "image": thumbnail,
-                    "pageid": page.get("pageid"),
-                },
-            ))
+            results.append(
+                WebSearchResult(
+                    id=result_id,
+                    title=page.get("title", ""),
+                    snippet=page.get("extract", "")[:500],  # Limit snippet length
+                    url=page.get(
+                        "fullurl",
+                        f"https://en.wikipedia.org/wiki/{page.get('title', '').replace(' ', '_')}",
+                    ),
+                    relevance=1.0 - (i * 0.05),
+                    metadata={
+                        "source": "wikipedia",
+                        "language": "en",
+                        "image": thumbnail,
+                        "pageid": page.get("pageid"),
+                    },
+                )
+            )
     except Exception as e:
         print(f"Wikipedia search error: {e}")
 
     return results
 
 
-async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -> list[WebSearchResult]:
+async def search_duckduckgo(
+    client: httpx.AsyncClient, query: str, limit: int
+) -> list[WebSearchResult]:
     """Search DuckDuckGo using their instant answer API."""
     results = []
     headers = {"User-Agent": "NEXUS/1.0 (https://github.com/jravenel/nexus; demo search)"}
@@ -194,41 +206,48 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
         # Add abstract if available
         if data.get("Abstract"):
             result_id = hashlib.md5(f"ddg:abstract:{query}".encode()).hexdigest()[:12]
-            results.append(WebSearchResult(
-                id=result_id,
-                title=data.get("Heading", query),
-                snippet=data.get("Abstract", ""),
-                url=data.get("AbstractURL"),
-                relevance=1.0,
-                metadata={
-                    "source": "duckduckgo",
-                    "type": "abstract",
-                    "source_name": data.get("AbstractSource", ""),
-                    "image": main_image,
-                },
-            ))
+            results.append(
+                WebSearchResult(
+                    id=result_id,
+                    title=data.get("Heading", query),
+                    snippet=data.get("Abstract", ""),
+                    url=data.get("AbstractURL"),
+                    relevance=1.0,
+                    metadata={
+                        "source": "duckduckgo",
+                        "type": "abstract",
+                        "source_name": data.get("AbstractSource", ""),
+                        "image": main_image,
+                    },
+                )
+            )
 
         # Add related topics
-        for i, topic in enumerate(data.get("RelatedTopics", [])[:limit-1]):
+        for i, topic in enumerate(data.get("RelatedTopics", [])[: limit - 1]):
             if isinstance(topic, dict) and topic.get("Text"):
                 # Get topic icon/image
                 topic_icon = topic.get("Icon", {}).get("URL")
                 if topic_icon and not topic_icon.startswith("http"):
                     topic_icon = f"https://duckduckgo.com{topic_icon}" if topic_icon else None
 
-                result_id = hashlib.md5(f"ddg:topic:{topic.get('FirstURL', str(i))}".encode()).hexdigest()[:12]
-                results.append(WebSearchResult(
-                    id=result_id,
-                    title=topic.get("Text", "")[:100] + ("..." if len(topic.get("Text", "")) > 100 else ""),
-                    snippet=topic.get("Text", ""),
-                    url=topic.get("FirstURL"),
-                    relevance=0.9 - (i * 0.05),
-                    metadata={
-                        "source": "duckduckgo",
-                        "type": "related",
-                        "image": topic_icon,
-                    },
-                ))
+                result_id = hashlib.md5(
+                    f"ddg:topic:{topic.get('FirstURL', str(i))}".encode()
+                ).hexdigest()[:12]
+                results.append(
+                    WebSearchResult(
+                        id=result_id,
+                        title=topic.get("Text", "")[:100]
+                        + ("..." if len(topic.get("Text", "")) > 100 else ""),
+                        snippet=topic.get("Text", ""),
+                        url=topic.get("FirstURL"),
+                        relevance=0.9 - (i * 0.05),
+                        metadata={
+                            "source": "duckduckgo",
+                            "type": "related",
+                            "image": topic_icon,
+                        },
+                    )
+                )
 
         # Add results from topics within categories
         for topic in data.get("RelatedTopics", []):
@@ -236,19 +255,23 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
                 for subtopic in topic.get("Topics", [])[:3]:
                     if len(results) >= limit:
                         break
-                    result_id = hashlib.md5(f"ddg:subtopic:{subtopic.get('FirstURL', '')}".encode()).hexdigest()[:12]
-                    results.append(WebSearchResult(
-                        id=result_id,
-                        title=subtopic.get("Text", "")[:100],
-                        snippet=subtopic.get("Text", ""),
-                        url=subtopic.get("FirstURL"),
-                        relevance=0.7,
-                        metadata={
-                            "source": "duckduckgo",
-                            "type": "category",
-                            "category": topic.get("Name", ""),
-                        },
-                    ))
+                    result_id = hashlib.md5(
+                        f"ddg:subtopic:{subtopic.get('FirstURL', '')}".encode()
+                    ).hexdigest()[:12]
+                    results.append(
+                        WebSearchResult(
+                            id=result_id,
+                            title=subtopic.get("Text", "")[:100],
+                            snippet=subtopic.get("Text", ""),
+                            url=subtopic.get("FirstURL"),
+                            relevance=0.7,
+                            metadata={
+                                "source": "duckduckgo",
+                                "type": "category",
+                                "category": topic.get("Name", ""),
+                            },
+                        )
+                    )
 
     except Exception as e:
         print(f"DuckDuckGo search error: {e}")
@@ -258,12 +281,14 @@ async def search_duckduckgo(client: httpx.AsyncClient, query: str, limit: int) -
 
 class PrivateSearchRequest(BaseModel):
     """Private search request model."""
+
     query: str = Field(..., min_length=1, max_length=2000)
     source: str = Field(default="", max_length=100)
 
 
 class PrivateSearchResponse(BaseModel):
     """Private search response."""
+
     query: str
     source: str
     results: list = []
@@ -274,6 +299,65 @@ async def private_search(request: PrivateSearchRequest) -> PrivateSearchResponse
     """Search private sources (conversations, files, knowledge graph)."""
     # TODO: Implement private source search
     # For now return empty results
+    if request.source == "ontology":
+        from naas_abi import ABIModule
+
+        triple_store_service = ABIModule.get_instance().engine.services.triple_store
+
+        # Construct SPARQL query to match rdfs:label or skos:definition containing request.query
+        query_string = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+        SELECT ?uri ?label ?definition WHERE {{
+            ?uri a ?type .
+            OPTIONAL {{ ?uri rdfs:label ?label . }}
+            OPTIONAL {{ ?uri skos:definition ?definition . }}
+            FILTER (
+                (BOUND(?label) && CONTAINS(LCASE(STR(?label)), LCASE("{request.query}")))
+             || (BOUND(?definition) && CONTAINS(LCASE(STR(?definition)), LCASE("{request.query}")))
+            )
+        }}
+        LIMIT 100
+        """
+
+        sparql_results = triple_store_service.query(query_string)
+
+        # Shape output as required by SearchResult model (from lines 17-26)
+
+        from rdflib.query import ResultRow
+
+        results = []
+        qnorm = (request.query or "").strip().lower()
+        for row in sparql_results:
+            assert isinstance(row, ResultRow)
+            uri = str(row.get("uri"))
+            label = str(row.get("label") or uri.split("/")[-1])
+            definition = str(row.get("definition") or "")
+
+            labelnorm = label.strip().lower()
+            defnorm = definition.strip().lower()
+
+            if qnorm == labelnorm:
+                score = 1.0
+            elif qnorm in labelnorm:
+                score = 0.8
+            elif qnorm in defnorm:
+                score = 0.6
+            else:
+                score = 0.0  # Should not occur because the filter should have removed these
+
+            results.append(
+                WebSearchResult(
+                    id=uri,
+                    title=label,
+                    snippet=definition,
+                    url=None,
+                    relevance=score,
+                    metadata={},
+                )
+            )
+
+        return PrivateSearchResponse(query=request.query, source=request.source, results=results)
     return PrivateSearchResponse(query=request.query, source=request.source, results=[])
 
 
