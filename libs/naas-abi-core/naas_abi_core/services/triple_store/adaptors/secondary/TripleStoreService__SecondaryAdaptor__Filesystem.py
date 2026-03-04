@@ -1,4 +1,5 @@
 import os
+import tempfile
 from threading import Lock
 from typing import Any, Dict, List, Tuple
 
@@ -47,6 +48,21 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
             f"{hash_value}.ttl" if not hash_value.endswith(".ttl") else hash_value,
         )
 
+    def __serialize_atomic(self, graph: Graph, destination: str) -> None:
+        directory = os.path.dirname(destination)
+        os.makedirs(directory, exist_ok=True)
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=directory,
+            delete=False,
+        ) as temp_file:
+            temp_path = temp_file.name
+
+        graph.serialize(destination=temp_path, format="turtle")
+        os.replace(temp_path, destination)
+
     ## File System Methods
 
     def insert(self, triples: Graph, graph_name: URIRef | None = None):
@@ -76,9 +92,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
                 for p, o in triples_by_subject[subject]:
                     graph.add((subject, p, o))
 
-                graph.serialize(
-                    destination=self.hash_triples_path(subject_hash), format="turtle"
-                )
+                self.__serialize_atomic(graph, self.hash_triples_path(subject_hash))
 
             for prefix, namespace in triples.namespaces():
                 self.__live_graph.bind(prefix, namespace)
@@ -108,10 +122,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
                     for p, o in triples_by_subject[subject]:
                         graph.remove((subject, p, o))
 
-                    graph.serialize(
-                        destination=self.hash_triples_path(subject_hash),
-                        format="turtle",
-                    )
+                    self.__serialize_atomic(graph, self.hash_triples_path(subject_hash))
 
             # Update the live graph
             self.__live_graph -= triples
@@ -234,7 +245,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def create_graph(self, graph_name: URIRef) -> None:
         """Create a named graph.
-        
+
         Not supported by filesystem adapter.
         """
         raise NotImplementedError(
@@ -243,7 +254,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def clear_graph(self, graph_name: URIRef | None = None) -> None:
         """Clear triples from a graph.
-        
+
         Not supported by filesystem adapter.
         """
         raise NotImplementedError(
@@ -252,7 +263,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def drop_graph(self, graph_name: URIRef) -> None:
         """Drop a graph.
-        
+
         Not supported by filesystem adapter.
         """
         raise NotImplementedError(
@@ -261,7 +272,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def list_graphs(self) -> list[URIRef]:
         """List all named graphs.
-        
+
         Not supported by filesystem adapter - returns empty list.
         """
         return []

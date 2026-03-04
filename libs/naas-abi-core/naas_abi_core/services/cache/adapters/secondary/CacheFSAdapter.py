@@ -1,6 +1,8 @@
 import hashlib
 import json
 import os
+import tempfile
+import threading
 
 from naas_abi_core.services.cache.CachePort import (
     CachedData,
@@ -12,28 +14,48 @@ from naas_abi_core.services.cache.CachePort import (
 class CacheFSAdapter(ICacheAdapter):
     def __init__(self, cache_dir: str):
         self.cache_dir = cache_dir
+        self._lock = threading.RLock()
 
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
+
+    def __entry_path(self, key: str) -> str:
+        return os.path.join(self.cache_dir, self.__key_to_sha256(key))
 
     def __key_to_sha256(self, key: str) -> str:
         return hashlib.sha256(key.encode()).hexdigest()
 
     def get(self, key: str) -> CachedData:
-        if not os.path.exists(os.path.join(self.cache_dir, self.__key_to_sha256(key))):
-            raise CacheNotFoundError(f"Cache file not found: {key}")
+        path = self.__entry_path(key)
+        with self._lock:
+            if not os.path.exists(path):
+                raise CacheNotFoundError(f"Cache file not found: {key}")
 
-        with open(os.path.join(self.cache_dir, self.__key_to_sha256(key)), "r") as f:
-            return CachedData(**json.load(f))
+            with open(path, "r", encoding="utf-8") as f:
+                return CachedData(**json.load(f))
 
     def set(self, key: str, value: CachedData) -> None:
-        with open(os.path.join(self.cache_dir, self.__key_to_sha256(key)), "w") as f:
-            json.dump(value.model_dump(), f, indent=4)
+        path = self.__entry_path(key)
+        payload = json.dumps(value.model_dump(), indent=4)
+        with self._lock:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.cache_dir,
+                delete=False,
+            ) as temp_file:
+                temp_file.write(payload)
+                temp_path = temp_file.name
+            os.replace(temp_path, path)
 
     def delete(self, key: str) -> None:
-        if not os.path.exists(os.path.join(self.cache_dir, self.__key_to_sha256(key))):
-            raise CacheNotFoundError(f"Cache file not found: {key}")
-        os.remove(os.path.join(self.cache_dir, self.__key_to_sha256(key)))
+        path = self.__entry_path(key)
+        with self._lock:
+            if not os.path.exists(path):
+                raise CacheNotFoundError(f"Cache file not found: {key}")
+            os.remove(path)
 
     def exists(self, key: str) -> bool:
-        return os.path.exists(os.path.join(self.cache_dir, self.__key_to_sha256(key)))
+        path = self.__entry_path(key)
+        with self._lock:
+            return os.path.exists(path)
