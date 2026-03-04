@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.7 (2026-03-04)
+
+### Bug Fixes
+
+- Make favicon & title persistant
+  ([`6602223`](https://github.com/jupyter-naas/abi/commit/66022239cc255ce4bc525d31bd3f9e230dc8d2b2))
+
+
 ## v1.9.6 (2026-03-03)
 
 
