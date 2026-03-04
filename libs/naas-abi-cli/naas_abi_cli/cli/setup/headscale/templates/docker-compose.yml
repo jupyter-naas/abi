@@ -15,6 +15,6 @@ services:
       - ./lib:/var/lib/headscale
       - ./run:/var/run/headscale
       - ./config/extra-records.json:/var/lib/headscale/extra-records.json
-    command: server
+    command: serve
     healthcheck:
         test: ["CMD", "headscale", "health"]
