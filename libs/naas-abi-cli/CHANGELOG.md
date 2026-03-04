@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.2 (2026-03-04)
+
+### Bug Fixes
+
+- Headscale setup
+  ([`dbee594`](https://github.com/jupyter-naas/abi/commit/dbee59421b83c98434b9e2053dc2b345540b9186))
+
+
 ## v1.19.1 (2026-03-03)
 
 ### Bug Fixes
