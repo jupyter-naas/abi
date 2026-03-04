@@ -228,8 +228,24 @@ def naas(env: str):
     default="local",
     help="Environment to use (default: local). This is used to know which configuration file to load. (config.local.yaml, config.yaml, ...)",
 )
-def local_deploy(env: str):
-    setup_local_deploy(os.getcwd())
+@click.option(
+    "--regenerate",
+    is_flag=True,
+    default=False,
+    help="Regenerate local deploy files from latest templates.",
+)
+@click.option(
+    "--no-backup",
+    is_flag=True,
+    default=False,
+    help="Do not create a backup before regeneration.",
+)
+def local_deploy(env: str, regenerate: bool, no_backup: bool):
+    setup_local_deploy(
+        os.getcwd(),
+        regenerate=regenerate,
+        backup=not no_backup,
+    )
 
 
 @deploy.command("local-up")
