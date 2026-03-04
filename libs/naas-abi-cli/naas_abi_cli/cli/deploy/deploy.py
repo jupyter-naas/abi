@@ -240,9 +240,16 @@ def naas(env: str):
     default=False,
     help="Do not create a backup before regeneration.",
 )
-def local_deploy(env: str, regenerate: bool, no_backup: bool):
+@click.option(
+    "--headscale",
+    is_flag=True,
+    default=False,
+    help="Include Headscale service and configuration in local deploy.",
+)
+def local_deploy(env: str, regenerate: bool, no_backup: bool, headscale: bool):
     setup_local_deploy(
         os.getcwd(),
+        include_headscale=headscale,
         regenerate=regenerate,
         backup=not no_backup,
     )
