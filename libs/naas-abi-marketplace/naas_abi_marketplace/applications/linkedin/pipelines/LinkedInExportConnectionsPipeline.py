@@ -590,7 +590,10 @@ class LinkedInExportConnectionsPipeline(Pipeline, BasePipeline):
                 df, log_dir_path, parameters.file_name, copy=False
             )
             # Save graph to triple store
-            self.__configuration.triple_store.insert(graph)
+            self.__configuration.triple_store.insert(
+                graph,
+                graph_name=URIRef("http://ontology.naas.ai/graph/default"),
+            )
         return graph
 
     def as_tools(self) -> list[BaseTool]:
@@ -652,5 +655,4 @@ if __name__ == "__main__":
             linkedin_public_url=linkedin_public_url
         )
     )
-    print(graph.serialize(format="turtle"))
     print(graph.serialize(format="turtle"))

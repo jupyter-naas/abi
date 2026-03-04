@@ -286,7 +286,10 @@ class AddPowerPointPresentationPipeline(Pipeline):
         # Save the graph
         if len(graph) > 0:
             logger.info(f"✅ Inserting {len(graph)} triples into the triple store")
-            self.__configuration.triple_store.insert(graph)
+            self.__configuration.triple_store.insert(
+                graph,
+                graph_name=URIRef("http://ontology.naas.ai/graph/default"),
+            )
         return graph
 
     def as_tools(self) -> list[BaseTool]:

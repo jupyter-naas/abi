@@ -1,0 +1,49 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+# ======================================================================
+# Chat Completion Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:chat_completion_process_ontology a owl:Ontology ;
+    dc:title "Chat Completion Process"@en ;
+    dc:description "A process that generates an AI assistant response to a user message by routing to configured LLM provider (OpenAI, Anthropic, Ollama, Cloudflare, ABI)."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:ChatCompletionProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Chat Completion Process"@en ;
+    skos:definition "A process that generates an AI assistant response to a user message by routing to configured LLM provider (OpenAI, Anthropic, Ollama, Cloudflare, ABI)."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/chat.py lines 544-623" ;
+    skos:example "User sends message → System resolves provider → Builds prompt with history → Calls LLM API → Saves assistant response"@en .
+
+# ======================================================================
+# WHO, WHERE, WHEN, HOW WE KNOW, HOW IT IS, WHY
+# TODO: Add specific entities, qualities, roles, and relationships
+# ======================================================================
+
+# Use this template to add process-specific BFO entities:
+# - WHO (BFO_0000040): Material entities that participate
+# - WHERE (BFO_0000029): Sites where process occurs
+# - WHEN (BFO_0000008): Temporal regions
+# - HOW WE KNOW (BFO_0000031): Information entities
+# - HOW IT IS (BFO_0000019): Qualities
+# - WHY (BFO_0000023/BFO_0000016): Roles and dispositions
+
+# Example instance (replace with actual data):
+nexus:example_chat_completion_process_instance a nexus:ChatCompletionProcess ;
+    dc:created "2026-02-09T15:00:00Z"^^xsd:dateTime ;
+    rdfs:label "Example Chat Completion Process Instance"@en .

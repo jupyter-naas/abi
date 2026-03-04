@@ -1,0 +1,309 @@
+{
+  "id": "workspace-platform",
+  "name": "Platform",
+  "description": "NEXUS platform knowledge graph - the platform modeling itself",
+  "nodes": [
+    {
+      "id": "node-nexus-platform",
+      "type": "Material Entity",
+      "label": "NEXUS Platform",
+      "properties": {
+        "description": "The coordination platform by naas.ai where agents, knowledge, and humans connect into actionable intelligence",
+        "version": "0.1.0",
+        "repository": "https://github.com/jravenel/nexus",
+        "components": ["Chat", "Graph", "Ontology", "Search", "Lab", "Apps"]
+      }
+    },
+    {
+      "id": "node-module-chat",
+      "type": "Material Entity",
+      "label": "Chat Module",
+      "properties": {
+        "description": "Conversational interface for interacting with AI agents",
+        "path": "/workspace/[id]/chat",
+        "status": "ready",
+        "features": ["streaming", "multi-agent", "context-aware"]
+      }
+    },
+    {
+      "id": "node-module-graph",
+      "type": "Material Entity",
+      "label": "Graph Module",
+      "properties": {
+        "description": "Knowledge graph visualization and exploration",
+        "path": "/workspace/[id]/graph",
+        "status": "ready",
+        "features": ["vis-network", "BFO-7-buckets", "SPARQL"]
+      }
+    },
+    {
+      "id": "node-module-ontology",
+      "type": "Material Entity",
+      "label": "Ontology Module",
+      "properties": {
+        "description": "Visual ontology editor for defining entity types and relationships",
+        "path": "/workspace/[id]/ontology",
+        "status": "ready",
+        "features": ["import", "export", "schema-validation"]
+      }
+    },
+    {
+      "id": "node-module-search",
+      "type": "Material Entity",
+      "label": "Search Module",
+      "properties": {
+        "description": "Semantic search across all knowledge sources",
+        "path": "/workspace/[id]/search",
+        "status": "building",
+        "features": ["semantic", "filters", "facets"]
+      }
+    },
+    {
+      "id": "node-module-files",
+      "type": "Material Entity",
+      "label": "Files Module",
+      "properties": {
+        "description": "File storage and management",
+        "path": "/workspace/[id]/files",
+        "status": "ready",
+        "features": ["upload", "R2-storage", "file-tree"]
+      }
+    },
+    {
+      "id": "node-database",
+      "type": "Material Entity",
+      "label": "PostgreSQL Database",
+      "properties": {
+        "description": "Production PostgreSQL database for persistence",
+        "path": "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus",
+        "tables": ["users", "workspaces", "conversations", "messages", "graph_nodes", "graph_edges", "agent_configs"]
+      }
+    },
+    {
+      "id": "node-api",
+      "type": "Material Entity",
+      "label": "FastAPI Backend",
+      "properties": {
+        "description": "REST API exposing all platform capabilities",
+        "path": "apps/api",
+        "endpoints": ["/api/workspaces", "/api/graph", "/api/chat", "/api/agents", "/api/ontology"]
+      }
+    },
+    {
+      "id": "node-frontend",
+      "type": "Material Entity",
+      "label": "Next.js Frontend",
+      "properties": {
+        "description": "React-based user interface",
+        "path": "apps/web",
+        "framework": "Next.js 14",
+        "styling": "Tailwind CSS"
+      }
+    },
+    {
+      "id": "node-demo-data",
+      "type": "GDC",
+      "label": "Demo Data Files",
+      "properties": {
+        "description": "JSON files that seed the database with demo content",
+        "path": "demo/graphs/",
+        "files": ["nexus.json", "aviation.json", "user.json"]
+      }
+    },
+    {
+      "id": "node-agent-abi",
+      "type": "Material Entity",
+      "label": "ABI (Supervisor Agent)",
+      "properties": {
+        "description": "The supervisor agent that understands the entire platform and orchestrates other agents",
+        "role": "supervisor",
+        "capabilities": ["introspection", "orchestration", "routing", "context-management"],
+        "canQuery": "this knowledge graph to understand available agents and capabilities"
+      }
+    },
+    {
+      "id": "node-agent-aia",
+      "type": "Material Entity",
+      "label": "AIA (General Assistant)",
+      "properties": {
+        "description": "General-purpose AI assistant for answering questions and helping with tasks",
+        "role": "assistant",
+        "capabilities": ["qa", "writing", "coding", "analysis"]
+      }
+    },
+    {
+      "id": "node-agent-content",
+      "type": "Material Entity",
+      "label": "Content Assistant",
+      "properties": {
+        "description": "Specialized in writing, editing, and content creation",
+        "role": "specialist",
+        "capabilities": ["writing", "editing", "storytelling", "copywriting"]
+      }
+    },
+    {
+      "id": "node-agent-growth",
+      "type": "Material Entity",
+      "label": "Growth Engine",
+      "properties": {
+        "description": "Focused on marketing, analytics, and business growth",
+        "role": "specialist",
+        "capabilities": ["marketing", "analytics", "funnels", "optimization"]
+      }
+    },
+    {
+      "id": "node-agent-finance",
+      "type": "Material Entity",
+      "label": "Finance Analyst",
+      "properties": {
+        "description": "Expert in financial analysis, reporting, and planning",
+        "role": "specialist",
+        "capabilities": ["financial-modeling", "forecasting", "reporting", "budgeting"]
+      }
+    },
+    {
+      "id": "node-agent-ontology",
+      "type": "Material Entity",
+      "label": "Ontology Expert",
+      "properties": {
+        "description": "Specialized in knowledge modeling and ontology design",
+        "role": "specialist",
+        "capabilities": ["ontology-design", "BFO", "knowledge-graphs", "semantic-modeling"]
+      }
+    },
+    {
+      "id": "node-capability-chat",
+      "type": "Disposition",
+      "label": "Chat Capability",
+      "properties": {
+        "description": "Ability to engage in conversational interactions",
+        "inputType": "text",
+        "outputType": "text",
+        "streaming": true
+      }
+    },
+    {
+      "id": "node-capability-query-graph",
+      "type": "Disposition",
+      "label": "Query Graph Capability",
+      "properties": {
+        "description": "Ability to query the knowledge graph for information",
+        "inputType": "query",
+        "outputType": "nodes and edges",
+        "languages": ["natural", "SPARQL"]
+      }
+    },
+    {
+      "id": "node-capability-introspect",
+      "type": "Disposition",
+      "label": "Introspection Capability",
+      "properties": {
+        "description": "Ability to understand and describe the platform's own structure and capabilities",
+        "mechanism": "Query this knowledge graph for platform metadata"
+      }
+    },
+    {
+      "id": "node-process-chat-flow",
+      "type": "Process",
+      "label": "Chat Request Flow",
+      "properties": {
+        "description": "The process of handling a user chat request",
+        "steps": ["User sends message", "Frontend calls /api/chat/complete", "API selects provider", "Provider generates response", "Response saved to database", "Response streamed to frontend"]
+      }
+    },
+    {
+      "id": "node-process-graph-query",
+      "type": "Process",
+      "label": "Graph Query Flow",
+      "properties": {
+        "description": "The process of querying the knowledge graph",
+        "steps": ["User or agent submits query", "API queries PostgreSQL graph_nodes/edges", "Results returned as JSON", "Frontend renders visualization"]
+      }
+    },
+    {
+      "id": "node-process-seed",
+      "type": "Process",
+      "label": "Database Seeding Process",
+      "properties": {
+        "description": "Loading demo data into the database",
+        "command": "python seed.py --reset",
+        "steps": ["Read demo/graphs/*.json files", "Initialize PostgreSQL tables", "Insert records", "Database ready for API"]
+      }
+    },
+    {
+      "id": "node-bfo-ontology",
+      "type": "GDC",
+      "label": "BFO 7 Buckets Ontology",
+      "properties": {
+        "description": "The foundational ontology used to categorize all entities in NEXUS",
+        "buckets": {
+          "WHO": "Material Entity - people, objects, organizations",
+          "WHAT": "Process - events, activities, changes",
+          "WHEN": "Temporal Region - times, durations",
+          "WHERE": "Site - locations, places",
+          "HOW_IT_IS": "Quality - properties, attributes",
+          "WHY": "Role/Disposition - external roles, internal capabilities",
+          "HOW_WE_KNOW": "GDC - documents, data, plans"
+        }
+      }
+    },
+    {
+      "id": "node-workspace-nexus",
+      "type": "Site",
+      "label": "Platform Workspace",
+      "properties": {
+        "description": "The main workspace containing platform metadata and demo data",
+        "id": "workspace-platform",
+        "contains": ["platform-graph", "agents", "conversations"]
+      }
+    },
+    {
+      "id": "node-workspace-aviation",
+      "type": "Site",
+      "label": "Research Lab Workspace",
+      "properties": {
+        "description": "Demo workspace showing a real-world BFO application in aviation",
+        "id": "workspace-research",
+        "useCase": "Flight UA123 SFO to JFK"
+      }
+    }
+  ],
+  "edges": [
+    { "id": "edge-nexus-chat", "source": "node-nexus-platform", "target": "node-module-chat", "type": "has component" },
+    { "id": "edge-nexus-graph", "source": "node-nexus-platform", "target": "node-module-graph", "type": "has component" },
+    { "id": "edge-nexus-ontology", "source": "node-nexus-platform", "target": "node-module-ontology", "type": "has component" },
+    { "id": "edge-nexus-search", "source": "node-nexus-platform", "target": "node-module-search", "type": "has component" },
+    { "id": "edge-nexus-files", "source": "node-nexus-platform", "target": "node-module-files", "type": "has component" },
+    { "id": "edge-nexus-db", "source": "node-nexus-platform", "target": "node-database", "type": "uses" },
+    { "id": "edge-nexus-api", "source": "node-nexus-platform", "target": "node-api", "type": "has component" },
+    { "id": "edge-nexus-frontend", "source": "node-nexus-platform", "target": "node-frontend", "type": "has component" },
+    { "id": "edge-api-db", "source": "node-api", "target": "node-database", "type": "reads from" },
+    { "id": "edge-frontend-api", "source": "node-frontend", "target": "node-api", "type": "calls" },
+    { "id": "edge-demo-db", "source": "node-demo-data", "target": "node-database", "type": "seeds" },
+    { "id": "edge-seed-demo", "source": "node-process-seed", "target": "node-demo-data", "type": "reads" },
+    { "id": "edge-seed-db", "source": "node-process-seed", "target": "node-database", "type": "writes to" },
+    { "id": "edge-nexus-abi", "source": "node-nexus-platform", "target": "node-agent-abi", "type": "has agent" },
+    { "id": "edge-nexus-aia", "source": "node-nexus-platform", "target": "node-agent-aia", "type": "has agent" },
+    { "id": "edge-nexus-content", "source": "node-nexus-platform", "target": "node-agent-content", "type": "has agent" },
+    { "id": "edge-nexus-growth", "source": "node-nexus-platform", "target": "node-agent-growth", "type": "has agent" },
+    { "id": "edge-nexus-finance", "source": "node-nexus-platform", "target": "node-agent-finance", "type": "has agent" },
+    { "id": "edge-nexus-onto-agent", "source": "node-nexus-platform", "target": "node-agent-ontology", "type": "has agent" },
+    { "id": "edge-abi-supervises-aia", "source": "node-agent-abi", "target": "node-agent-aia", "type": "supervises" },
+    { "id": "edge-abi-supervises-content", "source": "node-agent-abi", "target": "node-agent-content", "type": "supervises" },
+    { "id": "edge-abi-supervises-growth", "source": "node-agent-abi", "target": "node-agent-growth", "type": "supervises" },
+    { "id": "edge-abi-supervises-finance", "source": "node-agent-abi", "target": "node-agent-finance", "type": "supervises" },
+    { "id": "edge-abi-supervises-ontology", "source": "node-agent-abi", "target": "node-agent-ontology", "type": "supervises" },
+    { "id": "edge-abi-introspect", "source": "node-agent-abi", "target": "node-capability-introspect", "type": "has capability" },
+    { "id": "edge-abi-query-graph", "source": "node-agent-abi", "target": "node-capability-query-graph", "type": "has capability" },
+    { "id": "edge-abi-chat", "source": "node-agent-abi", "target": "node-capability-chat", "type": "has capability" },
+    { "id": "edge-aia-chat", "source": "node-agent-aia", "target": "node-capability-chat", "type": "has capability" },
+    { "id": "edge-introspect-graph", "source": "node-capability-introspect", "target": "node-module-graph", "type": "operates on" },
+    { "id": "edge-chat-module", "source": "node-capability-chat", "target": "node-module-chat", "type": "operates on" },
+    { "id": "edge-query-graph-module", "source": "node-capability-query-graph", "target": "node-module-graph", "type": "operates on" },
+    { "id": "edge-chat-flow-api", "source": "node-process-chat-flow", "target": "node-api", "type": "uses" },
+    { "id": "edge-graph-query-api", "source": "node-process-graph-query", "target": "node-api", "type": "uses" },
+    { "id": "edge-graph-bfo", "source": "node-module-graph", "target": "node-bfo-ontology", "type": "structured by" },
+    { "id": "edge-nexus-workspace-nexus", "source": "node-nexus-platform", "target": "node-workspace-nexus", "type": "contains" },
+    { "id": "edge-nexus-workspace-aviation", "source": "node-nexus-platform", "target": "node-workspace-aviation", "type": "contains" }
+  ]
+}

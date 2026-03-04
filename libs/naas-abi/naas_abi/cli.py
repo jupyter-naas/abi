@@ -8,7 +8,6 @@ import os
 import re
 import shutil
 
-import dotenv
 import yaml
 from rich.console import Console
 from rich.prompt import Prompt
@@ -93,11 +92,66 @@ def get_component_selection():
 
 def enable_module_in_config(module_path: str):
     """Enable the module in config files if they exist."""
-    dotenv.load_dotenv()
 
-    env = os.getenv("ENV")
+    def _resolve_env() -> str | None:
+        env = os.getenv("ENV")
+        if env:
+            return env
 
-    config_files = [f"config.{env}.yaml"]
+        if not os.path.exists("config.yaml"):
+            return None
+
+        with open("config.yaml", "r", encoding="utf-8") as file:
+            config = yaml.safe_load(file) or {}
+
+        services = config.get("services")
+        if not isinstance(services, dict):
+            return None
+
+        secret = services.get("secret")
+        if not isinstance(secret, dict):
+            return None
+
+        secret_adapters = secret.get("secret_adapters")
+        if not isinstance(secret_adapters, list):
+            return None
+
+        for secret_adapter in secret_adapters:
+            if not isinstance(secret_adapter, dict):
+                continue
+            if secret_adapter.get("adapter") != "dotenv":
+                continue
+
+            secret_config = secret_adapter.get("config")
+            if not isinstance(secret_config, dict):
+                secret_config = {}
+
+            path = secret_config.get("path", ".env")
+            if not isinstance(path, str) or path.strip() == "":
+                raise ValueError(
+                    "Invalid dotenv secret adapter path in configuration. "
+                    "Expected a non-empty string at services.secret.secret_adapters[].config.path."
+                )
+
+            from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+                DotenvSecretSecondaryAdaptor,
+            )
+
+            value = DotenvSecretSecondaryAdaptor(path=path).get("ENV")
+            if value is not None:
+                return str(value)
+
+            return None
+
+        return None
+
+    env = _resolve_env()
+
+    config_file = f"config.{env}.yaml" if env else "config.yaml"
+    if not os.path.exists(config_file):
+        config_file = "config.yaml"
+
+    config_files = [config_file]
 
     for config_file in config_files:
         if os.path.exists(config_file):

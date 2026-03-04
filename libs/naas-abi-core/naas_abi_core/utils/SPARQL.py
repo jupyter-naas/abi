@@ -31,7 +31,6 @@ class SPARQLUtils:
         data = []
         for row in results:
             assert isinstance(row, query.ResultRow)
-            logger.debug(f"==> Row: {row}")
             data_dict = {}
             for key in row.labels:
                 data_dict[key] = str(row[key]) if row[key] else None
@@ -134,7 +133,7 @@ class SPARQLUtils:
             if len(graph) > 0:
                 results = graph.query(sparql_query)
             else:
-                results = self.query(sparql_query)  # type: ignore
+                results = self.triple_store_service.query(sparql_query)  # type: ignore
 
             for row in results:
                 assert isinstance(row, query.ResultRow)
@@ -171,7 +170,7 @@ class SPARQLUtils:
             }}
         """
         try:
-            results = self.query(sparql_query)  # type: ignore
+            results = self.triple_store_service.query(sparql_query)  # type: ignore
 
             id_map = {}
             for row in results:

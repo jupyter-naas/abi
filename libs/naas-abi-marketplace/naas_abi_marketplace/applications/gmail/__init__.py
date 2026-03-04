@@ -10,7 +10,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
-        modules=[],
+        modules=["naas_abi_marketplace.ai.chatgpt"],
         services=[ObjectStorageService],
     )
 
@@ -23,5 +23,5 @@ class ABIModule(BaseModule):
         config:
             datastore_path: "gmail"
         """
-        datastore_path: str = "gmail"
 
+        datastore_path: str = "gmail"

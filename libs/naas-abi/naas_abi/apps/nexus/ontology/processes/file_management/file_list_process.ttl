@@ -1,0 +1,160 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# File List Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:file_list_process a owl:Ontology ;
+    dc:title "File List Process"@en ;
+    dc:description "A process that lists files and folders in a directory path, supporting both local filesystem listing and S3 prefix-based listing with CommonPrefixes for folder simulation."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:FileListProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "File List Process"@en ;
+    skos:definition "A process that lists files and folders in a directory path, supporting both local filesystem listing and S3 prefix-based listing with CommonPrefixes for folder simulation."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/files.py:143-228 list_files()" ;
+    skos:example "1. If local: resolve full path, iterate directory contents, build FileInfo for each\n2. If S3: normalize prefix, call list_objects_v2 with Prefix and Delimiter=/\n3. Process CommonPrefixes as folders and Contents as files\n4. Skip S3 directory marker objects\n5. Sort results and return FileListResponse"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:DirectoryLister a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "DirectoryLister"@en ;
+    skos:definition "Backend logic enumerating directory contents"@en .
+
+nexus:StorageBackend a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "StorageBackend"@en ;
+    skos:definition "Local filesystem or S3-compatible storage"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:FileListEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "FileListEndpoint"@en ;
+    skos:definition "API endpoint GET /api/files/?path={path}"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:ListDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "ListDuration"@en ;
+    skos:definition "10-500ms: 10ms local, 100-500ms S3"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:FileListResponse a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "FileListResponse"@en ;
+    skos:definition "Response: files list + current path"@en .
+
+nexus:FileInfo a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "FileInfo"@en ;
+    skos:definition "Item: name, path, type (file/folder), size, modified, content_type"@en .
+
+nexus:S3ListResponse a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "S3ListResponse"@en ;
+    skos:definition "S3 response with CommonPrefixes (folders) and Contents (files)"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:SortOrder a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "SortOrder"@en ;
+    skos:definition "Quality: files sorted alphabetically by name"@en .
+
+nexus:S3FolderSimulation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "S3FolderSimulation"@en ;
+    skos:definition "Quality: S3 folders simulated via CommonPrefixes with / delimiter"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:DirectoryEnumeratorRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "DirectoryEnumeratorRole"@en ;
+    skos:definition "Role realized when system lists storage contents"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:S3PrefixDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "S3PrefixDisposition"@en ;
+    skos:definition "Disposition to use S3 list_objects_v2 with Delimiter=/ for folder emulation"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:file_list_process_has_directorylister a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:FileListProcess ;
+    rdfs:range nexus:DirectoryLister ;
+    rdfs:label "FileListProcess has participant DirectoryLister"@en .
+
+nexus:file_list_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:FileListProcess ;
+    rdfs:range nexus:FileListEndpoint ;
+    rdfs:label "FileListProcess occurs in FileListEndpoint"@en .
+
+nexus:file_list_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:FileListProcess ;
+    rdfs:range nexus:ListDuration ;
+    rdfs:label "FileListProcess occupies ListDuration"@en .
+
+nexus:file_list_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:FileListProcess ;
+    rdfs:range nexus:DirectoryEnumeratorRole ;
+    rdfs:label "FileListProcess realizes DirectoryEnumeratorRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:directoryPath a owl:DatatypeProperty ;
+    rdfs:label "directoryPath"@en ;
+    rdfs:range xsd:string .
+
+nexus:fileCount a owl:DatatypeProperty ;
+    rdfs:label "fileCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:folderCount a owl:DatatypeProperty ;
+    rdfs:label "folderCount"@en ;
+    rdfs:range xsd:integer .

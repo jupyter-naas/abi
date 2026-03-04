@@ -1,0 +1,151 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Search Suggestions Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:search_suggestions_process a owl:Ontology ;
+    dc:title "Search Suggestions Process"@en ;
+    dc:description "A process that provides autocomplete search suggestions by querying Wikipedia's OpenSearch API with partial query strings, returning up to 20 suggestion strings."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:SearchSuggestionsProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Search Suggestions Process"@en ;
+    skos:definition "A process that provides autocomplete search suggestions by querying Wikipedia's OpenSearch API with partial query strings, returning up to 20 suggestion strings."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/search.py:281-312 get_suggestions()" ;
+    skos:example "1. Build Wikipedia OpenSearch URL: action=opensearch, search={query}, limit={n}\n2. HTTP GET with 5-second timeout\n3. Parse JSON array response\n4. Extract suggestions from index 1\n5. Limit to requested count\n6. Return list of suggestion strings"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:WikipediaOpenSearch a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WikipediaOpenSearch"@en ;
+    skos:definition "Wikipedia OpenSearch API for autocomplete suggestions"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:SuggestionsEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "SuggestionsEndpoint"@en ;
+    skos:definition "NEXUS API GET /api/search/suggestions?query={q}&limit={n}"@en .
+
+nexus:WikipediaOpenSearchEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "WikipediaOpenSearchEndpoint"@en ;
+    skos:definition "en.wikipedia.org/w/api.php?action=opensearch"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:SuggestionDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "SuggestionDuration"@en ;
+    skos:definition "100-500ms for Wikipedia OpenSearch response"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:OpenSearchResponse a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OpenSearchResponse"@en ;
+    skos:definition "JSON array: [query, [suggestions], [descriptions], [urls]]"@en .
+
+nexus:SuggestionList a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "SuggestionList"@en ;
+    skos:definition "Array of suggestion strings (index 1 of response)"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:MaxSuggestions a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "MaxSuggestions"@en ;
+    skos:definition "Quality: maximum 20 suggestions (configurable 1-20)"@en .
+
+nexus:MinQueryLength a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "MinQueryLength"@en ;
+    skos:definition "Quality: minimum 1 character for query"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:AutocompletProviderRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "AutocompletProviderRole"@en ;
+    skos:definition "Role realized when system provides search suggestions"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:WikipediaOnlyDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "WikipediaOnlyDisposition"@en ;
+    skos:definition "Disposition to only use Wikipedia for suggestions (no DDG)"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:search_suggestions_process_has_wikipediaopensearch a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:SearchSuggestionsProcess ;
+    rdfs:range nexus:WikipediaOpenSearch ;
+    rdfs:label "SearchSuggestionsProcess has participant WikipediaOpenSearch"@en .
+
+nexus:search_suggestions_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:SearchSuggestionsProcess ;
+    rdfs:range nexus:SuggestionsEndpoint ;
+    rdfs:label "SearchSuggestionsProcess occurs in SuggestionsEndpoint"@en .
+
+nexus:search_suggestions_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:SearchSuggestionsProcess ;
+    rdfs:range nexus:SuggestionDuration ;
+    rdfs:label "SearchSuggestionsProcess occupies SuggestionDuration"@en .
+
+nexus:search_suggestions_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:SearchSuggestionsProcess ;
+    rdfs:range nexus:AutocompletProviderRole ;
+    rdfs:label "SearchSuggestionsProcess realizes AutocompletProviderRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:partialQuery a owl:DatatypeProperty ;
+    rdfs:label "partialQuery"@en ;
+    rdfs:range xsd:string .
+
+nexus:suggestionCount a owl:DatatypeProperty ;
+    rdfs:label "suggestionCount"@en ;
+    rdfs:range xsd:integer .

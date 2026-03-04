@@ -64,7 +64,12 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
             prefix=self.__triples_prefix, key=f"{name}.ttl", content=serialized_triples
         )
 
-    def insert(self, triples: Graph):
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+        if graph_name is not None:
+            raise NotImplementedError(
+                "Named graphs are not supported by object storage triple store adapter"
+            )
+
         with self.__lock:
             triples_by_subject: Dict[Node, List[Tuple[Node, Node]]] = (
                 self.triples_by_subject(triples)
@@ -108,7 +113,12 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
 
             self.__live_graph += triples
 
-    def remove(self, triples: Graph):
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
+        if graph_name is not None:
+            raise NotImplementedError(
+                "Named graphs are not supported by object storage triple store adapter"
+            )
+
         with self.__lock:
             triples_by_subject: Dict[Any, List[Tuple[Any, Any]]] = (
                 self.triples_by_subject(triples)
@@ -131,12 +141,8 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
 
             self.__live_graph -= triples
 
-    def get_subject_graph(self, subject: str | URIRef) -> Graph:
-        subject_hash = (
-            self.iri_hash(URIRef(subject))
-            if isinstance(subject, str)
-            else self.iri_hash(subject)
-        )
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
+        subject_hash = self.iri_hash(subject)
 
         try:
             graph = self.load_triples(subject_hash)
@@ -232,3 +238,23 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
         triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         pass
+
+    def create_graph(self, graph_name: URIRef):
+        raise NotImplementedError(
+            "Named graphs are not supported by object storage triple store adapter"
+        )
+
+    def clear_graph(self, graph_name: URIRef | None = None):
+        raise NotImplementedError(
+            "Named graphs are not supported by object storage triple store adapter"
+        )
+
+    def drop_graph(self, graph_name: URIRef):
+        raise NotImplementedError(
+            "Named graphs are not supported by object storage triple store adapter"
+        )
+
+    def list_graphs(self) -> list[URIRef]:
+        raise NotImplementedError(
+            "Named graphs are not supported by object storage triple store adapter"
+        )

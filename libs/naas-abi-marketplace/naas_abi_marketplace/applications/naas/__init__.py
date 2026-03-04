@@ -6,7 +6,7 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.services.secret.Secret import Secret
 
 
 class ABIModule(BaseModule):
@@ -14,7 +14,7 @@ class ABIModule(BaseModule):
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
         ],
-        services=[TripleStoreService, ObjectStorageService],
+        services=[Secret, ObjectStorageService],
     )
 
     class Configuration(ModuleConfiguration):
@@ -28,6 +28,7 @@ class ABIModule(BaseModule):
             workspace_id: "{{ secret.WORKSPACE_ID }}"
             storage_name: "{{ secret.STORAGE_NAME }}"
         """
+
         naas_api_key: str
         workspace_id: str | None = None
         storage_name: str | None = None

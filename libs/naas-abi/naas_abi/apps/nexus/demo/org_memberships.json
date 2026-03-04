@@ -1,0 +1,16 @@
+[
+  {"organization_id": "org-techcorp",        "user_id": "user-alice",   "role": "owner"},
+  {"organization_id": "org-techcorp",        "user_id": "user-bob",     "role": "admin"},
+  {"organization_id": "org-techcorp",        "user_id": "user-jeremy",  "role": "admin"},
+
+  {"organization_id": "org-globalconsulting", "user_id": "user-eve",    "role": "owner"},
+
+  {"organization_id": "org-innovate",        "user_id": "user-diana",   "role": "owner"},
+  {"organization_id": "org-innovate",        "user_id": "user-alice",   "role": "member"},
+  {"organization_id": "org-innovate",        "user_id": "user-jeremy",  "role": "member"},
+
+  {"organization_id": "org-researchlab",     "user_id": "user-diana",   "role": "owner"},
+  {"organization_id": "org-researchlab",     "user_id": "user-alice",   "role": "member"},
+  {"organization_id": "org-researchlab",     "user_id": "user-bob",     "role": "member"},
+  {"organization_id": "org-researchlab",     "user_id": "user-jeremy",  "role": "member"}
+]

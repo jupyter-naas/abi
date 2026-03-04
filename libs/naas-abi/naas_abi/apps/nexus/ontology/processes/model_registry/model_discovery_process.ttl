@@ -1,0 +1,151 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Model Discovery Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:model_discovery_process a owl:Ontology ;
+    dc:title "Model Discovery Process"@en ;
+    dc:description "A process that provides a catalog of 60+ AI models from the in-memory MODEL_REGISTRY dictionary, supporting filtering by provider and returning full model metadata including capabilities."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:ModelDiscoveryProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Model Discovery Process"@en ;
+    skos:definition "A process that provides a catalog of 60+ AI models from the in-memory MODEL_REGISTRY dictionary, supporting filtering by provider and returning full model metadata including capabilities."@en ;
+    rdfs:comment "Implements: apps/api/app/services/model_registry.py:488-512 get_models_for_provider(), get_all_models(), get_model_by_id()" ;
+    skos:example "1. If provider specified: return MODEL_REGISTRY[provider] list\n2. If no provider: flatten all provider lists into single list\n3. For model lookup: iterate all providers to find by model ID\n4. Return ModelInfo objects with full capability metadata"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ModelRegistry a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ModelRegistry"@en ;
+    skos:definition "In-memory Python dict with MODEL_REGISTRY[provider] = list[ModelInfo]"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:RegistryModule a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "RegistryModule"@en ;
+    skos:definition "apps/api/app/services/model_registry.py (in-memory, no database)"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:DiscoveryLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "DiscoveryLatency"@en ;
+    skos:definition "Less than 1ms (in-memory dict lookup)"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:ModelInfo a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ModelInfo"@en ;
+    skos:definition "Dict: id, name, provider, context_window, supports_streaming, supports_vision, supports_function_calling, max_output_tokens, released"@en .
+
+nexus:ProviderList a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ProviderList"@en ;
+    skos:definition "9 providers: openai, anthropic, xai, mistral, perplexity, google, openrouter, cloudflare, ollama"@en .
+
+nexus:ProviderLogo a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ProviderLogo"@en ;
+    skos:definition "Logo URL from PROVIDER_LOGOS mapping via get_logo_for_provider()"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:CatalogCompleteness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "CatalogCompleteness"@en ;
+    skos:definition "Quality: 60+ models manually cataloged across 9 providers"@en .
+
+nexus:ManualMaintenance a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ManualMaintenance"@en ;
+    skos:definition "Quality: registry requires manual updates for new models"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:ModelCatalogRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "ModelCatalogRole"@en ;
+    skos:definition "Role realized when system provides model information for UI and routing"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:StaticRegistryDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "StaticRegistryDisposition"@en ;
+    skos:definition "Disposition to use static in-memory registry (not auto-discovered)"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:model_discovery_process_has_modelregistry a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:ModelDiscoveryProcess ;
+    rdfs:range nexus:ModelRegistry ;
+    rdfs:label "ModelDiscoveryProcess has participant ModelRegistry"@en .
+
+nexus:model_discovery_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:ModelDiscoveryProcess ;
+    rdfs:range nexus:RegistryModule ;
+    rdfs:label "ModelDiscoveryProcess occurs in RegistryModule"@en .
+
+nexus:model_discovery_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:ModelDiscoveryProcess ;
+    rdfs:range nexus:DiscoveryLatency ;
+    rdfs:label "ModelDiscoveryProcess occupies DiscoveryLatency"@en .
+
+nexus:model_discovery_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:ModelDiscoveryProcess ;
+    rdfs:range nexus:ModelCatalogRole ;
+    rdfs:label "ModelDiscoveryProcess realizes ModelCatalogRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:totalModels a owl:DatatypeProperty ;
+    rdfs:label "totalModels"@en ;
+    rdfs:range xsd:integer .
+
+nexus:providerCount a owl:DatatypeProperty ;
+    rdfs:label "providerCount"@en ;
+    rdfs:range xsd:integer .

@@ -2,6 +2,315 @@
 
 <!-- version list -->
 
+## v1.9.6 (2026-03-03)
+
+
+## v1.9.5 (2026-03-03)
+
+### Bug Fixes
+
+- Exclude agent with no name
+  ([`641d7bd`](https://github.com/jupyter-naas/abi/commit/641d7bd7e9ff0acf21a716ff05830fa82d62307b))
+
+
+## v1.9.4 (2026-03-03)
+
+### Bug Fixes
+
+- Condition to exclude agent.name None
+  ([`e889924`](https://github.com/jupyter-naas/abi/commit/e889924299a26ec40a912ff47e8d7b9b9893213d))
+
+- Display logo url of agent in chat interface
+  ([`d7a74d9`](https://github.com/jupyter-naas/abi/commit/d7a74d9eaf36e799522bc389d7c9881bd481efdd))
+
+- File lint
+  ([`53fe441`](https://github.com/jupyter-naas/abi/commit/53fe4419cf9087ac09375a421d93f80db0dd5c55))
+
+- Get password from secret or add it
+  ([`540c7fc`](https://github.com/jupyter-naas/abi/commit/540c7fc39f8ab4fa3a6635915fbfa3257dad0e54))
+
+- Remove icon settings
+  ([`a8a76fe`](https://github.com/jupyter-naas/abi/commit/a8a76fe990edd1c4030ea63d6f58ac75fa87e2b1))
+
+### Refactoring
+
+- Display first 2 rows of agent description
+  ([`549622c`](https://github.com/jupyter-naas/abi/commit/549622cd94fda66a8b9a91e31995460222d46bf2))
+
+
+## v1.9.3 (2026-03-02)
+
+### Bug Fixes
+
+- Type 'null' is not assignable to type 'string | number | boolean'.
+  ([`83e1a10`](https://github.com/jupyter-naas/abi/commit/83e1a10cfe64bd2de72d0abf80331f0f3b3cfc48))
+
+
+## v1.9.2 (2026-03-02)
+
+
+## v1.9.1 (2026-03-02)
+
+### Bug Fixes
+
+- Error build nexus web
+  ([`2f9bff2`](https://github.com/jupyter-naas/abi/commit/2f9bff2962a0510e3e3f05fdd63dc6c2cc319e40))
+
+
+## v1.9.0 (2026-03-02)
+
+
+## v1.8.2 (2026-03-02)
+
+### Bug Fixes
+
+- Add abi agents to nexus
+  ([`dee9936`](https://github.com/jupyter-naas/abi/commit/dee99363e27f5f36935dd23ffb9167dd1f6a25e1))
+
+- Add classname
+  ([`0423f88`](https://github.com/jupyter-naas/abi/commit/0423f8809b4bdf3bd60e235e050ac331e19b17f6))
+
+- Code cleaning
+  ([`2d2783f`](https://github.com/jupyter-naas/abi/commit/2d2783f8ffd9464985f88489ab3deb771e0f70d8))
+
+- Init hexa archi agents
+  ([`ad5a997`](https://github.com/jupyter-naas/abi/commit/ad5a997bc51bd9ed8b2b5092521aa6ddf0a6c92d))
+
+- Mypy errors
+  ([`1f53767`](https://github.com/jupyter-naas/abi/commit/1f53767e45700dc6dd9c4c256d79c4589de84614))
+
+- Ollama exception thrown
+  ([`9cbb53a`](https://github.com/jupyter-naas/abi/commit/9cbb53a5ea42badc20fbd44cdbaadcc7196daace))
+
+- Remove ollama error from front
+  ([`b7b19a9`](https://github.com/jupyter-naas/abi/commit/b7b19a92ae1b42512a2a50b3287b1aadd2e54c9e))
+
+- Rm seeding default agents
+  ([`d00665a`](https://github.com/jupyter-naas/abi/commit/d00665af79d4b52a1fa510d2a7fdddbf6aff4368))
+
+- Save agents to db
+  ([`2185ae7`](https://github.com/jupyter-naas/abi/commit/2185ae73ebd9ce8ae52bab19fc4511f1d5ca3efa))
+
+
+## v1.8.1 (2026-02-19)
+
+### Bug Fixes
+
+- Does not make abi load every agent
+  ([`ec600b1`](https://github.com/jupyter-naas/abi/commit/ec600b1c85bb3e2b29c3959291dd8eaa1a20109f))
+
+
+## v1.8.0 (2026-02-19)
+
+### Bug Fixes
+
+- Do not update already existing users
+  ([`8754e4b`](https://github.com/jupyter-naas/abi/commit/8754e4b32324ecbaec35d7a0cd30bab13235c101))
+
+- Make checks
+  ([`b789da0`](https://github.com/jupyter-naas/abi/commit/b789da0cf1153e81f812fd94aa08abad00f33bf5))
+
+### Features
+
+- **nexus**: Make tenant/org branding and provisioning fully config-driven
+  ([`9ce64e5`](https://github.com/jupyter-naas/abi/commit/9ce64e59dc208af2cca659f71f99954b5d1626a8))
+
+
+## v1.7.14 (2026-02-19)
+
+
+## v1.7.13 (2026-02-18)
+
+### Bug Fixes
+
+- Nexus web build and service portal links for local dev
+  ([`a41432e`](https://github.com/jupyter-naas/abi/commit/a41432e81cfa57a4d2b3af481ba61d5c8fa9297a))
+
+
+## v1.7.12 (2026-02-18)
+
+### Bug Fixes
+
+- Working on multi env management
+  ([`482e67c`](https://github.com/jupyter-naas/abi/commit/482e67c01a4446bbac7fbf9d29948d91851707f4))
+
+
+## v1.7.11 (2026-02-17)
+
+
+## v1.7.10 (2026-02-17)
+
+### Bug Fixes
+
+- **nexus**: File manager api url
+  ([`09b3fde`](https://github.com/jupyter-naas/abi/commit/09b3fdecae31770a8620284c052b953c1810a7d4))
+
+
+## v1.7.9 (2026-02-17)
+
+
+## v1.7.8 (2026-02-17)
+
+
+## v1.7.7 (2026-02-17)
+
+
+## v1.7.6 (2026-02-17)
+
+
+## v1.7.5 (2026-02-17)
+
+### Bug Fixes
+
+- Add missing data in naas_abi release
+  ([`4aa9316`](https://github.com/jupyter-naas/abi/commit/4aa9316facc963b4ef4f1653f41b594ea7ae5479))
+
+
+## v1.7.4 (2026-02-17)
+
+
+## v1.7.3 (2026-02-17)
+
+### Bug Fixes
+
+- Install nexus-api deps from naas_abi pyproject directly
+  ([`a0a5734`](https://github.com/jupyter-naas/abi/commit/a0a57344e2d34adae689b52695b1f586c09b0ab3))
+
+
+## v1.7.2 (2026-02-17)
+
+### Bug Fixes
+
+- Build nexus for arm64
+  ([`859a31b`](https://github.com/jupyter-naas/abi/commit/859a31b68d121bbf5a1370d8daa1661db47831a3))
+
+
+## v1.7.1 (2026-02-16)
+
+
+## v1.7.0 (2026-02-16)
+
+### Features
+
+- Trigger release
+  ([`cf5dfe9`](https://github.com/jupyter-naas/abi/commit/cf5dfe9691af94ff1d791de0bd0d6a53cb877a32))
+
+
+## v1.6.1 (2026-02-16)
+
+### Bug Fixes
+
+- Make check-core
+  ([`5fcd0cd`](https://github.com/jupyter-naas/abi/commit/5fcd0cd53fb3f02ab12e6f9e65613afc65a7ffbc))
+
+
+## v1.6.0 (2026-02-16)
+
+### Features
+
+- Working on nexus container release to ghcr
+  ([`7f6f441`](https://github.com/jupyter-naas/abi/commit/7f6f441f07c409337e4082ea721a7b71080b49a8))
+
+
+## v1.5.2 (2026-02-16)
+
+### Bug Fixes
+
+- Remaning issues
+  ([`e9480ea`](https://github.com/jupyter-naas/abi/commit/e9480ea53bb33b2358e73dc9fead3915738bc2b8))
+
+
+## v1.5.1 (2026-02-16)
+
+### Bug Fixes
+
+- **deps**: Move greenlet to nexus-api package
+  ([`0a381ae`](https://github.com/jupyter-naas/abi/commit/0a381ae7f92ad326afe18cae21aeceb544c1a597))
+
+- **infra**: Rollback unstable weekend runtime wiring
+  ([`aac4a33`](https://github.com/jupyter-naas/abi/commit/aac4a33f2309ebff4a5889f72e45d13192955dd4))
+
+
+## v1.5.0 (2026-02-13)
+
+### Bug Fixes
+
+- Improve favicon display across browsers
+  ([`a26d1aa`](https://github.com/jupyter-naas/abi/commit/a26d1aa674494496045e145604c88535472865dd))
+
+- **infra**: Resolve CORS/500 errors and optimize Docker startup
+  ([`661f2cd`](https://github.com/jupyter-naas/abi/commit/661f2cde9390eb34c914e856644b1355d6b4907f))
+
+### Features
+
+- Rename to ABI NEXUS in browser tab
+  ([`a8725a6`](https://github.com/jupyter-naas/abi/commit/a8725a6dc1f08879face965fcbe7c7a6487d1b71))
+
+
+## v1.4.1 (2026-02-13)
+
+### Bug Fixes
+
+- AI Pane SupervisorAgent duplicate streaming and defaults
+  ([`f571323`](https://github.com/jupyter-naas/abi/commit/f5713236933003a4e8ace09e58cca4542b355504))
+
+
+## v1.4.0 (2026-02-12)
+
+### Bug Fixes
+
+- Add header to chat page for settings access
+  ([`0cc3604`](https://github.com/jupyter-naas/abi/commit/0cc360414716726366e87f57da18a7e77b334179))
+
+- Working on new project setup
+  ([`cd2a5cc`](https://github.com/jupyter-naas/abi/commit/cd2a5ccb156fe540759561e6eeb91abdeb1d4924))
+
+### Features
+
+- Working on wiring nexus to abi
+  ([`db01f8b`](https://github.com/jupyter-naas/abi/commit/db01f8b624870b47d1be9a331546ad5313a4204a))
+
+
+## v1.3.0 (2026-02-11)
+
+### Features
+
+- Migrate assets from root to nexus app
+  ([`acea3c8`](https://github.com/jupyter-naas/abi/commit/acea3c88affcbeaf636b953ed04cdfb8e450117d))
+
+
+## v1.2.0 (2026-02-11)
+
+### Features
+
+- Integrate nexus app into abi monorepo
+  ([`f3699f0`](https://github.com/jupyter-naas/abi/commit/f3699f0b84fddd12b0f69d202779ab48ebf16e82))
+
+
+## v1.1.1 (2026-02-10)
+
+### Bug Fixes
+
+- Get module instances from current module
+  ([`a5f4bc3`](https://github.com/jupyter-naas/abi/commit/a5f4bc3376c8f926c4e4959aee7b7dbb3012ba14))
+
+
+## v1.1.0 (2026-02-09)
+
+### Features
+
+- Working on addint BusService, KeyValueService and reworking Dagster orchestration
+  ([`bc448a6`](https://github.com/jupyter-naas/abi/commit/bc448a6a22c9f1788bb204e0671e6efb0c1bb774))
+
+
+## v1.0.15 (2026-02-02)
+
+### Bug Fixes
+
+- How ABI Agent loads templatable sparql query
+  ([`fa80a8c`](https://github.com/jupyter-naas/abi/commit/fa80a8c83f19e485b6d01abbb0573f58e214f517))
+
+
 ## v1.0.14 (2026-01-26)
 
 ### Bug Fixes

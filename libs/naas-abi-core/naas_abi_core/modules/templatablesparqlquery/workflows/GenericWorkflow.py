@@ -30,7 +30,7 @@ class GenericWorkflow(Generic[T]):
 
             template = Template(self.sparql_template)
             sparql_query = template.render(parameters.model_dump())
-            # print(sparql_query)
+            print(sparql_query)
             results = self.triple_store_service.query(sparql_query)
 
             return SPARQLUtils(self.triple_store_service).results_to_list(results)

@@ -1,0 +1,215 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Organization Creation Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:organization_creation_process a owl:Ontology ;
+    dc:title "Organization Creation Process"@en ;
+    dc:description "A process that creates a new organization with unique slug, branding configuration, and automatically adds the creating user as owner in organization_members table."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:OrganizationCreationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Organization Creation Process"@en ;
+    skos:definition "A process that creates a new organization with unique slug and branding, automatically adding the creating user as owner in organization_members table within a single transaction."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/organizations.py create_organization()" ;
+    skos:example "1. Check slug uniqueness in organizations table\n2. Generate organization ID: org-{uuid.hex[:12]}\n3. Create OrganizationModel with name, slug, owner_id, branding fields\n4. Create OrganizationMemberModel with role=owner\n5. Insert both in single transaction\n6. Commit and return Organization"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:Organization a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Organization"@en ;
+    skos:definition "A material entity representing a company or institution that owns workspaces and defines branding for the NEXUS platform."@en .
+
+nexus:OrganizationCreator a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "OrganizationCreator"@en ;
+    skos:definition "Authenticated user creating the organization"@en .
+
+nexus:OrganizationDatabase a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "OrganizationDatabase"@en ;
+    skos:definition "PostgreSQL with organizations and organization_members tables"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:OrganizationsEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OrganizationsEndpoint"@en ;
+    skos:definition "API endpoint POST /api/organizations"@en .
+
+nexus:OrganizationBrandingEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OrganizationBrandingEndpoint"@en ;
+    skos:definition "Public API endpoint GET /api/organizations/slug/{slug}/branding - no auth required"@en .
+
+nexus:OrganizationsTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OrganizationsTable"@en ;
+    skos:definition "PostgreSQL organizations table"@en .
+
+nexus:OrganizationMembersTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OrganizationMembersTable"@en ;
+    skos:definition "PostgreSQL organization_members table"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:OrgCreationDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "OrgCreationDuration"@en ;
+    skos:definition "40-80ms: uniqueness check + 2 inserts"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:OrganizationBranding a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OrganizationBranding"@en ;
+    skos:definition "Information entity containing organization branding: name, slug, logo_url, logo_emoji, primary_color, accent_color, background_color, font_family. Publicly accessible without authentication for login page theming."@en .
+
+nexus:OrganizationCreate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OrganizationCreate"@en ;
+    skos:definition "Pydantic model: name (1-200 chars), slug (regex: ^[a-z0-9][a-z0-9-]*[a-z0-9]$), branding fields"@en .
+
+nexus:OrganizationRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OrganizationRecord"@en ;
+    skos:definition "DB row: id (org-{uuid}), name, slug (unique), owner_id, branding fields, timestamps"@en .
+
+nexus:OrgMemberRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "OrgMemberRecord"@en ;
+    skos:definition "DB row: id, organization_id, user_id, role (owner/admin/member), created_at"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:OrgSlugUniqueness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "OrgSlugUniqueness"@en ;
+    skos:definition "Quality: slug must be unique across all organizations (400 if duplicate)"@en .
+
+nexus:OrgOwnerAutoMembership a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "OrgOwnerAutoMembership"@en ;
+    skos:definition "Quality: creator automatically added as member with owner role"@en .
+
+nexus:BrandingPublicAccess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "BrandingPublicAccess"@en ;
+    skos:definition "Quality: organization branding is publicly accessible without authentication, enabling branded login pages"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:OrganizationOwnerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "OrganizationOwnerRole"@en ;
+    skos:definition "Role realized when user creates and owns an organization"@en .
+
+nexus:OrganizationAdminRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "OrganizationAdminRole"@en ;
+    skos:definition "Role realized when user administers an organization (can update branding, manage members)"@en .
+
+nexus:OrganizationMemberRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "OrganizationMemberRole"@en ;
+    skos:definition "Role realized when user is a member of an organization (can access workspaces)"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:OrgTransactionalDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "OrgTransactionalDisposition"@en ;
+    skos:definition "Disposition to create organization + membership in single transaction"@en .
+
+nexus:BrandedLoginDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "BrandedLoginDisposition"@en ;
+    skos:definition "Disposition to serve organization-branded login page at /org/{slug}/login"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:org_creation_process_has_creator a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:OrganizationCreationProcess ;
+    rdfs:range nexus:OrganizationCreator ;
+    rdfs:label "OrganizationCreationProcess has participant OrganizationCreator"@en .
+
+nexus:org_creation_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:OrganizationCreationProcess ;
+    rdfs:range nexus:OrganizationsEndpoint ;
+    rdfs:label "OrganizationCreationProcess occurs in OrganizationsEndpoint"@en .
+
+nexus:org_creation_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:OrganizationCreationProcess ;
+    rdfs:range nexus:OrgCreationDuration ;
+    rdfs:label "OrganizationCreationProcess occupies OrgCreationDuration"@en .
+
+nexus:org_creation_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:OrganizationCreationProcess ;
+    rdfs:range nexus:OrganizationOwnerRole ;
+    rdfs:label "OrganizationCreationProcess realizes OrganizationOwnerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:organizationName a owl:DatatypeProperty ;
+    rdfs:label "organizationName"@en ;
+    rdfs:range xsd:string .
+
+nexus:organizationSlug a owl:DatatypeProperty ;
+    rdfs:label "organizationSlug"@en ;
+    rdfs:range xsd:string .
+
+nexus:hasOrganizationId a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "has organization ID"@en ;
+    skos:definition "Links a workspace to its parent organization."@en .
+
+nexus:hasLogoUrl a owl:DatatypeProperty ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "has logo URL"@en .
+
+nexus:hasPrimaryColor a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "has primary color"@en ;
+    skos:definition "Hex color code for organization primary brand color."@en .

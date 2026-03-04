@@ -5,6 +5,8 @@ import requests
 from naas_abi_core.services.triple_store.adaptors.secondary.Oxigraph import Oxigraph
 from rdflib import RDF, BNode, Graph, Literal, URIRef
 
+TEST_GRAPH_NAME = URIRef("http://example.org/test/graph1")
+
 # class TestOxigraph:
 #     """Test suite for the Oxigraph triple store adapter."""
 
@@ -581,7 +583,7 @@ class TestOxigraphIntegration:
         try:
             base_uri = f"http://test.example.org/{uuid.uuid4()}"
             large_graph = self.generate_graph(100001, base_uri)
-            oxigraph_adapter.insert(large_graph)
+            oxigraph_adapter.insert(large_graph, TEST_GRAPH_NAME)
 
             # Verify the data was inserted
             count_query = (
@@ -599,7 +601,7 @@ class TestOxigraphIntegration:
             assert int(result[0][count_var]) == 100001
 
             # Cleanup
-            oxigraph_adapter.remove(large_graph)
+            oxigraph_adapter.remove(large_graph, TEST_GRAPH_NAME)
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping large graph test")
 
@@ -607,7 +609,7 @@ class TestOxigraphIntegration:
         """Test basic insert and query workflow."""
         try:
             # Insert test data
-            oxigraph_adapter.insert(integration_graph)
+            oxigraph_adapter.insert(integration_graph, TEST_GRAPH_NAME)
 
             # Query for the data
             query = """
@@ -620,7 +622,7 @@ class TestOxigraphIntegration:
             assert str(results[0].o) == "integration_value"
 
             # Cleanup
-            oxigraph_adapter.remove(integration_graph)
+            oxigraph_adapter.remove(integration_graph, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping integration test")
@@ -628,7 +630,7 @@ class TestOxigraphIntegration:
     def test_construct_query(self, oxigraph_adapter, integration_graph):
         """Test CONSTRUCT query returns a graph."""
         try:
-            oxigraph_adapter.insert(integration_graph)
+            oxigraph_adapter.insert(integration_graph, TEST_GRAPH_NAME)
 
             query = """
             CONSTRUCT { ?s ?p ?o }
@@ -643,7 +645,7 @@ class TestOxigraphIntegration:
             assert len(result) > 0
 
             # Cleanup
-            oxigraph_adapter.remove(integration_graph)
+            oxigraph_adapter.remove(integration_graph, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping construct test")
@@ -651,7 +653,7 @@ class TestOxigraphIntegration:
     def test_ask_query(self, oxigraph_adapter, integration_graph):
         """Test ASK query."""
         try:
-            oxigraph_adapter.insert(integration_graph)
+            oxigraph_adapter.insert(integration_graph, TEST_GRAPH_NAME)
 
             # Ask if data exists
             ask_query = """
@@ -663,7 +665,7 @@ class TestOxigraphIntegration:
             assert result is not None
 
             # Cleanup
-            oxigraph_adapter.remove(integration_graph)
+            oxigraph_adapter.remove(integration_graph, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping ASK test")
@@ -671,7 +673,7 @@ class TestOxigraphIntegration:
     def test_get_subject_graph(self, oxigraph_adapter, integration_graph):
         """Test retrieving all triples for a specific subject."""
         try:
-            oxigraph_adapter.insert(integration_graph)
+            oxigraph_adapter.insert(integration_graph, TEST_GRAPH_NAME)
 
             subject = URIRef("http://test.example.org/integration_test")
             subject_graph = oxigraph_adapter.get_subject_graph(subject)
@@ -680,7 +682,7 @@ class TestOxigraphIntegration:
             assert len(subject_graph) == 2  # type and testProperty
 
             # Cleanup
-            oxigraph_adapter.remove(integration_graph)
+            oxigraph_adapter.remove(integration_graph, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping subject graph test")
@@ -705,7 +707,7 @@ class TestOxigraphIntegration:
                     )
                 )
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Query with FILTER - use specific URI
             query = """
@@ -725,7 +727,7 @@ class TestOxigraphIntegration:
             assert int(results[-1][value_var]) == 9
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping FILTER test")
@@ -752,7 +754,7 @@ class TestOxigraphIntegration:
                         )
                     )
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             query = """
             SELECT ?s ?id ?optional WHERE {
@@ -772,7 +774,7 @@ class TestOxigraphIntegration:
                     assert row.optional is None
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping OPTIONAL test")
@@ -792,7 +794,7 @@ class TestOxigraphIntegration:
             g.add((org, RDF.type, URIRef("http://test.example.org/Organization")))
             g.add((org, URIRef("http://test.example.org/title"), Literal("ACME Corp")))
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             query = """
             SELECT ?entity ?label WHERE {
@@ -815,7 +817,7 @@ class TestOxigraphIntegration:
             assert "ACME Corp" in labels
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping UNION test")
@@ -835,7 +837,7 @@ class TestOxigraphIntegration:
                     (subject, URIRef("http://test.example.org/agg/value"), Literal(val))
                 )
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Test COUNT, SUM, AVG, MIN, MAX
             query = """
@@ -866,7 +868,7 @@ class TestOxigraphIntegration:
             assert int(row[max_var]) == 50
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping aggregation test")
@@ -892,7 +894,7 @@ class TestOxigraphIntegration:
                         )
                     )
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             query = """
             SELECT ?category (COUNT(?item) as ?count)
@@ -915,7 +917,7 @@ class TestOxigraphIntegration:
             assert int(results[1][count_var]) == 2
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping GROUP BY test")
@@ -941,7 +943,7 @@ class TestOxigraphIntegration:
             )
 
             # Insert graph with blank nodes
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Query should only find the person type, not the address relationship
             query = f"""
@@ -957,7 +959,7 @@ class TestOxigraphIntegration:
             assert len(results) == 1
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running")
@@ -987,7 +989,7 @@ class TestOxigraphIntegration:
                     (subject, URIRef(f"http://test.example.org/prop{i}"), Literal(text))
                 )
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Query back and verify
             query = """
@@ -1004,7 +1006,7 @@ class TestOxigraphIntegration:
                 assert original in retrieved_values
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping special characters test")
@@ -1056,7 +1058,7 @@ class TestOxigraphIntegration:
                 )
             )
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Query and verify datatypes are preserved
             query = """
@@ -1069,7 +1071,7 @@ class TestOxigraphIntegration:
             assert len(results) == 5
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping datatypes test")
@@ -1112,7 +1114,7 @@ class TestOxigraphIntegration:
                 )
             )
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Query with language filter
             query = """
@@ -1127,7 +1129,7 @@ class TestOxigraphIntegration:
             assert str(results[0].label) == "Bonjour"
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping language tags test")
@@ -1144,7 +1146,7 @@ class TestOxigraphIntegration:
                 obj = URIRef(f"http://test.example.org/node{i + 1}")
                 g.add((subject, URIRef("http://test.example.org/next"), obj))
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Test property path with +
             query = """
@@ -1157,7 +1159,7 @@ class TestOxigraphIntegration:
             assert len(results) == 3  # node1, node2, node3
 
             # Cleanup
-            oxigraph_adapter.remove(g)
+            oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping property paths test")
@@ -1165,7 +1167,7 @@ class TestOxigraphIntegration:
     def test_describe_query(self, oxigraph_adapter, integration_graph):
         """Test DESCRIBE query."""
         try:
-            oxigraph_adapter.insert(integration_graph)
+            oxigraph_adapter.insert(integration_graph, TEST_GRAPH_NAME)
 
             query = """
             DESCRIBE <http://test.example.org/integration_test>
@@ -1176,7 +1178,7 @@ class TestOxigraphIntegration:
             assert len(result) > 0
 
             # Cleanup
-            oxigraph_adapter.remove(integration_graph)
+            oxigraph_adapter.remove(integration_graph, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping DESCRIBE test")
@@ -1187,10 +1189,10 @@ class TestOxigraphIntegration:
             empty_graph = Graph()
 
             # Insert empty graph should not fail
-            oxigraph_adapter.insert(empty_graph)
+            oxigraph_adapter.insert(empty_graph, TEST_GRAPH_NAME)
 
             # Remove empty graph should not fail
-            oxigraph_adapter.remove(empty_graph)
+            oxigraph_adapter.remove(empty_graph, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping empty graph test")
@@ -1206,7 +1208,7 @@ class TestOxigraphIntegration:
                 (subject, URIRef("http://test.example.org/value"), Literal("initial"))
             )
 
-            oxigraph_adapter.insert(g)
+            oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Update using SPARQL DELETE/INSERT
             update_query = """
@@ -1232,7 +1234,7 @@ class TestOxigraphIntegration:
             cleanup_graph.add(
                 (subject, URIRef("http://test.example.org/value"), Literal("updated"))
             )
-            oxigraph_adapter.remove(cleanup_graph)
+            oxigraph_adapter.remove(cleanup_graph, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping UPDATE test")
@@ -1269,7 +1271,7 @@ class TestOxigraphIntegration:
                     )
 
                 graphs.append(g)
-                oxigraph_adapter.insert(g)
+                oxigraph_adapter.insert(g, TEST_GRAPH_NAME)
 
             # Verify total count
             count_query = """
@@ -1283,7 +1285,7 @@ class TestOxigraphIntegration:
 
             # Cleanup
             for g in graphs:
-                oxigraph_adapter.remove(g)
+                oxigraph_adapter.remove(g, TEST_GRAPH_NAME)
 
         except requests.exceptions.ConnectionError:
             pytest.skip("Oxigraph is not running - skipping batch insertions test")
@@ -1293,7 +1295,7 @@ class TestOxigraphIntegration:
     #     """Test complete workflow: insert, query, get subject, remove."""
     #     try:
     #         # Insert test data
-    #         oxigraph_adapter.insert(integration_graph)
+    #         oxigraph_adapter.insert(integration_graph, TEST_GRAPH_NAME)
 
     #         # Query for the data
     #         query = """
@@ -1310,7 +1312,7 @@ class TestOxigraphIntegration:
     #         assert len(subject_graph) == 2  # type and testProperty
 
     #         # Remove the data
-    #         oxigraph_adapter.remove(integration_graph)
+    #         oxigraph_adapter.remove(integration_graph, TEST_GRAPH_NAME)
 
     #         # Verify removal
     #         results_after_remove = list(oxigraph_adapter.query(query))
@@ -1398,7 +1400,7 @@ class TestOxigraphIntegration:
     #         for result in total_results:
     #             subject_graph = oxigraph_adapter.get_subject_graph(result.s)
     #             cleanup_graph += subject_graph
-    #         oxigraph_adapter.remove(cleanup_graph)
+    #         oxigraph_adapter.remove(cleanup_graph, TEST_GRAPH_NAME)
 
     #     except requests.exceptions.ConnectionError:
     #         pytest.skip("Oxigraph is not running - skipping concurrent test")

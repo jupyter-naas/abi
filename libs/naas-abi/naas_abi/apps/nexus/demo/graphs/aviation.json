@@ -1,0 +1,166 @@
+{
+  "id": "workspace-research",
+  "name": "Aviation",
+  "description": "Aviation demo showing BFO 7 Buckets applied to flight operations",
+  "nodes": [
+    {
+      "id": "node-aircraft",
+      "type": "Material Entity",
+      "label": "Boeing 737-800",
+      "properties": {
+        "registration": "N12345",
+        "manufacturer": "Boeing",
+        "model": "737-800",
+        "capacity": 189
+      }
+    },
+    {
+      "id": "node-captain",
+      "type": "Material Entity",
+      "label": "Captain Sarah Chen",
+      "properties": {
+        "role": "Captain",
+        "airline": "United Airlines",
+        "license": "ATP-123456",
+        "flightHours": 15000
+      }
+    },
+    {
+      "id": "node-fo",
+      "type": "Material Entity",
+      "label": "First Officer James Park",
+      "properties": {
+        "role": "First Officer",
+        "airline": "United Airlines",
+        "license": "ATP-789012"
+      }
+    },
+    {
+      "id": "node-airline",
+      "type": "Material Entity",
+      "label": "United Airlines",
+      "properties": {
+        "type": "Airline",
+        "iataCode": "UA",
+        "icaoCode": "UAL"
+      }
+    },
+    {
+      "id": "node-flight",
+      "type": "Process",
+      "label": "Flight UA123",
+      "properties": {
+        "flightNumber": "UA123",
+        "status": "Completed",
+        "distance": "2586 nm"
+      }
+    },
+    {
+      "id": "node-takeoff",
+      "type": "Process",
+      "label": "Takeoff",
+      "properties": {
+        "runway": "28R",
+        "v1": "148 kt",
+        "vr": "156 kt",
+        "v2": "163 kt"
+      }
+    },
+    {
+      "id": "node-cruise",
+      "type": "Process",
+      "label": "Cruise",
+      "properties": {
+        "altitude": "FL350",
+        "speed": "485 kt",
+        "duration": "4h 30m"
+      }
+    },
+    {
+      "id": "node-landing",
+      "type": "Process",
+      "label": "Landing",
+      "properties": {
+        "runway": "31R",
+        "autoland": false,
+        "category": "CAT I"
+      }
+    },
+    {
+      "id": "node-sfo",
+      "type": "Site",
+      "label": "San Francisco Intl (SFO)",
+      "properties": {
+        "iataCode": "SFO",
+        "icaoCode": "KSFO",
+        "elevation": "13 ft",
+        "city": "San Francisco"
+      }
+    },
+    {
+      "id": "node-jfk",
+      "type": "Site",
+      "label": "John F Kennedy Intl (JFK)",
+      "properties": {
+        "iataCode": "JFK",
+        "icaoCode": "KJFK",
+        "elevation": "13 ft",
+        "city": "New York"
+      }
+    },
+    {
+      "id": "node-departure-time",
+      "type": "Temporal Region",
+      "label": "Departure Time",
+      "properties": {
+        "datetime": "2026-02-03T08:00:00-08:00",
+        "timezone": "PST"
+      }
+    },
+    {
+      "id": "node-arrival-time",
+      "type": "Temporal Region",
+      "label": "Arrival Time",
+      "properties": {
+        "datetime": "2026-02-03T16:30:00-05:00",
+        "timezone": "EST"
+      }
+    },
+    {
+      "id": "node-altitude",
+      "type": "Quality",
+      "label": "Cruise Altitude",
+      "properties": {
+        "value": 35000,
+        "unit": "feet",
+        "flightLevel": "FL350"
+      }
+    },
+    {
+      "id": "node-flightplan",
+      "type": "GDC",
+      "label": "Flight Plan UA123",
+      "properties": {
+        "format": "ICAO",
+        "route": "SFO KAYEX Q92 MVA J80 JFK",
+        "alternates": ["EWR", "LGA"]
+      }
+    }
+  ],
+  "edges": [
+    { "id": "edge-captain-airline", "source": "node-captain", "target": "node-airline", "type": "member of" },
+    { "id": "edge-fo-airline", "source": "node-fo", "target": "node-airline", "type": "member of" },
+    { "id": "edge-aircraft-airline", "source": "node-aircraft", "target": "node-airline", "type": "owned by" },
+    { "id": "edge-aircraft-flight", "source": "node-aircraft", "target": "node-flight", "type": "participates in" },
+    { "id": "edge-captain-flight", "source": "node-captain", "target": "node-flight", "type": "participates in" },
+    { "id": "edge-fo-flight", "source": "node-fo", "target": "node-flight", "type": "participates in" },
+    { "id": "edge-takeoff-cruise", "source": "node-takeoff", "target": "node-cruise", "type": "precedes" },
+    { "id": "edge-cruise-landing", "source": "node-cruise", "target": "node-landing", "type": "precedes" },
+    { "id": "edge-flight-sfo", "source": "node-flight", "target": "node-sfo", "type": "departs from" },
+    { "id": "edge-flight-jfk", "source": "node-flight", "target": "node-jfk", "type": "arrives at" },
+    { "id": "edge-takeoff-departure", "source": "node-takeoff", "target": "node-departure-time", "type": "occurs at" },
+    { "id": "edge-landing-arrival", "source": "node-landing", "target": "node-arrival-time", "type": "occurs at" },
+    { "id": "edge-altitude-aircraft", "source": "node-altitude", "target": "node-aircraft", "type": "inheres in" },
+    { "id": "edge-flight-flightplan", "source": "node-flight", "target": "node-flightplan", "type": "concretizes" }
+  ]
+}

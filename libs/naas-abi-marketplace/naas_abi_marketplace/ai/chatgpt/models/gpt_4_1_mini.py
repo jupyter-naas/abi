@@ -13,8 +13,10 @@ model: ChatModel = ChatModel(
     model=ChatOpenAI(
         model=MODEL_ID,
         temperature=0,
-        api_key=SecretStr(
-            ABIModule.get_instance().configuration.openai_api_key
-        ),
+        # Network resilience: OpenAI/HTTP can transiently disconnect (esp. in long-lived agents).
+        # These settings reduce "Server disconnected without sending a response" crashes.
+        timeout=120,
+        max_retries=3,
+        api_key=SecretStr(ABIModule.get_instance().configuration.openai_api_key),
     ),
 )

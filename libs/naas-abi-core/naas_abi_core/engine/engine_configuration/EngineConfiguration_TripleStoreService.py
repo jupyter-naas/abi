@@ -11,7 +11,7 @@ from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator impo
 )
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStorePort
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing_extensions import Self
 
 # Only import for type checking, not at runtime
@@ -29,7 +29,25 @@ class OxigraphAdapterConfiguration(BaseModel):
         timeout: 60
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     oxigraph_url: str = "http://localhost:7878"
+    timeout: int = 60
+
+
+class ApacheJenaTDB2AdapterConfiguration(BaseModel):
+    """Apache Jena Fuseki (TDB2) adapter configuration.
+
+    triple_store_adapter:
+      adapter: "apache_jena_tdb2"
+      config:
+        jena_tdb2_url: "http://localhost:3030/ds"
+        timeout: 60
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    jena_tdb2_url: str = "http://localhost:3030/ds"
     timeout: int = 60
 
 
@@ -44,6 +62,8 @@ class AWSNeptuneAdapterConfiguration(BaseModel):
         aws_secret_access_key: "{{ secret.AWS_SECRET_ACCESS_KEY }}"
         db_instance_identifier: "{{ secret.AWS_NEPTUNE_DB_INSTANCE_IDENTIFIER }}"
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     aws_region_name: str
     aws_access_key_id: str
@@ -67,6 +87,8 @@ class AWSNeptuneSSHTunnelAdapterConfiguration(AWSNeptuneAdapterConfiguration):
         bastion_private_key: "{{ secret.AWS_BASTION_PRIVATE_KEY }}"
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     bastion_host: str
     bastion_port: int
     bastion_user: str
@@ -83,6 +105,8 @@ class TripleStoreAdapterFilesystemConfiguration(BaseModel):
         triples_path: "triples"
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     store_path: str
     triples_path: str = "triples"
 
@@ -97,6 +121,8 @@ class TripleStoreAdapterObjectStorageConfiguration(BaseModel):
         triples_prefix: "triples"
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     object_storage_service: ObjectStorageServiceConfiguration
     triples_prefix: str = "triples"
 
@@ -104,6 +130,7 @@ class TripleStoreAdapterObjectStorageConfiguration(BaseModel):
 class TripleStoreAdapterConfiguration(GenericLoader):
     adapter: Literal[
         "oxigraph",
+        "apache_jena_tdb2",
         "aws_neptune_sshtunnel",
         "aws_neptune",
         "fs",
@@ -113,6 +140,7 @@ class TripleStoreAdapterConfiguration(GenericLoader):
     config: (
         Union[
             OxigraphAdapterConfiguration,
+            ApacheJenaTDB2AdapterConfiguration,
             AWSNeptuneAdapterConfiguration,
             AWSNeptuneSSHTunnelAdapterConfiguration,
             TripleStoreAdapterFilesystemConfiguration,
@@ -146,6 +174,12 @@ class TripleStoreAdapterConfiguration(GenericLoader):
                 OxigraphAdapterConfiguration,
                 self.config,
                 "Invalid configuration for services.triple_store.triple_store_adapter 'oxigraph' adapter",
+            )
+        if self.adapter == "apache_jena_tdb2":
+            pydantic_model_validator(
+                ApacheJenaTDB2AdapterConfiguration,
+                self.config,
+                "Invalid configuration for services.triple_store.triple_store_adapter 'apache_jena_tdb2' adapter",
             )
         if self.adapter == "aws_neptune":
             pydantic_model_validator(
@@ -181,6 +215,14 @@ class TripleStoreAdapterConfiguration(GenericLoader):
                 OxigraphAdapterConfiguration.model_validate(arguments)
 
                 return Oxigraph(**arguments)
+            elif self.adapter == "apache_jena_tdb2":
+                from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+                    ApacheJenaTDB2,
+                )
+
+                ApacheJenaTDB2AdapterConfiguration.model_validate(arguments)
+
+                return ApacheJenaTDB2(**arguments)
             elif self.adapter == "aws_neptune":
                 from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
                     AWSNeptune,

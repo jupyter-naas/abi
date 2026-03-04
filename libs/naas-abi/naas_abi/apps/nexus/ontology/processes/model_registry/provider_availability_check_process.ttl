@@ -1,0 +1,151 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Provider Availability Check Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:provider_availability_check_process a owl:Ontology ;
+    dc:title "Provider Availability Check Process"@en ;
+    dc:description "A process that determines which AI providers are configured and available for a user by checking workspace secrets for API keys and environment variables, returning providers with their model catalogs."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:ProviderAvailabilityCheckProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Provider Availability Check Process"@en ;
+    skos:definition "A process that determines which AI providers are configured and available for a user by checking workspace secrets for API keys and environment variables, returning providers with their model catalogs."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/providers.py:66-212 list_available_providers()" ;
+    skos:example "1. Get user workspace IDs from workspace_members\n2. For each provider: check has_api_key_configured(key_name, workspace_ids, db)\n3. has_api_key_configured: query secrets table, fallback to os.environ.get()\n4. For providers with keys: get models from MODEL_REGISTRY\n5. Always include Ollama with its models\n6. Return list of Provider objects with has_api_key and models"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:AvailabilityChecker a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "AvailabilityChecker"@en ;
+    skos:definition "Backend logic scanning secrets and environment for provider keys"@en .
+
+nexus:SecretStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "SecretStore"@en ;
+    skos:definition "PostgreSQL secrets table with encrypted API keys"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:ProvidersEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "ProvidersEndpoint"@en ;
+    skos:definition "API endpoint GET /api/providers/available"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:CheckDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "CheckDuration"@en ;
+    skos:definition "100-250ms: workspace queries + secret lookups + registry"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:Provider a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Provider"@en ;
+    skos:definition "Response object: id, name, type, has_api_key (bool), models list"@en .
+
+nexus:APIKeyPatterns a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "APIKeyPatterns"@en ;
+    skos:definition "Secret key patterns checked: OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, MISTRAL_API_KEY, etc."@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:FallbackChain a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "FallbackChain"@en ;
+    skos:definition "Quality: checks secrets first, then environment variables"@en .
+
+nexus:OllamaInclusion a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "OllamaInclusion"@en ;
+    skos:definition "Quality: Ollama always included (no API key needed)"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:AvailabilityReporterRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "AvailabilityReporterRole"@en ;
+    skos:definition "Role realized when system reports which providers are usable"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:EnvironmentFallbackDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "EnvironmentFallbackDisposition"@en ;
+    skos:definition "Disposition to check env vars when no database secret found"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:provider_availability_check_process_has_availabilitychecker a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:ProviderAvailabilityCheckProcess ;
+    rdfs:range nexus:AvailabilityChecker ;
+    rdfs:label "ProviderAvailabilityCheckProcess has participant AvailabilityChecker"@en .
+
+nexus:provider_availability_check_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:ProviderAvailabilityCheckProcess ;
+    rdfs:range nexus:ProvidersEndpoint ;
+    rdfs:label "ProviderAvailabilityCheckProcess occurs in ProvidersEndpoint"@en .
+
+nexus:provider_availability_check_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:ProviderAvailabilityCheckProcess ;
+    rdfs:range nexus:CheckDuration ;
+    rdfs:label "ProviderAvailabilityCheckProcess occupies CheckDuration"@en .
+
+nexus:provider_availability_check_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:ProviderAvailabilityCheckProcess ;
+    rdfs:range nexus:AvailabilityReporterRole ;
+    rdfs:label "ProviderAvailabilityCheckProcess realizes AvailabilityReporterRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:configuredProviderCount a owl:DatatypeProperty ;
+    rdfs:label "configuredProviderCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:totalModelCount a owl:DatatypeProperty ;
+    rdfs:label "totalModelCount"@en ;
+    rdfs:range xsd:integer .

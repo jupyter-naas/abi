@@ -1,5 +1,0 @@
-# FILE: bandit.yaml
-exclude: []
-tests: []
-skips:
-    - B101

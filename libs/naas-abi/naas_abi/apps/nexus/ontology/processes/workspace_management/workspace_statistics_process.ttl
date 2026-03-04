@@ -1,0 +1,144 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Workspace Statistics Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:workspace_statistics_process a owl:Ontology ;
+    dc:title "Workspace Statistics Process"@en ;
+    dc:description "A process that calculates workspace-level counts for graph nodes, graph edges, conversations, and agents using SQL COUNT queries across 4 tables."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:WorkspaceStatisticsProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Workspace Statistics Process"@en ;
+    skos:definition "A process that calculates workspace-level counts for graph nodes, graph edges, conversations, and agents using SQL COUNT queries across 4 tables."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/workspaces.py:147-176 get_workspace_stats()" ;
+    skos:example "1. Validate workspace access\n2. COUNT graph_nodes WHERE workspace_id = ?\n3. COUNT graph_edges WHERE workspace_id = ?\n4. COUNT conversations WHERE workspace_id = ?\n5. COUNT agent_configs WHERE workspace_id = ?\n6. Return statistics dict"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:StatisticsAggregator a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "StatisticsAggregator"@en ;
+    skos:definition "SQL query executor counting workspace resources"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:StatsEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "StatsEndpoint"@en ;
+    skos:definition "API endpoint GET /api/workspaces/{workspace_id}/stats"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:StatsDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "StatsDuration"@en ;
+    skos:definition "40-160ms for 4 COUNT queries"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:WorkspaceStats a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "WorkspaceStats"@en ;
+    skos:definition "Dict: nodes (int), edges (int), conversations (int), agents (int)"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:QueryEfficiency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "QueryEfficiency"@en ;
+    skos:definition "Quality: 4 independent COUNT queries, could be optimized to 1"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:ResourceCounterRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "ResourceCounterRole"@en ;
+    skos:definition "Role realized when system counts workspace resources"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:SimpleCOUNTDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "SimpleCOUNTDisposition"@en ;
+    skos:definition "Disposition to use simple COUNT(*) per table"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:workspace_statistics_process_has_statisticsaggregator a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:WorkspaceStatisticsProcess ;
+    rdfs:range nexus:StatisticsAggregator ;
+    rdfs:label "WorkspaceStatisticsProcess has participant StatisticsAggregator"@en .
+
+nexus:workspace_statistics_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:WorkspaceStatisticsProcess ;
+    rdfs:range nexus:StatsEndpoint ;
+    rdfs:label "WorkspaceStatisticsProcess occurs in StatsEndpoint"@en .
+
+nexus:workspace_statistics_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:WorkspaceStatisticsProcess ;
+    rdfs:range nexus:StatsDuration ;
+    rdfs:label "WorkspaceStatisticsProcess occupies StatsDuration"@en .
+
+nexus:workspace_statistics_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:WorkspaceStatisticsProcess ;
+    rdfs:range nexus:ResourceCounterRole ;
+    rdfs:label "WorkspaceStatisticsProcess realizes ResourceCounterRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:nodeCount a owl:DatatypeProperty ;
+    rdfs:label "nodeCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:edgeCount a owl:DatatypeProperty ;
+    rdfs:label "edgeCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:conversationCount a owl:DatatypeProperty ;
+    rdfs:label "conversationCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:agentCount a owl:DatatypeProperty ;
+    rdfs:label "agentCount"@en ;
+    rdfs:range xsd:integer .

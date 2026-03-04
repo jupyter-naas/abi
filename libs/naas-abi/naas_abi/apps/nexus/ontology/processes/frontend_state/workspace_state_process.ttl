@@ -1,0 +1,165 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Workspace State Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:workspace_state_process a owl:Ontology ;
+    dc:title "Workspace State Process"@en ;
+    dc:description "A process managing workspace navigation, conversations, messages, and agent selection in the Zustand store with throttled localStorage persistence to prevent browser freeze during streaming."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:WorkspaceStateProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Workspace State Process"@en ;
+    skos:definition "A process managing workspace navigation, conversations, messages, and agent selection in the Zustand store with throttled localStorage persistence to prevent browser freeze during streaming."@en ;
+    rdfs:comment "Implements: apps/web/src/stores/workspace.ts useWorkspaceStore" ;
+    skos:example "1. On mount: fetchWorkspaces() from /api/workspaces/\n2. Validate currentWorkspaceId against fetched workspaces\n3. On message: addMessage() appends to conversation, triggers throttled persist\n4. On streaming: updateLastMessage() appends token to last message content\n5. On workspace change: setCurrentWorkspace(), re-filter conversations\n6. Persist: throttled to max 1 write/second to prevent browser freeze"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ZustandWorkspaceStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ZustandWorkspaceStore"@en ;
+    skos:definition "Zustand store managing workspace state"@en .
+
+nexus:ThrottledLocalStorage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ThrottledLocalStorage"@en ;
+    skos:definition "Custom storage wrapper batching writes to max 1/second"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:WorkspaceStorageKey a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "WorkspaceStorageKey"@en ;
+    skos:definition "localStorage key: nexus-workspace-storage"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:StreamingThrottle a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "StreamingThrottle"@en ;
+    skos:definition "1000ms batching interval for localStorage writes during streaming"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:WorkspaceState a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "WorkspaceState"@en ;
+    skos:definition "State: conversations, activeConversationId, selectedAgent, workspaces, currentWorkspaceId, projects, branches"@en .
+
+nexus:ConversationActions a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ConversationActions"@en ;
+    skos:definition "createConversation(), addMessage(), updateLastMessage(), deleteConversation()"@en .
+
+nexus:WorkspaceActions a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "WorkspaceActions"@en ;
+    skos:definition "fetchWorkspaces(), setCurrentWorkspace(), createWorkspace(), deleteWorkspace()"@en .
+
+nexus:BranchActions a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "BranchActions"@en ;
+    skos:definition "createBranch(), deleteBranch(), checkoutBranch(), commit(), mergeBranch()"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:ThrottlePerformance a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ThrottlePerformance"@en ;
+    skos:definition "Quality: prevents JSON.stringify + localStorage.setItem on every streaming token"@en .
+
+nexus:WorkspaceIsolation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "WorkspaceIsolation"@en ;
+    skos:definition "Quality: conversations filtered by currentWorkspaceId"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:StateOrchestratorRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "StateOrchestratorRole"@en ;
+    skos:definition "Role realized when store coordinates navigation, chat, and workspace data"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:ThrottledPersistDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "ThrottledPersistDisposition"@en ;
+    skos:definition "Disposition to batch localStorage writes during high-frequency updates"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:workspace_state_process_has_zustandworkspacestore a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:WorkspaceStateProcess ;
+    rdfs:range nexus:ZustandWorkspaceStore ;
+    rdfs:label "WorkspaceStateProcess has participant ZustandWorkspaceStore"@en .
+
+nexus:workspace_state_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:WorkspaceStateProcess ;
+    rdfs:range nexus:WorkspaceStorageKey ;
+    rdfs:label "WorkspaceStateProcess occurs in WorkspaceStorageKey"@en .
+
+nexus:workspace_state_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:WorkspaceStateProcess ;
+    rdfs:range nexus:StreamingThrottle ;
+    rdfs:label "WorkspaceStateProcess occupies StreamingThrottle"@en .
+
+nexus:workspace_state_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:WorkspaceStateProcess ;
+    rdfs:range nexus:StateOrchestratorRole ;
+    rdfs:label "WorkspaceStateProcess realizes StateOrchestratorRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:conversationCount a owl:DatatypeProperty ;
+    rdfs:label "conversationCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:activeConversationId a owl:DatatypeProperty ;
+    rdfs:label "activeConversationId"@en ;
+    rdfs:range xsd:string .
+
+nexus:selectedAgent a owl:DatatypeProperty ;
+    rdfs:label "selectedAgent"@en ;
+    rdfs:range xsd:string .

@@ -2,6 +2,7 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
+
 import jwt
 import pydash
 import requests
@@ -151,17 +152,17 @@ class NaasIntegration(Integration):
         }
         return self._make_request("GET", f"/workspace/{workspace_id}", payload)
 
-    def get_workspaces(self) -> Dict:
+    def list_workspaces(self) -> Dict:
         """Get all workspaces."""
         return self._make_request("GET", "/workspace/")
 
-    def get_personal_workspace(self) -> Union[str, None]:
+    def get_personal_workspace(self) -> str:
         """Get personal workspace ID."""
-        workspaces = self.get_workspaces()
+        workspaces = self.list_workspaces()
         for workspace in workspaces.get("workspaces", []):
             if workspace.get("is_personal"):
                 return workspace.get("id")
-        return None
+        raise ValueError("No personal workspace found")
 
     def update_workspace(self, workspace_id: str, **kwargs) -> Dict:
         """Update an existing workspace.
@@ -236,7 +237,7 @@ class NaasIntegration(Integration):
         )
         return self._make_request("GET", endpoint)
 
-    def get_plugins(self, workspace_id: str) -> Dict:
+    def list_plugins(self, workspace_id: str) -> Dict:
         """Get all plugins in the workspace."""
         return self._make_request("GET", f"/workspace/{workspace_id}/plugin")
 
@@ -281,7 +282,7 @@ class NaasIntegration(Integration):
             Dict[str, str]: Dictionary containing the assistant ID and name
         """
         if not plugins and workspace_id is not None:
-            plugins = self.get_plugins(workspace_id).get("workspace_plugins", [])
+            plugins = self.list_plugins(workspace_id).get("workspace_plugins", [])
         for i, a in enumerate(plugins):
             plugin_id = a.get("id")
             payload = a.get("payload")
@@ -342,7 +343,7 @@ class NaasIntegration(Integration):
             params["id"] = ontology_id
         return self._make_request("GET", f"/ontology/{ontology_id}", params=params)
 
-    def get_ontologies(self, workspace_id: str) -> Dict:
+    def list_ontologies(self, workspace_id: str) -> Dict:
         """List all ontologies.
 
         Args:
@@ -727,11 +728,12 @@ class NaasIntegration(Integration):
         asset: dict = {}
         if workspace_id is None and self.__configuration.workspace_id is not None:
             workspace_id = self.__configuration.workspace_id
-        else:
-            return {"error": "workspace_id must be provided"}
         if storage_name is None and self.__configuration.storage_name is not None:
             storage_name = self.__configuration.storage_name
-        else:
+
+        if workspace_id is None:
+            return {"error": "workspace_id must be provided"}
+        if storage_name is None:
             return {"error": "storage_name must be provided"}
 
         # Init storage service Naas
@@ -1090,7 +1092,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="list_workspaces",
             description="List workspaces you have access to from naas.ai platform",
-            func=lambda: integration.get_workspaces(),
+            func=lambda: integration.list_workspaces(),
             args_schema=GetWorkspacesSchema,
         ),
         StructuredTool(
@@ -1130,7 +1132,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="list_plugins",
             description="List plugins/assistants/agents from workspace.",
-            func=lambda workspace_id: integration.get_plugins(workspace_id),
+            func=lambda workspace_id: integration.list_plugins(workspace_id),
             args_schema=GetPluginsSchema,
         ),
         StructuredTool(
@@ -1174,7 +1176,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="list_ontologies",
             description="List all ontologies from a given workspace.",
-            func=lambda workspace_id: integration.get_ontologies(workspace_id),
+            func=lambda workspace_id: integration.list_ontologies(workspace_id),
             args_schema=GetOntologiesSchema,
         ),
         StructuredTool(

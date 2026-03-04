@@ -1,4 +1,5 @@
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
+    ApacheJenaTDB2AdapterConfiguration,
     AWSNeptuneSSHTunnelAdapterConfiguration,
     OxigraphAdapterConfiguration,
     TripleStoreAdapterConfiguration,
@@ -107,3 +108,47 @@ def test_triple_store_service_configuration_aws_neptune_sshtunnel():
 
     assert triple_store_service is not None
     assert isinstance(triple_store_service, TripleStoreService)
+
+
+def test_triple_store_service_configuration_apache_jena_tdb2():
+    from unittest.mock import Mock, patch
+
+    from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+        ApacheJenaTDB2,
+    )
+
+    with (
+        patch(
+            "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.get"
+        ) as mock_get,
+        patch(
+            "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.post"
+        ) as mock_post,
+    ):
+        mock_get.return_value = Mock(status_code=200)
+        mock_get.return_value.raise_for_status = Mock()
+        mock_post.return_value = Mock(status_code=200)
+        mock_post.return_value.raise_for_status = Mock()
+
+        configuration = TripleStoreServiceConfiguration(
+            triple_store_adapter=TripleStoreAdapterConfiguration(
+                adapter="apache_jena_tdb2",
+                config=ApacheJenaTDB2AdapterConfiguration(
+                    jena_tdb2_url="http://localhost:3030/ds",
+                    timeout=120,
+                ),
+            )
+        )
+
+        assert configuration.triple_store_adapter is not None
+
+        triple_store_adapter = configuration.triple_store_adapter.load()
+
+        assert triple_store_adapter is not None
+        assert isinstance(triple_store_adapter, ITripleStorePort)
+        assert isinstance(triple_store_adapter, ApacheJenaTDB2)
+
+        triple_store_service = configuration.load()
+
+        assert triple_store_service is not None
+        assert isinstance(triple_store_service, TripleStoreService)

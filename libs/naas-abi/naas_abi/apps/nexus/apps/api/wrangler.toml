@@ -1,0 +1,68 @@
+# NEXUS API - Cloudflare Workers Configuration
+# Deploy with: npx wrangler deploy
+
+name = "nexus-api"
+main = "src/worker.py"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["python_workers"]
+
+# Production environment
+[env.production]
+name = "nexus-api"
+routes = [
+  { pattern = "api.nexus.naas.ai", custom_domain = true }
+]
+
+# Staging environment
+[env.staging]
+name = "nexus-api-staging"
+routes = [
+  { pattern = "api.staging.nexus.naas.ai", custom_domain = true }
+]
+
+# D1 Database bindings
+[[d1_databases]]
+binding = "NEXUS_DB"
+database_name = "nexus-db"
+database_id = ""  # Fill after running: npx wrangler d1 create nexus-db
+
+[[env.staging.d1_databases]]
+binding = "NEXUS_DB"
+database_name = "nexus-db-staging"
+database_id = ""  # Fill after running: npx wrangler d1 create nexus-db-staging
+
+# KV Namespace bindings (for sessions/cache)
+[[kv_namespaces]]
+binding = "NEXUS_KV"
+id = ""  # Fill after running: npx wrangler kv:namespace create NEXUS_KV
+
+[[env.staging.kv_namespaces]]
+binding = "NEXUS_KV"
+id = ""  # Fill after running: npx wrangler kv:namespace create NEXUS_KV --env staging
+
+# Environment variables (secrets should be set via wrangler secret)
+[vars]
+NEXUS_ENV = "cloudflare"
+CORS_ORIGINS = '["https://nexus.naas.ai"]'
+
+[env.staging.vars]
+NEXUS_ENV = "staging"
+CORS_ORIGINS = '["https://staging.nexus.naas.ai"]'
+
+# Secrets (set via CLI, not in file):
+# npx wrangler secret put SECRET_KEY
+# npx wrangler secret put CLOUDFLARE_API_TOKEN
+# npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+# npx wrangler secret put ANTHROPIC_API_KEY
+# npx wrangler secret put OPENAI_API_KEY
+
+# Build configuration
+# Note: Cloudflare Workers uses its own Python runtime
+# Dependencies should be specified in pyproject.toml
+# For local development, use: uv sync
+[build]
+command = "uv sync"
+
+# Observability
+[observability]
+enabled = true

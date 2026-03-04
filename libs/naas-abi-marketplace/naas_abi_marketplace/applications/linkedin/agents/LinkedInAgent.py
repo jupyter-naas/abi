@@ -85,14 +85,20 @@ def create_agent(
 ) -> IntentAgent:
     # Initialize module
     from naas_abi_marketplace.applications.linkedin import ABIModule
+
     module = ABIModule.get_instance()
     li_at = module.configuration.li_at
     JSESSIONID = module.configuration.JSESSIONID
     linkedin_profile_url = module.configuration.linkedin_profile_url
 
     # Get google custom search api key and engine id
-    from naas_abi_marketplace.applications.google_search import ABIModule as GoogleSearchABIModule
-    google_custom_search_api_key = GoogleSearchABIModule.get_instance().configuration.google_custom_search_api_key
+    from naas_abi_marketplace.applications.google_search import (
+        ABIModule as GoogleSearchABIModule,
+    )
+
+    google_custom_search_api_key = (
+        GoogleSearchABIModule.get_instance().configuration.google_custom_search_api_key
+    )
     google_custom_search_engine_id = GoogleSearchABIModule.get_instance().configuration.google_custom_search_engine_id
 
     # Define model
@@ -101,11 +107,13 @@ def create_agent(
     # Define tools
     tools: list = []
     from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
+
     naas_api_key = NaasABIModule.get_instance().configuration.naas_api_key
 
     from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
+
     naas_integration_config = NaasIntegrationConfiguration(
         api_key=naas_api_key,
     )
@@ -114,8 +122,9 @@ def create_agent(
         LinkedInIntegrationConfiguration,
         as_tools,
     )
+
     linkedin_integration_config = LinkedInIntegrationConfiguration(
-        li_at=li_at, 
+        li_at=li_at,
         JSESSIONID=JSESSIONID,
         linkedin_url=linkedin_profile_url,
         naas_integration_config=naas_integration_config,
@@ -163,6 +172,21 @@ def create_agent(
         search_linkedin_organization_page_workflow_config
     )
     tools += search_linkedin_organization_page_workflow.as_tools()
+
+    from naas_abi_core.modules.templatablesparqlquery import (
+        ABIModule as TemplatableSparqlQueryABIModule,
+    )
+
+    linkedin_tools = [
+        "linkedin_search_connections_by_person_name",
+        "linkedin_count_connections_by_person",
+        "linkedin_get_connection_information",
+        "linkedin_search_email_address_by_person_uri",
+    ]
+    sparql_query_tools_list = TemplatableSparqlQueryABIModule.get_instance().get_tools(
+        linkedin_tools
+    )
+    tools += sparql_query_tools_list
 
     # Set intents
     intents: list = [

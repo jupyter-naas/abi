@@ -3,18 +3,18 @@ import hashlib
 import io
 import os
 import uuid
-from typing import Callable, List, Tuple
+from datetime import datetime
+from typing import Callable, List
 
-import pydash
 import rdflib
 from naas_abi_core import logger
+from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     ITripleStoreService,
     OntologyEvent,
 )
-from naas_abi_core.utils.Workers import Job, WorkerPool
-from rdflib import RDF, Graph, URIRef
+from rdflib import DCTERMS, OWL, RDF, RDFS, XSD, Graph, Literal, URIRef
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -51,9 +51,10 @@ internal:content a owl:DatatypeProperty ;
     rdfs:label "content" ;
     rdfs:comment "Base64 encoded content of the schema file" .
 """
+GRAPH_CLASS = URIRef("http://ontology.naas.ai/abi/Graph")
 
 
-class TripleStoreService(ITripleStoreService):
+class TripleStoreService(ServiceBase, ITripleStoreService):
     """TripleStoreService provides CRUD operations and SPARQL querying capabilities for ontologies.
 
     This service acts as a facade for ontology storage and retrieval operations. It handles storing,
@@ -75,88 +76,82 @@ class TripleStoreService(ITripleStoreService):
     def __init__(
         self,
         triple_store_adapter: ITripleStorePort,
-        views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = [
-            (None, RDF.type, None)
-        ],
-        trigger_worker_pool_size: int = 10,
     ):
+        super().__init__()
         self.__triple_store_adapter = triple_store_adapter
-        self.__event_listeners = {}
-        self.__views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = views
-
-        self.__trigger_worker_pool = WorkerPool(trigger_worker_pool_size)
+        self.__schema_graph = URIRef("http://ontology.naas.ai/graph/schema")
 
         # Load SCHEMA_TTL in IOBuffer
         schema_ttl_buffer = io.StringIO(SCHEMA_TTL)
-        self.insert(Graph().parse(schema_ttl_buffer, format="turtle"))
+        self.insert(
+            Graph().parse(schema_ttl_buffer, format="turtle"),
+            graph_name=self.__schema_graph,
+        )
 
-        self.init_views()
+    def _hash_value(self, value: object) -> str:
+        return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:32]
 
-    def __del__(self):
-        self.__trigger_worker_pool.shutdown()
+    def _subscription_graph_topic_token(self, graph_name: URIRef | str) -> str:
+        if graph_name == "*":
+            return "*"
+        return self._hash_value(graph_name)
 
-    def init_views(self):
-        for view in self.__views:
-            self.subscribe(
-                view,
-                OntologyEvent.INSERT,
-                lambda event, triple: self.__triple_store_adapter.handle_view_event(
-                    view, event, triple
-                ),
-            )
-            self.subscribe(
-                view,
-                OntologyEvent.DELETE,
-                lambda event, triple: self.__triple_store_adapter.handle_view_event(
-                    view, event, triple
-                ),
-            )
+    def insert(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+    ) -> None:
 
-    def insert(self, triples: Graph):
+        assert graph_name is not None
+
         # Insert the triples into the store
-        self.__triple_store_adapter.insert(triples)
+        self.__triple_store_adapter.insert(triples, graph_name=graph_name)
+
+        if self.services_wired is False:
+            return
 
         # Notify listeners of the insert
         for s, p, o in triples.triples((None, None, None)):
-            for ss, sp, so in self.__event_listeners:
-                if (
-                    (ss is None or str(ss) == str(s))
-                    and (sp is None or str(sp) == str(p))
-                    and (so is None or str(so) == str(o))
-                ):
-                    if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
-                        for _, callback, background in self.__event_listeners[
-                            ss, sp, so
-                        ][OntologyEvent.INSERT]:
-                            if background:
-                                self.__trigger_worker_pool.submit(
-                                    Job(None, callback, OntologyEvent.INSERT, (s, p, o))
-                                )
-                            else:
-                                callback(OntologyEvent.INSERT, (s, p, o))
+            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
 
-    def remove(self, triples: Graph):
+            try:
+                topic = f"ts.insert.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
+                self.services.bus.topic_publish(
+                    "triple_store",
+                    topic,
+                    triple_bytes,
+                )
+            except Exception as e:
+                logger.error(f"Error publishing triple: {e}")
+                raise e
+
+    def remove(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+    ) -> None:
+        assert graph_name is not None
+
         # Remove the triples from the store
-        self.__triple_store_adapter.remove(triples)
+        self.__triple_store_adapter.remove(triples, graph_name=graph_name)
+
+        if self.services_wired is False:
+            return
 
         # Notify listeners of the delete
         for s, p, o in triples.triples((None, None, None)):
-            for ss, sp, so in self.__event_listeners:
-                if (
-                    (ss is None or str(ss) == str(s))
-                    and (sp is None or str(sp) == str(p))
-                    and (so is None or str(so) == str(o))
-                ):
-                    if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
-                        for _, callback, background in self.__event_listeners[
-                            ss, sp, so
-                        ][OntologyEvent.DELETE]:
-                            if background:
-                                self.__trigger_worker_pool.submit(
-                                    Job(None, callback, OntologyEvent.DELETE, (s, p, o))
-                                )
-                            else:
-                                callback(OntologyEvent.DELETE, (s, p, o))
+            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
+
+            try:
+                topic = f"ts.delete.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
+                self.services.bus.topic_publish(
+                    "triple_store",
+                    topic,
+                    triple_bytes,
+                )
+            except Exception as e:
+                logger.error(f"Error publishing triple: {e}")
+                raise e
 
     def get(self) -> Graph:
         return self.__triple_store_adapter.get()
@@ -167,38 +162,84 @@ class TripleStoreService(ITripleStoreService):
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return self.__triple_store_adapter.query_view(view, query)
 
+    def _insert_graph_metadata(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+        label = graph_name.split("/")[-1].split("#")[-1]
+        g = Graph()
+        g.add((graph_name, RDF.type, OWL.NamedIndividual))
+        g.add((graph_name, RDF.type, GRAPH_CLASS))
+        g.add((graph_name, RDFS.label, Literal(label)))
+        g.add(
+            (
+                graph_name,
+                DCTERMS.created,
+                Literal(
+                    datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    datatype=XSD.dateTime,
+                ),
+            )
+        )
+        self.insert(g, graph_name=graph_name)
+
+    def create_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+
+        self.__triple_store_adapter.create_graph(graph_name)
+
+        # Insert schema graph into the new graph
+        self._insert_graph_metadata(graph_name)
+
+    def clear_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+
+        self.__triple_store_adapter.clear_graph(graph_name)
+
+        # Insert schema graph into the new graph
+        self._insert_graph_metadata(graph_name)
+
+    def drop_graph(self, graph_name: URIRef) -> None:
+        self.__triple_store_adapter.drop_graph(graph_name)
+
+    def list_graphs(self) -> list[URIRef]:
+        return self.__triple_store_adapter.list_graphs()
+
     def subscribe(
         self,
-        topic: tuple,
-        event_type: OntologyEvent,
-        callback: Callable[[OntologyEvent, Tuple[str, str, str]], None],
-        background: bool = False,
-    ) -> str:
-        if topic not in self.__event_listeners:
-            self.__event_listeners[topic] = {}
-        if event_type not in self.__event_listeners[topic]:
-            self.__event_listeners[topic][event_type] = []
+        topic: tuple[URIRef | None, URIRef | None, URIRef | None],
+        callback: Callable[[bytes], None],
+        event_type: OntologyEvent | None = None,
+        graph_name: URIRef | str = "*",
+    ) -> None:
+        _event_type: str = ""
+        if event_type == OntologyEvent.INSERT:
+            _event_type = "insert"
+        elif event_type == OntologyEvent.DELETE:
+            _event_type = "delete"
+        elif event_type is None:
+            _event_type = "*"
 
-        subscription_id = str(uuid.uuid4())
+        graph_topic = self._subscription_graph_topic_token(graph_name)
+        s = "*" if topic[0] is None else self._hash_value(topic[0])
+        p = "*" if topic[1] is None else self._hash_value(topic[1])
+        o = "*" if topic[2] is None else self._hash_value(topic[2])
 
-        self.__event_listeners[topic][event_type].append(
-            (subscription_id, callback, background)
+        topic_str = f"ts.{_event_type}.g.{graph_topic}.s.{s}.p.{p}.o.{o}"
+
+        self.services.bus.topic_consume(
+            "triple_store",
+            topic_str,
+            callback,
         )
 
-        return subscription_id
+    def get_subject_graph(self, subject: str, graph_name: str = "*") -> Graph:
+        return self.__triple_store_adapter.get_subject_graph(
+            URIRef(subject), graph_name
+        )
 
-    def unsubscribe(self, subscription_id: str) -> None:
-        for topic in self.__event_listeners:
-            for event_type in self.__event_listeners[topic]:
-                self.__event_listeners[topic][event_type] = pydash.filter_(
-                    self.__event_listeners[topic][event_type],
-                    lambda x: x[0] != subscription_id,
-                )
-
-    def get_subject_graph(self, subject: str) -> Graph:
-        return self.__triple_store_adapter.get_subject_graph(URIRef(subject))
-
-    ###################lib/abi/services/ontology/OntologyService.py#########################################
+    ############################################################
     # Schema Management
     ############################################################
 
@@ -206,16 +247,18 @@ class TripleStoreService(ITripleStoreService):
         # First build a cache of all schemas to speed up the process.
         schema_cache = Graph()
 
-        results = self.query("""
+        results = self.query(f"""
             PREFIX internal: <http://triple-store.internal#>
             SELECT ?schema ?filePath ?hash ?fileLastUpdateTime ?content
-            WHERE {
+            WHERE {{
+                GRAPH <{str(self.__schema_graph)}> {{
                 ?schema a internal:Schema ;
                     internal:filePath ?filePath ;
                     internal:hash ?hash ;
                     internal:fileLastUpdateTime ?fileLastUpdateTime ;
                     internal:content ?content .
-            }
+                }}
+            }}
         """)
 
         for row in results:
@@ -255,43 +298,71 @@ class TripleStoreService(ITripleStoreService):
         else:
             read_query_func = self.query
 
+        def _load_schema_metadata(subject: URIRef) -> dict[str, str]:
+            triples: rdflib.query.Result = read_query_func(
+                f"""
+                PREFIX internal: <http://triple-store.internal#>
+                SELECT ?p ?o 
+                WHERE {{
+                    GRAPH <{str(self.__schema_graph)}> {{
+                        <{subject}> ?p ?o .
+                    }}
+                }}
+                """
+            )
+
+            schema_dict: dict[str, str] = {}
+            for row in triples:
+                assert isinstance(row, rdflib.query.ResultRow)
+                p, o = row
+                schema_dict[str(p).replace("http://triple-store.internal#", "")] = str(
+                    o
+                )
+
+            return schema_dict
+
+        def _remove_schema_subject(subject: URIRef) -> None:
+            triples: rdflib.query.Result = read_query_func(
+                f"""
+                SELECT ?p ?o 
+                WHERE {{ 
+                    GRAPH <{str(self.__schema_graph)}> {{ 
+                    <{str(subject)}> ?p ?o . 
+                    }} 
+                }}
+                """
+            )
+
+            cleanup_graph = Graph()
+            for row in triples:
+                assert isinstance(row, rdflib.query.ResultRow)
+                p, o = row
+                cleanup_graph.add((subject, p, o))
+
+            if len(cleanup_graph) > 0:
+                self.remove(cleanup_graph, graph_name=self.__schema_graph)
+
         try:
-            query = f'''PREFIX internal: <http://triple-store.internal#>
-            SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'''
+            query = f"""
+            PREFIX internal: <http://triple-store.internal#>
+
+            SELECT *
+            WHERE {{
+                GRAPH <{str(self.__schema_graph)}> {{
+                    ?s internal:filePath "{filepath}" .
+                }}
+            }}
+            """
             # logger.debug(f"Query: {query}")
             # Check if schema with filePath == filepath already exists and grab all triples.
             schema_triples: rdflib.query.Result = read_query_func(query)
 
-            # logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
+            schema_rows = list(schema_triples)
+            # logger.debug(f"len(schema_rows): {len(schema_rows)}")
             # If schema with filePath == filepath already exists, we check if the file has been modified.
-            schema_exists_in_store = len(list(schema_triples)) == 1
-            logger.debug(f"Schema exists in store: {schema_exists_in_store}")
+            schema_exists_in_store = len(schema_rows) > 0
+            # logger.debug(f"Schema exists in store: {schema_exists_in_store}")
             if schema_exists_in_store:
-                result_rows = list(schema_triples)
-                assert len(result_rows) == 1
-                assert isinstance(result_rows[0], rdflib.query.ResultRow)
-                _SUBJECT_TUPLE_INDEX = 0
-                subject = result_rows[0][_SUBJECT_TUPLE_INDEX]
-
-                # Select * from subject
-                triples: rdflib.query.Result = read_query_func(
-                    f"""PREFIX internal: <http://triple-store.internal#>
-                        SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
-                )
-
-                # Load schema into a dict
-                schema_dict = {}
-                for row in triples:
-                    assert isinstance(row, rdflib.query.ResultRow)
-                    p, o = row
-
-                    schema_dict[str(p).replace("http://triple-store.internal#", "")] = (
-                        str(o)
-                    )
-
-                # Get file last update time
-                file_last_update_time = os.path.getmtime(filepath)
-
                 # Open file and get content.
                 with open(filepath, "r") as file:
                     new_content = file.read()
@@ -300,8 +371,46 @@ class TripleStoreService(ITripleStoreService):
                     new_content.encode("utf-8")
                 ).hexdigest()
 
+                schema_entries: list[tuple[URIRef, dict[str, str]]] = []
+                for row in schema_rows:
+                    assert isinstance(row, rdflib.query.ResultRow)
+                    _SUBJECT_TUPLE_INDEX = 0
+                    subject = row[_SUBJECT_TUPLE_INDEX]
+                    assert isinstance(subject, URIRef)
+                    schema_entries.append((subject, _load_schema_metadata(subject)))
+
+                matching_entry = next(
+                    (
+                        (subject, schema_dict)
+                        for subject, schema_dict in schema_entries
+                        if schema_dict.get("hash") == new_content_hash
+                    ),
+                    None,
+                )
+
+                if matching_entry is not None:
+                    subject, schema_dict = matching_entry
+                else:
+                    subject, schema_dict = schema_entries[0]
+
+                # Get file last update time
+                file_last_update_time = os.path.getmtime(filepath)
+
+                duplicate_subjects = [
+                    candidate_subject
+                    for candidate_subject, _ in schema_entries
+                    if candidate_subject != subject
+                ]
+
                 # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
                 if schema_dict["hash"] == new_content_hash:
+                    if len(duplicate_subjects) > 0:
+                        logger.debug(
+                            f"Cleaning up {len(duplicate_subjects)} duplicate schema metadata entries for {filepath}."
+                        )
+                        for duplicate_subject in duplicate_subjects:
+                            _remove_schema_subject(duplicate_subject)
+
                     logger.debug("Schema is up to date, no need to update.")
                     return
 
@@ -320,8 +429,8 @@ class TripleStoreService(ITripleStoreService):
                 deletion_triples = old_schema - new_schema
 
                 # Insert addition and remove deletion triples
-                self.insert(addition_triples)
-                self.remove(deletion_triples)
+                self.insert(addition_triples, graph_name=self.__schema_graph)
+                self.remove(deletion_triples, graph_name=self.__schema_graph)
 
                 # Update schema information in the triple store.
 
@@ -335,7 +444,8 @@ class TripleStoreService(ITripleStoreService):
                         internal:content "{schema_dict["content"]}" .
                 '''),
                         format="turtle",
-                    )
+                    ),
+                    graph_name=self.__schema_graph,
                 )
 
                 self.insert(
@@ -348,8 +458,16 @@ class TripleStoreService(ITripleStoreService):
                         internal:content "{base64.b64encode(new_content.encode("utf-8")).decode("utf-8")}" .
                 '''),
                         format="turtle",
-                    )
+                    ),
+                    graph_name=self.__schema_graph,
                 )
+
+                if len(duplicate_subjects) > 0:
+                    logger.debug(
+                        f"Cleaning up {len(duplicate_subjects)} duplicate schema metadata entries for {filepath}."
+                    )
+                    for duplicate_subject in duplicate_subjects:
+                        _remove_schema_subject(duplicate_subject)
 
                 # Return as we don't need to continue as we have already updated the schema.
                 return
@@ -372,7 +490,7 @@ class TripleStoreService(ITripleStoreService):
                 g = Graph().parse(filepath)
 
                 # Insert schema into the triple store
-                self.insert(g)
+                self.insert(g, graph_name=self.__schema_graph)
 
                 # Get file last update time
                 file_last_update_time = os.path.getmtime(filepath)
@@ -390,15 +508,25 @@ class TripleStoreService(ITripleStoreService):
                         internal:content "{base64_content}" .
                 '''),
                         format="turtle",
-                    )
+                    ),
+                    graph_name=self.__schema_graph,
                 )
         except Exception as e:
-            logger.error(f"Error loading schema ({filepath}): {e}")
+            import traceback
+
+            logger.error(f"Error loading schema ({filepath}): {str(e)}")
+            traceback.print_exc()
 
     def get_schema_graph(self) -> Graph:
         contents: rdflib.query.Result = self.query(
-            """PREFIX internal: <http://triple-store.internal#>
-            SELECT ?s ?o WHERE { ?s internal:content ?o . }"""
+            f"""
+            PREFIX internal: <http://triple-store.internal#>
+            SELECT ?s ?o WHERE {{
+                GRAPH <{str(self.__schema_graph)}> {{
+                    ?s internal:content ?o .
+                }}
+            }}
+            """
         )
 
         graph = Graph()

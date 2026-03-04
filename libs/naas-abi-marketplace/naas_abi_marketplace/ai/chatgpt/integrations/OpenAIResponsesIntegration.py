@@ -8,7 +8,6 @@ import pdfplumber
 import requests
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
-from naas_abi_core.models.Model import OPENROUTER_MODEL_MAPPING
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.utils.StorageUtils import StorageUtils
@@ -49,10 +48,7 @@ class OpenAIResponsesIntegration(Integration):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.__configuration.api_key}",
         }
-        if self.__configuration.base_url.startswith("https://openrouter.ai/api/v1"):
-            self.model = OPENROUTER_MODEL_MAPPING[self.__configuration.model]
-        else:
-            self.model = self.__configuration.model
+        self.model = self.__configuration.model
         self.__storage_utils = StorageUtils(
             ABIModule.get_instance().engine.services.object_storage
         )

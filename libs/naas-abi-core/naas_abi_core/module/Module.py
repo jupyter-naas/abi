@@ -4,11 +4,17 @@ import glob
 import os
 from typing import Dict, List, cast
 
+from fastapi import FastAPI
 from naas_abi_core import logger
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
+    GlobalConfig
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.integration.integration import Integration
 from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
+from naas_abi_core.module.ModuleOrchestrationLoader import \
+    ModuleOrchestrationLoader
+from naas_abi_core.module.ModuleUtils import find_class_module_root_path
+from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.pipeline.pipeline import Pipeline
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.workflow.workflow import Workflow
@@ -64,6 +70,7 @@ class BaseModule(Generic[TConfig]):
     __integrations: List[Integration] = []
     __workflows: List[Workflow] = []
     __pipelines: List[Pipeline] = []
+    __orchestrations: List[type[Orchestrations]] = []
 
     def __init__(self, engine: EngineProxy, configuration: TConfig):
         assert isinstance(configuration, ModuleConfiguration), (
@@ -71,6 +78,7 @@ class BaseModule(Generic[TConfig]):
         )
         logger.debug(f"Initializing module {self.__module__.split('.')[0]}")
         self.module_path = self.__module__.split(".")[0]
+        self.module_root_path = find_class_module_root_path(self.__class__).as_posix()
         self._engine = engine
         self._configuration = configuration
 
@@ -124,11 +132,18 @@ class BaseModule(Generic[TConfig]):
     def pipelines(self) -> List[Pipeline]:
         return self.__pipelines
 
+    @property
+    def orchestrations(self) -> List[type[Orchestrations]]:
+        return self.__orchestrations
+
     def on_load(self):
         logger.debug(f"on_load for module {self.__module__.split('.')[0]}")
         self.__load_ontologies()
 
         self.__agents = ModuleAgentLoader.load_agents(self.__class__)
+        self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(
+            self.__class__
+        )
 
     def on_initialized(self):
         """
@@ -142,10 +157,20 @@ class BaseModule(Generic[TConfig]):
     def on_unloaded(self):
         pass
 
+    def api(self, app: FastAPI) -> None:
+        """
+        Override this method in a module subclass to provide custom API endpoints 
+        via FastAPI's APIRouter. By default, this method does nothing.
+
+        Args:
+            app (FastAPI): The FastAPI app instance to register the API endpoints on.
+        """
+        pass
+
     def __load_ontologies(self):
-        if os.path.exists(os.path.join(self.__module__.split(".")[0], "ontologies")):
+        if os.path.exists(os.path.join(self.module_root_path, "ontologies")):
             for file in glob.glob(
-                os.path.join(self.module_path, "ontologies", "**", "*.ttl"),
+                os.path.join(self.module_root_path, "ontologies", "**", "*.ttl"),
                 recursive=True,
             ):
                 self.ontologies.append(file)
