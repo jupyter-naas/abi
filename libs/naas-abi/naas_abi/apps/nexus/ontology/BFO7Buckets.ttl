@@ -1,0 +1,335 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+abi:BFO7Buckets a owl:Ontology ;
+  dc:title "BFO 7 Buckets Ontology"@en ;
+  dc:description "Ontology for the BFO 7 buckets"@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Ontology for the BFO 7 buckets"@en ;
+  dc11:contributor "John Beverley" , "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou";
+  dc11:date "2026-01-14"^^xsd:date .
+
+#################################################################
+# BFO object properties (from BFO-Core)
+#################################################################
+
+###  http://purl.obolibrary.org/obo/BFO_0000054
+<http://purl.obolibrary.org/obo/BFO_0000054> rdf:type owl:ObjectProperty ;
+                                             owl:inverseOf <http://purl.obolibrary.org/obo/BFO_0000055> ;
+                                             rdfs:label "has realization"@en ;
+                                             skos:definition "b has realization c =Def c realizes b"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000055
+<http://purl.obolibrary.org/obo/BFO_0000055> rdf:type owl:ObjectProperty ;
+                                             rdfs:label "realizes"@en ;
+                                             skos:definition "(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000056
+<http://purl.obolibrary.org/obo/BFO_0000056> rdf:type owl:ObjectProperty ;
+                                             owl:inverseOf <http://purl.obolibrary.org/obo/BFO_0000057> ;
+                                             rdfs:label "participates in"@en ;
+                                             skos:definition "(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000057
+<http://purl.obolibrary.org/obo/BFO_0000057> rdf:type owl:ObjectProperty ;
+                                             rdfs:label "has participant"@en ;
+                                             skos:definition "p has participant c =Def c participates in p"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000058
+<http://purl.obolibrary.org/obo/BFO_0000058> rdf:type owl:ObjectProperty ;
+                                             owl:inverseOf <http://purl.obolibrary.org/obo/BFO_0000059> ;
+                                             rdfs:label "is concretized by"@en ;
+                                             skos:definition "c is concretized by b =Def b concretizes c"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000059
+<http://purl.obolibrary.org/obo/BFO_0000059> rdf:type owl:ObjectProperty ;
+                                             rdfs:label "concretizes"@en ;
+                                             skos:definition "b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000062
+<http://purl.obolibrary.org/obo/BFO_0000062> rdf:type owl:ObjectProperty ;
+                                             owl:inverseOf <http://purl.obolibrary.org/obo/BFO_0000063> ;
+                                             rdf:type owl:TransitiveProperty ;
+                                             rdfs:label "preceded by"@en ;
+                                             skos:definition "b preceded by c =Def b precedes c"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000063
+<http://purl.obolibrary.org/obo/BFO_0000063> rdf:type owl:ObjectProperty ,
+                                                      owl:TransitiveProperty ;
+                                             rdfs:label "precedes"@en ;
+                                             skos:definition "(Elucidation) precedes is a relation between occurrents o, o' such that if t is the temporal extent of o & t' is the temporal extent of o' then either the last instant of o is before the first instant of o' or the last instant of o is the first instant of o' & neither o nor o' are temporal instants"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000066
+<http://purl.obolibrary.org/obo/BFO_0000066> rdf:type owl:ObjectProperty ;
+                                             owl:inverseOf <http://purl.obolibrary.org/obo/BFO_0000183> ;
+                                             rdfs:label "occurs in"@en ;
+                                             skos:definition "b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000084
+<http://purl.obolibrary.org/obo/BFO_0000084> rdf:type owl:ObjectProperty ;
+                                             owl:inverseOf <http://purl.obolibrary.org/obo/BFO_0000101> ;
+                                             rdfs:label "generically depends on"@en ;
+                                             skos:altLabel "g-depends on"@en ;
+                                             skos:definition "b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000101
+<http://purl.obolibrary.org/obo/BFO_0000101> rdf:type owl:ObjectProperty ;
+                                             rdfs:label "is carrier of"@en ;
+                                             skos:definition "b is carrier of c =Def there is some time t such that c generically depends on b at t"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000127
+<http://purl.obolibrary.org/obo/BFO_0000127> rdf:type owl:ObjectProperty ;
+                                             owl:inverseOf <http://purl.obolibrary.org/obo/BFO_0000218> ;
+                                             rdfs:label "material basis of"@en ;
+                                             skos:definition "b material basis of c =Def c has material basis b"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000171
+<http://purl.obolibrary.org/obo/BFO_0000171> rdf:type owl:ObjectProperty ;
+                                             rdfs:label "located in"@en ;
+                                             skos:definition "b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000183
+<http://purl.obolibrary.org/obo/BFO_0000183> rdf:type owl:ObjectProperty ;
+                                             rdfs:label "environs"@en ;
+                                             skos:definition "b environs c =Def c occurs in b"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000196
+<http://purl.obolibrary.org/obo/BFO_0000196> rdf:type owl:ObjectProperty ;
+                                             rdfs:subPropertyOf <http://purl.obolibrary.org/obo/BFO_0000194> ;
+                                             owl:inverseOf <http://purl.obolibrary.org/obo/BFO_0000197> ;
+                                             rdfs:label "bearer of"@en ;
+                                             skos:definition "b bearer of c =Def c inheres in b"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000197
+<http://purl.obolibrary.org/obo/BFO_0000197> rdf:type owl:ObjectProperty ;
+                                             rdfs:subPropertyOf <http://purl.obolibrary.org/obo/BFO_0000195> ;
+                                             rdfs:label "inheres in"@en ;
+                                             skos:definition "b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000199
+<http://purl.obolibrary.org/obo/BFO_0000199> rdf:type owl:ObjectProperty ,
+                                                      owl:FunctionalProperty ;
+                                             rdfs:label "occupies temporal region"@en ;
+                                             skos:definition "p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000218
+<http://purl.obolibrary.org/obo/BFO_0000218> rdf:type owl:ObjectProperty ;
+                                             rdfs:label "has material basis"@en ;
+                                             skos:definition "b has material basis c =Def b is a disposition & c is a material entity & there is some d bearer of b & there is some time t such that c is a continuant part of d at t & d has disposition b because c is a continuant part of d at t"@en .
+
+#################################################################
+# BFO classes with restrictions
+#################################################################
+
+# Process (WHAT)
+<http://purl.obolibrary.org/obo/BFO_0000015> a owl:Class ;
+    rdfs:label "process"@en ;
+    skos:altLabel "event"@en ;
+    skos:definition "(Elucidation) p is a process means p is an occurrent that has some temporal proper part and for some time t, p has some material entity as participant"@en ;
+    skos:example "An act of selling; the life of an organism; a process of sleeping; a process of cell-division; a beating of the heart; a process of meiosis; the taxiing of an aircraft; the programming of a computer"@en ;
+    rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000003> ,  # occurrent
+        [ a owl:Restriction ;
+          # precedes (BFO_0000063) → process (BFO_0000015)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000063> ;
+          owl:allValuesFrom <http://purl.obolibrary.org/obo/BFO_0000015>  # process
+        ] ,
+        [ a owl:Restriction ;
+          # preceded by (BFO_0000062) → process (BFO_0000015)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000062> ;
+          owl:allValuesFrom <http://purl.obolibrary.org/obo/BFO_0000015>  # process
+        ] ,
+        [ a owl:Restriction ;
+          # occupies temporal region (BFO_0000199) → temporal region (BFO_0000008)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000199> ;
+          owl:allValuesFrom <http://purl.obolibrary.org/obo/BFO_0000008>  # temporal region
+        ] ,
+        [ a owl:Restriction ;
+          # has participant (BFO_0000057) → material entity (BFO_0000040) or quality (BFO_0000019)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000057> ;
+          owl:allValuesFrom [ a owl:Class ;
+              owl:unionOf ( <http://purl.obolibrary.org/obo/BFO_0000040>  # material entity
+                          <http://purl.obolibrary.org/obo/BFO_0000019>  # quality
+                          )
+          ]
+        ] ,
+        [ a owl:Restriction ;
+          # concretizes (BFO_0000059) → generically dependent continuant (BFO_0000031)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000059> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000031>  # generically dependent continuant
+        ] ,
+        [ a owl:Restriction ;
+          # occurs in (BFO_0000066) → site (BFO_0000029) or material entity (BFO_0000040)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000066> ;
+          owl:allValuesFrom <http://purl.obolibrary.org/obo/BFO_0000040>
+        ] ,
+        [ a owl:Restriction ;
+          # realizes (BFO_0000055) → role (BFO_0000023) or disposition (BFO_0000016)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000055> ;
+          owl:someValuesFrom [ a owl:Class ;
+              owl:unionOf ( <http://purl.obolibrary.org/obo/BFO_0000023>  # role
+                            <http://purl.obolibrary.org/obo/BFO_0000016>  # disposition
+                          )
+          ]
+        ] .
+
+# Temporal region (WHEN)
+<http://purl.obolibrary.org/obo/BFO_0000008> a owl:Class ;
+    rdfs:label "temporal region"@en ;
+    skos:definition "(Elucidation) A temporal region is an occurrent over which processes can unfold"@en ;
+    skos:example "As for zero-dimensional temporal region and one-dimensional temporal region"@en ;
+    rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000003> .
+
+# Material entity (WHO)
+<http://purl.obolibrary.org/obo/BFO_0000040> a owl:Class ;
+    rdfs:label "material entity"@en ;
+    skos:definition "(Elucidation) A material entity is an independent continuant has some portion of matter as continuant part"@en ;
+    skos:example "A human being; the undetached arm of a human being; an aggregate of human beings"@en ;
+    rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000004> ,  # independent continuant
+        [ a owl:Restriction ;
+          # located in (BFO_0000171) → site (BFO_0000029)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000171> ;
+          owl:allValuesFrom <http://purl.obolibrary.org/obo/BFO_0000029>  # site
+        ] ,
+        [ a owl:Restriction ;
+          # is carrier of (BFO_0000101) → generically dependent continuant (BFO_0000031)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000101> ;
+          owl:allValuesFrom <http://purl.obolibrary.org/obo/BFO_0000031>  # generically dependent continuant
+        ] ,
+        [ a owl:Restriction ;
+          # bearer of (BFO_0000196) → quality (BFO_0000019) or role (BFO_0000023) or disposition (BFO_0000016)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000196> ;
+          owl:allValuesFrom [ a owl:Class ;
+              owl:unionOf ( <http://purl.obolibrary.org/obo/BFO_0000019>  # quality
+                          <http://purl.obolibrary.org/obo/BFO_0000023>    # role
+                          <http://purl.obolibrary.org/obo/BFO_0000016>    # disposition
+                          )
+          ]
+        ] ,
+        [ a owl:Restriction ;
+          # material basis of (BFO_0000127) → disposition (BFO_0000016)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000127> ;
+          owl:allValuesFrom <http://purl.obolibrary.org/obo/BFO_0000016>  # disposition
+        ] ,
+        [ a owl:Restriction ;
+          # participates in (BFO_0000056) → process (BFO_0000015)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000056> ;
+          owl:allValuesFrom <http://purl.obolibrary.org/obo/BFO_0000015>  # process
+        ] .
+
+# Site (WHERE)
+<http://purl.obolibrary.org/obo/BFO_0000029> a owl:Class ;
+    rdfs:label "site"@en ;
+    skos:definition "(Elucidation) A site is a three-dimensional immaterial entity whose boundaries either (partially or wholly) coincide with the boundaries of one or more material entities or have locations determined in relation to some material entity"@en ;
+    skos:example "A hole in a portion of cheese; a rabbit hole; the Grand Canyon; the Piazza San Marco; the kangaroo-joey-containing hole of a kangaroo pouch; your left nostril (a fiat part - the opening - of your left nasal cavity); the lumen of your gut; the hold of a ship; the interior of the trunk of your car; hole in an engineered floor joist"@en ;
+    rdfs:subClassOf 
+        <http://purl.obolibrary.org/obo/BFO_0000141> ,  # immaterial entity
+        [ a owl:Restriction ;
+          # environs (BFO_0000183) → process (BFO_0000015)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000183> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000015>  # process
+        ] .
+
+# Generically dependent continuant / ICE (HOW WE KNOW)
+<http://purl.obolibrary.org/obo/BFO_0000031> a owl:Class ;
+    rdfs:label "generically dependent continuant"@en ;
+    skos:altLabel "g-dependent continuant"@en ;
+    skos:definition "(Elucidation) A generically dependent continuant is an entity that exists in virtue of the fact that there is at least one of what may be multiple copies which is the content or the pattern that multiple copies would share"@en ;
+    skos:example "The pdf file on your laptop; the pdf file that is a copy thereof on my laptop; the sequence of this protein molecule; the sequence that is a copy thereof in that protein molecule; the content that is shared by a string of dots and dashes written on a page and the transmitted Morse code signal; the content of a sentence; an engineering blueprint"@en ;
+    rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000002> ;  # continuant
+    rdfs:subClassOf 
+        [ a owl:Restriction ;
+          # is concretized by (BFO_0000058) → process (BFO_0000015) or quality (BFO_0000019) or role (BFO_0000023) or disposition (BFO_0000016)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000058> ;
+          owl:someValuesFrom [ a owl:Class ;
+              owl:unionOf ( <http://purl.obolibrary.org/obo/BFO_0000015>  # process
+                            <http://purl.obolibrary.org/obo/BFO_0000019>  # quality
+                            <http://purl.obolibrary.org/obo/BFO_0000023>  # role
+                            <http://purl.obolibrary.org/obo/BFO_0000016>  # disposition
+                          )
+          ]
+        ] ,
+        [ a owl:Restriction ;
+          # generically depends on (BFO_0000084) → material entity (BFO_0000040)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000084> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000040>  # material entity
+        ] .
+
+# Quality (HOW IT IS)
+<http://purl.obolibrary.org/obo/BFO_0000019> a owl:Class ;
+    rdfs:label "quality"@en ;
+    skos:definition "(Elucidation) A quality is a specifically dependent continuant that, in contrast to roles and dispositions, does not require any further process in order to be realized"@en ;
+    skos:example "The colour of a tomato; the ambient temperature of this portion of air; the length of the circumference of your waist; the shape of your nose; the shape of your nostril; the mass of this piece of gold"@en ;
+    rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000020> ,  # specifically dependent continuant
+        [ a owl:Restriction ;
+          # concretizes (BFO_0000059) → generically dependent continuant (BFO_0000031)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000059> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000031>  # Generically dependent continuant
+        ] ,
+        [ a owl:Restriction ;
+          # participates in (BFO_0000056) → process (BFO_0000015)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000056> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000015>  # Process
+        ] ,
+        [ a owl:Restriction ;
+          # inheres in (BFO_0000197) → material entity (BFO_0000040)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000197> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000040>  # Material Entity
+        ] .
+
+# Role (WHY)
+<http://purl.obolibrary.org/obo/BFO_0000023> a owl:Class ;
+    rdfs:label "role"@en ;
+    skos:altLabel "externally-grounded realizable entity"@en ;
+    skos:definition "(Elucidation) A role b is a realizable entity such that b exists because there is some single bearer that is in some special physical, social, or institutional set of circumstances in which this bearer does not have to be & b is not such that, if it ceases to exist, then the physical make-up of the bearer is thereby changed"@en ;
+    skos:example "The priest role; the student role; the role of subject in a clinical trial; the role of a stone in marking a property boundary; the role of a boundary to demarcate two neighbouring administrative territories; the role of a building in serving as a military target"@en ;
+    rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000017> ,
+        [ a owl:Restriction ;
+          # has realization (BFO_0000054) → process (BFO_0000015)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000054> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000015>
+        ] ,
+        [ a owl:Restriction ;
+          # concretizes (BFO_0000059) → generically dependent continuant (BFO_0000031)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000059> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000031>
+        ] ,
+        [ a owl:Restriction ;
+          # inheres in (BFO_0000197) → material entity (BFO_0000040)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000197> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000040>
+        ] .
+
+# Disposition (WHY)
+<http://purl.obolibrary.org/obo/BFO_0000016> a owl:Class ;
+    rdfs:label "disposition"@en ;
+    skos:altLabel "internally-grounded realizable entity"@en ;
+    skos:definition "(Elucidation) A disposition b is a realizable entity such that if b ceases to exist then its bearer is physically changed & b's realization occurs when and because this bearer is in some special physical circumstances & this realization occurs in virtue of the bearer's physical make-up"@en ;
+    skos:example "An atom of element X has the disposition to decay to an atom of element Y; the cell wall is disposed to transport cellular material through endocytosis and exocytosis; certain people have a predisposition to colon cancer; children are innately disposed to categorize objects in certain ways"@en ;
+    rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000017> ,  # realizable entity
+        [ a owl:Restriction ;
+          # has realization (BFO_0000054) → process (BFO_0000015)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000054> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000015>
+        ] ,
+        [ a owl:Restriction ;
+          # concretizes (BFO_0000059) → generically dependent continuant (BFO_0000031)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000059> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000031>
+        ] ,
+        [ a owl:Restriction ;
+          # has material basis (BFO_0000218) → material entity (BFO_0000040)
+          owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000218> ;
+          owl:someValuesFrom <http://purl.obolibrary.org/obo/BFO_0000040>
+        ] .

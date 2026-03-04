@@ -53,7 +53,8 @@ def test_convert_ontology_graph_to_yaml_workflow(
             ),
         )
     )
-    triple_store_service.insert(graph)
+    graph_name = URIRef("http://ontology.naas.ai/graph/default")
+    triple_store_service.insert(graph, graph_name=graph_name)
     time.sleep(3)
 
     # Run workflow
@@ -71,7 +72,7 @@ def test_convert_ontology_graph_to_yaml_workflow(
     )
 
     # Remove graph
-    triple_store_service.remove(graph)
+    triple_store_service.remove(graph, graph_name=graph_name)
 
     # Remove ontology
     naas_integration = NaasIntegration(

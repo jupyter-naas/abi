@@ -1,0 +1,159 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Knowledge Graph State Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:knowledge_graph_state_process a owl:Ontology ;
+    dc:title "Knowledge Graph State Process"@en ;
+    dc:description "A process managing knowledge graph visualization state including named graphs, nodes, edges, views, saved queries, zoom level, and selection in the frontend Zustand store."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:KnowledgeGraphStateProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Knowledge Graph State Process"@en ;
+    skos:definition "A process managing knowledge graph visualization state including named graphs, nodes, edges, views, saved queries, zoom level, and selection in the frontend Zustand store."@en ;
+    rdfs:comment "Implements: apps/web/src/stores/knowledge-graph.ts useKnowledgeGraphStore" ;
+    skos:example "1. Load graph from API: GET /api/graph/workspaces/{workspace_id}\n2. Create/manage named graphs with node and edge counts\n3. Track selected node/edge for detail panel\n4. Manage view types (visual/table/sparql/schema/statistics)\n5. Execute queries via POST /api/graph/query\n6. Persist graphs, views, queries to localStorage"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ZustandGraphStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ZustandGraphStore"@en ;
+    skos:definition "Zustand store managing graph visualization state"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:GraphStorageKey a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "GraphStorageKey"@en ;
+    skos:definition "localStorage key: nexus-knowledge-graph"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:GraphLoadDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "GraphLoadDuration"@en ;
+    skos:definition "50-500ms for workspace graph load from API"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:GraphState a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "GraphState"@en ;
+    skos:definition "State: graphs, nodes, edges, selectedNodeId, selectedEdgeId, views, activeViewType, queries, zoomLevel"@en .
+
+nexus:GraphViewTypes a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "GraphViewTypes"@en ;
+    skos:definition "Types: visual, table, sparql, schema, statistics"@en .
+
+nexus:SavedQuery a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "SavedQuery"@en ;
+    skos:definition "Interface: name, query, language (sparql/cypher/natural), results, lastRun"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:PositionPersistence a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "PositionPersistence"@en ;
+    skos:definition "Quality: node x,y positions persisted across sessions"@en .
+
+nexus:MultiGraphSupport a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "MultiGraphSupport"@en ;
+    skos:definition "Quality: supports multiple named graphs with visibility toggling"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:GraphVisualizerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "GraphVisualizerRole"@en ;
+    skos:definition "Role realized when store manages graph display and interaction"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:BFOColorSchemeDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "BFOColorSchemeDisposition"@en ;
+    skos:definition "Disposition to color nodes by BFO 7 Buckets category"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:knowledge_graph_state_process_has_zustandgraphstore a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:KnowledgeGraphStateProcess ;
+    rdfs:range nexus:ZustandGraphStore ;
+    rdfs:label "KnowledgeGraphStateProcess has participant ZustandGraphStore"@en .
+
+nexus:knowledge_graph_state_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:KnowledgeGraphStateProcess ;
+    rdfs:range nexus:GraphStorageKey ;
+    rdfs:label "KnowledgeGraphStateProcess occurs in GraphStorageKey"@en .
+
+nexus:knowledge_graph_state_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:KnowledgeGraphStateProcess ;
+    rdfs:range nexus:GraphLoadDuration ;
+    rdfs:label "KnowledgeGraphStateProcess occupies GraphLoadDuration"@en .
+
+nexus:knowledge_graph_state_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:KnowledgeGraphStateProcess ;
+    rdfs:range nexus:GraphVisualizerRole ;
+    rdfs:label "KnowledgeGraphStateProcess realizes GraphVisualizerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:nodeCount a owl:DatatypeProperty ;
+    rdfs:label "nodeCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:edgeCount a owl:DatatypeProperty ;
+    rdfs:label "edgeCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:zoomLevel a owl:DatatypeProperty ;
+    rdfs:label "zoomLevel"@en ;
+    rdfs:range xsd:float .
+
+nexus:viewType a owl:DatatypeProperty ;
+    rdfs:label "viewType"@en ;
+    rdfs:range xsd:string .

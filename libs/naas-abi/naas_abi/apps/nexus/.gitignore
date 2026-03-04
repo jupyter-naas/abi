@@ -1,0 +1,56 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+.next
+dist
+build
+out
+
+# Environment
+.env
+.env.local
+.env.*.local
+feedback.txt
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Turbo
+.turbo
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.venv
+venv
+.mypy_cache
+.ruff_cache
+
+# Local/legacy SQLite artifacts (project is PostgreSQL-only)
+apps/api/*.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage
+.coverage
+
+# Misc
+*.tsbuildinfo
+
+# Uploaded workspace logos
+apps/api/uploads/

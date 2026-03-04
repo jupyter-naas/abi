@@ -7,7 +7,6 @@ from naas_abi_core.integration.integration import (
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
-from naas_abi_core.models.Model import OPENROUTER_MODEL_MAPPING
 from pydantic import BaseModel, Field
 
 
@@ -82,10 +81,6 @@ class PerplexityIntegration(Integration):
         """Search the web for information."""
         if system_prompt is None:
             system_prompt = self.__configuration.system_prompt
-
-        # Handble model name in case of OpenRouter model
-        if self.__configuration.base_url.startswith("https://openrouter.ai/api/v1"):
-            model = OPENROUTER_MODEL_MAPPING[model]
 
         payload = {
             "model": model,

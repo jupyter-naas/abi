@@ -1,0 +1,214 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix linkedin: <http://ontology.naas.ai/abi/linkedin/> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+########################################################
+# LinkedIn Act of Connections Queries
+########################################################
+
+# Count the number of LinkedIn connections for a person (by URI)
+intentMapping:LinkedInCountConnectionsByPerson a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "linkedin_count_connections_by_person"@en ;
+    intentMapping:intentDescription "Count the number of LinkedIn connections for a person, using their URI." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+
+        SELECT (COUNT(DISTINCT ?connectedPerson) AS ?connectionCount)
+        WHERE {
+          BIND(<{{ person_uri }}> AS ?thePerson)
+          ?thePerson a cco:ont00001262 .
+
+          ?connection a linkedin:ActOfConnection ;
+                      linkedin:involvesAgent ?thePerson , ?connectedPerson .
+          ?connectedPerson a cco:ont00001262 .
+          FILTER(?connectedPerson != ?thePerson)
+        }
+    """ ;
+    intentMapping:hasArgument intentMapping:personUriArg .
+
+# Search all persons connected to a specific person by URI
+intentMapping:LinkedInSearchConnectionsByPerson a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "linkedin_search_connections_by_person"@en ;
+    intentMapping:intentDescription "Search for LinkedIn connections where at least one person is connected to a specific person (using person URI). Returns connection URIs, connected date, and person information." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+
+        SELECT DISTINCT 
+            ?connection 
+            ?connectedPerson 
+            ?connectedPersonName 
+            ?connectedAt 
+            ?currentJobPositionValue 
+            ?currentOrganizationValue 
+            ?currentPublicUrlValue 
+            ?emailAddressValue
+        WHERE {
+          BIND(<{{ person_uri }}> AS ?thePerson)
+          ?thePerson a cco:ont00001262 .
+
+          ?connection a linkedin:ActOfConnection ;
+                      linkedin:involvesAgent ?thePerson ;
+                      linkedin:involvesAgent ?connectedPerson ;
+                      linkedin:connectedAt ?connectedAtURI.
+
+          ?connectedAtURI rdfs:label ?connectedAt .
+
+          FILTER(?connectedPerson != ?thePerson)
+
+          ?connectedPerson a cco:ont00001262 ;
+                           rdfs:label ?connectedPersonName .
+
+          OPTIONAL {
+            ?connectedPerson linkedin:hasCurrentJobPosition ?currentJobPosition .
+            ?currentJobPosition a linkedin:CurrentJobPosition ;
+                               rdfs:label ?currentJobPositionValue .
+          }
+          OPTIONAL {
+            ?connectedPerson linkedin:hasCurrentOrganization ?currentOrganization .
+            ?currentOrganization a linkedin:CurrentOrganization ;
+                                rdfs:label ?currentOrganizationValue .
+          }
+          OPTIONAL {
+            ?connectedPerson linkedin:hasCurrentPublicUrl ?currentPublicUrl .
+            ?currentPublicUrl a linkedin:CurrentPublicUrl ;
+                              rdfs:label ?currentPublicUrlValue .
+          }
+          OPTIONAL {
+            ?connectedPerson linkedin:hasEmailAddress ?emailAddress .
+            ?emailAddress a linkedin:EmailAddress ;
+                          rdfs:label ?emailAddressValue .
+          }
+        }
+
+        ORDER BY DESC(?connectedAt)
+        LIMIT 50
+    """ ;
+    intentMapping:hasArgument intentMapping:personUriArg .
+
+# Search connections by organization (by organization URI)
+intentMapping:LinkedInSearchConnectionsByOrganization a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "linkedin_search_connections_by_organization"@en ;
+    intentMapping:intentDescription "Search for LinkedIn connections where at least one person works at a specific organization (using organization URI). Returns connection URIs, connected date, and person information." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+
+        SELECT DISTINCT ?connection ?connectedAt ?person ?personName ?currentOrganization ?organizationName
+        WHERE {
+          # Match the organization entity directly (filter first for efficiency)
+          VALUES ?orgURI { <{{ organization_uri }}> }
+
+          # Get only those CurrentOrganization instances that reference the organization URI
+          ?currentOrganization a linkedin:CurrentOrganization ;
+                               bfo:BFO_0000197 ?orgURI ;
+                               rdfs:label ?organizationName .
+
+          # Get people who currently have this organization as their current organization
+          ?person a cco:ont00001262 ;
+                  rdfs:label ?personName ;
+                  linkedin:hasCurrentOrganization ?currentOrganization .
+
+          # Get connection events involving this person
+          ?connection a linkedin:ActOfConnection ;
+                      linkedin:involvesAgent ?person ;
+                      linkedin:connectedAt ?connectedAt .
+        }
+        ORDER BY DESC(?connectedAt)
+        LIMIT 50
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationUriArg .
+
+# Search for all LinkedIn person info (all qualities) by their URI
+intentMapping:LinkedInSearchPersonInfoByPersonUri a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "linkedin_search_person_info"@en ;
+    intentMapping:intentDescription """
+      Given a person's URI, retrieve all available LinkedIn profile information qualities, including:
+      - Current Job Position
+      - Current Organization
+      - Current Public URL
+      - Email Address
+      Each quality is returned as a value (label), not as the URI of the quality entity.
+    """ ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+
+        SELECT DISTINCT
+          ?personName
+          ?currentJobPositionValue
+          ?currentOrganizationValue
+          ?currentPublicUrlValue
+          ?emailAddressValue
+        WHERE {
+          BIND(<{{ person_uri }}> AS ?person)
+          ?person a cco:ont00001262 ;
+                  rdfs:label ?personName .
+
+          OPTIONAL {
+            ?person linkedin:hasCurrentJobPosition ?currentJobPosition .
+            ?currentJobPosition a linkedin:CurrentJobPosition ;
+                               rdfs:label ?currentJobPositionValue .
+          }
+          OPTIONAL {
+            ?person linkedin:hasCurrentOrganization ?currentOrganization .
+            ?currentOrganization a linkedin:CurrentOrganization ;
+                                rdfs:label ?currentOrganizationValue .
+          }
+          OPTIONAL {
+            ?person linkedin:hasCurrentPublicUrl ?currentPublicUrl .
+            ?currentPublicUrl a linkedin:CurrentPublicUrl ;
+                              rdfs:label ?currentPublicUrlValue .
+          }
+          OPTIONAL {
+            ?person linkedin:hasEmailAddress ?emailAddress .
+            ?emailAddress a linkedin:EmailAddress ;
+                          rdfs:label ?emailAddressValue .
+          }
+        }
+    """ ;
+    intentMapping:hasArgument intentMapping:personUriArg .
+
+########################################################
+# LinkedIn Act of Connections Arguments
+########################################################
+
+intentMapping:personUriArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "person_uri" ;
+    intentMapping:argumentDescription "URI of the person" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationFormat "person_uri" .
+
+intentMapping:personUri1Arg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "person_uri_1" ;
+    intentMapping:argumentDescription "URI of the first person" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationFormat "person_uri_1" .
+
+intentMapping:personUri2Arg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "person_uri_2" ;
+    intentMapping:argumentDescription "URI of the second person" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationFormat "person_uri_2" .
+
+intentMapping:organizationUriArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "organization_uri" ;
+    intentMapping:argumentDescription "URI of the organization" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationFormat "organization_uri" .

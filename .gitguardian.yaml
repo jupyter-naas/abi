@@ -1,0 +1,8 @@
+# GitGuardian configuration
+# https://docs.gitguardian.com/ggshield-docs/reference/gitguardian-yaml
+
+secret:
+  ignored-matches:
+    # Demo/seed password for local development - intentionally public
+    - name: "Demo seed password for local development"
+      match: "nexus2026"

@@ -1,7 +1,3 @@
-import os
-import subprocess
-import sys
-
 import click
 
 from .agent import agent
@@ -13,6 +9,8 @@ from .module import module
 from .new import new
 from .run import run
 from .secret import secrets
+from .setup import setup
+from .stack import logs, stack, start, stop
 
 
 @click.group("abi")
@@ -29,7 +27,11 @@ _main.add_command(new)
 _main.add_command(init)
 _main.add_command(deploy)
 _main.add_command(run)
-
+_main.add_command(setup)
+_main.add_command(start)
+_main.add_command(stop)
+_main.add_command(logs)
+_main.add_command(stack)
 ran = False
 
 
@@ -39,27 +41,8 @@ def main():
         return
     ran = True
 
-    # Check how the project is being runned.
-    if os.getenv("LOCAL_UV_RAN") is None:
-        if "pyproject.toml" in os.listdir(os.getcwd()):
-            with open("pyproject.toml", "r") as file:
-                if "naas-abi-cli" in file.read():
-                    arguments = (
-                        "uv run --active python -m naas_abi_cli.cli".split(" ")
-                        + sys.argv[1:]
-                    )
-                    try:
-                        subprocess.run(
-                            arguments,
-                            cwd=os.getcwd(),
-                            env={**os.environ, "LOCAL_UV_RAN": "true"},
-                            check=True,
-                        )
-                    except Exception:
-                        pass
-
-                    return
     _main()
 
 
+main()
 main()

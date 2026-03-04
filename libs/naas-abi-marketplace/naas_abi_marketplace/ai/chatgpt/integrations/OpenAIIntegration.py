@@ -1,16 +1,18 @@
-from dataclasses import dataclass, field
+import os
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Dict, List, Optional
+
 from langchain_core.tools import StructuredTool
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from openai import OpenAI
 from pydantic import BaseModel, Field
-from naas_abi_marketplace.ai.chatgpt import ABIModule
-from naas_abi_core.utils.StorageUtils import StorageUtils
-import os
-
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openai")
 
@@ -21,10 +23,13 @@ class OpenAIIntegrationConfiguration(IntegrationConfiguration):
 
     Attributes:
         api_key (str): OpenAI API key for authentication
+        datastore_path (str): Path to the datastore
+        object_storage (ObjectStorageService): Object storage service
     """
 
     api_key: str
-    datastore_path: str = field(default_factory=lambda: ABIModule.get_instance().configuration.datastore_path)
+    datastore_path: str
+    object_storage: ObjectStorageService
 
 
 class OpenAIIntegration(Integration):
@@ -46,9 +51,11 @@ class OpenAIIntegration(Integration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__openai = OpenAI(api_key=self.__configuration.api_key)
-        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.__storage_utils = StorageUtils(self.__configuration.object_storage)
 
-    @cache(lambda self: "list_models", cache_type=DataType.PICKLE, ttl=timedelta(days=1))
+    @cache(
+        lambda self: "list_models", cache_type=DataType.PICKLE, ttl=timedelta(days=1)
+    )
     def list_models(self) -> Dict:
         """List available models."""
         models = self.__openai.models.list()
@@ -57,16 +64,29 @@ class OpenAIIntegration(Integration):
         self.__storage_utils.save_json(data, output_dir, "models.json")
         return {"models": data}
 
-    @cache(lambda self, model_id: f"retrieve_model_{model_id}", cache_type=DataType.PICKLE, ttl=timedelta(days=1))
+    @cache(
+        lambda self, model_id: f"retrieve_model_{model_id}",
+        cache_type=DataType.PICKLE,
+        ttl=timedelta(days=1),
+    )
     def retrieve_model(self, model_id: str) -> Dict:
         """Retrieve a specific model."""
         model = self.__openai.models.retrieve(model_id)
-        output_dir = os.path.join(self.__configuration.datastore_path, "models", model_id)
-        self.__storage_utils.save_json(model.model_dump(), output_dir, f"{model_id}_info.json")
+        output_dir = os.path.join(
+            self.__configuration.datastore_path, "models", model_id
+        )
+        self.__storage_utils.save_json(
+            model.model_dump(), output_dir, f"{model_id}_info.json"
+        )
         return model.model_dump()
-    
+
     @cache(
-        lambda self, prompt, system_prompt, messages, model, temperature: f"{prompt}_{system_prompt}_{messages}_{model}_{temperature}",
+        lambda self,
+        prompt,
+        system_prompt,
+        messages,
+        model,
+        temperature: f"{prompt}_{system_prompt}_{messages}_{model}_{temperature}",
         cache_type=DataType.PICKLE,
         ttl=timedelta(days=1),
     )
@@ -109,13 +129,17 @@ class OpenAIIntegration(Integration):
                 temperature=temperature,
             )
         if (
-            hasattr(completion, "choices") and 
-            len(completion.choices) > 0 and 
-            hasattr(completion.choices[0], "message") and 
-            hasattr(completion.choices[0].message, "content")
+            hasattr(completion, "choices")
+            and len(completion.choices) > 0
+            and hasattr(completion.choices[0], "message")
+            and hasattr(completion.choices[0].message, "content")
         ):
-            output_dir = os.path.join(self.__configuration.datastore_path, "completions", model)
-            self.__storage_utils.save_json(dict(completion), output_dir, f"{model}_{temperature}.json")
+            output_dir = os.path.join(
+                self.__configuration.datastore_path, "completions", model
+            )
+            self.__storage_utils.save_json(
+                dict(completion), output_dir, f"{model}_{temperature}.json"
+            )
             content = completion.choices[0].message.content
             return {"content": content}
         return {}

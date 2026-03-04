@@ -4,8 +4,13 @@ import click
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
+from .agent import new_agent
+from .integration import new_integration
 from .new import new
+from .orchestration import new_orchestration
+from .pipeline import new_pipeline
 from .utils import to_kebab_case, to_pascal_case, to_snake_case
+from .workflow import new_workflow
 
 
 @new.command("module")
@@ -42,6 +47,36 @@ def new_module(module_name: str, module_path: str = ".", quiet: bool = False):
             "module_name_snake": to_snake_case(module_name),
             "module_name_pascal": to_pascal_case(module_name),
         }
+    )
+
+    new_agent(
+        module_name,
+        os.path.join(module_path, "agents"),
+        extra_values={"module_name_snake": to_snake_case(module_name)},
+    )
+
+    new_integration(
+        module_name,
+        os.path.join(module_path, "integrations"),
+        extra_values={"module_name_snake": to_snake_case(module_name)},
+    )
+    
+    new_pipeline(
+        module_name,
+        os.path.join(module_path, "pipelines"),
+        extra_values={"module_name_snake": to_snake_case(module_name)},
+    )
+    
+    new_workflow(
+        module_name,
+        os.path.join(module_path, "workflows"),
+        extra_values={"module_name_snake": to_snake_case(module_name)},
+    )
+    
+    new_orchestration(
+        module_name,
+        os.path.join(module_path, "orchestrations"),
+        extra_values={"module_name_snake": to_snake_case(module_name)},
     )
 
     if not quiet:

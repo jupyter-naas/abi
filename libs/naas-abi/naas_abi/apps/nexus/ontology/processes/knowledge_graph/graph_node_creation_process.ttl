@@ -1,0 +1,165 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Graph Node Creation Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:graph_node_creation_process a owl:Ontology ;
+    dc:title "Graph Node Creation Process"@en ;
+    dc:description "A process that creates a new node entity in the knowledge graph with type, label, and JSON properties, storing it in the graph_nodes PostgreSQL table with workspace isolation."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:GraphNodeCreationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Graph Node Creation Process"@en ;
+    skos:definition "A process that creates a new node entity in the knowledge graph with type, label, and JSON properties, storing it in the graph_nodes PostgreSQL table with workspace isolation."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/graph.py:161-178 create_node()" ;
+    skos:example "1. Validate workspace access\n2. Generate node ID: node-{uuid.hex[:12]}\n3. Serialize properties dict to JSON string\n4. Insert GraphNodeModel into graph_nodes table\n5. Commit transaction\n6. Return GraphNode response"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:GraphAuthor a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "GraphAuthor"@en ;
+    skos:definition "Authenticated user creating the node"@en .
+
+nexus:GraphDatabase a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "GraphDatabase"@en ;
+    skos:definition "PostgreSQL database storing graph_nodes table"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:GraphNodesEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "GraphNodesEndpoint"@en ;
+    skos:definition "API endpoint POST /api/graph/nodes"@en .
+
+nexus:GraphNodesTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "GraphNodesTable"@en ;
+    skos:definition "PostgreSQL table graph_nodes with workspace_id index"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:NodeCreationDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "NodeCreationDuration"@en ;
+    skos:definition "10-30ms for single row insert"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:GraphNodeCreate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "GraphNodeCreate"@en ;
+    skos:definition "Pydantic model: workspace_id, type (1-100 chars), label (1-500 chars), properties (JSON dict)"@en .
+
+nexus:GraphNodeRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "GraphNodeRecord"@en ;
+    skos:definition "Database row: id (node-{uuid}), workspace_id, type, label, properties (JSON text), created_at, updated_at"@en .
+
+nexus:GraphNodeResponse a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "GraphNodeResponse"@en ;
+    skos:definition "API response with full node data"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:NodeTypeCardinality a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "NodeTypeCardinality"@en ;
+    skos:definition "Quality: unlimited node types per workspace"@en .
+
+nexus:PropertyFlexibility a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "PropertyFlexibility"@en ;
+    skos:definition "Quality: properties stored as free-form JSON"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:GraphBuilderRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "GraphBuilderRole"@en ;
+    skos:definition "Role realized when user adds entities to the knowledge graph"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:JSONSerializationDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "JSONSerializationDisposition"@en ;
+    skos:definition "Disposition to serialize properties dict to JSON string for storage"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:graph_node_creation_process_has_graphauthor a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:GraphNodeCreationProcess ;
+    rdfs:range nexus:GraphAuthor ;
+    rdfs:label "GraphNodeCreationProcess has participant GraphAuthor"@en .
+
+nexus:graph_node_creation_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:GraphNodeCreationProcess ;
+    rdfs:range nexus:GraphNodesEndpoint ;
+    rdfs:label "GraphNodeCreationProcess occurs in GraphNodesEndpoint"@en .
+
+nexus:graph_node_creation_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:GraphNodeCreationProcess ;
+    rdfs:range nexus:NodeCreationDuration ;
+    rdfs:label "GraphNodeCreationProcess occupies NodeCreationDuration"@en .
+
+nexus:graph_node_creation_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:GraphNodeCreationProcess ;
+    rdfs:range nexus:GraphBuilderRole ;
+    rdfs:label "GraphNodeCreationProcess realizes GraphBuilderRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:nodeType a owl:DatatypeProperty ;
+    rdfs:label "nodeType"@en ;
+    rdfs:range xsd:string .
+
+nexus:nodeLabel a owl:DatatypeProperty ;
+    rdfs:label "nodeLabel"@en ;
+    rdfs:range xsd:string .
+
+nexus:propertyCount a owl:DatatypeProperty ;
+    rdfs:label "propertyCount"@en ;
+    rdfs:range xsd:integer .

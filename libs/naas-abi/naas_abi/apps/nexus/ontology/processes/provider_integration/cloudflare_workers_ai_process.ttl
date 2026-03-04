@@ -1,0 +1,161 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Cloudflare Workers AI Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:cloudflare_workers_ai_process a owl:Ontology ;
+    dc:title "Cloudflare Workers AI Process"@en ;
+    dc:description "A process that executes AI inference on Cloudflare's edge network using Workers AI API, supporting both streaming SSE and non-streaming responses."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:CloudflareWorkersAIProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Cloudflare Workers AI Process"@en ;
+    skos:definition "A process that executes AI inference on Cloudflare's edge network using Workers AI API, supporting both streaming SSE and non-streaming responses."@en ;
+    rdfs:comment "Implements: apps/api/app/services/providers.py:305-421 complete_with_cloudflare(), stream_with_cloudflare()" ;
+    skos:example "1. Extract account_id from provider config or secrets\n2. Format model path as @cf/{provider}/{model}\n3. Set Authorization: Bearer {api_token} header\n4. POST to Cloudflare AI run endpoint with messages\n5. If streaming: parse SSE data lines with response field\n6. If non-streaming: extract result.response from JSON\n7. Handle Cloudflare-specific error formats"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:CloudflareEdgeNetwork a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "CloudflareEdgeNetwork"@en ;
+    skos:definition "Cloudflare's global edge infrastructure executing AI inference"@en .
+
+nexus:WorkersAIRuntime a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WorkersAIRuntime"@en ;
+    skos:definition "Cloudflare Workers AI model runtime"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:CloudflareAIEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "CloudflareAIEndpoint"@en ;
+    skos:definition "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/{model}"@en .
+
+nexus:CloudflareModelsEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "CloudflareModelsEndpoint"@en ;
+    skos:definition "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/models/search"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:EdgeInferenceDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "EdgeInferenceDuration"@en ;
+    skos:definition "500-5000ms depending on model and edge location proximity"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:CloudflareRequest a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "CloudflareRequest"@en ;
+    skos:definition "JSON body with messages array and optional stream:true flag"@en .
+
+nexus:CloudflareResponse a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "CloudflareResponse"@en ;
+    skos:definition "JSON with result.response (non-streaming) or SSE data lines"@en .
+
+nexus:AccountId a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "AccountId"@en ;
+    skos:definition "Cloudflare account identifier required for API routing"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:EdgeLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "EdgeLatency"@en ;
+    skos:definition "Quality measuring response time based on edge node proximity"@en .
+
+nexus:ModelPathFormat a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ModelPathFormat"@en ;
+    skos:definition "Quality: model path format @cf/meta/llama-3.1-8b-instruct"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:EdgeInferenceRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "EdgeInferenceRole"@en ;
+    skos:definition "Role realized when Cloudflare executes inference at the edge"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:SSEStreamingDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "SSEStreamingDisposition"@en ;
+    skos:definition "Disposition to stream via SSE when stream:true is set"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:cloudflare_workers_ai_process_has_cloudflareedgenetwork a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:CloudflareWorkersAIProcess ;
+    rdfs:range nexus:CloudflareEdgeNetwork ;
+    rdfs:label "CloudflareWorkersAIProcess has participant CloudflareEdgeNetwork"@en .
+
+nexus:cloudflare_workers_ai_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:CloudflareWorkersAIProcess ;
+    rdfs:range nexus:CloudflareAIEndpoint ;
+    rdfs:label "CloudflareWorkersAIProcess occurs in CloudflareAIEndpoint"@en .
+
+nexus:cloudflare_workers_ai_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:CloudflareWorkersAIProcess ;
+    rdfs:range nexus:EdgeInferenceDuration ;
+    rdfs:label "CloudflareWorkersAIProcess occupies EdgeInferenceDuration"@en .
+
+nexus:cloudflare_workers_ai_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:CloudflareWorkersAIProcess ;
+    rdfs:range nexus:EdgeInferenceRole ;
+    rdfs:label "CloudflareWorkersAIProcess realizes EdgeInferenceRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:accountId a owl:DatatypeProperty ;
+    rdfs:label "accountId"@en ;
+    rdfs:range xsd:string .
+
+nexus:modelPath a owl:DatatypeProperty ;
+    rdfs:label "modelPath"@en ;
+    rdfs:range xsd:string .

@@ -8,7 +8,7 @@ from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator impo
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing_extensions import Self
 
 # Only import for type checking, not at runtime
@@ -23,9 +23,13 @@ class DotenvSecretConfiguration(BaseModel):
 
     secret_adapters:
       - adapter: "dotenv"
-        config: {}
+        config:
+          path: ".env"
     """
-    pass
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = ".env"
 
 
 class NaasSecretConfiguration(BaseModel):
@@ -37,6 +41,9 @@ class NaasSecretConfiguration(BaseModel):
           naas_api_key: "{{ secret.NAAS_API_KEY }}"
           naas_api_url: "https://api.naas.ai"
     """
+
+    model_config = ConfigDict(extra="forbid")
+
     naas_api_key: str
     naas_api_url: str
 
@@ -50,6 +57,9 @@ class Base64SecretConfiguration(BaseModel):
           secret_adapter: *secret_adapter
           base64_secret_key: "{{ secret.BASE64_SECRET_KEY }}"
     """
+
+    model_config = ConfigDict(extra="forbid")
+
     secret_adapter: "SecretAdapterConfiguration"
     base64_secret_key: str
 

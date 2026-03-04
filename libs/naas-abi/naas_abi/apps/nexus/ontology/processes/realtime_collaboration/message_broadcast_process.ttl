@@ -1,0 +1,151 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Message Broadcast Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:message_broadcast_process a owl:Ontology ;
+    dc:title "Message Broadcast Process"@en ;
+    dc:description "A process that notifies all users in a workspace when a new message is created in any conversation, broadcasting the message content in real-time via Socket.IO."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:MessageBroadcastProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Message Broadcast Process"@en ;
+    skos:definition "A process that notifies all users in a workspace when a new message is created in any conversation, broadcasting the message content in real-time via Socket.IO."@en ;
+    rdfs:comment "Implements: apps/api/app/services/websocket.py:211-226 new_message handler" ;
+    skos:example "1. Receive new_message event with workspace_id, conversation_id, message\n2. Broadcast to workspace:{workspace_id} room\n3. Include conversation_id, message, and timestamp\n4. Do NOT exclude sender (all users see the message)"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:MessageSender a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "MessageSender"@en ;
+    skos:definition "User or system that created the new message"@en .
+
+nexus:WorkspaceSubscribers a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "WorkspaceSubscribers"@en ;
+    skos:definition "All connected users in the workspace room"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:MessageEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "MessageEvent"@en ;
+    skos:definition "Socket.IO event: new_message"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:BroadcastLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "BroadcastLatency"@en ;
+    skos:definition "Less than 1ms for event emission"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:NewMessageEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "NewMessageEvent"@en ;
+    skos:definition "Broadcast: {conversation_id, message (dict), timestamp}"@en .
+
+nexus:MessageData a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "MessageData"@en ;
+    skos:definition "Input: {workspace_id, conversation_id, message}"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:IncludeSender a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "IncludeSender"@en ;
+    skos:definition "Quality: sender receives their own message broadcast (no skip_sid)"@en .
+
+nexus:RealtimeDelivery a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "RealtimeDelivery"@en ;
+    skos:definition "Quality: message delivered instantly to all workspace subscribers"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:MessageNotifierRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "MessageNotifierRole"@en ;
+    skos:definition "Role realized when system broadcasts new messages"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:InclusiveBroadcastDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "InclusiveBroadcastDisposition"@en ;
+    skos:definition "Disposition to include sender in broadcast (unlike typing)"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:message_broadcast_process_has_messagesender a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:MessageBroadcastProcess ;
+    rdfs:range nexus:MessageSender ;
+    rdfs:label "MessageBroadcastProcess has participant MessageSender"@en .
+
+nexus:message_broadcast_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:MessageBroadcastProcess ;
+    rdfs:range nexus:MessageEvent ;
+    rdfs:label "MessageBroadcastProcess occurs in MessageEvent"@en .
+
+nexus:message_broadcast_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:MessageBroadcastProcess ;
+    rdfs:range nexus:BroadcastLatency ;
+    rdfs:label "MessageBroadcastProcess occupies BroadcastLatency"@en .
+
+nexus:message_broadcast_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:MessageBroadcastProcess ;
+    rdfs:range nexus:MessageNotifierRole ;
+    rdfs:label "MessageBroadcastProcess realizes MessageNotifierRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:conversationId a owl:DatatypeProperty ;
+    rdfs:label "conversationId"@en ;
+    rdfs:range xsd:string .
+
+nexus:messageRole a owl:DatatypeProperty ;
+    rdfs:label "messageRole"@en ;
+    rdfs:range xsd:string .

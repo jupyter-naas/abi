@@ -1,7 +1,8 @@
 import os
 from datetime import datetime
 from queue import Queue
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Union, cast
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.tools import BaseTool, Tool
@@ -13,6 +14,7 @@ from langgraph.types import Command
 from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import (
+    ABIAgentState,
     Agent,
     AgentConfiguration,
     AgentSharedState,
@@ -124,10 +126,10 @@ Slides structure from template:
 SUGGESTIONS: list[str] = []
 
 
-class PowerPointState(MessagesState):
+class PowerPointState(ABIAgentState):
     """State class for PowerPoint presentation creation conversations.
 
-    Extends MessagesState to include PowerPoint-specific information that tracks
+    Extends ABIAgentState to include PowerPoint-specific information that tracks
     the presentation creation process throughout the conversation flow.
 
     Attributes:
@@ -239,7 +241,9 @@ class PowerPointAgent(Agent):
         self.__triple_store_service = (
             ABIModule.get_instance().engine.services.triple_store
         )
-        self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
+        self.__storage_utils = StorageUtils(
+            ABIModule.get_instance().engine.services.object_storage
+        )
         self.__powerpoint_pipeline_configuration = (
             AddPowerPointPresentationPipelineConfiguration(
                 powerpoint_configuration=self.__powerpoint_configuration,
@@ -303,7 +307,8 @@ class PowerPointAgent(Agent):
 
         # import uuid
 
-        if "[TEMPLATE_STRUCTURE]" in self._system_prompt:
+        system_prompt = state["system_prompt"]
+        if "[TEMPLATE_STRUCTURE]" in system_prompt:
             logger.debug("🔧 Injecting template structure")
             # Create graph
             ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -384,8 +389,13 @@ class PowerPointAgent(Agent):
             {graph.serialize(format="turtle")}
             ```
             """
-            system_prompt = self._system_prompt.replace("[TEMPLATE_STRUCTURE]", turtle)
-            self.set_system_prompt(system_prompt)
+            updated_system_prompt = system_prompt.replace(
+                "[TEMPLATE_STRUCTURE]", turtle
+            )
+            return Command(
+                goto="validate_presentation_draft",
+                update={"system_prompt": updated_system_prompt},
+            )
         return Command(goto="validate_presentation_draft")
 
     def validate_presentation_draft(self, state: PowerPointState) -> Command:
@@ -397,7 +407,8 @@ class PowerPointAgent(Agent):
         logger.debug("🔍 Validating presentation draft")
 
         # Get last messages
-        last_human_message = self.get_last_human_message(state)
+        # Cast to ABIAgentState since PowerPointState extends it
+        last_human_message = self.get_last_human_message(cast(ABIAgentState, state))
         last_ai_message: Any | None = _.find(
             state["messages"][::-1], lambda m: isinstance(m, AIMessage)
         )

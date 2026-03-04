@@ -196,7 +196,7 @@ class Oxigraph(ITripleStorePort):
             f"Removed {len(triples)} triples from Oxigraph via store endpoint (large remove)"
         )
 
-    def insert(self, triples: Graph):
+    def insert(self, triples: Graph, graph_name: URIRef):
         """
         Insert RDF triples into Oxigraph.
 
@@ -216,15 +216,20 @@ class Oxigraph(ITripleStorePort):
         if len(triples) == 0:
             return
         elif len(triples) > 100000:
-            self.__insert_large_graph(triples)
+            if graph_name is not None:
+                raise NotImplementedError(
+                    "Named graph insert for large graphs is not supported in Oxigraph adapter"
+                )
         else:
             # Build INSERT DATA query
-            insert_query = "INSERT DATA {\n"
+            insert_query = f"INSERT DATA {{\n  GRAPH <{str(graph_name)}> {{\n"
+
             for s, p, o in triples:
                 if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
                     continue
                 insert_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-            insert_query += "}"
+
+            insert_query += "  }\n}"
 
             response = requests.post(
                 self.update_endpoint,
@@ -239,7 +244,7 @@ class Oxigraph(ITripleStorePort):
                 response.raise_for_status()
                 logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
 
-    def remove(self, triples: Graph, chunk_size: int = 1_000_000):
+    def remove(self, triples: Graph, graph_name: URIRef):
         """
         Remove RDF triples from Oxigraph.
 
@@ -258,15 +263,23 @@ class Oxigraph(ITripleStorePort):
         if len(triples) == 0:
             return
         elif len(triples) > 100000:
-            self.__remove_large_graph(triples)
+            if graph_name is not None:
+                raise NotImplementedError(
+                    "Named graph remove for large graphs is not supported in Oxigraph adapter"
+                )
         else:
             # Build DELETE DATA query
-            delete_query = "DELETE DATA {\n"
+            delete_query = f"DELETE DATA {{\n  GRAPH <{str(graph_name)}> {{\n"
+
             for s, p, o in triples:
                 if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
                     continue
                 delete_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-            delete_query += "}"
+
+            if graph_name is None:
+                delete_query += "}"
+            else:
+                delete_query += "  }\n}"
 
             response = requests.post(
                 self.update_endpoint,
@@ -501,7 +514,7 @@ class Oxigraph(ITripleStorePort):
         """
         return self.query(query)
 
-    def get_subject_graph(self, subject: URIRef) -> Graph:
+    def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         """
         Get all triples for a specific subject as an RDFLib Graph.
 
@@ -518,7 +531,7 @@ class Oxigraph(ITripleStorePort):
         """
         query = f"""
         CONSTRUCT {{ <{str(subject)}> ?p ?o }}
-        WHERE {{ <{str(subject)}> ?p ?o }}
+        WHERE {{ GRAPH <{str(graph_name)}> {{ <{str(subject)}> ?p ?o }} }}
         """
 
         result = self.query(query)
@@ -528,6 +541,30 @@ class Oxigraph(ITripleStorePort):
         else:
             # If query returns non-graph result, create empty graph
             return Graph()
+
+    def create_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+        self.query(f"CREATE GRAPH <{str(graph_name)}>")
+
+    def clear_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+        self.query(f"CLEAR GRAPH <{str(graph_name)}>")
+
+    def drop_graph(self, graph_name: URIRef) -> None:
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+        self.query(f"DROP GRAPH <{str(graph_name)}>")
+
+    def list_graphs(self) -> list[URIRef]:
+        result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+        graphs: list[URIRef] = []
+        for row in result:
+            graph = getattr(row, "g", None)
+            if isinstance(graph, URIRef):
+                graphs.append(graph)
+        return graphs
 
 
 if __name__ == "__main__":
@@ -556,6 +593,7 @@ if __name__ == "__main__":
         print("\nTesting basic operations...")
 
         # Create test data
+        test_graph_name = URIRef("http://example.org/test/graph1")
         test_graph = Graph()
         test_subject = URIRef("http://example.org/test/person1")
         test_graph.add(
@@ -571,7 +609,7 @@ if __name__ == "__main__":
 
         # Insert
         print("- Inserting test data...")
-        adapter.insert(test_graph)
+        adapter.insert(test_graph, test_graph_name)
         print("  ✓ Insert successful")
 
         # Query
@@ -582,12 +620,12 @@ if __name__ == "__main__":
 
         # Get subject graph
         print("- Getting subject graph...")
-        subject_graph = adapter.get_subject_graph(test_subject)
+        subject_graph = adapter.get_subject_graph(test_subject, test_graph_name)
         print(f"  Subject has {len(subject_graph)} triples")
 
         # Clean up
         print("- Removing test data...")
-        adapter.remove(test_graph)
+        adapter.remove(test_graph, test_subject)
         print("  ✓ Remove successful")
 
         print("\n✓ All tests passed!")

@@ -2,6 +2,310 @@
 
 <!-- version list -->
 
+## v1.18.2 (2026-03-02)
+
+### Bug Fixes
+
+- Manage secondary adapter dotenv with mutex
+  ([`ee76c11`](https://github.com/jupyter-naas/abi/commit/ee76c117e7b25f009c5313104fe30dc2d50599ac))
+
+
+## v1.18.1 (2026-03-02)
+
+### Bug Fixes
+
+- Error rm schema
+  ([`fb3739a`](https://github.com/jupyter-naas/abi/commit/fb3739a5f40b6d7cda8110e8ef5b650729a76275))
+
+
+## v1.18.0 (2026-03-02)
+
+### Bug Fixes
+
+- Get subject graph
+  ([`a2c4b9c`](https://github.com/jupyter-naas/abi/commit/a2c4b9c9d840e7d8d6013a01bf8d74697d7cf603))
+
+### Refactoring
+
+- Get subject graph
+  ([`932b5e0`](https://github.com/jupyter-naas/abi/commit/932b5e04c631521c90834f758845795ad50cb66b))
+
+- Update adapters
+  ([`fbb9511`](https://github.com/jupyter-naas/abi/commit/fbb95114b5d960d36a1a41e4b28902820038edd4))
+
+
+## v1.17.4 (2026-03-02)
+
+### Bug Fixes
+
+- Error ruff
+  ([`5ef341a`](https://github.com/jupyter-naas/abi/commit/5ef341a036ee5fb09d0b0af2bc14a353030776bd))
+
+
+## v1.17.3 (2026-02-25)
+
+### Bug Fixes
+
+- Improve api loading time
+  ([`e6d6671`](https://github.com/jupyter-naas/abi/commit/e6d66711d065a89800f0fcec722cd68d05034e24))
+
+- Make it possible to not have the api reload by default
+  ([`308e4a9`](https://github.com/jupyter-naas/abi/commit/308e4a96eb6481d0171deb508e1f3fe45a8264cb))
+
+
+## v1.17.2 (2026-02-19)
+
+### Bug Fixes
+
+- Postgres checkpointer overload
+  ([`891749e`](https://github.com/jupyter-naas/abi/commit/891749e5d00dc4494f29b81944c1f09b48e4de8d))
+
+
+## v1.17.1 (2026-02-19)
+
+### Bug Fixes
+
+- Make naas_abi having access to every modules
+  ([`d932b80`](https://github.com/jupyter-naas/abi/commit/d932b80bf99875db053585d34152c9483d4071c4))
+
+- Make naas_abi having access to everything
+  ([`aa6f7c3`](https://github.com/jupyter-naas/abi/commit/aa6f7c3bf871205bd9f38d79cee3829a768b2ef4))
+
+
+## v1.17.0 (2026-02-19)
+
+### Features
+
+- Create openrouter agent for all available models on init
+  ([`7b58aca`](https://github.com/jupyter-naas/abi/commit/7b58aca8e9bcdb6683e7281d628f7fa11b2b53d4))
+
+
+## v1.16.0 (2026-02-18)
+
+### Features
+
+- Improve schema duplication management and ingestion speed
+  ([`f1f4e21`](https://github.com/jupyter-naas/abi/commit/f1f4e213650d5c1b45bbc090163a16a993a177e4))
+
+
+## v1.15.0 (2026-02-18)
+
+### Bug Fixes
+
+- Working on multi env management
+  ([`482e67c`](https://github.com/jupyter-naas/abi/commit/482e67c01a4446bbac7fbf9d29948d91851707f4))
+
+### Features
+
+- Handle different .env files
+  ([`fe0f6ae`](https://github.com/jupyter-naas/abi/commit/fe0f6ae9865c5f2417f958f0db2e4d3d327703e8))
+
+
+## v1.14.1 (2026-02-17)
+
+### Bug Fixes
+
+- Working on fixing nexus workspace access
+  ([`d29b007`](https://github.com/jupyter-naas/abi/commit/d29b00775bbe631d978f5d1d0f687fa187282cd0))
+
+
+## v1.14.0 (2026-02-16)
+
+### Features
+
+- Trigger release
+  ([`cf5dfe9`](https://github.com/jupyter-naas/abi/commit/cf5dfe9691af94ff1d791de0bd0d6a53cb877a32))
+
+
+## v1.13.3 (2026-02-16)
+
+### Bug Fixes
+
+- Make check-core
+  ([`5fcd0cd`](https://github.com/jupyter-naas/abi/commit/5fcd0cd53fb3f02ab12e6f9e65613afc65a7ffbc))
+
+
+## v1.13.2 (2026-02-16)
+
+### Bug Fixes
+
+- **deps**: Move greenlet to nexus-api package
+  ([`0a381ae`](https://github.com/jupyter-naas/abi/commit/0a381ae7f92ad326afe18cae21aeceb544c1a597))
+
+
+## v1.13.1 (2026-02-13)
+
+### Bug Fixes
+
+- Critical local development setup issues
+  ([`b63d50e`](https://github.com/jupyter-naas/abi/commit/b63d50efa54e6c7e3a09bc3b3552084c1c9586b0))
+
+
+## v1.13.0 (2026-02-13)
+
+### Features
+
+- Add named graph management
+  ([`e4557e2`](https://github.com/jupyter-naas/abi/commit/e4557e2e5d55a43e062cc105368c254035329709))
+
+- Add tests for Jena and Oxigrpah. Also implemented a generci test to be reuse. Improved portal
+  ([`43ab798`](https://github.com/jupyter-naas/abi/commit/43ab798f1db273bb319cf952d5874d2729b743fa))
+
+- Added apache Jena TB2 Fuseki adapter to the triple store service
+  ([`620c466`](https://github.com/jupyter-naas/abi/commit/620c46608f2f74e845ed754e0332049da651aae4))
+
+
+## v1.12.0 (2026-02-12)
+
+### Features
+
+- Working on wiring nexus to abi
+  ([`db01f8b`](https://github.com/jupyter-naas/abi/commit/db01f8b624870b47d1be9a331546ad5313a4204a))
+
+
+## v1.11.0 (2026-02-10)
+
+### Bug Fixes
+
+- Dependency dagster
+  ([`69601cd`](https://github.com/jupyter-naas/abi/commit/69601cdc8c9760227591ebd04631b064d3d26c5b))
+
+- Error query
+  ([`c1fc341`](https://github.com/jupyter-naas/abi/commit/c1fc34160da6123ec81805be58e3f4bbf304b0ca))
+
+- Improve timeout qdrant
+  ([`391f803`](https://github.com/jupyter-naas/abi/commit/391f803baafdc62aa8800dfbfef6e997cd33e198))
+
+- Load ontologies not working
+  ([`10de7ab`](https://github.com/jupyter-naas/abi/commit/10de7abd351c36ed537f0d692485cd4d01dd1894))
+
+- Manage default values for properties
+  ([`f290794`](https://github.com/jupyter-naas/abi/commit/f290794454b6a3ee1176a63d995923f99137693c))
+
+- New instances must be owl NamedIndividual
+  ([`6e105d4`](https://github.com/jupyter-naas/abi/commit/6e105d49429c002838632de9cec86eba682336a3))
+
+- Print sparql query performed
+  ([`fd52035`](https://github.com/jupyter-naas/abi/commit/fd520355b27452d78ca1e626d6f33c7ecf2566d9))
+
+- Remove debug
+  ([`bfddde8`](https://github.com/jupyter-naas/abi/commit/bfddde813433a61076e5a5693e555be6ea3accee))
+
+- Remove logger debug (duplicates)
+  ([`3428387`](https://github.com/jupyter-naas/abi/commit/3428387e40252a3786ca3b6587fb331d45e1b1f5))
+
+- Rename classes
+  ([`c4932f7`](https://github.com/jupyter-naas/abi/commit/c4932f7033eaa2d2143ef0cd6bb7f37f850bffd4))
+
+- Replace union of list by list of union + manage duplicates
+  ([`2b11c8a`](https://github.com/jupyter-naas/abi/commit/2b11c8aa13ac55432047ba1e41518cf684134fd1))
+
+- Right hand side values are not supported in TypedDict
+  ([`774ca70`](https://github.com/jupyter-naas/abi/commit/774ca707db85c0cfffa5f6d80b7f291ba7198f99))
+
+- Use restrictions, label for class and property names
+  ([`ef6320e`](https://github.com/jupyter-naas/abi/commit/ef6320e47052f765504d3106e22e573f7ad298d4))
+
+### Features
+
+- Add method to save py file next to ttl
+  ([`41f9cf1`](https://github.com/jupyter-naas/abi/commit/41f9cf136c311eafc4ece0d05f537e12e761b7e2))
+
+- Add rdfs label, dcterms creator and created as default properties for class
+  ([`4fc863f`](https://github.com/jupyter-naas/abi/commit/4fc863f1cab52c2325e4830a957850cf4e560350))
+
+- Bind namespace to graph, add class label as prop, improve meta prop
+  ([`f65cfdf`](https://github.com/jupyter-naas/abi/commit/f65cfdf90b767361a26bb29b1ea15fbb4b6e42d5))
+
+- Create class from ttl in folder ontologies + test on linkedin
+  ([`0c34ce2`](https://github.com/jupyter-naas/abi/commit/0c34ce23e9ab1a69af932f1b8337f9de74ea30e9))
+
+### Refactoring
+
+- Print trace back and logger debug
+  ([`fd64d06`](https://github.com/jupyter-naas/abi/commit/fd64d06e8ad6b401343455021a0675a429f5aeb6))
+
+
+## v1.10.0 (2026-02-09)
+
+### Bug Fixes
+
+- Working on make check
+  ([`fa75fc6`](https://github.com/jupyter-naas/abi/commit/fa75fc6f21c0b0fe0158a861085a31844dbaf6d2))
+
+- Working on make check
+  ([`f90773c`](https://github.com/jupyter-naas/abi/commit/f90773c8ab6aac94712c9cb2aaf18a1e73aff89f))
+
+### Features
+
+- Working on deploy local cli
+  ([`c3ffe6d`](https://github.com/jupyter-naas/abi/commit/c3ffe6db633f2ce7789de5460d8849f80490b699))
+
+- Working on deploy local cli
+  ([`798e02a`](https://github.com/jupyter-naas/abi/commit/798e02ad2576f86344a54068fcd00e8f717c977d))
+
+
+## v1.9.1 (2026-02-09)
+
+### Bug Fixes
+
+- Rename keyvalue directory name
+  ([`5834c55`](https://github.com/jupyter-naas/abi/commit/5834c55179737ff3ff80384a474653379de2c643))
+
+
+## v1.9.0 (2026-02-09)
+
+### Bug Fixes
+
+- Add check
+  ([`a991e7c`](https://github.com/jupyter-naas/abi/commit/a991e7c28ec2a6a4f87fe1297c4b90efff80ed0e))
+
+- Add redis and rabbitmq to all optional group
+  ([`eac0fa6`](https://github.com/jupyter-naas/abi/commit/eac0fa61962863123d581017b6840dd14d232628))
+
+- Adding debug
+  ([`6ed8edf`](https://github.com/jupyter-naas/abi/commit/6ed8edf8e7dfea3906f1b2e0bb8deb355b1157f4))
+
+- Improve BusService configuration and add redis/rabbitmq to optional dependencies
+  ([`451d242`](https://github.com/jupyter-naas/abi/commit/451d242505e40f20792322b6862364df44194df1))
+
+- Remove undesired print
+  ([`3beedd8`](https://github.com/jupyter-naas/abi/commit/3beedd8eda8a81a08bf9fa6c12822c2936dea1eb))
+
+- Replace print with logger.debug in TripleStoreService and fix whitespace
+  ([`da1e6d0`](https://github.com/jupyter-naas/abi/commit/da1e6d01c2a7d0468e572a3b2bbf5995e485b385))
+
+- Update CLI and rename KVService
+  ([`00e62d6`](https://github.com/jupyter-naas/abi/commit/00e62d61c51e36f792cbdc2540e527596df67097))
+
+- Working on PR fixes
+  ([`2421685`](https://github.com/jupyter-naas/abi/commit/24216859bc2c122ffdea8ad7a4e8086c11701067))
+
+- Working on review
+  ([`a85b4a9`](https://github.com/jupyter-naas/abi/commit/a85b4a9a10910ac16d52ee8be1032e5c8ec311f1))
+
+### Features
+
+- Working on addint BusService, KeyValueService and reworking Dagster orchestration
+  ([`bc448a6`](https://github.com/jupyter-naas/abi/commit/bc448a6a22c9f1788bb204e0671e6efb0c1bb774))
+
+
+## v1.8.0 (2026-02-03)
+
+### Features
+
+- Working on Dagster orchestration
+  ([`b970d21`](https://github.com/jupyter-naas/abi/commit/b970d21e135ab32c344122be50f292c0b44ff039))
+
+
+## v1.7.2 (2026-02-02)
+
+### Bug Fixes
+
+- How ABI Agent loads templatable sparql query
+  ([`fa80a8c`](https://github.com/jupyter-naas/abi/commit/fa80a8c83f19e485b6d01abbb0573f58e214f517))
+
+
 ## v1.7.1 (2026-01-26)
 
 ### Bug Fixes

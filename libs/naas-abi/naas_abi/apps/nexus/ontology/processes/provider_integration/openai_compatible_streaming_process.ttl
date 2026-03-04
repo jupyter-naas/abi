@@ -1,0 +1,176 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# OpenAI Compatible Streaming Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:openai_compatible_streaming_process a owl:Ontology ;
+    dc:title "OpenAI Compatible Streaming Process"@en ;
+    dc:description "A process that streams AI responses from OpenAI-compatible APIs (OpenAI, XAI, Mistral, OpenRouter, Perplexity, Google) using Server-Sent Events with Authorization Bearer headers."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:OpenAICompatibleStreamingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "OpenAI Compatible Streaming Process"@en ;
+    skos:definition "A process that streams AI responses from OpenAI-compatible APIs (OpenAI, XAI, Mistral, OpenRouter, Perplexity, Google) using Server-Sent Events with Authorization Bearer headers."@en ;
+    rdfs:comment "Implements: apps/api/app/services/providers.py:202-302 stream_with_openai_compatible()" ;
+    skos:example "1. Build messages array with system prompt as first message\n2. Set Authorization: Bearer {api_key} header\n3. POST to {endpoint}/chat/completions with stream=true, model, messages, temperature\n4. Parse SSE stream line by line\n5. For each data: line, extract choices[0].delta.content\n6. Yield content chunks to caller\n7. Stop on data: [DONE] signal\n8. Handle HTTP errors with user-friendly messages"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:OpenAICompatibleProvider a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "OpenAICompatibleProvider"@en ;
+    skos:definition "External LLM API implementing OpenAI chat completions interface"@en .
+
+nexus:ChatBackendProxy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ChatBackendProxy"@en ;
+    skos:definition "FastAPI server proxying streaming requests to provider"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:ChatCompletionsEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "ChatCompletionsEndpoint"@en ;
+    skos:definition "Provider endpoint {base_url}/chat/completions"@en .
+
+nexus:StreamEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "StreamEndpoint"@en ;
+    skos:definition "NEXUS endpoint POST /api/chat/stream"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:FirstTokenLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "FirstTokenLatency"@en ;
+    skos:definition "200-2000ms from request to first token depending on provider and model"@en .
+
+nexus:StreamingWindow a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "StreamingWindow"@en ;
+    skos:definition "1-30 seconds total streaming duration"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:ProviderMessages a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ProviderMessages"@en ;
+    skos:definition "Array of {role, content} messages formatted for provider API"@en .
+
+nexus:SSEDataLine a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "SSEDataLine"@en ;
+    skos:definition "Server-Sent Event line: data: {choices:[{delta:{content:token}}]}"@en .
+
+nexus:DoneSignal a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "DoneSignal"@en ;
+    skos:definition "Terminal SSE line: data: [DONE]"@en .
+
+nexus:AuthorizationHeader a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "AuthorizationHeader"@en ;
+    skos:definition "HTTP header: Authorization: Bearer {api_key}"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:StreamingThroughput a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "StreamingThroughput"@en ;
+    skos:definition "10-100 tokens/second depending on model and load"@en .
+
+nexus:ResponseCompleteness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ResponseCompleteness"@en ;
+    skos:definition "Quality measuring whether full response was received before timeout"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:StreamProxyRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "StreamProxyRole"@en ;
+    skos:definition "Role realized when backend proxies SSE from provider to frontend"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:OpenRouterRefererDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "OpenRouterRefererDisposition"@en ;
+    skos:definition "Disposition to add HTTP-Referer header when provider is OpenRouter"@en .
+
+nexus:TimeoutDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "TimeoutDisposition"@en ;
+    skos:definition "Disposition to timeout after 120 seconds of no data"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:openai_compatible_streaming_process_has_openaicompatibleprovider a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:OpenAICompatibleStreamingProcess ;
+    rdfs:range nexus:OpenAICompatibleProvider ;
+    rdfs:label "OpenAICompatibleStreamingProcess has participant OpenAICompatibleProvider"@en .
+
+nexus:openai_compatible_streaming_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:OpenAICompatibleStreamingProcess ;
+    rdfs:range nexus:ChatCompletionsEndpoint ;
+    rdfs:label "OpenAICompatibleStreamingProcess occurs in ChatCompletionsEndpoint"@en .
+
+nexus:openai_compatible_streaming_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:OpenAICompatibleStreamingProcess ;
+    rdfs:range nexus:FirstTokenLatency ;
+    rdfs:label "OpenAICompatibleStreamingProcess occupies FirstTokenLatency"@en .
+
+nexus:openai_compatible_streaming_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:OpenAICompatibleStreamingProcess ;
+    rdfs:range nexus:StreamProxyRole ;
+    rdfs:label "OpenAICompatibleStreamingProcess realizes StreamProxyRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:streamTimeout a owl:DatatypeProperty ;
+    rdfs:label "streamTimeout"@en ;
+    rdfs:range xsd:integer .
+
+nexus:tokenCount a owl:DatatypeProperty ;
+    rdfs:label "tokenCount"@en ;
+    rdfs:range xsd:integer .

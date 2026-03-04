@@ -1,0 +1,170 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Reference Ontology Import Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:reference_ontology_import_process a owl:Ontology ;
+    dc:title "Reference Ontology Import Process"@en ;
+    dc:description "A process that parses external ontology files (TTL/OWL/RDF) using regex patterns to extract owl:Class and owl:ObjectProperty definitions with their labels, definitions, and examples."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:ReferenceOntologyImportProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Reference Ontology Import Process"@en ;
+    skos:definition "A process that parses external ontology files (TTL/OWL/RDF) using regex patterns to extract owl:Class and owl:ObjectProperty definitions with their labels, definitions, and examples."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/ontology.py:67-197 parse_ttl(), import_reference_ontology()" ;
+    skos:example "1. Determine format from filename extension (.ttl, .owl, .rdf)\n2. Parse content using regex for owl:Class patterns\n3. Extract rdfs:label, skos:definition, skos:example for each class\n4. Parse content using regex for owl:ObjectProperty patterns\n5. Extract labels and definitions for each property\n6. Extract ontology name from dc:title triple\n7. Return ReferenceOntology with classes and properties lists"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:OntologyParser a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "OntologyParser"@en ;
+    skos:definition "Regex-based TTL parser extracting classes and properties"@en .
+
+nexus:ExternalOntologyFile a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ExternalOntologyFile"@en ;
+    skos:definition "User-provided ontology file content (up to 5MB)"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:OntologyImportEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "OntologyImportEndpoint"@en ;
+    skos:definition "API endpoint POST /api/ontology/import"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:ParseDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "ParseDuration"@en ;
+    skos:definition "10-500ms depending on file size (max 5MB, ~5M characters)"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:ImportRequest a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ImportRequest"@en ;
+    skos:definition "Pydantic model: content (1-5000000 chars), filename (validated pattern)"@en .
+
+nexus:ReferenceOntology a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ReferenceOntology"@en ;
+    skos:definition "Parsed result: id, name, file_path, format, classes list, properties list"@en .
+
+nexus:ReferenceClass a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ReferenceClass"@en ;
+    skos:definition "Extracted class: iri, label, definition, examples, subClassOf list"@en .
+
+nexus:ReferenceProperty a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ReferenceProperty"@en ;
+    skos:definition "Extracted property: iri, label, definition, inverseOf, domain, range"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:ParserLimitation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ParserLimitation"@en ;
+    skos:definition "Quality: basic regex parsing, not full Turtle parser"@en .
+
+nexus:MaxFileSize a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "MaxFileSize"@en ;
+    skos:definition "Quality: 5MB maximum file size for import"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:OntologyImporterRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "OntologyImporterRole"@en ;
+    skos:definition "Role realized when system parses external ontology specifications"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:RegexParsingDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "RegexParsingDisposition"@en ;
+    skos:definition "Disposition to use regex patterns for TTL class/property extraction"@en .
+
+nexus:FormatDetectionDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "FormatDetectionDisposition"@en ;
+    skos:definition "Disposition to detect format from filename extension (.ttl, .owl, .rdf)"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:reference_ontology_import_process_has_ontologyparser a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:ReferenceOntologyImportProcess ;
+    rdfs:range nexus:OntologyParser ;
+    rdfs:label "ReferenceOntologyImportProcess has participant OntologyParser"@en .
+
+nexus:reference_ontology_import_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:ReferenceOntologyImportProcess ;
+    rdfs:range nexus:OntologyImportEndpoint ;
+    rdfs:label "ReferenceOntologyImportProcess occurs in OntologyImportEndpoint"@en .
+
+nexus:reference_ontology_import_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:ReferenceOntologyImportProcess ;
+    rdfs:range nexus:ParseDuration ;
+    rdfs:label "ReferenceOntologyImportProcess occupies ParseDuration"@en .
+
+nexus:reference_ontology_import_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:ReferenceOntologyImportProcess ;
+    rdfs:range nexus:OntologyImporterRole ;
+    rdfs:label "ReferenceOntologyImportProcess realizes OntologyImporterRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:classCount a owl:DatatypeProperty ;
+    rdfs:label "classCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:propertyCount a owl:DatatypeProperty ;
+    rdfs:label "propertyCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:fileFormat a owl:DatatypeProperty ;
+    rdfs:label "fileFormat"@en ;
+    rdfs:range xsd:string .

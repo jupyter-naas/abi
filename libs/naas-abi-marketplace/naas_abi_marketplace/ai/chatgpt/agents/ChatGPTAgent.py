@@ -194,4 +194,6 @@ def create_agent(
 
 
 class ChatGPTAgent(IntentAgent):
+    name: str = NAME
+    description: str = DESCRIPTION
     pass

@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Dict
 
 from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.services.bus.BusService import BusService
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -18,13 +20,19 @@ class ServicesProxy:
     __engine: IEngine
     __module_name: str
     __module_dependencies: ModuleDependencies
+    __unlocked: bool
 
     def __init__(
-        self, engine: IEngine, module_name: str, module_dependencies: ModuleDependencies
+        self,
+        engine: IEngine,
+        module_name: str,
+        module_dependencies: ModuleDependencies,
+        unlocked: bool = False,
     ):
         self.__engine = engine
         self.__module_name = module_name
         self.__module_dependencies = module_dependencies
+        self.__unlocked = unlocked
 
     # def __accessible_services(self) -> List[Any]:
     #     engine_services = {
@@ -43,6 +51,9 @@ class ServicesProxy:
     #     ]
 
     def __ensure_access(self, service_type: type) -> None:
+        if self.__unlocked:
+            return
+
         if service_type not in self.__module_dependencies.services:
             raise ValueError(
                 f"Module {self.__module_name} does not have access to {service_type}"
@@ -72,11 +83,24 @@ class ServicesProxy:
 
         return self.__engine.services.secret
 
+    @property
+    def bus(self) -> BusService:
+        self.__ensure_access(BusService)
+
+        return self.__engine.services.bus
+
+    @property
+    def kv(self) -> KeyValueService:
+        self.__ensure_access(KeyValueService)
+
+        return self.__engine.services.kv
+
 
 class EngineProxy:
     __engine: IEngine
     __module_name: str
     __module_dependencies: ModuleDependencies
+    __unlocked: bool
 
     __services_proxy: ServicesProxy
 
@@ -85,14 +109,28 @@ class EngineProxy:
         engine: IEngine,
         module_name: str,
         module_dependencies: ModuleDependencies,
+        unlocked: bool = False,
     ):
         self.__engine = engine
         self.__module_name = module_name
         self.__module_dependencies = module_dependencies
-        self.__services_proxy = ServicesProxy(engine, module_name, module_dependencies)
+        self.__unlocked = unlocked
+        self.__services_proxy = ServicesProxy(
+            engine,
+            module_name,
+            module_dependencies,
+            unlocked=unlocked,
+        )
 
     @property
     def modules(self) -> Dict[str, BaseModule]:
+        if self.__unlocked:
+            return {
+                module_name: module
+                for module_name, module in self.__engine.modules.items()
+                if module_name != self.__module_name
+            }
+
         _modules = {}
 
         for module in self.__module_dependencies.modules:

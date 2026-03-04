@@ -1,0 +1,270 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* 
+   * naas.ai Brand Guidelines
+   * https://about.naas.ai/brand-guidelines
+   * 
+   * Background: #19191C
+   * Foreground: #FAFAFA
+   * Primary: #34D399 (emerald)
+   * Secondary: #1FA574
+   */
+
+  :root {
+    /* Light mode */
+    --background: 0 0% 99%;
+    --foreground: 240 6% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 6% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 6% 10%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 93%;
+    --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 160 84% 39%;
+    --radius: 0.5rem;
+
+    /* Glass effects */
+    --glass-bg: rgba(255, 255, 255, 0.8);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, #34D399 0%, #1FA574 100%);
+    --gradient-secondary: linear-gradient(135deg, #1FA574 0%, #19191C 100%);
+    --gradient-accent: linear-gradient(135deg, #34D399 0%, #10B981 50%, #1FA574 100%);
+  }
+
+  .dark {
+    /* Dark mode - Brand default */
+    --background: 240 6% 10%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 12%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 6% 12%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 160 84% 45%;
+    --primary-foreground: 240 6% 10%;
+    --secondary: 240 5% 18%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 5% 16%;
+    --muted-foreground: 240 4% 60%;
+    --accent: 160 84% 45%;
+    --accent-foreground: 240 6% 10%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 18%;
+    --input: 240 5% 18%;
+    --ring: 160 84% 45%;
+
+    /* Glass effects - dark mode */
+    --glass-bg: rgba(25, 25, 28, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  /* Glassmorphism effects */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    /* Default to 0px unless org overrides it */
+    border-radius: var(--org-border-radius, 0px);
+  }
+
+  .glass-nav {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--glass-border);
+    border-radius: var(--org-border-radius, 0px);
+  }
+
+  .glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: var(--org-border-radius, 0px);
+  }
+
+  /* Text gradient */
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: 0 0 20px rgba(52, 211, 153, 0.3),
+                0 0 40px rgba(52, 211, 153, 0.1);
+  }
+
+  .glow-primary-sm {
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.2);
+  }
+
+  /* Button variants */
+  .btn-hero {
+    @apply relative overflow-hidden;
+    background: var(--gradient-primary);
+  }
+
+  .btn-hero::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity;
+    background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 100%);
+  }
+
+  .btn-hero:hover::before {
+    @apply opacity-100;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/20 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/30;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus visible styles */
+:focus-visible {
+  @apply outline-none ring-2 ring-ring/30 ring-offset-0;
+}
+
+/* Remove focus ring from inputs inside glass cards (the card itself shows focus) */
+.glass-card :focus-visible,
+.glass-card:focus-within {
+  @apply ring-0;
+}
+
+/* Subtle focus for glass cards */
+.glass-card:focus-within {
+  border-color: hsl(var(--border));
+}
+
+/* ============================================
+ * WORKSPACE THEME DYNAMIC COLORS
+ * These use CSS variables set by workspace-layout
+ * ============================================ */
+
+/* Text with workspace accent color */
+.text-workspace-accent {
+  color: var(--workspace-accent, #22c55e);
+}
+
+/* Background with workspace accent color (with opacity variants) */
+.bg-workspace-accent {
+  background-color: var(--workspace-accent, #22c55e);
+}
+
+.bg-workspace-accent-10 {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 10%, transparent);
+}
+
+.bg-workspace-accent-15 {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 15%, transparent);
+}
+
+.bg-workspace-accent-5 {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 5%, transparent);
+}
+
+/* Border with workspace accent color */
+.border-workspace-accent {
+  border-color: var(--workspace-accent, #22c55e);
+}
+
+/* Hover variants */
+.hover\:bg-workspace-accent-10:hover {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 10%, transparent);
+}
+
+.hover\:text-workspace-accent:hover {
+  color: var(--workspace-accent, #22c55e);
+}
+
+.hover\:border-workspace-accent:hover {
+  border-color: var(--workspace-accent, #22c55e);
+}
+
+/* ============================================
+ * ORGANIZATION BRANDING - BORDER RADIUS
+ * Applies globally when data-org-branded="true" is set
+ * ============================================ */
+
+/* Override ALL rounded classes and elements with org border radius */
+[data-org-branded="true"] *[class*="rounded"],
+[data-org-branded="true"] button,
+[data-org-branded="true"] input:not([type="checkbox"]):not([type="radio"]),
+[data-org-branded="true"] textarea,
+[data-org-branded="true"] select,
+[data-org-branded="true"] .border,
+[data-org-branded="true"] .glass,
+[data-org-branded="true"] .glass-card,
+[data-org-branded="true"] .glass-nav {
+  /* Default to 0px unless org overrides */
+  border-radius: var(--org-border-radius, 0px) !important;
+}
+
+/* Preserve circular elements */
+[data-org-branded="true"] *[class*="rounded-full"],
+[data-org-branded="true"] .rounded-full,
+[data-org-branded="true"] img.rounded-full,
+[data-org-branded="true"] div.rounded-full,
+[data-org-branded="true"] button.rounded-full {
+  border-radius: 9999px !important;
+}
+
+/* Preserve very small rounded elements (like checkboxes, badges) */
+[data-org-branded="true"] .rounded-sm,
+[data-org-branded="true"] input[type="checkbox"],
+[data-org-branded="true"] input[type="radio"] {
+  /* Keep their default border-radius */
+}

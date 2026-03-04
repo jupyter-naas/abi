@@ -1,0 +1,156 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Authentication State Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:auth_state_process a owl:Ontology ;
+    dc:title "Authentication State Process"@en ;
+    dc:description "A process managing user authentication state in the frontend Zustand store, handling login, register, logout, token persistence, and automatic 401 detection with redirect to /login."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:AuthenticationStateProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Authentication State Process"@en ;
+    skos:definition "A process managing user authentication state in the frontend Zustand store, handling login, register, logout, token persistence, and automatic 401 detection with redirect to /login."@en ;
+    rdfs:comment "Implements: apps/web/src/stores/auth.ts useAuthStore, authFetch()" ;
+    skos:example "1. Login: POST /api/auth/login, store user+token in state and localStorage\n2. Register: POST /api/auth/register, same flow as login\n3. Logout: clear auth state, remove 6 localStorage keys, redirect\n4. authFetch: wrapper that adds Authorization header and detects 401\n5. checkAuth: validate token on app load"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ZustandAuthStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ZustandAuthStore"@en ;
+    skos:definition "Zustand store managing auth state in browser"@en .
+
+nexus:LocalStorage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "LocalStorage"@en ;
+    skos:definition "Browser localStorage persisting auth tokens"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:AuthStorageKey a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "AuthStorageKey"@en ;
+    skos:definition "localStorage key: nexus-auth"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:LoginDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "LoginDuration"@en ;
+    skos:definition "200-1000ms for API call + state update + localStorage write"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:AuthState a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "AuthState"@en ;
+    skos:definition "State: user (User|null), token (string|null), isAuthenticated (bool), isLoading, error"@en .
+
+nexus:AuthActions a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "AuthActions"@en ;
+    skos:definition "login(email, password), register(email, password, name), logout(), checkAuth()"@en .
+
+nexus:AuthFetch a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "AuthFetch"@en ;
+    skos:definition "Global fetch wrapper that auto-detects 401 and redirects to /login"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:TokenPersistence a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "TokenPersistence"@en ;
+    skos:definition "Quality: token persisted in localStorage, survives page refresh"@en .
+
+nexus:AutoLogoutOn401 a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "AutoLogoutOn401"@en ;
+    skos:definition "Quality: any 401 response triggers automatic logout + redirect"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:SessionManagerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "SessionManagerRole"@en ;
+    skos:definition "Role realized when frontend manages user session lifecycle"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:Auto401DetectionDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "Auto401DetectionDisposition"@en ;
+    skos:definition "Disposition to intercept 401 responses and force re-authentication"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:auth_state_process_has_zustandauthstore a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:AuthenticationStateProcess ;
+    rdfs:range nexus:ZustandAuthStore ;
+    rdfs:label "AuthenticationStateProcess has participant ZustandAuthStore"@en .
+
+nexus:auth_state_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:AuthenticationStateProcess ;
+    rdfs:range nexus:AuthStorageKey ;
+    rdfs:label "AuthenticationStateProcess occurs in AuthStorageKey"@en .
+
+nexus:auth_state_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:AuthenticationStateProcess ;
+    rdfs:range nexus:LoginDuration ;
+    rdfs:label "AuthenticationStateProcess occupies LoginDuration"@en .
+
+nexus:auth_state_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:AuthenticationStateProcess ;
+    rdfs:range nexus:SessionManagerRole ;
+    rdfs:label "AuthenticationStateProcess realizes SessionManagerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:isAuthenticated a owl:DatatypeProperty ;
+    rdfs:label "isAuthenticated"@en ;
+    rdfs:range xsd:boolean .
+
+nexus:tokenPresent a owl:DatatypeProperty ;
+    rdfs:label "tokenPresent"@en ;
+    rdfs:range xsd:boolean .

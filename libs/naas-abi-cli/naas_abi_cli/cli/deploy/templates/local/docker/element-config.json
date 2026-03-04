@@ -1,0 +1,13 @@
+{
+  "default_server_config": {
+    "m.homeserver": {
+      "base_url": "http://localhost:8008",
+      "server_name": "localhost"
+    }
+  },
+  "disable_custom_urls": true,
+  "disable_guests": true,
+  "enable_registration": true,
+  "enable_registration_without_verification": true,
+  "brand": "ABI Element"
+}

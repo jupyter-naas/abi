@@ -1,0 +1,44 @@
+# NEXUS Web - Cloudflare Workers Configuration
+# Deploy with: npx wrangler deploy
+
+name = "nexus-web"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Use the @cloudflare/next-on-pages adapter
+# Build command in package.json: "build:cf": "npx @cloudflare/next-on-pages"
+pages_build_output_dir = ".vercel/output/static"
+
+# Production environment
+[env.production]
+name = "nexus-web"
+routes = [
+  { pattern = "nexus.naas.ai", custom_domain = true }
+]
+
+# Staging environment  
+[env.staging]
+name = "nexus-web-staging"
+routes = [
+  { pattern = "staging.nexus.naas.ai", custom_domain = true }
+]
+
+# Environment variables
+[vars]
+NEXT_PUBLIC_NEXUS_ENV = "cloudflare"
+NEXT_PUBLIC_API_URL = "https://api.nexus.naas.ai"
+NEXT_PUBLIC_FRONTEND_URL = "https://nexus.naas.ai"
+
+[env.staging.vars]
+NEXT_PUBLIC_NEXUS_ENV = "staging"
+NEXT_PUBLIC_API_URL = "https://api.staging.nexus.naas.ai"
+NEXT_PUBLIC_FRONTEND_URL = "https://staging.nexus.naas.ai"
+
+# KV bindings (for edge caching if needed)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = ""
+
+# Observability
+[observability]
+enabled = true

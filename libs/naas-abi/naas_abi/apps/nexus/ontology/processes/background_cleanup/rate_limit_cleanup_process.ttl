@@ -1,0 +1,151 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Rate Limit Cleanup Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:rate_limit_cleanup_process a owl:Ontology ;
+    dc:title "Rate Limit Cleanup Process"@en ;
+    dc:description "A process that removes rate limit events older than 24 hours from the rate_limit_events table to prevent unbounded growth, intended as a daily background task."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:RateLimitCleanupProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Rate Limit Cleanup Process"@en ;
+    skos:definition "A process that removes rate limit events older than 24 hours from the rate_limit_events table to prevent unbounded growth, intended as a daily background task."@en ;
+    rdfs:comment "Implements: apps/api/app/services/rate_limit.py:66-75 cleanup_old_rate_limit_events()" ;
+    skos:example "1. Calculate cutoff: NOW() - 24 hours\n2. DELETE FROM rate_limit_events WHERE created_at < cutoff\n3. Log number of deleted events"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:CleanupScheduler a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "CleanupScheduler"@en ;
+    skos:definition "Background task executor (not yet scheduled)"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:RateLimitEventsTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "RateLimitEventsTable"@en ;
+    skos:definition "PostgreSQL rate_limit_events table"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:CleanupDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "CleanupDuration"@en ;
+    skos:definition "50-200ms for single DELETE query"@en .
+
+nexus:RetentionWindow a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "RetentionWindow"@en ;
+    skos:definition "24 hours of rate limit history retained"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:CutoffTimestamp a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "CutoffTimestamp"@en ;
+    skos:definition "datetime: NOW() - 24 hours"@en .
+
+nexus:DeletedEvents a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "DeletedEvents"@en ;
+    skos:definition "Rows WHERE created_at < cutoff"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:RetentionPeriod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "RetentionPeriod"@en ;
+    skos:definition "Quality: 24-hour retention window for rate limit forensics"@en .
+
+nexus:NotYetScheduled a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "NotYetScheduled"@en ;
+    skos:definition "Quality: requires manual invocation or cron job setup"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:EventCleanerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "EventCleanerRole"@en ;
+    skos:definition "Role realized when system purges old rate limit records"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:TimeBasedPurgeDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "TimeBasedPurgeDisposition"@en ;
+    skos:definition "Disposition to delete events older than 24-hour threshold"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:rate_limit_cleanup_process_has_cleanupscheduler a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:RateLimitCleanupProcess ;
+    rdfs:range nexus:CleanupScheduler ;
+    rdfs:label "RateLimitCleanupProcess has participant CleanupScheduler"@en .
+
+nexus:rate_limit_cleanup_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:RateLimitCleanupProcess ;
+    rdfs:range nexus:RateLimitEventsTable ;
+    rdfs:label "RateLimitCleanupProcess occurs in RateLimitEventsTable"@en .
+
+nexus:rate_limit_cleanup_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:RateLimitCleanupProcess ;
+    rdfs:range nexus:CleanupDuration ;
+    rdfs:label "RateLimitCleanupProcess occupies CleanupDuration"@en .
+
+nexus:rate_limit_cleanup_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:RateLimitCleanupProcess ;
+    rdfs:range nexus:EventCleanerRole ;
+    rdfs:label "RateLimitCleanupProcess realizes EventCleanerRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:deletedEventCount a owl:DatatypeProperty ;
+    rdfs:label "deletedEventCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:retentionHours a owl:DatatypeProperty ;
+    rdfs:label "retentionHours"@en ;
+    rdfs:range xsd:integer .

@@ -13,3 +13,4 @@ def pydantic_model_validator(model: Any, payload: Any, message: str):
         model.model_validate(payload)
     except ValidationError as e:
         logger.error(f"{message}: {e}")
+        raise

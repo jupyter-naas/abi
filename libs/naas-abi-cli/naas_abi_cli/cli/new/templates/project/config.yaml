@@ -1,26 +1,14 @@
-deploy:
-  workspace_id: "{{ naas_workspace_id }}"
-  space_name: "{{ project_name_snake }}-abi-api"
 {% raw %}
-  naas_api_key: "{{ secret.NAAS_API_KEY }}"
-  env:
-    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
-    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
-    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
-
-auto_publish:
-  enabled: true # Enable automatic publishing of agents to workspace
-  exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
-  default_agent: "Abi" # Which agent to set as default in workspace
-
 api:
   title: "ABI API"
-  description: "API for ABI, your Artifical Business Intelligence"
+  description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
   cors_origins:
-    - "http://localhost:9879"
-
+    - "http://{{ secret.PUBLIC_WEB_HOST }}"
+    - "https://{{ secret.PUBLIC_WEB_HOST }}"
+    - "http://{{ secret.PUBLIC_API_HOST }}"
+    - "https://{{ secret.PUBLIC_API_HOST }}"
 
 global_config:
   ai_mode: "cloud"
@@ -28,6 +16,12 @@ global_config:
 modules:
   - module: naas_abi
     enabled: true
+    config:
+      nexus_config:
+        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
+        redis_url: "redis://localhost:6379/0"
+        cors_origins_str: "http://{{ secret.PUBLIC_WEB_HOST }},https://{{ secret.PUBLIC_WEB_HOST }},http://{{ secret.PUBLIC_API_HOST }},https://{{ secret.PUBLIC_API_HOST }}"
+
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
@@ -36,8 +30,7 @@ modules:
   - module: {{ project_name_snake }}
     enabled: true
 
-# Comment default_agent to talk to naas_abi AbiAgent by default
-default_agent: "{{ project_name_snake }} {{project_name_pascal}}Agent"
+default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
@@ -47,16 +40,32 @@ services:
         config: {}
   object_storage:
     object_storage_adapter:
-      adapter: "fs"
+      adapter: "s3"
       config:
-        base_path: "storage/datastore"
+        bucket_name: "abi"
+        base_prefix: "abi/datastore"
+        access_key_id: "{{ secret.MINIO_ROOT_USER }}"
+        secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
+        endpoint_url: "http://localhost:9000"
   triple_store:
     triple_store_adapter:
-      adapter: "fs"
+      adapter: "apache_jena_tdb2"
       config:
-        store_path: "storage/triplestore"
+        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@localhost:3030/ds"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
-      config: {}
+      config:
+        host: "localhost"
+        port: 6333
+  bus:
+    bus_adapter:
+      adapter: "rabbitmq"
+      config:
+        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@localhost:5672"
+  kv:
+    kv_adapter:
+      adapter: "redis"
+      config:
+        redis_url: "redis://localhost:6379"
 {% endraw %}

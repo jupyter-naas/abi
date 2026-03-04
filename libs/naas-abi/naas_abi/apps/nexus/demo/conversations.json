@@ -1,0 +1,59 @@
+[
+  {
+    "id": "conv-introspection",
+    "workspace_id": "workspace-platform",
+    "user_id": "user-alice",
+    "title": "How does NEXUS work?",
+    "agent": "agent-abi",
+    "messages": [
+      {
+        "id": "msg-1",
+        "role": "user",
+        "content": "Tell me about yourself and how NEXUS works"
+      },
+      {
+        "id": "msg-2",
+        "role": "assistant",
+        "content": "I'm **ABI**, the supervisor agent for the NEXUS platform. I have a unique capability - I can introspect the knowledge graph to understand the entire system.\n\n## Platform Architecture\n\nNEXUS is built as a coordination platform with these layers:\n\n- **Frontend** (Next.js) - Chat, Graph, Ontology, Files\n- **API** (FastAPI) - REST endpoints\n- **Database** (PostgreSQL) - Production persistence\n\n## My Agent Team\n\n- **AIA**: General assistant for Q&A and coding\n- **Content Assistant**: Writing and editing\n- **Growth Engine**: Marketing and analytics\n- **Finance Analyst**: Financial planning\n- **Ontology Expert**: Knowledge modeling\n\nWhat would you like to explore?"
+      }
+    ]
+  },
+  {
+    "id": "conv-aviation",
+    "workspace_id": "workspace-research",
+    "user_id": "user-diana",
+    "title": "BFO Aviation Demo",
+    "agent": "agent-ontology",
+    "messages": [
+      {
+        "id": "msg-3",
+        "role": "user",
+        "content": "Explain the aviation demo and how it shows BFO in action"
+      },
+      {
+        "id": "msg-4",
+        "role": "assistant",
+        "content": "The **Aviation Demo** demonstrates how real-world scenarios can be modeled using the **BFO 7 Buckets** framework.\n\n## BFO Mapping\n\n| Bucket | Category | Example |\n|--------|----------|----------|\n| WHO | Material Entity | Boeing 737-800, Captain Sarah Chen |\n| WHAT | Process | Flight UA123, Takeoff, Landing |\n| WHEN | Temporal Region | 08:00 PST departure |\n| WHERE | Site | SFO, JFK |\n| HOW IT IS | Quality | FL350 cruise altitude |\n| WHY | Role | Pilot in command |\n| HOW WE KNOW | GDC | Flight Plan UA123 |\n\nNavigate to the **Graph** tab to see this visually!"
+      }
+    ]
+  },
+  {
+    "id": "conv-capabilities",
+    "workspace_id": "workspace-platform",
+    "user_id": "user-bob",
+    "title": "What can you do?",
+    "agent": "agent-abi",
+    "messages": [
+      {
+        "id": "msg-5",
+        "role": "user",
+        "content": "What agents and capabilities are available?"
+      },
+      {
+        "id": "msg-6",
+        "role": "assistant",
+        "content": "## Agents\n\n| Agent | Role | Capabilities |\n|-------|------|-------------|\n| **ABI** (me) | Supervisor | Introspection, Orchestration, Graph Queries |\n| **AIA** | Assistant | Q&A, Writing, Coding, Analysis |\n| **Content** | Specialist | Writing, Editing, Storytelling |\n| **Growth** | Specialist | Marketing, Analytics, Funnels |\n| **Finance** | Specialist | Modeling, Forecasting, Reporting |\n| **Ontology** | Specialist | BFO, Knowledge Graphs, Semantic Modeling |\n\n## How to Use\n\n1. **Chat with me (ABI)** for platform questions\n2. **Use specialist agents** for domain-specific tasks\n3. **Explore the Graph** to see entities and relationships\n4. **Edit the Ontology** to define new entity types"
+      }
+    ]
+  }
+]

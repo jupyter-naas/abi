@@ -1,0 +1,170 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix nexus: <http://nexus.platform/ontology/> .
+
+
+# ======================================================================
+# Provider Discovery Process
+# BFO 7 Buckets Compliant (ISO 21383-2)
+# ======================================================================
+
+nexus:provider_discovery_process a owl:Ontology ;
+    dc:title "Provider Discovery Process"@en ;
+    dc:description "A process that discovers available AI providers by checking workspace secrets for API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) and querying the in-memory MODEL_REGISTRY for each provider's model catalog."@en ;
+    dc:created "2026-02-09"^^xsd:date ;
+    owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ,
+                <http://nexus.platform/ontology/_shared/common_entities> .
+
+
+# ======================================================================
+# WHAT: Process (BFO_0000015)
+# ======================================================================
+
+nexus:ProviderDiscoveryProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Provider Discovery Process"@en ;
+    skos:definition "A process that discovers available AI providers by checking workspace secrets for API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) and querying the in-memory MODEL_REGISTRY for each provider's model catalog."@en ;
+    rdfs:comment "Implements: apps/api/app/api/endpoints/providers.py:66-212 list_available_providers()" ;
+    skos:example "1. Query user workspace memberships from workspace_members table\n2. Query secrets table for API key patterns (OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, etc.)\n3. Check environment variables as fallback for each provider\n4. For each provider with key: query MODEL_REGISTRY for models with capabilities\n5. Always include Ollama (local, no API key required)\n6. Return list of Provider objects with has_api_key and models"@en .
+
+# ======================================================================
+# WHO: Material Entities (BFO_0000040)
+# ======================================================================
+
+nexus:ProviderDiscoveryServer a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "ProviderDiscoveryServer"@en ;
+    skos:definition "FastAPI server executing provider enumeration"@en .
+
+nexus:UserRequester a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "UserRequester"@en ;
+    skos:definition "Authenticated user requesting available providers"@en .
+
+# ======================================================================
+# WHERE: Sites (BFO_0000029)
+# ======================================================================
+
+nexus:ProvidersEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "ProvidersEndpoint"@en ;
+    skos:definition "API endpoint GET /api/providers/available"@en .
+
+nexus:SecretsTable a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "SecretsTable"@en ;
+    skos:definition "PostgreSQL secrets table storing encrypted API keys"@en .
+
+nexus:ModelRegistry a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "ModelRegistry"@en ;
+    skos:definition "In-memory MODEL_REGISTRY dict with 60+ model definitions"@en .
+
+# ======================================================================
+# WHEN: Temporal Regions (BFO_0000008)
+# ======================================================================
+
+nexus:DiscoveryDuration a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "DiscoveryDuration"@en ;
+    skos:definition "Temporal region of 50-200ms for secret queries and registry lookup"@en .
+
+# ======================================================================
+# HOW WE KNOW: Information Entities (BFO_0000031)
+# ======================================================================
+
+nexus:APIKeySecret a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "APIKeySecret"@en ;
+    skos:definition "Encrypted API key stored in secrets table (Fernet AES-128-CBC)"@en .
+
+nexus:ProviderCatalog a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ProviderCatalog"@en ;
+    skos:definition "List of Provider objects with has_api_key flag and model list"@en .
+
+nexus:ModelInfo a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "ModelInfo"@en ;
+    skos:definition "Model metadata: id, name, context_window, supports_streaming, supports_vision"@en .
+
+# ======================================================================
+# HOW IT IS: Qualities (BFO_0000019)
+# ======================================================================
+
+nexus:ProviderAvailability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ProviderAvailability"@en ;
+    skos:definition "Boolean quality indicating if a provider has a configured API key"@en .
+
+nexus:ModelCount a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "ModelCount"@en ;
+    skos:definition "Integer quality counting available models per provider"@en .
+
+# ======================================================================
+# WHY: Roles (BFO_0000023)
+# ======================================================================
+
+nexus:ProviderEnumeratorRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "ProviderEnumeratorRole"@en ;
+    skos:definition "Role realized when system scans secrets for provider API keys"@en .
+
+# ======================================================================
+# WHY: Dispositions (BFO_0000016)
+# ======================================================================
+
+nexus:AlwaysIncludeOllamaDisposition a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    rdfs:label "AlwaysIncludeOllamaDisposition"@en ;
+    skos:definition "Disposition to always include Ollama provider regardless of API key presence"@en .
+
+# ======================================================================
+# Process Relationships (BFO Object Properties)
+# ======================================================================
+
+nexus:provider_discovery_process_has_providerdiscoveryserver a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain nexus:ProviderDiscoveryProcess ;
+    rdfs:range nexus:ProviderDiscoveryServer ;
+    rdfs:label "ProviderDiscoveryProcess has participant ProviderDiscoveryServer"@en .
+
+nexus:provider_discovery_process_occurs_in a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    rdfs:domain nexus:ProviderDiscoveryProcess ;
+    rdfs:range nexus:ProvidersEndpoint ;
+    rdfs:label "ProviderDiscoveryProcess occurs in ProvidersEndpoint"@en .
+
+nexus:provider_discovery_process_occupies a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    rdfs:domain nexus:ProviderDiscoveryProcess ;
+    rdfs:range nexus:DiscoveryDuration ;
+    rdfs:label "ProviderDiscoveryProcess occupies DiscoveryDuration"@en .
+
+nexus:provider_discovery_process_realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    rdfs:domain nexus:ProviderDiscoveryProcess ;
+    rdfs:range nexus:ProviderEnumeratorRole ;
+    rdfs:label "ProviderDiscoveryProcess realizes ProviderEnumeratorRole"@en .
+
+# ======================================================================
+# Data Properties
+# ======================================================================
+
+nexus:hasAPIKey a owl:DatatypeProperty ;
+    rdfs:label "hasAPIKey"@en ;
+    rdfs:range xsd:boolean .
+
+nexus:modelCount a owl:DatatypeProperty ;
+    rdfs:label "modelCount"@en ;
+    rdfs:range xsd:integer .
+
+nexus:providerName a owl:DatatypeProperty ;
+    rdfs:label "providerName"@en ;
+    rdfs:range xsd:string .

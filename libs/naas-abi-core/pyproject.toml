@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-core"
-version = "1.7.1"
+version = "1.18.2"
 description = "Abi framework allowing you to build your AI system."
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 requires-python = ">=3.10,<4"
@@ -34,6 +34,10 @@ dependencies = [
     "docker>=7.1.0",
     "types-pyyaml>=6.0.12.20250915",
     "types-paramiko>=4.0.0.20250822",
+    "dagster>=1.11.12",
+    "dagster-webserver>=1.11.12",
+    "dagster-postgres>=0.27.12",
+    "dagster-aws>=0.27.12",
 ]
 license = { text = "MIT License" }
 
@@ -59,9 +63,23 @@ all = [
     "naas-abi-core[aws]",
     "naas-abi-core[qdrant]",
     "naas-abi-core[openrouter]",
+    "naas-abi-core[dagster]",
+    "naas-abi-core[redis]",
+    "naas-abi-core[rabbitmq]",
 ]
 openrouter = [
     "langchain-openai>=0.3.35",
+]
+dagster = [
+    "dagster>=1.12.13",
+    "dagster-postgres>=0.28.14",
+    "dagster-webserver>=1.12.14",
+]
+redis = [
+    "redis>=7.1.0",
+]
+rabbitmq = [
+    "pika",
 ]
 [project.scripts]
 onto2py = "naas_abi_core.utils.onto2py.__main__:main"
@@ -78,6 +96,7 @@ dev = [
     "mypy>=1.19.0",
     "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",
+    "testcontainers>=4.13.2",
 ]
 
 [tool.semantic_release]
@@ -114,3 +133,8 @@ prerelease_token = "dev"
 
 [tool.hatch.build.targets.sdist.force-include]
 "assets" = "assets"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (may require external services)",
+]

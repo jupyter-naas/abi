@@ -1,0 +1,20 @@
+[
+  {"workspace_id": "workspace-platform",     "user_id": "user-alice",   "role": "owner"},
+  {"workspace_id": "workspace-platform",     "user_id": "user-bob",     "role": "admin"},
+  {"workspace_id": "workspace-platform",     "user_id": "user-jeremy",  "role": "admin"},
+
+  {"workspace_id": "workspace-techcorp",     "user_id": "user-alice",   "role": "owner"},
+  {"workspace_id": "workspace-techcorp",     "user_id": "user-bob",     "role": "admin"},
+  {"workspace_id": "workspace-techcorp",     "user_id": "user-jeremy",  "role": "admin"},
+
+  {"workspace_id": "workspace-research",     "user_id": "user-diana",   "role": "owner"},
+  {"workspace_id": "workspace-research",     "user_id": "user-alice",   "role": "member"},
+  {"workspace_id": "workspace-research",     "user_id": "user-bob",     "role": "member"},
+  {"workspace_id": "workspace-research",     "user_id": "user-jeremy",  "role": "member"},
+
+  {"workspace_id": "workspace-innovate",     "user_id": "user-diana",   "role": "owner"},
+  {"workspace_id": "workspace-innovate",     "user_id": "user-alice",   "role": "member"},
+  {"workspace_id": "workspace-innovate",     "user_id": "user-jeremy",  "role": "member"},
+
+  {"workspace_id": "workspace-consulting",   "user_id": "user-eve",     "role": "owner"}
+]

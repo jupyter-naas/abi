@@ -1,0 +1,140 @@
+deploy:
+  workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
+  space_name: "abi-api"
+  naas_api_key: "{{ secret.NAAS_API_KEY }}"
+  env:
+    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
+    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
+    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
+
+api:
+  title: "ABI API"
+  description: "API for ABI"
+  logo_path: "assets/logo.png"
+  favicon_path: "assets/favicon.ico"
+  cors_origins:
+    - "http://localhost:9879"
+    - "http://localhost:3042"
+
+global_config:
+  ai_mode: "cloud"
+
+
+modules:
+  - module: naas_abi
+    enabled: true
+    config:
+      nexus_config:
+        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
+        redis_url: "redis://redis:6379/0"
+        cors_origins_str: "http://localhost:3042,http://127.0.0.1:3042"
+        tenant:
+          tab_title: "ABI AI Platform | Naas.ai"
+          favicon_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
+          logo_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
+          primary_color: "#34D399"
+          accent_color: "#34D399"
+          background_color: "#FFFFFF"
+          login_card_color: "#FFFFFF"
+          login_input_color: "#F4F4F4"
+          login_border_radius: "0"
+          show_terms_footer: false
+          show_powered_by: false
+          login_footer_text: "© ABI AI Platform (Beta)| Naas.ai"
+        users:
+          - email: "florent@naas.ai"
+            name: "Florent Ravenel"
+            store_credentials_in_secrets: true
+          - email: "jeremy@naas.ai"
+            name: "Jeremy Ravenel"
+            store_credentials_in_secrets: true
+          - email: "maxime@naas.ai"
+            name: "Maxime Ravenel"
+            store_credentials_in_secrets: true
+        organizations:
+          - name: "Naas.ai"
+            slug: "naas-ai"
+            owner_email: "florent@naas.ai"
+            logo_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
+            logo_rectangle_url: "https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-core/assets/logo.png"
+            primary_color: "#34D399"
+            accent_color: "#34D399"
+            login_footer_text: "© Naas.ai"
+            show_powered_by: false
+            members:
+              - email: "florent@naas.ai"
+                role: "owner"
+              - email: "jeremy@naas.ai"
+                role: "owner"
+              - email: "maxime@naas.ai"
+                role: "owner"
+            workspaces:
+              - name: "Naas.ai"
+                slug: "naas-ai"
+                owner_email: "florent@naas.ai"
+                primary_color: "#34D399"
+                accent_color: "#34D399"
+                members:
+                  - email: "florent@naas.ai"
+                    role: "owner"
+                  - email: "jeremy@naas.ai"
+                    role: "owner"
+                  - email: "maxime@naas.ai"
+                    role: "owner"
+
+  - module: naas_abi_marketplace.ai.chatgpt
+    enabled: true
+    config:
+      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
+  - module: naas_abi_marketplace.applications.openrouter
+    enabled: true
+    config:
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+      include_models:
+        - "anthropic/claude-opus-4.6"
+        - "anthropic/claude-sonnet-4.6"
+        - "deepseek/deepseek-v3.2"
+        - "google/gemini-3.1-pro-preview"
+        - "mistralai/mistral-large-2512"
+        - "openai/gpt-4.1"
+        - "openai/gpt-4.1-mini"
+        - "openai/gpt-5.1"
+        - "openai/gpt-5.2"
+        - "x-ai/grok-4.1-fast"
+
+services:
+  secret:
+    secret_adapters:
+      - adapter: "dotenv"
+        config: {}
+  object_storage:
+    object_storage_adapter:
+      adapter: "s3"
+      config:
+        bucket_name: "abi"
+        base_prefix: "abi/datastore"
+        access_key_id: "{{ secret.MINIO_ROOT_USER }}"
+        secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
+        endpoint_url: "http://minio:9000"
+  triple_store:
+    triple_store_adapter:
+      adapter: "apache_jena_tdb2"
+      config:
+        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@fuseki:3030/ds"
+  vector_store:
+    vector_store_adapter:
+      adapter: "qdrant"
+      config:
+        host: "qdrant"
+        port: 6333
+  bus:
+    bus_adapter:
+      adapter: "rabbitmq"
+      config:
+        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@rabbitmq:5672"
+  kv:
+    kv_adapter:
+      adapter: "redis"
+      config:
+        redis_url: "redis://redis:6379"

@@ -2,6 +2,259 @@
 
 <!-- version list -->
 
+## v1.19.1 (2026-03-03)
+
+### Bug Fixes
+
+- Remove cli rerun
+  ([`e590251`](https://github.com/jupyter-naas/abi/commit/e5902510f8e00740508fa1de8610340981351557))
+
+
+## v1.19.0 (2026-03-03)
+
+### Features
+
+- Add api example in new abi module creation
+  ([`735931e`](https://github.com/jupyter-naas/abi/commit/735931ee331b57fec791dbede5949e5d019654b3))
+
+
+## v1.18.1 (2026-02-25)
+
+
+## v1.18.0 (2026-02-24)
+
+### Features
+
+- Working on adding headscale to the default deployment
+  ([`253c40f`](https://github.com/jupyter-naas/abi/commit/253c40f750e5c9a8930fbebdff69bbb4379e05c8))
+
+
+## v1.17.3 (2026-02-19)
+
+### Bug Fixes
+
+- Sort modules & agents ascending on abi agent list
+  ([`bcf1534`](https://github.com/jupyter-naas/abi/commit/bcf15345d076c257048ca8cf3b90791dae94bd58))
+
+
+## v1.17.2 (2026-02-18)
+
+### Bug Fixes
+
+- Cors
+  ([`b8c5fd5`](https://github.com/jupyter-naas/abi/commit/b8c5fd5a2f65f936d7015267067b72a4c1321b33))
+
+- Working on abi start
+  ([`570ddf3`](https://github.com/jupyter-naas/abi/commit/570ddf312799e2cecae09d8aae2bc80d48f20b79))
+
+
+## v1.17.1 (2026-02-18)
+
+### Bug Fixes
+
+- Overall
+  ([`8874852`](https://github.com/jupyter-naas/abi/commit/88748528ad867109f84db8f9f8e71eac5be774b6))
+
+
+## v1.17.0 (2026-02-18)
+
+
+## v1.16.0 (2026-02-18)
+
+### Features
+
+- Working on fixing multienv
+  ([`ba7d7d0`](https://github.com/jupyter-naas/abi/commit/ba7d7d0396b46ba81e0458a872dabd29b7ac32ae))
+
+
+## v1.15.7 (2026-02-17)
+
+### Bug Fixes
+
+- Update the local docker compose template
+  ([`08f4c1f`](https://github.com/jupyter-naas/abi/commit/08f4c1ff374dcfe66732f9a3d48e57ad367a460c))
+
+
+## v1.15.6 (2026-02-17)
+
+### Bug Fixes
+
+- Working on fixing nexus workspace access
+  ([`d29b007`](https://github.com/jupyter-naas/abi/commit/d29b00775bbe631d978f5d1d0f687fa187282cd0))
+
+
+## v1.15.5 (2026-02-17)
+
+### Bug Fixes
+
+- Add missing data in naas_abi release
+  ([`4aa9316`](https://github.com/jupyter-naas/abi/commit/4aa9316facc963b4ef4f1653f41b594ea7ae5479))
+
+
+## v1.15.4 (2026-02-17)
+
+### Bug Fixes
+
+- Add migrations to release
+  ([`b928c24`](https://github.com/jupyter-naas/abi/commit/b928c24bc1c0034029192b80d1b7cbc06083dd81))
+
+
+## v1.15.3 (2026-02-17)
+
+
+## v1.15.2 (2026-02-17)
+
+
+## v1.15.1 (2026-02-17)
+
+### Bug Fixes
+
+- Generate config.yaml on new project
+  ([`cfdc888`](https://github.com/jupyter-naas/abi/commit/cfdc88819326cc52cdf608257c84cb5d03859de1))
+
+
+## v1.15.0 (2026-02-16)
+
+### Features
+
+- Trigger release
+  ([`cf5dfe9`](https://github.com/jupyter-naas/abi/commit/cf5dfe9691af94ff1d791de0bd0d6a53cb877a32))
+
+
+## v1.14.0 (2026-02-16)
+
+### Features
+
+- Working on abi new project setup and stack management
+  ([`2fa9392`](https://github.com/jupyter-naas/abi/commit/2fa939201d32c065cc9284e3e876aac953d66c1b))
+
+- Working on nexus container release to ghcr
+  ([`7f6f441`](https://github.com/jupyter-naas/abi/commit/7f6f441f07c409337e4082ea721a7b71080b49a8))
+
+- Working on tui
+  ([`01165ef`](https://github.com/jupyter-naas/abi/commit/01165ef2ac49966d0d343d6fe6381b659f32ef93))
+
+
+## v1.13.4 (2026-02-16)
+
+### Bug Fixes
+
+- **infra**: Rollback unstable weekend runtime wiring
+  ([`aac4a33`](https://github.com/jupyter-naas/abi/commit/aac4a33f2309ebff4a5889f72e45d13192955dd4))
+
+
+## v1.13.3 (2026-02-13)
+
+### Bug Fixes
+
+- **infra**: Resolve CORS/500 errors and optimize Docker startup
+  ([`661f2cd`](https://github.com/jupyter-naas/abi/commit/661f2cde9390eb34c914e856644b1355d6b4907f))
+
+
+## v1.13.2 (2026-02-13)
+
+### Bug Fixes
+
+- Make the generation default to Jena
+  ([`470cdce`](https://github.com/jupyter-naas/abi/commit/470cdce3e4e3e970b043c21131ae39a8d4ad1622))
+
+
+## v1.13.1 (2026-02-12)
+
+### Bug Fixes
+
+- Working on new project setup
+  ([`cd2a5cc`](https://github.com/jupyter-naas/abi/commit/cd2a5ccb156fe540759561e6eeb91abdeb1d4924))
+
+
+## v1.13.0 (2026-02-11)
+
+### Features
+
+- Migrate assets from root to nexus app
+  ([`acea3c8`](https://github.com/jupyter-naas/abi/commit/acea3c88affcbeaf636b953ed04cdfb8e450117d))
+
+
+## v1.12.0 (2026-02-10)
+
+
+## v1.11.4 (2026-02-10)
+
+
+## v1.11.3 (2026-02-10)
+
+### Bug Fixes
+
+- Add missing element-config.json
+  ([`37c8b76`](https://github.com/jupyter-naas/abi/commit/37c8b76da2d9124e48b5f2548dd7d2bf296af959))
+
+
+## v1.11.2 (2026-02-10)
+
+
+## v1.11.1 (2026-02-10)
+
+### Bug Fixes
+
+- Add template .env
+  ([`194421b`](https://github.com/jupyter-naas/abi/commit/194421b7828713606e30144f77a2fcd6c3c32b81))
+
+- Add template .env
+  ([`b5fbe73`](https://github.com/jupyter-naas/abi/commit/b5fbe731c7bd37bb12348fc0ddbe75b5c5a8aa78))
+
+- Add template .env
+  ([`8c9d43d`](https://github.com/jupyter-naas/abi/commit/8c9d43dda47f569b342d44f7d4789b853d6e72d1))
+
+
+## v1.11.0 (2026-02-09)
+
+### Bug Fixes
+
+- Working on make check
+  ([`32b09fa`](https://github.com/jupyter-naas/abi/commit/32b09fa17ff2eecd17208f5b2800f418062676af))
+
+- Working on make check
+  ([`64dc00f`](https://github.com/jupyter-naas/abi/commit/64dc00fd8ce415de7d4d977a8d83d834a67a5aa6))
+
+- Working on make check
+  ([`2b9972d`](https://github.com/jupyter-naas/abi/commit/2b9972d9602036e6a926ed0a7b469e1dc1b9bb2f))
+
+- Working on make check
+  ([`da6c160`](https://github.com/jupyter-naas/abi/commit/da6c160ab55d1ec4c56cdbe3dc3ddef67144d043))
+
+### Features
+
+- Working on deploy local cli
+  ([`c3ffe6d`](https://github.com/jupyter-naas/abi/commit/c3ffe6db633f2ce7789de5460d8849f80490b699))
+
+- Working on deploy local cli
+  ([`798e02a`](https://github.com/jupyter-naas/abi/commit/798e02ad2576f86344a54068fcd00e8f717c977d))
+
+
+## v1.10.2 (2026-02-09)
+
+### Bug Fixes
+
+- Agent templating
+  ([`e199010`](https://github.com/jupyter-naas/abi/commit/e199010ceea5d4024e6c24337a36a2413eed8659))
+
+
+## v1.10.1 (2026-02-09)
+
+### Bug Fixes
+
+- Update CLI and rename KVService
+  ([`00e62d6`](https://github.com/jupyter-naas/abi/commit/00e62d61c51e36f792cbdc2540e527596df67097))
+
+
+## v1.10.0 (2026-02-03)
+
+### Features
+
+- Working on Dagster orchestration
+  ([`b970d21`](https://github.com/jupyter-naas/abi/commit/b970d21e135ab32c344122be50f292c0b44ff039))
+
+
 ## v1.9.1 (2026-01-26)
 
 ### Bug Fixes
