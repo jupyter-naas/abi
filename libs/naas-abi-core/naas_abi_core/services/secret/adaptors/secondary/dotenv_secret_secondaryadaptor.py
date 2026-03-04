@@ -1,4 +1,5 @@
 import os
+from threading import Lock
 from typing import Any, Dict
 
 from dotenv import dotenv_values, find_dotenv, set_key
@@ -9,6 +10,7 @@ from naas_abi_core.utils.Logger import logger
 class DotenvSecretSecondaryAdaptor(ISecretAdapter):
     def __init__(self, path: str = ".env"):
         self.path = path
+        self._lock = Lock()
 
         if not os.path.exists(self.path):
             raise FileNotFoundError(
@@ -23,25 +25,29 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
         self.secrets = dotenv_values(self.path)
 
     def get(self, key: str, default: Any = None) -> str | Any | None:
-        secret_value = self.secrets.get(key)
-        if secret_value is not None:
-            return str(secret_value)
+        with self._lock:
+            secret_value = self.secrets.get(key)
+            if secret_value is not None:
+                return str(secret_value)
 
-        env_value = os.environ.get(key)
-        if env_value is not None:
-            return env_value
+            env_value = os.environ.get(key)
+            if env_value is not None:
+                return env_value
 
         return default
 
     def set(self, key: str, value: str):
-        os.environ[key] = value
-        set_key(self.path, key, value)
+        with self._lock:
+            os.environ[key] = value
+            set_key(self.path, key, value)
 
     def remove(self, key: str):
-        os.environ.pop(key, None)
+        with self._lock:
+            os.environ.pop(key, None)
 
     def list(self) -> Dict[str, str | None]:
-        secrets: Dict[str, str | None] = {}
-        for key in self.secrets.keys():
-            secrets[str(key)] = str(self.secrets.get(key))
-        return secrets
+        with self._lock:
+            secrets: Dict[str, str | None] = {}
+            for key in self.secrets.keys():
+                secrets[str(key)] = str(self.secrets.get(key))
+            return secrets

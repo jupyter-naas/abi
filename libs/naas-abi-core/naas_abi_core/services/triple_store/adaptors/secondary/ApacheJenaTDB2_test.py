@@ -54,7 +54,7 @@ def test_insert_posts_expected_sparql_update(graph_name, expected_fragment):
         mock_post.return_value = Mock(status_code=200)
         mock_post.return_value.raise_for_status = Mock()
 
-        adapter.insert(graph, graph_name=graph_name)
+        adapter.insert(graph, graph_name)
 
         assert mock_post.call_args.args[0] == adapter.update_endpoint
         call_kwargs = mock_post.call_args.kwargs
@@ -89,7 +89,7 @@ def test_remove_posts_expected_sparql_update(graph_name, expected_fragment):
         mock_post.return_value = Mock(status_code=200)
         mock_post.return_value.raise_for_status = Mock()
 
-        adapter.remove(graph, graph_name=graph_name)
+        adapter.remove(graph, graph_name)
 
         assert mock_post.call_args.args[0] == adapter.update_endpoint
         call_kwargs = mock_post.call_args.kwargs

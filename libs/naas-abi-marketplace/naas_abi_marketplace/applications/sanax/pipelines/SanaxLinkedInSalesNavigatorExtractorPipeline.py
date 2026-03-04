@@ -683,7 +683,10 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 df, log_dir_path, excel_file_name, parameters.sheet_name, copy=False
             )
             # Save graph to triple store
-            self.__configuration.triple_store.insert(graph)
+            self.__configuration.triple_store.insert(
+                graph,
+                graph_name=URIRef("http://ontology.naas.ai/graph/default"),
+            )
         return graph
 
     def as_tools(self) -> list[BaseTool]:

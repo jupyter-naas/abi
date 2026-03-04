@@ -150,7 +150,10 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
                     Literal(ontology_id),
                 )
             )
-            self.__configuration.triple_store.insert(graph_insert)
+            self.__configuration.triple_store.insert(
+                graph_insert,
+                graph_name=URIRef("http://ontology.naas.ai/graph/default"),
+            )
         return ontology_id
 
     def as_tools(self) -> list[BaseTool]:

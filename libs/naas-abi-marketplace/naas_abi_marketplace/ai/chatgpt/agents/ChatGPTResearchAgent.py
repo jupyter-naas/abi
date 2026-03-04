@@ -50,4 +50,6 @@ def create_agent(
 
 
 class ChatGPTResponsesAgent(Agent):
+    name: str = NAME
+    description: str = DESCRIPTION
     pass
