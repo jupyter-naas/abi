@@ -1,7 +1,7 @@
 ---
 # The URL clients will connect to.
-# Local deploy defaults to HTTP because TLS is typically terminated upstream.
-server_url: http://{{ HEADSCALE_SERVER_URL }}:{{ HEADSCALE_SERVER_PORT }}
+# Local deploy terminates TLS at Caddy and exposes Headscale over HTTPS.
+server_url: https://{{ HEADSCALE_SERVER_URL }}
 
 # Address to listen to / bind to on the server.
 listen_addr: 0.0.0.0:8080

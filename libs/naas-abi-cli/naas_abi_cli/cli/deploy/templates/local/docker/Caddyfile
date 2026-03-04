@@ -9,3 +9,11 @@
         header_up X-Forwarded-Proto {scheme}
     }
 }
+
+{% if INCLUDE_HEADSCALE %}
+{$HEADSCALE_SERVER_URL:headscale.localhost} {
+    reverse_proxy headscale:8080 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+{% endif %}

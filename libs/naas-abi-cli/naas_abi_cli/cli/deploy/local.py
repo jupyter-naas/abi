@@ -73,7 +73,7 @@ HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
       - abi-network
 """
 
-HEADSCALE_CONFIG_CONTENT_TEMPLATE = """server_url: https://{headscale_server_url}:{headscale_server_port}
+HEADSCALE_CONFIG_CONTENT_TEMPLATE = """server_url: https://{headscale_server_url}
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 0.0.0.0:9090
 grpc_listen_addr: 0.0.0.0:50443
@@ -117,12 +117,6 @@ def _copy_headscale_templates(deploy_path: str, values: dict[str, object]) -> No
                 DEFAULT_ENV_VALUES["HEADSCALE_SERVER_URL"],
             )
         )
-        headscale_server_port = str(
-            values.get(
-                "HEADSCALE_SERVER_PORT",
-                DEFAULT_ENV_VALUES["HEADSCALE_SERVER_PORT"],
-            )
-        )
         headscale_internal_domain = str(
             values.get(
                 "HEADSCALE_INTERNAL_DOMAIN",
@@ -131,7 +125,6 @@ def _copy_headscale_templates(deploy_path: str, values: dict[str, object]) -> No
         )
         config_content = HEADSCALE_CONFIG_CONTENT_TEMPLATE.format(
             headscale_server_url=headscale_server_url,
-            headscale_server_port=headscale_server_port,
             headscale_internal_domain=headscale_internal_domain,
         )
         with open(headscale_config_path, "w", encoding="utf-8") as config_file:

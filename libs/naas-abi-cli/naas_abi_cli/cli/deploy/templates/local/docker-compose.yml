@@ -110,6 +110,9 @@ services:
     environment:
       - PUBLIC_WEB_HOST=${PUBLIC_WEB_HOST:-localhost}
       - PUBLIC_API_HOST=${PUBLIC_API_HOST:-api.localhost}
+{% if INCLUDE_HEADSCALE %}
+      - HEADSCALE_SERVER_URL=${HEADSCALE_SERVER_URL:-headscale.localhost}
+{% endif %}
     volumes:
       - ./.deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -117,6 +120,9 @@ services:
     depends_on:
       - nexus-web
       - abi
+{% if INCLUDE_HEADSCALE %}
+      - headscale
+{% endif %}
     networks:
       - abi-network
 

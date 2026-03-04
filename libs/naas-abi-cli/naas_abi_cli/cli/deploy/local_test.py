@@ -56,10 +56,12 @@ def test_setup_local_deploy_can_include_headscale(tmp_path: Path) -> None:
 
     compose_content = compose_path.read_text(encoding="utf-8")
     env_content = env_path.read_text(encoding="utf-8")
+    headscale_config_content = headscale_config_path.read_text(encoding="utf-8")
 
     assert "  headscale:" in compose_content
     assert "headscale_data:" in compose_content
     assert "HEADSCALE_SERVER_PORT=" in env_content
+    assert "server_url: https://headscale.localhost" in headscale_config_content
     assert headscale_config_path.exists()
     assert headscale_extra_records_path.exists()
 
