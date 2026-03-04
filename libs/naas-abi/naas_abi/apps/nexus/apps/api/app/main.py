@@ -48,41 +48,41 @@ async def _startup(app: FastAPI) -> None:
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
     await apply_configuration_seeds(getattr(app.state, "secret_service", None))
 
-    # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
-    print("Checking Ollama status...")
-    # Gate autostart behind config flag to avoid process management in prod
-    required_model = "qwen3-vl:2b"
-    if settings.enable_ollama_autostart:
-        ollama_result = await ensure_ollama_ready(required_model=required_model)
-    else:
-        # Do not attempt to start; only report current status
-        from naas_abi.apps.nexus.apps.api.app.services.ollama import (
-            get_installed_models,
-            is_ollama_running,
-        )
-        running = await is_ollama_running()
-        models = await get_installed_models() if running else []
-        ollama_result = {
-            "ollama_installed": running or bool(models),
-            "ollama_running": running,
-            "ollama_started_by_nexus": False,
-            "model_available": any(required_model in m for m in models),
-            "model_pulled": False,
-            "models": models,
-            "error": None,
-        }
-    app.state.ollama_status = ollama_result
-    if ollama_result["ollama_running"]:
-        started_msg = " (started by NEXUS)" if ollama_result.get("ollama_started_by_nexus") else ""
-        print(f"Ollama: running{started_msg} - models: {ollama_result['models']}")
-    elif ollama_result["ollama_installed"]:
-        print(
-            "Ollama: installed but not running - "
-            f"{ollama_result.get('error', 'not started')} "
-            f"(autostart={'on' if settings.enable_ollama_autostart else 'off'})"
-        )
-    else:
-        print("Ollama: not installed - install from https://ollama.ai for local AI")
+    # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
+    # print("Checking Ollama status...")
+    # # Gate autostart behind config flag to avoid process management in prod
+    # required_model = "qwen3-vl:2b"
+    # if settings.enable_ollama_autostart:
+    #     ollama_result = await ensure_ollama_ready(required_model=required_model)
+    # else:
+    #     # Do not attempt to start; only report current status
+    #     from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+    #         get_installed_models,
+    #         is_ollama_running,
+    #     )
+    #     running = await is_ollama_running()
+    #     models = await get_installed_models() if running else []
+    #     ollama_result = {
+    #         "ollama_installed": running or bool(models),
+    #         "ollama_running": running,
+    #         "ollama_started_by_nexus": False,
+    #         "model_available": any(required_model in m for m in models),
+    #         "model_pulled": False,
+    #         "models": models,
+    #         "error": None,
+    #     }
+    # app.state.ollama_status = ollama_result
+    # if ollama_result["ollama_running"]:
+    #     started_msg = " (started by NEXUS)" if ollama_result.get("ollama_started_by_nexus") else ""
+    #     print(f"Ollama: running{started_msg} - models: {ollama_result['models']}")
+    # elif ollama_result["ollama_installed"]:
+    #     print(
+    #         "Ollama: installed but not running - "
+    #         f"{ollama_result.get('error', 'not started')} "
+    #         f"(autostart={'on' if settings.enable_ollama_autostart else 'off'})"
+    #     )
+    # else:
+    #     print("Ollama: not installed - install from https://ollama.ai for local AI")
 
 
 async def _shutdown(app: FastAPI) -> None:

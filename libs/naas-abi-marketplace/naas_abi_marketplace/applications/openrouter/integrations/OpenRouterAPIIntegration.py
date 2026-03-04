@@ -173,7 +173,7 @@ class OpenRouterAPIIntegration(Integration):
         """
         return self._make_request("GET", "/models/count")
 
-    def list_models(self, params: Optional[Dict] = None) -> List:
+    def list_models(self, params: Optional[Dict] = None, save_json: bool = True) -> List:
         """
         List all models and their properties, along with splits by provider (owner).
 
@@ -188,28 +188,29 @@ class OpenRouterAPIIntegration(Integration):
         """
         response = self._make_request("GET", "/models", params=params)
         models = response.get("data", []) if isinstance(response, dict) else []
-        self.__storage_utils.save_json(
-            models,
-            os.path.join(self.__configuration.datastore_path, "models", "_all"),
-            "models.json",
-        )
-
-        owners: dict = {}
-
-        for model in models:
-            model_id = model.get("id", "")
-            # Only split once: e.g. "openai/gpt-4" -> "openai", "gpt-4"
-            owner = model_id.split("/")[0] if "/" in model_id else "unknown"
-            if owner not in owners:
-                owners[owner] = []
-            owners[owner].append(model)
-
-        for owner, owner_models in owners.items():
+        if save_json:
             self.__storage_utils.save_json(
-                owner_models,
-                os.path.join(self.__configuration.datastore_path, "models", owner),
+                models,
+                os.path.join(self.__configuration.datastore_path, "models", "_all"),
                 "models.json",
             )
+
+            owners: dict = {}
+
+            for model in models:
+                model_id = model.get("id", "")
+                # Only split once: e.g. "openai/gpt-4" -> "openai", "gpt-4"
+                owner = model_id.split("/")[0] if "/" in model_id else "unknown"
+                if owner not in owners:
+                    owners[owner] = []
+                owners[owner].append(model)
+
+            for owner, owner_models in owners.items():
+                self.__storage_utils.save_json(
+                    owner_models,
+                    os.path.join(self.__configuration.datastore_path, "models", owner),
+                    "models.json",
+                )
 
         return models
 

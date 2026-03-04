@@ -13,6 +13,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -187,6 +188,7 @@ jobs:
 
   streamlit-demo:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       REGISTRY_NAME: ${{ github.event.repository.name }}-demo-streamlit
     steps:
@@ -261,6 +263,7 @@ jobs:
 
   mcp-server:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build  # Wait for API to be deployed first
     env:
       REGISTRY_NAME: ${{ github.event.repository.name }}-mcp-server

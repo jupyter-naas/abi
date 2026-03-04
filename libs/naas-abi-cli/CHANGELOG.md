@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.19.2 (2026-03-04)
+
+### Bug Fixes
+
+- Headscale setup
+  ([`dbee594`](https://github.com/jupyter-naas/abi/commit/dbee59421b83c98434b9e2053dc2b345540b9186))
+
+
+## v1.19.1 (2026-03-03)
+
+### Bug Fixes
+
+- Remove cli rerun
+  ([`e590251`](https://github.com/jupyter-naas/abi/commit/e5902510f8e00740508fa1de8610340981351557))
+
+
+## v1.19.0 (2026-03-03)
+
+### Features
+
+- Add api example in new abi module creation
+  ([`735931e`](https://github.com/jupyter-naas/abi/commit/735931ee331b57fec791dbede5949e5d019654b3))
+
+
 ## v1.18.1 (2026-02-25)
 
 
