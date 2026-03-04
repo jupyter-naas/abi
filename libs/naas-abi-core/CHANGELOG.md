@@ -2,6 +2,46 @@
 
 <!-- version list -->
 
+## v1.18.2 (2026-03-02)
+
+### Bug Fixes
+
+- Manage secondary adapter dotenv with mutex
+  ([`ee76c11`](https://github.com/jupyter-naas/abi/commit/ee76c117e7b25f009c5313104fe30dc2d50599ac))
+
+
+## v1.18.1 (2026-03-02)
+
+### Bug Fixes
+
+- Error rm schema
+  ([`fb3739a`](https://github.com/jupyter-naas/abi/commit/fb3739a5f40b6d7cda8110e8ef5b650729a76275))
+
+
+## v1.18.0 (2026-03-02)
+
+### Bug Fixes
+
+- Get subject graph
+  ([`a2c4b9c`](https://github.com/jupyter-naas/abi/commit/a2c4b9c9d840e7d8d6013a01bf8d74697d7cf603))
+
+### Refactoring
+
+- Get subject graph
+  ([`932b5e0`](https://github.com/jupyter-naas/abi/commit/932b5e04c631521c90834f758845795ad50cb66b))
+
+- Update adapters
+  ([`fbb9511`](https://github.com/jupyter-naas/abi/commit/fbb95114b5d960d36a1a41e4b28902820038edd4))
+
+
+## v1.17.4 (2026-03-02)
+
+### Bug Fixes
+
+- Error ruff
+  ([`5ef341a`](https://github.com/jupyter-naas/abi/commit/5ef341a036ee5fb09d0b0af2bc14a353030776bd))
+
+
 ## v1.17.3 (2026-02-25)
 
 ### Bug Fixes

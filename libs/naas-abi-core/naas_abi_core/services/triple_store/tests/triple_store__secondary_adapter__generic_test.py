@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
 import uuid
+from abc import ABC, abstractmethod
 
 import pytest
 from rdflib import Graph, Literal, URIRef
@@ -32,6 +32,7 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
 
     def test_insert_query_remove_roundtrip_default_graph(self, adapter):
         marker = uuid.uuid4().hex
+        graph_name = URIRef(f"http://test.example.org/default/{marker}")
         subject = URIRef(f"http://test.example.org/{marker}/entity")
         predicate = URIRef("http://test.example.org/value")
         obj = Literal(f"value-{marker}")
@@ -39,13 +40,15 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
         g = Graph()
         g.add((subject, predicate, obj))
 
-        adapter.insert(g)
+        adapter.insert(g, graph_name)
 
         result = list(
             adapter.query(
                 f"""
                 SELECT ?o WHERE {{
-                    <{subject}> <{predicate}> ?o .
+                    GRAPH <{graph_name}> {{
+                        <{subject}> <{predicate}> ?o .
+                    }}
                 }}
                 """
             )
@@ -53,16 +56,18 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
         assert len(result) == 1
         assert str(result[0].o) == str(obj)
 
-        subject_graph = adapter.get_subject_graph(subject)
+        subject_graph = adapter.get_subject_graph(subject, graph_name)
         assert len(list(subject_graph.triples((subject, predicate, obj)))) == 1
 
-        adapter.remove(g)
+        adapter.remove(g, graph_name)
 
         result_after_delete = list(
             adapter.query(
                 f"""
                 SELECT ?o WHERE {{
-                    <{subject}> <{predicate}> ?o .
+                    GRAPH <{graph_name}> {{
+                        <{subject}> <{predicate}> ?o .
+                    }}
                 }}
                 """
             )
@@ -84,7 +89,7 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
         g = Graph()
         g.add((subject, predicate, obj))
 
-        adapter.insert(g, graph_name=graph_name)
+        adapter.insert(g, graph_name)
 
         named_graph_result = list(
             adapter.query(
@@ -100,7 +105,7 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
         assert len(named_graph_result) == 1
         assert str(named_graph_result[0].o) == str(obj)
 
-        adapter.remove(g, graph_name=graph_name)
+        adapter.remove(g, graph_name)
 
         named_graph_result_after_delete = list(
             adapter.query(
@@ -131,7 +136,7 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
         g.add((subject, predicate, obj))
 
         adapter.create_graph(graph_name)
-        adapter.insert(g, graph_name=graph_name)
+        adapter.insert(g, graph_name)
 
         listed_graphs = adapter.list_graphs()
         assert graph_name in listed_graphs

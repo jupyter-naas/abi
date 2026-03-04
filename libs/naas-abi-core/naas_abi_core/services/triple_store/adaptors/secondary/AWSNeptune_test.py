@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 from dotenv import load_dotenv
 from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
+    NEPTUNE_DEFAULT_GRAPH_NAME,
     AWSNeptune,
     AWSNeptuneSSHTunnel,
 )
@@ -105,7 +106,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         )
     )
 
-    aws_neptune.insert(right_graph)
+    aws_neptune.insert(right_graph, NEPTUNE_DEFAULT_GRAPH_NAME)
 
     aws_neptune.create_graph(left_graph_name)
     aws_neptune.create_graph(right_graph_name)
@@ -253,7 +254,7 @@ def test_AWSNeptune(aws_neptune):
 
     # Testing insert
 
-    aws_neptune.insert(graph)
+    aws_neptune.insert(graph, NEPTUNE_DEFAULT_GRAPH_NAME)
 
     query = f"""PREFIX test: <{prefix}>
 
