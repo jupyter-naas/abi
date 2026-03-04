@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { getApiUrl } from '@/lib/config';
 
@@ -76,6 +77,7 @@ function applyFavicon(url: string) {
 }
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [tenant, setTenant] = useState<TenantConfig>(DEFAULT_TENANT);
 
   useEffect(() => {
@@ -85,15 +87,20 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       .then((data: TenantConfig | null) => {
         if (!data) return;
         setTenant(data);
-        document.title = data.tab_title;
-        if (data.favicon_url) {
-          applyFavicon(data.favicon_url);
-        }
       })
       .catch(() => {
         // Tenant endpoint unavailable — keep defaults
       });
   }, []);
+
+  // Re-apply tenant title and favicon on every navigation so they persist
+  // over route-level metadata (e.g. auth layout "Sign In").
+  useEffect(() => {
+    document.title = tenant.tab_title;
+    if (tenant.favicon_url) {
+      applyFavicon(tenant.favicon_url);
+    }
+  }, [tenant.tab_title, tenant.favicon_url, pathname]);
 
   return (
     <TenantContext.Provider value={tenant}>{children}</TenantContext.Provider>
