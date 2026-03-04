@@ -1,0 +1,106 @@
+---
+# The URL clients will connect to.
+# Local deploy defaults to HTTP because TLS is typically terminated upstream.
+server_url: http://{{ HEADSCALE_SERVER_URL }}:{{ HEADSCALE_SERVER_PORT }}
+
+# Address to listen to / bind to on the server.
+listen_addr: 0.0.0.0:8080
+
+# Address to listen to /metrics and /debug.
+metrics_listen_addr: 0.0.0.0:9090
+
+# Address to listen for gRPC.
+grpc_listen_addr: 0.0.0.0:50443
+
+# Allow the gRPC admin interface to run in insecure mode for local deploy.
+grpc_allow_insecure: true
+
+# TS2021 Noise protocol configuration.
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+# List of IP prefixes to allocate tail addresses from.
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+
+  # Allocation strategy: sequential (default) or random.
+  allocation: sequential
+
+# DERP relay configuration.
+derp:
+  server:
+    # If enabled, runs the embedded DERP server.
+    enabled: false
+
+  # List of externally available DERP maps encoded in JSON.
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+
+  # Locally available DERP map files encoded in YAML.
+  paths: []
+
+  # Periodically refresh remote DERP sources.
+  auto_update_enabled: true
+  update_frequency: 24h
+
+# Disable the automatic check for headscale updates on startup.
+disable_check_updates: true
+
+database:
+  # Database type. Available options: sqlite, postgres.
+  type: sqlite
+
+  # SQLite configuration.
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+
+    # Enable WAL mode for better write behavior.
+    write_ahead_log: true
+
+policy:
+  # The mode can be "file" or "database".
+  mode: file
+
+  # If mode is "file", this points to the ACL policy file.
+  path: ""
+
+dns:
+  # Whether to use MagicDNS.
+  magic_dns: true
+
+  # Base domain used to generate hostnames for nodes.
+  base_domain: {{ HEADSCALE_INTERNAL_DOMAIN }}
+
+  # Override client local DNS settings with Headscale DNS.
+  override_local_dns: true
+
+  # List of DNS servers exposed to clients.
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 1.0.0.1
+
+  # Additional search domains.
+  search_domains: []
+
+  # Extra DNS records loaded from a JSON file.
+  extra_records_path: /var/lib/headscale/extra-records.json
+
+# Unix socket used for the CLI to connect without authentication.
+unix_socket: /var/run/headscale/headscale.sock
+unix_socket_permission: "0770"
+
+log:
+  # Valid levels: panic, fatal, error, warn, info, debug, trace.
+  level: info
+
+  # Output format: text or json.
+  format: text
+
+# Logtail sends client logs to Tailscale infrastructure.
+logtail:
+  enabled: false
+
+# Prefer random WireGuard client ports over static 41641.
+randomize_client_port: false
