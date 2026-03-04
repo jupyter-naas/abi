@@ -53,7 +53,7 @@ HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
     image: docker.io/headscale/headscale:stable
     pull_policy: always
     restart: unless-stopped
-    command: ["headscale", "serve"]
+    command: ["server"]
     ports:
       - ${HEADSCALE_SERVER_PORT}:8080
       - ${HEADSCALE_METRICS_PORT}:9090
