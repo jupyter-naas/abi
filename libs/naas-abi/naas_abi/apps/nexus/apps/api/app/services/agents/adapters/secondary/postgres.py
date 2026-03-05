@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.models import AgentConfigModel, InferenceServerModel
@@ -21,18 +22,18 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
     @staticmethod
     def _to_record(model: AgentConfigModel) -> AgentRecord:
         return AgentRecord(
-            id=model.id,
-            workspace_id=model.workspace_id,
-            name=model.name,
-            class_name=model.class_name,
-            description=model.description,
-            system_prompt=model.system_prompt,
-            model_id=model.model_id,
-            provider=model.provider,
-            logo_url=model.logo_url,
+            id=str(model.id),
+            workspace_id=str(model.workspace_id),
+            name=str(model.name),
+            class_name=str(model.class_name),
+            description=str(model.description),
+            system_prompt=str(model.system_prompt),
+            model_id=str(model.model_id),
+            provider=str(model.provider),
+            logo_url=str(model.logo_url),
             enabled=bool(model.enabled),
-            created_at=model.created_at,
-            updated_at=model.updated_at,
+            created_at=datetime.fromisoformat(str(model.created_at)),
+            updated_at=datetime.fromisoformat(str(model.updated_at)),
         )
 
     async def list_by_workspace(self, workspace_id: str) -> list[AgentRecord]:
@@ -61,12 +62,12 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
         if server is None:
             return None
         return InferenceServerRecord(
-            id=server.id,
-            workspace_id=server.workspace_id,
-            name=server.name,
-            type=server.type,
-            endpoint=server.endpoint,
-            api_key=server.api_key,
+            id=str(server.id),
+            workspace_id=str(server.workspace_id),
+            name=str(server.name),
+            type=str(server.type),
+            endpoint=str(server.endpoint),
+            api_key=str(server.api_key),
         )
 
     async def create(self, data: AgentCreateInput) -> AgentRecord:
@@ -123,17 +124,17 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             return None
 
         if updates.name is not None:
-            agent_model.name = updates.name
+            agent_model.name = str(updates.name)
         if updates.class_name is not None:
-            agent_model.class_name = updates.class_name
+            agent_model.class_name = str(updates.class_name)
         if updates.description is not None:
-            agent_model.description = updates.description
+            agent_model.description = str(updates.description)
         if updates.system_prompt is not None:
-            agent_model.system_prompt = updates.system_prompt
+            agent_model.system_prompt = str(updates.system_prompt)
         if updates.model_id is not None:
-            agent_model.model_id = updates.model_id
+            agent_model.model_id = str(updates.model_id)
         if updates.enabled is not None:
-            agent_model.enabled = updates.enabled
+            agent_model.enabled = bool(updates.enabled)
 
         await self.db.commit()
         await self.db.refresh(agent_model)
