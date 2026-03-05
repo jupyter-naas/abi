@@ -6,7 +6,7 @@ from naas_abi_core.services.agent.Agent import (
     AgentSharedState,
 )
 
-NAME = "Ontology_Engineer"
+NAME = "Ontology Engineer"
 DESCRIPTION = "A agent that helps users understand BFO Ontology and transform text into ontologies."
 SYSTEM_PROMPT = """
 # ROLE: 
