@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Literal, Union
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
@@ -111,6 +111,22 @@ class TripleStoreAdapterFilesystemConfiguration(BaseModel):
     triples_path: str = "triples"
 
 
+class TripleStoreAdapterOxigraphEmbeddedConfiguration(BaseModel):
+    """Embedded Oxigraph adapter configuration.
+
+    triple_store_adapter:
+      adapter: "oxigraph_embedded"
+      config:
+        store_path: "storage/triplestore/oxigraph"
+        graph_base_iri: "http://ontology.naas.ai/graph/default"
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    store_path: str
+    graph_base_iri: str = "http://ontology.naas.ai/graph/default"
+
+
 class TripleStoreAdapterObjectStorageConfiguration(BaseModel):
     """Object storage adapter configuration.
 
@@ -134,6 +150,7 @@ class TripleStoreAdapterConfiguration(GenericLoader):
         "aws_neptune_sshtunnel",
         "aws_neptune",
         "fs",
+        "oxigraph_embedded",
         "object_storage",
         "custom",
     ]
@@ -144,6 +161,7 @@ class TripleStoreAdapterConfiguration(GenericLoader):
             AWSNeptuneAdapterConfiguration,
             AWSNeptuneSSHTunnelAdapterConfiguration,
             TripleStoreAdapterFilesystemConfiguration,
+            TripleStoreAdapterOxigraphEmbeddedConfiguration,
             TripleStoreAdapterObjectStorageConfiguration,
             dict,
         ]
@@ -152,42 +170,88 @@ class TripleStoreAdapterConfiguration(GenericLoader):
 
     @model_validator(mode="after")
     def validate_adapter(self) -> Self:
+        config_value = self.config
+        payload: dict[str, Any] | None
+        if isinstance(config_value, BaseModel):
+            payload = config_value.model_dump()
+        elif isinstance(config_value, dict):
+            payload = config_value
+        else:
+            payload = None
+
+        def _payload_for(model: type[BaseModel]) -> dict | None:
+            if payload is None:
+                return None
+            if not isinstance(payload, dict):
+                return payload
+            allowed_fields = set(model.model_fields.keys())
+            return {
+                key: value for key, value in payload.items() if key in allowed_fields
+            }
+
         if self.adapter != "custom":
-            assert self.config is not None, (
-                "config is required if adapter is not custom"
-            )
+            assert payload is not None, "config is required if adapter is not custom"
 
         if self.adapter == "fs":
+            self.config = TripleStoreAdapterFilesystemConfiguration.model_validate(
+                _payload_for(TripleStoreAdapterFilesystemConfiguration)
+            )
             pydantic_model_validator(
                 TripleStoreAdapterFilesystemConfiguration,
                 self.config,
                 "Invalid configuration for services.triple_store.triple_store_adapter 'fs' adapter",
             )
         if self.adapter == "object_storage":
+            self.config = TripleStoreAdapterObjectStorageConfiguration.model_validate(
+                _payload_for(TripleStoreAdapterObjectStorageConfiguration)
+            )
             pydantic_model_validator(
                 TripleStoreAdapterObjectStorageConfiguration,
                 self.config,
                 "Invalid configuration for services.triple_store.triple_store_adapter 'object_storage' adapter",
             )
+        if self.adapter == "oxigraph_embedded":
+            self.config = (
+                TripleStoreAdapterOxigraphEmbeddedConfiguration.model_validate(
+                    _payload_for(TripleStoreAdapterOxigraphEmbeddedConfiguration)
+                )
+            )
+            pydantic_model_validator(
+                TripleStoreAdapterOxigraphEmbeddedConfiguration,
+                self.config,
+                "Invalid configuration for services.triple_store.triple_store_adapter 'oxigraph_embedded' adapter",
+            )
         if self.adapter == "oxigraph":
+            self.config = OxigraphAdapterConfiguration.model_validate(
+                _payload_for(OxigraphAdapterConfiguration)
+            )
             pydantic_model_validator(
                 OxigraphAdapterConfiguration,
                 self.config,
                 "Invalid configuration for services.triple_store.triple_store_adapter 'oxigraph' adapter",
             )
         if self.adapter == "apache_jena_tdb2":
+            self.config = ApacheJenaTDB2AdapterConfiguration.model_validate(
+                _payload_for(ApacheJenaTDB2AdapterConfiguration)
+            )
             pydantic_model_validator(
                 ApacheJenaTDB2AdapterConfiguration,
                 self.config,
                 "Invalid configuration for services.triple_store.triple_store_adapter 'apache_jena_tdb2' adapter",
             )
         if self.adapter == "aws_neptune":
+            self.config = AWSNeptuneAdapterConfiguration.model_validate(
+                _payload_for(AWSNeptuneAdapterConfiguration)
+            )
             pydantic_model_validator(
                 AWSNeptuneAdapterConfiguration,
                 self.config,
                 "Invalid configuration for services.triple_store.triple_store_adapter 'aws_neptune' adapter",
             )
         if self.adapter == "aws_neptune_sshtunnel":
+            self.config = AWSNeptuneSSHTunnelAdapterConfiguration.model_validate(
+                _payload_for(AWSNeptuneSSHTunnelAdapterConfiguration)
+            )
             pydantic_model_validator(
                 AWSNeptuneSSHTunnelAdapterConfiguration,
                 self.config,
@@ -247,6 +311,18 @@ class TripleStoreAdapterConfiguration(GenericLoader):
                 TripleStoreAdapterFilesystemConfiguration.model_validate(arguments)
 
                 return TripleStoreService__SecondaryAdaptor__Filesystem(**arguments)
+            elif self.adapter == "oxigraph_embedded":
+                from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__OxigraphEmbedded import (
+                    TripleStoreService__SecondaryAdaptor__OxigraphEmbedded,
+                )
+
+                TripleStoreAdapterOxigraphEmbeddedConfiguration.model_validate(
+                    arguments
+                )
+
+                return TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(
+                    **arguments
+                )
             elif self.adapter == "object_storage":
                 from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
                     TripleStoreService__SecondaryAdaptor__ObjectStorage,
