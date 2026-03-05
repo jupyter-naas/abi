@@ -204,7 +204,7 @@ export function VisNetwork({
     nodesDataRef.current.clear();
     nodesDataRef.current.add(visNodes);
 
-    // Initial load: run physics then disable
+    // Initial load only: run physics then disable and fit once
     if (!isStabilizedRef.current && networkRef.current && visNodes.length > 0) {
       networkRef.current.once('stabilizationIterationsDone', () => {
         if (networkRef.current) {
@@ -218,14 +218,8 @@ export function VisNetwork({
           networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
         }
       });
-    } else if (isStabilizedRef.current && networkRef.current && visNodes.length > 0) {
-      // Already stabilized: just fit without physics
-      setTimeout(() => {
-        if (networkRef.current) {
-          networkRef.current.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
-        }
-      }, 50);
     }
+    // When already stabilized, only update node data; do not fit() so the view is not re-centered on selection
   }, [nodes, toVisNode]);
 
   // Update edges

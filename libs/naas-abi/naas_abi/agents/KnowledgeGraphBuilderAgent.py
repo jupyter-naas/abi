@@ -6,7 +6,7 @@ from naas_abi_core.services.agent.Agent import (
     AgentSharedState,
 )
 
-NAME: str = "Knowledge_Graph_Builder"
+NAME: str = "Knowledge Graph Builder"
 AVATAR_URL: str = "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Rdf_logo.svg/1200px-Rdf_logo.svg.png"
 DESCRIPTION: str = (
     "A Knowledge Graph Builder Agent that helps users to build Knowledge Graphs."

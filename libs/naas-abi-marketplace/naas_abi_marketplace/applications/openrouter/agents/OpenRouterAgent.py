@@ -58,7 +58,11 @@ def create_agent(
     object_storage = module.engine.services.object_storage
 
     # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+    from naas_abi_marketplace.applications.openrouter.models.OpenRouterModel import (
+        OpenRouterModel,
+    )
+
+    model = OpenRouterModel(api_key=api_key).get_model("openrouter/free")
 
     # Define tools (none initially)
     tools: list = []
@@ -110,7 +114,7 @@ def create_agent(
     return OpenRouterAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=model,
         tools=tools,
         intents=intents,
         state=agent_shared_state,

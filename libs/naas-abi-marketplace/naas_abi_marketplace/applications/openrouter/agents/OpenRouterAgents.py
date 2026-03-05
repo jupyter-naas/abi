@@ -13,6 +13,8 @@ from naas_abi_marketplace.applications.openrouter.models.OpenRouterModel import 
     OpenRouterModel,
 )
 
+OPENROUTER_AGENT_MODULE = "naas_abi_marketplace.applications.openrouter.agents"
+
 
 class OpenRouterAgents:
     def __init__(
@@ -32,8 +34,10 @@ class OpenRouterAgents:
         )
 
         # Create a safe class name from model_id
-        # e.g., "anthropic/claude-sonnet-4.6" -> "AnthropicClaudeSonnet46Agent"
-        class_name_parts = model_id.replace("/", " ").replace("-", " ").split()
+        # e.g., "anthropic/claude-sonnet-4.6" -> "AnthropicClaudeSonnet4_6Agent"
+        class_name_parts = (
+            model_id.replace("/", " ").replace("-", " ").replace(".", "_").split()
+        )
         class_name = "".join(word.capitalize() for word in class_name_parts) + "Agent"
 
         # Create the agent class factory function
@@ -127,6 +131,7 @@ You excel at providing accurate, helpful, and contextually appropriate responses
                 "name": model_name,
                 "description": model_description,
                 "New": classmethod(create_agent_func),
+                "__module__": OPENROUTER_AGENT_MODULE + "." + class_name,
             },
         )
 
