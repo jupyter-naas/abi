@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore, type Agent } from '@/stores/agents';
+import { useAgentList } from '@/components/ui/dialogs';
 import { getApiUrl } from '@/lib/config';
 
 const getApiBase = () => getApiUrl();
@@ -52,26 +53,16 @@ export function AgentSelector() {
   const [searchQuery, setSearchQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const { selectedAgent, setSelectedAgent } = useWorkspaceStore();
-  const { agents, fetchAgents } = useAgentsStore();
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const { defaultAgents, customAgents, filteredAgents, enabledAgents } = useAgentList(searchQuery);
 
-  // Filter to only enabled agents
-  const enabledAgents = agents.filter(a => a.enabled);
-  // Prefer SupervisorAgent as default, fallback to first enabled agent
-  const abiAgent = enabledAgents.find(a => a.id === 'abi');
+  // Prefer Abi as default, fallback to first enabled agent
+  const abiAgent = enabledAgents.find((a) => a.name === 'Abi');
   const defaultAgent = abiAgent || enabledAgents[0];
   const selected = enabledAgents.find((a) => a.id === selectedAgent) || defaultAgent;
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Fetch agents when workspace changes
-  useEffect(() => {
-    if (currentWorkspaceId) {
-      fetchAgents(currentWorkspaceId);
-    }
-  }, [currentWorkspaceId, fetchAgents]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -84,17 +75,6 @@ export function AgentSelector() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  // Filter agents by search query and enabled status
-  const filteredAgents = searchQuery.trim()
-    ? enabledAgents.filter((a) =>
-        a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : enabledAgents;
-
-  const defaultAgents = filteredAgents.filter(a => a.isDefault).sort((a, b) => a.name.localeCompare(b.name));
-  const customAgents = filteredAgents.filter(a => !a.isDefault).sort((a, b) => a.name.localeCompare(b.name));
 
   // Show default on server to prevent hydration mismatch
   const displayAgent = mounted ? selected : defaultAgent;
