@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, Globe, ArrowUp, Download } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, Globe, ArrowUp, Download, ExternalLink } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -29,6 +30,117 @@ const getLogoUrl = (url: string | null): string | undefined => {
 // Max image size for uploads (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+// Match http(s) URLs for linkification and preview
+const URL_REGEX = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
+
+/** Split text into segments; URLs become anchor elements so they get href styling and preview */
+function linkifyText(text: string, isUser: boolean): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  URL_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const url = match[0];
+    parts.push(
+      <React.Fragment key={key++}>
+        <LinkWithPreview href={url} isUserBubble={isUser}>
+          {url}
+        </LinkWithPreview>
+      </React.Fragment>
+    );
+    lastIndex = match.index + url.length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts;
+}
+
+/** Styled link with hover card: open in new tab only. Rendered via portal so it stays above chat list/input. */
+function LinkWithPreview({
+  href,
+  children,
+  isUserBubble,
+}: {
+  href: string;
+  children: React.ReactNode;
+  isUserBubble?: boolean;
+}) {
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+
+  const linkClass = isUserBubble
+    ? 'text-white underline underline-offset-2 hover:opacity-90 break-all'
+    : 'text-workspace-accent hover:text-workspace-accent/90 underline underline-offset-2 break-all';
+
+  const domain = (() => {
+    try {
+      return new URL(href).hostname;
+    } catch {
+      return href;
+    }
+  })();
+
+  const handleMouseEnter = () => {
+    const el = linkRef.current;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      setPosition({ left: rect.left, top: rect.bottom + 4 });
+    }
+    setShowPreview(true);
+  };
+
+  const handleMouseLeave = () => {
+    setShowPreview(false);
+    setPosition(null);
+  };
+
+  const cardContent =
+    showPreview && position ? (
+      <span
+        className="fixed flex w-72 max-w-[90vw] flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+        style={{ left: position.left, top: position.top, zIndex: 99999 }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <div className="p-3">
+          <p className="text-xs font-medium text-foreground line-clamp-1">{domain}</p>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 flex items-center gap-1.5 text-xs text-workspace-accent hover:underline"
+          >
+            <ExternalLink size={12} />
+            Open in new tab
+          </a>
+        </div>
+      </span>
+    ) : null;
+
+  return (
+    <>
+      <a
+        ref={linkRef}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkClass}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {children}
+      </a>
+      {typeof document !== 'undefined' && cardContent && createPortal(cardContent, document.body)}
+    </>
+  );
+}
 
 export function ChatInterface() {
   const [mounted, setMounted] = useState(false);
@@ -899,6 +1011,19 @@ const MessageBubble = React.memo(function MessageBubble({
     ? (message.authorName || user?.name || 'You')
     : (agent?.name || message.agent || 'Assistant');
 
+  // Unwrap JSON-wrapped content if the provider returned {"content": "..."}
+  const displayContent = (() => {
+    const raw = message.content;
+    if (typeof raw !== 'string' || !raw.trim().startsWith('{')) return raw;
+    try {
+      const obj = JSON.parse(raw);
+      if (obj && typeof obj === 'object' && typeof obj.content === 'string') return obj.content;
+    } catch {
+      // ignore
+    }
+    return raw;
+  })();
+
   // Parse thinking content from <think>...</think> tags
   const parseThinking = (content: string) => {
     const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
@@ -910,7 +1035,7 @@ const MessageBubble = React.memo(function MessageBubble({
     return { thinking: null, response: content };
   };
 
-  const { thinking, response } = isUser ? { thinking: null, response: message.content } : parseThinking(message.content);
+  const { thinking, response } = isUser ? { thinking: null, response: displayContent } : parseThinking(displayContent);
 
   // Detect caret placeholder usage in streaming content and strip it for display
   const endsWithCaret = typeof response === 'string' && /▌$/.test(response);
@@ -960,6 +1085,20 @@ const MessageBubble = React.memo(function MessageBubble({
 
   const markdownComponents = useMemo(
     () => ({
+      a: ({
+        href,
+        children,
+        ...props
+      }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children?: React.ReactNode }) => {
+        if (!href || !/^https?:\/\//i.test(href)) {
+          return <a href={href} {...props}>{children}</a>;
+        }
+        return (
+          <LinkWithPreview href={href} isUserBubble={false}>
+            {children ?? href}
+          </LinkWithPreview>
+        );
+      },
       pre: ({
         children,
         ...props
@@ -1106,7 +1245,9 @@ const MessageBubble = React.memo(function MessageBubble({
           </div>
           
           {isUser ? (
-            <p className="whitespace-pre-wrap text-right">{response}</p>
+            <p className="whitespace-pre-wrap text-right">
+              {(response as string).match(URL_REGEX) ? linkifyText(response as string, true) : response}
+            </p>
           ) : isStillProcessing ? (
             <div className="flex items-baseline gap-1">
               {responseWithoutCaret && (

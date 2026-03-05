@@ -61,7 +61,6 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from sse_starlette.sse import EventSourceResponse
 
-
 _shared_checkpointer: BaseCheckpointSaver | None = None
 _shared_checkpointer_url: str | None = None
 _shared_postgres_connection: Any | None = None
@@ -410,8 +409,8 @@ class Agent(Expose):
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
                 If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
         """
-        logger.debug(f"Initializing agent: {name}")
-        self._name = name
+        self._name = self.validate_name(name)
+        logger.debug(f"Initializing agent: '{self._name}'")
         self._description = description
         self._state = state
         self._original_tools = tools
@@ -422,7 +421,10 @@ class Agent(Expose):
             self._state.set_supervisor_agent(self._state.supervisor_agent)
         logger.debug(f"Supervisor agent: {self._state.supervisor_agent}")
 
-        agent_names = [a.name for a in self._original_agents] + [name]
+        # We validate the names of the agents.
+        agent_names: list[str] = [agent.name for agent in self._original_agents] + [
+            self._name
+        ]
         if (
             self._state.current_active_agent is not None
             and self._state.current_active_agent in agent_names
@@ -442,14 +444,10 @@ class Agent(Expose):
         assert isinstance(description, str)
         assert isinstance(chat_model, BaseChatModel | ChatModel)
 
-        # We assert agents
-        for agent in agents:
-            assert isinstance(agent, Agent)
-
         # We store the provided tools in __structured_tools because we will need to know which ones are provided by the user and which one are agents.
         # This is needed when we duplicate the agent.
         _structured_tools, _agents = self.prepare_tools(
-            cast(list[Union[Tool, BaseTool, "Agent"]], tools), agents
+            cast(list[Union[Tool, BaseTool, "Agent"]], tools), self._original_agents
         )
         self._structured_tools = _structured_tools
         self._agents = _agents
@@ -656,20 +654,6 @@ class Agent(Expose):
                     intents_text += "\n"
             return intents_text.rstrip()
 
-        @tool(return_direct=False)
-        def read_makefile() -> str:
-            """Read the Makefile and return the content."""
-            try:
-                with open("Makefile", "r") as f:
-                    makefile_content = f.read()
-
-                return "Here are the make commands available:\n\n" + makefile_content
-
-            except FileNotFoundError:
-                return "Could not find Makefile in the root directory."
-            except Exception as e:
-                return f"Error reading Makefile: {str(e)}"
-
         tools: list[Tool | BaseTool] = [
             get_time_date,
             list_tools_available,
@@ -682,9 +666,6 @@ class Agent(Expose):
         if self.state.supervisor_agent is not None or len(self._agents) > 0:
             tools.append(get_current_active_agent)
             tools.append(get_supervisor_agent)
-
-        if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev":
-            tools.append(read_makefile)
         return tools
 
     @property
@@ -695,18 +676,28 @@ class Agent(Expose):
     def state(self) -> AgentSharedState:
         return self._state
 
-    def validate_tool_name(self, tool: BaseTool) -> BaseTool:
-        if not re.match(r"^[a-zA-Z0-9_-]+$", tool.name):
-            # Replace invalid characters with '_'
-            valid_name = re.sub(r"[^a-zA-Z0-9_-]", "_", tool.name)
+    def validate_name(self, name: str) -> str:
+        # Only allow characters valid for graph node names (e.g. ':' is reserved and not allowed).
+        pattern = r"^[a-zA-Z0-9_-]+$"
+        if not re.match(pattern, name):
+            # Replace invalid/reserved characters (including ':') with '_'
+            valid_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
             logger.warning(
-                f"Tool name '{tool.name}' does not comply with '^[a-zA-Z0-9_-]+$'. Renaming to '{valid_name}'."
+                f"Name '{name}' does not match pattern '{pattern}' (e.g. ':' is reserved). Renaming to '{valid_name}'."
             )
-            tool.name = valid_name
+            return valid_name.replace("__", "_")
+        return name
+
+    def validate_tool_name(self, tool: BaseTool) -> BaseTool:
+        tool.name = self.validate_name(tool.name)
         return tool
 
+    def validate_agent_name(self, agent: Agent) -> Agent:
+        agent._name = self.validate_name(agent.name)
+        return agent
+
     def prepare_tools(
-        self, tools: list[Union[Tool, BaseTool, "Agent"]], agents: list
+        self, tools: list[Union[Tool, BaseTool, "Agent"]], agents: list[Agent]
     ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
@@ -735,6 +726,7 @@ class Agent(Expose):
             else:
                 # Accept both Tool and BaseTool
                 if hasattr(t, "name"):
+                    t = self.validate_tool_name(t)
                     if t.name not in _tool_names:
                         _tools.append(t)
                         _tool_names.add(t.name)
@@ -775,7 +767,9 @@ class Agent(Expose):
         graph.add_node(self.call_tools)
 
         for agent in self._agents:
-            graph.add_node(agent.name, agent.graph)
+            agent = self.validate_agent_name(agent)
+            logger.debug(f"Adding agent to graph: '{agent._name}'")
+            graph.add_node(agent._name, agent.graph)
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
@@ -914,25 +908,6 @@ SUBAGENT SYSTEM PROMPT:
 {state["system_prompt"]}
 """
             updated_system_prompt = subagent_prompt
-
-        if (
-            self.state.supervisor_agent == self.name
-            and os.getenv("ENV") == "dev"
-            and "DEVELOPPER SYSTEM PROMPT" not in state["system_prompt"]
-        ):
-            dev_prompt = f"""
-DEVELOPPER SYSTEM PROMPT:
-
-For any questions/commands related to the project, use tool: `read_makefile` to get the information you need.
-
---------------------------------
-
-AGENT SYSTEM PROMPT:
-
-{state["system_prompt"]}
-"""
-
-            updated_system_prompt = dev_prompt
 
         if "CURRENT_DATE" not in state["system_prompt"]:
             from datetime import datetime

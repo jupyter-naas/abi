@@ -56,6 +56,7 @@ export interface Agent {
   id: string;
   name: string;
   description: string;
+  class_name?: string | null; // e.g. "naas_abi.agents/AbiAgent"
   icon: 'user' | 'bot' | 'cpu' | 'brain' | 'sparkles' | 'zap' | 'target' | 'search';
   systemPrompt: string;
   providerId: string | null; // DEPRECATED: Legacy 1:1 mapping to a provider config
@@ -111,6 +112,7 @@ export const useAgentsStore = create<AgentsState>()(
               id: a.id,
               name: a.name,
               description: a.description || '',
+              class_name: a.class_name ?? undefined,
               icon: 'sparkles' as Agent['icon'],
               systemPrompt: a.system_prompt || '',
               providerId: a.model || null, // DEPRECATED: keep for backward compat
