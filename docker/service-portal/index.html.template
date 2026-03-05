@@ -156,7 +156,7 @@
     <div class="container">
       <div class="header">
         <h1>ABI Service Portal</h1>
-        <div class="hint">Grouped by typology for faster local navigation</div>
+        <div class="hint">Grouped by typology for faster navigation</div>
       </div>
 
       <div class="section">
@@ -166,8 +166,8 @@
             <h2>ABI API</h2>
             <p>Core ABI service and operator UI.</p>
             <div class="links">
-              <a href="http://127.0.0.1:9879" target="_blank" rel="noreferrer">REST API</a>
-              <a href="http://127.0.0.1:9879/docs" target="_blank" rel="noreferrer">OpenAPI Docs</a>
+              <a href="#" data-port="9879" data-path="/" target="_blank" rel="noreferrer">REST API</a>
+              <a href="#" data-port="9879" data-path="/docs" target="_blank" rel="noreferrer">OpenAPI Docs</a>
             </div>
           </div>
 
@@ -175,7 +175,7 @@
             <h2>Nexus</h2>
             <p>Artifact repository manager.</p>
             <div class="links">
-              <a href="http://127.0.0.1:3042" target="_blank" rel="noreferrer">Nexus UI</a>
+              <a href="#" data-port="3042" data-path="/" target="_blank" rel="noreferrer">Nexus UI</a>
             </div>
           </div>
         </div>
@@ -188,7 +188,7 @@
             <h2>PostgreSQL</h2>
             <p>Agent memory database.</p>
             <div class="links">
-              <span>postgresql://abi_user:abi_password@localhost:5432/abi_memory</span>
+              <span data-host-template="postgresql://abi_user:abi_password@{host}:5432/abi_memory">postgresql://abi_user:abi_password@{host}:5432/abi_memory</span>
               <span class="badge">non-HTTP</span>
             </div>
           </div>
@@ -197,9 +197,9 @@
             <h2>Qdrant</h2>
             <p>Vector database API and dashboard.</p>
             <div class="links">
-              <a href="http://localhost:6333/dashboard" target="_blank" rel="noreferrer">Dashboard</a>
-              <a href="http://localhost:6333" target="_blank" rel="noreferrer">REST API</a>
-              <span>gRPC: localhost:6334 <span class="badge">non-HTTP</span></span>
+              <a href="#" data-port="6333" data-path="/dashboard" target="_blank" rel="noreferrer">Dashboard</a>
+              <a href="#" data-port="6333" data-path="/" target="_blank" rel="noreferrer">REST API</a>
+              <span data-host-template="gRPC: {host}:6334">gRPC: {host}:6334 <span class="badge">non-HTTP</span></span>
             </div>
           </div>
 
@@ -207,10 +207,10 @@
             <h2>Apache Jena TDB2</h2>
             <p>RDF triple store with HTTP SPARQL query access.</p>
             <div class="links">
-              <a href="http://localhost:3030/" target="_blank" rel="noreferrer">Fuseki Admin UI</a>
-              <a href="http://localhost:3030/ds" target="_blank" rel="noreferrer">Dataset endpoint</a>
-              <a href="http://localhost:3030/ds/query" target="_blank" rel="noreferrer">SPARQL Query</a>
-              <a href="http://localhost:3000" target="_blank" rel="noreferrer">SPARQL HTTP Query UI</a>
+              <a href="#" data-port="3030" data-path="/" target="_blank" rel="noreferrer">Fuseki Admin UI</a>
+              <a href="#" data-port="3030" data-path="/ds" target="_blank" rel="noreferrer">Dataset endpoint</a>
+              <a href="#" data-port="3030" data-path="/ds/query" target="_blank" rel="noreferrer">SPARQL Query</a>
+              <a href="#" data-port="3000" data-path="/" target="_blank" rel="noreferrer">SPARQL HTTP Query UI</a>
             </div>
           </div>
         </div>
@@ -223,8 +223,8 @@
             <h2>MinIO</h2>
             <p>S3-compatible object storage.</p>
             <div class="links">
-              <a href="http://localhost:9001" target="_blank" rel="noreferrer">Console</a>
-              <a href="http://localhost:9000" target="_blank" rel="noreferrer">S3 API</a>
+              <a href="#" data-port="9001" data-path="/" target="_blank" rel="noreferrer">Console</a>
+              <a href="#" data-port="9000" data-path="/" target="_blank" rel="noreferrer">S3 API</a>
             </div>
           </div>
         </div>
@@ -237,8 +237,8 @@
             <h2>RabbitMQ</h2>
             <p>AMQP message bus with UI.</p>
             <div class="links">
-              <a href="http://localhost:15672" target="_blank" rel="noreferrer">Management UI</a>
-              <span>AMQP: localhost:5672 <span class="badge">non-HTTP</span></span>
+              <a href="#" data-port="15672" data-path="/" target="_blank" rel="noreferrer">Management UI</a>
+              <span data-host-template="AMQP: {host}:5672">AMQP: {host}:5672 <span class="badge">non-HTTP</span></span>
             </div>
           </div>
 
@@ -246,8 +246,8 @@
             <h2>Redis</h2>
             <p>In-memory cache and broker.</p>
             <div class="links">
-              <a href="http://localhost:8082" target="_blank" rel="noreferrer">Redis Commander UI</a>
-              <span>redis://localhost:6379 <span class="badge">non-HTTP</span></span>
+              <a href="#" data-port="8082" data-path="/" target="_blank" rel="noreferrer">Redis Commander UI</a>
+              <span data-host-template="redis://{host}:6379">redis://{host}:6379 <span class="badge">non-HTTP</span></span>
             </div>
           </div>
         </div>
@@ -260,7 +260,7 @@
             <h2>Dagster</h2>
             <p>Workflow orchestration UI.</p>
             <div class="links">
-              <a href="http://localhost:3001" target="_blank" rel="noreferrer">Dagster UI</a>
+              <a href="#" data-port="3001" data-path="/" target="_blank" rel="noreferrer">Dagster UI</a>
             </div>
           </div>
         </div>
@@ -273,8 +273,8 @@
             <h2>Synapse (Matrix)</h2>
             <p>Homeserver APIs for result distribution.</p>
             <div class="links">
-              <a href="http://localhost:8008" target="_blank" rel="noreferrer">Client-Server API</a>
-              <span>Federation: localhost:8448 <span class="badge">non-HTTP</span></span>
+              <a href="#" data-port="8008" data-path="/" target="_blank" rel="noreferrer">Client-Server API</a>
+              <span data-host-template="Federation: {host}:8448">Federation: {host}:8448 <span class="badge">non-HTTP</span></span>
             </div>
           </div>
 
@@ -282,7 +282,7 @@
             <h2>Element Web</h2>
             <p>Matrix web client for consuming outputs.</p>
             <div class="links">
-              <a href="http://localhost:8081" target="_blank" rel="noreferrer">Element UI</a>
+              <a href="#" data-port="8081" data-path="/" target="_blank" rel="noreferrer">Element UI</a>
             </div>
           </div>
         </div>
@@ -292,5 +292,37 @@
         If a link fails, the service may not be running in your active profile.
       </div>
     </div>
+    <script>
+      (() => {
+        const { protocol, hostname } = window.location;
+
+        const buildUrl = (port, path = "/") => {
+          const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+          return `${protocol}//${hostname}:${port}${normalizedPath}`;
+        };
+
+        document.querySelectorAll("a[data-port]").forEach((link) => {
+          const port = link.getAttribute("data-port");
+          const path = link.getAttribute("data-path") || "/";
+
+          if (!port) {
+            return;
+          }
+
+          link.setAttribute("href", buildUrl(port, path));
+        });
+
+        document.querySelectorAll("[data-host-template]").forEach((node) => {
+          const template = node.getAttribute("data-host-template");
+
+          if (!template) {
+            return;
+          }
+
+          const separator = node.childNodes.length > 1 ? " " : "";
+          node.childNodes[0].textContent = template.replaceAll("{host}", hostname) + separator;
+        });
+      })();
+    </script>
   </body>
 </html>
