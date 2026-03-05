@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   BrainCircuit, ChevronRight, Box, Link2,
-  FolderPlus, RefreshCw, Import, Plus, BookOpen, FileCode,
+  RefreshCw, Import, Plus, BookOpen, FileCode,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -46,7 +46,6 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
   const {
     items: ontologyItems,
     loading: ontologyLoading,
-    createFolder: createOntologyFolder,
     refreshItems: refreshOntology,
     referenceOntologies,
     expandedReferences,
@@ -157,7 +156,7 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
         <button
           onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology?view=create-relationship'))}
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="New Relationship"
+          title="New Object Property"
         >
           <Link2 size={14} />
         </button>
@@ -170,17 +169,6 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
           title="Refresh"
         >
           <RefreshCw size={14} />
-        </button>
-        <button
-          onClick={async () => {
-            const timestamp = Date.now();
-            const name = `Folder_${timestamp}`;
-            await createOntologyFolder(name);
-          }}
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="New Folder"
-        >
-          <FolderPlus size={14} />
         </button>
         <button
           onClick={() => {
