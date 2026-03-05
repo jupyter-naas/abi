@@ -365,7 +365,7 @@ export default function AgentsPage() {
                               <div className="min-w-0 flex-1">
                                 <p className="font-medium">{agent.name}</p>
                                 {agent.class_name ? (
-                                  <p className="text-xs text-muted-foreground italic">
+                                  <p className="text-[10px] text-muted-foreground italic pb-0.5">
                                     {agent.class_name.split('/')[0]}
                                   </p>
                                 ) : null}
