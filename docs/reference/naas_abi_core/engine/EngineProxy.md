@@ -20,6 +20,11 @@
       - If locked: returns only modules listed in `module_dependencies.modules`, supporting optional `#soft` suffix.
   - `services -> ServicesProxy`
     - Purpose: access engine services through a dependency-checked proxy.
+  - `api_configuration -> ApiConfiguration`
+    - Purpose: read API runtime configuration shared by the engine (for example `cors_origins`).
+    - Behavior:
+      - Returns `engine.configuration.api`.
+      - Raises `RuntimeError` when API configuration is not available from the wrapped engine.
 
 ### `class ServicesProxy`
 - **Constructor**
@@ -38,6 +43,7 @@
   - `engine.modules: Dict[str, BaseModule]`
   - `engine.services.<service_name>` attributes for:
     - `object_storage`, `triple_store`, `vector_store`, `secret`, `bus`, `kv`
+  - `engine.configuration.api`
 - Requires `ModuleDependencies` with:
   - `services`: a collection of allowed service *types* (e.g., `ObjectStorageService`)
   - `modules`: a collection of module names (strings), optionally suffixed with `#soft`

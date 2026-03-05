@@ -327,7 +327,7 @@ class ABIModule(BaseModule):
         nexus_config.settings = nexus_config.Settings(**settings_kwargs)
 
         # Keep API and Nexus CORS aligned from a single source of truth.
-        app.state.abi_cors_origins = self.engine.configuration.api.cors_origins
+        app.state.abi_cors_origins = self.engine.api_configuration.cors_origins
 
         # Expose ABI object storage to Nexus routes.
         app.state.object_storage = self.engine.services.object_storage
