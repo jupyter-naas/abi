@@ -451,6 +451,7 @@ async def get_ontology_overview_stats(
 
 def _compute_ontology_stats_for_graph(graph: Graph) -> tuple[int, int, int, int, int]:
     """Return (classes, object_properties, data_properties, named_individuals, imports) for a graph."""
+
     def _count_iri_subjects(rdf_type: URIRef) -> int:
         return len(
             {
@@ -964,64 +965,6 @@ async def import_reference_ontology(request: ImportRequest):
 
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to parse ontology file") from exc
-
-
-@router.post("/import/preview")
-async def preview_ontology_file(request: ImportRequest):
-    """Preview an ontology file before importing.
-
-    Accepts content directly - no server filesystem access.
-    """
-    try:
-        ontology = parse_ttl(request.content, request.filename)
-
-        return {
-            "name": ontology.name,
-            "classCount": len(ontology.classes),
-            "propertyCount": len(ontology.properties),
-            "preview": {
-                "classes": [c.model_dump() for c in ontology.classes[:5]],
-                "properties": [p.model_dump() for p in ontology.properties[:5]],
-            },
-        }
-
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to preview ontology file") from exc
-
-
-@router.get("/reference/bfo7")
-async def get_bfo7_reference() -> dict:
-    """Return the parsed BFO 7 Buckets reference ontology bundled with the server.
-
-    This enables clients to load a standard bucket taxonomy by default without
-    shipping the TTL file to the browser. The response mirrors /ontology/import.
-    """
-    try:
-        from pathlib import Path
-
-        # Locate repository root by walking up until we find the 'apps' directory
-        p = Path(__file__).resolve()
-        root = None
-        for _ in range(6):
-            if p.name == "apps":
-                root = p.parent
-                break
-            p = p.parent
-        if root is None:
-            # Fallback: assume five levels up from this file is repo root
-            root = Path(__file__).resolve().parents[4]
-
-        ttl_path = root / "ontology" / "BFO7Buckets.ttl"
-        if not ttl_path.exists():
-            raise FileNotFoundError(f"BFO7Buckets.ttl not found at {ttl_path}")
-
-        content = ttl_path.read_text(encoding="utf-8")
-        ontology = parse_ttl(content, str(ttl_path))
-        return ontology.model_dump()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail="Failed to load BFO7 reference ontology"
-        ) from exc
 
 
 @router.get("/ontologies")

@@ -517,21 +517,6 @@ export default function OntologyPage() {
                     )}
                   </div>
 
-                  {/* Example paths */}
-                  <div className="rounded-lg border bg-muted/30 p-4">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Example Paths
-                    </p>
-                    <div className="space-y-2">
-                      <button
-                        onClick={() => setImportPath('/Users/jrvmac/NCOR-Organization/BFO-Process-Ledger/src/ontology/bpl-modules/template/BFO7Buckets.ttl')}
-                        className="block w-full rounded-md bg-background p-2 text-left text-xs font-mono hover:bg-muted"
-                      >
-                        BFO 7 Buckets (TTL)
-                      </button>
-                    </div>
-                  </div>
-
                   {/* Supported formats */}
                   <div className="text-center text-xs text-muted-foreground">
                     Supported: .ttl (Turtle), .owl (OWL), .rdf (RDF/XML)
