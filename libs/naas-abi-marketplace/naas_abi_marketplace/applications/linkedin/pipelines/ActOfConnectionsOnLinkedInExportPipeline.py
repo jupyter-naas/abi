@@ -1,6 +1,5 @@
 import threading
 import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
@@ -33,13 +32,9 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
     Person,
     ProfilePage,
 )
-from naas_abi_marketplace.applications.linkedin.pipelines.LinkedInExportProfilePipeline import (
-    LinkedInExportProfilePipelineConfiguration,
-)
 from pydantic import Field
 from rdflib import Graph, Namespace, URIRef
 
-LINKEDIN = Namespace("http://ontology.naas.ai/abi/linkedin/")
 UNKNOWN_VALUE = "UNKNOWN"
 
 
@@ -49,31 +44,32 @@ class ActOfConnectionsOnLinkedInExportPipelineConfiguration(PipelineConfiguratio
 
     Attributes:
         triple_store (ITripleStoreService): The triple store service
+        linkedin_namespace (Namespace): The namespace for the LinkedIn ontology
+        linkedin_graph_name (URIRef): The graph name for the LinkedIn ontology
         linkedin_export_configuration (LinkedInExportIntegrationConfiguration): The LinkedIn export integration configuration
         limit (int | None): The limit of rows to process
         workers (int): Number of worker threads for parallel processing
     """
 
     triple_store: ITripleStoreService
+    linkedin_namespace: Namespace
+    linkedin_graph_name: URIRef
     linkedin_export_configuration: LinkedInExportIntegrationConfiguration
-    linkedin_export_profile_pipeline_configuration: (
-        LinkedInExportProfilePipelineConfiguration
-    )
     limit: int | None = None
     workers: int = 20
 
 
 class ActOfConnectionsOnLinkedInExportPipelineParameters(PipelineParameters):
-    """Parameters for LinkedInExportConnectionsPipeline.
+    """Parameters for ActOfConnectionsOnLinkedInExportPipeline.
 
     Attributes:
         file_name (str): Name of the CSV file to process
     """
 
-    person_name: Annotated[
-        str,
+    person: Annotated[
+        Person,
         Field(
-            description="LinkedIn public URL of the profile to process",
+            description="Person entity to process",
         ),
     ]
     file_name: Annotated[
@@ -99,37 +95,8 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             configuration.linkedin_export_configuration
         )
         self.__sparql_utils = SPARQLUtils(configuration.triple_store)
-
-    def get_person_entity_from_name(self, person_name: str) -> Person:
-        """
-        Get person URI and name using the public_url property from LinkedInProfilePage.
-        If not found, creates a new Person individual in the triple store.
-        Returns: (URIRef, label) if created, or (URIRef, label) if found, or (None, None)
-        """
-        sparql_query = """
-        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-
-        SELECT ?personUri ?personName
-        WHERE {{
-            ?person a cco:ont00001262 ; # Person
-                   rdfs:label ?personName .
-            FILTER(CONTAINS(LCASE(STR(?personName)), LCASE("{person_name}")))
-        }}
-        """.format(person_name=person_name.replace('"', '\\"'))
-        results = self.__sparql_utils.results_to_list(
-            self.__configuration.triple_store.query(sparql_query)
-        )
-        if results and results[0].get("personUri"):
-            return Person(
-                _uri=str(results[0]["personUri"]), label=results[0]["personName"]
-            )
-
-        # If not found, create individual in the graph
-        person_uri = ABI[str(uuid.uuid4())]
-        return Person(_uri=str(person_uri), label=person_name, given_name=person_name)
+        self.__linkedin_namespace = configuration.linkedin_namespace
+        self.__linkedin_graph_name = configuration.linkedin_graph_name
 
     def generate_graph_date(
         self,
@@ -175,7 +142,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             Graph containing all entities created from this row
         """
 
-        print(
+        logger.debug(
             f"🔄 Worker thread processing row {row_index + 1}/{total_rows} "
             f"(Thread: {threading.current_thread().name})"
         )
@@ -264,10 +231,10 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         person_entity.has_current_organization = [linkedin_org_entity]
         person_entity.has_connection_role = [connection_role_initial_entity]
         # Note: init_person_entity relationship is handled via URI reference
-        organization_entity.holds_linkedin_quality = [linkedin_org_entity]
+        organization_entity.has_organization_label = [linkedin_org_entity]
 
         # HOW WE KNOW
-        profile_page_entity.is_owned_by = [person_entity]
+        profile_page_entity.is_profile_page_of = [person_entity]
         profile_page_entity.is_concretized_by = [act_of_connection_entity]
 
         # HOW IT IS
@@ -277,7 +244,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         position_entity.concretizes = [export_file_uriref, profile_page_entity]
         linkedin_org_entity.inheres_in = [person_entity, organization_entity]
         linkedin_org_entity.concretizes = [export_file_uriref]
-        organization_entity.holds_linkedin_quality = [linkedin_org_entity]
+        organization_entity.has_organization_label = [linkedin_org_entity]
         linkedin_public_url_entity.inheres_in = [person_entity]
         linkedin_public_url_entity.concretizes = [export_file_uriref]
 
@@ -287,7 +254,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
 
         # Generate graph from all entities created in this row
         row_graph = Graph()
-        row_graph.bind("linkedin", LINKEDIN)
+        row_graph.bind("linkedin", self.__linkedin_namespace)
         row_entities = [
             act_of_connection_entity,
             person_entity,
@@ -315,7 +282,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             )
 
         # Create shared entities that will be reused across all rows
-        person_entity = self.get_person_entity_from_name(parameters.person_name)
+        person_entity: Person = parameters.person
 
         # Create linkedin location entity
         linkedin_location_entity = Location(label=UNKNOWN_VALUE)
@@ -334,12 +301,12 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         # Create relationships between shared entities
         person_entity.is_located_in = [linkedin_location_entity]
         export_file_entity.is_owned_by = [linkedin_org_entity]
-        linkedin_org_entity.is_owner_of = [export_file_entity]
+        person_entity.is_owner_of = [export_file_entity]
 
         # Generate graph for shared entities and insert them once
         logger.debug("==> Generating graph for shared entities")
         shared_graph = Graph()
-        shared_graph.bind("linkedin", LINKEDIN)
+        shared_graph.bind("linkedin", self.__linkedin_namespace)
         shared_entities = [
             person_entity,
             linkedin_location_entity,
@@ -356,7 +323,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         if len(shared_graph) > 0:
             self.__configuration.triple_store.insert(
                 shared_graph,
-                graph_name=URIRef("http://ontology.naas.ai/graph/default"),
+                graph_name=self.__linkedin_graph_name,
             )
 
         # Store URIs for reuse in row processing
@@ -377,7 +344,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         logger.debug(f"✅ {len(df)} rows in CSV file to be processed")
 
         # Processing rows from CSV file with multi-worker threading
-        print(
+        logger.info(
             f"==> Starting parallel processing with {self.__configuration.workers} workers"
         )
         if self.__configuration.limit is not None:
@@ -405,7 +372,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
                 ): (idx, row)
                 for idx, (_, row) in enumerate(df.iterrows())
             }
-            print(
+            logger.info(
                 f"✅ Submitted {len(future_to_row)} tasks to {self.__configuration.workers} workers"
             )
 
@@ -419,13 +386,13 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
                     if len(row_graph) > 0:
                         self.__configuration.triple_store.insert(
                             row_graph,
-                            graph_name=URIRef("http://ontology.naas.ai/graph/default"),
+                            graph_name=self.__linkedin_graph_name,
                         )
                     processed_count += 1
                     if processed_count % 10 == 0 or processed_count == total_rows:
                         elapsed = time.time() - start_time
                         rate = processed_count / elapsed if elapsed > 0 else 0
-                        print(
+                        logger.info(
                             f"✅ Progress: {processed_count}/{total_rows} rows processed and inserted "
                             f"({rate:.2f} rows/sec, {elapsed:.2f}s elapsed)"
                         )
@@ -439,7 +406,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
 
         elapsed_time = time.time() - start_time
         avg_rate = processed_count / elapsed_time if elapsed_time > 0 else 0
-        print(
+        logger.info(
             f"✅ Completed processing: {processed_count}/{total_rows} rows successful, "
             f"{error_count} errors, {elapsed_time:.2f}s total ({avg_rate:.2f} rows/sec)"
         )
@@ -484,23 +451,23 @@ if __name__ == "__main__":
     linkedin_export_configuration = LinkedInExportIntegrationConfiguration(
         export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
     )
-    linkedin_export_profile_pipeline_configuration = (
-        LinkedInExportProfilePipelineConfiguration(
-            triple_store=module.engine.services.triple_store,
-            linkedin_export_configuration=linkedin_export_configuration,
-        )
-    )
-    person_name = "Florent Ravenel"
-    limit = None
 
+    # Create person entity
+    person_name = "Florent Ravenel"
+    person = Person(label=person_name, given_name=person_name, last_name=person_name)
+
+    # Pipeline
     pipeline = ActOfConnectionsOnLinkedInExportPipeline(
         ActOfConnectionsOnLinkedInExportPipelineConfiguration(
+            linkedin_namespace=module.configuration.linkedin_namespace,
+            linkedin_graph_name=module.configuration.linkedin_graph_name,
             triple_store=module.engine.services.triple_store,
             linkedin_export_configuration=linkedin_export_configuration,
-            linkedin_export_profile_pipeline_configuration=linkedin_export_profile_pipeline_configuration,
-            limit=limit,
+            limit=None,
         )
     )
     graph = pipeline.run(
-        ActOfConnectionsOnLinkedInExportPipelineParameters(person_name=person_name)
+        ActOfConnectionsOnLinkedInExportPipelineParameters(
+            person=person, file_name="Connections.csv"
+        )
     )

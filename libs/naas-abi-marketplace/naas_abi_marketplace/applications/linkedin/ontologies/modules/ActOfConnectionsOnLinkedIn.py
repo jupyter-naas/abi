@@ -261,7 +261,7 @@ class Person(RDFEntity):
         "has_email_address": "http://ontology.naas.ai/abi/linkedin/hasEmailAddress",
         "has_public_url": "http://ontology.naas.ai/abi/linkedin/hasCurrentPublicUrl",
         "is_located_in": "http://ontology.naas.ai/abi/linkedin/locatedIn",
-        "is_owner_of": "http://ontology.naas.ai/abi/linkedin/isOwnerOf",
+        "is_owner_of": "http://ontology.naas.ai/abi/linkedin/hasProfilePage",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "last_name": "http://ontology.naas.ai/abi/last_name",
     }
@@ -349,15 +349,15 @@ class Person(RDFEntity):
         Annotated[
             List[Union[Location, URIRef, str]],
             Field(
-                description="A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile."
+                description="A person or organization is located in y if and only if y is a UserSite that represents the location associated with the person or organization on LinkedIn. This property connects a Person or Organization to the LinkedIn user site they are located in as indicated on their LinkedIn profile."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
     is_owner_of: Optional[
         Annotated[
-            List[Union[ProfilePage, URIRef, str]],
+            List[Union[ConnectionsExportFile, ProfilePage, URIRef, str]],
             Field(
-                description="b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information."
+                description="b has profile page c =Def b is a person or organization, c is a LinkedIn profile page, and b has a LinkedIn profile page."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -374,16 +374,14 @@ class Organization(RDFEntity):
         "agent_involved_in": "http://ontology.naas.ai/abi/linkedin/agentInvolvedIn",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "holds_linkedin_quality": "http://ontology.naas.ai/abi/linkedin/holdsQuality",
+        "has_organization_label": "http://ontology.naas.ai/abi/linkedin/hasOrganizationLabel",
         "is_located_in": "http://ontology.naas.ai/abi/linkedin/locatedIn",
-        "is_owner_of": "http://ontology.naas.ai/abi/linkedin/isOwnerOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
         "agent_involved_in",
-        "holds_linkedin_quality",
+        "has_organization_label",
         "is_located_in",
-        "is_owner_of",
     }
 
     # Data properties
@@ -406,11 +404,11 @@ class Organization(RDFEntity):
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    holds_linkedin_quality: Optional[
+    has_organization_label: Optional[
         Annotated[
             List[Union[CurrentOrganization, URIRef, str]],
             Field(
-                description="A organization holds quality y if and only if y is a CurrentOrganization (a quality) that inheres in the organization and expresses a specific quality or characteristic as recorded on LinkedIn. This property connects a Organization to the specific quality or characteristic they hold that can be indicated on their LinkedIn organization page or on people's LinkedIn profile page who are part of the organization."
+                description="A organization has LinkedIn organization label y if and only if y is a CurrentOrganization (a quality) that inheres in the organization and expresses a specific quality or characteristic as recorded on LinkedIn. This property connects a Organization to the specific quality or characteristic they hold that can be indicated on their LinkedIn organization page or on people's LinkedIn profile page who are part of the organization."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -418,15 +416,7 @@ class Organization(RDFEntity):
         Annotated[
             List[Union[Location, URIRef, str]],
             Field(
-                description="A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_owner_of: Optional[
-        Annotated[
-            List[Union[ConnectionsExportFile, URIRef, str]],
-            Field(
-                description="b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information."
+                description="A person or organization is located in y if and only if y is a UserSite that represents the location associated with the person or organization on LinkedIn. This property connects a Person or Organization to the LinkedIn user site they are located in as indicated on their LinkedIn profile."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -469,10 +459,10 @@ class ProfilePage(RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "is_concretized_by": "http://purl.obolibrary.org/obo/BFO_0000058",
-        "is_owned_by": "http://ontology.naas.ai/abi/linkedin/isOwnedBy",
+        "is_profile_page_of": "http://ontology.naas.ai/abi/linkedin/isProfilePageOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"is_concretized_by", "is_owned_by"}
+    _object_properties: ClassVar[set[str]] = {"is_concretized_by", "is_profile_page_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -503,11 +493,11 @@ class ProfilePage(RDFEntity):
             Field(description="c is concretized by b =Def b concretizes c"),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_owned_by: Optional[
+    is_profile_page_of: Optional[
         Annotated[
             List[Union[Person, URIRef, str]],
             Field(
-                description="c is owned by b =Def c is an Information Content Entity (e.g., LinkedIn profile page) and b is the material entity that has ownership or control over c as information."
+                description="c is profile page of b =Def c is a LinkedIn Profile Page and b is the Person whose professional identity is represented by c."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -548,9 +538,9 @@ class ConnectionsExportFile(RDFEntity):
     # Object properties
     is_owned_by: Optional[
         Annotated[
-            List[Union[Organization, URIRef, str]],
+            List[Union[Organization, Person, URIRef, str]],
             Field(
-                description="c is owned by b =Def c is an Information Content Entity (e.g., LinkedIn profile page) and b is the material entity that has ownership or control over c as information."
+                description="c is owned by b =Def c is a Connections Export File and b is the Commercial Organization that has ownership or control over c."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
