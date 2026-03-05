@@ -417,42 +417,20 @@ async def get_ontology_overview_stats(
 ) -> OntologyOverviewStats:
     """Return ontology element counts for a specific ontology path."""
     try:
-        extension = Path(ontology_path).suffix.lower()
-        parse_format = {
-            ".ttl": "turtle",
-            ".owl": "xml",
-            ".rdf": "xml",
-            ".nt": "nt",
-        }.get(extension)
-
-        graph = Graph()
-        try:
-            graph.parse(ontology_path, format=parse_format)
-        except Exception:
-            # Fallback to rdflib format auto-detection when explicit mapping fails.
-            graph.parse(ontology_path)
-
-        def _count_iri_subjects(rdf_type: URIRef) -> int:
-            return len(
-                {
-                    subject
-                    for subject in graph.subjects(RDF.type, rdf_type)
-                    if isinstance(subject, URIRef)
-                }
-            )
-
-        classes_count = _count_iri_subjects(OWL.Class)
-        object_properties_count = _count_iri_subjects(OWL.ObjectProperty)
-        data_properties_count = _count_iri_subjects(OWL.DatatypeProperty)
-        named_individuals_count = _count_iri_subjects(OWL.NamedIndividual)
+        graph = _load_ontology_graph(ontology_path)
+        (
+            classes_count,
+            object_properties_count,
+            data_properties_count,
+            named_individuals_count,
+            imports_count,
+        ) = _compute_ontology_stats_for_graph(graph)
         total_items_count = (
             classes_count
             + object_properties_count
             + data_properties_count
             + named_individuals_count
         )
-        imports_count = len(set(graph.objects(None, OWL.imports)))
-
         return OntologyOverviewStats(
             name=Path(ontology_path).name,
             path=ontology_path,
@@ -471,85 +449,83 @@ async def get_ontology_overview_stats(
         ) from exc
 
 
+def _compute_ontology_stats_for_graph(graph: Graph) -> tuple[int, int, int, int, int]:
+    """Return (classes, object_properties, data_properties, named_individuals, imports) for a graph."""
+    def _count_iri_subjects(rdf_type: URIRef) -> int:
+        return len(
+            {
+                subject
+                for subject in graph.subjects(RDF.type, rdf_type)
+                if isinstance(subject, URIRef)
+            }
+        )
+
+    classes_count = _count_iri_subjects(OWL.Class)
+    object_properties_count = _count_iri_subjects(OWL.ObjectProperty)
+    data_properties_count = _count_iri_subjects(OWL.DatatypeProperty)
+    named_individuals_count = _count_iri_subjects(OWL.NamedIndividual)
+    imports_count = len(set(graph.objects(None, OWL.imports)))
+    return (
+        classes_count,
+        object_properties_count,
+        data_properties_count,
+        named_individuals_count,
+        imports_count,
+    )
+
+
 @router.get("/overview/stats/all")
 async def get_all_ontologies_overview_stats() -> OntologyOverviewAggregateStats:
-    """Return consolidated overview stats across all registered ontologies using the triple store."""
+    """Return consolidated overview stats across all registered ontology files (file-based aggregation)."""
     try:
-        from naas_abi import ABIModule
-
-        triple_store_service = ABIModule.get_instance().engine.services.triple_store
-
-        # SPARQL query to count classes, object properties, data properties, named individuals, imports
-        sparql = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        SELECT ?classes ?object_properties ?data_properties ?named_individuals ?imports
-        WHERE {
-        {
-            SELECT (COUNT(DISTINCT ?class) AS ?classes)
-            WHERE {
-            ?class a owl:Class .
-            }
-        }
-        {
-            SELECT (COUNT(DISTINCT ?obj_prop) AS ?object_properties)
-            WHERE {
-            ?obj_prop a owl:ObjectProperty .
-            }
-        }
-        {
-            SELECT (COUNT(DISTINCT ?data_prop) AS ?data_properties)
-            WHERE {
-            ?data_prop a owl:DatatypeProperty .
-            }
-        }
-        {
-            SELECT (COUNT(DISTINCT ?individual) AS ?named_individuals)
-            WHERE {
-            ?individual a owl:NamedIndividual .
-            }
-        }
-        {
-            SELECT (COUNT(DISTINCT ?import_iri) AS ?imports)
-            WHERE {
-            ?ontology owl:imports ?import_iri .
-            }
-        }
-        }
-        """
-
-        # Run the SPARQL query using the triple store service
-        result = triple_store_service.query(sparql)
-
-        row = None
-        for res in result:
-            row = res.asdict() if hasattr(res, "asdict") else dict(res)
-            break
-        if row is None:
-            row = {}
-
-        # Convert values to int safely, defaulting to 0 if missing
-        classes = int(row.get("classes", 0))
-        object_properties = int(row.get("object_properties", 0))
-        data_properties = int(row.get("data_properties", 0))
-        named_individuals = int(row.get("named_individuals", 0))
-        imports = int(row.get("imports", 0))
-        total_items = classes + object_properties + data_properties + named_individuals
-
-        # Get ontology count
         ontologies = await list_ontology_files()
         ontology_paths = [item.path for item in ontologies.get("items", [])]
+
+        total_classes = 0
+        total_object_properties = 0
+        total_data_properties = 0
+        total_named_individuals = 0
+        total_imports = 0
+
+        for path in ontology_paths:
+            try:
+                graph = _load_ontology_graph(path)
+                (
+                    classes_count,
+                    object_properties_count,
+                    data_properties_count,
+                    named_individuals_count,
+                    imports_count,
+                ) = _compute_ontology_stats_for_graph(graph)
+                total_classes += classes_count
+                total_object_properties += object_properties_count
+                total_data_properties += data_properties_count
+                total_named_individuals += named_individuals_count
+                total_imports += imports_count
+            except Exception:
+                # Skip files that fail to load (e.g. missing path)
+                continue
+
+        total_items = (
+            total_classes
+            + total_object_properties
+            + total_data_properties
+            + total_named_individuals
+        )
 
         return OntologyOverviewAggregateStats(
             name="All ontologies",
             path="*",
             ontologies_count=len(ontology_paths),
             total_items=total_items,
-            classes=classes,
-            object_properties=object_properties,
-            data_properties=data_properties,
-            named_individuals=named_individuals,
-            imports=imports,
+            classes=total_classes,
+            object_properties=total_object_properties,
+            data_properties=total_data_properties,
+            named_individuals=total_named_individuals,
+            imports=total_imports,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail="Failed to compute consolidated ontology overview stats"

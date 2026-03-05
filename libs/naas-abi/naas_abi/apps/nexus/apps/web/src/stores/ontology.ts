@@ -59,9 +59,13 @@ export interface OntologyItem {
   actions?: EntityAction[];
   
   // For items based on reference ontologies
-  baseClass?: string; // IRI of the base class
+  baseClass?: string; // IRI of the base class (or subclass parent); for relationships = subPropertyOf
+  example?: string;
   parentName?: string;
   referenceOntologyId?: string;
+  // For object properties (relationships)
+  domain?: string[]; // Class IRIs
+  range?: string[]; // Class IRIs
   
   // Metadata
   objectCount?: number; // Number of instances
@@ -123,8 +127,15 @@ interface OntologyState {
   // CRUD for user items
   fetchItems: () => Promise<void>;
   fetchItemsForView: (view: 'classes' | 'relations', ontologyPath?: string | null) => Promise<void>;
-  createEntity: (name: string, description?: string, baseClass?: string) => Promise<OntologyItem | null>;
-  createRelationship: (name: string, description?: string, baseProperty?: string) => Promise<OntologyItem | null>;
+  createEntity: (name: string, description?: string, baseClass?: string, example?: string) => Promise<OntologyItem | null>;
+  createRelationship: (
+    name: string,
+    definition?: string,
+    example?: string,
+    subPropertyOf?: string,
+    domain?: string[],
+    range?: string[]
+  ) => Promise<OntologyItem | null>;
   createFolder: (name: string) => Promise<OntologyItem | null>;
   deleteItem: (id: string) => Promise<boolean>;
   updateItem: (id: string, updates: Partial<OntologyItem>) => Promise<boolean>;
@@ -390,7 +401,7 @@ export const useOntologyStore = create<OntologyState>()(
         }
       },
 
-      createEntity: async (name, description, baseClass) => {
+      createEntity: async (name, description, baseClass, example) => {
         const workspaceId = getCurrentWorkspaceId();
         if (!workspaceId) {
           set({ error: 'No workspace selected' });
@@ -406,6 +417,7 @@ export const useOntologyStore = create<OntologyState>()(
           type: 'entity',
           description,
           baseClass,
+          example,
           pluralName: `${name}s`,
           aliases: [],
           status: 'draft',
@@ -421,20 +433,23 @@ export const useOntologyStore = create<OntologyState>()(
         return newItem;
       },
 
-      createRelationship: async (name, description, baseProperty) => {
+      createRelationship: async (name, definition, example, subPropertyOf, domain, range) => {
         const workspaceId = getCurrentWorkspaceId();
         if (!workspaceId) {
           set({ error: 'No workspace selected' });
           return null;
         }
-        
+
         const newItem: OntologyItem = {
           id: `rel-${Date.now()}`,
           workspaceId,
           name,
           type: 'relationship',
-          description,
-          baseClass: baseProperty,
+          description: definition,
+          example,
+          baseClass: subPropertyOf,
+          domain: domain?.length ? domain : undefined,
+          range: range?.length ? range : undefined,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
