@@ -37,7 +37,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
 
-type ViewMode = 'overview' | 'classes' | 'relations' | 'editor' | 'import' | 'create-entity' | 'create-relationship';
+type ViewMode = 'overview' | 'classes' | 'relations' | 'editor' | 'import' | 'export' | 'create-entity' | 'create-relationship';
 
 const VisNetwork = dynamic(
   () => import('@/components/graph/vis-network').then((mod) => mod.VisNetwork),
@@ -68,7 +68,7 @@ export default function OntologyPage() {
   // Update view mode and pre-fill form when URL changes
   useEffect(() => {
     const view = searchParams?.get('view') as ViewMode;
-    if (view && ['overview', 'classes', 'relations', 'editor', 'import', 'create-entity', 'create-relationship'].includes(view)) {
+    if (view && ['overview', 'classes', 'relations', 'editor', 'import', 'export', 'create-entity', 'create-relationship'].includes(view)) {
       const normalizedView = view === 'editor' ? 'classes' : view;
       setViewMode(normalizedView);
       if (normalizedView === 'classes' || normalizedView === 'relations') {
@@ -106,6 +106,13 @@ export default function OntologyPage() {
   const classItems = useMemo(() => items.filter((item) => item.type === 'entity'), [items]);
   const relationshipItems = useMemo(() => items.filter((item) => item.type === 'relationship'), [items]);
   const selectedOntologyPath = searchParams?.get('ontology') || null;
+
+  // When on Export view but no ontology is selected, return to overview (Export not available)
+  useEffect(() => {
+    if (viewMode === 'export' && !selectedOntologyPath) {
+      setViewMode('overview');
+    }
+  }, [viewMode, selectedOntologyPath]);
 
   useEffect(() => {
     if (viewMode === 'classes') {
@@ -265,9 +272,9 @@ export default function OntologyPage() {
     <div className="flex h-full flex-col">
       <Header />
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
         {/* Toolbar */}
-        <div className="flex h-10 items-center justify-between border-b bg-muted/30 px-4">
+        <div className="flex h-10 shrink-0 items-center justify-between border-b bg-muted/30 px-4">
           <div className="flex gap-1">
             <button
               onClick={() => setViewMode('overview')}
@@ -309,30 +316,34 @@ export default function OntologyPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setViewMode('import')}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+              className={cn(
+                'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+                viewMode === 'import' && 'text-foreground'
+              )}
             >
-              <Download size={14} />
+              <Upload size={14} />
               Import
             </button>
             <button
-              onClick={handleExportCurrentOntology}
-              disabled={!selectedOntologyPath || exporting}
+              onClick={() => setViewMode('export')}
+              disabled={!selectedOntologyPath}
               className={cn(
-                "flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground",
-                (!selectedOntologyPath || exporting) && "cursor-not-allowed opacity-50"
+                'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+                viewMode === 'export' && 'text-foreground',
+                !selectedOntologyPath && 'cursor-not-allowed'
               )}
-              title={!selectedOntologyPath ? 'Select an ontology file to export' : 'Export selected ontology'}
+              title={!selectedOntologyPath ? 'Select an ontology in Overview to export' : 'Export selected ontology'}
             >
-              <Upload size={14} />
-              {exporting ? 'Exporting...' : 'Export'}
+              <Download size={14} />
+              Export
             </button>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex flex-1 overflow-hidden">
+        {/* Content - scrollable */}
+        <div className="flex flex-1 min-h-0 overflow-y-auto">
           {viewMode === 'import' && (
-            <div className="flex flex-1 flex-col items-center justify-center bg-card p-8">
+            <div className="flex min-h-full w-full flex-col items-center justify-center bg-card p-8">
               <div className="w-full max-w-xl">
                 <div className="mb-6 text-center">
                   <div className="mb-4 flex justify-center">
@@ -408,12 +419,61 @@ export default function OntologyPage() {
             </div>
           )}
 
+          {viewMode === 'export' && selectedOntologyPath && (
+            <div className="flex min-h-full w-full flex-col items-center justify-center bg-card p-8">
+              <div className="w-full max-w-xl">
+                <div className="mb-6 text-center">
+                  <div className="mb-4 flex justify-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                      <Download size={32} className="text-muted-foreground" />
+                    </div>
+                  </div>
+                  <h2 className="mb-2 text-lg font-semibold">Export Ontology</h2>
+                  <p className="text-muted-foreground">
+                    Download the selected ontology as a TTL file.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Selected ontology
+                    </p>
+                    <p className="truncate font-mono text-sm" title={selectedOntologyPath}>
+                      {selectedOntologyPath}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleExportCurrentOntology}
+                      disabled={exporting}
+                      className={cn(
+                        'flex items-center gap-2 rounded-lg bg-workspace-accent px-6 py-2.5 text-sm font-medium text-white',
+                        'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                      )}
+                    >
+                      {exporting ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Download size={16} />
+                      )}
+                      {exporting ? 'Exporting...' : 'Export ontology'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {viewMode === 'overview' && (
+            <div className="min-h-full w-full">
             <OntologyOverviewView
               ontologyPath={selectedOntologyPath}
               onCreateEntity={openCreateEntity}
               onCreateRelationship={openCreateRelationship}
             />
+            </div>
           )}
 
           {(viewMode === 'classes' || viewMode === 'relations' || viewMode === 'editor') && (
@@ -431,7 +491,7 @@ export default function OntologyPage() {
 
           {/* Create Entity Form */}
           {viewMode === 'create-entity' && (
-            <div className="flex flex-1 flex-col bg-card p-6">
+            <div className="flex min-h-full w-full flex-col bg-card p-6">
               <div className="mx-auto w-full max-w-2xl">
                 <div className="mb-6 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -578,7 +638,7 @@ export default function OntologyPage() {
 
           {/* Create Relationship Form */}
           {viewMode === 'create-relationship' && (
-            <div className="flex flex-1 flex-col bg-card p-6">
+            <div className="flex min-h-full w-full flex-col bg-card p-6">
               <div className="mx-auto w-full max-w-2xl">
                 <div className="mb-6 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -1150,7 +1210,7 @@ function OntologyOverviewView({
     : null;
 
   return (
-    <div className="flex flex-1 flex-col bg-card p-6">
+    <div className="flex min-h-full flex-col bg-card p-6">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">Overview</h2>
@@ -1219,7 +1279,7 @@ function OntologyOverviewView({
             </h3>
             <div className="h-[560px] rounded-lg border overflow-hidden">
               <div className="flex h-full">
-                <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
+                <div className="flex-1 bg-zinc-50 dark:bg-zinc-900">
                   <div className="absolute left-4 top-4 z-10 flex gap-2">
                     <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
                       <Search size={14} className="text-muted-foreground" />
