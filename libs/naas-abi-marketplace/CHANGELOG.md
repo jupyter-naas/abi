@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.7.3 (2026-03-05)
+
+### Bug Fixes
+
+- Create default module path
+  ([`a906c76`](https://github.com/jupyter-naas/abi/commit/a906c7668a2a7ed008143b79c7619ccd059f06e7))
+
+- Improve href display in chat interface
+  ([`56b9c1b`](https://github.com/jupyter-naas/abi/commit/56b9c1b68d62f45e8d8cabe6d79f48fe074b30da))
+
+
 ## v1.7.2 (2026-03-03)
 
 ### Bug Fixes
