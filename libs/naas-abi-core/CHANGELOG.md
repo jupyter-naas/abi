@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.18.3 (2026-03-05)
+
+### Bug Fixes
+
+- Make check
+  ([`9557a48`](https://github.com/jupyter-naas/abi/commit/9557a48c5fef634f31817cd922567947c2309afe))
+
+
 ## v1.18.2 (2026-03-02)
 
 ### Bug Fixes
