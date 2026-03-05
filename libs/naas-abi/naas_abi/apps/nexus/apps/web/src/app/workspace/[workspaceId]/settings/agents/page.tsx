@@ -364,6 +364,11 @@ export default function AgentsPage() {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="font-medium">{agent.name}</p>
+                                {agent.class_name ? (
+                                  <p className="text-xs text-muted-foreground italic">
+                                    {agent.class_name.split('/')[0]}
+                                  </p>
+                                ) : null}
                                 <p
                                   className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]"
                                   title={agent.description || undefined}
