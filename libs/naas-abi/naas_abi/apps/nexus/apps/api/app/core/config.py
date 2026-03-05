@@ -2,7 +2,6 @@
 Application configuration using pydantic-settings.
 """
 
-import json
 import sys
 from functools import lru_cache
 from typing import Any, Literal
@@ -166,41 +165,6 @@ class Settings(BaseSettings):
     api_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:3000"
     websocket_path: str = "/ws/socket.io"
-
-    # CORS - accept comma-separated (CORS_ORIGINS_STR) or JSON array (CORS_ORIGINS)
-    cors_origins_str: str = "http://localhost:3000,http://127.0.0.1:3000"
-    cors_origins: str | None = None  # Optional JSON array e.g. '["http://localhost:3000"]'
-
-    @property
-    def cors_origins_list(self) -> list[str]:
-        """Resolved CORS origins: from env, merged; local dev always includes localhost."""
-        origins: set[str] = set()
-        # From comma-separated string
-        for o in self.cors_origins_str.split(","):
-            o = o.strip()
-            if o:
-                origins.add(o)
-        # From JSON array (CORS_ORIGINS in .env)
-        if self.cors_origins:
-            try:
-                parsed = (
-                    json.loads(self.cors_origins)
-                    if isinstance(self.cors_origins, str)
-                    else self.cors_origins
-                )
-                if isinstance(parsed, list):
-                    for o in parsed:
-                        if isinstance(o, str) and o.strip():
-                            origins.add(o.strip())
-            except (json.JSONDecodeError, TypeError):
-                pass
-        # In development, always allow localhost so frontend never gets blocked
-        if self.environment == "development" or self.nexus_env == "local":
-            origins.add("http://localhost:3000")
-            origins.add("http://127.0.0.1:3000")
-            origins.add("http://localhost:3042")
-            origins.add("http://127.0.0.1:3042")
-        return list(origins)
 
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only
