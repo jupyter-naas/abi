@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.20.0 (2026-03-05)
+
+### Documentation
+
+- Working on documentation
+  ([`725631e`](https://github.com/jupyter-naas/abi/commit/725631e61c03183656bd3ac4082a0c444003f353))
+
+### Features
+
+- Working on centralizing CORS usage
+  ([`08caa0d`](https://github.com/jupyter-naas/abi/commit/08caa0d2896f03a0c88e25d38ed0f2a076ec73ef))
+
+
 ## v1.19.5 (2026-03-04)
 
 
