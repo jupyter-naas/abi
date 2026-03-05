@@ -65,6 +65,40 @@ def _get_agent_class_description(agent_cls: type) -> str | None:
     return desc if isinstance(desc, str) else None
 
 
+def _get_agent_system_prompt(agent_cls: type) -> str | None:
+    """Resolve system prompt from agent class. Uses class attribute or default AgentConfiguration."""
+    sp = getattr(agent_cls, "system_prompt", None)
+    if isinstance(sp, str):
+        return sp
+    from naas_abi_core.services.agent.Agent import AgentConfiguration
+
+    config = AgentConfiguration()
+    return config.get_system_prompt([])
+
+
+def _extract_agent_intents(agent_cls: type) -> list[dict[str, str]] | None:
+    """Extract intents from agent class as list of dicts for API (intent_value, intent_type, intent_target, intent_scope)."""
+    raw = getattr(agent_cls, "intents", None)
+    if not isinstance(raw, list) or not raw:
+        return None
+    out: list[dict[str, str]] = []
+    for item in raw:
+        if not hasattr(item, "intent_value") or not hasattr(item, "intent_type"):
+            continue
+        d: dict[str, str] = {
+            "intent_value": getattr(item, "intent_value", ""),
+            "intent_type": getattr(item.intent_type, "value", str(item.intent_type)),
+            "intent_target": str(getattr(item, "intent_target", "")),
+        }
+        scope = getattr(item, "intent_scope", None)
+        if scope is not None and hasattr(scope, "value"):
+            d["intent_scope"] = scope.value
+        else:
+            d["intent_scope"] = str(scope) if scope is not None else ""
+        out.append(d)
+    return out if out else None
+
+
 @router.get("/")
 async def list_agents(
     workspace_id: str | None = None,
@@ -78,7 +112,9 @@ async def list_agents(
     await require_workspace_access(current_user.id, workspace_id)
 
     agent_list = await agent_service.list_workspace_agents(workspace_id)
-    existing_agents_by_name = {agent.name: agent for agent in agent_list}
+    existing_agents_by_class_name = {
+        agent.class_name: agent for agent in agent_list if agent.class_name
+    }
 
     # Add agents from engine modules to the API
     from naas_abi import ABIModule
@@ -108,13 +144,14 @@ async def list_agents(
 
         class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
         class_name_to_agent_class[class_name] = agent_cls
-        existing_agent = existing_agents_by_name.get(str(name))
+        existing_agent = existing_agents_by_class_name.get(class_name)
         enabled = False
         if name == "Abi":
             enabled = True
 
         if not existing_agent:
             logger.debug(f"Creating agent in nexus backend: {name}")
+            system_prompt = _get_agent_system_prompt(agent_cls)
 
             # Create agent in database
             agent_create = AgentCreateInput(
@@ -124,23 +161,28 @@ async def list_agents(
                 class_name=class_name,
                 provider="abi",
                 enabled=enabled,
+                system_prompt=system_prompt,
             )
             created_agent = await agent_service.create_agent(agent_create)
 
             # Add created agent to list
             agent_list.append(created_agent)
-            existing_agents_by_name[str(name)] = created_agent
+            existing_agents_by_class_name[class_name] = created_agent
 
     enriched_agent_list: list[AgentRecord] = []
     for agent in agent_list:
         suggestions = None
         logo_url = None
+        intents = None
         if agent.class_name:
             resolved_cls = class_name_to_agent_class.get(agent.class_name)
             if resolved_cls is not None and isinstance(resolved_cls, type):
                 suggestions = _extract_agent_suggestions(resolved_cls)
                 logo_url = getattr(resolved_cls, "logo_url", None)
-        enriched_agent_list.append(replace(agent, suggestions=suggestions, logo_url=logo_url))
+                intents = _extract_agent_intents(resolved_cls)
+        enriched_agent_list.append(
+            replace(agent, suggestions=suggestions, logo_url=logo_url, intents=intents)
+        )
 
     return enriched_agent_list
 
