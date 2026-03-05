@@ -1,0 +1,27 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# SalesChannels Ontology for Inside Sales Representative Domain
+# Inside sales channels and methods ontology
+
+@prefix : <http://naas.ai/ontology/inside-sales-representative/saleschannels#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "SalesChannels Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Inside sales channels and methods ontology" .
+
+# Core Classes
+:SalesChannelsEntity a owl:Class ;
+    rdfs:label "SalesChannels Entity" ;
+    rdfs:comment "Base class for saleschannels entities" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :SalesChannelsEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+# Domain-specific instances would be defined here
