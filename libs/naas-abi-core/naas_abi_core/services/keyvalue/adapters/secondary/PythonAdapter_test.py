@@ -1,4 +1,5 @@
 import time
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import pytest
@@ -82,3 +83,43 @@ class TestPythonAdapter(GenericKVSecondaryAdapterTest):
         assert adapter.exists(key) is True
         assert adapter.delete_if_value_matches(key, token) is True
         assert adapter.exists(key) is False
+
+    def test_persistence_across_restart(self, tmp_path):
+        db_path = tmp_path / "kv.sqlite3"
+        key = f"naas-abi-core:kv:persist:{uuid4()}"
+
+        first = PythonAdapter(persistence_path=str(db_path))
+        first.set(key, b"persisted")
+
+        second = PythonAdapter(persistence_path=str(db_path))
+        assert second.get(key) == b"persisted"
+
+    def test_ttl_survives_restart(self, tmp_path):
+        db_path = tmp_path / "kv-ttl.sqlite3"
+        key = f"naas-abi-core:kv:persist-ttl:{uuid4()}"
+
+        first = PythonAdapter(persistence_path=str(db_path))
+        first.set(key, b"ttl", ttl=1)
+
+        second = PythonAdapter(persistence_path=str(db_path))
+        assert second.exists(key) is True
+
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and second.exists(key):
+            time.sleep(0.05)
+
+        assert second.exists(key) is False
+
+    def test_concurrent_writes_are_safe(self, tmp_path):
+        db_path = tmp_path / "kv-concurrency.sqlite3"
+        adapter = PythonAdapter(persistence_path=str(db_path))
+        key = f"naas-abi-core:kv:conc:{uuid4()}"
+
+        def _writer(value: bytes) -> None:
+            adapter.set(key, value)
+
+        values = [f"value-{i}".encode("utf-8") for i in range(20)]
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(_writer, values))
+
+        assert adapter.get(key) in values
