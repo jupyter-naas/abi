@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-03-05)
+
+### Features
+
+- Working on centralizing COES
+  ([`5de2a36`](https://github.com/jupyter-naas/abi/commit/5de2a369f0b5908c2fb92f731708da8dc2cfe8bf))
+
+- Working on centralizing CORS usage
+  ([`08caa0d`](https://github.com/jupyter-naas/abi/commit/08caa0d2896f03a0c88e25d38ed0f2a076ec73ef))
+
+
 ## v1.9.7 (2026-03-04)
 
 ### Bug Fixes
