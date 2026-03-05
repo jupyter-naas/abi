@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+## v1.19.1 (2026-03-05)
+
+### Bug Fixes
+
+- Remove intents dev + duplicated function list available agents + cleanup agent & tool name from
+  intents
+  ([`6c7ac88`](https://github.com/jupyter-naas/abi/commit/6c7ac889379950fccd48e945049bc1a2fccd8220))
+
+- Validate agent name on init
+  ([`87605a9`](https://github.com/jupyter-naas/abi/commit/87605a9d14ade9d43b3aa247e3863d522271df0f))
+
+
 ## v1.19.0 (2026-03-05)
 
 ### Features
