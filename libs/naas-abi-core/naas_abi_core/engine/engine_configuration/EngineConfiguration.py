@@ -7,6 +7,7 @@ import yaml
 from jinja2 import Template
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
+    BusAdapterPythonQueueConfiguration,
     BusAdapterConfiguration,
     BusServiceConfiguration,
 )
@@ -14,6 +15,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import
     DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
+    KeyValueAdapterPythonConfiguration,
     KeyValueAdapterConfiguration,
     KeyValueServiceConfiguration,
 )
@@ -29,10 +31,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
     TripleStoreAdapterConfiguration,
-    TripleStoreAdapterFilesystemConfiguration,
+    TripleStoreAdapterOxigraphEmbeddedConfiguration,
     TripleStoreServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreService import (
+    VectorStoreAdapterQdrantInMemoryConfiguration,
     VectorStoreAdapterConfiguration,
     VectorStoreServiceConfiguration,
 )
@@ -56,15 +59,20 @@ class ServicesConfiguration(BaseModel):
     )
     triple_store: TripleStoreServiceConfiguration = TripleStoreServiceConfiguration(
         triple_store_adapter=TripleStoreAdapterConfiguration(
-            adapter="fs",
-            config=TripleStoreAdapterFilesystemConfiguration(
-                store_path="storage/triplestore", triples_path="triples"
+            adapter="oxigraph_embedded",
+            config=TripleStoreAdapterOxigraphEmbeddedConfiguration(
+                store_path="storage/triplestore/oxigraph",
+                graph_base_iri="http://ontology.naas.ai/graph/default",
             ),
         )
     )
     vector_store: VectorStoreServiceConfiguration = VectorStoreServiceConfiguration(
         vector_store_adapter=VectorStoreAdapterConfiguration(
-            adapter="qdrant_in_memory", config={}
+            adapter="qdrant_in_memory",
+            config=VectorStoreAdapterQdrantInMemoryConfiguration(
+                storage_path="storage/vectorstore/qdrant",
+                timeout=300,
+            ).model_dump(),
         )
     )
     secret: SecretServiceConfiguration = SecretServiceConfiguration(
@@ -75,10 +83,26 @@ class ServicesConfiguration(BaseModel):
         ]
     )
     bus: BusServiceConfiguration = BusServiceConfiguration(
-        bus_adapter=BusAdapterConfiguration(adapter="python_queue", config={})
+        bus_adapter=BusAdapterConfiguration(
+            adapter="python_queue",
+            config=BusAdapterPythonQueueConfiguration(
+                persistence_path="storage/bus/python_queue.sqlite3",
+                journal_mode="WAL",
+                busy_timeout_ms=5000,
+                poll_interval_seconds=0.05,
+                lock_timeout_seconds=1.0,
+            ).model_dump(),
+        )
     )  # Provide default if not supplied
     kv: KeyValueServiceConfiguration = KeyValueServiceConfiguration(
-        kv_adapter=KeyValueAdapterConfiguration(adapter="python", config={})
+        kv_adapter=KeyValueAdapterConfiguration(
+            adapter="python",
+            config=KeyValueAdapterPythonConfiguration(
+                persistence_path="storage/kv/python.sqlite3",
+                journal_mode="WAL",
+                busy_timeout_ms=5000,
+            ).model_dump(),
+        )
     )
 
 
