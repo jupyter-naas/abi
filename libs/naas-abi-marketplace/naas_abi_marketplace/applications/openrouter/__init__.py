@@ -1,5 +1,3 @@
-from pydantic import Field
-
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -8,6 +6,7 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from pydantic import Field
 
 
 class ABIModule(BaseModule):
