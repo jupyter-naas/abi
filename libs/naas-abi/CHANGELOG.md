@@ -2,6 +2,54 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-03-05)
+
+### Bug Fixes
+
+- Dialog box chat
+  ([`b8d5f64`](https://github.com/jupyter-naas/abi/commit/b8d5f644474f263ee79071fe6c30c902aadaedaf))
+
+- Display class name in nexus
+  ([`32d8611`](https://github.com/jupyter-naas/abi/commit/32d8611cf0ed12692f8480965dbdbb44f64c1af9))
+
+- Display export above corner tab
+  ([`d6052bd`](https://github.com/jupyter-naas/abi/commit/d6052bd409748fac4370b2bc0aaa45f70d01872c))
+
+- Import with example not working
+  ([`5c24ec9`](https://github.com/jupyter-naas/abi/commit/5c24ec921b7f015fde9b5c0dba8d2134d80cd67f))
+
+- Improve display of module path
+  ([`698c103`](https://github.com/jupyter-naas/abi/commit/698c10317fd8cb3c8a939fd3801ca0b20648bb60))
+
+- Improve href display in chat interface
+  ([`56b9c1b`](https://github.com/jupyter-naas/abi/commit/56b9c1b68d62f45e8d8cabe6d79f48fe074b30da))
+
+- Overview data not display + improving create class & object prop
+  ([`7d48660`](https://github.com/jupyter-naas/abi/commit/7d486605a65fc47aef5def98ab331b0df8f19a92))
+
+- Rename agents
+  ([`73090b9`](https://github.com/jupyter-naas/abi/commit/73090b93c5b1cbb38967fd79af49877f36714a77))
+
+- Tenant display in all sections
+  ([`83df650`](https://github.com/jupyter-naas/abi/commit/83df650aacdc3f0dc3ebc47ce159885d989d4f76))
+
+- Type error adapater pg
+  ([`e56185a`](https://github.com/jupyter-naas/abi/commit/e56185acc67d119ce407938d391ca093191d4cca))
+
+### Features
+
+- Add system prompt and intents to agent
+  ([`039894b`](https://github.com/jupyter-naas/abi/commit/039894b4f495380f9513da6f47a6bf5cbc0e9829))
+
+### Refactoring
+
+- Redirect to agent settings ws on click
+  ([`18010f0`](https://github.com/jupyter-naas/abi/commit/18010f05b5f065093be8f70fd4136ead4bdad7c4))
+
+- Update abi with new method
+  ([`22a5e00`](https://github.com/jupyter-naas/abi/commit/22a5e001d66d7c5003faaa760d81eb095d73bf23))
+
+
 ## v1.10.0 (2026-03-05)
 
 ### Features
