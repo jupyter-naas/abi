@@ -15,6 +15,8 @@ api:
   cors_origins:
     - "http://localhost:9879"
     - "http://localhost:3042"
+    - "http://127.0.0.1:9879"
+    - "https://nexus.localhost"
 
 global_config:
   ai_mode: "cloud"
