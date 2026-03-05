@@ -1,8 +1,11 @@
+import pytest
+
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
     ApacheJenaTDB2AdapterConfiguration,
     AWSNeptuneSSHTunnelAdapterConfiguration,
     OxigraphAdapterConfiguration,
     TripleStoreAdapterConfiguration,
+    TripleStoreAdapterOxigraphEmbeddedConfiguration,
     TripleStoreAdapterFilesystemConfiguration,
     TripleStoreServiceConfiguration,
 )
@@ -152,3 +155,29 @@ def test_triple_store_service_configuration_apache_jena_tdb2():
 
         assert triple_store_service is not None
         assert isinstance(triple_store_service, TripleStoreService)
+
+
+def test_triple_store_service_configuration_oxigraph_embedded(tmp_path):
+    pytest.importorskip("pyoxigraph")
+
+    from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__OxigraphEmbedded import (
+        TripleStoreService__SecondaryAdaptor__OxigraphEmbedded,
+    )
+
+    configuration = TripleStoreServiceConfiguration(
+        triple_store_adapter=TripleStoreAdapterConfiguration(
+            adapter="oxigraph_embedded",
+            config=TripleStoreAdapterOxigraphEmbeddedConfiguration(
+                store_path=str(tmp_path / "oxigraph"),
+            ),
+        )
+    )
+
+    triple_store_adapter = configuration.triple_store_adapter.load()
+
+    assert triple_store_adapter is not None
+    assert isinstance(triple_store_adapter, ITripleStorePort)
+    assert isinstance(
+        triple_store_adapter,
+        TripleStoreService__SecondaryAdaptor__OxigraphEmbedded,
+    )
