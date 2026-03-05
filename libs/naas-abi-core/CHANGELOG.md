@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.0 (2026-03-05)
+
+### Features
+
+- Working on centralizing COES
+  ([`5de2a36`](https://github.com/jupyter-naas/abi/commit/5de2a369f0b5908c2fb92f731708da8dc2cfe8bf))
+
+
 ## v1.18.3 (2026-03-05)
 
 ### Bug Fixes
