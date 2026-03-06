@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.20.0 (2026-03-06)
+
+### Features
+
+- Make it possible to provide you own embedding model
+  ([`ec0f5d1`](https://github.com/jupyter-naas/abi/commit/ec0f5d1c22de8f2ebd2cbdfb9c52e8c5739c8c09))
+
+
 ## v1.19.1 (2026-03-05)
 
 ### Bug Fixes
