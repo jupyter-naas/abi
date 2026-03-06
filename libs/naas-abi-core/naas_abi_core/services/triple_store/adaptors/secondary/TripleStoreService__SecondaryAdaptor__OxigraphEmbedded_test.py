@@ -68,3 +68,19 @@ def test_oxigraph_embedded_concurrent_insert(tmp_path):
 
     subject_graph = adapter.get_subject_graph(subject, graph_name)
     assert len(list(subject_graph.triples((subject, None, None)))) == 20
+
+
+def test_oxigraph_embedded_creates_missing_parent_directories(tmp_path):
+    pytest.importorskip("pyoxigraph")
+
+    store_path = tmp_path / "missing" / "nested" / "oxigraph"
+    adapter = TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(
+        store_path=str(store_path),
+    )
+
+    adapter.insert(
+        _build_graph(URIRef("http://example.org/bootstrap"), 1),
+        URIRef("http://example.org/graph/bootstrap"),
+    )
+
+    assert store_path.exists()

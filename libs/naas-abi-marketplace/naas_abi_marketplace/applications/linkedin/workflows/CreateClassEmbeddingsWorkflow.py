@@ -4,11 +4,8 @@ from typing import Annotated, Any, Dict, List
 
 import numpy as np
 from langchain_core.tools import BaseTool, StructuredTool
+from langchain_openai import OpenAIEmbeddings
 from naas_abi_core import logger
-from naas_abi_core.services.agent.beta.Embeddings import (
-    embeddings,
-    embeddings_batch,
-)
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from naas_abi_core.utils.Expose import APIRouter
@@ -27,8 +24,8 @@ class CreateClassEmbeddingsWorkflowConfiguration(WorkflowConfiguration):
 
     triple_store: ITripleStoreService
     vector_store: VectorStoreService
-    embeddings_model_name: str = "text-embedding-ada-002"
-    embeddings_dimension: int = 1536
+    embeddings_model_name: str = "text-embedding-3-large"
+    embeddings_dimension: int = 3072
 
 
 class CreateClassEmbeddingsWorkflowParameters(WorkflowParameters):
@@ -82,6 +79,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
         # Get embedding dimension and model name
         self.__embedding_dimension = self.__configuration.embeddings_dimension
         self.__embeddings_model_name = self.__configuration.embeddings_model_name
+        self.__embeddings_model = OpenAIEmbeddings(model=self.__embeddings_model_name)
 
     def create_class_embeddings(
         self, parameters: CreateClassEmbeddingsWorkflowParameters
@@ -211,7 +209,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
             logger.info(
                 f"Embedding {len(new_labels)} new {parameters.entity_type_label} labels..."
             )
-            embeddings_vectors = embeddings_batch(new_labels)
+            embeddings_vectors = self.__embeddings_model.embed_documents(new_labels)
             embeddings_array = [np.array(emb) for emb in embeddings_vectors]
 
             # Store in vector store
@@ -293,7 +291,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
                     return [{"error": f"{search_param_name} is required"}]
 
                 # Generate embedding for the query
-                query_embedding = embeddings(name)
+                query_embedding = self.__embeddings_model.embed_query(name)
                 query_vector = np.array(query_embedding)
 
                 # Search in vector store
