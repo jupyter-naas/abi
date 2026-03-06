@@ -4,7 +4,7 @@
 - A small intent-matching utility that:
   - Indexes a list of `Intent` objects in an in-memory `VectorStore` using embeddings.
   - Retrieves the most similar intents to an input string (intent text or raw user prompt).
-- It also initializes an LLM client (`ChatOpenAI` or an airgapped local alternative), but the current `map_prompt` implementation does **not** call the LLM.
+- It also initializes an LLM client (`ChatOpenAI`), but the current `map_prompt` implementation does **not** call the LLM.
 
 ## Public API
 
@@ -23,10 +23,12 @@
     - `intent_scope: Optional[IntentScope] = IntentScope.ALL` — scope metadata.
 
 ### Class: `IntentMapper`
-- `__init__(intents: list[Intent])`
+- `__init__(intents: list[Intent], embedding_model: Embeddings | None = None)`
   - Builds a `VectorStore` and indexes `intent.intent_value` for all provided intents.
-  - Determines embedding dimension from `EMBEDDINGS_MODELS_DIMENSIONS_MAP` keyed by `Embeddings._model_name`; raises if unset.
-  - Initializes `self.model` depending on environment (see Dependencies).
+  - If `embedding_model` is provided, uses it for document/query embeddings.
+  - If `embedding_model` is `None`, logs a warning and instantiates `OpenAIEmbeddings(model="text-embedding-3-large")`.
+  - Defers `VectorStore` creation until embeddings are computed, then infers vector dimension from the first vector.
+  - Initializes `self.model = ChatOpenAI(model="gpt-4.1-mini")`.
   - Sets a `system_prompt` string (not used by current mapping methods).
 - `get_intent_from_value(value: str) -> Intent | None`
   - Returns the `Intent` whose `intent_value` exactly matches `value`, else `None`.
@@ -38,14 +40,9 @@
   - Returns a tuple: `([], prompt_results)` (first element always empty in current implementation).
 
 ## Configuration/Dependencies
-- Environment variables:
-  - `AI_MODE="airgap"`: uses `naas_abi_core.services.agent.beta.LocalModel.AirgapChatOpenAI` with a local base URL (`http://localhost:12434/engines/v1`).
-  - `OPENROUTER_API_KEY`: if set (and not in airgap mode), uses OpenRouter via `ChatOpenAI(..., base_url="https://openrouter.ai/api/v1")`.
-  - Otherwise falls back to `ChatOpenAI(model="gpt-4.1-mini")`.
-- Embeddings/vector store dependencies (imported from sibling modules):
-  - `Embeddings._model_name` (must be non-`None`, else `ValueError`)
-  - `EMBEDDINGS_MODELS_DIMENSIONS_MAP`
-  - `embeddings(text: str)`, `embeddings_batch(texts: list[str])`
+- Embeddings/vector store dependencies:
+  - Optional custom `embedding_model` implementing LangChain `Embeddings`
+  - `OpenAIEmbeddings` for default fallback behavior
   - `VectorStore` with:
     - `add_texts(texts, embeddings=..., metadatas=...)`
     - `similarity_search(query_embedding, k=...)`
@@ -72,6 +69,7 @@ print(prompt_results[0]["intent"].intent_value)
 ```
 
 ## Caveats
-- `Embeddings._model_name` must be set; otherwise `IntentMapper(...)` raises `ValueError("Embeddings model name is not set")`.
+- If `embedding_model` is not provided, a warning is logged and `OpenAIEmbeddings(model="text-embedding-3-large")` is used.
+- The internal `VectorStore` is initialized only after embeddings are generated, and its dimension is inferred from the first vector.
 - `map_prompt` does not use the configured LLM; it only does embedding similarity against `intent_value` strings and returns `([], prompt_results)`.
 - Returned items from `map_intent`/`map_prompt` are dicts whose base shape is determined by `VectorStore.similarity_search`; this module only adds an `"intent"` key.
