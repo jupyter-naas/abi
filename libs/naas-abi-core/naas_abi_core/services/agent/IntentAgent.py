@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, Optional, Union
 
 import pydash as pd
 import spacy
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool, Tool, tool
@@ -10,8 +11,8 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.utils.Logger import logger
 from spacy.cli import download as spacy_download
 
 from .Agent import (
@@ -248,6 +249,7 @@ class IntentAgent(Agent):
 
     _intents: list[Intent]
     _intent_mapper: IntentMapper
+    _embedding_model: Embeddings | None
 
     def __init__(
         self,
@@ -263,8 +265,9 @@ class IntentAgent(Agent):
         event_queue: Queue | None = None,
         threshold: float = 0.85,
         threshold_neighbor: float = 0.05,
-        direct_intent_score: float = 0.95,
+        direct_intent_score: float = 0.90,
         default_intents: bool = True,
+        embedding_model: Embeddings | None = None,
     ):
         """Initialize the IntentAgent.
 
@@ -294,6 +297,9 @@ class IntentAgent(Agent):
                 Defaults to 0.85.
             threshold_neighbor (float, optional): Maximum score difference for similar intents.
                 Defaults to 0.05.
+            embedding_model (Embeddings | None, optional): Embeddings backend used by intent
+                mapping. If None, IntentMapper falls back to default embeddings backend.
+                Defaults to None.
         """
 
         def _prepare_intents(
@@ -316,7 +322,11 @@ class IntentAgent(Agent):
             return new_intents
 
         self._intents = _prepare_intents(intents)
-        self._intent_mapper = IntentMapper(self._intents)
+        self._embedding_model = embedding_model
+        self._intent_mapper = IntentMapper(
+            self._intents,
+            embedding_model=self._embedding_model,
+        )
         self._threshold = threshold
         self._threshold_neighbor = threshold_neighbor
         self._direct_intent_score = direct_intent_score
@@ -996,6 +1006,7 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             state=shared_state,  # Create new state instance
             configuration=self._configuration,
             event_queue=queue,
+            embedding_model=self._embedding_model,
         )
 
         return new_agent

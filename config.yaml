@@ -19,7 +19,7 @@ api:
 global_config:
   ai_mode: "cloud"
 
-default_agent: naas_abi_marketplace.ai.chatgpt ChatGPTAgent
+default_agent: naas_abi AbiAgent 
 modules:
   - module: naas_abi
     enabled: true

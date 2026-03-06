@@ -115,11 +115,13 @@ def create_agent(
 
     import numpy as np
     from langchain_core.tools import StructuredTool
-    from naas_abi_core.services.agent.beta.Embeddings import embeddings
+    from langchain_openai import OpenAIEmbeddings
     from naas_abi_core.services.vector_store.VectorStoreService import (
         VectorStoreService,
     )
     from pydantic import BaseModel, Field
+
+    embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
     vector_store_service: VectorStoreService = (
         ABIModule.get_instance().engine.services.vector_store
@@ -182,7 +184,7 @@ def create_agent(
                     return [{"error": f"{search_param_name} is required"}]
 
                 # Generate embedding for the query
-                query_embedding = embeddings(name)
+                query_embedding = embeddings_model.embed_query(name)
                 query_vector = np.array(query_embedding)
 
                 # Search in vector store

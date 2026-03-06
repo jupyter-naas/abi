@@ -27,8 +27,9 @@
   - Returns the internal list of intents used by the mapper (includes defaults and optional dev intents).
 
 #### Key methods
-- `__init__(..., intents: list[Intent]=[], agents: list[Agent]=[], tools: list=..., memory: BaseCheckpointSaver|None=None, threshold=0.85, threshold_neighbor=0.05, direct_intent_score=0.95)`
+- `__init__(..., intents: list[Intent]=[], agents: list[Agent]=[], tools: list=..., memory: BaseCheckpointSaver|None=None, threshold=0.85, threshold_neighbor=0.05, direct_intent_score=0.95, embedding_model: Embeddings | None = None)`
   - Initializes intent mapper, adds a built-in tool (`list_available_agents`), merges `DEFAULT_INTENTS` (+ `DEV_INTENTS` when `ENV != "prod"`), configures thresholds, and sets up memory/checkpointing.
+  - Forwards `embedding_model` to `IntentMapper`; if omitted, mapper logs a warning and uses `OpenAIEmbeddings(model="text-embedding-3-large")`.
 - `build_graph(patcher: Optional[Callable]=None) -> None`
   - Builds and compiles the internal LangGraph flow for routing.
 - `duplicate(queue: Queue|None=None, agent_shared_state: AgentSharedState|None=None) -> IntentAgent`
@@ -70,6 +71,7 @@
 
 ```python
 from naas_abi_core.services.agent.IntentAgent import IntentAgent
+from langchain_openai import OpenAIEmbeddings
 from naas_abi_core.models.Model import ChatModel  # or any langchain BaseChatModel
 
 # Provide a chat model compatible with langchain_core BaseChatModel
@@ -82,6 +84,7 @@ agent = IntentAgent(
     agents=[],   # optional sub-agents
     tools=[],    # optional tools; IntentAgent adds list_available_agents automatically
     intents=[],  # optional custom intents; defaults are appended
+    embedding_model=OpenAIEmbeddings(model="text-embedding-3-large"),
 )
 
 agent.build_graph()

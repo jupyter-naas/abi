@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Tuple
 
 import rdflib
@@ -34,6 +35,7 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
         with self._stores_lock:
             existing = self._stores.get(store_path)
             if existing is None:
+                Path(store_path).mkdir(parents=True, exist_ok=True)
                 existing = Store(path=store_path)
                 self._stores[store_path] = existing
 
