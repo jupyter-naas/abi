@@ -1,5 +1,8 @@
+import sys
+
 import click
 
+from .bootstrap import maybe_rerun_in_project_context
 from .agent import agent
 from .chat import chat
 from .config import config
@@ -43,8 +46,11 @@ def main():
         return
     ran = True
 
+    if maybe_rerun_in_project_context(sys.argv[1:]):
+        return
+
     _main()
 
 
-main()
-main()
+if __name__ == "__main__":
+    main()

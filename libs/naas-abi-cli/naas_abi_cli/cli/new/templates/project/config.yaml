@@ -39,32 +39,35 @@ services:
         config: {}
   object_storage:
     object_storage_adapter:
-      adapter: "s3"
+      adapter: "fs"
       config:
-        bucket_name: "abi"
-        base_prefix: "abi/datastore"
-        access_key_id: "{{ secret.MINIO_ROOT_USER }}"
-        secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
-        endpoint_url: "http://localhost:9000"
+        base_path: "storage/datastore"
   triple_store:
     triple_store_adapter:
-      adapter: "apache_jena_tdb2"
+      adapter: "oxigraph_embedded"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@localhost:3030/ds"
+        store_path: "storage/triplestore/oxigraph"
+        graph_base_iri: "http://ontology.naas.ai/graph/default"
   vector_store:
     vector_store_adapter:
-      adapter: "qdrant"
+      adapter: "qdrant_in_memory"
       config:
-        host: "localhost"
-        port: 6333
+        storage_path: "storage/vectorstore/qdrant"
+        timeout: 300
   bus:
     bus_adapter:
-      adapter: "rabbitmq"
+      adapter: "python_queue"
       config:
-        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@localhost:5672"
+        persistence_path: "storage/bus/python_queue.sqlite3"
+        journal_mode: "WAL"
+        busy_timeout_ms: 5000
+        poll_interval_seconds: 0.05
+        lock_timeout_seconds: 1.0
   kv:
     kv_adapter:
-      adapter: "redis"
+      adapter: "python"
       config:
-        redis_url: "redis://localhost:6379"
+        persistence_path: "storage/kv/python.sqlite3"
+        journal_mode: "WAL"
+        busy_timeout_ms: 5000
 {% endraw %}
