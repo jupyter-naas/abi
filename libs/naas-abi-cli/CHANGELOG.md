@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.21.0 (2026-03-09)
+
+### Features
+
+- Abi cli rerun
+  ([`a3a1a2b`](https://github.com/jupyter-naas/abi/commit/a3a1a2b69ed24bce413f514bfab169ebde194369))
+
+
 ## v1.20.0 (2026-03-05)
 
 ### Documentation
