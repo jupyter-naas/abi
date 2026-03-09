@@ -198,7 +198,7 @@ The CLI is built using:
 - **naas-abi-marketplace**: Marketplace modules and agents
 - **naas-abi**: Main ABI package
 
-The CLI runs directly in the current environment and does not automatically re-run itself via `uv run`.
+When run inside an ABI project, the CLI auto-detects the project root and re-runs itself in that project context via `uv run --project ...`.
 
 ## Project Structure
 
