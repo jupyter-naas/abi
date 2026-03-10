@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.21.1 (2026-03-10)
+
+### Bug Fixes
+
+- Update the cli to display when it executes sub abi cli
+  ([`526eac3`](https://github.com/jupyter-naas/abi/commit/526eac3843cdc92b681ea7debe2c6d9454d057f3))
+
+
 ## v1.21.0 (2026-03-09)
 
 ### Features
