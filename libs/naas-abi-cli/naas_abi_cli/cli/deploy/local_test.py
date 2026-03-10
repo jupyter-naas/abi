@@ -61,7 +61,8 @@ def test_setup_local_deploy_can_include_headscale(tmp_path: Path) -> None:
     assert "  headscale:" in compose_content
     assert "headscale_data:" in compose_content
     assert "HEADSCALE_SERVER_PORT=" in env_content
-    assert "server_url: https://headscale.localhost" in headscale_config_content
+    assert "# The URL clients will connect to." in headscale_config_content
+    assert "server_url: https://headscale.localhost:443" in headscale_config_content
     assert headscale_config_path.exists()
     assert headscale_extra_records_path.exists()
 

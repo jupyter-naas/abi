@@ -73,31 +73,6 @@ HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
       - abi-network
 """
 
-HEADSCALE_CONFIG_CONTENT_TEMPLATE = """server_url: https://{headscale_server_url}
-listen_addr: 0.0.0.0:8080
-metrics_listen_addr: 0.0.0.0:9090
-grpc_listen_addr: 0.0.0.0:50443
-
-prefixes:
-  v4: 100.64.0.0/10
-  v6: fd7a:115c:a1e0::/48
-
-noise:
-  private_key_path: /var/lib/headscale/noise_private.key
-
-database:
-  type: sqlite
-  sqlite:
-    path: /var/lib/headscale/db.sqlite
-
-dns:
-  base_domain: {headscale_internal_domain}
-  extra_records_path: /var/lib/headscale/extra-records.json
-
-log:
-  level: info
-"""
-
 
 def _copy_headscale_templates(deploy_path: str, values: dict[str, object]) -> None:
     copier = Copier(
@@ -110,25 +85,19 @@ def _copy_headscale_templates(deploy_path: str, values: dict[str, object]) -> No
     copier.copy(values=values)
 
     headscale_config_path = os.path.join(deploy_path, "docker/headscale/config.yaml")
+    headscale_extra_records_path = os.path.join(
+        deploy_path, "docker/headscale/extra-records.json"
+    )
     if not os.path.exists(headscale_config_path):
-        headscale_server_url = str(
-            values.get(
-                "HEADSCALE_SERVER_URL",
-                DEFAULT_ENV_VALUES["HEADSCALE_SERVER_URL"],
-            )
+        raise FileNotFoundError(
+            f"Missing rendered Headscale config at {headscale_config_path}. "
+            "Ensure the naas-abi-cli package includes the local deploy headscale templates."
         )
-        headscale_internal_domain = str(
-            values.get(
-                "HEADSCALE_INTERNAL_DOMAIN",
-                DEFAULT_ENV_VALUES["HEADSCALE_INTERNAL_DOMAIN"],
-            )
+    if not os.path.exists(headscale_extra_records_path):
+        raise FileNotFoundError(
+            f"Missing rendered Headscale extra-records file at {headscale_extra_records_path}. "
+            "Ensure the naas-abi-cli package includes the local deploy headscale templates."
         )
-        config_content = HEADSCALE_CONFIG_CONTENT_TEMPLATE.format(
-            headscale_server_url=headscale_server_url,
-            headscale_internal_domain=headscale_internal_domain,
-        )
-        with open(headscale_config_path, "w", encoding="utf-8") as config_file:
-            config_file.write(config_content)
 
 
 def _ensure_headscale_service(docker_compose_target_path: str) -> None:
