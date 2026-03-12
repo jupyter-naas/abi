@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.20.1 (2026-03-12)
+
+### Bug Fixes
+
+- / handling in object storage adapter
+  ([`89c6b16`](https://github.com/jupyter-naas/abi/commit/89c6b164f91c46e93561e9d7abeda75c058339c7))
+
+- Object storage adapter / handling
+  ([`a6a0119`](https://github.com/jupyter-naas/abi/commit/a6a0119e68355a09a8011e05a78923f75e56a60e))
+
+
 ## v1.20.0 (2026-03-06)
 
 ### Features
