@@ -66,7 +66,10 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             for part in [self.base_prefix, normalized_prefix, normalized_key]
             if part
         ]
-        return "/".join(parts)
+        full_key = "/".join(parts)
+        if key is None and full_key:
+            return f"{full_key}/"
+        return full_key
 
     @staticmethod
     def __normalize_key_part(value: str | None) -> str:
