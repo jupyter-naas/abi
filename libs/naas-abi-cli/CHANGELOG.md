@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.22.0 (2026-03-12)
+
+### Features
+
+- Improve service portal
+  ([`d207ce4`](https://github.com/jupyter-naas/abi/commit/d207ce459e0bb8a0700b8fed4f566a30261f6a04))
+
+
 ## v1.21.1 (2026-03-10)
 
 ### Bug Fixes
