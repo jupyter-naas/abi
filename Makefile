@@ -121,6 +121,7 @@ help:
 	@echo "  test-ci                  Run basic tests for CI (no external dependencies)"
 	@echo "  test-abi                 Run tests specifically for the abi library"
 	@echo "  test-api                 Run API-specific tests"
+	@echo "  test-local-embedded-core Run no-docker local embedded core e2e test"
 	@echo "  test-integration-core    Run core integration tests (testcontainers)"
 	@echo "  test-api-init            Test API initialization with production secrets"
 	@echo "  test-api-init-container  Test API initialization in containerized environment"
@@ -540,6 +541,11 @@ test: deps
 # Run API-specific tests
 test-api: deps
 	@ uv run python -m pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v -s
+
+# Run no-docker local embedded stack e2e test
+test-local-embedded-core: deps
+	@ echo "🔍 Running local embedded core e2e test..."
+	@ uv run pytest libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_LocalEmbeddedE2E_test.py -v
 
 # Run core integration tests using testcontainers
 test-integration-core: deps check-docker
@@ -974,4 +980,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology
+.PHONY: test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology

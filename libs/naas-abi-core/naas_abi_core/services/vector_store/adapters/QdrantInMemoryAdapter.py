@@ -1,86 +1,77 @@
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+import os
+import threading
+from typing import Any, Dict, List, Optional, Union, cast
+import uuid
+from uuid import UUID
 
 import numpy as np
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointIdsList,
+    PointStruct,
+    PointVectors,
+    UpdateStatus,
+    VectorParams,
+)
 
 from ..IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class _InMemoryCollection:
-    dimension: int
-    distance_metric: str
-    documents: Dict[str, VectorDocument] = field(default_factory=dict)
-
-
 class QdrantInMemoryAdapter(IVectorStorePort):
-    def __init__(self) -> None:
-        self._collections: Dict[str, _InMemoryCollection] = {}
-        self._initialized = False
+    """Local Qdrant adapter.
+
+    Uses embedded Qdrant mode for both ephemeral (`:memory:`) and durable
+    filesystem-backed persistence.
+    """
+
+    def __init__(
+        self,
+        storage_path: str = ":memory:",
+        timeout: int = 300,
+    ) -> None:
+        self.storage_path = storage_path
+        self.timeout = timeout
+        self.client: Optional[QdrantClient] = None
+        self._lock = threading.RLock()
 
     def initialize(self) -> None:
-        self._initialized = True
-        logger.info("Initialized QdrantInMemoryAdapter")
+        with self._lock:
+            if self.client is not None:
+                return
 
-    def _require_initialized(self) -> None:
-        if not self._initialized:
+            if self.storage_path == ":memory:":
+                self.client = QdrantClient(location=":memory:", timeout=self.timeout)
+                logger.info("Initialized in-memory local Qdrant")
+                return
+
+            os.makedirs(self.storage_path, exist_ok=True)
+            self.client = QdrantClient(path=self.storage_path, timeout=self.timeout)
+            logger.info("Initialized local Qdrant at %s", self.storage_path)
+
+    def _require_initialized(self) -> QdrantClient:
+        if self.client is None:
             raise RuntimeError("Adapter not initialized")
+        return self.client
 
-    def _get_collection(self, collection_name: str) -> _InMemoryCollection:
-        collection = self._collections.get(collection_name)
-        if collection is None:
-            raise KeyError(f"Collection not found: {collection_name}")
-        return collection
+    @staticmethod
+    def _point_id(vector_id: str) -> str:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, vector_id))
 
-    def _to_vector(self, vector: np.ndarray) -> np.ndarray:
-        array = np.asarray(vector, dtype=float)
-        if array.ndim != 1:
-            array = array.reshape(-1)
-        return array
-
-    def _validate_dimension(
-        self, collection: _InMemoryCollection, vector: np.ndarray
-    ) -> None:
-        if vector.size != collection.dimension:
-            raise ValueError(
-                "Vector dimension mismatch. "
-                f"Expected {collection.dimension}, got {vector.size}"
-            )
-
-    def _score(
-        self, metric: str, query_vector: np.ndarray, candidate_vector: np.ndarray
-    ) -> float:
-        metric_key = metric.lower()
-        if metric_key == "euclidean":
-            return float(-np.linalg.norm(query_vector - candidate_vector))
-        if metric_key == "dot":
-            return float(np.dot(query_vector, candidate_vector))
-
-        query_norm = np.linalg.norm(query_vector)
-        candidate_norm = np.linalg.norm(candidate_vector)
-        if query_norm == 0.0 or candidate_norm == 0.0:
-            return 0.0
-        return float(np.dot(query_vector, candidate_vector) / (query_norm * candidate_norm))
-
-    def _matches_filter(
-        self, document: VectorDocument, filter: Optional[Dict[str, Any]]
-    ) -> bool:
-        if not filter:
-            return True
-
-        payload: Dict[str, Any] = {}
-        if document.metadata:
-            payload.update(document.metadata)
-        if document.payload is not None:
-            payload["payload"] = document.payload
-
-        for key, value in filter.items():
-            if key not in payload or payload[key] != value:
-                return False
-        return True
+    @staticmethod
+    def _get_distance_metric(metric: str) -> Distance:
+        metric_map = {
+            "cosine": Distance.COSINE,
+            "euclidean": Distance.EUCLID,
+            "dot": Distance.DOT,
+        }
+        return metric_map.get(metric.lower(), Distance.COSINE)
 
     def create_collection(
         self,
@@ -89,49 +80,55 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         distance_metric: str = "cosine",
         **kwargs,
     ) -> None:
-        self._require_initialized()
-
-        if collection_name in self._collections:
-            raise RuntimeError(f"Collection already exists: {collection_name}")
-
-        self._collections[collection_name] = _InMemoryCollection(
-            dimension=dimension, distance_metric=distance_metric
-        )
-        logger.info(f"Created collection: {collection_name}")
+        with self._lock:
+            client = self._require_initialized()
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=dimension, distance=self._get_distance_metric(distance_metric)
+                ),
+                **kwargs,
+            )
 
     def delete_collection(self, collection_name: str) -> None:
-        self._require_initialized()
-
-        if collection_name in self._collections:
-            del self._collections[collection_name]
-            logger.info(f"Deleted collection: {collection_name}")
-            return
-
-        raise KeyError(f"Collection not found: {collection_name}")
+        with self._lock:
+            client = self._require_initialized()
+            client.delete_collection(collection_name=collection_name)
 
     def list_collections(self) -> List[str]:
-        self._require_initialized()
-        return list(self._collections.keys())
+        with self._lock:
+            client = self._require_initialized()
+            collections = client.get_collections()
+            return [c.name for c in collections.collections]
 
     def store_vectors(
         self, collection_name: str, documents: List[VectorDocument]
     ) -> None:
-        self._require_initialized()
+        with self._lock:
+            client = self._require_initialized()
+            points = []
+            for doc in documents:
+                payload = {}
+                if doc.metadata:
+                    payload.update(doc.metadata)
+                if doc.payload:
+                    payload["payload"] = doc.payload
+                payload["_abi_id"] = doc.id
+                payload["_abi_vector"] = doc.vector.tolist()
 
-        collection = self._get_collection(collection_name)
+                points.append(
+                    PointStruct(
+                        id=self._point_id(doc.id),
+                        vector=doc.vector.tolist(),
+                        payload=payload,
+                    )
+                )
 
-        for doc in documents:
-            vector = self._to_vector(doc.vector)
-            self._validate_dimension(collection, vector)
-
-            collection.documents[doc.id] = VectorDocument(
-                id=doc.id,
-                vector=vector.copy(),
-                metadata=dict(doc.metadata) if doc.metadata else {},
-                payload=dict(doc.payload) if doc.payload is not None else None,
+            operation_info = client.upsert(
+                collection_name=collection_name, points=points
             )
-
-        logger.debug(f"Stored {len(documents)} vectors in {collection_name}")
+            if operation_info.status != UpdateStatus.COMPLETED:
+                raise RuntimeError(f"Failed to store vectors: {operation_info}")
 
     def search(
         self,
@@ -142,51 +139,94 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         include_vectors: bool = False,
         include_metadata: bool = True,
     ) -> List[SearchResult]:
-        self._require_initialized()
+        with self._lock:
+            client = self._require_initialized()
 
-        collection = self._get_collection(collection_name)
-        query_array = self._to_vector(query_vector)
-        self._validate_dimension(collection, query_array)
+            search_filter = None
+            if filter:
+                conditions = [
+                    FieldCondition(key=key, match=MatchValue(value=value))
+                    for key, value in filter.items()
+                ]
+                if conditions:
+                    search_filter = Filter(must=cast(Any, conditions))
 
-        results: List[SearchResult] = []
-        for doc in collection.documents.values():
-            if not self._matches_filter(doc, filter):
-                continue
-
-            score = self._score(collection.distance_metric, query_array, doc.vector)
-            results.append(
-                SearchResult(
-                    id=doc.id,
-                    score=score,
-                    vector=doc.vector.copy() if include_vectors else None,
-                    metadata=dict(doc.metadata) if include_metadata else None,
-                    payload=(
-                        dict(doc.payload)
-                        if include_metadata and doc.payload is not None
-                        else None
-                    ),
-                )
+            search_result = client.query_points(
+                collection_name=collection_name,
+                query=query_vector.tolist(),
+                limit=k,
+                query_filter=search_filter,
+                with_vectors=include_vectors,
+                with_payload=include_metadata,
             )
 
-        results.sort(key=lambda item: item.score, reverse=True)
-        return results[:k]
+            return [
+                SearchResult(
+                    id=str(hit.payload.get("_abi_id", hit.id))
+                    if hit.payload
+                    else str(hit.id),
+                    score=hit.score,
+                    vector=(
+                        np.array(hit.payload["_abi_vector"])
+                        if include_vectors
+                        and hit.payload
+                        and "_abi_vector" in hit.payload
+                        else (
+                            np.array(hit.vector)
+                            if include_vectors and hit.vector is not None
+                            else None
+                        )
+                    ),
+                    metadata={
+                        k: v
+                        for k, v in dict(hit.payload).items()
+                        if k not in {"payload", "_abi_id", "_abi_vector"}
+                    }
+                    if hit.payload and include_metadata
+                    else None,
+                    payload=hit.payload.get("payload")
+                    if hit.payload and "payload" in hit.payload
+                    else None,
+                )
+                for hit in search_result.points
+            ]
 
     def get_vector(
         self, collection_name: str, vector_id: str, include_vector: bool = True
     ) -> Optional[VectorDocument]:
-        self._require_initialized()
+        with self._lock:
+            client = self._require_initialized()
+            points = client.retrieve(
+                collection_name=collection_name,
+                ids=[self._point_id(vector_id)],
+                with_vectors=include_vector,
+                with_payload=True,
+            )
 
-        collection = self._get_collection(collection_name)
-        doc = collection.documents.get(vector_id)
-        if doc is None:
-            return None
+            if not points:
+                return None
 
-        return VectorDocument(
-            id=doc.id,
-            vector=doc.vector.copy() if include_vector else np.array([]),
-            metadata=dict(doc.metadata) if doc.metadata else {},
-            payload=dict(doc.payload) if doc.payload is not None else None,
-        )
+            point = points[0]
+            payload = dict(point.payload) if point.payload else {}
+            vector_array = (
+                np.array(payload["_abi_vector"])
+                if include_vector and "_abi_vector" in payload
+                else (
+                    np.array(point.vector)
+                    if include_vector and point.vector is not None
+                    else np.array([])
+                )
+            )
+            return VectorDocument(
+                id=str(payload.get("_abi_id", vector_id)),
+                vector=vector_array,
+                metadata={
+                    k: v
+                    for k, v in payload.items()
+                    if k not in {"payload", "_abi_id", "_abi_vector"}
+                },
+                payload=payload.get("payload"),
+            )
 
     def update_vector(
         self,
@@ -196,38 +236,56 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         metadata: Optional[Dict[str, Any]] = None,
         payload: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self._require_initialized()
+        with self._lock:
+            client = self._require_initialized()
 
-        collection = self._get_collection(collection_name)
-        doc = collection.documents.get(vector_id)
-        if doc is None:
-            raise KeyError(f"Vector not found: {vector_id}")
+            if vector is not None:
+                client.update_vectors(
+                    collection_name=collection_name,
+                    points=[
+                        PointVectors(
+                            id=self._point_id(vector_id),
+                            vector=vector.tolist(),
+                        )
+                    ],
+                )
 
-        if vector is not None:
-            new_vector = self._to_vector(vector)
-            self._validate_dimension(collection, new_vector)
-            doc.vector = new_vector.copy()
+            if metadata is not None or payload is not None or vector is not None:
+                new_payload = {}
+                if metadata:
+                    new_payload.update(metadata)
+                if payload:
+                    new_payload["payload"] = payload
+                new_payload["_abi_id"] = vector_id
+                if vector is not None:
+                    new_payload["_abi_vector"] = vector.tolist()
 
-        if metadata is not None:
-            doc.metadata = dict(metadata)
+                client.set_payload(
+                    collection_name=collection_name,
+                    payload=new_payload,
+                    points=[self._point_id(vector_id)],
+                )
 
-        if payload is not None:
-            doc.payload = dict(payload)
-
-    def delete_vectors(self, collection_name: str, vector_ids: List) -> None:
-        self._require_initialized()
-
-        collection = self._get_collection(collection_name)
-        for vector_id in vector_ids:
-            collection.documents.pop(vector_id, None)
-
-        logger.debug(f"Deleted {len(vector_ids)} vectors from {collection_name}")
+    def delete_vectors(self, collection_name: str, vector_ids: List[str]) -> None:
+        with self._lock:
+            client = self._require_initialized()
+            point_ids = cast(
+                List[Union[int, str, UUID]],
+                [self._point_id(vector_id) for vector_id in vector_ids],
+            )
+            client.delete(
+                collection_name=collection_name,
+                points_selector=PointIdsList(points=point_ids),
+            )
 
     def count_vectors(self, collection_name: str) -> int:
-        self._require_initialized()
-        collection = self._get_collection(collection_name)
-        return len(collection.documents)
+        with self._lock:
+            client = self._require_initialized()
+            collection_info = client.get_collection(collection_name=collection_name)
+            return collection_info.points_count or 0
 
     def close(self) -> None:
-        self._initialized = False
-        logger.info("Closed QdrantInMemoryAdapter")
+        with self._lock:
+            if self.client is not None:
+                self.client.close()
+                self.client = None

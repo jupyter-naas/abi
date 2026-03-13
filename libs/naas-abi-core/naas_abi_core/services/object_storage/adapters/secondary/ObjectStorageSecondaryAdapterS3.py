@@ -59,11 +59,23 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
         Returns:
             str: Full key path
         """
-        # if key is None:
-        #     return f"{self.base_prefix}/{prefix}".lstrip('/')
-        return f"{self.base_prefix + '/' if self.base_prefix else ''}{prefix + '/' if prefix else ''}{key if key else ''}".lstrip(
-            "/"
-        )
+        normalized_prefix = self.__normalize_key_part(prefix)
+        normalized_key = self.__normalize_key_part(key)
+        parts = [
+            part
+            for part in [self.base_prefix, normalized_prefix, normalized_key]
+            if part
+        ]
+        full_key = "/".join(parts)
+        if key is None and full_key:
+            return f"{full_key}/"
+        return full_key
+
+    @staticmethod
+    def __normalize_key_part(value: str | None) -> str:
+        if not value:
+            return ""
+        return "/".join(part for part in value.split("/") if part)
 
     def __object_exists(self, prefix: str, key: str | None = None) -> bool:
         """Check if an object exists in S3.

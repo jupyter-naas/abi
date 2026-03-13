@@ -2,6 +2,65 @@
 
 <!-- version list -->
 
+## v1.22.0 (2026-03-12)
+
+### Features
+
+- Improve service portal
+  ([`d207ce4`](https://github.com/jupyter-naas/abi/commit/d207ce459e0bb8a0700b8fed4f566a30261f6a04))
+
+
+## v1.21.1 (2026-03-10)
+
+### Bug Fixes
+
+- Update the cli to display when it executes sub abi cli
+  ([`526eac3`](https://github.com/jupyter-naas/abi/commit/526eac3843cdc92b681ea7debe2c6d9454d057f3))
+
+
+## v1.21.0 (2026-03-09)
+
+### Features
+
+- Abi cli rerun
+  ([`a3a1a2b`](https://github.com/jupyter-naas/abi/commit/a3a1a2b69ed24bce413f514bfab169ebde194369))
+
+
+## v1.20.0 (2026-03-05)
+
+### Documentation
+
+- Working on documentation
+  ([`725631e`](https://github.com/jupyter-naas/abi/commit/725631e61c03183656bd3ac4082a0c444003f353))
+
+### Features
+
+- Working on centralizing CORS usage
+  ([`08caa0d`](https://github.com/jupyter-naas/abi/commit/08caa0d2896f03a0c88e25d38ed0f2a076ec73ef))
+
+
+## v1.19.5 (2026-03-04)
+
+
+## v1.19.4 (2026-03-04)
+
+
+## v1.19.3 (2026-03-04)
+
+### Bug Fixes
+
+- Headscale setup
+  ([`d3ea48c`](https://github.com/jupyter-naas/abi/commit/d3ea48c6318b3e1fec4b8c03cdb942796e0001f7))
+
+
+## v1.19.2 (2026-03-04)
+
+### Bug Fixes
+
+- Headscale setup
+  ([`dbee594`](https://github.com/jupyter-naas/abi/commit/dbee59421b83c98434b9e2053dc2b345540b9186))
+
+
 ## v1.19.1 (2026-03-03)
 
 ### Bug Fixes

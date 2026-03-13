@@ -43,6 +43,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def _unwrap_json_content(raw: str) -> str:
+    """If the provider returned a JSON object with a 'content' key, return that; else return raw."""
+    if not raw or not raw.strip().startswith("{"):
+        return raw
+    try:
+        obj = json.loads(raw)
+        if isinstance(obj, dict) and "content" in obj and isinstance(obj["content"], str):
+            return obj["content"]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return raw
+
 # Get valid provider types from model registry
 VALID_PROVIDER_TYPES = get_all_provider_names() + ["custom", "abi"]  # Add "custom" for user-defined, "abi" for external ABI servers
 
@@ -653,6 +666,7 @@ async def complete_chat(
             response_content = await complete_with_provider(
                 messages=provider_messages, config=provider_config, system_prompt=system_prompt,
             )
+            response_content = _unwrap_json_content(response_content)
             provider_used = f"{provider.name} ({provider.model})"
         except Exception as e:
             response_content = f"**Error calling {provider.name}:**\n\n{str(e)}\n\nPlease check your provider configuration in Settings."

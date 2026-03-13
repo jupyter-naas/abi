@@ -19,6 +19,7 @@ api:
 global_config:
   ai_mode: "cloud"
 
+default_agent: naas_abi AbiAgent 
 modules:
   - module: naas_abi
     enabled: true
@@ -26,33 +27,31 @@ modules:
       nexus_config:
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
         redis_url: "redis://localhost:6379/0"
-        cors_origins_str: "http://localhost:3042,http://127.0.0.1:3042"
-
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-
-  - module: naas_abi_marketplace.applications.openrouter
-    enabled: true
-    config:
-      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
-      include_models:
-        - "anthropic/claude-opus-4.6"
-        - "anthropic/claude-sonnet-4.6"
-        - "deepseek/deepseek-v3.2"
-        - "google/gemini-3.1-pro-preview"
-        - "mistralai/mistral-large-2512"
-        - "openai/gpt-4.1"
-        - "openai/gpt-4.1-mini"
-        - "openai/gpt-5.1"
-        - "openai/gpt-5.2"
-        - "perplexity/sonar-pro-search"
-        - "x-ai/grok-4.1-fast"
-
-  - module: naas_abi_marketplace.applications.git
-    enabled: true
-
+  #
+  # - module: naas_abi_marketplace.applications.openrouter
+  #   enabled: true
+  #   config:
+  #     openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+  #     include_models:
+  #       - "anthropic/claude-opus-4.6"
+  #       - "anthropic/claude-sonnet-4.6"
+  #       - "deepseek/deepseek-v3.2"
+  #       - "google/gemini-3.1-pro-preview"
+  #       - "mistralai/mistral-large-2512"
+  #       - "openai/gpt-4.1"
+  #       - "openai/gpt-4.1-mini"
+  #       - "openai/gpt-5.1"
+  #       - "openai/gpt-5.2"
+  #       - "perplexity/sonar-pro-search"
+  #       - "x-ai/grok-4.1-fast"
+  #
+  # - module: naas_abi_marketplace.applications.git
+  #   enabled: true
+  #
 services:
   secret:
     secret_adapters:
@@ -65,22 +64,27 @@ services:
         base_path: "storage/datastore"
   triple_store:
     triple_store_adapter:
-      adapter: "apache_jena_tdb2"
+      adapter: "oxigraph_embedded"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@localhost:3030/ds"
+        store_path: "storage/triplestore/oxigraph"
+        graph_base_iri: "http://ontology.naas.ai/graph/default"
   vector_store:
     vector_store_adapter:
-      adapter: "qdrant"
+      adapter: "qdrant_in_memory"
       config:
-        host: "localhost"
-        port: 6333
+        storage_path: "storage/vectorstore/qdrant"
+        timeout: 300
   bus:
     bus_adapter:
-      adapter: "rabbitmq"
+      adapter: "python_queue"
       config:
-        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@localhost:5672"
+        persistence_path: "storage/bus/python_queue.sqlite3"
+        journal_mode: "WAL"
+        busy_timeout_ms: 5000
   kv:
     kv_adapter:
-      adapter: "redis"
+      adapter: "python"
       config:
-        redis_url: "redis://localhost:6379"
+        persistence_path: "storage/kv/python.sqlite3"
+        journal_mode: "WAL"
+        busy_timeout_ms: 5000

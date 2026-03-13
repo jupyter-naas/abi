@@ -10,16 +10,17 @@ class AgentRecord:
     id: str
     workspace_id: str
     name: str
-    class_name: str | None
     description: str
-    system_prompt: str
+    enabled: bool
+    class_name: str | None
+    system_prompt: str | None
     model_id: str | None
     provider: str | None
     logo_url: str | None
-    enabled: bool
     created_at: datetime
     updated_at: datetime
     suggestions: list[dict[str, str]] | None = None
+    intents: list[dict[str, str]] | None = None
 
 
 @dataclass
