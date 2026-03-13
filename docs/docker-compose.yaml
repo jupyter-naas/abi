@@ -1,0 +1,14 @@
+services:
+  docs:
+    image: ghcr.io/jupyter-naas/quartz-custom:latest
+    environment:
+      SITE_TITLE: "ABI"
+      BASE_URL: "docs.localhost"
+      DEFAULT_THEME: "dark"
+    ports:
+      - 8080:8080
+    volumes:
+      - ./:/data/content
+      - ./.quartz_conf/quartz.config.ts:/data/quartz.config.ts
+      - ./.quartz_conf/quartz.layout.ts:/data/quartz.layout.ts
+      - ./.quartz_conf/custom.scss:/data/custom.scss

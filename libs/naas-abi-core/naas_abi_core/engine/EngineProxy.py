@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Dict
 
 from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+    ApiConfiguration,
+)
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
@@ -145,3 +148,10 @@ class EngineProxy:
     @property
     def services(self) -> ServicesProxy:
         return self.__services_proxy
+
+    @property
+    def api_configuration(self) -> ApiConfiguration:
+        configuration = getattr(self.__engine, "configuration", None)
+        if configuration is None or not hasattr(configuration, "api"):
+            raise RuntimeError("Engine configuration API is not available")
+        return configuration.api

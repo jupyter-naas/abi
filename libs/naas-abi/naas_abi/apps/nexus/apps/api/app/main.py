@@ -46,6 +46,7 @@ async def _startup(app: FastAPI) -> None:
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
+
     await apply_configuration_seeds(getattr(app.state, "secret_service", None))
 
     # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
@@ -123,7 +124,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
             # HSTS (only in production)
             if settings.environment == "production":
-                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+                response.headers["Strict-Transport-Security"] = (
+                    "max-age=31536000; includeSubDomains"
+                )
 
             # CSP (if configured)
             if settings.content_security_policy:
@@ -132,6 +135,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 # Strict default CSP for production (no 'unsafe-*').
                 # Generate a per-response nonce in case any HTML is ever served via this app.
                 import secrets
+
                 nonce = secrets.token_urlsafe(16)
                 csp = (
                     "default-src 'self'; "
@@ -183,7 +187,10 @@ async def ollama_ensure_ready(model: str = "qwen3-vl:2b"):
     to decide whether to retry the pending chat request automatically.
     """
     result = await ensure_ollama_ready(required_model=model)
-    ready = bool(result.get("ollama_running") and (result.get("model_available") or result.get("model_pulled")))
+    ready = bool(
+        result.get("ollama_running")
+        and (result.get("model_available") or result.get("model_pulled"))
+    )
     return {"ready": ready, "status": result}
 
 
@@ -199,8 +206,7 @@ def _register_startup_handlers(app: FastAPI) -> None:
 
 
 def _configure_middleware(app: FastAPI) -> None:
-    # CORS - allow frontend origin; local dev always includes localhost:3000
-    cors_origins = settings.cors_origins_list
+    cors_origins = list(getattr(app.state, "abi_cors_origins", [settings.frontend_url]))
     logger = logging.getLogger(__name__)
     logger.info(f"[CORS] Configured origins: {cors_origins}")
     app.add_middleware(
@@ -237,7 +243,9 @@ def _mount_static_assets(app: FastAPI) -> None:
     # Serve organization logos
     org_logos_path = Path(__file__).parent.parent / "public" / "organizations"
     if org_logos_path.exists():
-        app.mount("/organizations", StaticFiles(directory=str(org_logos_path)), name="organizations")
+        app.mount(
+            "/organizations", StaticFiles(directory=str(org_logos_path)), name="organizations"
+        )
 
     # Serve uploaded workspace logos
     uploads_path = Path(__file__).parent.parent / "uploads"
@@ -277,8 +285,7 @@ def create_app(app: FastAPI | None = None):
     app.state._nexus_asgi_app = asgi_app
     return asgi_app
 
+
 if __name__ == "__main__":
     app = create_app()
     uvicorn.run(app, host="0.0.0.0", port=9879, reload_dirs=["src", "libs"], reload=True)
-
-

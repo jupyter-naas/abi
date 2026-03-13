@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 # Create Socket.IO server with proper CORS (align with API CORS settings)
 sio = socketio.AsyncServer(
-    async_mode='asgi',
-    cors_allowed_origins=settings.cors_origins_list,
+    async_mode="asgi",
+    cors_allowed_origins=[],
     logger=True,
     engineio_logger=True,
     allow_upgrades=True,
@@ -45,14 +45,14 @@ async def connect(sid, environ, auth):
     # Accept Bearer token via Socket.IO auth payload or Authorization header
     token: str | None = None
     if isinstance(auth, dict):
-        token = auth.get('token') or auth.get('authorization') or auth.get('Authorization')
-        if token and token.lower().startswith('bearer '):
-            token = token.split(' ', 1)[1].strip()
+        token = auth.get("token") or auth.get("authorization") or auth.get("Authorization")
+        if token and token.lower().startswith("bearer "):
+            token = token.split(" ", 1)[1].strip()
 
     if not token:
-        header_auth = environ.get('HTTP_AUTHORIZATION')
-        if header_auth and header_auth.lower().startswith('bearer '):
-            token = header_auth.split(' ', 1)[1].strip()
+        header_auth = environ.get("HTTP_AUTHORIZATION")
+        if header_auth and header_auth.lower().startswith("bearer "):
+            token = header_auth.split(" ", 1)[1].strip()
 
     if not token:
         logger.warning("[WS] Missing token; rejecting connection")
@@ -63,8 +63,8 @@ async def connect(sid, environ, auth):
         logger.warning("[WS] Invalid token; rejecting connection")
         return False
 
-    user_id = payload.get('sub')
-    jti = payload.get('jti')
+    user_id = payload.get("sub")
+    jti = payload.get("jti")
     if not user_id:
         logger.warning("[WS] Token missing subject; rejecting connection")
         return False
@@ -77,8 +77,8 @@ async def connect(sid, environ, auth):
 
     # Store user_id with session
     async with sio.session(sid) as session:
-        session['user_id'] = user_id
-        session['workspaces'] = set()
+        session["user_id"] = user_id
+        session["workspaces"] = set()
 
     return True
 
@@ -87,8 +87,8 @@ async def connect(sid, environ, auth):
 async def disconnect(sid):
     """Handle client disconnection."""
     async with sio.session(sid) as session:
-        user_id = session.get('user_id')
-        workspaces = session.get('workspaces', set())
+        user_id = session.get("user_id")
+        workspaces = session.get("workspaces", set())
 
     if not user_id:
         return
@@ -100,10 +100,10 @@ async def disconnect(sid):
 
             # Notify others in workspace
             await sio.emit(
-                'user_left',
-                {'user_id': user_id, 'workspace_id': workspace_id},
-                room=f'workspace:{workspace_id}',
-                skip_sid=sid
+                "user_left",
+                {"user_id": user_id, "workspace_id": workspace_id},
+                room=f"workspace:{workspace_id}",
+                skip_sid=sid,
             )
 
     # Clean up user tracking
@@ -116,17 +116,17 @@ async def disconnect(sid):
 @sio.event
 async def join_workspace(sid, data):
     """User joins a workspace room."""
-    workspace_id = data.get('workspace_id')
+    workspace_id = data.get("workspace_id")
 
     if not workspace_id:
-        return {'error': 'workspace_id required'}
+        return {"error": "workspace_id required"}
 
     async with sio.session(sid) as session:
-        user_id = session.get('user_id')
-        session['workspaces'].add(workspace_id)
+        user_id = session.get("user_id")
+        session["workspaces"].add(workspace_id)
 
     # Join Socket.IO room
-    sio.enter_room(sid, f'workspace:{workspace_id}')
+    sio.enter_room(sid, f"workspace:{workspace_id}")
 
     # Track presence
     if workspace_id not in workspace_presence:
@@ -139,37 +139,34 @@ async def join_workspace(sid, data):
 
     # Notify others
     await sio.emit(
-        'user_joined',
+        "user_joined",
         {
-            'user_id': user_id,
-            'workspace_id': workspace_id,
-            'timestamp': datetime.now(UTC).isoformat()
+            "user_id": user_id,
+            "workspace_id": workspace_id,
+            "timestamp": datetime.now(UTC).isoformat(),
         },
-        room=f'workspace:{workspace_id}',
-        skip_sid=sid
+        room=f"workspace:{workspace_id}",
+        skip_sid=sid,
     )
 
     # Return current presence list
-    return {
-        'workspace_id': workspace_id,
-        'users': list(workspace_presence[workspace_id])
-    }
+    return {"workspace_id": workspace_id, "users": list(workspace_presence[workspace_id])}
 
 
 @sio.event
 async def leave_workspace(sid, data):
     """User leaves a workspace room."""
-    workspace_id = data.get('workspace_id')
+    workspace_id = data.get("workspace_id")
 
     if not workspace_id:
-        return {'error': 'workspace_id required'}
+        return {"error": "workspace_id required"}
 
     async with sio.session(sid) as session:
-        user_id = session.get('user_id')
-        session['workspaces'].discard(workspace_id)
+        user_id = session.get("user_id")
+        session["workspaces"].discard(workspace_id)
 
     # Leave Socket.IO room
-    sio.leave_room(sid, f'workspace:{workspace_id}')
+    sio.leave_room(sid, f"workspace:{workspace_id}")
 
     # Remove from presence
     if workspace_id in workspace_presence:
@@ -180,97 +177,85 @@ async def leave_workspace(sid, data):
 
     # Notify others
     await sio.emit(
-        'user_left',
-        {'user_id': user_id, 'workspace_id': workspace_id},
-        room=f'workspace:{workspace_id}',
-        skip_sid=sid
+        "user_left",
+        {"user_id": user_id, "workspace_id": workspace_id},
+        room=f"workspace:{workspace_id}",
+        skip_sid=sid,
     )
 
-    return {'status': 'left', 'workspace_id': workspace_id}
+    return {"status": "left", "workspace_id": workspace_id}
 
 
 @sio.event
 async def typing_start(sid, data):
     """User started typing in a conversation."""
-    workspace_id = data.get('workspace_id')
-    conversation_id = data.get('conversation_id')
+    workspace_id = data.get("workspace_id")
+    conversation_id = data.get("conversation_id")
 
     async with sio.session(sid) as session:
-        user_id = session.get('user_id')
+        user_id = session.get("user_id")
 
     # Broadcast to workspace (excluding sender)
     await sio.emit(
-        'user_typing',
-        {
-            'user_id': user_id,
-            'conversation_id': conversation_id,
-            'typing': True
-        },
-        room=f'workspace:{workspace_id}',
-        skip_sid=sid
+        "user_typing",
+        {"user_id": user_id, "conversation_id": conversation_id, "typing": True},
+        room=f"workspace:{workspace_id}",
+        skip_sid=sid,
     )
 
 
 @sio.event
 async def typing_stop(sid, data):
     """User stopped typing."""
-    workspace_id = data.get('workspace_id')
-    conversation_id = data.get('conversation_id')
+    workspace_id = data.get("workspace_id")
+    conversation_id = data.get("conversation_id")
 
     async with sio.session(sid) as session:
-        user_id = session.get('user_id')
+        user_id = session.get("user_id")
 
     await sio.emit(
-        'user_typing',
-        {
-            'user_id': user_id,
-            'conversation_id': conversation_id,
-            'typing': False
-        },
-        room=f'workspace:{workspace_id}',
-        skip_sid=sid
+        "user_typing",
+        {"user_id": user_id, "conversation_id": conversation_id, "typing": False},
+        room=f"workspace:{workspace_id}",
+        skip_sid=sid,
     )
 
 
 @sio.event
 async def message_created(sid, data):
     """New message created - broadcast to workspace."""
-    workspace_id = data.get('workspace_id')
-    conversation_id = data.get('conversation_id')
-    message = data.get('message')
+    workspace_id = data.get("workspace_id")
+    conversation_id = data.get("conversation_id")
+    message = data.get("message")
 
     # Broadcast to all users in workspace
     await sio.emit(
-        'new_message',
+        "new_message",
         {
-            'conversation_id': conversation_id,
-            'message': message,
-            'timestamp': datetime.now(UTC).isoformat()
+            "conversation_id": conversation_id,
+            "message": message,
+            "timestamp": datetime.now(UTC).isoformat(),
         },
-        room=f'workspace:{workspace_id}'
+        room=f"workspace:{workspace_id}",
     )
 
 
 @sio.event
 async def cursor_position(sid, data):
     """User cursor position in collaborative editing."""
-    workspace_id = data.get('workspace_id')
-    document_id = data.get('document_id')
-    position = data.get('position')
+    workspace_id = data.get("workspace_id")
+    document_id = data.get("document_id")
+    position = data.get("position")
 
     async with sio.session(sid) as session:
-        user_id = session.get('user_id')
+        user_id = session.get("user_id")
 
     # Broadcast cursor position
     await sio.emit(
-        'cursor_update',
-        {
-            'user_id': user_id,
-            'document_id': document_id,
-            'position': position
-        },
-        room=f'workspace:{workspace_id}',
-        skip_sid=sid
+        "cursor_update",
+        {"user_id": user_id, "document_id": document_id, "position": position},
+        room=f"workspace:{workspace_id}",
+        skip_sid=sid,
     )
 
 
@@ -292,6 +277,9 @@ def init_websocket(app: FastAPI):
     CORS is handled by both Socket.IO (for WS) and FastAPI middleware (for HTTP).
     """
     ws_path = getattr(settings, "websocket_path", "/ws/socket.io")
+    cors_origins = list(getattr(app.state, "abi_cors_origins", [settings.frontend_url]))
+    sio.eio.cors_allowed_origins = cors_origins
+    logger.info("[WS] Configured origins: %s", cors_origins)
     mount_prefix = ws_path.rsplit("/", 1)[0] if "/" in ws_path.strip("/") else "/ws"
     if not mount_prefix.startswith("/"):
         mount_prefix = f"/{mount_prefix}"
@@ -310,7 +298,7 @@ def init_websocket(app: FastAPI):
             # between HTTP and WebSocket scopes across ASGI stacks.
             socketio_path=None,
             on_startup=None,
-            on_shutdown=None
+            on_shutdown=None,
         )
         app.mount(mount_prefix, socket_app)
         app.state._nexus_socketio_mounted = True

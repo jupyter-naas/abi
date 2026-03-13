@@ -31,3 +31,20 @@ def test_vector_store_service_configuration():
 
     assert vector_store_service is not None
     assert isinstance(vector_store_service, VectorStoreService)
+
+
+def test_vector_store_service_configuration_qdrant_in_memory(tmp_path):
+    from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
+        QdrantInMemoryAdapter,
+    )
+
+    configuration = VectorStoreServiceConfiguration(
+        vector_store_adapter=VectorStoreAdapterConfiguration(
+            adapter="qdrant_in_memory",
+            config={"storage_path": str(tmp_path / "qdrant-local")},
+        )
+    )
+
+    vector_store_adapter = configuration.vector_store_adapter.load()
+    assert isinstance(vector_store_adapter, IVectorStorePort)
+    assert isinstance(vector_store_adapter, QdrantInMemoryAdapter)

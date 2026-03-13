@@ -2,6 +2,53 @@
 
 <!-- version list -->
 
+## v1.20.1 (2026-03-12)
+
+### Bug Fixes
+
+- / handling in object storage adapter
+  ([`89c6b16`](https://github.com/jupyter-naas/abi/commit/89c6b164f91c46e93561e9d7abeda75c058339c7))
+
+- Object storage adapter / handling
+  ([`a6a0119`](https://github.com/jupyter-naas/abi/commit/a6a0119e68355a09a8011e05a78923f75e56a60e))
+
+
+## v1.20.0 (2026-03-06)
+
+### Features
+
+- Make it possible to provide you own embedding model
+  ([`ec0f5d1`](https://github.com/jupyter-naas/abi/commit/ec0f5d1c22de8f2ebd2cbdfb9c52e8c5739c8c09))
+
+
+## v1.19.1 (2026-03-05)
+
+### Bug Fixes
+
+- Remove intents dev + duplicated function list available agents + cleanup agent & tool name from
+  intents
+  ([`6c7ac88`](https://github.com/jupyter-naas/abi/commit/6c7ac889379950fccd48e945049bc1a2fccd8220))
+
+- Validate agent name on init
+  ([`87605a9`](https://github.com/jupyter-naas/abi/commit/87605a9d14ade9d43b3aa247e3863d522271df0f))
+
+
+## v1.19.0 (2026-03-05)
+
+### Features
+
+- Working on centralizing COES
+  ([`5de2a36`](https://github.com/jupyter-naas/abi/commit/5de2a369f0b5908c2fb92f731708da8dc2cfe8bf))
+
+
+## v1.18.3 (2026-03-05)
+
+### Bug Fixes
+
+- Make check
+  ([`9557a48`](https://github.com/jupyter-naas/abi/commit/9557a48c5fef634f31817cd922567947c2309afe))
+
+
 ## v1.18.2 (2026-03-02)
 
 ### Bug Fixes

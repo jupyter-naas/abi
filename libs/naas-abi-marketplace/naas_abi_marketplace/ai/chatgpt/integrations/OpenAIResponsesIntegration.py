@@ -54,11 +54,9 @@ class OpenAIResponsesIntegration(Integration):
         )
 
     @cache(
-        lambda self,
-        method,
-        endpoint,
-        params,
-        json: f"{method}_{endpoint}_{str(params)}_{str(json)}",
+        lambda self, method, endpoint, params, json: (
+            f"{method}_{endpoint}_{str(params)}_{str(json)}"
+        ),
         cache_type=DataType.PICKLE,
         ttl=timedelta(days=1),
     )
@@ -369,20 +367,20 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
             description="Search the web",
             func=lambda **kwargs: integration.search_web(**kwargs),
             args_schema=SearchWebSchema,
-            return_direct=True,
+            return_direct=False,
         ),
         StructuredTool(
             name="chatgpt_analyze_image",
             description="Analyze an image from URL",
             func=lambda **kwargs: integration.analyze_image(**kwargs),
             args_schema=AnalyzeImageSchema,
-            return_direct=True,
+            return_direct=False,
         ),
         StructuredTool(
             name="chatgpt_analyze_pdf",
             description="Analyze a PDF document from URL",
             func=lambda **kwargs: integration.analyze_pdf(**kwargs),
             args_schema=AnalyzePdfSchema,
-            return_direct=True,
+            return_direct=False,
         ),
     ]

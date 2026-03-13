@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import Link from 'next/link';
 import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Archive, Edit2, Trash2 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -291,27 +292,32 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
 
       {/* Agents folder */}
       <div className="space-y-0.5">
-        <button
-          onClick={() => setAgentsExpanded(!agentsExpanded)}
-          className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          <ChevronRight
-            size={12}
-            className={cn('transition-transform', agentsExpanded && 'rotate-90')}
-          />
-          <Bot size={12} />
-          <span className="flex-1 text-left">Agents</span>
-          <span
-            onClick={(e) => {
-              e.stopPropagation();
-              router.push(getWorkspacePath(currentWorkspaceId, '/chat/agents/new'));
-            }}
-            className="rounded p-0.5 hover:bg-muted"
+        <div className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground">
+          <button
+            onClick={() => setAgentsExpanded(!agentsExpanded)}
+            className="flex items-center justify-center rounded p-0.5 hover:bg-muted hover:text-foreground"
+            aria-expanded={agentsExpanded}
+          >
+            <ChevronRight
+              size={12}
+              className={cn('transition-transform', agentsExpanded && 'rotate-90')}
+            />
+          </button>
+          <Link
+            href={getWorkspacePath(currentWorkspaceId, '/settings/agents')}
+            className="flex flex-1 items-center gap-1 rounded py-0.5 text-left hover:text-foreground"
+          >
+            <Bot size={12} />
+            <span>Agents</span>
+          </Link>
+          <Link
+            href={getWorkspacePath(currentWorkspaceId, '/chat/agents/new')}
+            className="rounded p-0.5 hover:bg-muted hover:text-foreground"
             title="Create Agent"
           >
             <Plus size={12} />
-          </span>
-        </button>
+          </Link>
+        </div>
 
         {agentsExpanded && (
           <div className="ml-3 space-y-0.5">

@@ -1028,7 +1028,7 @@ export default function GraphPage() {
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <UserPlus size={14} />
+                <UserPlus size={14} className="text-orange-500 dark:text-orange-400" />
                 Create New Individual
               </div>
             )}
@@ -1041,7 +1041,7 @@ export default function GraphPage() {
                 <div className="mx-auto w-full max-w-2xl">
                   <div className="mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <UserPlus size={24} className="text-workspace-accent" />
+                      <UserPlus size={24} className="text-orange-500 dark:text-orange-400" />
                       <h2 className="text-lg font-semibold">Create New Individual</h2>
                     </div>
                     <button
@@ -1103,7 +1103,7 @@ export default function GraphPage() {
                           'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
                         )}
                       >
-                        {creatingIndividual ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                        {creatingIndividual ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} className="text-orange-500 dark:text-orange-400" />}
                         Create Individual
                       </button>
                     </div>
@@ -1340,7 +1340,17 @@ export default function GraphPage() {
 
             {pageMode === 'graph' && activeViewType === 'overview' && (
               <div className="flex-1 overflow-auto p-6">
-                <h2 className="mb-6 text-lg font-semibold">Overview</h2>
+                <div className="mb-6 flex items-start justify-between gap-4">
+                  <h2 className="text-lg font-semibold">Overview</h2>
+                  <button
+                    type="button"
+                    onClick={() => setPageMode('create-individual')}
+                    className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+                  >
+                    <UserPlus size={14} className="text-orange-500 dark:text-orange-400" />
+                    Create Individual
+                  </button>
+                </div>
                 <div className="grid grid-cols-4 gap-6">
                   <StatCard title="Total Nodes" value={stats.totalNodes} icon={Circle} />
                   <StatCard title="Total Edges" value={stats.totalEdges} icon={Link2} />
@@ -1371,7 +1381,7 @@ export default function GraphPage() {
 
             {pageMode === 'graph' && activeViewType === 'entities' && (
               <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
-                {/* Search overlay */}
+                {/* Search overlay - left */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
                   <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
                     <Search size={14} className="text-muted-foreground" />
@@ -1406,6 +1416,17 @@ export default function GraphPage() {
                       Showing {filteredNodes.length} of {nodes.length} nodes
                     </span>
                   )}
+                </div>
+                {/* Create Individual - top right inside page */}
+                <div className="absolute right-4 top-4 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setPageMode('create-individual')}
+                    className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-muted"
+                  >
+                    <UserPlus size={14} className="text-orange-500 dark:text-orange-400" />
+                    Create Individual
+                  </button>
                 </div>
 
                 {/* Zoom controls - using vis-network's built-in navigation buttons */}
@@ -1484,6 +1505,17 @@ export default function GraphPage() {
 
             {pageMode === 'graph' && activeViewType === 'table' && (
               <div className="flex-1 overflow-auto p-4">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <h2 className="text-lg font-semibold">Table</h2>
+                  <button
+                    type="button"
+                    onClick={() => setPageMode('create-individual')}
+                    className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+                  >
+                    <UserPlus size={14} className="text-orange-500 dark:text-orange-400" />
+                    Create Individual
+                  </button>
+                </div>
                 <div className="rounded-lg border">
                   <table className="w-full">
                     <thead>

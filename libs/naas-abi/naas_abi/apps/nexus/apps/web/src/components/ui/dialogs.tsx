@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, createContext, useContext, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
+import { useAgentsStore, type Agent } from '@/stores/agents';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 // ============================================================
 // Generic Modal Backdrop
@@ -42,6 +44,63 @@ function ModalBackdrop({
     </div>,
     document.body
   );
+}
+
+// ============================================================
+// useAgentList - same list as chat page (AgentSelector)
+// Use this in any dialog that needs to show or select agents.
+// ============================================================
+
+export function useAgentList(searchQuery = '') {
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const { agents, fetchAgents, getAgent } = useAgentsStore();
+
+  const enabledAgents = useMemo(
+    () => agents.filter((a: Agent) => a.enabled),
+    [agents]
+  );
+
+  const filteredAgents = useMemo(
+    () =>
+      searchQuery.trim()
+        ? enabledAgents.filter(
+            (a: Agent) =>
+              a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              a.description.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : enabledAgents,
+    [enabledAgents, searchQuery]
+  );
+
+  const defaultAgents = useMemo(
+    () =>
+      filteredAgents
+        .filter((a: Agent) => a.isDefault)
+        .sort((a: Agent, b: Agent) => a.name.localeCompare(b.name)),
+    [filteredAgents]
+  );
+
+  const customAgents = useMemo(
+    () =>
+      filteredAgents
+        .filter((a: Agent) => !a.isDefault)
+        .sort((a: Agent, b: Agent) => a.name.localeCompare(b.name)),
+    [filteredAgents]
+  );
+
+  useEffect(() => {
+    if (currentWorkspaceId) {
+      fetchAgents(currentWorkspaceId);
+    }
+  }, [currentWorkspaceId, fetchAgents]);
+
+  return {
+    enabledAgents,
+    defaultAgents,
+    customAgents,
+    filteredAgents,
+    getAgent,
+  } as const;
 }
 
 // ============================================================

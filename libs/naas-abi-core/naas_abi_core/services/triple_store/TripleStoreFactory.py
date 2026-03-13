@@ -13,6 +13,9 @@ from naas_abi_core.services.triple_store.adaptors.secondary.Oxigraph import Oxig
 from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
     TripleStoreService__SecondaryAdaptor__Filesystem,
 )
+from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__OxigraphEmbedded import (
+    TripleStoreService__SecondaryAdaptor__OxigraphEmbedded,
+)
 from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
     TripleStoreService__SecondaryAdaptor__ObjectStorage,
 )
@@ -137,5 +140,17 @@ class TripleStoreFactory:
         return TripleStoreService(
             ApacheJenaTDB2(
                 jena_tdb2_url=jena_tdb2_url,
+            )
+        )
+
+    @staticmethod
+    def TripleStoreServiceOxigraphEmbedded(
+        store_path: str,
+        graph_base_iri: str = "http://ontology.naas.ai/graph/default",
+    ) -> TripleStoreService:
+        return TripleStoreService(
+            TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(
+                store_path=store_path,
+                graph_base_iri=graph_base_iri,
             )
         )

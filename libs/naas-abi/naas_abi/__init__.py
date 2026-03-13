@@ -148,8 +148,6 @@ class NexusConfig(BaseModel):
     api_prefix: str = "/api"
     api_url: str = "http://localhost:9879"
     frontend_url: str = "http://localhost:3042"
-    cors_origins_str: str = "http://localhost:3042,http://127.0.0.1:3042"
-    cors_origins: str | None = None
     websocket_path: str = "/ws/socket.io"
 
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
@@ -324,10 +322,12 @@ class ABIModule(BaseModule):
 
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
-        # We override settings with module config from `nexus_config`.
         settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
 
         nexus_config.settings = nexus_config.Settings(**settings_kwargs)
+
+        # Keep API and Nexus CORS aligned from a single source of truth.
+        app.state.abi_cors_origins = self.engine.api_configuration.cors_origins
 
         # Expose ABI object storage to Nexus routes.
         app.state.object_storage = self.engine.services.object_storage

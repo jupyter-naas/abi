@@ -1,5 +1,6 @@
 import os
 import shutil
+from datetime import datetime
 from ipaddress import ip_address
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from ..utils.Copier import Copier
 
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
 HEADSCALE_SERVICE_MARKER = "  headscale:"
+BACKUP_DIRECTORY = os.path.join(".abi-backups", "deploy-local")
 
 DEFAULT_ENV_VALUES: dict[str, str] = {
     "BASE_DOMAIN": "localhost",
@@ -51,7 +53,7 @@ HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
     image: docker.io/headscale/headscale:stable
     pull_policy: always
     restart: unless-stopped
-    command: ["headscale", "serve"]
+    command: ["server"]
     ports:
       - ${HEADSCALE_SERVER_PORT}:8080
       - ${HEADSCALE_METRICS_PORT}:9090
@@ -81,6 +83,21 @@ def _copy_headscale_templates(deploy_path: str, values: dict[str, object]) -> No
         destination_path=os.path.join(deploy_path, "docker/headscale"),
     )
     copier.copy(values=values)
+
+    headscale_config_path = os.path.join(deploy_path, "docker/headscale/config.yaml")
+    headscale_extra_records_path = os.path.join(
+        deploy_path, "docker/headscale/extra-records.json"
+    )
+    if not os.path.exists(headscale_config_path):
+        raise FileNotFoundError(
+            f"Missing rendered Headscale config at {headscale_config_path}. "
+            "Ensure the naas-abi-cli package includes the local deploy headscale templates."
+        )
+    if not os.path.exists(headscale_extra_records_path):
+        raise FileNotFoundError(
+            f"Missing rendered Headscale extra-records file at {headscale_extra_records_path}. "
+            "Ensure the naas-abi-cli package includes the local deploy headscale templates."
+        )
 
 
 def _ensure_headscale_service(docker_compose_target_path: str) -> None:
@@ -256,10 +273,107 @@ def _append_local_env_once(source_env_path: str, destination_env_path: str) -> N
         destination_file.write(source_content)
 
 
+def _read_env_vars(env_path: str) -> dict[str, str]:
+    env_vars: dict[str, str] = {}
+
+    if not os.path.exists(env_path):
+        return env_vars
+
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for line in env_file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            env_vars[key] = value
+
+    return env_vars
+
+
+def _merge_local_env_template(
+    source_env_path: str,
+    destination_env_path: str,
+    existing_env_vars: dict[str, str],
+) -> None:
+    with open(source_env_path, "r", encoding="utf-8") as source_file:
+        source_lines = source_file.read().splitlines()
+
+    template_keys: set[str] = set()
+    merged_lines: list[str] = []
+
+    for line in source_lines:
+        stripped = line.strip()
+        if (
+            stripped
+            and not stripped.startswith("#")
+            and "=" in stripped
+            and not stripped.startswith("{%")
+            and not stripped.startswith("{{")
+        ):
+            key, value = stripped.split("=", 1)
+            template_keys.add(key)
+            if key in existing_env_vars:
+                merged_lines.append(f"{key}={existing_env_vars[key]}")
+                continue
+            merged_lines.append(f"{key}={value}")
+            continue
+
+        merged_lines.append(line)
+
+    additional_keys = [key for key in existing_env_vars if key not in template_keys]
+    if additional_keys:
+        if merged_lines and merged_lines[-1].strip() != "":
+            merged_lines.append("")
+        merged_lines.append("# Preserved custom values from previous .env")
+        for key in additional_keys:
+            merged_lines.append(f"{key}={existing_env_vars[key]}")
+
+    merged_content = "\n".join(merged_lines)
+    if merged_content and not merged_content.endswith("\n"):
+        merged_content += "\n"
+
+    with open(destination_env_path, "w", encoding="utf-8") as destination_file:
+        destination_file.write(merged_content)
+
+
+def _backup_local_deploy_files(
+    project_path: str,
+    deploy_path: str,
+    docker_compose_target_path: str,
+    local_env_target_path: str,
+) -> str | None:
+    paths_to_backup = [
+        deploy_path,
+        docker_compose_target_path,
+        local_env_target_path,
+    ]
+    existing_paths = [path for path in paths_to_backup if os.path.exists(path)]
+    if not existing_paths:
+        return None
+
+    backup_root = os.path.join(project_path, BACKUP_DIRECTORY)
+    backup_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = os.path.join(backup_root, backup_timestamp)
+    os.makedirs(backup_path, exist_ok=False)
+
+    for source_path in existing_paths:
+        destination_path = os.path.join(backup_path, os.path.basename(source_path))
+        if os.path.isdir(source_path):
+            shutil.copytree(source_path, destination_path)
+        else:
+            shutil.copy2(source_path, destination_path)
+
+    return backup_path
+
+
 def setup_local_deploy(
     project_path: str,
     include_headscale: bool = False,
     base_domain: str | None = None,
+    regenerate: bool = False,
+    backup: bool = True,
 ) -> None:
     project_path = os.path.abspath(os.path.expanduser(project_path))
 
@@ -269,13 +383,14 @@ def setup_local_deploy(
     local_env_template_path = os.path.join(deploy_path, ".env")
     local_env_target_path = os.path.join(project_path, ".env")
 
-    if base_domain is None:
-        base_domain = Prompt.ask(
+    selected_base_domain = base_domain
+    if selected_base_domain is None:
+        selected_base_domain = Prompt.ask(
             f"Base domain (example: {DEFAULT_ENV_VALUES['BASE_DOMAIN']})",
             default=DEFAULT_ENV_VALUES["BASE_DOMAIN"],
         )
 
-    generated_hosts = _build_hosts_from_domain(base_domain)
+    generated_hosts = _build_hosts_from_domain(selected_base_domain)
     public_web_host = generated_hosts["PUBLIC_WEB_HOST"]
     public_api_host = generated_hosts["PUBLIC_API_HOST"]
     headscale_server_url = generated_hosts["HEADSCALE_SERVER_URL"]
@@ -283,7 +398,7 @@ def setup_local_deploy(
     nexus_api_url = _build_nexus_api_url(public_api_host=public_api_host)
 
     _print_domain_recap(
-        base_domain=base_domain,
+        base_domain=selected_base_domain,
         public_api_host=public_api_host,
         public_web_host=public_web_host,
         nexus_api_url=nexus_api_url,
@@ -303,7 +418,24 @@ def setup_local_deploy(
         "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
     }
 
-    if not os.path.exists(deploy_path):
+    existing_env_vars = _read_env_vars(local_env_target_path)
+
+    if regenerate:
+        backup_path = None
+        if backup:
+            backup_path = _backup_local_deploy_files(
+                project_path=project_path,
+                deploy_path=deploy_path,
+                docker_compose_target_path=docker_compose_target_path,
+                local_env_target_path=local_env_target_path,
+            )
+            if backup_path is not None:
+                print(f"Backed up previous local deploy files to {backup_path}")
+
+        if os.path.exists(deploy_path):
+            shutil.rmtree(deploy_path)
+
+    if regenerate or not os.path.exists(deploy_path):
         os.makedirs(deploy_path, exist_ok=False)
 
         copier = Copier(
@@ -315,13 +447,23 @@ def setup_local_deploy(
         copier.copy(values=template_values)
 
     if os.path.exists(docker_compose_template_path):
+        if regenerate and os.path.exists(docker_compose_target_path):
+            os.remove(docker_compose_target_path)
+
         if os.path.exists(docker_compose_target_path):
             os.remove(docker_compose_template_path)
         else:
             shutil.move(docker_compose_template_path, docker_compose_target_path)
 
     if os.path.exists(local_env_template_path):
-        _append_local_env_once(local_env_template_path, local_env_target_path)
+        if regenerate:
+            _merge_local_env_template(
+                source_env_path=local_env_template_path,
+                destination_env_path=local_env_target_path,
+                existing_env_vars=existing_env_vars,
+            )
+        else:
+            _append_local_env_once(local_env_template_path, local_env_target_path)
         os.remove(local_env_template_path)
 
     for key, value in DEFAULT_ENV_VALUES.items():

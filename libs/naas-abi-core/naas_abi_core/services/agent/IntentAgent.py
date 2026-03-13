@@ -1,9 +1,9 @@
-import os
 from queue import Queue
 from typing import Any, Callable, Dict, Optional, Union
 
 import pydash as pd
 import spacy
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool, Tool, tool
@@ -11,11 +11,17 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.utils.Logger import logger
 from spacy.cli import download as spacy_download
 
-from .Agent import Agent, AgentConfiguration, AgentSharedState, create_checkpointer, ABIAgentState
+from .Agent import (
+    ABIAgentState,
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    create_checkpointer,
+)
 from .beta.IntentMapper import Intent, IntentMapper, IntentScope, IntentType
 
 _nlp = None
@@ -206,192 +212,6 @@ DEFAULT_INTENTS: list = [
         intent_scope=IntentScope.DIRECT,
     ),
 ]
-DEV_INTENTS: list = [
-    # General development questions
-    Intent(
-        intent_value="How do I start developing on ABI?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="What are the available make commands?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Show me all make commands",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Environment setup
-    Intent(
-        intent_value="How do I set up my development environment?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I install dependencies?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I create a virtual environment?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Testing
-    Intent(
-        intent_value="How do I run tests?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I check code quality?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I run security scans?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Docker operations
-    Intent(
-        intent_value="How do I work with Docker containers?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I start local services?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I manage Docker containers?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Chat agents
-    Intent(
-        intent_value="What chat agents are available?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Development tools
-    Intent(
-        intent_value="How do I use the API server?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I work with the knowledge graph?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I use Dagster for data orchestration?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Module creation
-    Intent(
-        intent_value="How do I create new modules?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I create new agents?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I create new integrations?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I create new workflows?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I create new pipelines?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I create new ontologies?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Data management
-    Intent(
-        intent_value="How do I manage data storage?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I work with the triplestore?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I handle data exports?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Documentation
-    Intent(
-        intent_value="How do I generate documentation?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I publish agents?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    # Cleanup and maintenance
-    Intent(
-        intent_value="How do I clean up the project?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="How do I handle Docker cleanup?",
-        intent_type=IntentType.TOOL,
-        intent_target="read_makefile",
-        intent_scope=IntentScope.DIRECT,
-    ),
-]
 
 
 class IntentState(ABIAgentState):
@@ -429,6 +249,7 @@ class IntentAgent(Agent):
 
     _intents: list[Intent]
     _intent_mapper: IntentMapper
+    _embedding_model: Embeddings | None
 
     def __init__(
         self,
@@ -444,7 +265,9 @@ class IntentAgent(Agent):
         event_queue: Queue | None = None,
         threshold: float = 0.85,
         threshold_neighbor: float = 0.05,
-        direct_intent_score: float = 0.95,
+        direct_intent_score: float = 0.90,
+        default_intents: bool = True,
+        embedding_model: Embeddings | None = None,
     ):
         """Initialize the IntentAgent.
 
@@ -474,48 +297,36 @@ class IntentAgent(Agent):
                 Defaults to 0.85.
             threshold_neighbor (float, optional): Maximum score difference for similar intents.
                 Defaults to 0.05.
+            embedding_model (Embeddings | None, optional): Embeddings backend used by intent
+                mapping. If None, IntentMapper falls back to default embeddings backend.
+                Defaults to None.
         """
-        
-        
-        @tool(return_direct=True)
-        def list_available_agents() -> str:
-            """Displays a formatted list of all available agents."""
-            return "\n".join([agent.name for agent in self._agents])
-        
-        tools.append(list_available_agents)
-        
-        # Add default intents while avoiding duplicates
-        intents.append(
-            Intent(
-                intent_value="agents",
-                intent_type=IntentType.TOOL,
-                intent_target="list_available_agents",
-            )
+
+        def _prepare_intents(
+            intents: list[Intent], default_intents: bool = True
+        ) -> list[Intent]:
+            new_intents: list[Intent] = []
+            # Clean up tools and agents names
+            for intent in intents:
+                if intent.intent_type in [IntentType.TOOL, IntentType.AGENT]:
+                    intent.intent_target = self.validate_name(intent.intent_target)
+                new_intents.append(intent)
+
+            # Add default intents
+            if default_intents:
+                for default_intent in DEFAULT_INTENTS:
+                    if default_intent.intent_value not in [
+                        intent.intent_value for intent in intents
+                    ]:
+                        new_intents.append(default_intent)
+            return new_intents
+
+        self._intents = _prepare_intents(intents)
+        self._embedding_model = embedding_model
+        self._intent_mapper = IntentMapper(
+            self._intents,
+            embedding_model=self._embedding_model,
         )
-        
-        intent_values = {
-            (intent.intent_value, intent.intent_type, intent.intent_target)
-            for intent in intents
-        }
-        for default_intent in DEFAULT_INTENTS:
-            if (
-                default_intent.intent_value,
-                default_intent.intent_type,
-                default_intent.intent_target,
-            ) not in intent_values:
-                intents.append(default_intent)
-
-        if os.environ.get("ENV") != "prod":
-            for dev_intent in DEV_INTENTS:
-                if (
-                    dev_intent.intent_value,
-                    dev_intent.intent_type,
-                    dev_intent.intent_target,
-                ) not in intent_values:
-                    intents.append(dev_intent)
-
-        self._intents = intents
-        self._intent_mapper = IntentMapper(self._intents)
         self._threshold = threshold
         self._threshold_neighbor = threshold_neighbor
         self._direct_intent_score = direct_intent_score
@@ -585,7 +396,9 @@ class IntentAgent(Agent):
         graph.add_node(self.call_tools)
 
         for agent in self._agents:
-            graph.add_node(agent.name, agent.graph)
+            agent = self.validate_agent_name(agent)
+            logger.debug(f"Adding agent to graph: '{agent._name}'")
+            graph.add_node(agent._name, agent.graph)
 
         if patcher is not None:
             graph = patcher(graph)
@@ -1193,6 +1006,7 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             state=shared_state,  # Create new state instance
             configuration=self._configuration,
             event_queue=queue,
+            embedding_model=self._embedding_model,
         )
 
         return new_agent

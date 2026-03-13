@@ -23,7 +23,7 @@ from naas_abi_core.utils.StorageUtils import StorageUtils
 MODULE: ABIModule = ABIModule.get_instance()
 SERVICES: ServicesProxy = MODULE.engine.services
 
-NAME = "Entity_to_SPARQL"
+NAME = "Entity to SPARQL"
 DESCRIPTION = "A agent that extracts entities from text and transform them into SPARQL INSERT DATA statements."
 SYSTEM_PROMPT = """
 # ROLE: 

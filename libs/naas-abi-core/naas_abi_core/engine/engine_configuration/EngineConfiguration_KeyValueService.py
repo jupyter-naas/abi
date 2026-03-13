@@ -36,7 +36,11 @@ class KeyValueAdapterPythonConfiguration(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    pass
+    persistence_path: str | None = None
+    journal_mode: Literal["DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"] = (
+        "WAL"
+    )
+    busy_timeout_ms: int = 5000
 
 
 class KeyValueAdapterConfiguration(GenericLoader):
