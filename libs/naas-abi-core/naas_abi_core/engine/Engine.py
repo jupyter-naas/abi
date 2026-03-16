@@ -63,12 +63,15 @@ class Engine(IEngine):
         logger.debug("Engine modules loaded")
 
         if self.__services.triple_store_available():
-            logger.debug("Loading engine ontologies")
-            EngineOntologyLoader.load_ontologies(
-                self.__services.triple_store,
-                self.__engine_module_loader.ordered_modules,
-            )
-            logger.debug("Engine ontologies loaded")
+            if not self.__configuration.global_config.skip_ontology_loading:
+                logger.debug("Loading engine ontologies")
+                EngineOntologyLoader.load_ontologies(
+                    self.__services.triple_store,
+                    self.__engine_module_loader.ordered_modules,
+                )
+                logger.debug("Engine ontologies loaded")
+            else:
+                logger.debug("Skipping ontology loading")
         else:
             logger.debug("No triple store available, skipping ontology loading")
 
