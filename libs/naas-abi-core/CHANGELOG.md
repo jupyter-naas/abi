@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.21.0 (2026-03-16)
+
+### Features
+
+- Make it possible to skip ontology loading
+  ([`72bceae`](https://github.com/jupyter-naas/abi/commit/72bceaec4aeed2675b43f4042dde74e14d0a6ad4))
+
+
 ## v1.20.1 (2026-03-12)
 
 ### Bug Fixes
