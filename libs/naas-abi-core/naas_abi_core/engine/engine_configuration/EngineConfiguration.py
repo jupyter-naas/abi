@@ -154,6 +154,7 @@ class ModuleConfig(BaseModel):
 
 class GlobalConfig(BaseModel):
     ai_mode: Literal["cloud", "local", "airgap"]
+    skip_ontology_loading: bool = False
 
 
 class EngineConfiguration(BaseModel):
