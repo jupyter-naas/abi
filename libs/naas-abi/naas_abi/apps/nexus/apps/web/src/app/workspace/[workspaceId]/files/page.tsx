@@ -16,9 +16,12 @@ import {
   List,
   Search,
   FlaskConical,
+  Eye,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFilesStore, type FileInfo } from '@/stores/files';
+import { authFetch } from '@/stores/auth';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
 
 export default function FilesPage() {
@@ -54,6 +57,10 @@ export default function FilesPage() {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [activeContextMenu, setActiveContextMenu] = useState<string | null>(null);
+  const [pdfViewerFileName, setPdfViewerFileName] = useState<string | null>(null);
+  const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
+  const [pdfViewerLoading, setPdfViewerLoading] = useState(false);
+  const [pdfViewerError, setPdfViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Helper to open file in Lab
@@ -70,6 +77,14 @@ export default function FilesPage() {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [activeContextMenu]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfViewerUrl) {
+        URL.revokeObjectURL(pdfViewerUrl);
+      }
+    };
+  }, [pdfViewerUrl]);
   
   // Check if we're viewing a synced local folder
   const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
@@ -227,6 +242,51 @@ export default function FilesPage() {
       day: 'numeric',
       year: 'numeric',
     });
+  };
+
+  const isPdfFile = (file: FileInfo) =>
+    file.type === 'file' && (
+      file.name.toLowerCase().endsWith('.pdf') ||
+      file.content_type === 'application/pdf'
+    );
+
+  const openPdfViewer = async (file: FileInfo) => {
+    if (!isPdfFile(file)) return;
+    setPdfViewerError(null);
+    setPdfViewerLoading(true);
+    setPdfViewerFileName(file.name);
+
+    if (pdfViewerUrl) {
+      URL.revokeObjectURL(pdfViewerUrl);
+      setPdfViewerUrl(null);
+    }
+
+    try {
+      const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
+      const response = await authFetch(`/api/files/raw/${encodedPath}`);
+      if (!response.ok) {
+        throw new Error('Failed to load PDF preview');
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(
+        blob.type ? blob : new Blob([blob], { type: 'application/pdf' })
+      );
+      setPdfViewerUrl(blobUrl);
+    } catch (error) {
+      setPdfViewerError(error instanceof Error ? error.message : 'Failed to load PDF preview');
+    } finally {
+      setPdfViewerLoading(false);
+    }
+  };
+
+  const closePdfViewer = () => {
+    setPdfViewerFileName(null);
+    setPdfViewerError(null);
+    if (pdfViewerUrl) {
+      URL.revokeObjectURL(pdfViewerUrl);
+    }
+    setPdfViewerUrl(null);
+    setPdfViewerLoading(false);
   };
 
   const handleRefresh = () => {
@@ -483,6 +543,8 @@ export default function FilesPage() {
                             } else {
                               fetchFiles(file.path);
                             }
+                          } else if (isPdfFile(file)) {
+                            openPdfViewer(file);
                           } else {
                             openFile(file.path);
                           }
@@ -529,6 +591,19 @@ export default function FilesPage() {
                                 Open in Lab
                               </button>
                             )}
+                            {isPdfFile(file) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveContextMenu(null);
+                                  openPdfViewer(file);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+                              >
+                                <Eye size={12} />
+                                View PDF
+                              </button>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -570,6 +645,8 @@ export default function FilesPage() {
                       } else {
                         fetchFiles(file.path);
                       }
+                    } else if (isPdfFile(file)) {
+                      openPdfViewer(file);
                     } else {
                       openFile(file.path);
                     }
@@ -588,6 +665,43 @@ export default function FilesPage() {
           )}
         </div>
       </div>
+
+      {/* PDF Viewer modal */}
+      {pdfViewerFileName && (
+        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
+            <div className="flex items-center justify-between border-b px-4 py-2">
+              <div className="truncate text-sm font-medium">{pdfViewerFileName}</div>
+              <button
+                onClick={closePdfViewer}
+                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                aria-label="Close PDF viewer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="relative flex-1 bg-muted/20">
+              {pdfViewerLoading && (
+                <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                  Loading PDF preview...
+                </div>
+              )}
+              {pdfViewerError && !pdfViewerLoading && (
+                <div className="absolute inset-0 flex items-center justify-center p-6 text-sm text-destructive">
+                  {pdfViewerError}
+                </div>
+              )}
+              {pdfViewerUrl && !pdfViewerLoading && !pdfViewerError && (
+                <iframe
+                  src={pdfViewerUrl}
+                  title={pdfViewerFileName}
+                  className="h-full w-full border-0"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </>
   );

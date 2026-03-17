@@ -47,6 +47,18 @@ class TenantConfig(BaseModel):
     show_terms_footer: bool = False
     show_powered_by: bool = True
     login_footer_text: str | None = None
+    apps: list["ExternalAppConfig"] = Field(default_factory=list)
+
+
+class ExternalAppConfig(BaseModel):
+    """External app shortcut displayed in the Apps page."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    url: str
+    description: str | None = None
+    icon_emoji: str | None = None
 
 
 class UserSeedConfig(BaseModel):
