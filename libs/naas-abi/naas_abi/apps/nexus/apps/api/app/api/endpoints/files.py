@@ -1,7 +1,10 @@
 """File management API endpoints backed by ABI ObjectStorageService."""
 
 from datetime import datetime
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
+import shutil
+import subprocess
+import tempfile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
@@ -244,6 +247,12 @@ async def list_files(request: Request, path: str = Query("", description="Direct
                 ".yaml": "text/yaml",
                 ".yml": "text/yaml",
                 ".pdf": "application/pdf",
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+                ".svg": "image/svg+xml",
             }
             content_type = content_types.get(ext, "application/octet-stream")
         except Exceptions.ObjectNotFound:
@@ -400,6 +409,65 @@ async def upload_file(
 # =============================================================================
 
 
+@router.get("/preview/pdf/{path:path}")
+async def preview_file_as_pdf(request: Request, path: str):
+    """Preview a presentation file as PDF (requires LibreOffice)."""
+    storage = get_object_storage(request)
+    normalized_path = normalize_relative_path(path)
+    ext = PurePosixPath(normalized_path).suffix.lower()
+    if ext not in {".ppt", ".pptx"}:
+        raise HTTPException(status_code=400, detail="Only PPT/PPTX preview is supported")
+    if _is_directory(storage, normalized_path):
+        raise HTTPException(status_code=400, detail="Cannot preview a directory")
+
+    try:
+        content_bytes = _read_bytes(storage, normalized_path)
+    except Exceptions.ObjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="File not found") from exc
+
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        raise HTTPException(
+            status_code=501,
+            detail="PPTX preview is unavailable: LibreOffice is not installed on the API service.",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="nexus-ppt-preview-") as tmp_dir:
+        input_path = Path(tmp_dir) / PurePosixPath(normalized_path).name
+        output_name = f"{PurePosixPath(normalized_path).stem}.pdf"
+        output_path = Path(tmp_dir) / output_name
+        input_path.write_bytes(content_bytes)
+
+        result = subprocess.run(
+            [
+                soffice,
+                "--headless",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                str(Path(tmp_dir)),
+                str(input_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if result.returncode != 0 or not output_path.exists():
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to convert presentation to PDF preview.",
+            )
+
+        pdf_bytes = output_path.read_bytes()
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{output_name}"'},
+    )
+
+
 @router.get("/raw/{path:path}")
 async def read_file_raw(request: Request, path: str):
     """Read raw file bytes (for binary previews/downloads)."""
@@ -425,6 +493,12 @@ async def read_file_raw(request: Request, path: str):
         ".yaml": "text/yaml",
         ".yml": "text/yaml",
         ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
     }
     content_type = content_types.get(ext, "application/octet-stream")
     filename = PurePosixPath(normalized_path).name
