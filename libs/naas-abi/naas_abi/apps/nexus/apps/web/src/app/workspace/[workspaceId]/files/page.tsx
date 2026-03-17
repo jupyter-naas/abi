@@ -2,9 +2,20 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Header } from '@/components/shell/header';
 import { 
   FileCode, 
+  FileCode2,
+  FileText,
+  FileJson,
+  FileImage,
+  FileSpreadsheet,
+  FileArchive,
+  FileVideo,
+  FileAudio,
+  Presentation,
   Folder, 
   FolderPlus, 
   RefreshCw, 
@@ -61,6 +72,15 @@ export default function FilesPage() {
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
   const [pdfViewerLoading, setPdfViewerLoading] = useState(false);
   const [pdfViewerError, setPdfViewerError] = useState<string | null>(null);
+  const [pdfViewerDownloadFile, setPdfViewerDownloadFile] = useState<FileInfo | null>(null);
+  const [imageViewerFileName, setImageViewerFileName] = useState<string | null>(null);
+  const [imageViewerUrl, setImageViewerUrl] = useState<string | null>(null);
+  const [imageViewerLoading, setImageViewerLoading] = useState(false);
+  const [imageViewerError, setImageViewerError] = useState<string | null>(null);
+  const [markdownViewerFileName, setMarkdownViewerFileName] = useState<string | null>(null);
+  const [markdownViewerContent, setMarkdownViewerContent] = useState<string>('');
+  const [markdownViewerLoading, setMarkdownViewerLoading] = useState(false);
+  const [markdownViewerError, setMarkdownViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Helper to open file in Lab
@@ -85,6 +105,14 @@ export default function FilesPage() {
       }
     };
   }, [pdfViewerUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (imageViewerUrl) {
+        URL.revokeObjectURL(imageViewerUrl);
+      }
+    };
+  }, [imageViewerUrl]);
   
   // Check if we're viewing a synced local folder
   const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
@@ -244,17 +272,90 @@ export default function FilesPage() {
     });
   };
 
+  const getFileExtension = (name: string) => {
+    const idx = name.lastIndexOf('.');
+    return idx >= 0 ? name.slice(idx + 1).toLowerCase() : '';
+  };
+
+  const getFileIcon = (file: FileInfo, size = 16) => {
+    if (file.type === 'folder') {
+      return <Folder size={size} className="text-muted-foreground" />;
+    }
+
+    const ext = getFileExtension(file.name);
+    const contentType = file.content_type?.toLowerCase() || '';
+
+    if (ext === 'pdf') return <FileText size={size} className="text-red-500" />;
+    if (['md', 'markdown'].includes(ext)) return <FileText size={size} className="text-sky-600" />;
+    if (['ppt', 'pptx', 'key'].includes(ext)) return <Presentation size={size} className="text-orange-500" />;
+    if (['txt', 'doc', 'docx', 'rtf'].includes(ext)) return <FileText size={size} className="text-blue-500" />;
+    if (['xls', 'xlsx', 'xlsm', 'xlsb'].includes(ext)) return <FileSpreadsheet size={size} className="text-emerald-700" />;
+    if (['csv', 'tsv'].includes(ext)) return <FileSpreadsheet size={size} className="text-emerald-500" />;
+    if (['json', 'yaml', 'yml'].includes(ext)) return <FileJson size={size} className="text-amber-500" />;
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <FileArchive size={size} className="text-orange-500" />;
+    if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext) || contentType.startsWith('video/')) {
+      return <FileVideo size={size} className="text-fuchsia-500" />;
+    }
+    if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext) || contentType.startsWith('audio/')) {
+      return <FileAudio size={size} className="text-pink-500" />;
+    }
+    if (
+      ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext) ||
+      contentType.startsWith('image/')
+    ) {
+      return <FileImage size={size} className="text-violet-500" />;
+    }
+    if (
+      ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'go', 'rs', 'rb', 'php', 'cs', 'cpp', 'c', 'h', 'sh', 'sql'].includes(ext)
+    ) {
+      return <FileCode2 size={size} className="text-cyan-500" />;
+    }
+
+    return <FileCode size={size} className="text-muted-foreground" />;
+  };
+
   const isPdfFile = (file: FileInfo) =>
     file.type === 'file' && (
       file.name.toLowerCase().endsWith('.pdf') ||
       file.content_type === 'application/pdf'
     );
 
+  const isImageFile = (file: FileInfo) => {
+    if (file.type !== 'file') return false;
+    const lowerName = file.name.toLowerCase();
+    return (
+      lowerName.endsWith('.png') ||
+      lowerName.endsWith('.jpg') ||
+      lowerName.endsWith('.jpeg') ||
+      lowerName.endsWith('.gif') ||
+      lowerName.endsWith('.webp') ||
+      lowerName.endsWith('.svg') ||
+      file.content_type?.startsWith('image/') === true
+    );
+  };
+
+  const isMarkdownFile = (file: FileInfo) => {
+    if (file.type !== 'file') return false;
+    const lowerName = file.name.toLowerCase();
+    return (
+      lowerName.endsWith('.md') ||
+      lowerName.endsWith('.markdown') ||
+      file.content_type === 'text/markdown'
+    );
+  };
+
+  const isPresentationFile = (file: FileInfo) => {
+    if (file.type !== 'file') return false;
+    const ext = getFileExtension(file.name);
+    return ['ppt', 'pptx', 'key'].includes(ext);
+  };
+
   const openPdfViewer = async (file: FileInfo) => {
     if (!isPdfFile(file)) return;
     setPdfViewerError(null);
     setPdfViewerLoading(true);
     setPdfViewerFileName(file.name);
+    setPdfViewerDownloadFile(null);
 
     if (pdfViewerUrl) {
       URL.revokeObjectURL(pdfViewerUrl);
@@ -282,11 +383,135 @@ export default function FilesPage() {
   const closePdfViewer = () => {
     setPdfViewerFileName(null);
     setPdfViewerError(null);
+    setPdfViewerDownloadFile(null);
     if (pdfViewerUrl) {
       URL.revokeObjectURL(pdfViewerUrl);
     }
     setPdfViewerUrl(null);
     setPdfViewerLoading(false);
+  };
+
+  const openPresentationPreview = async (file: FileInfo) => {
+    if (!isPresentationFile(file)) return;
+    setPdfViewerError(null);
+    setPdfViewerLoading(true);
+    setPdfViewerFileName(`${file.name} (PDF preview)`);
+    setPdfViewerDownloadFile(file);
+
+    if (pdfViewerUrl) {
+      URL.revokeObjectURL(pdfViewerUrl);
+      setPdfViewerUrl(null);
+    }
+
+    try {
+      const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
+      const response = await authFetch(`/api/files/preview/pdf/${encodedPath}`);
+      if (!response.ok) {
+        throw new Error('PPTX preview unavailable right now');
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(
+        blob.type ? blob : new Blob([blob], { type: 'application/pdf' })
+      );
+      setPdfViewerUrl(blobUrl);
+    } catch (error) {
+      setPdfViewerFileName(null);
+      setPdfViewerDownloadFile(null);
+      setPdfViewerLoading(false);
+      // Graceful fallback: download original presentation when conversion is unavailable.
+      await downloadFileToDesktop(file);
+      return;
+    } finally {
+      setPdfViewerLoading(false);
+    }
+  };
+
+  const openImageViewer = async (file: FileInfo) => {
+    if (!isImageFile(file)) return;
+    setImageViewerError(null);
+    setImageViewerLoading(true);
+    setImageViewerFileName(file.name);
+
+    if (imageViewerUrl) {
+      URL.revokeObjectURL(imageViewerUrl);
+      setImageViewerUrl(null);
+    }
+
+    try {
+      const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
+      const response = await authFetch(`/api/files/raw/${encodedPath}`);
+      if (!response.ok) {
+        throw new Error('Failed to load image preview');
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setImageViewerUrl(blobUrl);
+    } catch (error) {
+      setImageViewerError(error instanceof Error ? error.message : 'Failed to load image preview');
+    } finally {
+      setImageViewerLoading(false);
+    }
+  };
+
+  const closeImageViewer = () => {
+    setImageViewerFileName(null);
+    setImageViewerError(null);
+    if (imageViewerUrl) {
+      URL.revokeObjectURL(imageViewerUrl);
+    }
+    setImageViewerUrl(null);
+    setImageViewerLoading(false);
+  };
+
+  const openMarkdownViewer = async (file: FileInfo) => {
+    if (!isMarkdownFile(file)) return;
+    setMarkdownViewerError(null);
+    setMarkdownViewerLoading(true);
+    setMarkdownViewerFileName(file.name);
+    setMarkdownViewerContent('');
+
+    try {
+      const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
+      const response = await authFetch(`/api/files/${encodedPath}`);
+      if (!response.ok) {
+        throw new Error('Failed to load markdown preview');
+      }
+      const data = await response.json();
+      setMarkdownViewerContent(typeof data.content === 'string' ? data.content : '');
+    } catch (error) {
+      setMarkdownViewerError(error instanceof Error ? error.message : 'Failed to load markdown preview');
+    } finally {
+      setMarkdownViewerLoading(false);
+    }
+  };
+
+  const closeMarkdownViewer = () => {
+    setMarkdownViewerFileName(null);
+    setMarkdownViewerContent('');
+    setMarkdownViewerError(null);
+    setMarkdownViewerLoading(false);
+  };
+
+  const downloadFileToDesktop = async (file: FileInfo) => {
+    if (file.type !== 'file') return;
+    try {
+      const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
+      const response = await authFetch(`/api/files/raw/${encodedPath}`);
+      if (!response.ok) {
+        throw new Error('Failed to download file');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to download file');
+    }
   };
 
   const handleRefresh = () => {
@@ -543,6 +768,12 @@ export default function FilesPage() {
                             } else {
                               fetchFiles(file.path);
                             }
+                          } else if (isPresentationFile(file)) {
+                            openPresentationPreview(file);
+                          } else if (isImageFile(file)) {
+                            openImageViewer(file);
+                          } else if (isMarkdownFile(file)) {
+                            openMarkdownViewer(file);
                           } else if (isPdfFile(file)) {
                             openPdfViewer(file);
                           } else {
@@ -551,11 +782,7 @@ export default function FilesPage() {
                         }}
                         className="flex items-center gap-2 text-sm hover:text-primary"
                       >
-                        {file.type === 'folder' ? (
-                          <Folder size={16} className="text-muted-foreground" />
-                        ) : (
-                          <FileCode size={16} className="text-muted-foreground" />
-                        )}
+                        {getFileIcon(file, 16)}
                         {file.name}
                       </button>
                     </td>
@@ -591,6 +818,19 @@ export default function FilesPage() {
                                 Open in Lab
                               </button>
                             )}
+                            {isPresentationFile(file) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveContextMenu(null);
+                                  openPresentationPreview(file);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+                              >
+                                <Eye size={12} />
+                                Preview PPTX
+                              </button>
+                            )}
                             {isPdfFile(file) && (
                               <button
                                 onClick={(e) => {
@@ -602,6 +842,32 @@ export default function FilesPage() {
                               >
                                 <Eye size={12} />
                                 View PDF
+                              </button>
+                            )}
+                            {isImageFile(file) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveContextMenu(null);
+                                  openImageViewer(file);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+                              >
+                                <Eye size={12} />
+                                View Image
+                              </button>
+                            )}
+                            {isMarkdownFile(file) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveContextMenu(null);
+                                  openMarkdownViewer(file);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+                              >
+                                <Eye size={12} />
+                                View Markdown
                               </button>
                             )}
                             <button
@@ -645,6 +911,12 @@ export default function FilesPage() {
                       } else {
                         fetchFiles(file.path);
                       }
+                    } else if (isPresentationFile(file)) {
+                      openPresentationPreview(file);
+                    } else if (isImageFile(file)) {
+                      openImageViewer(file);
+                    } else if (isMarkdownFile(file)) {
+                      openMarkdownViewer(file);
                     } else if (isPdfFile(file)) {
                       openPdfViewer(file);
                     } else {
@@ -653,11 +925,7 @@ export default function FilesPage() {
                   }}
                   className="group flex flex-col items-center gap-2 rounded-lg border p-4 hover:bg-muted/50"
                 >
-                  {file.type === 'folder' ? (
-                    <Folder size={40} className="text-muted-foreground" />
-                  ) : (
-                    <FileCode size={40} className="text-muted-foreground" />
-                  )}
+                  {getFileIcon(file, 40)}
                   <span className="w-full truncate text-center text-sm">{file.name}</span>
                 </button>
               ))}
@@ -672,13 +940,24 @@ export default function FilesPage() {
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <div className="truncate text-sm font-medium">{pdfViewerFileName}</div>
-              <button
-                onClick={closePdfViewer}
-                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
-                aria-label="Close PDF viewer"
-              >
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-2">
+                {pdfViewerDownloadFile && (
+                  <button
+                    onClick={() => downloadFileToDesktop(pdfViewerDownloadFile)}
+                    className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
+                  >
+                    <Download size={12} />
+                    Download original
+                  </button>
+                )}
+                <button
+                  onClick={closePdfViewer}
+                  className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                  aria-label="Close PDF viewer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
             <div className="relative flex-1 bg-muted/20">
               {pdfViewerLoading && (
@@ -697,6 +976,78 @@ export default function FilesPage() {
                   title={pdfViewerFileName}
                   className="h-full w-full border-0"
                 />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {imageViewerFileName && (
+        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
+            <div className="flex items-center justify-between border-b px-4 py-2">
+              <div className="truncate text-sm font-medium">{imageViewerFileName}</div>
+              <button
+                onClick={closeImageViewer}
+                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                aria-label="Close image viewer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="relative flex-1 bg-black/40">
+              {imageViewerLoading && (
+                <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">
+                  Loading image preview...
+                </div>
+              )}
+              {imageViewerError && !imageViewerLoading && (
+                <div className="absolute inset-0 flex items-center justify-center p-6 text-sm text-destructive">
+                  {imageViewerError}
+                </div>
+              )}
+              {imageViewerUrl && !imageViewerLoading && !imageViewerError && (
+                <div className="flex h-full w-full items-center justify-center p-4">
+                  <img
+                    src={imageViewerUrl}
+                    alt={imageViewerFileName}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {markdownViewerFileName && (
+        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
+            <div className="flex items-center justify-between border-b px-4 py-2">
+              <div className="truncate text-sm font-medium">{markdownViewerFileName}</div>
+              <button
+                onClick={closeMarkdownViewer}
+                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                aria-label="Close markdown viewer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="relative flex-1 overflow-auto bg-background p-6">
+              {markdownViewerLoading && (
+                <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                  Loading markdown preview...
+                </div>
+              )}
+              {markdownViewerError && !markdownViewerLoading && (
+                <div className="absolute inset-0 flex items-center justify-center p-6 text-sm text-destructive">
+                  {markdownViewerError}
+                </div>
+              )}
+              {!markdownViewerLoading && !markdownViewerError && (
+                <div className="prose prose-sm max-w-none dark:prose-invert">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {markdownViewerContent}
+                  </ReactMarkdown>
+                </div>
               )}
             </div>
           </div>
