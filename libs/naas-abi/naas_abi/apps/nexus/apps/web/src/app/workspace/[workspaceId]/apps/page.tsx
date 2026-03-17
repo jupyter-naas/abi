@@ -1,7 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Header } from '@/components/shell/header';
 import {
+  Globe,
   FileText,
   Presentation,
   Table,
@@ -11,16 +13,18 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/contexts/tenant-context';
 
 interface AppCardProps {
   icon: React.ReactNode;
   name: string;
   description: string;
+  url?: string;
   status: 'available' | 'coming-soon';
 }
 
-function AppCard({ icon, name, description, status }: AppCardProps) {
-  return (
+function AppCard({ icon, name, description, status, url }: AppCardProps) {
+  const content = (
     <div
       className={cn(
         'group relative flex flex-col rounded-xl border bg-card p-6 transition-all',
@@ -46,9 +50,19 @@ function AppCard({ icon, name, description, status }: AppCardProps) {
       )}
     </div>
   );
+
+  if (status === 'available' && url) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer noopener">
+        {content}
+      </a>
+    );
+  }
+
+  return content;
 }
 
-const apps: AppCardProps[] = [
+const comingSoonApps: AppCardProps[] = [
   {
     icon: <FileText size={24} />,
     name: 'Docs',
@@ -81,7 +95,57 @@ const apps: AppCardProps[] = [
   },
 ];
 
+type ExternalAppEntry = {
+  name: string;
+  url: string;
+  description?: string;
+  icon_emoji?: string;
+};
+
+function parseExternalAppsFromEnv(): ExternalAppEntry[] {
+  const raw = process.env.NEXT_PUBLIC_EXTERNAL_APPS_JSON;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((app): app is ExternalAppEntry => {
+      return (
+        typeof app === 'object' &&
+        app !== null &&
+        typeof app.name === 'string' &&
+        typeof app.url === 'string'
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
 export default function AppsPage() {
+  const tenant = useTenant();
+  const envApps = useMemo(parseExternalAppsFromEnv, []);
+  const tenantApps = Array.isArray(tenant.apps) ? tenant.apps : [];
+  const configuredApps: AppCardProps[] = [...tenantApps, ...envApps]
+    .map((app) => {
+      const normalizedUrl = app.url.trim();
+      if (!normalizedUrl) return null;
+      let fallbackDescription = normalizedUrl;
+      try {
+        fallbackDescription = new URL(normalizedUrl).hostname;
+      } catch {
+        // Keep the raw URL as a fallback when config contains a non-standard URL.
+      }
+      return {
+        icon: app.icon_emoji ? <span className="text-2xl leading-none">{app.icon_emoji}</span> : <Globe size={24} />,
+        name: app.name,
+        description: app.description || fallbackDescription,
+        url: normalizedUrl,
+        status: 'available' as const,
+      };
+    })
+    .filter((app): app is AppCardProps => app !== null);
+  const apps = [...configuredApps, ...comingSoonApps];
+
   return (
     <div className="flex h-full flex-col">
       <Header title="Apps" subtitle="Extensible applications for your workspace" />
@@ -93,7 +157,7 @@ export default function AppsPage() {
             <div>
               <h2 className="text-xl font-semibold">Installed Apps</h2>
               <p className="text-muted-foreground">
-                Apps extend NEXUS with specialized functionality
+                Apps extend NEXUS with specialized functionality.
               </p>
             </div>
             <button
@@ -106,6 +170,11 @@ export default function AppsPage() {
               Browse Marketplace
             </button>
           </div>
+          {configuredApps.length === 0 && (
+            <p className="mb-4 text-sm text-muted-foreground">
+              No external apps configured yet. Add entries in `nexus_config.tenant.apps` in your config file.
+            </p>
+          )}
 
           {/* Apps grid */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

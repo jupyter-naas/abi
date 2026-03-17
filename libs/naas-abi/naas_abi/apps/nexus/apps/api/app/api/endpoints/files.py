@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
@@ -11,7 +11,10 @@ from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
-OBJECT_STORAGE_PREFIX = "nexus/files"
+# Empty prefix means: browse the object storage base_prefix as-is.
+# With current config this is `abi/datastore`, so users can navigate
+# `external/...`, `nexus/...`, etc. directly from the Files UI.
+OBJECT_STORAGE_PREFIX = ""
 FOLDER_MARKER = ".nexus_folder"
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
 
@@ -142,7 +145,7 @@ def _list_directory(storage: ObjectStorageService, path: str) -> list[str]:
 
     children: set[str] = set()
     for raw_path in raw_paths:
-        relative = _relative_from_storage_path(raw_path)
+        relative = _relative_from_storage_path(raw_path).strip("/")
         if not relative:
             continue
         if relative == FOLDER_MARKER or relative.endswith(f"/{FOLDER_MARKER}"):
@@ -240,6 +243,7 @@ async def list_files(request: Request, path: str = Query("", description="Direct
                 ".txt": "text/plain",
                 ".yaml": "text/yaml",
                 ".yml": "text/yaml",
+                ".pdf": "application/pdf",
             }
             content_type = content_types.get(ext, "application/octet-stream")
         except Exceptions.ObjectNotFound:
@@ -394,6 +398,42 @@ async def upload_file(
 # =============================================================================
 # WILDCARD ROUTES LAST (catch-all patterns)
 # =============================================================================
+
+
+@router.get("/raw/{path:path}")
+async def read_file_raw(request: Request, path: str):
+    """Read raw file bytes (for binary previews/downloads)."""
+    storage = get_object_storage(request)
+    normalized_path = normalize_relative_path(path)
+
+    if _is_directory(storage, normalized_path):
+        raise HTTPException(status_code=400, detail="Cannot read a directory")
+
+    try:
+        content_bytes = _read_bytes(storage, normalized_path)
+    except Exceptions.ObjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="File not found") from exc
+
+    ext = PurePosixPath(normalized_path).suffix.lower()
+    content_types = {
+        ".py": "text/x-python",
+        ".js": "text/javascript",
+        ".ts": "text/typescript",
+        ".json": "application/json",
+        ".md": "text/markdown",
+        ".txt": "text/plain",
+        ".yaml": "text/yaml",
+        ".yml": "text/yaml",
+        ".pdf": "application/pdf",
+    }
+    content_type = content_types.get(ext, "application/octet-stream")
+    filename = PurePosixPath(normalized_path).name
+
+    return Response(
+        content=content_bytes,
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 @router.get("/{path:path}", response_model=FileContent)
