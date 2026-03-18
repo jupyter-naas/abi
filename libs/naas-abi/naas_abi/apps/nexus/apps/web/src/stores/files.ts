@@ -373,29 +373,36 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   fetchFiles: async (path = '') => {
+    // Files page should reflect the object storage tree as-is.
+    // Do not force a workspace prefix here.
+    const relativePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      set({ error: 'No workspace selected', loading: false });
-      return;
-    }
-    
-    // Strip workspace prefix if already present (from file.path)
-    let relativePath = path;
-    if (path.startsWith(`${workspaceId}/`)) {
-      relativePath = path.substring(workspaceId.length + 1);
-    }
-    
-    // Prefix path with workspace ID for isolation
-    const workspacePath = `${workspaceId}/${relativePath}`.replace(/\/+$/, '');
     
     set({ loading: true, error: null });
     try {
-      const response = await authFetch(`${getApiBase()}/api/files/?path=${encodeURIComponent(workspacePath)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch files');
+      const fetchListing = async (targetPath: string) => {
+        const response = await authFetch(`${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch files');
+        }
+        const data = await response.json();
+        return Array.isArray(data.files) ? (data.files as FileInfo[]) : [];
+      };
+
+      let resolvedPath = relativePath;
+      let resolvedFiles = await fetchListing(relativePath);
+
+      // Fallback: if root appears empty, try workspace root.
+      // This handles deployments where objects are scoped under workspace IDs.
+      if (!relativePath && resolvedFiles.length === 0 && workspaceId) {
+        const workspaceFiles = await fetchListing(workspaceId);
+        if (workspaceFiles.length > 0) {
+          resolvedPath = workspaceId;
+          resolvedFiles = workspaceFiles;
+        }
       }
-      const data = await response.json();
-      set({ files: data.files, currentPath: relativePath, loading: false });
+
+      set({ files: resolvedFiles, currentPath: resolvedPath, loading: false });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
     }
@@ -462,20 +469,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   createFile: async (path, content = '') => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      set({ error: 'No workspace selected', loading: false });
-      return null;
-    }
-    
-    // Strip workspace prefix if already present
-    let relativePath = path;
-    if (path.startsWith(`${workspaceId}/`)) {
-      relativePath = path.substring(workspaceId.length + 1);
-    }
-    
-    // Prefix path with workspace ID for isolation
-    const workspacePath = `${workspaceId}/${relativePath}`;
+    const workspacePath = path.replace(/^\/+|\/+$/g, '');
     
     set({ loading: true, error: null });
     try {
@@ -502,20 +496,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   createFolder: async (path) => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      set({ error: 'No workspace selected', loading: false });
-      return null;
-    }
-    
-    // Strip workspace prefix if already present
-    let relativePath = path;
-    if (path.startsWith(`${workspaceId}/`)) {
-      relativePath = path.substring(workspaceId.length + 1);
-    }
-    
-    // Prefix path with workspace ID for isolation
-    const workspacePath = `${workspaceId}/${relativePath}`;
+    const workspacePath = path.replace(/^\/+|\/+$/g, '');
     
     set({ loading: true, error: null });
     try {
@@ -623,14 +604,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   uploadFile: async (file) => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      set({ error: 'No workspace selected', loading: false });
-      return null;
-    }
-
     const { currentPath } = get();
-    const uploadPath = currentPath ? `${workspaceId}/${currentPath}` : workspaceId;
+    const uploadPath = currentPath ? currentPath : '';
 
     set({ loading: true, error: null });
     try {
