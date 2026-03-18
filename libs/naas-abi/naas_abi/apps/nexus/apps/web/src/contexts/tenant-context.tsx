@@ -5,6 +5,12 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { getApiUrl } from '@/lib/config';
 
 interface TenantConfig {
+  apps: {
+    name: string;
+    url: string;
+    description?: string | null;
+    icon_emoji?: string | null;
+  }[];
   tab_title: string;
   favicon_url: string | null;
   logo_url?: string | null;
@@ -28,6 +34,7 @@ interface TenantConfig {
 }
 
 const DEFAULT_TENANT: TenantConfig = {
+  apps: [],
   tab_title: 'ABI Nexus | naas.ai',
   favicon_url: null,
   logo_url: null,
@@ -124,9 +131,13 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const apiBase = getApiUrl();
     fetch(`${apiBase}/api/tenant`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: TenantConfig | null) => {
+      .then((data: Partial<TenantConfig> | null) => {
         if (!data) return;
-        setTenant(data);
+        setTenant({
+          ...DEFAULT_TENANT,
+          ...data,
+          apps: Array.isArray(data.apps) ? data.apps : [],
+        });
       })
       .catch(() => {
         // Tenant endpoint unavailable — keep defaults

@@ -7,12 +7,18 @@ so the frontend can apply them without authentication.
 
 from fastapi import APIRouter
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
 
 class TenantResponse(BaseModel):
+    class ExternalAppResponse(BaseModel):
+        name: str
+        url: str
+        description: str | None = None
+        icon_emoji: str | None = None
+
     tab_title: str
     favicon_url: str | None = None
     logo_url: str | None = None
@@ -33,6 +39,7 @@ class TenantResponse(BaseModel):
     show_terms_footer: bool
     show_powered_by: bool
     login_footer_text: str | None = None
+    apps: list[ExternalAppResponse] = Field(default_factory=list)
 
 
 @router.get("", response_model=TenantResponse)
@@ -59,4 +66,13 @@ async def get_tenant_config() -> TenantResponse:
         show_terms_footer=settings.tenant.show_terms_footer,
         show_powered_by=settings.tenant.show_powered_by,
         login_footer_text=settings.tenant.login_footer_text,
+        apps=[
+            TenantResponse.ExternalAppResponse(
+                name=app.name,
+                url=app.url,
+                description=app.description,
+                icon_emoji=app.icon_emoji,
+            )
+            for app in settings.tenant.apps
+        ],
     )

@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.12.0 (2026-03-17)
+
+### Bug Fixes
+
+- Apps and files section nexus ui
+  ([`1d1072f`](https://github.com/jupyter-naas/abi/commit/1d1072f05f56e27914b2784bfc78381b17038695))
+
+### Features
+
+- Add viewers to files
+  ([`79e9068`](https://github.com/jupyter-naas/abi/commit/79e906835240e64170aca034a8a0bbeeb82a4bdc))
+
+
 ## v1.11.0 (2026-03-05)
 
 ### Bug Fixes
