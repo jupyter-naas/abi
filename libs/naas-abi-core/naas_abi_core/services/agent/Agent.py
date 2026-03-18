@@ -1059,6 +1059,7 @@ SUBAGENT SYSTEM PROMPT:
 
         # Initialize the results list.
         results: list[Command] = []
+        had_tool_error: bool = False
 
         # Initialize the called tools list.
         called_tools: list[BaseTool] = []
@@ -1130,13 +1131,15 @@ SUBAGENT SYSTEM PROMPT:
                     )
             except Exception as e:
                 logger.error(f"🚨 Tool call {tool_name} failed: {e}")
+                had_tool_error = True
+                called_tools.append(tool_)
                 results.append(
                     Command(
-                        goto="__end__",
                         update={
                             "messages": [
                                 ToolMessage(
                                     content=f"Tool call {tool_name} failed: {str(e)}",
+                                    name=tool_name,
                                     tool_call_id=tool_call["id"],
                                 )
                             ]
@@ -1165,7 +1168,10 @@ SUBAGENT SYSTEM PROMPT:
             and last_tool_reponse.name is not None
             and not last_tool_reponse.name.startswith("transfer_to_")
         ):
-            if return_direct is False:
+            if had_tool_error:
+                logger.debug("⏩ Calling model to interpret the tool error response.")
+                results.append(Command(goto="call_model"))
+            elif return_direct is False:
                 logger.debug("⏩ Calling model to interpret the tool response.")
                 results.append(Command(goto="call_model"))
             else:
