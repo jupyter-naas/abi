@@ -874,7 +874,8 @@ class Agent(Expose):
         logger.debug(f"💬 Starting chatting with agent '{self.name}'")
         updated_system_prompt = state["system_prompt"]
         if (
-            self.state.supervisor_agent != self.name
+            self.state.supervisor_agent is not None
+            and self.state.supervisor_agent != self.name
             and "SUPERVISOR SYSTEM PROMPT" not in state["system_prompt"]
         ):
             # This agent is a subagent with a supervisor
@@ -1096,6 +1097,7 @@ SUBAGENT SYSTEM PROMPT:
                     tool_response is not None
                     and hasattr(tool_response, "name")
                     and tool_response.name == "request_help"
+                    and self._state.supervisor_agent is not None
                     and self._state.supervisor_agent != self.name
                 ):
                     self._state.set_current_active_agent(self._state.supervisor_agent)
