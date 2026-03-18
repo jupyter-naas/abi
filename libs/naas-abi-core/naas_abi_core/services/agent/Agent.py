@@ -660,7 +660,13 @@ class Agent(Expose):
             list_subagents_available,
             list_intents_available,
         ]
-        if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
+        has_supervisor = (
+            self.state.supervisor_agent is not None
+            and self.state.supervisor_agent.strip() != ""
+            and self.state.supervisor_agent != self.name
+        )
+
+        if has_supervisor:
             tools.append(request_help)
 
         if self.state.supervisor_agent is not None or len(self._agents) > 0:
@@ -875,6 +881,7 @@ class Agent(Expose):
         updated_system_prompt = state["system_prompt"]
         if (
             self.state.supervisor_agent is not None
+            and self.state.supervisor_agent.strip() != ""
             and self.state.supervisor_agent != self.name
             and "SUPERVISOR SYSTEM PROMPT" not in state["system_prompt"]
         ):
@@ -1098,6 +1105,7 @@ SUBAGENT SYSTEM PROMPT:
                     and hasattr(tool_response, "name")
                     and tool_response.name == "request_help"
                     and self._state.supervisor_agent is not None
+                    and self._state.supervisor_agent.strip() != ""
                     and self._state.supervisor_agent != self.name
                 ):
                     self._state.set_current_active_agent(self._state.supervisor_agent)
