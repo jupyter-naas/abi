@@ -125,25 +125,29 @@ export default function AppsPage() {
   const tenant = useTenant();
   const envApps = useMemo(parseExternalAppsFromEnv, []);
   const tenantApps = Array.isArray(tenant.apps) ? tenant.apps : [];
-  const configuredApps: AppCardProps[] = [...tenantApps, ...envApps]
-    .map((app) => {
-      const normalizedUrl = app.url.trim();
-      if (!normalizedUrl) return null;
-      let fallbackDescription = normalizedUrl;
-      try {
-        fallbackDescription = new URL(normalizedUrl).hostname;
-      } catch {
-        // Keep the raw URL as a fallback when config contains a non-standard URL.
-      }
-      return {
+  const configuredApps: AppCardProps[] = [...tenantApps, ...envApps].flatMap((app) => {
+    const normalizedUrl = app.url.trim();
+    if (!normalizedUrl) {
+      return [];
+    }
+
+    let fallbackDescription = normalizedUrl;
+    try {
+      fallbackDescription = new URL(normalizedUrl).hostname;
+    } catch {
+      // Keep the raw URL as a fallback when config contains a non-standard URL.
+    }
+
+    return [
+      {
         icon: app.icon_emoji ? <span className="text-2xl leading-none">{app.icon_emoji}</span> : <Globe size={24} />,
         name: app.name,
         description: app.description || fallbackDescription,
         url: normalizedUrl,
         status: 'available' as const,
-      };
-    })
-    .filter((app): app is AppCardProps => app !== null);
+      },
+    ];
+  });
   const apps = [...configuredApps, ...comingSoonApps];
 
   return (
