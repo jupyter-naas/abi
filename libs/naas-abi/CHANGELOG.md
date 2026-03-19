@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.12.1 (2026-03-19)
+
+### Bug Fixes
+
+- AppCard null pointer
+  ([`a964d71`](https://github.com/jupyter-naas/abi/commit/a964d7134e3adf8ead4a9b02e0360afd4ca546d9))
+
+- Check core
+  ([`3362916`](https://github.com/jupyter-naas/abi/commit/336291624113803242f5a059d950f6cdae2771d2))
+
+
 ## v1.12.0 (2026-03-17)
 
 ### Bug Fixes
