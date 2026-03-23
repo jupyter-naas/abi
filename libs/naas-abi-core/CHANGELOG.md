@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.21.3 (2026-03-23)
+
+### Bug Fixes
+
+- Update stream completion agent duplication to have a fresh state
+  ([`ab11e2e`](https://github.com/jupyter-naas/abi/commit/ab11e2ec76a6d794d1d87376a0acf87d2eb42571))
+
+
 ## v1.21.2 (2026-03-18)
 
 
