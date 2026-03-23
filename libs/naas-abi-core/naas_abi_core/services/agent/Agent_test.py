@@ -180,6 +180,68 @@ def test_agent_duplication(model):
 #     assert events[1]["event"] == "done"
 
 
+def test_agent_stream_invoke_isolation(model):
+    from queue import Queue
+
+    from naas_abi_core.services.agent.Agent import (
+        Agent,
+        AgentConfiguration,
+        AgentSharedState,
+    )
+
+    agent = Agent(
+        name="Isolation Test Agent",
+        description="Tests request isolation",
+        chat_model=model,
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(
+            system_prompt="You must respond with exactly the word 'ANSWER_A' and nothing else."
+        ),
+    )
+
+    fresh_queue = Queue()
+    fresh_state = AgentSharedState(thread_id="thread-a")
+    dup_a = agent.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
+
+    events_a = list(dup_a.stream_invoke("Give me answer A"))
+    content_a = "".join(
+        e["data"]
+        for e in events_a
+        if e.get("event") == "message" and "[DONE]" not in e.get("data", "")
+    )
+    assert "ANSWER_A" in content_a, f"Expected ANSWER_A but got: {content_a}"
+
+
+def test_agent_completion_fresh_state_per_request(model):
+    from naas_abi_core.services.agent.Agent import (
+        Agent,
+        AgentConfiguration,
+        AgentSharedState,
+    )
+
+    agent = Agent(
+        name="State Freshness Agent",
+        description="Tests fresh state per request",
+        chat_model=model,
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(system_prompt="Respond with 'OK'."),
+    )
+
+    dup = agent.duplicate(
+        agent_shared_state=AgentSharedState(thread_id="unique-thread-123")
+    )
+    assert dup.state.thread_id == "unique-thread-123"
+
+    dup2 = agent.duplicate(
+        agent_shared_state=AgentSharedState(thread_id="another-thread-456")
+    )
+    assert dup2.state.thread_id == "another-thread-456"
+    assert dup.state.thread_id == "unique-thread-123"
+    assert dup.state.thread_id != dup2.state.thread_id
+
+
 def test_agent_one_tool_agent_response(model):
     from langchain_core.tools import tool
     from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
