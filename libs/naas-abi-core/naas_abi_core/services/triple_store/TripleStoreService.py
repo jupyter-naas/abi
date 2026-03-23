@@ -101,7 +101,6 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         triples: Graph,
         graph_name: URIRef,
     ) -> None:
-
         assert graph_name is not None
 
         # Insert the triples into the store
@@ -515,6 +514,72 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             import traceback
 
             logger.error(f"Error loading schema ({filepath}): {str(e)}")
+            traceback.print_exc()
+
+    def remove_schema(self, filepath: str):
+        logger.debug(f"Removing schema: {filepath}")
+
+        try:
+            rows = list(
+                self.query(
+                    f'''
+                    PREFIX internal: <http://triple-store.internal#>
+                    SELECT ?s ?content
+                    WHERE {{
+                        GRAPH <{str(self.__schema_graph)}> {{
+                            ?s a internal:Schema ;
+                               internal:filePath "{filepath}" ;
+                               internal:content ?content .
+                        }}
+                    }}
+                    '''
+                )
+            )
+
+            if len(rows) == 0:
+                logger.debug(f"No schema found in store for filepath: {filepath}")
+                return
+
+            schema_triples = Graph()
+            metadata_triples = Graph()
+
+            for row in rows:
+                assert isinstance(row, rdflib.query.ResultRow)
+                subject, content = row
+                assert isinstance(subject, URIRef)
+
+                # Rebuild schema triples from stored base64 content.
+                decoded_content = base64.b64decode(str(content)).decode("utf-8")
+                schema_graph = Graph().parse(
+                    io.StringIO(decoded_content), format="turtle"
+                )
+                schema_triples += schema_graph
+
+                metadata = self.query(
+                    f"""
+                    SELECT ?p ?o
+                    WHERE {{
+                        GRAPH <{str(self.__schema_graph)}> {{
+                            <{str(subject)}> ?p ?o .
+                        }}
+                    }}
+                    """
+                )
+
+                for metadata_row in metadata:
+                    assert isinstance(metadata_row, rdflib.query.ResultRow)
+                    predicate, obj = metadata_row
+                    metadata_triples.add((subject, predicate, obj))
+
+            if len(schema_triples) > 0:
+                self.remove(schema_triples, graph_name=self.__schema_graph)
+
+            if len(metadata_triples) > 0:
+                self.remove(metadata_triples, graph_name=self.__schema_graph)
+        except Exception as e:
+            import traceback
+
+            logger.error(f"Error removing schema ({filepath}): {str(e)}")
             traceback.print_exc()
 
     def get_schema_graph(self) -> Graph:

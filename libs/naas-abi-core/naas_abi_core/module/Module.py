@@ -6,13 +6,11 @@ from typing import Dict, List, cast
 
 from fastapi import FastAPI
 from naas_abi_core import logger
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
-    GlobalConfig
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.integration.integration import Integration
 from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
-from naas_abi_core.module.ModuleOrchestrationLoader import \
-    ModuleOrchestrationLoader
+from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLoader
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
 from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.pipeline.pipeline import Pipeline
@@ -81,6 +79,11 @@ class BaseModule(Generic[TConfig]):
         self.module_root_path = find_class_module_root_path(self.__class__).as_posix()
         self._engine = engine
         self._configuration = configuration
+        self.__ontologies = []
+        self.__agents = []
+        self.__workflows = []
+        self.__pipelines = []
+        self.__orchestrations = []
 
         assert hasattr(self.__class__, "Configuration"), (
             "BaseModule must have a Configuration class"
@@ -159,7 +162,7 @@ class BaseModule(Generic[TConfig]):
 
     def api(self, app: FastAPI) -> None:
         """
-        Override this method in a module subclass to provide custom API endpoints 
+        Override this method in a module subclass to provide custom API endpoints
         via FastAPI's APIRouter. By default, this method does nothing.
 
         Args:
