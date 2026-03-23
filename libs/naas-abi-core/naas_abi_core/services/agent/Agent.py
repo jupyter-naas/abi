@@ -1486,17 +1486,9 @@ SUBAGENT SYSTEM PROMPT:
         def completion(query: CompletionQuery):
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
-            logger.debug(
-                f"completion - current active agent: {self._state.current_active_agent}"
-            )
-            logger.debug(
-                f"completion - supervisor agent: {self._state.supervisor_agent}"
-            )
 
-            new_agent = self.duplicate(
-                queue=self._event_queue, agent_shared_state=self._state
-            )
-            new_agent.state.set_thread_id(query.thread_id)
+            fresh_state = AgentSharedState(thread_id=query.thread_id)
+            new_agent = self.duplicate(agent_shared_state=fresh_state)
             return new_agent.invoke(query.prompt)
 
         @router.post(
@@ -1508,17 +1500,12 @@ SUBAGENT SYSTEM PROMPT:
         async def stream_completion(query: CompletionQuery):
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
-            logger.debug(
-                f"stream_completion - current active agent: {self._state.current_active_agent}"
-            )
-            logger.debug(
-                f"stream_completion - supervisor agent: {self._state.supervisor_agent}"
-            )
 
+            fresh_queue = Queue()
+            fresh_state = AgentSharedState(thread_id=query.thread_id)
             new_agent = self.duplicate(
-                queue=self._event_queue, agent_shared_state=self._state
+                queue=fresh_queue, agent_shared_state=fresh_state
             )
-            new_agent.state.set_thread_id(query.thread_id)
             return EventSourceResponse(
                 new_agent.stream_invoke(query.prompt),
                 media_type="text/event-stream; charset=utf-8",
