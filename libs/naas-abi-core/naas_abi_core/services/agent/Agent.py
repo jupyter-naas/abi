@@ -1501,7 +1501,7 @@ SUBAGENT SYSTEM PROMPT:
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
 
-            fresh_queue = Queue()
+            fresh_queue: Queue = Queue()
             fresh_state = AgentSharedState(thread_id=query.thread_id)
             new_agent = self.duplicate(
                 queue=fresh_queue, agent_shared_state=fresh_state
