@@ -461,6 +461,11 @@ class GitHubGraphqlIntegration(Integration):
         # Get the item ID from the response
         item_id = add_result["data"]["addProjectV2ItemById"]["item"]["id"]
 
+        # Optional mutation responses are initialized to None when not executed.
+        status_result: Dict[str, Any] | None = None
+        priority_result: Dict[str, Any] | None = None
+        iteration_result: Dict[str, Any] | None = None
+
         # Update status field if provided
         if status_field_id and status_option_id:
             status_mutation = """
