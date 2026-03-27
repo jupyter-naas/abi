@@ -10,10 +10,13 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://ontology.naas.ai/abi/TimeOntology> rdf:type owl:Ontology ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/TimeOntology.ttl> ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for time."@en ;
-    dc:title "Time Ontology" .
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
+    dc:title "Person Ontology"@en ;
+    dc:description "Ontology for time."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Creating specific classes for time."@en ;
+    dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+    dc11:date "2025-06-10"^^xsd:date .
 
 #################################################################
 #    Classes
@@ -23,5 +26,4 @@ abi:ISO8601UTCDateTime a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000203 ; # Temporal instant
     rdfs:label "ISO 8601 UTC DateTime" ;
     skos:definition "A Temporal Instant specified according to the ISO 8601 standard format with UTC timezone, representing a specific point in time." ;
-    skos:example "2025-01-01T00:00:00.000Z" ;
-    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+    skos:example "2025-01-01T00:00:00.000Z" .

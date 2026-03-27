@@ -1,0 +1,168 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix nexus: <http://ontology.naas.ai/nexus/> .
+
+<http://ontology.naas.ai/abi/nexus/NexusPlatformOntology> a owl:Ontology ;
+  owl:imports
+    <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ,
+    <https://www.commoncoreontologies.org/AgentOntology> ,
+    <https://www.commoncoreontologies.org/InformationEntityOntology> ,
+    <https://www.commoncoreontologies.org/EventOntology> ;
+  dc:title "Nexus Platform Ontology"@en ;
+  dc:description "Ontology for core concepts of the Nexus platform."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+  dc11:date "2026-03-27"^^xsd:date .
+
+#################################################################
+#    Classes
+#################################################################
+
+nexus:Tenant a owl:Class ;
+    rdfs:label "Tenant"@en ;
+    skos:definition "A role borne by an organization in relation to a deployed Nexus platform instance, through which the organization is granted access to an isolated operational space within the platform."@en ;
+    skos:example "Naas.ai as customer tenant of a Nexus deployment"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000023 ,  # role
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isTenantOf ;
+          owl:someValuesFrom nexus:Organization
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isTenantOf ;
+          owl:allValuesFrom nexus:Organization
+        ] .
+
+nexus:Server a owl:Class ;
+    rdfs:label "Server"@en ;
+    skos:definition "A physical machine that hosts or supports the deployment and operation of the Nexus platform."@en ;
+    skos:example "AWS EC2 host", "On-premise rack server"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000040 ,  # material entity
+        [ a owl:Restriction ;
+          owl:onProperty nexus:locatedInDeploymentSite ;
+          owl:someValuesFrom nexus:DeploymentSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:locatedInDeploymentSite ;
+          owl:allValuesFrom nexus:DeploymentSite
+        ] .
+
+nexus:DeploymentSite a owl:Class ;
+    rdfs:label "Deployment Site"@en ;
+    skos:definition "A physical or digital site in which a Nexus platform deployment is located or operates."@en ;
+    skos:example "Europe West deployment region", "US East deployment region"@en ;
+    rdfs:subClassOf bfo:BFO_0000029 . # site
+
+nexus:User a owl:Class ;
+    rdfs:label "User"@en ;
+    skos:definition "A person registered in or recognized by the Nexus platform as part of its set of users."@en ;
+    skos:example "Alice Johnson", "Bob Smith", "Charlie Brown"@en ;
+    rdfs:subClassOf cco:ont00001262 . # Person
+
+nexus:Organization a owl:Class ;
+    rdfs:label "Organization"@en ;
+    skos:definition "An organization that uses, manages, or is represented within the Nexus platform."@en ;
+    skos:example "Naas.ai", "Customer X", "Research Team"@en ;
+    rdfs:subClassOf
+        cco:ont00001180 ,  # Organization
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasWorkspace ;
+          owl:allValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasUser ;
+          owl:allValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasTenant ;
+          owl:allValuesFrom nexus:Tenant
+        ] .
+
+nexus:Workspace a owl:Class ;
+    rdfs:label "Workspace"@en ;
+    skos:definition "A generically dependent continuant representing a configured digital workspace in the Nexus platform, including its structure, settings, permissions, and organization of resources and activities."@en ;
+    skos:example "Naas.ai main workspace", "Customer X workspace"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,  # generically dependent continuant
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isWorkspaceOf ;
+          owl:someValuesFrom nexus:Organization
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isWorkspaceOf ;
+          owl:allValuesFrom nexus:Organization
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hostedOn ;
+          owl:someValuesFrom nexus:Server
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hostedOn ;
+          owl:allValuesFrom nexus:Server
+        ] .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+nexus:hasWorkspace a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    owl:inverseOf nexus:isWorkspaceOf ;
+    rdfs:label "has workspace"@en ;
+    skos:definition "Relates an organization to a workspace that depends on it within the Nexus platform."@en ;
+    rdfs:domain nexus:Organization ;
+    rdfs:range nexus:Workspace .
+
+nexus:isWorkspaceOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    owl:inverseOf nexus:hasWorkspace ;
+    rdfs:label "is workspace of"@en ;
+    skos:definition "Relates a workspace to the organization on which it generically depends within the Nexus platform."@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range nexus:Organization .
+
+nexus:hasUser a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ; # has member part
+    rdfs:label "has user"@en ;
+    skos:definition "Relates an organization to a user that is a member of it within the Nexus platform."@en ;
+    rdfs:domain nexus:Organization ;
+    rdfs:range nexus:User .
+
+nexus:hasTenant a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
+    owl:inverseOf nexus:isTenantOf ;
+    rdfs:label "has tenant"@en ;
+    skos:definition "Relates an organization to the tenant role it bears in relation to the Nexus platform."@en ;
+    rdfs:domain nexus:Organization ;
+    rdfs:range nexus:Tenant .
+
+nexus:isTenantOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000197 ; # inheres in
+    owl:inverseOf nexus:hasTenant ;
+    rdfs:label "is tenant of"@en ;
+    skos:definition "Relates a tenant role to the organization in which it inheres."@en ;
+    rdfs:domain nexus:Tenant ;
+    rdfs:range nexus:Organization .
+
+nexus:hostedOn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:label "hosted on"@en ;
+    skos:definition "Relates a workspace to the physical server on which its realization depends."@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range nexus:Server .
+
+nexus:locatedInDeploymentSite a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000171 ; # located in
+    rdfs:label "located in deployment site"@en ;
+    skos:definition "Relates a server to the deployment site in which it is located or operates."@en ;
+    rdfs:domain nexus:Server ;
+    rdfs:range nexus:DeploymentSite .

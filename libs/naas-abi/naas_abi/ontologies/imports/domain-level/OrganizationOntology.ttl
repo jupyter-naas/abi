@@ -10,11 +10,13 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://ontology.naas.ai/abi/OrganizationOntology> a owl:Ontology ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/OrganizationOntology.ttl> ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for organizations."@en ;
-    dc:license "" ;
-    dc:title "Organization Ontology" .
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
+    dc:title "Organization Ontology"@en ;
+    dc:description "Ontology for organizations."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Ontology for organizations."@en ;
+    dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+    dc11:date "2025-06-10"^^xsd:date .
 
 #################################################################
 #    Classes

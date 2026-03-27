@@ -9,6 +9,15 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
+<http://ontology.naas.ai/abi/GeospatialOntology> a owl:Ontology ;
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
+    dc:title "Geospatial Ontology"@en ;
+    dc:description "Ontology for geospatial data."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Adding missing geospatial classes from Common Core Ontologies."@en ;
+    dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+    dc11:date "2026-03-27"^^xsd:date .
+
 #################################################################
 #    Classes
 #################################################################

@@ -10,11 +10,13 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://ontology.naas.ai/abi/OfferingOntology> a owl:Ontology ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/OfferingOntology.ttl> ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for offering."@en ;
-    dc:license "" ;
-    dc:title "Offering Ontology" .
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
+    dc:title "Offering Ontology"@en ;
+    dc:description "Ontology for offerings."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Ontology for offerings."@en ;
+    dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+    dc11:date "2025-06-10"^^xsd:date .
 
 #################################################################
 #    Classes

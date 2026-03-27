@@ -10,11 +10,13 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://ontology.naas.ai/abi/PersonOntology> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/AgentOntology>, <https://www.commoncoreontologies.org/PlatformOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/PersonOntology.ttl> ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for persons and individuals."@en ;
-    dc:title "Person Ontology" .
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
+    dc:title "Person Ontology"@en ;
+    dc:description "Ontology for persons."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Ontology for persons."@en ;
+    dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+    dc11:date "2025-06-10"^^xsd:date .
 
 #################################################################
 #    Classes
@@ -66,4 +68,11 @@ abi:date_of_birth a owl:DataProperty ;
     rdfs:range xsd:date ;
     skos:definition "The date of birth of a person."@en ;
     skos:example "1990-01-01"@en .
+
+abi:given_name a owl:DataProperty ;
+    rdfs:label "given name"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range xsd:string ;
+    skos:definition "The given name of a person."@en ;
+    skos:example "John"@en .
     
