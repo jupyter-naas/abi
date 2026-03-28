@@ -321,7 +321,8 @@ class IntentAgent(Agent):
                         new_intents.append(default_intent)
             return new_intents
 
-        self._intents = _prepare_intents(intents)
+        self._default_intents = default_intents
+        self._intents = _prepare_intents(intents, default_intents)
         self._embedding_model = embedding_model
         self._intent_mapper = IntentMapper(
             self._intents,
@@ -1007,6 +1008,10 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             configuration=self._configuration,
             event_queue=queue,
             embedding_model=self._embedding_model,
+            threshold=self._threshold,
+            threshold_neighbor=self._threshold_neighbor,
+            direct_intent_score=self._direct_intent_score,
+            default_intents=self._default_intents,
         )
 
         return new_agent
