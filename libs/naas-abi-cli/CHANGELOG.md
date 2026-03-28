@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.23.1 (2026-03-28)
+
+### Bug Fixes
+
+- Abi cli bootstrap
+  ([`a8c5b4a`](https://github.com/jupyter-naas/abi/commit/a8c5b4a7af6722a7634715fb278a72bfcb79bc5a))
+
+
 ## v1.23.0 (2026-03-13)
 
 
