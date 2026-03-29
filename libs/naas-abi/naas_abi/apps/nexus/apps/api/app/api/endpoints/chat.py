@@ -313,6 +313,23 @@ async def _resolve_provider(
                         "openrouter": "https://openrouter.ai/api/v1",
                     }
 
+                    # Ollama (local, no API key needed) — resolve directly
+                    if agent.provider == "ollama" and agent.model_id:
+                        import logging
+                        import os
+                        ollama_endpoint = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+                        logging.info(f"✓ Resolved Ollama agent: {agent.model_id} via {ollama_endpoint}")
+                        return ProviderConfigRequest(
+                            id="agent-ollama",
+                            name="Ollama (Local)",
+                            type="ollama",
+                            enabled=True,
+                            endpoint=ollama_endpoint,
+                            api_key=None,
+                            account_id=None,
+                            model=agent.model_id,
+                        )
+
                     secret_key = secret_key_map.get(agent.provider)
                     if secret_key and agent.model_id:
                         # Query secret from database
@@ -391,14 +408,16 @@ async def _resolve_provider(
                 logging.warning(f"Failed to resolve agent provider: {e}")
 
     # Fallback to Ollama auto-detect (force qwen3-vl:2b if available)
-    ollama_status = await check_ollama_status()
+    import os
+    _ollama_fallback_endpoint = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    ollama_status = await check_ollama_status(_ollama_fallback_endpoint)
     if ollama_status["status"] == "online" and ollama_status["models"]:
         # Prefer Qwen3 VL 2B for multimodal by default
         preferred = "qwen3-vl:2b"
         model = preferred if any(preferred in m for m in ollama_status["models"]) else _select_provider_model(ollama_status, has_images)
         return ProviderConfigRequest(
             id="ollama-fallback", name="Ollama (Auto)", type="ollama",
-            enabled=True, endpoint="http://localhost:11434",
+            enabled=True, endpoint=_ollama_fallback_endpoint,
             api_key=None, account_id=None, model=model,
         )
     return None
