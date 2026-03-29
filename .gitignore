@@ -109,3 +109,6 @@ sandbox/
 coverage.xml
 htmlcov/
 secrets.yaml
+
+# Local override (managed by parent aia/ repo)
+docker-compose.override.yml
