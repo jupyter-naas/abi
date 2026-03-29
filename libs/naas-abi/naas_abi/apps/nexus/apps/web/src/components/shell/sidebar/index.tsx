@@ -16,6 +16,7 @@ import { LabSection } from './lab-section';
 import { OntologySection } from './ontology-section';
 import { KnowledgeGraphSection } from './knowledge-graph-section';
 import { AppsSection } from './apps-section';
+import { SystemStatus } from './system-status';
 
 export function Sidebar() {
   const [mounted, setMounted] = useState(false);
@@ -184,6 +185,9 @@ export function Sidebar() {
         <LabSection collapsed={collapsed} />
         <AppsSection collapsed={collapsed} />
       </nav>
+
+      {/* System backbone — API + Service Portal status */}
+      <SystemStatus collapsed={collapsed} />
     </aside>
   );
 }

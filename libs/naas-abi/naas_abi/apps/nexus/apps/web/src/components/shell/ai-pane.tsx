@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
+import type { AgentType } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useSecretsStore } from '@/stores/secrets';
@@ -31,6 +32,30 @@ import { useAuthStore } from '@/stores/auth';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
 const getApiBase = () => getApiUrl();
+const OPENCODE_URL = 'http://127.0.0.1:4242';
+
+// --- opencode session management ---
+let _opencodeSessionId: string | null = null;
+
+async function getOrCreateOpencodeSession(): Promise<string> {
+  if (_opencodeSessionId) return _opencodeSessionId;
+  const r = await fetch(`${OPENCODE_URL}/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  const s = await r.json();
+  _opencodeSessionId = s.id as string;
+  return _opencodeSessionId;
+}
+
+async function sendOpencodeMessage(sessionId: string, text: string): Promise<void> {
+  await fetch(`${OPENCODE_URL}/session/${sessionId}/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parts: [{ type: 'text', text }] }),
+  });
+}
 
 type Mode = 'agent' | 'plan' | 'debug' | 'ask';
 
@@ -76,6 +101,104 @@ export function AIPane() {
   const { agents, getAgent } = useAgentsStore();
   const { providers } = useIntegrationsStore();
   const { getSecretByKey } = useSecretsStore();
+
+  // opencode state (used when paneAgent === 'opencode')
+  const [opencodeReady, setOpencodeReady] = useState(false);
+  const opencodeEsRef = useRef<EventSource | null>(null);
+  const opencodeSessionRef = useRef<string | null>(null);
+
+  // Probe opencode availability
+  useEffect(() => {
+    const check = () =>
+      fetch(`${OPENCODE_URL}/session`, { mode: 'cors' })
+        .then((r) => r.ok && setOpencodeReady(true))
+        .catch(() => setOpencodeReady(false));
+    check();
+    const id = setInterval(check, 8000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Subscribe to opencode SSE when it's the active agent
+  useEffect(() => {
+    if (paneAgent !== 'opencode' || !opencodeReady) return;
+
+    const es = new EventSource(`${OPENCODE_URL}/event`);
+    opencodeEsRef.current = es;
+    let currentAssistantId: string | null = null;
+
+    es.onmessage = (e) => {
+      try {
+        const ev = JSON.parse(e.data) as { type: string; properties: Record<string, unknown> };
+
+        // Ensure the assistant bubble exists, keyed by messageID
+        const ensureBubble = (msgId: string) => {
+          if (!currentAssistantId) {
+            currentAssistantId = msgId;
+            setMessages((prev) => {
+              if (prev.find((m) => m.id === msgId)) return prev;
+              return [...prev, { id: msgId, role: 'assistant' as const, content: '▌' }];
+            });
+          }
+        };
+
+        // Streaming delta (primary path for streaming text)
+        if (ev.type === 'message.part.delta') {
+          const { sessionID, messageID, field, delta } = ev.properties as {
+            sessionID: string; messageID: string; partID: string; field: string; delta: string;
+          };
+          if (opencodeSessionRef.current !== sessionID) return;
+          ensureBubble(messageID);
+          if (field === 'text') {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === currentAssistantId
+                  ? { ...m, content: m.content.replace(/▌$/, '') + delta + '▌' }
+                  : m
+              )
+            );
+          }
+        }
+
+        // Part completed (tool calls / final text snapshot)
+        if (ev.type === 'message.part.updated') {
+          const { part, sessionID } = ev.properties as {
+            sessionID: string;
+            part: { messageID: string; type: string; text?: string; toolName?: string; state?: string };
+          };
+          if (opencodeSessionRef.current !== sessionID) return;
+          ensureBubble(part.messageID);
+
+          if ((part.type === 'tool-invocation' || part.type === 'tool_call') && currentAssistantId) {
+            const toolLabel = `\`${part.toolName || 'tool'}\`${part.state === 'result' ? ' ✓' : ' …'}`;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === currentAssistantId
+                  ? { ...m, content: m.content.replace(/▌$/, '') + `\n> ${toolLabel}\n▌` }
+                  : m
+              )
+            );
+          }
+        }
+
+        // Session finished
+        if (ev.type === 'session.idle') {
+          if (currentAssistantId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === currentAssistantId
+                  ? { ...m, content: m.content.replace(/▌$/, '') }
+                  : m
+              )
+            );
+            currentAssistantId = null;
+          }
+          setIsLoading(false);
+        }
+      } catch { /* ignore */ }
+    };
+
+    return () => { es.close(); opencodeEsRef.current = null; };
+  }, [paneAgent, opencodeReady]);
   
   const currentAgent = mounted ? agents.find((a) => a.id === paneAgent) || agents.find((a) => a.id === 'abi') || agents[0] : null;
   
@@ -214,6 +337,22 @@ export function AIPane() {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+
+    // Route to opencode when selected
+    if (paneAgent === 'opencode') {
+      try {
+        if (!opencodeReady) throw new Error('opencode is not running. Run `make opencode-start` from ~/aia');
+        const sessionId = opencodeSessionRef.current ?? await getOrCreateOpencodeSession();
+        opencodeSessionRef.current = sessionId;
+        await sendOpencodeMessage(sessionId, userContent);
+        // Response arrives via SSE in the useEffect above; isLoading cleared on session.idle
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'opencode error';
+        setMessages((prev) => [...prev, { id: Date.now().toString(), role: 'assistant', content: `⚠️ ${msg}` }]);
+        setIsLoading(false);
+      }
+      return;
+    }
 
     try {
       // Get provider for current agent (AI Pane uses paneAgent)
@@ -560,7 +699,7 @@ export function AIPane() {
                     showAgentMenu && 'bg-muted'
                   )}
                 >
-                  <span>{currentAgent?.name || 'SupervisorAgent'}</span>
+                  <span>{paneAgent === 'opencode' ? 'opencode' : (currentAgent?.name || 'SupervisorAgent')}</span>
                   <ChevronDown size={12} className="text-muted-foreground" />
                 </button>
                 
@@ -569,6 +708,23 @@ export function AIPane() {
                     <div className="px-3 py-1.5 text-xs text-muted-foreground">
                       Select agent
                     </div>
+                    {/* opencode — local coding agent with filesystem + shell */}
+                    <button
+                      type="button"
+                      onClick={() => { setPaneAgent('opencode' as AgentType); setShowAgentMenu(false); }}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
+                        paneAgent === 'opencode' && 'bg-muted'
+                      )}
+                    >
+                      <span className={cn(
+                        'h-1.5 w-1.5 rounded-full flex-shrink-0',
+                        opencodeReady ? 'bg-emerald-400' : 'bg-zinc-500'
+                      )} />
+                      <span className="flex-1 text-left">opencode</span>
+                      {paneAgent === 'opencode' && <Check size={12} />}
+                    </button>
+                    <div className="mx-2 my-1 h-px bg-border" />
                     {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
                       <button
                         key={agent.id}
