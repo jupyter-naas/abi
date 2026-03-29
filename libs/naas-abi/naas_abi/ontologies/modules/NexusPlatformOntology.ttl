@@ -1,0 +1,682 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix nexus: <http://ontology.naas.ai/nexus/> .
+
+<http://ontology.naas.ai/abi/nexus/NexusPlatformOntology> a owl:Ontology ;
+  owl:imports
+    <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ,
+    <https://www.commoncoreontologies.org/AgentOntology> ,
+    <https://www.commoncoreontologies.org/InformationEntityOntology> ,
+    <https://www.commoncoreontologies.org/EventOntology> ;
+  dc:title "Nexus Platform Ontology"@en ;
+  dc:description "Ontology for core continuant concepts of the Nexus platform."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+  dc11:date "2026-03-27"^^xsd:date .
+
+#################################################################
+#    Classes
+#################################################################
+
+nexus:Tenant a owl:Class ;
+    rdfs:label "Tenant"@en ;
+    skos:definition "A role borne by an organization in relation to a deployed Nexus platform instance, through which the organization is granted tenant status within the platform."@en ;
+    skos:example "Naas.ai as tenant of a Nexus deployment", "Customer X as tenant of a private Nexus instance", "Research Lab Y as tenant of a shared deployment"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000023 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isTenantOf ;
+          owl:someValuesFrom nexus:Organization
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isTenantOf ;
+          owl:allValuesFrom nexus:Organization
+        ] .
+
+nexus:Server a owl:Class ;
+    rdfs:label "Server"@en ;
+    skos:definition "A physical machine that hosts or supports the deployment and operation of the Nexus platform."@en ;
+    skos:example "AWS EC2 host", "On-premise rack server", "Dedicated GPU server"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000040 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:locatedInDeploymentSite ;
+          owl:someValuesFrom nexus:DeploymentSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:locatedInDeploymentSite ;
+          owl:allValuesFrom nexus:DeploymentSite
+        ] .
+
+nexus:DeploymentSite a owl:Class ;
+    rdfs:label "Deployment Site"@en ;
+    skos:definition "A physical or digital site in which a Nexus platform deployment is located or operates."@en ;
+    skos:example "Europe West deployment region", "US East deployment region", "Private datacenter zone A"@en ;
+    rdfs:subClassOf bfo:BFO_0000029 .
+
+nexus:User a owl:Class ;
+    rdfs:label "User"@en ;
+    skos:definition "A person registered in or recognized by the Nexus platform as part of its set of users."@en ;
+    skos:example "Alice Johnson", "Bob Smith", "Charlie Brown"@en ;
+    rdfs:subClassOf cco:ont00001262 .
+
+nexus:Organization a owl:Class ;
+    rdfs:label "Organization"@en ;
+    skos:definition "An organization that uses, manages, or is represented within the Nexus platform."@en ;
+    skos:example "Naas.ai", "Customer X", "Research Team"@en ;
+    rdfs:subClassOf
+        cco:ont00001180 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasWorkspace ;
+          owl:allValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasUser ;
+          owl:allValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasTenant ;
+          owl:allValuesFrom nexus:Tenant
+        ] .
+
+nexus:Workspace a owl:Class ;
+    rdfs:label "Workspace"@en ;
+    skos:definition "A generically dependent continuant representing a configured digital workspace in the Nexus platform, including its structure, settings, permissions, and organization of resources and activities."@en ;
+    skos:example "Naas.ai Main Workspace", "Customer X Workspace", "Internal Ontology Workspace"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isWorkspaceOf ;
+          owl:someValuesFrom nexus:Organization
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isWorkspaceOf ;
+          owl:allValuesFrom nexus:Organization
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hostedOn ;
+          owl:someValuesFrom nexus:Server
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hostedOn ;
+          owl:allValuesFrom nexus:Server
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:WorkspaceRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:WorkspaceRole
+        ] .
+
+nexus:Search a owl:Class ;
+    rdfs:label "Search"@en ;
+    skos:definition "A generically dependent continuant representing a configured search capability or stored search artifact in the Nexus platform through which information from configured sources can be accessed."@en ;
+    skos:example "Global platform search", "Ontology search", "Knowledge graph search"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:SearchRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:SearchRole
+        ] .
+
+nexus:Conversation a owl:Class ;
+    rdfs:label "Conversation"@en ;
+    skos:definition "A generically dependent continuant representing a stored conversational artifact in the Nexus platform, composed of messages exchanged between users and agents."@en ;
+    skos:example "Conversation about ontology design", "Support discussion with an agent", "Research chat about graph views"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isConversationOf ;
+          owl:someValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isConversationOf ;
+          owl:allValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasMessage ;
+          owl:allValuesFrom nexus:Message
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:ConversationRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:ConversationRole
+        ] .
+
+nexus:Message a owl:Class ;
+    rdfs:label "Message"@en ;
+    skos:definition "A generically dependent continuant representing a stored message within a conversation in the Nexus platform."@en ;
+    skos:example "User prompt", "Agent answer", "Follow-up clarification message"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMessageOf ;
+          owl:someValuesFrom nexus:Conversation
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMessageOf ;
+          owl:allValuesFrom nexus:Conversation
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:MessageRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:MessageRole
+        ] .
+
+nexus:Agent a owl:Class ;
+    rdfs:label "Agent"@en ;
+    skos:definition "A generically dependent continuant representing a configured software agent in the Nexus platform."@en ;
+    skos:example "Ontology Assistant", "Search Assistant", "KG Assistant"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:AgentRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:AgentRole
+        ] .
+
+nexus:Ontology a owl:Class ;
+    rdfs:label "Ontology"@en ;
+    skos:definition "A generically dependent continuant representing a formal ontology stored in the Nexus platform."@en ;
+    skos:example "BFO 7 Buckets Ontology", "Nexus Platform Ontology", "Customer Domain Ontology"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasOntologyModule ;
+          owl:allValuesFrom nexus:OntologyModule
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasOntologyClass ;
+          owl:allValuesFrom nexus:OntologyClass
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasOntologyObjectProperty ;
+          owl:allValuesFrom nexus:OntologyObjectProperty
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:OntologyRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:OntologyRole
+        ] .
+
+nexus:OntologyModule a owl:Class ;
+    rdfs:label "Ontology Module"@en ;
+    skos:definition "A generically dependent continuant representing a modular portion of an ontology stored and managed in the Nexus platform."@en ;
+    skos:example "Agent module", "Platform module", "Knowledge graph module"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isOntologyModuleOf ;
+          owl:someValuesFrom nexus:Ontology
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isOntologyModuleOf ;
+          owl:allValuesFrom nexus:Ontology
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:OntologyModuleRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:OntologyModuleRole
+        ] .
+
+nexus:OntologyClass a owl:Class ;
+    rdfs:label "Ontology Class"@en ;
+    skos:definition "A generically dependent continuant representing a class defined within an ontology."@en ;
+    skos:example "Workspace", "Organization", "NamedGraph"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:OntologyClassRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:OntologyClassRole
+        ] .
+
+nexus:OntologyObjectProperty a owl:Class ;
+    rdfs:label "Ontology Object Property"@en ;
+    skos:definition "A generically dependent continuant representing an object property defined within an ontology."@en ;
+    skos:example "hasWorkspace", "hasTenant", "hasNamedGraph"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:OntologyObjectPropertyRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:OntologyObjectPropertyRole
+        ] .
+
+nexus:KnowledgeGraph a owl:Class ;
+    rdfs:label "Knowledge Graph"@en ;
+    skos:definition "A generically dependent continuant representing a structured graph of entities and relations stored in the Nexus platform."@en ;
+    skos:example "Project knowledge graph", "Customer knowledge graph", "Ontology-driven graph store"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasNamedGraph ;
+          owl:allValuesFrom nexus:NamedGraph
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasGraphView ;
+          owl:allValuesFrom nexus:GraphView
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:KnowledgeGraphRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:KnowledgeGraphRole
+        ] .
+
+nexus:NamedGraph a owl:Class ;
+    rdfs:label "Named Graph"@en ;
+    skos:definition "A generically dependent continuant representing an identified graph stored as part of a knowledge graph."@en ;
+    skos:example "ontology/core", "instances/customers", "analytics/events"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isNamedGraphOf ;
+          owl:someValuesFrom nexus:KnowledgeGraph
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isNamedGraphOf ;
+          owl:allValuesFrom nexus:KnowledgeGraph
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:NamedGraphRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:NamedGraphRole
+        ] .
+
+nexus:GraphView a owl:Class ;
+    rdfs:label "Graph View"@en ;
+    skos:definition "A generically dependent continuant representing a partial and configured representation of one or more named graphs, defined by graph selection and filters for visualization or analysis."@en ;
+    skos:example "Customer-only instance view", "Ontology class hierarchy view", "Project analytics view"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:selectsNamedGraph ;
+          owl:someValuesFrom nexus:NamedGraph
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:selectsNamedGraph ;
+          owl:allValuesFrom nexus:NamedGraph
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasGraphFilter ;
+          owl:allValuesFrom nexus:GraphFilter
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:GraphViewRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:GraphViewRole
+        ] .
+
+nexus:GraphFilter a owl:Class ;
+    rdfs:label "Graph Filter"@en ;
+    skos:definition "A generically dependent continuant representing a graph-specific selection criterion used to restrict or structure the representation of data in a graph view."@en ;
+    skos:example "Filter by class Workspace", "Filter by graph ontology/core", "Filter by tenant Customer X"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:GraphFilterRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:GraphFilterRole
+        ] .
+
+nexus:Files a owl:Class ;
+    rdfs:label "Files"@en ;
+    skos:definition "A generically dependent continuant representing a digital file accessible through the Nexus platform."@en ;
+    skos:example "ontology.ttl", "report.pdf", "dataset.csv"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:FileRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:FileRole
+        ] .
+
+nexus:FileSystem a owl:Class ;
+    rdfs:label "File System"@en ;
+    skos:definition "A generically dependent continuant representing a configured file system source accessible from the Nexus platform."@en ;
+    skos:example "Local storage", "S3 connector", "Google Drive connector"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasFiles ;
+          owl:allValuesFrom nexus:Files
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:FileSystemRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:FileSystemRole
+        ] .
+
+nexus:MarketplaceApps a owl:Class ;
+    rdfs:label "Marketplace Apps"@en ;
+    skos:definition "A generically dependent continuant representing a configured application or customization available in or deployed through the Nexus platform marketplace."@en ;
+    skos:example "Knowledge Browser App", "Ontology Editor App", "Graph Analytics App"@en ;
+    rdfs:subClassOf
+        bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:someValuesFrom nexus:MarketplaceAppRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasRole ;
+          owl:allValuesFrom nexus:MarketplaceAppRole
+        ] .
+
+nexus:WorkspaceRole a owl:Class ;
+    rdfs:label "Workspace Role"@en ;
+    skos:definition "A role associated with a workspace as a configured digital environment in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:SearchRole a owl:Class ;
+    rdfs:label "Search Role"@en ;
+    skos:definition "A role associated with a search artifact as a search capability in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:ConversationRole a owl:Class ;
+    rdfs:label "Conversation Role"@en ;
+    skos:definition "A role associated with a conversation as a stored communication artifact in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:MessageRole a owl:Class ;
+    rdfs:label "Message Role"@en ;
+    skos:definition "A role associated with a message as a stored communication unit in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:AgentRole a owl:Class ;
+    rdfs:label "Agent Role"@en ;
+    skos:definition "A role associated with an agent as a configured software assistant in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:OntologyRole a owl:Class ;
+    rdfs:label "Ontology Role"@en ;
+    skos:definition "A role associated with an ontology as a formal knowledge schema in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:OntologyModuleRole a owl:Class ;
+    rdfs:label "Ontology Module Role"@en ;
+    skos:definition "A role associated with an ontology module as a modular portion of an ontology in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:OntologyClassRole a owl:Class ;
+    rdfs:label "Ontology Class Role"@en ;
+    skos:definition "A role associated with an ontology class as a formal classificatory element in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:OntologyObjectPropertyRole a owl:Class ;
+    rdfs:label "Ontology Object Property Role"@en ;
+    skos:definition "A role associated with an ontology object property as a formal relational element in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:KnowledgeGraphRole a owl:Class ;
+    rdfs:label "Knowledge Graph Role"@en ;
+    skos:definition "A role associated with a knowledge graph as a structured graph artifact in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:NamedGraphRole a owl:Class ;
+    rdfs:label "Named Graph Role"@en ;
+    skos:definition "A role associated with a named graph as an identified graph component in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:GraphViewRole a owl:Class ;
+    rdfs:label "Graph View Role"@en ;
+    skos:definition "A role associated with a graph view as a configured graph representation in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:GraphFilterRole a owl:Class ;
+    rdfs:label "Graph Filter Role"@en ;
+    skos:definition "A role associated with a graph filter as a graph-specific selection criterion in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:FileRole a owl:Class ;
+    rdfs:label "File Role"@en ;
+    skos:definition "A role associated with a digital file as an accessible file artifact in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:FileSystemRole a owl:Class ;
+    rdfs:label "File System Role"@en ;
+    skos:definition "A role associated with a configured file system source in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+nexus:MarketplaceAppRole a owl:Class ;
+    rdfs:label "Marketplace App Role"@en ;
+    skos:definition "A role associated with a marketplace application as a configured application or customization in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+nexus:hasWorkspace a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isWorkspaceOf ;
+    rdfs:label "has workspace"@en ;
+    skos:definition "Relates an organization to a workspace that depends on it within the Nexus platform."@en ;
+    rdfs:domain nexus:Organization ;
+    rdfs:range nexus:Workspace .
+
+nexus:isWorkspaceOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasWorkspace ;
+    rdfs:label "is workspace of"@en ;
+    skos:definition "Relates a workspace to the organization on which it generically depends."@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range nexus:Organization .
+
+nexus:hasUser a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:label "has user"@en ;
+    skos:definition "Relates an organization to a user that is a member of it in the platform."@en ;
+    rdfs:domain nexus:Organization ;
+    rdfs:range nexus:User .
+
+nexus:hasTenant a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000196 ;
+    owl:inverseOf nexus:isTenantOf ;
+    rdfs:label "has tenant"@en ;
+    skos:definition "Relates an organization to the tenant role it bears."@en ;
+    rdfs:domain nexus:Organization ;
+    rdfs:range nexus:Tenant .
+
+nexus:isTenantOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000197 ;
+    owl:inverseOf nexus:hasTenant ;
+    rdfs:label "is tenant of"@en ;
+    skos:definition "Relates a tenant role to the organization in which it inheres."@en ;
+    rdfs:domain nexus:Tenant ;
+    rdfs:range nexus:Organization .
+
+nexus:hostedOn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:label "hosted on"@en ;
+    skos:definition "Relates a workspace to the physical server on which it depends for hosting."@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range nexus:Server .
+
+nexus:locatedInDeploymentSite a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000171 ;
+    rdfs:label "located in deployment site"@en ;
+    skos:definition "Relates a server to the deployment site in which it is located."@en ;
+    rdfs:domain nexus:Server ;
+    rdfs:range nexus:DeploymentSite .
+
+nexus:hasConversation a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isConversationOf ;
+    rdfs:label "has conversation"@en ;
+    skos:definition "Relates a workspace to a conversation it carries or contains."@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range nexus:Conversation .
+
+nexus:isConversationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasConversation ;
+    rdfs:label "is conversation of"@en ;
+    skos:definition "Relates a conversation to the workspace on which it depends."@en ;
+    rdfs:domain nexus:Conversation ;
+    rdfs:range nexus:Workspace .
+
+nexus:hasMessage a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isMessageOf ;
+    rdfs:label "has message"@en ;
+    skos:definition "Relates a conversation to a message it contains."@en ;
+    rdfs:domain nexus:Conversation ;
+    rdfs:range nexus:Message .
+
+nexus:isMessageOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasMessage ;
+    rdfs:label "is message of"@en ;
+    skos:definition "Relates a message to the conversation on which it depends."@en ;
+    rdfs:domain nexus:Message ;
+    rdfs:range nexus:Conversation .
+
+nexus:hasOntologyModule a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isOntologyModuleOf ;
+    rdfs:label "has ontology module"@en ;
+    skos:definition "Relates an ontology to one of its ontology modules."@en ;
+    rdfs:domain nexus:Ontology ;
+    rdfs:range nexus:OntologyModule .
+
+nexus:isOntologyModuleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasOntologyModule ;
+    rdfs:label "is ontology module of"@en ;
+    skos:definition "Relates an ontology module to the ontology on which it depends."@en ;
+    rdfs:domain nexus:OntologyModule ;
+    rdfs:range nexus:Ontology .
+
+nexus:hasOntologyClass a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:label "has ontology class"@en ;
+    skos:definition "Relates an ontology to a class defined within it."@en ;
+    rdfs:domain nexus:Ontology ;
+    rdfs:range nexus:OntologyClass .
+
+nexus:hasOntologyObjectProperty a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:label "has ontology object property"@en ;
+    skos:definition "Relates an ontology to an object property defined within it."@en ;
+    rdfs:domain nexus:Ontology ;
+    rdfs:range nexus:OntologyObjectProperty .
+
+nexus:hasNamedGraph a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isNamedGraphOf ;
+    rdfs:label "has named graph"@en ;
+    skos:definition "Relates a knowledge graph to a named graph that composes it."@en ;
+    rdfs:domain nexus:KnowledgeGraph ;
+    rdfs:range nexus:NamedGraph .
+
+nexus:isNamedGraphOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasNamedGraph ;
+    rdfs:label "is named graph of"@en ;
+    skos:definition "Relates a named graph to the knowledge graph on which it depends."@en ;
+    rdfs:domain nexus:NamedGraph ;
+    rdfs:range nexus:KnowledgeGraph .
+
+nexus:hasGraphView a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:label "has graph view"@en ;
+    skos:definition "Relates a knowledge graph to a graph view derived from it."@en ;
+    rdfs:domain nexus:KnowledgeGraph ;
+    rdfs:range nexus:GraphView .
+
+nexus:hasGraphFilter a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:label "has graph filter"@en ;
+    skos:definition "Relates a graph view to a graph filter used in it."@en ;
+    rdfs:domain nexus:GraphView ;
+    rdfs:range nexus:GraphFilter .
+
+nexus:selectsNamedGraph a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:label "selects named graph"@en ;
+    skos:definition "Relates a graph view to a named graph it selects."@en ;
+    rdfs:domain nexus:GraphView ;
+    rdfs:range nexus:NamedGraph .
+
+nexus:hasFiles a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:label "has files"@en ;
+    skos:definition "Relates a file system to files accessible through it."@en ;
+    rdfs:domain nexus:FileSystem ;
+    rdfs:range nexus:Files .
+
+nexus:hasMarketplaceApps a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:label "has marketplace apps"@en ;
+    skos:definition "Relates a workspace to a marketplace application available in or associated with it."@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range nexus:MarketplaceApps .
+
+nexus:hasRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    owl:inverseOf nexus:isRoleOf ;
+    rdfs:label "has role"@en ;
+    skos:definition "Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."@en ;
+    rdfs:domain bfo:BFO_0000031 ;
+    rdfs:range bfo:BFO_0000023 .
+
+nexus:isRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    owl:inverseOf nexus:hasRole ;
+    rdfs:label "is role of"@en ;
+    skos:definition "Relates a role to the generically dependent continuant of which it is the role-side concretization in the Nexus platform."@en ;
+    rdfs:domain bfo:BFO_0000023 ;
+    rdfs:range bfo:BFO_0000031 .
