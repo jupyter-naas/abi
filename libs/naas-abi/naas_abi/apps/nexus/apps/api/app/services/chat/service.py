@@ -21,13 +21,13 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError, IAMService
-from naas_abi.apps.nexus.apps.api.app.services.providers import Message as ProviderMessage
-from naas_abi.apps.nexus.apps.api.app.services.providers import (
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     check_ollama_status,
     execute_tool,
 )
-from naas_abi.apps.nexus.apps.api.app.services.providers import (
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     complete_chat as complete_with_provider,
 )
 from naas_abi.apps.nexus.apps.api.app.services.secrets_crypto import decrypt_secret_value

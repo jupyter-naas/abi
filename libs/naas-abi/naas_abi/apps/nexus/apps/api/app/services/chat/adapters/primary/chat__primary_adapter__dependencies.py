@@ -20,7 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
-from naas_abi.apps.nexus.apps.api.app.services.providers import Message as ProviderMessage
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry, get_service_registry
 from sqlalchemy.ext.asyncio import AsyncSession
 

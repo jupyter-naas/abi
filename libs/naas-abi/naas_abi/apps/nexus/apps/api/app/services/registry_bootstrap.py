@@ -23,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     RegistryServices,
     ServiceRegistry,
 )
+from naas_abi.apps.nexus.apps.api.app.services.search.service import SearchService
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -47,12 +48,14 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
         adapter=ChatSecondaryAdapterPostgres(db_getter=db_getter),
         iam_service=iam_service,
     )
+    search_service = SearchService()
     agents_service = AgentService(AgentSecondaryAdapterPostgres(db_getter=db_getter))
 
     return ServiceRegistry.configure(
         RegistryServices(
             iam=iam_service,
             chat=chat_service,
+            search=search_service,
             agents=agents_service,
             workspaces=workspace_service,
             organizations=organization_service,
