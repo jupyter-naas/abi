@@ -13,11 +13,17 @@ import {
   Check,
   Sparkles,
   Building2,
+  Plus,
+  RefreshCw,
+  AlertCircle,
+  Search,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type WorkspaceBranch, type Workspace } from '@/stores/workspace';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
+import { useGit } from '@/hooks/use-git';
+import { FilePalette } from './file-palette';
 
 interface HeaderProps {
   title?: string;
@@ -28,6 +34,9 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
   const [mounted, setMounted] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [newBranchName, setNewBranchName] = useState('');
+  const [creatingBranch, setCreatingBranch] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const branchMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -39,12 +48,12 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
     contextPanelOpen, 
     toggleContextPanel, 
     currentWorkspaceId,
-    getCurrentBranch,
-    getBranches,
-    checkoutBranch,
   } = useWorkspaceStore();
+
+  // Real git state
+  const { branches, status, currentBranch, totalChanges, loading: gitLoading, refresh: gitRefresh, checkout } = useGit();
   
-  // Use authenticated user from auth store (not the hardcoded workspace store user)
+  // Use authenticated user from auth store
   const user = authUser;
 
   // Helper to generate workspace-scoped URLs
@@ -65,8 +74,19 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
       }
     };
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // Use defaults on server to prevent hydration mismatch
@@ -74,46 +94,72 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
   const panelOpen = mounted ? contextPanelOpen : false;
   const displayUser = mounted ? user : null;
   
-  // Git branch state
-  const currentBranch = mounted ? getCurrentBranch() : null;
-  const branches = mounted ? getBranches() : [];
-
-  const handleCheckoutBranch = (branchId: string) => {
-    checkoutBranch(branchId);
+  const handleCheckout = async (name: string) => {
+    await checkout(name);
     setBranchMenuOpen(false);
+    setNewBranchName('');
+    setCreatingBranch(false);
   };
 
-  const getBranchColor = (branch: WorkspaceBranch) => {
-    if (branch.name === 'main') return 'text-green-500';
-    if (branch.name === 'demo') return 'text-purple-500';
-    if (branch.name === 'development') return 'text-blue-500';
-    if (branch.name.startsWith('feature/')) return 'text-cyan-500';
-    if (branch.name.startsWith('hotfix/')) return 'text-red-500';
+  const handleCreateBranch = async () => {
+    if (!newBranchName.trim()) return;
+    await checkout(newBranchName.trim(), true);
+    setBranchMenuOpen(false);
+    setNewBranchName('');
+    setCreatingBranch(false);
+  };
+
+  const branchColor = (name: string) => {
+    if (name === 'main' || name === 'master') return 'text-green-500';
+    if (name === 'demo') return 'text-purple-500';
+    if (name === 'development' || name === 'dev') return 'text-blue-500';
+    if (name.startsWith('feature/')) return 'text-cyan-500';
+    if (name.startsWith('hotfix/')) return 'text-red-500';
     return 'text-muted-foreground';
   };
 
 
   return (
-    <header className="glass-nav flex h-14 items-center justify-between border-b border-border/50 px-4">
-      {/* Left side - show expand button when sidebar is collapsed */}
-      <div className="flex items-center">
-        {!sidebarOpen && (
-          <button
-            onClick={toggleSidebar}
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-md transition-all',
-              'hover:bg-muted hover:text-foreground text-muted-foreground'
-            )}
-            title="Expand sidebar"
-          >
-            <PanelLeft size={16} />
-          </button>
-        )}
-      </div>
+    <>
+      <FilePalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+
+      <header className="glass-nav flex h-14 items-center justify-between border-b border-border/50 px-4">
+        {/* Left side - show expand button when sidebar is collapsed */}
+        <div className="flex items-center">
+          {!sidebarOpen && (
+            <button
+              onClick={toggleSidebar}
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-md transition-all',
+                'hover:bg-muted hover:text-foreground text-muted-foreground'
+              )}
+              title="Expand sidebar"
+            >
+              <PanelLeft size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Center — file search trigger (VS Code Cmd+P style) */}
+        <button
+          onClick={() => setPaletteOpen(true)}
+          className={cn(
+            'flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-1.5',
+            'text-sm text-muted-foreground transition-all',
+            'hover:border-border hover:bg-muted hover:text-foreground',
+            'w-56 sm:w-72 md:w-80'
+          )}
+        >
+          <Search size={13} className="shrink-0" />
+          <span className="flex-1 text-left text-xs">Go to file…</span>
+          <kbd className="hidden rounded border bg-background px-1.5 py-0.5 text-[10px] sm:inline">
+            ⌘P
+          </kbd>
+        </button>
 
       {/* Right side */}
       <div className="flex items-center gap-1">
-        {/* Branch Selector - Simple dropdown like Palantir */}
+        {/* Branch Selector — wired to real ~/aia git repo */}
         <div ref={branchMenuRef} className="relative mr-2">
           <button
             onClick={() => setBranchMenuOpen(!branchMenuOpen)}
@@ -123,30 +169,100 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
               branchMenuOpen && 'bg-muted border-primary'
             )}
           >
-            <GitBranch size={14} className={currentBranch ? getBranchColor(currentBranch) : 'text-muted-foreground'} />
-            <span className="font-medium">{currentBranch?.name || 'main'}</span>
+            <GitBranch size={14} className={branchColor(currentBranch?.name ?? 'main')} />
+            <span className="font-medium">{currentBranch?.name ?? (gitLoading ? '…' : 'main')}</span>
+            {totalChanges > 0 && (
+              <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500/20 px-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                {totalChanges}
+              </span>
+            )}
             <ChevronDown size={14} className="text-muted-foreground" />
           </button>
 
           {branchMenuOpen && (
-            <div className="glass-card absolute right-0 top-full z-50 mt-2 w-56 py-1">
-              {branches.map((branch) => (
+            <div className="glass-card absolute right-0 top-full z-50 mt-2 w-64 py-1">
+              {/* Status summary */}
+              {status && (status.staged.length > 0 || status.changed.length > 0 || status.untracked.length > 0) && (
+                <div className="border-b border-border/50 px-3 py-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+                    <AlertCircle size={11} />
+                    {status.staged.length > 0 && <span>{status.staged.length} staged</span>}
+                    {status.changed.length > 0 && <span>{status.changed.length} changed</span>}
+                    {status.untracked.length > 0 && <span>{status.untracked.length} untracked</span>}
+                  </div>
+                  {status.ahead > 0 && (
+                    <span className="mt-0.5 block text-blue-500">↑ {status.ahead} ahead of origin</span>
+                  )}
+                  {status.behind > 0 && (
+                    <span className="mt-0.5 block text-orange-500">↓ {status.behind} behind origin</span>
+                  )}
+                </div>
+              )}
+
+              {/* Branch list */}
+              <div className="max-h-48 overflow-y-auto py-1">
+                {branches.map((branch) => (
+                  <button
+                    key={branch.name}
+                    onClick={() => handleCheckout(branch.name)}
+                    className={cn(
+                      'flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors',
+                      'hover:bg-primary/10',
+                      branch.current && 'bg-primary/5'
+                    )}
+                  >
+                    <GitBranch size={13} className={branchColor(branch.name)} />
+                    <span className="flex-1 text-left">{branch.name}</span>
+                    {branch.ahead > 0 && (
+                      <span className="text-[10px] text-blue-500">↑{branch.ahead}</span>
+                    )}
+                    {branch.behind > 0 && (
+                      <span className="text-[10px] text-orange-500">↓{branch.behind}</span>
+                    )}
+                    {branch.current && <Check size={13} className="text-primary" />}
+                  </button>
+                ))}
+              </div>
+
+              {/* New branch */}
+              <div className="border-t border-border/50 px-3 py-2">
+                {creatingBranch ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={newBranchName}
+                      onChange={(e) => setNewBranchName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCreateBranch();
+                        if (e.key === 'Escape') { setCreatingBranch(false); setNewBranchName(''); }
+                      }}
+                      placeholder="new-branch-name"
+                      className="flex-1 rounded border bg-background px-2 py-1 text-xs outline-none ring-1 ring-primary"
+                    />
+                    <button onClick={handleCreateBranch} className="text-xs text-primary hover:underline">Create</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setCreatingBranch(true)}
+                    className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus size={12} />
+                    New branch
+                  </button>
+                )}
+              </div>
+
+              {/* Refresh */}
+              <div className="border-t border-border/50 px-3 py-1.5">
                 <button
-                  key={branch.id}
-                  onClick={() => handleCheckoutBranch(branch.id)}
-                  className={cn(
-                    'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
-                    'hover:bg-primary/10',
-                    currentBranch?.id === branch.id && 'bg-primary/5'
-                  )}
+                  onClick={() => { gitRefresh(); }}
+                  className="flex w-full items-center gap-2 px-1 py-1 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  <GitBranch size={14} className={getBranchColor(branch)} />
-                  <span className="flex-1 text-left">{branch.name}</span>
-                  {currentBranch?.id === branch.id && (
-                    <Check size={14} className="text-primary" />
-                  )}
+                  <RefreshCw size={11} className={gitLoading ? 'animate-spin' : ''} />
+                  Refresh
                 </button>
-              ))}
+              </div>
             </div>
           )}
         </div>
@@ -266,5 +382,6 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
         </div>
       </div>
     </header>
+    </>
   );
 }

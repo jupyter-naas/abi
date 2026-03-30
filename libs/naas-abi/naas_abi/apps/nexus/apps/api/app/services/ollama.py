@@ -10,6 +10,7 @@ Handles:
 
 import asyncio
 import logging
+import os
 import platform
 import shutil
 import subprocess
@@ -19,7 +20,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_ENDPOINT = "http://localhost:11434"
+# Allow overriding via env var so Docker deployments can point to host Ollama.
+# On macOS/Windows with Docker Desktop, use: OLLAMA_HOST=http://host.docker.internal:11434
+OLLAMA_ENDPOINT = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 DEFAULT_MODEL = "qwen3-vl:2b"
 STARTUP_TIMEOUT = 30  # seconds to wait for Ollama to start
 

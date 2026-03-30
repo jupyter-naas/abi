@@ -2,13 +2,43 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Archive, Edit2, Trash2 } from 'lucide-react';
+import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Archive, Edit2, Trash2, LayoutGrid, List } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { CollapsibleSection } from './collapsible-section';
-import { getWorkspacePath, agentIconComponents } from './utils';
+import { getWorkspacePath } from './utils';
+
+// ─── Logo resolution ──────────────────────────────────────────────────────────
+// Returns { url, invert } where invert=true means the image is monochrome and
+// needs CSS `dark:invert` so it stays visible on dark backgrounds.
+const LOGO_MAP: { pattern: RegExp; url: string; invert?: boolean }[] = [
+  // Simple Icons CDN (high-quality SVG, monochrome → needs invert in dark mode)
+  { pattern: /openai|gpt-?[34]|gpt-?4o|o1|o3|o4/i,     url: 'https://cdn.simpleicons.org/openai',       invert: true  },
+  { pattern: /claude|anthropic/i,                         url: 'https://cdn.simpleicons.org/anthropic',    invert: true  },
+  { pattern: /gemini|gemma/i,                             url: 'https://cdn.simpleicons.org/googlegemini'               },
+  { pattern: /llama|meta:/i,                              url: 'https://cdn.simpleicons.org/meta',         invert: true  },
+  { pattern: /perplexity/i,                               url: 'https://cdn.simpleicons.org/perplexity',  invert: true  },
+  { pattern: /ollama/i,                                   url: 'https://cdn.simpleicons.org/ollama',       invert: true  },
+  // Direct favicons (already coloured, no invert needed)
+  { pattern: /mistral|mixtral/i,                          url: 'https://mistral.ai/favicon.ico'                         },
+  { pattern: /deepseek/i,                                 url: 'https://www.deepseek.com/favicon.ico'                   },
+  { pattern: /grok|xai|x\.ai/i,                          url: 'https://x.ai/favicon.ico',                invert: true  },
+  { pattern: /openrouter/i,                               url: 'https://openrouter.ai/favicon.ico'                      },
+  { pattern: /groq/i,                                     url: 'https://groq.com/favicon.ico'                           },
+  { pattern: /qwen/i,                                     url: 'https://www.google.com/s2/favicons?sz=64&domain=qwenlm.github.io' },
+  { pattern: /cohere/i,                                   url: 'https://cohere.com/favicon.ico'                         },
+  { pattern: /amazon|bedrock|nova/i,                      url: 'https://www.google.com/s2/favicons?sz=64&domain=aws.amazon.com' },
+];
+
+function resolveAgentLogo(name: string, logoUrl: string | null): { url: string; invert: boolean } | null {
+  if (logoUrl) return { url: logoUrl, invert: false };
+  for (const { pattern, url, invert } of LOGO_MAP) {
+    if (pattern.test(name)) return { url, invert: !!invert };
+  }
+  return null;
+}
 
 const ConversationItem = React.memo(function ConversationItem({
   id,
@@ -224,6 +254,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [agentsExpanded, setAgentsExpanded] = useState(true);
+  const [agentView, setAgentView] = useState<'list' | 'grid'>('list');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
@@ -310,6 +341,14 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
             <Bot size={12} />
             <span>Agents</span>
           </Link>
+          {/* View toggle: list ↔ grid */}
+          <button
+            onClick={() => setAgentView(agentView === 'list' ? 'grid' : 'list')}
+            className="rounded p-0.5 hover:bg-muted hover:text-foreground"
+            title={agentView === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+          >
+            {agentView === 'list' ? <LayoutGrid size={12} /> : <List size={12} />}
+          </button>
           <Link
             href={getWorkspacePath(currentWorkspaceId, '/chat/agents/new')}
             className="rounded p-0.5 hover:bg-muted hover:text-foreground"
@@ -319,11 +358,17 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
           </Link>
         </div>
 
-        {agentsExpanded && (
+        {agentsExpanded && agentView === 'list' && (
           <div className="ml-3 space-y-0.5">
             {safeAgents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
-              const AgentIcon = agentIconComponents[agent.icon] || agentIconComponents.sparkles;
               const isSelected = isChatRoute && selectedAgent === agent.id;
+              const logo = resolveAgentLogo(agent.name, agent.logoUrl ?? null);
+              const initials = agent.name
+                .split(/[\s\-_]+/)
+                .slice(0, 2)
+                .map((w: string) => w[0]?.toUpperCase() ?? '')
+                .join('');
+              const hue = agent.name.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0) % 360;
 
               return (
                 <button
@@ -333,15 +378,78 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
                     router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
                   }}
                   className={cn(
-                    'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs transition-colors',
+                    'group flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-xs transition-colors',
                     'hover:bg-workspace-accent-10',
-                    isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
+                    isSelected && 'bg-workspace-accent-15 text-workspace-accent'
                   )}
                 >
-                  <AgentIcon size={12} className={cn(
-                    isSelected ? 'text-workspace-accent' : 'text-muted-foreground'
-                  )} />
+                  <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center overflow-hidden rounded">
+                    {logo ? (
+                      <img
+                        src={logo.url}
+                        alt=""
+                        className={cn('h-4 w-4 object-contain', logo.invert && 'dark:invert')}
+                      />
+                    ) : (
+                      <span
+                        className="flex h-4 w-4 items-center justify-center rounded text-[8px] font-bold text-white"
+                        style={{ background: `hsl(${hue} 55% 50%)` }}
+                      >
+                        {initials}
+                      </span>
+                    )}
+                  </span>
                   <span className="flex-1 truncate">{agent.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {agentsExpanded && agentView === 'grid' && (
+          <div className="ml-1 grid grid-cols-3 gap-1 pt-0.5">
+            {safeAgents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
+              const isSelected = isChatRoute && selectedAgent === agent.id;
+              const logo = resolveAgentLogo(agent.name, agent.logoUrl ?? null);
+              const initials = agent.name
+                .split(/[\s\-_]+/)
+                .slice(0, 2)
+                .map((w: string) => w[0]?.toUpperCase() ?? '')
+                .join('');
+              const hue = agent.name.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0) % 360;
+
+              return (
+                <button
+                  key={agent.id}
+                  onClick={() => {
+                    setSelectedAgent(agent.id);
+                    router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+                  }}
+                  title={agent.name}
+                  className={cn(
+                    'group flex flex-col items-center gap-1 rounded-md px-1 py-2 text-center text-[10px] transition-colors',
+                    'hover:bg-workspace-accent-10',
+                    isSelected && 'bg-workspace-accent-15 text-workspace-accent'
+                  )}
+                >
+                  {/* Big logo */}
+                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg">
+                    {logo ? (
+                      <img
+                        src={logo.url}
+                        alt=""
+                        className={cn('h-8 w-8 object-contain', logo.invert && 'dark:invert')}
+                      />
+                    ) : (
+                      <span
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white"
+                        style={{ background: `hsl(${hue} 55% 50%)` }}
+                      >
+                        {initials}
+                      </span>
+                    )}
+                  </span>
+                  <span className="w-full truncate leading-tight">{agent.name.split(/[\s:\/]+/)[0]}</span>
                 </button>
               );
             })}

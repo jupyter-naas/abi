@@ -11,6 +11,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
                                                             chat,
                                                             files,
                                                             graph,
+                                                            lab_fs,
+                                                            lab_git,
+                                                            lab_terminal,
                                                             ontology,
                                                             organizations,
                                                             providers,
@@ -34,6 +37,10 @@ api_router.include_router(ontology.router, prefix="/ontology", tags=["ontology"]
 api_router.include_router(graph.router, prefix="/graph", tags=["graph"])
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(files.router, prefix="/files", tags=["files"])
+api_router.include_router(lab_fs.router, prefix="/lab/fs", tags=["lab-fs"])
+api_router.include_router(lab_fs.public_router, tags=["lab-fs-public"])  # no-auth raw file serve
+api_router.include_router(lab_git.router, prefix="/lab/git", tags=["lab-git"])
+api_router.include_router(lab_terminal.terminal_router, prefix="/lab/terminal", tags=["lab-terminal"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers.router, prefix="/providers", tags=["providers"])
 api_router.include_router(websocket.router, prefix="/websocket", tags=["websocket"])

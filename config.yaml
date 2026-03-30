@@ -19,8 +19,10 @@ api:
 global_config:
   ai_mode: "cloud"
 
-default_agent: naas_abi AbiAgent 
+default_agent: aia AiaAgent
 modules:
+  - path: ../src/aia
+    enabled: true
   - module: naas_abi
     enabled: true
     config:

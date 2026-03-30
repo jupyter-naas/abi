@@ -125,6 +125,11 @@ interface FilesState {
   refreshLabFiles: () => Promise<void>;  // Refreshes Lab's file tree
   readFile: (path: string) => Promise<string | null>;
   saveFile: (path: string) => Promise<boolean>;
+
+  // Host filesystem (Lab - reads ~/aia via /api/lab/fs/)
+  fetchHostFiles: (path?: string) => Promise<FileInfo[]>;
+  readHostFile: (path: string) => Promise<string | null>;
+  saveHostFile: (path: string) => Promise<boolean>;
 }
 
 import { getApiUrl } from '@/lib/config';
@@ -331,11 +336,13 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
   
   openFile: (path) => {
-    const { openFiles } = get();
+    const { openFiles, fileContents } = get();
     if (!openFiles.includes(path)) {
       set({ openFiles: [...openFiles, path], activeFile: path });
-      // Read file content when opening
-      get().readFile(path);
+      // Only auto-read if content isn't already cached
+      if (fileContents[path] === undefined) {
+        get().readFile(path);
+      }
     } else {
       set({ activeFile: path });
     }
@@ -408,22 +415,12 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     }
   },
 
-  // Fetch files for Lab - always at workspace root (independent of Files navigation)
+  // Fetch files for Lab - reads host ~/aia filesystem via /api/lab/fs/
   fetchLabFiles: async () => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      set({ labLoading: false });
-      return;
-    }
-    
     set({ labLoading: true });
     try {
-      const response = await authFetch(`${getApiBase()}/api/files/?path=${encodeURIComponent(workspaceId)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch lab files');
-      }
-      const data = await response.json();
-      set({ labFiles: data.files, labLoading: false, labFolderContents: {} });
+      const data = await get().fetchHostFiles('');
+      set({ labFiles: data, labLoading: false, labFolderContents: {} });
     } catch (error) {
       console.error('Error fetching lab files:', error);
       set({ labLoading: false });
@@ -432,40 +429,15 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   // Fetch contents of a specific folder for Lab tree expansion
   fetchLabFolderContents: async (folderPath: string) => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      return [];
-    }
-    
     // Check cache first
     const cached = get().labFolderContents[folderPath];
-    if (cached) {
-      return cached;
-    }
-    
-    try {
-      // folderPath is relative to workspace, like "new-folder"
-      const fullPath = `${workspaceId}/${folderPath}`;
-      const response = await authFetch(`${getApiBase()}/api/files/?path=${encodeURIComponent(fullPath)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch folder contents');
-      }
-      const data = await response.json();
-      const files = data.files as FileInfo[];
-      
-      // Cache the results
-      set((state) => ({
-        labFolderContents: {
-          ...state.labFolderContents,
-          [folderPath]: files
-        }
-      }));
-      
-      return files;
-    } catch (error) {
-      console.error('Error fetching folder contents:', error);
-      return [];
-    }
+    if (cached) return cached;
+
+    const files = await get().fetchHostFiles(folderPath);
+    set((state) => ({
+      labFolderContents: { ...state.labFolderContents, [folderPath]: files },
+    }));
+    return files;
   },
 
   createFile: async (path, content = '') => {
@@ -701,6 +673,60 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         unsavedChanges: { ...unsavedChanges, [path]: false },
       });
       
+      return true;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      return false;
+    }
+  },
+
+  // ─── Host filesystem (Lab) ──────────────────────────────────────────────────
+
+  fetchHostFiles: async (path = '') => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/lab/fs/?path=${encodeURIComponent(path)}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch host files');
+      const data = await response.json();
+      return (data.files as FileInfo[]) ?? [];
+    } catch (error) {
+      console.error('fetchHostFiles error:', error);
+      return [];
+    }
+  },
+
+  readHostFile: async (path) => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/lab/fs/read/${encodeURIComponent(path)}`
+      );
+      if (!response.ok) throw new Error('Failed to read host file');
+      const data = await response.json();
+      const { fileContents } = get();
+      set({ fileContents: { ...fileContents, [path]: data.content } });
+      return data.content as string;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      return null;
+    }
+  },
+
+  saveHostFile: async (path) => {
+    const { fileContents, unsavedChanges } = get();
+    const content = fileContents[path];
+    if (content === undefined) return false;
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/lab/fs/write/${encodeURIComponent(path)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, content }),
+        }
+      );
+      if (!response.ok) throw new Error('Failed to save host file');
+      set({ unsavedChanges: { ...unsavedChanges, [path]: false } });
       return true;
     } catch (error) {
       set({ error: (error as Error).message });

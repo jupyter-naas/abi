@@ -45,10 +45,6 @@ const FileItem = React.memo(function FileItem({
   const [showMenu, setShowMenu] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const getRelativePath = (fullPath: string) => {
-    const parts = fullPath.split('/');
-    return parts.slice(1).join('/');
-  };
 
   const handleToggleExpand = async () => {
     if (!isFolder) return;
@@ -56,8 +52,7 @@ const FileItem = React.memo(function FileItem({
 
     if (!expanded && fetchFolderContents) {
       setLoadingChildren(true);
-      const relativePath = getRelativePath(file.path);
-      const contents = await fetchFolderContents(relativePath);
+      const contents = await fetchFolderContents(file.path);
       setChildren(contents);
       setLoadingChildren(false);
     }
@@ -186,7 +181,27 @@ const FileItem = React.memo(function FileItem({
               className="fixed inset-0 z-40"
               onClick={() => setShowMenu(false)}
             />
-            <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-md border bg-popover py-1 shadow-lg">
+              <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border bg-popover py-1 shadow-lg">
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  // Full absolute path on host
+                  navigator.clipboard.writeText(`/Users/jrvmac/aia/${file.path}`);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+              >
+                Copy Absolute Path
+              </button>
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  navigator.clipboard.writeText(file.path);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+              >
+                Copy Relative Path
+              </button>
+              <div className="my-1 mx-2 h-px bg-border" />
               <button
                 onClick={() => {
                   setShowMenu(false);
@@ -252,67 +267,45 @@ export function LabSection({ collapsed }: { collapsed: boolean }) {
     fetchLabFolderContents,
     refreshLabFiles,
     activeFile,
-    openFile,
-    createFile,
-    createFolder,
     renameFile,
     deleteFile,
   } = useFilesStore();
   const { prompt, dialog: promptDialog } = usePrompt();
 
-  const resolveTargetPath = useCallback((name: string) => {
-    let targetPath = name;
-    if (selectedLabPath) {
-      const parts = selectedLabPath.split('/');
-      const relativePath = parts.slice(1).join('/');
-      const findItem = (files: FileInfo[], path: string): FileInfo | undefined => {
-        for (const f of files) {
-          if (f.path === path) return f;
-        }
-        return undefined;
-      };
-      const selectedItem = findItem(labFiles, selectedLabPath);
-      if (selectedItem?.type === 'folder') {
-        targetPath = `${relativePath}/${name}`;
-      } else if (relativePath.includes('/')) {
-        const parentPath = relativePath.substring(0, relativePath.lastIndexOf('/'));
-        targetPath = `${parentPath}/${name}`;
-      }
-    }
-    return targetPath;
-  }, [selectedLabPath, labFiles]);
 
   const handleNewFile = useCallback(async () => {
     const name = await prompt({
       title: 'New File',
-      description: 'Enter a name for the new file',
-      defaultValue: 'untitled.py',
+      description: 'Enter path relative to ~/aia (e.g. src/mymodule/app.py)',
+      defaultValue: 'src/untitled.py',
       confirmLabel: 'Create',
     });
     if (name) {
-      const targetPath = resolveTargetPath(name);
-      const result = await createFile(targetPath);
-      if (result) {
-        await refreshLabFiles();
-        openFile(result.path);
-        router.push(getWorkspacePath(currentWorkspaceId, '/lab'));
-      }
+      const store = useFilesStore.getState();
+      store.setFileContent(name, '');
+      await store.saveHostFile(name);
+      store.openFile(name);
+      await refreshLabFiles();
+      router.push(getWorkspacePath(currentWorkspaceId, '/lab'));
     }
-  }, [prompt, resolveTargetPath, createFile, refreshLabFiles, openFile, router, currentWorkspaceId]);
+  }, [prompt, refreshLabFiles, router, currentWorkspaceId]);
 
   const handleNewFolder = useCallback(async () => {
     const name = await prompt({
       title: 'New Folder',
-      description: 'Enter a name for the new folder',
-      defaultValue: 'new-folder',
+      description: 'Enter path relative to ~/aia (e.g. src/mymodule)',
+      defaultValue: 'src/new-folder',
       confirmLabel: 'Create',
     });
     if (name) {
-      const targetPath = resolveTargetPath(name);
-      await createFolder(targetPath);
+      // Create a .gitkeep so the folder exists on disk
+      const store = useFilesStore.getState();
+      const keepFile = `${name.replace(/\/$/, '')}/.gitkeep`;
+      store.setFileContent(keepFile, '');
+      await store.saveHostFile(keepFile);
       await refreshLabFiles();
     }
-  }, [prompt, resolveTargetPath, createFolder, refreshLabFiles]);
+  }, [prompt, refreshLabFiles]);
 
   return (
     <>
@@ -369,8 +362,11 @@ export function LabSection({ collapsed }: { collapsed: boolean }) {
               file={file}
               activeFile={activeFile}
               selectedPath={selectedLabPath}
-              onFileClick={(path) => {
-                openFile(path);
+              onFileClick={async (path) => {
+                // Read from host FS then open in editor
+                const { readHostFile, openFile: openInEditor, fileContents } = useFilesStore.getState();
+                if (!fileContents[path]) await readHostFile(path);
+                openInEditor(path);
                 router.push(getWorkspacePath(currentWorkspaceId, '/lab'));
               }}
               onSelect={(path) => setSelectedLabPath(path)}
