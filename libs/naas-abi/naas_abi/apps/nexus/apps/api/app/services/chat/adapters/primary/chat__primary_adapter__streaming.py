@@ -21,8 +21,8 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     ChatRequest,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import AGENT_SYSTEM_PROMPTS
-from naas_abi.apps.nexus.apps.api.app.services.providers import Message as ProviderMessage
-from naas_abi.apps.nexus.apps.api.app.services.providers import (
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     stream_with_abi_inprocess,
     stream_with_cloudflare,
@@ -226,7 +226,7 @@ async def stream_chat_response(
                 if not inprocess_emitted:
                     raise RuntimeError("In-process ABI stream returned no content")
             elif provider.type in OPENAI_COMPATIBLE:
-                from naas_abi.apps.nexus.apps.api.app.services.providers import (
+                from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
                     stream_with_openai_compatible,
                 )
 

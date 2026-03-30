@@ -35,7 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__streaming import (
     stream_chat_response,
 )
-from naas_abi.apps.nexus.apps.api.app.services.providers import check_ollama_status
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import check_ollama_status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)

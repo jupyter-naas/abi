@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
     from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
     from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
+    from naas_abi.apps.nexus.apps.api.app.services.search.service import SearchService
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import WorkspaceService
 
 
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 class RegistryServices:
     iam: IAMService
     chat: ChatService
+    search: SearchService
     agents: AgentService
     workspaces: WorkspaceService
     organizations: OrganizationService
@@ -56,6 +58,10 @@ class ServiceRegistry:
     @property
     def agents(self) -> AgentService:
         return self._services.agents
+
+    @property
+    def search(self) -> SearchService:
+        return self._services.search
 
     @property
     def workspaces(self) -> WorkspaceService:

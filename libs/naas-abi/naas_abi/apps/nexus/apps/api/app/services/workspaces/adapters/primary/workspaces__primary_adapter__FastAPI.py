@@ -12,7 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_workspace_role,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import _encrypt
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_encrypt
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
@@ -386,7 +386,7 @@ async def create_inference_server(
         endpoint=server_data.endpoint,
         description=server_data.description,
         enabled=server_data.enabled,
-        api_key=_encrypt(server_data.api_key) if server_data.api_key else None,
+        api_key=deprecated_encrypt(server_data.api_key) if server_data.api_key else None,
         health_path=server_data.health_path,
         models_path=server_data.models_path,
     )
@@ -407,7 +407,7 @@ async def update_inference_server(
 
     api_key = None
     if updates.api_key is not None:
-        api_key = _encrypt(updates.api_key) if updates.api_key else None
+        api_key = deprecated_encrypt(updates.api_key) if updates.api_key else None
 
     server = await service.update_inference_server(
         workspace_id=workspace_id,
