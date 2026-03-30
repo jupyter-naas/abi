@@ -6,9 +6,9 @@ All write operations (checkout, create branch) are intentionally minimal
 and safe: no force-push, no reset --hard, no destructive ops.
 """
 
+import os
 import subprocess
 from pathlib import Path
-import os
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field

@@ -9,7 +9,7 @@ relative to AIA_HOST_ROOT and no path-traversal is permitted.
 import mimetypes
 import os
 from datetime import datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
