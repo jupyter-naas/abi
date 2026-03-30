@@ -311,30 +311,30 @@ class ABIModule(BaseModule):
 
     def on_initialized(self):
         super().on_initialized()
-        # import glob
-        # import os
+        import glob
+        import os
 
-        # # Convert ontologies to Python classes.
-        # from naas_abi_core import logger
-        # from naas_abi_core.utils.onto2py import onto2py
+        # Convert ontologies to Python classes.
+        from naas_abi_core import logger
+        from naas_abi_core.utils.onto2py import onto2py
 
-        # ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
-        # ttl_files = glob.glob(
-        #     os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
-        # )
+        ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
+        ttl_files = glob.glob(
+            os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
+        )
 
-        # if not ttl_files:
-        #     logger.warning(f"No TTL files found in {ontologies_dir}")
-        #     return
+        if not ttl_files:
+            logger.warning(f"No TTL files found in {ontologies_dir}")
+            return
 
-        # for ttl_file in ttl_files:
-        #     try:
-        #         logger.debug(f"Converting {ttl_file} to Python")
-        #         onto2py(ttl_file)
-        #     except Exception as e:
-        #         logger.error(
-        #             f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
-        #         )
+        for ttl_file in ttl_files:
+            try:
+                logger.debug(f"Converting {ttl_file} to Python")
+                onto2py(ttl_file)
+            except Exception as e:
+                logger.error(
+                    f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
+                )
 
         # Initialize Nexus platform
         from naas_abi.pipelines.NexusPlatformPipeline import (
