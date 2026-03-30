@@ -11,8 +11,11 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import (
+    PostgresSessionRegistry,
+)
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
     OrganizationMemberModel,
@@ -20,6 +23,10 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceMemberModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.organizations import (
+    OrganizationPermissionError,
+)
+from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,13 +37,15 @@ public_router = APIRouter()
 
 # ============ Pydantic Schemas ============
 
+
 class OrganizationBranding(BaseModel):
     """Public branding data returned without authentication."""
+
     id: str
     name: str
     slug: str
-    logo_url: str | None = None              # Square logo (icon, sidebar)
-    logo_rectangle_url: str | None = None     # Wide/horizontal logo (login page, headers)
+    logo_url: str | None = None  # Square logo (icon, sidebar)
+    logo_rectangle_url: str | None = None  # Wide/horizontal logo (login page, headers)
     logo_emoji: str | None = None
     primary_color: str = "#22c55e"
     accent_color: str | None = None
@@ -55,11 +64,12 @@ class OrganizationBranding(BaseModel):
     login_footer_text: str | None = None
     secondary_logo_url: str | None = None
     show_logo_separator: bool = False
-    default_theme: str | None = None             # "light", "dark", or null (system)
+    default_theme: str | None = None  # "light", "dark", or null (system)
 
 
 class Organization(BaseModel):
     """Full organization model (authenticated)."""
+
     id: str
     name: str
     slug: str
@@ -91,8 +101,9 @@ class Organization(BaseModel):
 
 class OrganizationCreate(BaseModel):
     """Create a new organization."""
+
     name: str = Field(..., min_length=1, max_length=200)
-    slug: str = Field(..., min_length=1, max_length=100, pattern=r'^[a-z0-9][a-z0-9\-]*[a-z0-9]$')
+    slug: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$")
     logo_url: str | None = None
     logo_rectangle_url: str | None = None
     logo_emoji: str | None = None
@@ -118,6 +129,7 @@ class OrganizationCreate(BaseModel):
 
 class OrganizationUpdate(BaseModel):
     """Update an organization's branding."""
+
     name: str | None = None
     slug: str | None = None
     logo_url: str | None = None
@@ -145,6 +157,7 @@ class OrganizationUpdate(BaseModel):
 
 class OrganizationMember(BaseModel):
     """Organization member model."""
+
     id: str
     organization_id: str
     user_id: str
@@ -156,17 +169,20 @@ class OrganizationMember(BaseModel):
 
 class OrganizationMemberInvite(BaseModel):
     """Invite a member to an organization."""
+
     email: str = Field(..., min_length=1)
-    role: str = Field(default="member", pattern=r'^(owner|admin|member)$')
+    role: str = Field(default="member", pattern=r"^(owner|admin|member)$")
 
 
 class OrganizationMemberUpdate(BaseModel):
     """Update organization member role."""
-    role: str = Field(..., pattern=r'^(owner|admin|member)$')
+
+    role: str = Field(..., pattern=r"^(owner|admin|member)$")
 
 
 class OrganizationDomain(BaseModel):
     """Organization domain model."""
+
     id: str
     organization_id: str
     domain: str
@@ -178,10 +194,14 @@ class OrganizationDomain(BaseModel):
 
 class OrganizationDomainCreate(BaseModel):
     """Add a domain to an organization."""
-    domain: str = Field(..., min_length=3, max_length=255, pattern=r'^[a-z0-9][a-z0-9\-\.]*[a-z0-9]$')
+
+    domain: str = Field(
+        ..., min_length=3, max_length=255, pattern=r"^[a-z0-9][a-z0-9\-\.]*[a-z0-9]$"
+    )
 
 
 # ============ Helpers ============
+
 
 def _to_schema(row: OrganizationModel) -> Organization:
     return Organization(
@@ -259,26 +279,49 @@ ALLOWED_IMAGE_TYPES = {
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
-async def get_org_role(user_id: str, org_id: str, db: AsyncSession) -> str | None:
+async def get_org_role(user_id: str, org_id: str, _db: AsyncSession) -> str | None:
     """Get user's role in an organization. Returns None if not a member."""
-    result = await db.execute(
-        select(OrganizationMemberModel.role).where(
-            (OrganizationMemberModel.organization_id == org_id)
-            & (OrganizationMemberModel.user_id == user_id)
-        )
-    )
-    return result.scalar_one_or_none()
+    async with AsyncSessionLocal() as service_db:
+        registry = ServiceRegistry.instance()
+        session_registry = PostgresSessionRegistry.instance()
+        session_id = f"sess-{uuid4().hex}"
+        session_registry.bind(session_id=session_id, db=service_db)
+        token = session_registry.set_current_session(session_id)
+        try:
+            return await registry.organizations.get_organization_role(
+                user_id=user_id,
+                org_id=org_id,
+            )
+        finally:
+            session_registry.reset_current_session(token)
+            session_registry.unbind(session_id)
 
 
-async def require_org_access(user_id: str, org_id: str, db: AsyncSession) -> str:
+async def require_org_access(user_id: str, org_id: str, _db: AsyncSession) -> str:
     """Check that user has access to an organization. Returns role. Raises 403 if not."""
-    role = await get_org_role(user_id, org_id, db)
-    if not role:
-        raise HTTPException(status_code=403, detail="You do not have access to this organization")
-    return role
+    async with AsyncSessionLocal() as service_db:
+        registry = ServiceRegistry.instance()
+        session_registry = PostgresSessionRegistry.instance()
+        session_id = f"sess-{uuid4().hex}"
+        session_registry.bind(session_id=session_id, db=service_db)
+        token = session_registry.set_current_session(session_id)
+        try:
+            return await registry.organizations.require_organization_access(
+                user_id=user_id,
+                org_id=org_id,
+            )
+        except OrganizationPermissionError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have access to this organization",
+            ) from exc
+        finally:
+            session_registry.reset_current_session(token)
+            session_registry.unbind(session_id)
 
 
 # ============ PUBLIC Endpoints (no auth) ============
+
 
 @public_router.get("/slug/{slug}/branding")
 async def get_organization_branding(
@@ -289,9 +332,7 @@ async def get_organization_branding(
     Get organization branding by slug. PUBLIC endpoint - no authentication required.
     This is called by the login page before the user authenticates.
     """
-    result = await db.execute(
-        select(OrganizationModel).where(OrganizationModel.slug == slug)
-    )
+    result = await db.execute(select(OrganizationModel).where(OrganizationModel.slug == slug))
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -299,6 +340,7 @@ async def get_organization_branding(
 
 
 # ============ Authenticated Endpoints ============
+
 
 @router.get("")
 async def list_organizations(
@@ -330,9 +372,7 @@ async def get_organization(
 ) -> Organization:
     """Get an organization by ID. Requires membership."""
     await require_org_access(current_user.id, org_id, db)
-    result = await db.execute(
-        select(OrganizationModel).where(OrganizationModel.id == org_id)
-    )
+    result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -347,9 +387,7 @@ async def create_organization(
 ) -> Organization:
     """Create a new organization. The current user becomes the owner."""
     # Check slug uniqueness
-    existing = await db.execute(
-        select(OrganizationModel).where(OrganizationModel.slug == org.slug)
-    )
+    existing = await db.execute(select(OrganizationModel).where(OrganizationModel.slug == org.slug))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Slug already exists")
 
@@ -412,9 +450,7 @@ async def update_organization(
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can update organization branding")
 
-    result = await db.execute(
-        select(OrganizationModel).where(OrganizationModel.id == org_id)
-    )
+    result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
     org = result.scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -531,8 +567,9 @@ async def list_org_workspaces(
 
     # Fetch org once to provide inherited branding (logos)
     org_res = await db.execute(
-        select(OrganizationModel.logo_url, OrganizationModel.logo_rectangle_url)
-        .where(OrganizationModel.id == org_id)
+        select(OrganizationModel.logo_url, OrganizationModel.logo_rectangle_url).where(
+            OrganizationModel.id == org_id
+        )
     )
     org_row = org_res.first()
     org_logo_url = org_row[0] if org_row else None
@@ -555,20 +592,22 @@ async def list_org_workspaces(
     # Include workspace logo and inherited organization logos to allow UI fallback
     response: list[dict] = []
     for ws in workspaces:
-        response.append({
-            "id": ws.id,
-            "name": ws.name,
-            "slug": ws.slug,
-            "owner_id": ws.owner_id,
-            "organization_id": ws.organization_id,
-            "created_at": ws.created_at,
-            "updated_at": ws.updated_at,
-            # Branding
-            "logo_url": ws.logo_url,
-            "logo_emoji": ws.logo_emoji,
-            "organization_logo_url": org_logo_url,
-            "organization_logo_rectangle_url": org_logo_rect_url,
-        })
+        response.append(
+            {
+                "id": ws.id,
+                "name": ws.name,
+                "slug": ws.slug,
+                "owner_id": ws.owner_id,
+                "organization_id": ws.organization_id,
+                "created_at": ws.created_at,
+                "updated_at": ws.updated_at,
+                # Branding
+                "logo_url": ws.logo_url,
+                "logo_emoji": ws.logo_emoji,
+                "organization_logo_url": org_logo_url,
+                "organization_logo_rectangle_url": org_logo_rect_url,
+            }
+        )
     return response
 
 
@@ -583,6 +622,7 @@ async def list_org_members(
 
     # Get members with user info
     from naas_abi.apps.nexus.apps.api.app.models import UserModel
+
     result = await db.execute(
         select(OrganizationMemberModel, UserModel)
         .join(UserModel, OrganizationMemberModel.user_id == UserModel.id)
@@ -592,15 +632,17 @@ async def list_org_members(
 
     members = []
     for member, user in result.all():
-        members.append(OrganizationMember(
-            id=member.id,
-            organization_id=member.organization_id,
-            user_id=member.user_id,
-            role=member.role,
-            email=user.email,
-            name=user.name,
-            created_at=member.created_at,
-        ))
+        members.append(
+            OrganizationMember(
+                id=member.id,
+                organization_id=member.organization_id,
+                user_id=member.user_id,
+                role=member.role,
+                email=user.email,
+                name=user.name,
+                created_at=member.created_at,
+            )
+        )
 
     return members
 
@@ -619,9 +661,8 @@ async def invite_org_member(
 
     # Find user by email
     from naas_abi.apps.nexus.apps.api.app.models import UserModel
-    result = await db.execute(
-        select(UserModel).where(UserModel.email == invite.email)
-    )
+
+    result = await db.execute(select(UserModel).where(UserModel.email == invite.email))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found with this email")
@@ -693,9 +734,8 @@ async def update_org_member(
 
     # Get user info
     from naas_abi.apps.nexus.apps.api.app.models import UserModel
-    user_result = await db.execute(
-        select(UserModel).where(UserModel.id == user_id)
-    )
+
+    user_result = await db.execute(select(UserModel).where(UserModel.id == user_id))
     user = user_result.scalar_one()
 
     return OrganizationMember(
@@ -748,6 +788,7 @@ async def remove_org_member(
 
 # ============ Organization Domains ============
 
+
 @router.get("/{org_id}/domains")
 async def list_org_domains(
     org_id: str,
@@ -799,6 +840,7 @@ async def add_org_domain(
 
     # Generate verification token
     import secrets
+
     verification_token = secrets.token_urlsafe(32)
 
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -896,14 +938,17 @@ async def delete_org_domain(
 
 # ============ Organization Billing (Placeholder) ============
 
+
 class BillingInfo(BaseModel):
     """Organization billing information."""
+
     plan: str
     usage: dict | None = None
 
 
 class BillingUpgrade(BaseModel):
     """Upgrade organization plan."""
+
     plan: str
 
 
@@ -919,7 +964,7 @@ async def get_org_billing(
     # Return 501 Not Implemented
     raise HTTPException(
         status_code=501,
-        detail="Billing functionality is not yet implemented. This feature will be available in a future release."
+        detail="Billing functionality is not yet implemented. This feature will be available in a future release.",
     )
 
 
@@ -937,7 +982,7 @@ async def upgrade_org_plan(
 
     raise HTTPException(
         status_code=501,
-        detail="Billing upgrades are not yet implemented. Please contact support@naas.ai to discuss enterprise plans."
+        detail="Billing upgrades are not yet implemented. Please contact support@naas.ai to discuss enterprise plans.",
     )
 
 
@@ -954,5 +999,5 @@ async def add_payment_method(
 
     raise HTTPException(
         status_code=501,
-        detail="Payment method management is not yet implemented. Billing features are coming soon."
+        detail="Payment method management is not yet implemented. Billing features are coming soon.",
     )
