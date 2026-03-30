@@ -5,6 +5,7 @@
  * Dynamically imported (no SSR) since xterm requires browser APIs.
  */
 
+import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef, useCallback } from 'react';
 import { getApiUrl } from '@/lib/config';
 

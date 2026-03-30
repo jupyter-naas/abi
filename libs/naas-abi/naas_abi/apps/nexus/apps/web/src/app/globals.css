@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* xterm.js base styles */
-@import '@xterm/xterm/css/xterm.css';
 @layer base {
   /* 
    * naas.ai Brand Guidelines
