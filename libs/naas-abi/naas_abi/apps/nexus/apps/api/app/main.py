@@ -25,6 +25,12 @@ async def _startup(app: FastAPI) -> None:
     """Application startup handler."""
     configure_logging()
 
+    from naas_abi.apps.nexus.apps.api.app.services.registry_bootstrap import (
+        initialize_nexus_service_registry,
+    )
+
+    initialize_nexus_service_registry()
+
     # Validate critical security settings
     validate_settings_on_startup()
 
@@ -286,6 +292,8 @@ def create_app(app: FastAPI | None = None):
     return asgi_app
 
 
+app = create_app()
+
+
 if __name__ == "__main__":
-    app = create_app()
     uvicorn.run(app, host="0.0.0.0", port=9879, reload_dirs=["src", "libs"], reload=True)

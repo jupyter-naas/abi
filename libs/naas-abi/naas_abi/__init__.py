@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import FastAPI
 from naas_abi_core.module.Module import (
     BaseModule,
@@ -9,9 +11,19 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+
+def _initialize_nexus_service_registry() -> None:
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.registry_bootstrap import (
+            initialize_nexus_service_registry,
+        )
+
+        initialize_nexus_service_registry()
+    except Exception:
+        # Registry warm-up must never block module import.
+        pass
 
 
 class TenantConfig(BaseModel):
@@ -329,7 +341,7 @@ class ABIModule(BaseModule):
             OntologyEvent.INSERT,
         )
 
-    def api(self, app: FastAPI) -> None:
+    def on_initialized(self):
         # Initialize Nexus settings
 
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
@@ -337,6 +349,10 @@ class ABIModule(BaseModule):
         settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
 
         nexus_config.settings = nexus_config.Settings(**settings_kwargs)
+
+        _initialize_nexus_service_registry()
+
+    def api(self, app: FastAPI) -> None:
 
         # Keep API and Nexus CORS aligned from a single source of truth.
         app.state.abi_cors_origins = self.engine.api_configuration.cors_origins
