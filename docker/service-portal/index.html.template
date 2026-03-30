@@ -279,7 +279,7 @@ const NODES_DEF = [
     desc: 'Agent memory store, Nexus chat history, and LangGraph checkpoints.',
     status: 'running',
     links: [
-      { label: 'postgresql://localhost:5432', badge: 'non-HTTP' },
+      { label: () => `postgresql://${HOST}:5432`, badge: 'non-HTTP' },
     ],
   },
   {
@@ -312,7 +312,7 @@ const NODES_DEF = [
     status: 'running',
     links: [
       { label: 'Redis Commander', port: 8082, path: '/' },
-      { label: 'redis://localhost:6379', badge: 'non-HTTP' },
+      { label: () => `redis://${HOST}:6379`, badge: 'non-HTTP' },
     ],
   },
   {
@@ -503,8 +503,9 @@ function openPanel(def) {
   if (nonHttp.length) {
     html += '<div class="links-section"><h4>Connection Strings</h4>';
     nonHttp.forEach(l => {
+      const label = typeof l.label === 'function' ? l.label() : l.label;
       html += `<div class="link-item" style="cursor:default">
-        <div class="link-label">${l.label}</div>
+        <div class="link-label">${label}</div>
         <span class="badge blue">non-HTTP</span>
       </div>`;
     });
