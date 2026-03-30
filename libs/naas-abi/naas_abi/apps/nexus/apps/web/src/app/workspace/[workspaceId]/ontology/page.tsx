@@ -432,7 +432,7 @@ export default function OntologyPage() {
               )}
             >
               <Link2 size={14} />
-              Object Property
+              Object Properties
             </button>
           </div>
           <div className="flex items-center gap-3">
@@ -1772,7 +1772,7 @@ function EntityDetailView({
                 </button>
               </div>
               <p className="text-sm text-muted-foreground">
-                {item.type === 'entity' ? 'Class' : 'Object Property'} • {item.objectCount || 0} objects
+                {item.type === 'entity' ? 'Class' : 'Object Properties'} • {item.objectCount || 0} objects
               </p>
             </div>
           </div>
