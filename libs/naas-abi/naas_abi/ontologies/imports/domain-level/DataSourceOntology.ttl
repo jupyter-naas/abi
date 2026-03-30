@@ -9,12 +9,12 @@
 
 <http://ontology.naas.ai/abi/DataSourceOntology> a owl:Ontology ;
     owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
-  dc:title "Data Source Ontology"@en ;
-  dc:description "Ontology for data sources."@en ;
-  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
-  rdfs:comment "Ontology for data sources."@en ;
-  dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
-  dc11:date "2026-03-27"^^xsd:date .
+    dc:title "Data Source Ontology"@en ;
+    dc:description "Ontology for data sources."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Ontology for data sources."@en ;
+    dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+    dc11:date "2026-03-27"^^xsd:date .
 
 #################################################################
 #    Classes
