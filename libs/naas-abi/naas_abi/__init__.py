@@ -314,13 +314,8 @@ class ABIModule(BaseModule):
         import glob
         import os
 
+        # Convert ontologies to Python classes.
         from naas_abi_core import logger
-
-        from naas_abi.pipelines.NexusPlatformPipeline import initialize_nexus
-
-        # Init nexus platform
-        initialize_nexus(self.engine.services.triple_store)
-
         from naas_abi_core.utils.onto2py import onto2py
 
         ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
@@ -340,6 +335,20 @@ class ABIModule(BaseModule):
                 logger.error(
                     f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
                 )
+
+        # # Initialize Nexus platform
+        # from naas_abi.pipelines.NexusPlatformPipeline import (
+        #     NexusPlatformPipeline,
+        #     NexusPlatformPipelineConfiguration,
+        #     NexusPlatformPipelineParameters,
+        # )
+
+        # pipeline = NexusPlatformPipeline(
+        #     NexusPlatformPipelineConfiguration(
+        #         triple_store=self.engine.services.triple_store
+        #     )
+        # )
+        # pipeline.run(NexusPlatformPipelineParameters())
 
     def on_load(self):
         super().on_load()
