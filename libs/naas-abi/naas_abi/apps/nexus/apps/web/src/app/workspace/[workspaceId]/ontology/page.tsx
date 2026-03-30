@@ -910,7 +910,7 @@ function OntologySplitView({
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
   const [didInitExpanded, setDidInitExpanded] = useState(false);
   const isClassMode = mode === 'classes';
-  const modeLabel = isClassMode ? 'Classes' : 'Object Property';
+  const modeLabel = isClassMode ? 'Classes' : 'Object Properties';
   const modeIcon = isClassMode ? Box : Link2;
   const ModeIcon = modeIcon;
 
@@ -1404,7 +1404,7 @@ function OntologyOverviewView({
               {/* List of relations (edges) */}
               <div className="rounded-lg border bg-background">
                 <div className="border-b px-4 py-3">
-                  <h3 className="text-sm font-medium">Object Property</h3>
+                  <h3 className="text-sm font-medium">Object Properties</h3>
                   <p className="text-xs text-muted-foreground">
                     {filteredRelations.length} of {graphEdges.length}
                   </p>
