@@ -13,9 +13,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
-
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
+from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
