@@ -313,6 +313,7 @@ class Workspace(RDFEntity):
         "hosted_on": "http://ontology.naas.ai/nexus/hostedOn",
         "is_workspace_of": "http://ontology.naas.ai/nexus/isWorkspaceOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "logo_url": "http://ontology.naas.ai/nexus/logo_url",
     }
     _object_properties: ClassVar[set[str]] = {
         "has_conversation",
@@ -323,6 +324,14 @@ class Workspace(RDFEntity):
     }
 
     # Data properties
+    logo_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
         Optional[datetime.datetime],
@@ -524,14 +533,53 @@ class Agent(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Agent"
     _name: ClassVar[str] = "Agent"
     _property_uris: ClassVar[dict] = {
+        "class_name": "http://ontology.naas.ai/nexus/class_name",
+        "class_path": "http://ontology.naas.ai/nexus/class_path",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "description": "http://ontology.naas.ai/nexus/description",
         "has_role": "http://ontology.naas.ai/nexus/hasRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "logo_url": "http://ontology.naas.ai/nexus/logo_url",
+        "module_path": "http://ontology.naas.ai/nexus/module_path",
+        "system_prompt": "http://ontology.naas.ai/nexus/system_prompt",
     }
     _object_properties: ClassVar[set[str]] = {"has_role"}
 
     # Data properties
+    description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A description used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = "unknown"
+    logo_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = "unknown"
+    class_name: Optional[Annotated[str, Field(description="Agent class name.")]] = (
+        "unknown"
+    )
+    module_path: Optional[
+        Annotated[str, Field(description="Agent module path in naas-abi.")]
+    ] = "unknown"
+    class_path: Optional[
+        Annotated[str, Field(description="Agent module path and class name.")]
+    ] = "unknown"
+    system_prompt: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A system prompt used in Nexus platform to configure a software agent."
+            ),
+        ]
+    ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
         Optional[datetime.datetime],

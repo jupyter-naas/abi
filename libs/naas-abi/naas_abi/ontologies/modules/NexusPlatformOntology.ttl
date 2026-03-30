@@ -680,3 +680,50 @@ nexus:isRoleOf a owl:ObjectProperty ;
     skos:definition "Relates a role to the generically dependent continuant of which it is the role-side concretization in the Nexus platform."@en ;
     rdfs:domain bfo:BFO_0000023 ;
     rdfs:range bfo:BFO_0000031 .
+
+
+#################################################################
+#    Data Properties
+#################################################################
+
+nexus:description a owl:DatatypeProperty ;
+    rdfs:label "description"@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range xsd:string ;
+    skos:definition "A description used in Nexus platform to identify a generically dependent continuant instance."@en ;
+    skos:example "Agent used to search for information on the web." .
+
+nexus:logo_url a owl:DatatypeProperty ;
+    rdfs:label "logo url"@en ;
+    rdfs:domain nexus:Agent, nexus:Workspace ;
+    rdfs:range xsd:string ;
+    skos:definition "A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance."@en ;
+    skos:example "https://example.com/logo.png" .
+
+nexus:class_name a owl:DatatypeProperty ;
+    rdfs:label "class name"@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range xsd:string ;
+    skos:definition "Agent class name."@en ;
+    skos:example "AbiAgent" .
+
+nexus:module_path a owl:DatatypeProperty ;
+    rdfs:label "module path"@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range xsd:string ;
+    skos:definition "Agent module path in naas-abi."@en ;
+    skos:example "naas_abi.agents.AbiAgent" .
+
+nexus:class_path a owl:DatatypeProperty ;
+    rdfs:label "class path"@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range xsd:string ;
+    skos:definition "Agent module path and class name."@en ;
+    skos:example "naas_abi.agents.AbiAgent/AbiAgent" .
+
+nexus:system_prompt a owl:DatatypeProperty ;
+    rdfs:label "system prompt"@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range xsd:string ;
+    skos:definition "A system prompt used in Nexus platform to configure a software agent."@en ;
+    skos:example "You are a helpful assistant that can answer questions and help with tasks." .
