@@ -19,7 +19,7 @@ class NexusPlatformPipelineConfiguration(PipelineConfiguration):
     triple_store: TripleStoreService
     nexus_namespace: Namespace = Namespace("http://ontology.naas.ai/nexus/")
     nexus_graph_uri: URIRef = URIRef("http://ontology.naas.ai/graph/nexus")
-    force_update: bool = False
+    force_update: bool = True
 
 
 class NexusPlatformPipelineParameters(PipelineParameters):
