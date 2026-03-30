@@ -28,6 +28,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore } from '@/stores/auth';
+import { useFilesStore } from '@/stores/files';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
@@ -42,7 +43,16 @@ async function getOrCreateOpencodeSession(): Promise<string> {
   const r = await fetch(`${OPENCODE_URL}/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
+    body: JSON.stringify({
+      // Auto-approve all tool calls so bash/write don't block on approval
+      permission: [
+        { permission: 'bash',    pattern: '*', action: 'allow' },
+        { permission: 'write',   pattern: '*', action: 'allow' },
+        { permission: 'edit',    pattern: '*', action: 'allow' },
+        { permission: 'delete',  pattern: '*', action: 'allow' },
+        { permission: 'patch',   pattern: '*', action: 'allow' },
+      ],
+    }),
   });
   const s = await r.json();
   _opencodeSessionId = s.id as string;
@@ -106,6 +116,7 @@ export function AIPane() {
   const [opencodeReady, setOpencodeReady] = useState(false);
   const opencodeEsRef = useRef<EventSource | null>(null);
   const opencodeSessionRef = useRef<string | null>(null);
+  const currentAssistantIdRef = useRef<string | null>(null); // mirrors closure var for polling
 
   // Probe opencode availability
   useEffect(() => {
@@ -129,11 +140,16 @@ export function AIPane() {
     es.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data) as { type: string; properties: Record<string, unknown> };
+        const evSessionId = (ev.properties?.sessionID as string | undefined);
+
+        // Ignore events from other sessions (only apply to session-specific events)
+        const isOurSession = !evSessionId || !opencodeSessionRef.current || evSessionId === opencodeSessionRef.current;
 
         // Ensure the assistant bubble exists, keyed by messageID
         const ensureBubble = (msgId: string) => {
           if (!currentAssistantId) {
             currentAssistantId = msgId;
+            currentAssistantIdRef.current = msgId;
             setMessages((prev) => {
               if (prev.find((m) => m.id === msgId)) return prev;
               return [...prev, { id: msgId, role: 'assistant' as const, content: '▌' }];
@@ -141,12 +157,38 @@ export function AIPane() {
           }
         };
 
+        // Auto-reload active file from disk so previews reflect agent edits
+        const reloadActiveFile = () => {
+          const { activeFile, readHostFile, unsavedChanges } = useFilesStore.getState();
+          if (!activeFile) return;
+          readHostFile(activeFile).then(() => {
+            useFilesStore.setState((s) => ({
+              unsavedChanges: { ...s.unsavedChanges, [activeFile]: false },
+            }));
+          });
+        };
+
+        const finishStream = () => {
+          if (currentAssistantId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === currentAssistantId
+                  ? { ...m, content: m.content.replace(/▌$/, '') }
+                  : m
+              )
+            );
+            currentAssistantId = null;
+            currentAssistantIdRef.current = null;
+          }
+          setIsLoading(false);
+          reloadActiveFile();
+        };
+
         // Streaming delta (primary path for streaming text)
-        if (ev.type === 'message.part.delta') {
-          const { sessionID, messageID, field, delta } = ev.properties as {
+        if (ev.type === 'message.part.delta' && isOurSession) {
+          const { messageID, field, delta } = ev.properties as {
             sessionID: string; messageID: string; partID: string; field: string; delta: string;
           };
-          if (opencodeSessionRef.current !== sessionID) return;
           ensureBubble(messageID);
           if (field === 'text') {
             setMessages((prev) =>
@@ -159,17 +201,18 @@ export function AIPane() {
           }
         }
 
-        // Part completed (tool calls / final text snapshot)
-        if (ev.type === 'message.part.updated') {
-          const { part, sessionID } = ev.properties as {
+        // Part completed — show tool calls
+        if (ev.type === 'message.part.updated' && isOurSession) {
+          const { part } = ev.properties as {
             sessionID: string;
-            part: { messageID: string; type: string; text?: string; toolName?: string; state?: string };
+            part: { messageID: string; type: string; tool?: string; toolName?: string; state?: { status?: string } };
           };
-          if (opencodeSessionRef.current !== sessionID) return;
           ensureBubble(part.messageID);
-
-          if ((part.type === 'tool-invocation' || part.type === 'tool_call') && currentAssistantId) {
-            const toolLabel = `\`${part.toolName || 'tool'}\`${part.state === 'result' ? ' ✓' : ' …'}`;
+          // "tool" is the opencode type (not "tool-invocation")
+          if ((part.type === 'tool' || part.type === 'tool-invocation' || part.type === 'tool_call') && currentAssistantId) {
+            const name = part.tool || part.toolName || 'tool';
+            const done = (part.state as Record<string,unknown>)?.status === 'completed';
+            const toolLabel = `\`${name}\`${done ? ' ✓' : ' …'}`;
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === currentAssistantId
@@ -180,19 +223,12 @@ export function AIPane() {
           }
         }
 
-        // Session finished
-        if (ev.type === 'session.idle') {
-          if (currentAssistantId) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === currentAssistantId
-                  ? { ...m, content: m.content.replace(/▌$/, '') }
-                  : m
-              )
-            );
-            currentAssistantId = null;
+        // Session finished — two possible event types
+        if ((ev.type === 'session.idle' || ev.type === 'session.status') && isOurSession) {
+          const status = (ev.properties?.status as Record<string,unknown> | undefined)?.type;
+          if (ev.type === 'session.idle' || status === 'idle') {
+            finishStream();
           }
-          setIsLoading(false);
         }
       } catch { /* ignore */ }
     };
@@ -346,6 +382,44 @@ export function AIPane() {
         opencodeSessionRef.current = sessionId;
         await sendOpencodeMessage(sessionId, userContent);
         // Response arrives via SSE in the useEffect above; isLoading cleared on session.idle
+        // Safety polling: if SSE misses session.idle, poll until last assistant msg is complete
+        const pollSessionId = sessionId;
+        const poll = async () => {
+          // Grace period for SSE to try first
+          await new Promise((r) => setTimeout(r, 3000));
+          for (let i = 0; i < 120; i++) {
+            try {
+              const r = await fetch(`${OPENCODE_URL}/session/${pollSessionId}/message`);
+              if (r.ok) {
+                const msgs = await r.json() as Array<{ info: { role: string; time?: { completed?: number } } }>;
+                const lastAssistant = [...msgs].reverse().find((m) => m.info.role === 'assistant');
+                if (lastAssistant?.info.time?.completed) {
+                  // session complete — clean up cursor if still showing
+                  const aid = currentAssistantIdRef.current;
+                  if (aid) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === aid ? { ...m, content: m.content.replace(/▌$/, '') } : m
+                      )
+                    );
+                    currentAssistantIdRef.current = null;
+                    setIsLoading(false);
+                  }
+                  // Reload active file regardless of cursor state
+                  const { activeFile: af, readHostFile } = useFilesStore.getState();
+                  if (af) readHostFile(af).then(() => {
+                    useFilesStore.setState((s) => ({
+                      unsavedChanges: { ...s.unsavedChanges, [af]: false },
+                    }));
+                  });
+                  return;
+                }
+              }
+            } catch { /* ignore poll errors */ }
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        };
+        poll();
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'opencode error';
         setMessages((prev) => [...prev, { id: Date.now().toString(), role: 'assistant', content: `⚠️ ${msg}` }]);

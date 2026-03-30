@@ -320,6 +320,7 @@ export default function LabPage() {
   const [srcdocKey, setSrcdocKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [terminalHeight, setTerminalHeight] = useState(220);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
 
   const onDragStart = useCallback((e: React.MouseEvent) => {
@@ -340,9 +341,22 @@ export default function LabPage() {
 
   const {
     openFiles, activeFile, fileContents, unsavedChanges,
-    setActiveFile, closeFile, setFileContent, saveHostFile, openFile,
+    setActiveFile, closeFile, setFileContent, saveHostFile, openFile, readHostFile,
   } = useFilesStore();
   const { prompt, dialog: promptDialog } = usePrompt();
+
+  const refreshFromDisk = useCallback(async () => {
+    if (!activeFile) return;
+    setIsRefreshing(true);
+    try {
+      await readHostFile(activeFile);
+      useFilesStore.setState((s) => ({
+        unsavedChanges: { ...s.unsavedChanges, [activeFile]: false },
+      }));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [activeFile, readHostFile]);
 
   // Switch to preview when opening a markdown file, edit for code
   const prevActiveFile = useRef<string | null>(null);
@@ -522,6 +536,19 @@ export default function LabPage() {
                     Save
                   </button>
                 )}
+                <button
+                  onClick={refreshFromDisk}
+                  title="Reload file from disk (auto-applied after agent edits)"
+                  disabled={isRefreshing}
+                  className={cn(
+                    'flex items-center gap-1 rounded px-2 py-0.5 text-xs transition-colors',
+                    isRefreshing
+                      ? 'text-muted-foreground/50 cursor-not-allowed'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <RefreshCw size={12} className={cn(isRefreshing && 'animate-spin')} />
+                </button>
               </div>
             </div>
           )}
