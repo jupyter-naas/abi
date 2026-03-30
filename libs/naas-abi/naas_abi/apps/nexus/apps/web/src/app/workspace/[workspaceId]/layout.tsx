@@ -110,7 +110,7 @@ export default function WorkspaceIdLayout({
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
   
-  const { workspaces, currentWorkspaceId, setCurrentWorkspace } = useWorkspaceStore();
+  const { workspaces, currentWorkspaceId, setCurrentWorkspace, syncWorkspaceConversations } = useWorkspaceStore();
   const { isAuthenticated, token } = useAuthStore();
   const [authReady, setAuthReady] = useState(false);
 
@@ -142,12 +142,19 @@ export default function WorkspaceIdLayout({
       const workspace = workspaces.find(w => w.id === workspaceId);
       if (workspace) {
         setCurrentWorkspace(workspaceId);
+        void syncWorkspaceConversations(workspaceId);
       } else if (workspaces.length > 0) {
         // Redirect to first workspace if not found
         router.replace(`/workspace/${workspaces[0].id}/chat`);
       }
     }
-  }, [workspaceId, currentWorkspaceId, workspaces, setCurrentWorkspace, router]);
+  }, [workspaceId, currentWorkspaceId, workspaces, setCurrentWorkspace, syncWorkspaceConversations, router]);
+
+  useEffect(() => {
+    if (workspaceId) {
+      void syncWorkspaceConversations(workspaceId);
+    }
+  }, [workspaceId, syncWorkspaceConversations]);
 
   // Show nothing while checking auth
   if (!authReady || !token) {

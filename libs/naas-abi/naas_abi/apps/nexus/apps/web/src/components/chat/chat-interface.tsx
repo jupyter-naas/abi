@@ -167,6 +167,7 @@ export function ChatInterface() {
     updateLastMessage,
     getWorkspaceConversations,
     currentWorkspaceId,
+    loadConversationMessages,
   } = useWorkspaceStore();
 
   const { startTyping, stopTyping, onMessage } = useWebSocket();
@@ -216,6 +217,18 @@ export function ChatInterface() {
     
     return cleanup;
   }, [activeConversationId, onMessage, addMessage]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    if (!activeConversationId.startsWith('conv-')) return;
+    const conv = useWorkspaceStore
+      .getState()
+      .conversations.find((c) => c.id === activeConversationId);
+    // If this thread came from backend list (no messages loaded yet), fetch full history.
+    if (!conv || conv.messages.length === 0) {
+      void loadConversationMessages(activeConversationId);
+    }
+  }, [activeConversationId, loadConversationMessages]);
 
   // Handle typing indicators
   const handleInputChange = (value: string) => {
@@ -324,6 +337,9 @@ export function ChatInterface() {
     if ((!input.trim() && attachedImages.length === 0) || isLoading) return;
 
     let conversationId = activeConversationId;
+    const existingConversationBeforeSend = activeConversationId
+      ? useWorkspaceStore.getState().conversations.find((c) => c.id === activeConversationId)
+      : null;
 
     // Create new conversation if none active
     if (!conversationId) {
@@ -367,8 +383,15 @@ export function ChatInterface() {
       const agentData = getAgent(selectedAgent);
       const systemPrompt = agentData?.systemPrompt || null;
       
+      // If this is an existing thread with no local history loaded yet, fetch it first.
+      if (
+        existingConversationBeforeSend &&
+        conversationId.startsWith('conv-') &&
+        existingConversationBeforeSend.messages.length === 0
+      ) {
+        await loadConversationMessages(conversationId);
+      }
       // Get current conversation with fresh state (including the just-added user message)
-      // Using getState() to get the latest state after addMessage() was called
       const freshConversations = useWorkspaceStore.getState().conversations;
       const currentConversation = freshConversations.find(c => c.id === conversationId);
       const allMessages = currentConversation?.messages || [];

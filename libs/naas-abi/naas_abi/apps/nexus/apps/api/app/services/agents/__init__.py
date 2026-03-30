@@ -1,4 +1,3 @@
-from naas_abi.apps.nexus.apps.api.app.services.agents.factory import AgentFactory
 from naas_abi.apps.nexus.apps.api.app.services.agents.port import (
     AgentCreateInput,
     AgentRecord,
@@ -9,7 +8,6 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.service import AgentServic
 
 __all__ = [
     "AgentCreateInput",
-    "AgentFactory",
     "AgentRecord",
     "AgentService",
     "AgentUpdateInput",

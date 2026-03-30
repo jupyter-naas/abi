@@ -48,6 +48,35 @@ class TestConversationCRUD:
         data = response.json()
         assert len(data) == 2
 
+    async def test_list_conversations_filters_by_user(
+        self, client, test_user, second_user, test_workspace
+    ):
+        """List conversations is also scoped to current user."""
+        # Create a conversation as test_user
+        create_response = await client.post(
+            "/api/chat/conversations",
+            json={"workspace_id": test_workspace["id"], "title": "Private List Thread"},
+            headers=test_user["headers"],
+        )
+        assert create_response.status_code == 200
+
+        # Give second_user workspace membership.
+        invite_response = await client.post(
+            f"/api/workspaces/{test_workspace['id']}/members/invite",
+            json={"email": second_user["email"], "role": "member"},
+            headers=test_user["headers"],
+        )
+        assert invite_response.status_code == 200
+
+        # second_user should not see test_user conversations in list endpoint.
+        response = await client.get(
+            f"/api/chat/conversations?workspace_id={test_workspace['id']}",
+            headers=second_user["headers"],
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data == []
+
     async def test_get_conversation_with_messages(self, client, test_user, test_workspace):
         """Get a conversation by ID includes messages."""
         # Create conversation
@@ -86,6 +115,31 @@ class TestConversationCRUD:
         response = await client.get(
             f"/api/chat/conversations/{conv['id']}",
             headers=test_user["headers"],
+        )
+        assert response.status_code == 404
+
+    async def test_get_conversation_filters_by_user(
+        self, client, test_user, second_user, test_workspace
+    ):
+        """Conversation lookup by id is also scoped to current user."""
+        conv_response = await client.post(
+            "/api/chat/conversations",
+            json={"workspace_id": test_workspace["id"], "title": "Private Thread"},
+            headers=test_user["headers"],
+        )
+        conv = conv_response.json()
+
+        # Give second_user workspace membership. They still should not read test_user conversations.
+        invite_response = await client.post(
+            f"/api/workspaces/{test_workspace['id']}/members/invite",
+            json={"email": second_user["email"], "role": "member"},
+            headers=test_user["headers"],
+        )
+        assert invite_response.status_code == 200
+
+        response = await client.get(
+            f"/api/chat/conversations/{conv['id']}",
+            headers=second_user["headers"],
         )
         assert response.status_code == 404
 
