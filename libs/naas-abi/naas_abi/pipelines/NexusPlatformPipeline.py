@@ -217,7 +217,13 @@ class NexusPlatformPipeline(Pipeline):
             )
 
         # Initialize Nexus Platform
+        from rdflib.namespace import OWL, RDF, RDFS, XSD
+
         graph = Graph()
+        graph.bind("rdf", RDF)
+        graph.bind("rdfs", RDFS)
+        graph.bind("owl", OWL)
+        graph.bind("xsd", XSD)
         graph.bind("nexus", self.__nexus_namespace)
 
         graph += self.initialize_nexus_graphs()
