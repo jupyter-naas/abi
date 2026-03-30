@@ -10,22 +10,25 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentCreateInput,
-    AgentFactory,
     AgentRecord,
     AgentService,
     AgentUpdateInput,
 )
+from naas_abi.apps.nexus.apps.api.app.services.registry import (
+    ServiceRegistry,
+    get_service_registry,
+)
 from naas_abi_core import logger
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 
-def get_agent_service(db: AsyncSession = Depends(get_db)) -> AgentService:
-    return AgentFactory.ServicePostgres(db)
+def get_agent_service(
+    registry: ServiceRegistry = Depends(get_service_registry),
+) -> AgentService:
+    return registry.agents
 
 
 def _extract_agent_suggestions(agent_cls: type) -> list[dict[str, str]] | None:
