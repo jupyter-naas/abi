@@ -235,51 +235,6 @@ def create_agent(
     )
     tools += remove_individuals_pipeline.as_tools()
 
-    # Add specialized pipelines
-    from naas_abi.pipelines.UpdateCommercialOrganizationPipeline import (
-        UpdateCommercialOrganizationPipeline,
-        UpdateCommercialOrganizationPipelineConfiguration,
-    )
-    from naas_abi.pipelines.UpdateLegalNamePipeline import (
-        UpdateLegalNamePipeline,
-        UpdateLegalNamePipelineConfiguration,
-    )
-    from naas_abi.pipelines.UpdateLinkedInPagePipeline import (
-        UpdateLinkedInPagePipeline,
-        UpdateLinkedInPagePipelineConfiguration,
-    )
-    from naas_abi.pipelines.UpdatePersonPipeline import (
-        UpdatePersonPipeline,
-        UpdatePersonPipelineConfiguration,
-    )
-    from naas_abi.pipelines.UpdateSkillPipeline import (
-        UpdateSkillPipeline,
-        UpdateSkillPipelineConfiguration,
-    )
-    from naas_abi.pipelines.UpdateTickerPipeline import (
-        UpdateTickerPipeline,
-        UpdateTickerPipelineConfiguration,
-    )
-    from naas_abi.pipelines.UpdateWebsitePipeline import (
-        UpdateWebsitePipeline,
-        UpdateWebsitePipelineConfiguration,
-    )
-
-    specialized_pipelines = [
-        (UpdatePersonPipeline, UpdatePersonPipelineConfiguration),
-        (UpdateSkillPipeline, UpdateSkillPipelineConfiguration),
-        (
-            UpdateCommercialOrganizationPipeline,
-            UpdateCommercialOrganizationPipelineConfiguration,
-        ),
-        (UpdateLinkedInPagePipeline, UpdateLinkedInPagePipelineConfiguration),
-        (UpdateWebsitePipeline, UpdateWebsitePipelineConfiguration),
-        (UpdateLegalNamePipeline, UpdateLegalNamePipelineConfiguration),
-        (UpdateTickerPipeline, UpdateTickerPipelineConfiguration),
-    ]
-    for Pipeline, Configuration in specialized_pipelines:
-        tools += Pipeline(Configuration(MODULE.engine.services.triple_store)).as_tools()
-
     # Add search organizations tools
     from naas_abi_core.modules.templatablesparqlquery import (
         ABIModule as TemplatableSparqlQueryABIModule,
