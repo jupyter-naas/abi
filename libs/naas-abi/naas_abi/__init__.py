@@ -341,7 +341,7 @@ class ABIModule(BaseModule):
             OntologyEvent.INSERT,
         )
 
-    def api(self, app: FastAPI) -> None:
+    def on_initialized(self):
         # Initialize Nexus settings
 
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
@@ -351,6 +351,8 @@ class ABIModule(BaseModule):
         nexus_config.settings = nexus_config.Settings(**settings_kwargs)
 
         _initialize_nexus_service_registry()
+
+    def api(self, app: FastAPI) -> None:
 
         # Keep API and Nexus CORS aligned from a single source of truth.
         app.state.abi_cors_origins = self.engine.api_configuration.cors_origins
