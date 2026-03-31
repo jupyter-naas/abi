@@ -260,8 +260,8 @@ Services can be configured to use different adapters in `config.yaml`:
 - Keep changes scoped; avoid broad refactors unless requested.
 - Preserve existing architecture patterns over stylistic rewrites.
 - If unsure, follow nearest module conventions.
-- When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), add/update an ADR in `adr/`.
-- ADR files should use incremental numbering (`0001-...md`, `0002-...md`, etc.) and include at least: Status, Date, Context, Decision, Consequences.
+- When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), add/update an ADR in `docs/adr/`.
+- ADR files use `YYYYMMDD_topic.md` naming (e.g. `20260212_apache-jena-fuseki-default-triplestore.md`) and must include at least: Status, Date, Context, Decision, Consequences.
 
 ## Quick Cheat Sheet
 
