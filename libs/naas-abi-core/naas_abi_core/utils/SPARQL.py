@@ -5,7 +5,7 @@ from rdflib import DCTERMS, OWL, RDF, RDFS, XSD, Graph, URIRef, query
 
 from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
-from naas_abi_core.utils.Graph import ABI, BFO, CCO, TEST
+from naas_abi_core.utils.Graph import ABI, BFO, CCO
 
 
 class SPARQLUtils:
@@ -181,7 +181,9 @@ class SPARQLUtils:
             logger.error(f"Error getting identifiers map: {e}")
             return {}
 
-    def get_subject_graph(self, uri: str | URIRef, depth: int = 1) -> Graph:
+    def get_subject_graph(
+        self, uri: str | URIRef, depth: int = 1, graph_names: list[str] = []
+    ) -> Graph:
         """
         Get a graph for a given URI with a specified depth of relationships.
         This recursively follows relationships to build a more detailed subgraph.
@@ -216,6 +218,8 @@ class SPARQLUtils:
                     f"OPTIONAL {{ ?o{i - 1} ?p{i} ?o{i} . FILTER(isURI(?o{i - 1})) }}"
                 )
 
+        values = " ".join(f"<{graph_name}>" for graph_name in graph_names)
+
         sparql_query = f"""
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -229,7 +233,10 @@ class SPARQLUtils:
                 {" ".join(construct_clauses)}
             }}
             WHERE {{
+                VALUES ?g {{ {values} }}
+                GRAPH ?g {{
                 {" ".join(where_clauses)}
+                }}
             }}
         """
         try:
@@ -247,7 +254,6 @@ class SPARQLUtils:
         graph.bind("abi", ABI)
         graph.bind("bfo", BFO)
         graph.bind("cco", CCO)
-        graph.bind("test", TEST)
         for triple in results:
             # CONSTRUCT queries return triples directly, no need for ResultRow handling
             graph.add(triple)  # type: ignore
