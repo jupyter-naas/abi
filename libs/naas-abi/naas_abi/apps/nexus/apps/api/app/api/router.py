@@ -17,6 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
                                                             search,
                                                             secrets,
                                                             tenant,
+                                                            views,
                                                             websocket,
                                                             workspaces,
 )
@@ -32,6 +33,7 @@ api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(ontology.router, prefix="/ontology", tags=["ontology"])
 api_router.include_router(graph.router, prefix="/graph", tags=["graph"])
+api_router.include_router(views.router, prefix="/views", tags=["views"])
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(files.router, prefix="/files", tags=["files"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
