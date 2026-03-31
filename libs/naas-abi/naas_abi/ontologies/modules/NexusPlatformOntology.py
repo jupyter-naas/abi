@@ -538,13 +538,15 @@ class Agent(RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "description": "http://ontology.naas.ai/nexus/description",
+        "has_intent": "http://ontology.naas.ai/nexus/hasAgentIntent",
         "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_tool": "http://ontology.naas.ai/nexus/hasAgentTool",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "logo_url": "http://ontology.naas.ai/nexus/logo_url",
         "module_path": "http://ontology.naas.ai/nexus/module_path",
         "system_prompt": "http://ontology.naas.ai/nexus/system_prompt",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role"}
+    _object_properties: ClassVar[set[str]] = {"has_intent", "has_role", "has_tool"}
 
     # Data properties
     description: Optional[
@@ -591,6 +593,12 @@ class Agent(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
+    has_intent: Optional[
+        Annotated[
+            List[Union[AgentIntent, URIRef, str]],
+            Field(description="Relates an agent to an intent available to it."),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
     has_role: Optional[
         Annotated[
             List[Union[AgentRole, URIRef, str]],
@@ -599,6 +607,98 @@ class Agent(RDFEntity):
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
+    has_tool: Optional[
+        Annotated[
+            List[Union[AgentTool, URIRef, str]],
+            Field(description="Relates an agent to a tool available to it."),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
+
+
+class AgentTool(RDFEntity):
+    """
+    Agent Tool
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/AgentTool"
+    _name: ClassVar[str] = "Agent Tool"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "description": "http://ontology.naas.ai/nexus/description",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A description used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = "unknown"
+    label: Annotated[str, Field(description="Label of the resource.")]
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+
+class AgentIntent(RDFEntity):
+    """
+    Agent Intent
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/AgentIntent"
+    _name: ClassVar[str] = "Agent Intent"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "description": "http://ontology.naas.ai/nexus/description",
+        "intent_scope": "http://ontology.naas.ai/nexus/intent_scope",
+        "intent_target": "http://ontology.naas.ai/nexus/intent_target",
+        "intent_type": "http://ontology.naas.ai/nexus/intent_type",
+        "intent_value": "http://ontology.naas.ai/nexus/intent_value",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A description used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = "unknown"
+    intent_type: Optional[
+        Annotated[str, Field(description="The type of the intent.")]
+    ] = "unknown"
+    intent_value: Optional[
+        Annotated[str, Field(description="The value of the intent.")]
+    ] = "unknown"
+    intent_target: Optional[
+        Annotated[str, Field(description="The target of the intent.")]
+    ] = "unknown"
+    intent_scope: Optional[
+        Annotated[str, Field(description="The scope of the intent.")]
+    ] = "unknown"
+    label: Annotated[str, Field(description="Label of the resource.")]
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
 
 
 class Ontology(RDFEntity):
@@ -797,15 +897,10 @@ class KnowledgeGraph(RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "has_graph_view": "http://ontology.naas.ai/nexus/hasGraphView",
-        "has_named_graph": "http://ontology.naas.ai/nexus/hasNamedGraph",
         "has_role": "http://ontology.naas.ai/nexus/hasRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {
-        "has_graph_view",
-        "has_named_graph",
-        "has_role",
-    }
+    _object_properties: ClassVar[set[str]] = {"has_graph_view", "has_role"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -827,65 +922,11 @@ class KnowledgeGraph(RDFEntity):
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_named_graph: Optional[
-        Annotated[
-            List[Union[NamedGraph, URIRef, str]],
-            Field(
-                description="Relates a knowledge graph to a named graph that composes it."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
     has_role: Optional[
         Annotated[
             List[Union[KnowledgeGraphRole, URIRef, str]],
             Field(
                 description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-
-
-class NamedGraph(RDFEntity):
-    """
-    Named Graph
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/NamedGraph"
-    _name: ClassVar[str] = "Named Graph"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
-        "is_named_graph_of": "http://ontology.naas.ai/nexus/isNamedGraphOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"has_role", "is_named_graph_of"}
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    has_role: Optional[
-        Annotated[
-            List[Union[NamedGraphRole, URIRef, str]],
-            Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_named_graph_of: Optional[
-        Annotated[
-            List[Union[KnowledgeGraph, URIRef, str]],
-            Field(
-                description="Relates a named graph to the knowledge graph on which it depends."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -903,13 +944,13 @@ class GraphView(RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "has_graph_filter": "http://ontology.naas.ai/nexus/hasGraphFilter",
         "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "includes_knowledge_graph": "http://ontology.naas.ai/nexus/includesKnowledgeGraph",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "selects_named_graph": "http://ontology.naas.ai/nexus/selectsNamedGraph",
     }
     _object_properties: ClassVar[set[str]] = {
         "has_graph_filter",
         "has_role",
-        "selects_named_graph",
+        "includes_knowledge_graph",
     }
 
     # Data properties
@@ -938,10 +979,10 @@ class GraphView(RDFEntity):
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    selects_named_graph: Optional[
+    includes_knowledge_graph: Optional[
         Annotated[
-            List[Union[NamedGraph, URIRef, str]],
-            Field(description="Relates a graph view to a named graph it selects."),
+            List[Union[KnowledgeGraph, URIRef, str]],
+            Field(description="Relates a graph view to a knowledge graph it includes."),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
@@ -958,10 +999,31 @@ class GraphFilter(RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "has_role": "http://ontology.naas.ai/nexus/hasRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "object_uri": "http://ontology.naas.ai/nexus/object_uri",
+        "predicate_uri": "http://ontology.naas.ai/nexus/predicate_uri",
+        "subject_uri": "http://ontology.naas.ai/nexus/subject_uri",
     }
     _object_properties: ClassVar[set[str]] = {"has_role"}
 
     # Data properties
+    subject_uri: Optional[
+        Annotated[
+            str, Field(description="The URI of the subject filtering the graph view.")
+        ]
+    ] = "unknown"
+    predicate_uri: Optional[
+        Annotated[
+            str, Field(description="The URI of the predicate filtering the graph view.")
+        ]
+    ] = "unknown"
+    object_uri: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The URI or literal of the object filtering the graph view."
+            ),
+        ]
+    ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
         Optional[datetime.datetime],
@@ -1363,32 +1425,6 @@ class KnowledgeGraphRole(RDFEntity):
     ] = os.environ.get("USER")
 
 
-class NamedGraphRole(RDFEntity):
-    """
-    Named Graph Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/NamedGraphRole"
-    _name: ClassVar[str] = "Named Graph Role"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = set()
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-
 class GraphViewRole(RDFEntity):
     """
     Graph View Role
@@ -1530,12 +1566,13 @@ Search.model_rebuild()
 Conversation.model_rebuild()
 Message.model_rebuild()
 Agent.model_rebuild()
+AgentTool.model_rebuild()
+AgentIntent.model_rebuild()
 Ontology.model_rebuild()
 OntologyModule.model_rebuild()
 OntologyClass.model_rebuild()
 OntologyObjectProperty.model_rebuild()
 KnowledgeGraph.model_rebuild()
-NamedGraph.model_rebuild()
 GraphView.model_rebuild()
 GraphFilter.model_rebuild()
 Files.model_rebuild()
@@ -1551,7 +1588,6 @@ OntologyModuleRole.model_rebuild()
 OntologyClassRole.model_rebuild()
 OntologyObjectPropertyRole.model_rebuild()
 KnowledgeGraphRole.model_rebuild()
-NamedGraphRole.model_rebuild()
 GraphViewRole.model_rebuild()
 GraphFilterRole.model_rebuild()
 FileRole.model_rebuild()

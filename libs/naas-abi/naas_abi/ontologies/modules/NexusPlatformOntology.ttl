@@ -182,6 +182,22 @@ nexus:Agent a owl:Class ;
     skos:example "Ontology Assistant", "Search Assistant", "KG Assistant"@en ;
     rdfs:subClassOf bfo:BFO_0000031 ,
         [ a owl:Restriction ;
+          owl:onProperty nexus:hasAgentTool ;
+          owl:someValuesFrom nexus:AgentTool
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasAgentTool ;
+          owl:allValuesFrom nexus:AgentTool
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasAgentIntent ;
+          owl:someValuesFrom nexus:AgentIntent
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasAgentIntent ;
+          owl:allValuesFrom nexus:AgentIntent
+        ] ,
+        [ a owl:Restriction ;
           owl:onProperty nexus:hasRole ;
           owl:someValuesFrom nexus:AgentRole
         ] ,
@@ -189,6 +205,18 @@ nexus:Agent a owl:Class ;
           owl:onProperty nexus:hasRole ;
           owl:allValuesFrom nexus:AgentRole
         ] .
+
+nexus:AgentTool a owl:Class ;
+    rdfs:label "Agent Tool"@en ;
+    skos:definition "A generically dependent continuant representing a tool available to an agent in the Nexus platform."@en ;
+    skos:example "Web Search", "Read File", "Get current date and time"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 .
+
+nexus:AgentIntent a owl:Class ;
+    rdfs:label "Agent Intent"@en ;
+    skos:definition "A generically dependent continuant representing an intent available to an agent in the Nexus platform with intent type, value, target and scope."@en ;
+    skos:example "type: RAW, value: What can you tell about you?, target: I am a software agent developed by Naas.ai, scope: INDIRECT"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 .
 
 nexus:Ontology a owl:Class ;
     rdfs:label "Ontology"@en ;
@@ -241,7 +269,7 @@ nexus:OntologyModule a owl:Class ;
 nexus:OntologyClass a owl:Class ;
     rdfs:label "Ontology Class"@en ;
     skos:definition "A generically dependent continuant representing a class defined within an ontology."@en ;
-    skos:example "Workspace", "Organization", "NamedGraph"@en ;
+    skos:example "Workspace", "Organization"@en ;
     rdfs:subClassOf bfo:BFO_0000031 ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasRole ;
@@ -255,7 +283,7 @@ nexus:OntologyClass a owl:Class ;
 nexus:OntologyObjectProperty a owl:Class ;
     rdfs:label "Ontology Object Property"@en ;
     skos:definition "A generically dependent continuant representing an object property defined within an ontology."@en ;
-    skos:example "hasWorkspace", "hasTenant", "hasNamedGraph"@en ;
+    skos:example "hasWorkspace", "hasTenant"@en ;
     rdfs:subClassOf bfo:BFO_0000031 ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasRole ;
@@ -272,10 +300,6 @@ nexus:KnowledgeGraph a owl:Class ;
     skos:example "Project knowledge graph", "Customer knowledge graph", "Ontology-driven graph store"@en ;
     rdfs:subClassOf bfo:BFO_0000031 ,
         [ a owl:Restriction ;
-          owl:onProperty nexus:hasNamedGraph ;
-          owl:allValuesFrom nexus:NamedGraph
-        ] ,
-        [ a owl:Restriction ;
           owl:onProperty nexus:hasGraphView ;
           owl:allValuesFrom nexus:GraphView
         ] ,
@@ -288,44 +312,18 @@ nexus:KnowledgeGraph a owl:Class ;
           owl:allValuesFrom nexus:KnowledgeGraphRole
         ] .
 
-nexus:NamedGraph a owl:Class ; 
-    rdfs:label "Named Graph"@en ;
-    skos:definition "A generically dependent continuant representing an identified graph stored as part of a knowledge graph."@en ;
-    skos:example "ontology/core", "instances/customers", "analytics/events"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
-        [ a owl:Restriction ;
-          owl:onProperty nexus:isNamedGraphOf ;
-          owl:someValuesFrom nexus:KnowledgeGraph
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty nexus:isNamedGraphOf ;
-          owl:allValuesFrom nexus:KnowledgeGraph
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty nexus:hasRole ;
-          owl:someValuesFrom nexus:NamedGraphRole
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty nexus:hasRole ;
-          owl:allValuesFrom nexus:NamedGraphRole
-        ] .
-
 nexus:GraphView a owl:Class ;
     rdfs:label "Graph View"@en ;
     skos:definition "A generically dependent continuant representing a partial and configured representation of one or more named graphs, defined by graph selection and filters for visualization or analysis."@en ;
     skos:example "Customer-only instance view", "Ontology class hierarchy view", "Project analytics view"@en ;
     rdfs:subClassOf bfo:BFO_0000031 ,
         [ a owl:Restriction ;
-          owl:onProperty nexus:selectsNamedGraph ;
-          owl:someValuesFrom nexus:NamedGraph
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty nexus:selectsNamedGraph ;
-          owl:allValuesFrom nexus:NamedGraph
+          owl:onProperty nexus:includesKnowledgeGraph ;
+          owl:someValuesFrom nexus:KnowledgeGraph
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasGraphFilter ;
-          owl:allValuesFrom nexus:GraphFilter
+          owl:someValuesFrom nexus:GraphFilter
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasRole ;
@@ -446,11 +444,6 @@ nexus:KnowledgeGraphRole a owl:Class ;
     skos:definition "A role associated with a knowledge graph as a structured graph artifact in the Nexus platform."@en ;
     rdfs:subClassOf bfo:BFO_0000023 .
 
-nexus:NamedGraphRole a owl:Class ;
-    rdfs:label "Named Graph Role"@en ;
-    skos:definition "A role associated with a named graph as an identified graph component in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 .
-
 nexus:GraphViewRole a owl:Class ;
     rdfs:label "Graph View Role"@en ;
     skos:definition "A role associated with a graph view as a configured graph representation in the Nexus platform."@en ;
@@ -565,6 +558,20 @@ nexus:isMessageOf a owl:ObjectProperty ;
     rdfs:domain nexus:Message ;
     rdfs:range nexus:Conversation .
 
+nexus:hasAgentIntent a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:label "has intent"@en ;
+    skos:definition "Relates an agent to an intent available to it."@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range nexus:AgentIntent .
+
+nexus:hasAgentTool a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:label "has tool"@en ;
+    skos:definition "Relates an agent to a tool available to it."@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range nexus:AgentTool .
+
 nexus:hasOntologyModule a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000101 ;
     owl:inverseOf nexus:isOntologyModuleOf ;
@@ -595,22 +602,6 @@ nexus:hasOntologyObjectProperty a owl:ObjectProperty ;
     rdfs:domain nexus:Ontology ;
     rdfs:range nexus:OntologyObjectProperty .
 
-nexus:hasNamedGraph a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
-    owl:inverseOf nexus:isNamedGraphOf ;
-    rdfs:label "has named graph"@en ;
-    skos:definition "Relates a knowledge graph to a named graph that composes it."@en ;
-    rdfs:domain nexus:KnowledgeGraph ;
-    rdfs:range nexus:NamedGraph .
-
-nexus:isNamedGraphOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
-    owl:inverseOf nexus:hasNamedGraph ;
-    rdfs:label "is named graph of"@en ;
-    skos:definition "Relates a named graph to the knowledge graph on which it depends."@en ;
-    rdfs:domain nexus:NamedGraph ;
-    rdfs:range nexus:KnowledgeGraph .
-
 nexus:hasGraphView a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000101 ;
     rdfs:label "has graph view"@en ;
@@ -625,12 +616,12 @@ nexus:hasGraphFilter a owl:ObjectProperty ;
     rdfs:domain nexus:GraphView ;
     rdfs:range nexus:GraphFilter .
 
-nexus:selectsNamedGraph a owl:ObjectProperty ;
+nexus:includesKnowledgeGraph a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000084 ;
-    rdfs:label "selects named graph"@en ;
-    skos:definition "Relates a graph view to a named graph it selects."@en ;
+    rdfs:label "includes knowledge graph"@en ;
+    skos:definition "Relates a graph view to a knowledge graph it includes."@en ;
     rdfs:domain nexus:GraphView ;
-    rdfs:range nexus:NamedGraph .
+    rdfs:range nexus:KnowledgeGraph .
 
 nexus:hasFiles a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000101 ;
@@ -669,7 +660,7 @@ nexus:isRoleOf a owl:ObjectProperty ;
 
 nexus:description a owl:DatatypeProperty ;
     rdfs:label "description"@en ;
-    rdfs:domain nexus:Agent ;
+    rdfs:domain nexus:Agent, nexus:AgentTool, nexus:AgentIntent ;
     rdfs:range xsd:string ;
     skos:definition "A description used in Nexus platform to identify a generically dependent continuant instance."@en ;
     skos:example "Agent used to search for information on the web." .
@@ -708,3 +699,52 @@ nexus:system_prompt a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "A system prompt used in Nexus platform to configure a software agent."@en ;
     skos:example "You are a helpful assistant that can answer questions and help with tasks." .
+
+nexus:subject_uri a owl:DatatypeProperty ;
+    rdfs:label "subject uri"@en ;
+    rdfs:domain nexus:GraphFilter ;
+    rdfs:range xsd:string ;
+    skos:definition "The URI of the subject filtering the graph view."@en ;
+    skos:example "http://ontology.naas.ai/abi/3a1c515e-2500-460b-bce2-9a0fdc35354c" .
+
+nexus:predicate_uri a owl:DatatypeProperty ;
+    rdfs:label "predicate uri"@en ;
+    rdfs:domain nexus:GraphFilter ;
+    rdfs:range xsd:string ;
+    skos:definition "The URI of the predicate filtering the graph view."@en ;
+    skos:example "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", "https://www.w3.org/2000/01/rdf-schema#label" .
+
+nexus:object_uri a owl:DatatypeProperty ;
+    rdfs:label "object uri"@en ;
+    rdfs:domain nexus:GraphFilter ;
+    rdfs:range xsd:string ;
+    skos:definition "The URI or literal of the object filtering the graph view."@en ;
+    skos:example "http://ontology.naas.ai/nexus/Agent", "John Doe" .
+
+nexus:intent_type a owl:DatatypeProperty ;
+    rdfs:label "intent type"@en ;
+    rdfs:domain nexus:AgentIntent ;
+    rdfs:range xsd:string ;
+    skos:definition "The type of the intent."@en ;
+    skos:example "RAW", "TOOL", "AGENT" .
+
+nexus:intent_value a owl:DatatypeProperty ;
+    rdfs:label "intent value"@en ;
+    rdfs:domain nexus:AgentIntent ;
+    rdfs:range xsd:string ;
+    skos:definition "The value of the intent."@en ;
+    skos:example "What can you tell about you?" .
+
+nexus:intent_target a owl:DatatypeProperty ;
+    rdfs:label "intent target"@en ;
+    rdfs:domain nexus:AgentIntent ;
+    rdfs:range xsd:string ;
+    skos:definition "The target of the intent."@en ;
+    skos:example "I am a software agent developed by Naas.ai" .
+
+nexus:intent_scope a owl:DatatypeProperty ;
+    rdfs:label "intent scope"@en ;
+    rdfs:domain nexus:AgentIntent ;
+    rdfs:range xsd:string ;
+    skos:definition "The scope of the intent."@en ;
+    skos:example "DIRECT", "INDIRECT" .
