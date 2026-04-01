@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.21.5 (2026-03-27)
+
+### Bug Fixes
+
+- Add default intents handling in IntentAgent
+  ([`04c06cc`](https://github.com/jupyter-naas/abi/commit/04c06cc2042abcf3cd007fc7164c5a3a0d196af9))
+
+- Add type annotation for fresh_queue variable
+  ([`830cf5f`](https://github.com/jupyter-naas/abi/commit/830cf5f9b59989e6d9616fd1165136e5fb7dde53))
+
+
 ## v1.21.4 (2026-03-23)
 
 

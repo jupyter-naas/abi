@@ -12,7 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import _encrypt
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_encrypt
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import ABIServerModel
@@ -25,8 +25,10 @@ router = APIRouter()
 
 # ============ Pydantic Schemas ============
 
+
 class ABIServer(BaseModel):
     """ABI Server model."""
+
     id: str
     workspace_id: str
     name: str
@@ -38,6 +40,7 @@ class ABIServer(BaseModel):
 
 class ABIServerCreate(BaseModel):
     """Create ABI server request."""
+
     name: str = Field(..., min_length=1, max_length=255)
     endpoint: str = Field(..., min_length=1)
     api_key: str | None = None
@@ -45,6 +48,7 @@ class ABIServerCreate(BaseModel):
 
 class ABIServerUpdate(BaseModel):
     """Update ABI server request."""
+
     name: str | None = Field(None, min_length=1, max_length=255)
     endpoint: str | None = Field(None, min_length=1)
     api_key: str | None = None
@@ -52,6 +56,7 @@ class ABIServerUpdate(BaseModel):
 
 
 # ============ Helpers ============
+
 
 def _to_abi_server(row: ABIServerModel) -> ABIServer:
     return ABIServer(
@@ -66,6 +71,7 @@ def _to_abi_server(row: ABIServerModel) -> ABIServer:
 
 
 # ============ Endpoints ============
+
 
 @router.get("/workspaces/{workspace_id}/abi-servers")
 async def list_abi_servers(
@@ -110,7 +116,7 @@ async def create_abi_server(
         workspace_id=workspace_id,
         name=server.name,
         endpoint=server.endpoint,
-        api_key=_encrypt(server.api_key) if server.api_key else None,
+        api_key=deprecated_encrypt(server.api_key) if server.api_key else None,
         enabled=True,
         created_at=now,
         updated_at=now,
@@ -173,7 +179,7 @@ async def update_abi_server(
     if updates.endpoint is not None:
         row.endpoint = updates.endpoint
     if updates.api_key is not None:
-        row.api_key = _encrypt(updates.api_key) if updates.api_key else None
+        row.api_key = deprecated_encrypt(updates.api_key) if updates.api_key else None
     if updates.enabled is not None:
         row.enabled = updates.enabled
 
