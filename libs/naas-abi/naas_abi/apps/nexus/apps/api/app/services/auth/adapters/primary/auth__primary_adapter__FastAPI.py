@@ -5,25 +5,49 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import (APIRouter, Depends, File, HTTPException, Request,
-                     UploadFile, status)
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordRequestForm
 from naas_abi.apps.nexus.apps.api.app.services.audit import (
-    log_login, log_logout, log_password_change, log_register,
-    log_token_refresh)
+    log_login,
+    log_logout,
+    log_password_change,
+    log_register,
+    log_token_refresh,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-    get_auth_service, get_current_user_required, oauth2_scheme, to_user_schema)
+    get_auth_service,
+    get_current_user_required,
+    oauth2_scheme,
+    to_user_schema,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
-    AuthResponse, ForgotPasswordRequest, PasswordChangeRequest,
-    RefreshTokenRequest, RefreshTokenResponse, ResetPasswordRequest, Token,
-    User, UserCreate, UserLogin, UserUpdate)
+    AuthResponse,
+    ForgotPasswordRequest,
+    PasswordChangeRequest,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+    ResetPasswordRequest,
+    Token,
+    User,
+    UserCreate,
+    UserLogin,
+    UserUpdate,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    AuthService, CurrentPasswordInvalidError, EmailAlreadyRegisteredError,
-    EmailAlreadyTakenError, ExpiredResetTokenError, InvalidCredentialsError,
-    InvalidResetTokenError, UserNotFoundError)
+    AuthService,
+    CurrentPasswordInvalidError,
+    EmailAlreadyRegisteredError,
+    EmailAlreadyTakenError,
+    ExpiredResetTokenError,
+    InvalidCredentialsError,
+    InvalidResetTokenError,
+    UserNotFoundError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
-    check_rate_limit, get_rate_limit_identifier)
+    check_rate_limit,
+    get_rate_limit_identifier,
+)
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions as StorageExceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
@@ -323,7 +347,7 @@ async def get_avatar(
     try:
         content = object_storage.get_object(AVATAR_STORAGE_PREFIX, filename)
     except StorageExceptions.ObjectNotFound:
-        raise HTTPException(status_code=404, detail="Avatar not found")
+        raise HTTPException(status_code=404, detail="Avatar not found") from None
     return Response(content=content, media_type=media_type)
 
 
