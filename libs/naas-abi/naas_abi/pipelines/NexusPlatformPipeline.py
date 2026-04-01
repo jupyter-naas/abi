@@ -55,10 +55,16 @@ class NexusPlatformPipeline(Pipeline):
         self.__sparql_utils = SPARQLUtils(self.__triple_store)
 
         # Create the Nexus named graph if it does not exist.
+        logger.debug(f"Nexus graph list: {self.__triple_store.list_graphs()}")
         if self.__nexus_graph_uri not in self.__triple_store.list_graphs():
             self.__triple_store.create_graph(self.__nexus_graph_uri)
-            logger.info(f"Nexus graph created at {self.__nexus_graph_uri}")
-        elif self.__force_update:
+            logger.debug(f"Nexus graph created at {self.__nexus_graph_uri}")
+
+        if (
+            self.__force_update
+            and self.__nexus_graph_uri in self.__triple_store.list_graphs()
+        ):
+            logger.debug(f"Nexus graph cleared at {self.__nexus_graph_uri}")
             self.__triple_store.clear_graph(self.__nexus_graph_uri)
 
     def _query_nexus_instances(
@@ -124,10 +130,15 @@ class NexusPlatformPipeline(Pipeline):
 
         # Add graphs instances to nexus graph
         nexus_graphs = self.list_nexus_graphs()
-        nexus_graph_uris = {graph["uri"] for graph in nexus_graphs}
-        for graph_uri in self.__triple_store.list_graphs():
+        nexus_graph_uris = [str(graph["uri"]) for graph in nexus_graphs]
+        logger.debug(f"Nexus graph URIs: {nexus_graph_uris}")
+        # Some triple-store adapters do not list empty named graphs after clear_graph().
+        # Ensure the Nexus graph itself is always considered for registration.
+        graph_uris = {URIRef(uri) for uri in self.__triple_store.list_graphs()}
+        graph_uris.add(self.__nexus_graph_uri)
+        for graph_uri in graph_uris:
             if str(graph_uri) not in nexus_graph_uris:
-                logger.info(f"🟢 Graph {str(graph_uri)} added to nexus graph")
+                logger.debug(f"🟢 Graph {str(graph_uri)} added to nexus graph")
                 knowledge_graph = self.create_graph_to_nexus_graph(graph_uri)
                 inserted_graph += knowledge_graph.rdf()
 

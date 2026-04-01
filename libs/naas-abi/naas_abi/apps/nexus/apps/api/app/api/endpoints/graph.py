@@ -129,11 +129,25 @@ async def list_graphs(
     store = get_triple_store_service(request)
 
     # Get graphs from nexus ontology graph
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT DISTINCT ?uri ?label
+    WHERE {{
+        GRAPH <{NEXUS_GRAPH_URI}> {{
+            ?uri rdf:type <{KnowledgeGraph._class_uri}> .
+            OPTIONAL {{ ?uri rdfs:label ?label . }}
+        }}
+    }}
+    """
+    rows = store.query(query)
     graphs: list[GraphInfo] = []
-    for graph_uri in store.list_graphs():
-        graph_id = str(graph_uri).split("/")[-1].split("#")[-1]
-        graph_label = graph_id.capitalize()
-        graphs.append(GraphInfo(id=graph_id, uri=str(graph_uri), label=graph_label))
+    for row in rows:
+        assert isinstance(row, ResultRow)
+        graph_uri = str(row.uri)
+        graph_id = graph_uri.split("/")[-1]
+        graph_label = str(row.label) if row.label else graph_id
+        graphs.append(GraphInfo(id=graph_id, uri=graph_uri, label=graph_label))
     return graphs
 
 
