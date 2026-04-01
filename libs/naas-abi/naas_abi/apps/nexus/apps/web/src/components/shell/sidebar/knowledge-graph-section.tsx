@@ -8,7 +8,7 @@ import {
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useKnowledgeGraphStore, type GraphTripleFilter, type GraphView } from '@/stores/knowledge-graph';
+import { useKnowledgeGraphStore, type GraphView } from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { CollapsibleSection } from './collapsible-section';
@@ -203,17 +203,17 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     if (!currentWorkspaceId) return;
     try {
       const apiUrl = getApiUrl();
-      let graphList: { id: string; label: string }[] = [{ id: 'default', label: 'default' }];
+      let graphList: { id: string; label: string }[] = [];
       const namesRes = await authFetch(
         `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
       );
       if (namesRes.ok) {
         const namesData = await namesRes.json();
-        const parsed = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
+        const parsed = Array.isArray(namesData) ? namesData : [];
         const normalized = parsed
           .filter((g: unknown) => g && typeof g === 'object' && 'id' in g && typeof (g as { id: unknown }).id === 'string')
           .map((g: { id: string; label?: string }) => ({ id: g.id, label: g.label ?? g.id }));
-        if (normalized.length > 0) graphList = normalized;
+        graphList = normalized;
       }
 
       const graphs: GraphItem[] = graphList.map((graph) => ({
@@ -266,23 +266,28 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       try {
         const apiUrl = getApiUrl();
         const response = await authFetch(
-          `${apiUrl}/api/graph/views?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+          `${apiUrl}/api/view/list?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
         );
         if (!response.ok) return;
         const data = await response.json();
         const normalizedViews: GraphView[] = Array.isArray(data)
           ? data.map((item: {
             id: string;
-            name: string;
+            label?: string;
+            user_id?: string | null;
+            scope?: 'workspace' | 'user';
+            name?: string;
             graph_names?: string[];
-            filters?: GraphTripleFilter[];
+            graph_filters?: string[];
             created_at?: string;
           }) => ({
             id: item.id,
-            name: item.name,
+            name: item.label ?? item.name ?? item.id,
+            scope: item.scope === 'workspace' ? 'workspace' : 'user',
+            userId: item.user_id ?? undefined,
             type: 'entities',
             graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
-            filters: Array.isArray(item.filters) ? item.filters : [],
+            filters: [],
             createdAt: item.created_at ? new Date(item.created_at) : new Date(),
           }))
           : [];
@@ -294,6 +299,28 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     fetchViews();
   }, [currentWorkspaceId, setViews]);
 
+  const selectKnowledgeGraphRoot = () => {
+    if (activeSavedViewId) {
+      const activeView = views.find((view) => view.id === activeSavedViewId);
+      if (activeView?.graphIds && activeView.graphIds.length > 0) {
+        setVisibleGraphs(activeView.graphIds);
+      }
+      return;
+    }
+
+    if (selectedGraphId && availableGraphs.some((graph) => graph.id === selectedGraphId)) {
+      setVisibleGraphs([selectedGraphId]);
+      return;
+    }
+
+    const firstGraphId = availableGraphs[0]?.id;
+    if (firstGraphId) {
+      setActiveSavedView(null);
+      selectGraph(firstGraphId);
+      setVisibleGraphs([firstGraphId]);
+    }
+  };
+
   return (
     <CollapsibleSection
       id="graph"
@@ -302,7 +329,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       description="Visualize and explore your knowledge"
       href={graphPath}
       collapsed={collapsed}
-      onNavigate={() => setActiveSavedView(null)}
+      onNavigate={selectKnowledgeGraphRoot}
     >
       <div className="flex items-center gap-0.5 px-1 pb-1">
         <button
@@ -501,7 +528,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                         try {
                           const apiUrl = getApiUrl();
                           const response = await authFetch(
-                            `${apiUrl}/api/graph/views/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
+                            `${apiUrl}/api/view/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
                             { method: 'DELETE' }
                           );
                           if (!response.ok) return;

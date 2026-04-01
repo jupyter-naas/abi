@@ -360,6 +360,7 @@ async def get_graph_overview(
     request: Request,
     graph_id: str,
     workspace_id: str = Query(..., description="Workspace ID"),
+    limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
 ) -> GraphOverview:
     """Get overview of a given graph."""
@@ -369,6 +370,7 @@ async def get_graph_overview(
         request=request,
         graph_id=graph_id,
         workspace_id=workspace_id,
+        limit=limit,
         current_user=current_user,
     )
 
