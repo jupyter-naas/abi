@@ -1,328 +1,540 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ABI Service Portal</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      :root {
-        color-scheme: dark;
-        --bg: #07111f;
-        --bg-accent: #11243d;
-        --surface: rgba(12, 25, 44, 0.78);
-        --surface-border: rgba(148, 192, 255, 0.2);
-        --text: #e7eefc;
-        --text-muted: #a8b6ce;
-        --link: #79d8ff;
-        --link-hover: #c0ecff;
-        --badge-bg: rgba(125, 211, 252, 0.16);
-        --badge-text: #bfeaff;
-        --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-      }
-      body {
-        font-family: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        margin: 0;
-        padding: 24px;
-        background:
-          radial-gradient(circle at 8% -5%, rgba(121, 216, 255, 0.22), transparent 34%),
-          radial-gradient(circle at 90% 105%, rgba(79, 138, 255, 0.2), transparent 40%),
-          linear-gradient(140deg, var(--bg) 0%, var(--bg-accent) 48%, #081426 100%);
-        color: var(--text);
-        min-height: 100vh;
-      }
-      a {
-        color: var(--link);
-        text-decoration: none;
-        transition: color 0.2s ease;
-      }
-      a:hover {
-        color: var(--link-hover);
-        text-decoration: underline;
-      }
-      .container {
-        max-width: 1000px;
-        margin: 0 auto;
-      }
-      .header {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 20px;
-      }
-      .header h1 {
-        margin: 0;
-        font-size: 30px;
-        letter-spacing: -0.02em;
-      }
-      .hint {
-        font-size: 14px;
-        color: var(--text-muted);
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 16px;
-      }
-      .section {
-        margin-bottom: 24px;
-      }
-      .section-title {
-        margin: 0 0 12px 0;
-        font-size: 13px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--text-muted);
-      }
-      .section-title .badge {
-        margin-left: 8px;
-        vertical-align: middle;
-      }
-      .card {
-        border: 1px solid var(--surface-border);
-        border-radius: 14px;
-        padding: 14px;
-        background: var(--surface);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(6px);
-        transition: transform 0.18s ease, border-color 0.18s ease;
-      }
-      .card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(192, 236, 255, 0.52);
-      }
-      .card h2 {
-        margin: 0 0 8px 0;
-        font-size: 18px;
-        letter-spacing: -0.01em;
-      }
-      .card p {
-        margin: 0 0 10px 0;
-        font-size: 13px;
-        color: var(--text-muted);
-      }
-      .links {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        font-size: 14px;
-      }
-      .badge {
-        display: inline-block;
-        padding: 2px 6px;
-        border-radius: 999px;
-        font-size: 11px;
-        background: var(--badge-bg);
-        color: var(--badge-text);
-        margin-left: 6px;
-      }
-      .footer {
-        margin-top: 24px;
-        font-size: 12px;
-        color: var(--text-muted);
-      }
-      @media (prefers-color-scheme: light) {
-        :root {
-          color-scheme: light;
-          --bg: #eaf1ff;
-          --bg-accent: #dbe8ff;
-          --surface: rgba(255, 255, 255, 0.82);
-          --surface-border: rgba(16, 48, 96, 0.14);
-          --text: #0f1f3a;
-          --text-muted: #4a5f83;
-          --link: #005bc1;
-          --link-hover: #003d88;
-          --badge-bg: rgba(0, 91, 193, 0.11);
-          --badge-text: #124581;
-          --shadow: 0 10px 24px rgba(16, 46, 92, 0.1);
-        }
-        body {
-          background:
-            radial-gradient(circle at 10% -10%, rgba(255, 255, 255, 0.95), transparent 40%),
-            radial-gradient(circle at 92% 112%, rgba(160, 197, 255, 0.38), transparent 42%),
-            linear-gradient(145deg, var(--bg) 0%, var(--bg-accent) 52%, #f5f9ff 100%);
-        }
-        .card:hover {
-          border-color: rgba(0, 91, 193, 0.34);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h1>ABI Service Portal</h1>
-        <div class="hint">Grouped by typology for faster navigation</div>
-      </div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ABI Service Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/vis-network.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-      <div class="section">
-        <h2 class="section-title">Essentials <span class="badge">our tools</span></h2>
-        <div class="grid">
-          <div class="card">
-            <h2>ABI API</h2>
-            <p>Core ABI service and operator UI.</p>
-            <div class="links">
-              <a href="#" data-port="9879" data-path="/" target="_blank" rel="noreferrer">REST API</a>
-              <a href="#" data-port="9879" data-path="/docs" target="_blank" rel="noreferrer">OpenAPI Docs</a>
-            </div>
-          </div>
+    :root {
+      --bg:           #080d14;
+      --bg2:          #0d1520;
+      --surface:      rgba(14, 22, 38, 0.92);
+      --border:       rgba(100, 180, 255, 0.12);
+      --border-hi:    rgba(100, 200, 255, 0.4);
+      --text:         #ddeeff;
+      --muted:        #6a8aaa;
+      --accent:       #00c8ff;
+      --accent2:      #7c6fff;
+      --green:        #00e5a0;
+      --yellow:       #ffd166;
+      --red:          #ff5e6d;
+      --panel-w:      340px;
+    }
 
-          <div class="card">
-            <h2>Nexus</h2>
-            <p>Artifact repository manager.</p>
-            <div class="links">
-              <a href="#" data-port="3042" data-path="/" target="_blank" rel="noreferrer">Nexus UI</a>
-            </div>
-          </div>
-        </div>
-      </div>
+    html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Space Grotesk', sans-serif; }
 
-      <div class="section">
-        <h2 class="section-title">Databases</h2>
-        <div class="grid">
-          <div class="card">
-            <h2>PostgreSQL</h2>
-            <p>Agent memory database.</p>
-            <div class="links">
-              <span data-host-template="postgresql://abi_user:abi_password@{host}:5432/abi_memory">postgresql://abi_user:abi_password@{host}:5432/abi_memory</span>
-              <span class="badge">non-HTTP</span>
-            </div>
-          </div>
+    /* ── HEADER ── */
+    #header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+      height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px;
+      background: rgba(8, 13, 20, 0.85);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+    #header .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: 16px; letter-spacing: -0.02em;
+    }
+    #header .logo .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.6; transform:scale(0.85); } }
 
-          <div class="card">
-            <h2>Qdrant</h2>
-            <p>Vector database API and dashboard.</p>
-            <div class="links">
-              <a href="#" data-port="6333" data-path="/dashboard" target="_blank" rel="noreferrer">Dashboard</a>
-              <a href="#" data-port="6333" data-path="/" target="_blank" rel="noreferrer">REST API</a>
-              <span data-host-template="gRPC: {host}:6334">gRPC: {host}:6334 <span class="badge">non-HTTP</span></span>
-            </div>
-          </div>
+    #header .subtitle {
+      font-size: 12px; color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    #header .controls { display: flex; align-items: center; gap: 8px; }
+    .btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; padding: 5px 12px;
+      border: 1px solid var(--border-hi); border-radius: 6px;
+      background: transparent; color: var(--accent);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn:hover { background: rgba(0,200,255,0.08); border-color: var(--accent); }
 
-          <div class="card">
-            <h2>Apache Jena TDB2</h2>
-            <p>RDF triple store with HTTP SPARQL query access.</p>
-            <div class="links">
-              <a href="#" data-port="3030" data-path="/" target="_blank" rel="noreferrer">Fuseki Admin UI</a>
-              <a href="#" data-port="3030" data-path="/ds" target="_blank" rel="noreferrer">Dataset endpoint</a>
-              <a href="#" data-port="3030" data-path="/ds/query" target="_blank" rel="noreferrer">SPARQL Query</a>
-              <a href="#" data-port="3000" data-path="/" target="_blank" rel="noreferrer">SPARQL HTTP Query UI</a>
-            </div>
-          </div>
-        </div>
-      </div>
+    /* ── CANVAS ── */
+    #graph { position: fixed; top: 52px; left: 0; right: var(--panel-w); bottom: 0; }
 
-      <div class="section">
-        <h2 class="section-title">Storage</h2>
-        <div class="grid">
-          <div class="card">
-            <h2>MinIO</h2>
-            <p>S3-compatible object storage.</p>
-            <div class="links">
-              <a href="#" data-port="9001" data-path="/" target="_blank" rel="noreferrer">Console</a>
-              <a href="#" data-port="9000" data-path="/" target="_blank" rel="noreferrer">S3 API</a>
-            </div>
-          </div>
-        </div>
-      </div>
+    /* ── SIDE PANEL ── */
+    #panel {
+      position: fixed; top: 52px; right: 0; bottom: 0;
+      width: var(--panel-w);
+      background: var(--bg2);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
 
-      <div class="section">
-        <h2 class="section-title">Messaging and Cache</h2>
-        <div class="grid">
-          <div class="card">
-            <h2>RabbitMQ</h2>
-            <p>AMQP message bus with UI.</p>
-            <div class="links">
-              <a href="#" data-port="15672" data-path="/" target="_blank" rel="noreferrer">Management UI</a>
-              <span data-host-template="AMQP: {host}:5672">AMQP: {host}:5672 <span class="badge">non-HTTP</span></span>
-            </div>
-          </div>
+    #search-wrap {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    #search {
+      width: 100%; padding: 7px 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      outline: none; transition: border 0.2s;
+    }
+    #search:focus { border-color: var(--accent); }
+    #search::placeholder { color: var(--muted); }
 
-          <div class="card">
-            <h2>Redis</h2>
-            <p>In-memory cache and broker.</p>
-            <div class="links">
-              <a href="#" data-port="8082" data-path="/" target="_blank" rel="noreferrer">Redis Commander UI</a>
-              <span data-host-template="redis://{host}:6379">redis://{host}:6379 <span class="badge">non-HTTP</span></span>
-            </div>
-          </div>
-        </div>
-      </div>
+    #panel-placeholder {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px; color: var(--muted); padding: 24px; text-align: center;
+    }
+    #panel-placeholder .icon { font-size: 36px; opacity: 0.3; }
+    #panel-placeholder p { font-size: 13px; line-height: 1.6; }
 
-      <div class="section">
-        <h2 class="section-title">Orchestration</h2>
-        <div class="grid">
-          <div class="card">
-            <h2>Dagster</h2>
-            <p>Workflow orchestration UI.</p>
-            <div class="links">
-              <a href="#" data-port="3001" data-path="/" target="_blank" rel="noreferrer">Dagster UI</a>
-            </div>
-          </div>
-        </div>
-      </div>
+    #panel-content { display: none; flex-direction: column; flex: 1; overflow: hidden; }
 
-      <div class="section">
-        <h2 class="section-title">Matrix</h2>
-        <div class="grid">
-          <div class="card">
-            <h2>Synapse (Matrix)</h2>
-            <p>Homeserver APIs for result distribution.</p>
-            <div class="links">
-              <a href="#" data-port="8008" data-path="/" target="_blank" rel="noreferrer">Client-Server API</a>
-              <span data-host-template="Federation: {host}:8448">Federation: {host}:8448 <span class="badge">non-HTTP</span></span>
-            </div>
-          </div>
+    #panel-header {
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    #panel-header .node-type {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 6px;
+    }
+    #panel-header .node-name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+    #panel-header .node-desc { margin-top: 6px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+    #panel-header .status-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
 
-          <div class="card">
-            <h2>Element Web</h2>
-            <p>Matrix web client for consuming outputs.</p>
-            <div class="links">
-              <a href="#" data-port="8081" data-path="/" target="_blank" rel="noreferrer">Element UI</a>
-            </div>
-          </div>
-        </div>
-      </div>
+    .badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid currentColor;
+    }
+    .badge.green  { color: var(--green);  border-color: rgba(0,229,160,0.3);  background: rgba(0,229,160,0.08); }
+    .badge.yellow { color: var(--yellow); border-color: rgba(255,209,102,0.3); background: rgba(255,209,102,0.08); }
+    .badge.red    { color: var(--red);    border-color: rgba(255,94,109,0.3);  background: rgba(255,94,109,0.08); }
+    .badge.blue   { color: var(--accent); border-color: rgba(0,200,255,0.3);   background: rgba(0,200,255,0.08); }
 
-      <div class="footer">
-        If a link fails, the service may not be running in your active profile.
-      </div>
+    #panel-links { padding: 16px 20px; flex: 1; overflow-y: auto; }
+    #panel-links::-webkit-scrollbar { width: 4px; }
+    #panel-links::-webkit-scrollbar-track { background: transparent; }
+    #panel-links::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .links-section { margin-bottom: 20px; }
+    .links-section h4 {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .link-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; border-radius: 8px;
+      border: 1px solid var(--border); margin-bottom: 6px;
+      cursor: pointer; text-decoration: none; color: var(--text);
+      transition: all 0.18s;
+    }
+    .link-item:hover { border-color: var(--border-hi); background: rgba(0,200,255,0.04); }
+    .link-item .link-label { font-size: 13px; font-weight: 500; }
+    .link-item .link-url { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .link-item .arrow { color: var(--accent); font-size: 14px; opacity: 0.6; }
+
+    /* ── LEGEND ── */
+    #legend {
+      position: fixed; bottom: 20px; left: 20px;
+      display: flex; flex-direction: column; gap: 6px;
+      pointer-events: none;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo">
+    <div class="dot"></div>
+    ABI Service Portal
+  </div>
+  <div class="subtitle">Agentic Brain Infrastructure</div>
+  <div class="controls">
+    <button class="btn" onclick="network.fit()">Fit</button>
+    <button class="btn" onclick="resetLayout()">Reset</button>
+  </div>
+</div>
+
+<!-- GRAPH CANVAS -->
+<div id="graph"></div>
+
+<!-- SIDE PANEL -->
+<div id="panel">
+  <div id="search-wrap">
+    <input id="search" type="text" placeholder="Filter nodes…" oninput="filterNodes(this.value)">
+  </div>
+  <div id="panel-placeholder">
+    <div class="icon">⬡</div>
+    <p>Click any node to explore its services, links, and connections.</p>
+  </div>
+  <div id="panel-content">
+    <div id="panel-header">
+      <div class="node-type" id="p-type"></div>
+      <div class="node-name" id="p-name"></div>
+      <div class="node-desc" id="p-desc"></div>
+      <div class="status-row" id="p-status"></div>
     </div>
-    <script>
-      (() => {
-        const { protocol, hostname } = window.location;
+    <div id="panel-links"></div>
+  </div>
+</div>
 
-        const buildUrl = (port, path = "/") => {
-          const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-          return `${protocol}//${hostname}:${port}${normalizedPath}`;
-        };
+<!-- LEGEND -->
+<div id="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#00c8ff"></div>Core</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7c6fff"></div>AI Providers</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#00e5a0"></div>Custom Modules</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ffd166"></div>Data Services</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ff5e6d"></div>Messaging</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a8b6ce"></div>Tooling</div>
+</div>
 
-        document.querySelectorAll("a[data-port]").forEach((link) => {
-          const port = link.getAttribute("data-port");
-          const path = link.getAttribute("data-path") || "/";
+<script>
+const HOST  = window.location.hostname;
+const PROTO = window.location.protocol;
+const url   = (port, path = '/') => `${PROTO}//${HOST}:${port}${path}`;
 
-          if (!port) {
-            return;
-          }
+// ── NODE CATALOG ─────────────────────────────────────────────────────────────
+// To add your own modules, append entries with group: 'module' below.
+const NODES_DEF = [
 
-          link.setAttribute("href", buildUrl(port, path));
-        });
+  // ── CORE ─────────────────────────────────────────────────────────────────
+  {
+    id: 'abi-api', label: 'ABI API', group: 'core',
+    type: 'Core Service',
+    desc: 'Central ABI agent API — routes conversations, loads modules, serves OpenAPI and WebSocket endpoints.',
+    status: 'local',
+    links: [
+      { label: 'REST API',     port: 9879, path: '/' },
+      { label: 'OpenAPI Docs', port: 9879, path: '/docs' },
+      { label: 'WebSocket :9879/ws', badge: 'non-HTTP' },
+    ],
+  },
+  {
+    id: 'nexus', label: 'Nexus', group: 'core',
+    type: 'Core Service',
+    desc: 'Nexus web application — workspace UI for agents, pipelines, knowledge graphs, and module management.',
+    status: 'local',
+    links: [
+      { label: 'Nexus UI', port: 3042, path: '/' },
+    ],
+  },
+  {
+    id: 'mcp', label: 'MCP\nServer', group: 'core',
+    type: 'Core Service',
+    desc: 'Model Context Protocol server — exposes ABI tools to external clients such as Claude and Cursor.',
+    status: 'local',
+    links: [
+      { label: 'MCP HTTP', port: 8000, path: '/' },
+    ],
+  },
 
-        document.querySelectorAll("[data-host-template]").forEach((node) => {
-          const template = node.getAttribute("data-host-template");
+  // ── AI PROVIDERS ─────────────────────────────────────────────────────────
+  {
+    id: 'chatgpt', label: 'ChatGPT', group: 'ai',
+    type: 'AI Provider',
+    desc: 'OpenAI GPT models — default reasoning engine used by the core AbiAgent and marketplace modules.',
+    status: 'cloud',
+    links: [{ label: 'OpenAI Platform', url: 'https://platform.openai.com', external: true }],
+  },
+  {
+    id: 'claude', label: 'Claude', group: 'ai',
+    type: 'AI Provider',
+    desc: 'Anthropic Claude models — strong at coding, analysis, and long-context document understanding.',
+    status: 'cloud',
+    links: [{ label: 'Anthropic Console', url: 'https://console.anthropic.com', external: true }],
+  },
 
-          if (!template) {
-            return;
-          }
+  // ── DATA SERVICES ─────────────────────────────────────────────────────────
+  {
+    id: 'qdrant', label: 'Qdrant', group: 'data',
+    type: 'Vector Store',
+    desc: 'Vector database — stores embeddings for semantic search used by agents and pipelines.',
+    status: 'running',
+    links: [
+      { label: 'Dashboard', port: 6333, path: '/dashboard' },
+      { label: 'REST API',  port: 6333, path: '/' },
+      { label: 'gRPC :6334', badge: 'non-HTTP' },
+    ],
+  },
+  {
+    id: 'postgres', label: 'PostgreSQL', group: 'data',
+    type: 'Relational DB',
+    desc: 'Agent memory store, Nexus chat history, and LangGraph checkpoints.',
+    status: 'running',
+    links: [
+      { label: () => `postgresql://${HOST}:5432`, badge: 'non-HTTP' },
+    ],
+  },
+  {
+    id: 'fuseki', label: 'Fuseki\n(TDB2)', group: 'data',
+    type: 'Triple Store',
+    desc: 'Apache Jena Fuseki with TDB2 — RDF knowledge graph and SPARQL endpoint for semantic reasoning.',
+    status: 'running',
+    links: [
+      { label: 'Fuseki Admin',     port: 3030, path: '/' },
+      { label: 'SPARQL Endpoint',  port: 3030, path: '/ds/query' },
+      { label: 'YasGUI',           port: 3000, path: '/' },
+    ],
+  },
+  {
+    id: 'minio', label: 'MinIO', group: 'data',
+    type: 'Object Storage',
+    desc: 'S3-compatible object storage — Dagster compute logs, pipeline artifacts, and file assets.',
+    status: 'running',
+    links: [
+      { label: 'Console', port: 9001, path: '/' },
+      { label: 'S3 API :9000', badge: 'non-HTTP' },
+    ],
+  },
 
-          const separator = node.childNodes.length > 1 ? " " : "";
-          node.childNodes[0].textContent = template.replaceAll("{host}", hostname) + separator;
-        });
-      })();
-    </script>
-  </body>
+  // ── MESSAGING ─────────────────────────────────────────────────────────────
+  {
+    id: 'redis', label: 'Redis', group: 'messaging',
+    type: 'Cache / Pub-Sub',
+    desc: 'In-memory cache and pub/sub message broker for real-time events and session state.',
+    status: 'running',
+    links: [
+      { label: 'Redis Commander', port: 8082, path: '/' },
+      { label: () => `redis://${HOST}:6379`, badge: 'non-HTTP' },
+    ],
+  },
+  {
+    id: 'rabbitmq', label: 'RabbitMQ', group: 'messaging',
+    type: 'Message Bus',
+    desc: 'AMQP message bus for event-driven pipeline orchestration and inter-service communication.',
+    status: 'running',
+    links: [
+      { label: 'Management UI', port: 15672, path: '/' },
+      { label: 'AMQP :5672', badge: 'non-HTTP' },
+    ],
+  },
+
+  // ── TOOLING ──────────────────────────────────────────────────────────────
+  {
+    id: 'dagster', label: 'Dagster', group: 'ui',
+    type: 'Orchestration',
+    desc: 'Pipeline orchestration UI — schedule, monitor, and trigger data pipelines and asset materializations.',
+    status: 'local',
+    links: [{ label: 'Dagster UI', port: 3001, path: '/' }],
+  },
+  {
+    id: 'matrix', label: 'Matrix\n+ Element', group: 'ui',
+    type: 'Messaging UI',
+    desc: 'Federated Matrix server (Synapse) and Element web client for distributed AI output delivery.',
+    status: 'running',
+    links: [
+      { label: 'Element Web',  port: 8081, path: '/' },
+      { label: 'Synapse API',  port: 8008, path: '/' },
+    ],
+  },
+
+  // ── CUSTOM MODULES ────────────────────────────────────────────────────────
+  // These nodes are populated from the abi00-modules package loaded by the
+  // project's config.yaml. Add your own modules here following the same shape.
+];
+
+// ── EDGES ─────────────────────────────────────────────────────────────────────
+const EDGES_DEF = [
+  // core ↔ ai providers
+  { from: 'abi-api', to: 'chatgpt' },
+  { from: 'abi-api', to: 'claude'  },
+  // core ↔ core
+  { from: 'abi-api', to: 'nexus' },
+  { from: 'abi-api', to: 'mcp'   },
+  // core ↔ data
+  { from: 'abi-api', to: 'qdrant'   },
+  { from: 'abi-api', to: 'postgres' },
+  { from: 'abi-api', to: 'fuseki'   },
+  { from: 'abi-api', to: 'minio'    },
+  // core ↔ messaging
+  { from: 'abi-api',  to: 'redis'    },
+  { from: 'abi-api',  to: 'rabbitmq' },
+  { from: 'rabbitmq', to: 'abi-api'  },
+  // core ↔ orchestration
+  { from: 'abi-api', to: 'dagster' },
+  { from: 'dagster', to: 'minio'   },
+  { from: 'dagster', to: 'postgres' },
+  // matrix
+  { from: 'matrix', to: 'abi-api' },
+  // nexus ↔ data
+  { from: 'nexus', to: 'postgres' },
+  { from: 'nexus', to: 'redis'    },
+];
+
+// ── COLORS BY GROUP ──────────────────────────────────────────────────────────
+const GROUP_COLORS = {
+  core:      { bg: '#001e30', border: '#00c8ff', font: '#00c8ff', hi: '#00e5ff' },
+  ai:        { bg: '#1a1030', border: '#7c6fff', font: '#a99fff', hi: '#9c8fff' },
+  module:    { bg: '#00200f', border: '#00e5a0', font: '#00e5a0', hi: '#00ffb0' },
+  data:      { bg: '#1e1600', border: '#ffd166', font: '#ffd166', hi: '#ffe080' },
+  messaging: { bg: '#200008', border: '#ff5e6d', font: '#ff7a86', hi: '#ff9099' },
+  ui:        { bg: '#14181e', border: '#8899aa', font: '#a8b6ce', hi: '#b8c6de' },
+};
+
+function buildNodes() {
+  return NODES_DEF.map(n => {
+    const c = GROUP_COLORS[n.group] || GROUP_COLORS.ui;
+    return {
+      id: n.id, label: n.label, group: n.group,
+      color: {
+        background: c.bg, border: c.border,
+        highlight: { background: c.bg, border: c.hi },
+        hover:     { background: c.bg, border: c.hi },
+      },
+      font: { color: c.font, size: 12, face: 'Space Grotesk' },
+      shape: n.group === 'core' ? 'box' : n.group === 'module' ? 'hexagon' : 'dot',
+      size: n.group === 'core' ? 24 : n.group === 'module' ? 20 : 18,
+      borderWidth: n.group === 'core' ? 2.5 : 1.5,
+      borderWidthSelected: 3,
+      margin: n.group === 'core' ? 10 : 6,
+      shadow: { enabled: true, color: c.border + '55', size: 12, x: 0, y: 0 },
+    };
+  });
+}
+
+function buildEdges() {
+  return EDGES_DEF.map((e, i) => ({
+    id: i, from: e.from, to: e.to,
+    color: { color: 'rgba(100,160,220,0.15)', highlight: 'rgba(0,200,255,0.5)', hover: 'rgba(0,200,255,0.35)' },
+    width: 1,
+    smooth: { type: 'cubicBezier', forceDirection: 'none', roundness: 0.4 },
+    arrows: { to: { enabled: false } },
+    selectionWidth: 2,
+  }));
+}
+
+// ── NETWORK ───────────────────────────────────────────────────────────────────
+const container = document.getElementById('graph');
+const nodes = new vis.DataSet(buildNodes());
+const edges = new vis.DataSet(buildEdges());
+const network = new vis.Network(container, { nodes, edges }, {
+  physics: {
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      gravitationalConstant: -55,
+      centralGravity: 0.008,
+      springLength: 130,
+      springConstant: 0.06,
+      damping: 0.5,
+      avoidOverlap: 0.7,
+    },
+    stabilization: { enabled: true, iterations: 200, updateInterval: 10 },
+  },
+  interaction: { hover: true, tooltipDelay: 0, hideEdgesOnDrag: false, navigationButtons: false, keyboard: false },
+  layout: { improvedLayout: false },
+});
+
+network.on('stabilizationIterationsDone', () => network.setOptions({ physics: { enabled: false } }));
+
+// Highlight connected edges on node hover
+network.on('hoverNode', ({ node }) => {
+  const connected = network.getConnectedEdges(node);
+  edges.update(edges.get().map(e => ({
+    id: e.id,
+    color: connected.includes(e.id)
+      ? { color: 'rgba(0,200,255,0.5)' }
+      : { color: 'rgba(100,160,220,0.05)' },
+    width: connected.includes(e.id) ? 2 : 1,
+  })));
+});
+network.on('blurNode', () => {
+  edges.update(edges.get().map(e => ({
+    id: e.id,
+    color: { color: 'rgba(100,160,220,0.15)', highlight: 'rgba(0,200,255,0.5)' },
+    width: 1,
+  })));
+});
+
+// ── PANEL ─────────────────────────────────────────────────────────────────────
+network.on('click', ({ nodes: sel }) => {
+  if (!sel.length) { closePanel(); return; }
+  const def = NODES_DEF.find(n => n.id === sel[0]);
+  if (def) openPanel(def);
+});
+
+function openPanel(def) {
+  document.getElementById('panel-placeholder').style.display = 'none';
+  const pc = document.getElementById('panel-content');
+  pc.style.display = 'flex';
+
+  document.getElementById('p-type').textContent = def.type;
+  document.getElementById('p-name').textContent = def.label.replace('\n', ' ');
+  document.getElementById('p-desc').textContent = def.desc;
+
+  const statusMap = { running: ['green','Running'], local: ['yellow','Local'], cloud: ['blue','Cloud'], module: ['green','Enabled'] };
+  const [cls, lbl] = statusMap[def.status] || ['yellow', 'Unknown'];
+  document.getElementById('p-status').innerHTML = `<span class="badge ${cls}">${lbl}</span>`;
+
+  const http    = def.links.filter(l => !l.badge);
+  const nonHttp = def.links.filter(l => l.badge);
+  let html = '';
+
+  if (http.length) {
+    html += '<div class="links-section"><h4>Open</h4>';
+    http.forEach(l => {
+      const href = l.url || url(l.port, l.path || '/');
+      html += `<a class="link-item" href="${href}" target="_blank" rel="noreferrer">
+        <div>
+          <div class="link-label">${l.label}</div>
+          <div class="link-url">${href}</div>
+        </div>
+        <div class="arrow">↗</div>
+      </a>`;
+    });
+    html += '</div>';
+  }
+  if (nonHttp.length) {
+    html += '<div class="links-section"><h4>Connection Strings</h4>';
+    nonHttp.forEach(l => {
+      const label = typeof l.label === 'function' ? l.label() : l.label;
+      html += `<div class="link-item" style="cursor:default">
+        <div class="link-label">${label}</div>
+        <span class="badge blue">non-HTTP</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  if (!http.length && !nonHttp.length) {
+    html = '<div class="links-section"><h4>Endpoints</h4><div style="color:var(--muted);font-size:12px">No endpoints configured.</div></div>';
+  }
+  document.getElementById('panel-links').innerHTML = html;
+}
+
+function closePanel() {
+  document.getElementById('panel-placeholder').style.display = 'flex';
+  document.getElementById('panel-content').style.display = 'none';
+}
+
+// ── SEARCH / FILTER ───────────────────────────────────────────────────────────
+function filterNodes(q) {
+  const lower = q.toLowerCase().trim();
+  nodes.update(NODES_DEF.map(n => ({
+    id: n.id,
+    opacity: (!lower || n.label.toLowerCase().includes(lower) || n.type.toLowerCase().includes(lower) || n.desc.toLowerCase().includes(lower)) ? 1 : 0.1,
+  })));
+}
+
+function resetLayout() {
+  network.setOptions({ physics: { enabled: true } });
+  setTimeout(() => network.setOptions({ physics: { enabled: false } }), 3000);
+}
+</script>
+</body>
 </html>

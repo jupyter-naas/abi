@@ -180,6 +180,8 @@ interface WorkspaceState {
   deleteConversation: (id: string) => void;
   getWorkspaceConversations: () => Conversation[];
   setCurrentWorkspace: (id: string) => void;
+  syncWorkspaceConversations: (workspaceId?: string) => Promise<void>;
+  loadConversationMessages: (conversationId: string) => Promise<void>;
 
   // Projects
   projects: Project[];
@@ -218,6 +220,47 @@ interface WorkspaceState {
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+const generateConversationId = () => `conv-${Math.random().toString(36).substring(2, 14)}`;
+
+type ApiChatMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  agent?: string | null;
+  created_at?: string;
+};
+
+type ApiConversation = {
+  id: string;
+  workspace_id: string;
+  title?: string;
+  agent?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  messages?: ApiChatMessage[];
+};
+
+const mapApiMessage = (message: ApiChatMessage): Message => ({
+  id: message.id,
+  role: message.role,
+  content: message.content,
+  timestamp: new Date(message.created_at || Date.now()),
+  agent: message.agent || undefined,
+});
+
+const mapApiConversation = (conversation: ApiConversation): Conversation => ({
+  id: conversation.id,
+  workspaceId: conversation.workspace_id,
+  title: conversation.title || 'New Conversation',
+  messages: Array.isArray(conversation.messages) ? conversation.messages.map(mapApiMessage) : [],
+  agent: conversation.agent || 'abi',
+  createdAt: new Date(conversation.created_at || Date.now()),
+  updatedAt: new Date(conversation.updated_at || Date.now()),
+  pinned: Boolean(conversation.pinned),
+  archived: Boolean(conversation.archived),
+});
 
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
@@ -250,7 +293,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setPaneAgent: (agent) => set({ paneAgent: agent }),
 
   createConversation: (projectId?: string) => {
-    const id = generateId();
+    const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
     if (!workspaceId) {
       console.error('Cannot create conversation: no workspace selected');
@@ -458,6 +501,74 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
   setCurrentWorkspace: (id) => {
     set({ currentWorkspaceId: id, activeConversationId: null });
+  },
+
+  syncWorkspaceConversations: async (workspaceId) => {
+    const targetWorkspaceId = workspaceId || get().currentWorkspaceId;
+    if (!targetWorkspaceId) return;
+
+    try {
+      const { authFetch } = await import('./auth');
+      const response = await authFetch(
+        `/api/chat/conversations?workspace_id=${encodeURIComponent(targetWorkspaceId)}`
+      );
+      if (!response.ok) {
+        console.error('Failed to fetch conversations:', response.status);
+        return;
+      }
+
+      const apiConversations = (await response.json()) as ApiConversation[];
+      const fromApi = Array.isArray(apiConversations)
+        ? apiConversations.map(mapApiConversation)
+        : [];
+
+      set((state) => {
+        const existingById = new Map(state.conversations.map((c) => [c.id, c]));
+        const mergedWorkspaceConversations = fromApi.map((apiConv) => {
+          const existing = existingById.get(apiConv.id);
+          if (!existing) return apiConv;
+          return {
+            ...apiConv,
+            // Preserve loaded message history if we already have it in memory.
+            messages: existing.messages.length > 0 ? existing.messages : apiConv.messages,
+          };
+        });
+        const otherWorkspaces = state.conversations.filter(
+          (c) => c.workspaceId !== targetWorkspaceId
+        );
+        const conversations = [...mergedWorkspaceConversations, ...otherWorkspaces].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+        return { conversations };
+      });
+    } catch (error) {
+      console.error('Failed to sync workspace conversations:', error);
+    }
+  },
+
+  loadConversationMessages: async (conversationId) => {
+    if (!conversationId) return;
+    try {
+      const { authFetch } = await import('./auth');
+      const response = await authFetch(`/api/chat/conversations/${conversationId}`);
+      if (!response.ok) {
+        console.error('Failed to fetch conversation details:', response.status);
+        return;
+      }
+
+      const apiConversation = (await response.json()) as ApiConversation;
+      const mapped = mapApiConversation(apiConversation);
+
+      set((state) => {
+        const alreadyExists = state.conversations.some((c) => c.id === mapped.id);
+        const conversations = alreadyExists
+          ? state.conversations.map((c) => (c.id === mapped.id ? mapped : c))
+          : [mapped, ...state.conversations];
+        return { conversations };
+      });
+    } catch (error) {
+      console.error('Failed to load conversation messages:', error);
+    }
   },
 
   // Projects

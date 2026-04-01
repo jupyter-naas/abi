@@ -46,7 +46,8 @@ def test_maybe_rerun_in_project_context_executes_uv_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_root = tmp_path / "project"
-    project_root.mkdir(parents=True)
+    nested_path = project_root / "src" / "feature"
+    nested_path.mkdir(parents=True)
     (project_root / "pyproject.toml").write_text(
         '[project]\nname = "demo"\ndependencies = ["naas-abi-core"]\n',
         encoding="utf-8",
@@ -66,6 +67,7 @@ def test_maybe_rerun_in_project_context_executes_uv_run(
     monkeypatch.delenv("PYTEST_VERSION", raising=False)
     monkeypatch.setattr(bootstrap.sys, "argv", ["abi"])
     monkeypatch.setattr(bootstrap, "find_abi_project_root", lambda: project_root)
+    monkeypatch.setattr(bootstrap.Path, "cwd", lambda: nested_path)
     monkeypatch.setattr(bootstrap, "_get_system_cli_version", lambda: "1.0.0")
     monkeypatch.setattr(bootstrap, "_get_project_cli_version", lambda _: "1.1.0")
     monkeypatch.setattr(
@@ -90,7 +92,7 @@ def test_maybe_rerun_in_project_context_executes_uv_run(
         "module",
         "list",
     ]
-    assert called["cwd"] == str(project_root)
+    assert called["cwd"] == str(nested_path)
     assert called["check"] is True
     env = called["env"]
     assert isinstance(env, dict)

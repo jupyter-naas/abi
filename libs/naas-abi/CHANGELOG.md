@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.13.0 (2026-03-30)
+
+### Bug Fixes
+
+- Make check
+  ([`04f1524`](https://github.com/jupyter-naas/abi/commit/04f1524a0286e004ad9d37db01441d240dbae3d5))
+
+### Features
+
+- Rework remaining endpoints
+  ([`988f8a2`](https://github.com/jupyter-naas/abi/commit/988f8a239c1616101fa20d50d86779ba7090ef37))
+
+- Update initialization of the naas-abi module
+  ([`b53dff1`](https://github.com/jupyter-naas/abi/commit/b53dff10302ed169354ffc28f67fbab199609aaa))
+
+
 ## v1.12.1 (2026-03-19)
 
 ### Bug Fixes

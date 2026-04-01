@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from uuid import uuid4
 
@@ -14,10 +15,24 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.port import (
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+AsyncSessionGetter = Callable[[], AsyncSession | None]
+
 
 class AgentSecondaryAdapterPostgres(AgentPersistencePort):
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    def __init__(self, db: AsyncSession | None = None, db_getter: AsyncSessionGetter | None = None):
+        self._db = db
+        self._db_getter = db_getter
+
+    @property
+    def db(self) -> AsyncSession:
+        if self._db is not None:
+            return self._db
+        if self._db_getter is None:
+            raise RuntimeError("AgentSecondaryAdapterPostgres has no database binding")
+        db = self._db_getter()
+        if db is None:
+            raise RuntimeError("No database session bound in ServiceRegistry context")
+        return db
 
     @staticmethod
     def _to_record(model: AgentConfigModel) -> AgentRecord:

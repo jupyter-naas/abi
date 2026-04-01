@@ -104,6 +104,8 @@ def maybe_rerun_in_project_context(argv: list[str]) -> bool:
     project_version = _get_project_cli_version(project_root)
     _show_rerun_info(project_root, system_version, project_version)
 
+    invocation_cwd = Path.cwd()
+
     arguments = [
         "uv",
         "run",
@@ -117,7 +119,7 @@ def maybe_rerun_in_project_context(argv: list[str]) -> bool:
     try:
         subprocess.run(
             arguments,
-            cwd=str(project_root),
+            cwd=str(invocation_cwd),
             env={**os.environ, REEXEC_ENV_VAR: "true"},
             check=True,
         )
