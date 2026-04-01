@@ -21,7 +21,14 @@ interface GraphItem {
 }
 
 function isSchemaGraph(graph: GraphItem): boolean {
-  return graph.name === 'schema' || graph.id === 'schema' || graph.id.endsWith('/schema');
+  return (
+    graph.name === 'schema'
+    || graph.id === 'schema'
+    || graph.id.endsWith('/schema')
+    || graph.name === 'nexus'
+    || graph.id === 'nexus'
+    || graph.id.endsWith('/nexus')
+  );
 }
 
 const GraphItemRow = React.memo(function GraphItemRow({
