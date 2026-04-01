@@ -492,11 +492,12 @@ async def delete_view(
     return {"status": "deleted"}
 
 
-@router.get("/{graph_id}/overview")
+@router.get("/{view_id}/overview")
 async def get_view_overview(
     request: Request,
     view_id: str,
     workspace_id: str = Query(..., description="Workspace ID"),
+    limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
 ) -> ViewOverview:
     """Get overview of a given graph."""
@@ -506,6 +507,7 @@ async def get_view_overview(
         request=request,
         view_id=view_id,
         workspace_id=workspace_id,
+        limit=limit,
         current_user=current_user,
     )
 

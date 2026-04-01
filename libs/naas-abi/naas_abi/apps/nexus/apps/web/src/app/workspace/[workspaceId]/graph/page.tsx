@@ -126,6 +126,19 @@ interface FilterOptionsResponse {
   objects: FilterOption[];
 }
 
+interface ApiOverview {
+  kpis: {
+    total_instances: number;
+    total_relationships: number;
+    average_degree: number;
+    density: number;
+  };
+  instances_by_class: Array<{
+    type: string;
+    count: number;
+  }>;
+}
+
 interface ViewFilterDraft {
   subject_uri: string;
   predicate_uri: string;
@@ -251,12 +264,14 @@ function FilterOptionDropdown({
   );
 }
 
-interface ApiGraphView {
-  id: string;
+interface GraphViewInfo {
   workspace_id: string;
-  name: string;
+  id: string;
+  label: string;
   graph_names: string[];
-  filters: GraphTripleFilter[];
+  graph_filters: string[];
+  scope: 'workspace' | 'user';
+  user_id?: string | null;
   created_at?: string;
 }
 
@@ -271,6 +286,7 @@ export default function GraphPage() {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<ApiOverview | null>(null);
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -280,6 +296,7 @@ export default function GraphPage() {
   const {
     activeViewType,
     setActiveViewType,
+    selectedGraphId,
     visibleGraphIds,
     setVisibleGraphs,
     views,
@@ -312,6 +329,7 @@ export default function GraphPage() {
     objects: [],
   });
   const [viewFormError, setViewFormError] = useState<string | null>(null);
+  const [viewScope, setViewScope] = useState<'workspace' | 'user'>('user');
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
   const [graphName, setGraphName] = useState('');
   const [graphSlug, setGraphSlug] = useState('');
@@ -330,12 +348,13 @@ export default function GraphPage() {
   const loadFromApi = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setOverview(null);
 
     try {
       const apiUrl = getApiUrl();
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
-      let defaultGraphName = 'default';
+      let defaultGraphName = '';
       let normalized: { id: string; label?: string }[] = [];
 
       try {
@@ -345,78 +364,92 @@ export default function GraphPage() {
       
         if (!namesRes.ok) {
           setGraphOptions([]);
-          return;
+        } else {
+          const namesData = await namesRes.json();
+          const graphs = Array.isArray(namesData)
+            ? namesData
+            : Array.isArray(namesData?.graphs)
+              ? namesData.graphs
+              : [];
+      
+          // Proper type guard: id AND label must be string
+          normalized = graphs.filter(
+            (g: unknown): g is { id: string; label: string } =>
+              typeof g === "object" &&
+              g !== null &&
+              "id" in g &&
+              "label" in g &&
+              typeof (g as any).id === "string" &&
+              typeof (g as any).label === "string"
+          );
+
+          if (normalized.length === 0) {
+            setGraphOptions([]);
+          } else {
+            defaultGraphName = normalized[0].id;
+            setGraphOptions(
+              normalized.map((g: { id: string; label?: string }) => ({
+                id: g.id,
+                name: g.label ?? g.id,
+              }))
+            );
+          }
         }
-      
-        const namesData = await namesRes.json();
-        const graphs = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
-      
-        // Proper type guard: id AND label must be string
-        const normalized = graphs.filter(
-          (g: unknown): g is { id: string; label: string } =>
-            typeof g === "object" &&
-            g !== null &&
-            "id" in g &&
-            "label" in g &&
-            typeof (g as any).id === "string" &&
-            typeof (g as any).label === "string"
-        );
-      
-        if (normalized.length === 0) {
-          setGraphOptions([]);
-          return;
-        }
-      
-        defaultGraphName = normalized[0].id;
-      
-        setGraphOptions(
-          normalized.map((g: { id: string; label?: string }) => ({
-            id: g.id,
-            name: g.label ?? g.id,
-          }))
-        );
       } catch {
         setGraphOptions([]);
       }
 
-      // Resolve label to graph id so we always pass graph_id (not label) to /network
-      const resolveToGraphId = (value: string) => {
-        const found = normalized.find(
-          (g) => g.id === value || (g.label ?? g.id) === value
-        );
-        return found ? found.id : value;
-      };
-
-      // Determine fetch strategy: view_id only if view selected, graph_id only if graph(s) selected.
-      const paramsBase = new URLSearchParams({ workspace_id: workspaceId });
-      let urlsToFetch: string[];
+      // Determine fetch strategy: use view endpoint when view selected; otherwise fetch selected graph.
+      type NetworkRequest = { url: string; init?: RequestInit };
+      let requestsToFetch: NetworkRequest[];
+      let overviewUrl: string | null = null;
 
       if (activeSavedView) {
-        // View selected: single request with view_id only (backend gets graphs + filters from view)
-        paramsBase.set('view_id', activeSavedView.id);
-        urlsToFetch = [`${apiUrl}/api/graph/network?${paramsBase.toString()}`];
-      } else {
-        // Graph(s) selected: one request per graph with graph_id only (id, not label)
-        const graphIdsToFetch =
-          visibleGraphIds.length > 0
-            ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
-            : [defaultGraphName];
-        const safeGraphIds =
-          graphIdsToFetch.length > 0 ? graphIdsToFetch : [defaultGraphName];
-        urlsToFetch = safeGraphIds.map((graphIdOrLabel: string) => {
-          const params = new URLSearchParams({ workspace_id: workspaceId });
-          params.set('graph_id', resolveToGraphId(graphIdOrLabel));
-          return `${apiUrl}/api/graph/network?${params.toString()}`;
+        const params = new URLSearchParams({
+          workspace_id: workspaceId,
+          limit: '500',
         });
+        requestsToFetch = [
+          {
+            url: `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/network?${params.toString()}`,
+          },
+        ];
+        overviewUrl = `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+      } else {
+        const graphIdsToFetch =
+          selectedGraphId
+            ? [selectedGraphId]
+            : visibleGraphIds.length > 0
+            ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
+            : normalized.map((graph) => graph.id);
+        const effectiveGraphId = graphIdsToFetch[0] ?? defaultGraphName ?? '';
+        const params = new URLSearchParams({
+          workspace_id: workspaceId,
+          limit: '500',
+        });
+        requestsToFetch = effectiveGraphId
+          ? [{ url: `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/network?${params.toString()}` }]
+          : [];
+        if (effectiveGraphId) {
+          overviewUrl = `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+        }
       }
 
-      const responses = await Promise.all(
-        urlsToFetch.map((url) =>
-          authFetch(url)
-            .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-            .catch(() => ({ nodes: [], edges: [] }))
-        )
-      );
+      const [responses, overviewResponse] = await Promise.all([
+        Promise.all(
+          requestsToFetch.map(({ url, init }) =>
+            authFetch(url, init)
+              .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
+              .catch(() => ({ nodes: [], edges: [] }))
+          )
+        ),
+        overviewUrl
+          ? authFetch(overviewUrl)
+              .then((res) => (res.ok ? res.json() : null))
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      setOverview(overviewResponse as ApiOverview | null);
       
       // Merge all graph data
       responses.forEach((data) => {
@@ -459,27 +492,38 @@ export default function GraphPage() {
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, visibleGraphIds, activeSavedView]);
+  }, [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView]);
 
   const loadViewsFromApi = useCallback(async () => {
     const apiUrl = getApiUrl();
     const response = await authFetch(
-      `${apiUrl}/api/graph/views?workspace_id=${encodeURIComponent(workspaceId)}`
+      `${apiUrl}/api/view/list?workspace_id=${encodeURIComponent(workspaceId)}`
     );
     if (!response.ok) {
       throw new Error(`Failed to load views: ${response.status}`);
     }
-    const data = await response.json();
-    const normalizedViews: GraphView[] = Array.isArray(data)
-      ? data.map((item: ApiGraphView) => ({
-        id: item.id,
-        name: item.name,
-        type: 'entities',
-        graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
-        filters: Array.isArray(item.filters) ? item.filters : [],
-        createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-      }))
-      : [];
+    const data: unknown = await response.json();
+    const apiViews: GraphViewInfo[] = Array.isArray(data) ? (data as GraphViewInfo[]) : [];
+    const normalizedViews: GraphView[] = apiViews.map((view) => ({
+      id: view.id,
+      name: view.label || view.id,
+      scope: view.scope,
+      userId: view.user_id ?? undefined,
+      type: 'entities',
+      graphIds: Array.isArray(view.graph_names) ? view.graph_names : [],
+      filters: Array.isArray(view.graph_filters)
+        ? view.graph_filters.map(
+            (uri) =>
+              ({
+                subject_uri: '',
+                predicate_uri: '',
+                object_uri: '',
+                uri,
+              }) as GraphTripleFilter
+          )
+        : [],
+      createdAt: view.created_at ? new Date(view.created_at) : new Date(),
+    }));
     setViews(normalizedViews);
   }, [workspaceId, setViews]);
 
@@ -585,7 +629,7 @@ export default function GraphPage() {
     for (const graphId of names) {
       params.append('graph_names', graphId);
     }
-    const response = await authFetch(`${apiUrl}/api/graph/filter-options?${params.toString()}`);
+    const response = await authFetch(`${apiUrl}/api/view/filter-options?${params.toString()}`);
     if (!response.ok) {
       throw new Error(`Failed to load filter options: ${response.status}`);
     }
@@ -628,6 +672,7 @@ export default function GraphPage() {
     setPageMode('graph');
     setEditingViewId(null);
     setViewName('');
+    setViewScope('user');
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
     setViewFormError(null);
@@ -703,47 +748,53 @@ export default function GraphPage() {
     const payload = {
       workspace_id: workspaceId,
       name: normalizedName,
+      scope: viewScope,
       graph_names: graphIds,
       filters: normalizedFilters,
     };
 
-    let savedViewId: string | null = null;
-    if (editingViewId) {
-      const response = await authFetch(
-        `${apiUrl}/api/graph/views/${encodeURIComponent(editingViewId)}?workspace_id=${encodeURIComponent(workspaceId)}`,
-        {
-          method: 'PUT',
+    try {
+      let savedViewId: string | null = null;
+      if (editingViewId) {
+        const response = await authFetch(
+          `${apiUrl}/api/view/${encodeURIComponent(editingViewId)}?workspace_id=${encodeURIComponent(workspaceId)}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!response.ok) {
+          setViewFormError('Failed to update view.');
+          return;
+        }
+        const updated = await response.json();
+        savedViewId = typeof updated?.id === 'string' ? updated.id : editingViewId;
+      } else {
+        const response = await authFetch(`${apiUrl}/api/views`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          setViewFormError('Failed to create view.');
+          return;
         }
-      );
-      if (!response.ok) {
-        setViewFormError('Failed to update view.');
-        return;
+        const created = await response.json();
+        savedViewId = typeof created?.id === 'string' ? created.id : null;
       }
-      const updated = await response.json();
-      savedViewId = typeof updated?.id === 'string' ? updated.id : editingViewId;
-    } else {
-      const response = await authFetch(`${apiUrl}/api/graph/views`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        setViewFormError('Failed to create view.');
-        return;
-      }
-      const created = await response.json();
-      savedViewId = typeof created?.id === 'string' ? created.id : null;
-    }
 
-    await loadViewsFromApi();
-    if (savedViewId) {
-      setActiveSavedView(savedViewId);
+      await loadViewsFromApi();
+      if (savedViewId) {
+        setActiveSavedView(savedViewId);
+      }
+      setVisibleGraphs(graphIds);
+      setActiveViewType('entities');
+      closeCreateViewForm();
+    } catch (err) {
+      console.error('Failed to save graph view:', err);
+      setViewFormError('Failed to reach API. Verify backend is running and API URL is reachable.');
     }
-    setVisibleGraphs(graphIds);
-    setActiveViewType('entities');
-    closeCreateViewForm();
   };
 
   useEffect(() => {
@@ -751,6 +802,7 @@ export default function GraphPage() {
 
     if (editingView) {
       setViewName(editingView.name ?? '');
+      setViewScope(editingView.scope === 'workspace' ? 'workspace' : 'user');
       setSelectedViewGraphIds(Array.isArray(editingView.graphIds) ? editingView.graphIds : []);
       const normalizedFilters = Array.isArray(editingView.filters)
         ? editingView.filters
@@ -776,6 +828,7 @@ export default function GraphPage() {
     }
 
     setViewName('');
+    setViewScope('user');
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
     setViewFormError(null);
@@ -1212,6 +1265,20 @@ export default function GraphPage() {
                     </div>
 
                     <div>
+                      <label className="mb-2 block text-sm font-medium">Visibility</label>
+                      <select
+                        value={viewScope}
+                        onChange={(event) =>
+                          setViewScope(event.target.value === 'workspace' ? 'workspace' : 'user')
+                        }
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="user">Only me (user view)</option>
+                        <option value="workspace">Workspace (shared)</option>
+                      </select>
+                    </div>
+
+                    <div>
                       <label className="mb-2 block text-sm font-medium">Graphs</label>
                       <div className="space-y-1 rounded-lg border p-3">
                         {graphOptions.map((graph) => (
@@ -1352,19 +1419,19 @@ export default function GraphPage() {
                   </button>
                 </div>
                 <div className="grid grid-cols-4 gap-6">
-                  <StatCard title="Total Nodes" value={stats.totalNodes} icon={Circle} />
-                  <StatCard title="Total Edges" value={stats.totalEdges} icon={Link2} />
-                  <StatCard title="Avg Degree" value={stats.avgDegree.toFixed(2)} icon={Share2} />
-                  <StatCard title="Density" value={(stats.density * 100).toFixed(1) + '%'} icon={Workflow} />
+                  <StatCard title="Instances" value={overview?.kpis.total_instances ?? stats.totalNodes} icon={Circle} />
+                  <StatCard title="Relationships" value={overview?.kpis.total_relationships ?? stats.totalEdges} icon={Link2} />
+                  <StatCard title="Average Degree" value={(overview?.kpis.average_degree ?? stats.avgDegree).toFixed(2)} icon={Share2} />
+                  <StatCard title="Density" value={((overview?.kpis.density ?? stats.density) * 100).toFixed(1) + '%'} icon={Workflow} />
                 </div>
 
-                {Object.keys(stats.nodesByType).length > 0 && (
+                {((overview?.instances_by_class.length ?? 0) > 0 || Object.keys(stats.nodesByType).length > 0) && (
                   <div className="mt-8">
                     <h3 className="mb-4 font-medium">Nodes by Type</h3>
                     <div className="rounded-lg border">
-                      {Object.entries(stats.nodesByType)
-                        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-                        .map(([type, count]) => (
+                      {(overview?.instances_by_class ?? Object.entries(stats.nodesByType).map(([type, count]) => ({ type, count })))
+                        .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type))
+                        .map(({ type, count }) => (
                         <div key={type} className="flex items-center justify-between border-b p-3 last:border-b-0">
                           <span className="flex items-center gap-2">
                             <Box size={14} className="text-blue-500" />
