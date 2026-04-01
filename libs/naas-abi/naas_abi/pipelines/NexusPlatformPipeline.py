@@ -3,13 +3,20 @@ from enum import Enum
 from typing import Dict, List
 
 from langchain_core.tools import BaseTool
-from naas_abi.ontologies.modules.NexusPlatformOntology import Agent, KnowledgeGraph
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
+    Agent,
+    AgentIntent,
+    AgentTool,
+    GraphFilter,
+    GraphView,
+    KnowledgeGraph,
+)
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.SPARQL import SPARQLUtils
-from rdflib import Graph, Namespace, URIRef
+from rdflib import RDF, Graph, Namespace, URIRef
 
 
 @dataclass
@@ -98,16 +105,16 @@ class NexusPlatformPipeline(Pipeline):
         nexus_instances = self.__sparql_utils.results_to_list(results)
         return nexus_instances if nexus_instances is not None else []
 
-    def _list_nexus_graphs(self) -> List[Dict]:
+    def list_nexus_graphs(self) -> List[Dict]:
         return self._query_nexus_instances(URIRef(KnowledgeGraph._class_uri))
 
-    def _create_graph_to_nexus_graph(
+    def create_graph_to_nexus_graph(
         self,
         uri: URIRef,
     ) -> KnowledgeGraph:
         knowledge_graph = KnowledgeGraph(
             _uri=uri,
-            label=uri.split("/")[-1].split("#")[-1],
+            label=uri.split("/")[-1].split("#")[-1].capitalize(),
         )
         return knowledge_graph
 
@@ -116,29 +123,31 @@ class NexusPlatformPipeline(Pipeline):
         inserted_graph = Graph()
 
         # Add graphs instances to nexus graph
-        nexus_graphs = self._list_nexus_graphs()
+        nexus_graphs = self.list_nexus_graphs()
         nexus_graph_uris = {graph["uri"] for graph in nexus_graphs}
         for graph_uri in self.__triple_store.list_graphs():
             if str(graph_uri) not in nexus_graph_uris:
                 logger.info(f"🟢 Graph {str(graph_uri)} added to nexus graph")
-                knowledge_graph = self._create_graph_to_nexus_graph(graph_uri)
+                knowledge_graph = self.create_graph_to_nexus_graph(graph_uri)
                 inserted_graph += knowledge_graph.rdf()
 
         self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
         return inserted_graph
 
-    def _list_nexus_agents(self, metadata: dict[str, URIRef] = {}) -> List[Dict]:
+    def list_nexus_agents(self, metadata: dict[str, URIRef] = {}) -> List[Dict]:
         return self._query_nexus_instances(URIRef(Agent._class_uri), metadata)
 
-    def _create_agent_to_nexus_graph(
+    def create_agent_to_nexus_graph(
         self,
         label: str,
-        description: str | None,
-        logo_url: str | None,
-        system_prompt: str | None,
-        class_name: str | None,
-        module_path: str | None,
-        class_path: str | None,
+        description: str | None = None,
+        logo_url: str | None = None,
+        system_prompt: str | None = None,
+        class_name: str | None = None,
+        module_path: str | None = None,
+        class_path: str | None = None,
+        has_intent: list[AgentIntent | URIRef | str] | None = None,
+        has_tool: list[AgentTool | URIRef | str] | None = None,
     ) -> Agent:
         agent = Agent(label=label)
         if description is not None:
@@ -153,6 +162,10 @@ class NexusPlatformPipeline(Pipeline):
             agent.module_path = module_path
         if class_path is not None:
             agent.class_path = class_path
+        if has_intent is not None:
+            agent.has_intent = has_intent
+        if has_tool is not None:
+            agent.has_tool = has_tool
         return agent
 
     def initialize_nexus_agents(self) -> Graph:
@@ -177,7 +190,7 @@ class NexusPlatformPipeline(Pipeline):
                 agents.append(agent_cls)
 
         # create agents in nexus graph
-        nexus_agents = self._list_nexus_agents(
+        nexus_agents = self.list_nexus_agents(
             metadata={"class_path": URIRef(self.__nexus_namespace["class_path"])}
         )
         logger.debug(f"Nexus agents: {nexus_agents}")
@@ -195,8 +208,33 @@ class NexusPlatformPipeline(Pipeline):
             description = getattr(agent_cls, "description", None)
             logo_url = getattr(agent_cls, "logo_url", None)
             system_prompt = getattr(agent_cls, "system_prompt", None)
+            tools = getattr(agent_cls, "tools", None)
+            intents = getattr(agent_cls, "intents", None)
 
-            agent = self._create_agent_to_nexus_graph(
+            if isinstance(tools, list):
+                agent_tools: list = []
+                for tool in tools:
+                    agent_tool = AgentTool(
+                        label=tool.get("name", ""),
+                        description=tool.get("description", ""),
+                    )
+                    inserted_graph += agent_tool.rdf()
+                    agent_tools.append(agent_tool)
+
+            if isinstance(intents, list):
+                agent_intents: list = []
+                for intent in intents:
+                    agent_intent = AgentIntent(
+                        label=intent.intent_value,
+                        intent_value=intent.intent_value,
+                        intent_type=intent.intent_type,
+                        intent_target=intent.intent_target,
+                        intent_scope=intent.intent_scope,
+                    )
+                    inserted_graph += agent_intent.rdf()
+                    agent_intents.append(agent_intent)
+
+            agent = self.create_agent_to_nexus_graph(
                 label=name,
                 description=description,
                 logo_url=logo_url,
@@ -204,8 +242,66 @@ class NexusPlatformPipeline(Pipeline):
                 class_name=agent_cls.__name__,
                 module_path=agent_cls.__module__,
                 class_path=class_path,
+                has_intent=agent_intents,
+                has_tool=agent_tools,
             )
             inserted_graph += agent.rdf()
+
+        self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
+        return inserted_graph
+
+    def list_nexus_graph_views(self, metadata: dict[str, URIRef] = {}) -> List[Dict]:
+        return self._query_nexus_instances(URIRef(GraphView._class_uri), metadata)
+
+    def create_graph_view_to_nexus_graph(
+        self,
+        label: str,
+        has_graph_filter: list[GraphFilter | URIRef | str],
+        includes_knowledge_graph: list[KnowledgeGraph | URIRef | str],
+    ) -> GraphView:
+        graph_view = GraphView(
+            label=label,
+            has_graph_filter=has_graph_filter,
+            includes_knowledge_graph=includes_knowledge_graph,
+        )
+        return graph_view
+
+    def initialize_nexus_graph_views(self) -> Graph:
+        """Ensure the Nexus graph is populated with GraphView instances."""
+        inserted_graph = Graph()
+
+        # Agent view
+        graph_filter = GraphFilter(
+            label="Filter Nexus Agent",
+            predicate_uri=RDF.type,
+            object_uri=URIRef(Agent._class_uri),
+        )
+        inserted_graph += graph_filter.rdf()
+
+        agent_view = self.create_graph_view_to_nexus_graph(
+            label="Agent",
+            has_graph_filter=[graph_filter],
+            includes_knowledge_graph=[self.__nexus_graph_uri],
+        )
+        inserted_graph += agent_view.rdf()
+
+        # Graph view
+        graph_filter = GraphFilter(
+            label="Filter Nexus Graph Views",
+            predicate_uri=RDF.type,
+            object_uri=URIRef(GraphView._class_uri),
+        )
+        inserted_graph += graph_filter.rdf()
+
+        graph_view = self.create_graph_view_to_nexus_graph(
+            label="Graph View",
+            has_graph_filter=[graph_filter],
+            includes_knowledge_graph=[
+                self.__nexus_graph_uri,
+                "http://ontology.naas.ai/graph/schema",
+            ],
+        )
+        inserted_graph += graph_view.rdf()
 
         self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
         return inserted_graph
@@ -228,6 +324,13 @@ class NexusPlatformPipeline(Pipeline):
 
         graph += self.initialize_nexus_graphs()
         graph += self.initialize_nexus_agents()
+        graph += self.initialize_nexus_graph_views()
+
+        # Save graph
+        graph.serialize(
+            destination="libs/naas-abi/naas_abi/ontologies/sandbox/nexus.ttl",
+            format="turtle",
+        )
 
         # Return the Nexus graph
         return graph
