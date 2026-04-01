@@ -323,6 +323,16 @@ class ABIModule(BaseModule):
 
     def on_initialized(self):
         super().on_initialized()
+        # Initialize Nexus settings
+
+        from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
+
+        settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
+
+        nexus_config.settings = nexus_config.Settings(**settings_kwargs)
+
+        _initialize_nexus_service_registry()
+
         import glob
         import os
 
@@ -372,17 +382,6 @@ class ABIModule(BaseModule):
         #     lambda triple: print(f"Triple received: {triple.decode('utf-8')}"),
         #     OntologyEvent.INSERT,
         # )
-
-    def on_initialized(self):
-        # Initialize Nexus settings
-
-        from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
-
-        settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
-
-        nexus_config.settings = nexus_config.Settings(**settings_kwargs)
-
-        _initialize_nexus_service_registry()
 
     def api(self, app: FastAPI) -> None:
 
