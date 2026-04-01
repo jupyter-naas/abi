@@ -180,6 +180,7 @@ const ViewItemRow = React.memo(function ViewItemRow({
 });
 
 export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
+  const GRAPH_CACHE_REFRESH_EVENT = 'graph-cache-refresh';
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -205,6 +206,11 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   const isCreateIndividualView = requestedView === 'create-individual';
   const isSparqlView = requestedView === 'sparql';
   const showGraphRowSelection = isGraphRoute && !isCreateIndividualView && !isSparqlView;
+
+  useEffect(() => {
+    if (!currentWorkspaceId) return;
+    router.prefetch(graphPath);
+  }, [currentWorkspaceId, graphPath, router]);
 
   const fetchGraphs = async () => {
     if (!currentWorkspaceId) return;
@@ -257,7 +263,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
 
   useEffect(() => {
     fetchGraphs();
-  }, [currentWorkspaceId, visibleGraphIds.length, setVisibleGraphs]);
+  }, [currentWorkspaceId, setVisibleGraphs]);
 
   useEffect(() => {
     const onGraphListUpdate = () => {
@@ -352,6 +358,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
         <button
           onClick={() => {
             setActiveSavedView(null);
+            window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
             router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
           }}
           className={cn(
@@ -436,6 +443,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                                 alert(err.detail || 'Failed to clear graph');
                                 return;
                               }
+                              window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
                             } catch (err) {
                               console.error('Failed to clear graph:', err);
                               alert('Failed to clear graph');
@@ -465,6 +473,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                                 alert(err.detail || 'Failed to delete graph');
                                 return;
                               }
+                              window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
                               window.dispatchEvent(new CustomEvent('graph-list-update'));
                               await fetchGraphs();
                             } catch (err) {

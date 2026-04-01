@@ -275,6 +275,45 @@ interface GraphViewInfo {
   created_at?: string;
 }
 
+const GRAPH_CACHE_TTL_MS = 10 * 60 * 1000;
+const GRAPH_CACHE_REFRESH_EVENT = 'graph-cache-refresh';
+
+type TimestampedCacheEntry<T> = {
+  data: T;
+  expiresAt: number;
+};
+
+const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[] }>>();
+const overviewCache = new Map<string, TimestampedCacheEntry<ApiOverview | null>>();
+const graphListCache = new Map<
+  string,
+  TimestampedCacheEntry<{
+    graphOptions: GraphOption[];
+    normalized: Array<{ id: string; label?: string }>;
+    defaultGraphName: string;
+  }>
+>();
+
+function readFreshCache<T>(cache: Map<string, TimestampedCacheEntry<T>>, key: string): T | undefined {
+  const hit = cache.get(key);
+  if (!hit) return undefined;
+  if (Date.now() > hit.expiresAt) {
+    cache.delete(key);
+    return undefined;
+  }
+  return hit.data;
+}
+
+function writeCache<T>(cache: Map<string, TimestampedCacheEntry<T>>, key: string, data: T): void {
+  cache.set(key, { data, expiresAt: Date.now() + GRAPH_CACHE_TTL_MS });
+}
+
+function clearGraphPageCaches(): void {
+  networkCache.clear();
+  overviewCache.clear();
+  graphListCache.clear();
+}
+
 export default function GraphPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -335,6 +374,8 @@ export default function GraphPage() {
   const [graphSlug, setGraphSlug] = useState('');
   const [graphFormError, setGraphFormError] = useState<string | null>(null);
   const [creatingGraph, setCreatingGraph] = useState(false);
+  const loadRequestIdRef = useRef(0);
+  const overviewRequestIdRef = useRef(0);
   const activeSavedView = useMemo(
     () => views.find((view) => view.id === activeSavedViewId) ?? null,
     [views, activeSavedViewId]
@@ -345,10 +386,11 @@ export default function GraphPage() {
   );
 
   // Load graphs from API - fetches all visible graphs and merges them
-  const loadFromApi = useCallback(async () => {
+  const loadFromApi = useCallback(async (options?: { force?: boolean }) => {
+    const forceRefresh = options?.force === true;
+    const requestId = ++loadRequestIdRef.current;
     setLoading(true);
     setError(null);
-    setOverview(null);
 
     try {
       const apiUrl = getApiUrl();
@@ -358,41 +400,53 @@ export default function GraphPage() {
       let normalized: { id: string; label?: string }[] = [];
 
       try {
-        const namesRes = await authFetch(
-          `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`
-        );
-      
-        if (!namesRes.ok) {
-          setGraphOptions([]);
+        const listCacheKey = `graph-list:${workspaceId}`;
+        const cachedGraphList = !forceRefresh ? readFreshCache(graphListCache, listCacheKey) : undefined;
+        if (cachedGraphList) {
+          normalized = cachedGraphList.normalized;
+          defaultGraphName = cachedGraphList.defaultGraphName;
+          setGraphOptions(cachedGraphList.graphOptions);
         } else {
-          const namesData = await namesRes.json();
-          const graphs = Array.isArray(namesData)
-            ? namesData
-            : Array.isArray(namesData?.graphs)
-              ? namesData.graphs
-              : [];
-      
-          // Proper type guard: id AND label must be string
-          normalized = graphs.filter(
-            (g: unknown): g is { id: string; label: string } =>
-              typeof g === "object" &&
-              g !== null &&
-              "id" in g &&
-              "label" in g &&
-              typeof (g as any).id === "string" &&
-              typeof (g as any).label === "string"
+          const namesRes = await authFetch(
+            `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`
           );
 
-          if (normalized.length === 0) {
+          if (!namesRes.ok) {
             setGraphOptions([]);
           } else {
-            defaultGraphName = normalized[0].id;
-            setGraphOptions(
-              normalized.map((g: { id: string; label?: string }) => ({
+            const namesData = await namesRes.json();
+            const graphs = Array.isArray(namesData)
+              ? namesData
+              : Array.isArray(namesData?.graphs)
+                ? namesData.graphs
+                : [];
+
+            // Proper type guard: id AND label must be string
+            normalized = graphs.filter(
+              (g: unknown): g is { id: string; label: string } =>
+                typeof g === "object" &&
+                g !== null &&
+                "id" in g &&
+                "label" in g &&
+                typeof (g as any).id === "string" &&
+                typeof (g as any).label === "string"
+            );
+
+            if (normalized.length === 0) {
+              setGraphOptions([]);
+            } else {
+              defaultGraphName = normalized[0].id;
+              const optionsToCache = normalized.map((g: { id: string; label?: string }) => ({
                 id: g.id,
                 name: g.label ?? g.id,
-              }))
-            );
+              }));
+              setGraphOptions(optionsToCache);
+              writeCache(graphListCache, listCacheKey, {
+                graphOptions: optionsToCache,
+                normalized,
+                defaultGraphName,
+              });
+            }
           }
         }
       } catch {
@@ -402,7 +456,6 @@ export default function GraphPage() {
       // Determine fetch strategy: use view endpoint when view selected; otherwise fetch selected graph.
       type NetworkRequest = { url: string; init?: RequestInit };
       let requestsToFetch: NetworkRequest[];
-      let overviewUrl: string | null = null;
 
       if (activeSavedView) {
         const params = new URLSearchParams({
@@ -414,7 +467,6 @@ export default function GraphPage() {
             url: `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/network?${params.toString()}`,
           },
         ];
-        overviewUrl = `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
       } else {
         const graphIdsToFetch =
           selectedGraphId
@@ -430,26 +482,25 @@ export default function GraphPage() {
         requestsToFetch = effectiveGraphId
           ? [{ url: `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/network?${params.toString()}` }]
           : [];
-        if (effectiveGraphId) {
-          overviewUrl = `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
-        }
       }
 
-      const [responses, overviewResponse] = await Promise.all([
-        Promise.all(
-          requestsToFetch.map(({ url, init }) =>
-            authFetch(url, init)
-              .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-              .catch(() => ({ nodes: [], edges: [] }))
-          )
-        ),
-        overviewUrl
-          ? authFetch(overviewUrl)
-              .then((res) => (res.ok ? res.json() : null))
-              .catch(() => null)
-          : Promise.resolve(null),
-      ]);
-      setOverview(overviewResponse as ApiOverview | null);
+      const networkCacheKey = `network:${requestsToFetch.map(({ url }) => url).join('||')}`;
+      const cachedNetwork = !forceRefresh ? readFreshCache(networkCache, networkCacheKey) : undefined;
+      if (cachedNetwork) {
+        if (requestId === loadRequestIdRef.current) {
+          setNodes(cachedNetwork.nodes);
+          setEdges(cachedNetwork.edges);
+        }
+        return;
+      }
+
+      const responses = await Promise.all(
+        requestsToFetch.map(({ url, init }) =>
+          authFetch(url, init)
+            .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
+            .catch(() => ({ nodes: [], edges: [] }))
+        )
+      );
       
       // Merge all graph data
       responses.forEach((data) => {
@@ -483,16 +534,89 @@ export default function GraphPage() {
       // Deduplicate nodes and edges by ID
       const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values());
       const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values());
-      
+
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
+
       setNodes(uniqueNodes);
       setEdges(uniqueEdges);
+      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges });
     } catch (err) {
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
       console.error('Failed to load graph from API:', err);
       setError(err instanceof Error ? err.message : 'Failed to load graph');
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView]);
+
+  const loadOverviewFromApi = useCallback(async (options?: { force?: boolean }) => {
+    const forceRefresh = options?.force === true;
+    if (pageMode !== 'graph' || activeViewType !== 'overview') {
+      return;
+    }
+
+    const requestId = ++overviewRequestIdRef.current;
+    const apiUrl = getApiUrl();
+    let overviewUrl: string | null = null;
+
+    if (activeSavedView) {
+      overviewUrl = `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+    } else {
+      const graphIdsToFetch =
+        selectedGraphId
+          ? [selectedGraphId]
+          : visibleGraphIds.length > 0
+          ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
+          : graphOptions.map((graph) => graph.id);
+      const effectiveGraphId = graphIdsToFetch[0] ?? '';
+      if (effectiveGraphId) {
+        overviewUrl = `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+      }
+    }
+
+    if (!overviewUrl) {
+      if (requestId === overviewRequestIdRef.current) {
+        setOverview(null);
+      }
+      return;
+    }
+
+    const overviewCacheKey = `overview:${overviewUrl}`;
+    const cachedOverview = !forceRefresh ? readFreshCache(overviewCache, overviewCacheKey) : undefined;
+    if (cachedOverview !== undefined) {
+      if (requestId === overviewRequestIdRef.current) {
+        setOverview(cachedOverview);
+      }
+      return;
+    }
+
+    try {
+      const response = await authFetch(overviewUrl);
+      const data = response.ok ? await response.json() : null;
+      if (requestId === overviewRequestIdRef.current) {
+        setOverview(data as ApiOverview | null);
+        writeCache(overviewCache, overviewCacheKey, data as ApiOverview | null);
+      }
+    } catch {
+      if (requestId === overviewRequestIdRef.current) {
+        setOverview(null);
+      }
+    }
+  }, [
+    activeSavedView,
+    activeViewType,
+    graphOptions,
+    pageMode,
+    selectedGraphId,
+    visibleGraphIds,
+    workspaceId,
+  ]);
 
   const loadViewsFromApi = useCallback(async () => {
     const apiUrl = getApiUrl();
@@ -531,6 +655,28 @@ export default function GraphPage() {
   useEffect(() => {
     loadFromApi();
   }, [loadFromApi]);
+
+  useEffect(() => {
+    if (pageMode !== 'graph' || activeViewType !== 'overview') {
+      setOverview(null);
+      return;
+    }
+    loadOverviewFromApi();
+  }, [activeViewType, loadOverviewFromApi, pageMode]);
+
+  useEffect(() => {
+    const onGraphCacheRefresh = () => {
+      clearGraphPageCaches();
+      void loadFromApi({ force: true });
+      if (pageMode === 'graph' && activeViewType === 'overview') {
+        void loadOverviewFromApi({ force: true });
+      } else {
+        setOverview(null);
+      }
+    };
+    window.addEventListener(GRAPH_CACHE_REFRESH_EVENT, onGraphCacheRefresh);
+    return () => window.removeEventListener(GRAPH_CACHE_REFRESH_EVENT, onGraphCacheRefresh);
+  }, [activeViewType, loadFromApi, loadOverviewFromApi, pageMode]);
 
   useEffect(() => {
     loadViewsFromApi().catch((err) => {
@@ -714,7 +860,8 @@ export default function GraphPage() {
       const created = await response.json();
       setVisibleGraphs([created.id]);
       closeCreateGraphForm();
-      await loadFromApi();
+      clearGraphPageCaches();
+      await loadFromApi({ force: true });
       window.dispatchEvent(new CustomEvent('graph-list-update'));
     } catch (err) {
       setGraphFormError(err instanceof Error ? err.message : 'Failed to create graph');
@@ -863,7 +1010,8 @@ export default function GraphPage() {
         throw new Error(`Failed with status ${response.status}`);
       }
 
-      await loadFromApi();
+      clearGraphPageCaches();
+      await loadFromApi({ force: true });
       closeCreateIndividualForm();
     } catch (err) {
       console.error('Failed to create individual:', err);
