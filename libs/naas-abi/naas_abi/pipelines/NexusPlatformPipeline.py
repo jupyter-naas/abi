@@ -211,8 +211,8 @@ class NexusPlatformPipeline(Pipeline):
             tools = getattr(agent_cls, "tools", None)
             intents = getattr(agent_cls, "intents", None)
 
+            agent_tools: list = []
             if isinstance(tools, list):
-                agent_tools: list = []
                 for tool in tools:
                     agent_tool = AgentTool(
                         label=tool.get("name", ""),
@@ -221,8 +221,8 @@ class NexusPlatformPipeline(Pipeline):
                     inserted_graph += agent_tool.rdf()
                     agent_tools.append(agent_tool)
 
+            agent_intents: list = []
             if isinstance(intents, list):
-                agent_intents: list = []
                 for intent in intents:
                     agent_intent = AgentIntent(
                         label=intent.intent_value,
