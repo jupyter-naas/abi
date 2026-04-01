@@ -1,6 +1,7 @@
+import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, List
+from typing import Annotated
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi import ABIModule
@@ -10,7 +11,8 @@ from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreSer
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from pydantic import Field
-from rdflib import Graph, Namespace
+from rdflib import Graph, Namespace, URIRef
+from rdflib.query import ResultRow
 
 # Define namespaces
 BFO = Namespace("http://purl.obolibrary.org/obo/")
@@ -27,13 +29,17 @@ class RemoveIndividualPipelineConfiguration(PipelineConfiguration):
     """
 
     triple_store: ITripleStoreService
-    datastore_path: str = "datastore/ontology/removed_individual"
+    datastore_path: str = "knowledge_graph/remove"
 
 
 class RemoveIndividualPipelineParameters(PipelineParameters):
-    uris_to_remove: Annotated[
-        List[str],
-        Field(description="List of URIs to remove from the ontology", min_items=1),
+    uri: Annotated[
+        str,
+        Field(description="URI to remove from the ontology"),
+    ]
+    graph_uri: Annotated[
+        str,
+        Field(description="Graph URI to remove the individual from"),
     ]
 
 
@@ -89,36 +95,35 @@ class RemoveIndividualPipeline(Pipeline):
                 "Parameters must be of type RemoveIndividualPipelineParameters"
             )
 
-        output_dir = self.__configuration.datastore_path
-        removed_graph = Graph()
-        removed_graph.bind("bfo", BFO)
-        removed_graph.bind("cco", CCO)
-        removed_graph.bind("abi", ABI)
+        graph_uri = parameters.graph_uri
+        graph_name = graph_uri.split("/")[-1]
+        output_dir = os.path.join(self.__configuration.datastore_path, graph_name)
 
-        for uri in parameters.uris_to_remove:
-            logger.info(f"Getting triples for URI: {uri}")
-            results = self.get_all_triples_for_uri(uri)
-            graph_remove = Graph()
+        logger.info(
+            f"Removing triples for URI: {parameters.uri} from graph: {graph_uri}"
+        )
+        results = self.get_all_triples_for_uri(str(parameters.uri))
+        logger.info(f"Found {len(results)} triples for URI: {parameters.uri}")
 
-            for row in results:
-                s, p, o = row
-                graph_remove.add((s, p, o))
+        # Add triples to graph
+        graph = Graph()
+        for row in results:
+            assert isinstance(row, ResultRow)
+            s, p, o = row
+            graph.add((s, p, o))
 
-            if len(graph_remove) > 0:
-                logger.info(f"✅ Removing {len(graph_remove)} triples for URI: {uri}")
-                logger.info(graph_remove.serialize(format="turtle"))
-                self.__storage_utils.save_triples(
-                    graph_remove, output_dir, f"{uri.split('/')[-1]}.ttl"
-                )
-                self.__configuration.triple_store.remove(graph_remove)
+        # Save graph and remove triples
+        if len(graph) > 0:
+            logger.info(f"✅ Removing {len(graph)} triples for URI: {parameters.uri}")
+            logger.info(graph.serialize(format="turtle"))
+            self.__storage_utils.save_triples(
+                graph, output_dir, f"{parameters.uri.split('/')[-1]}.ttl"
+            )
+            self.__configuration.triple_store.remove(
+                graph, graph_name=URIRef(graph_uri)
+            )
 
-                # Add to the combined removed graph for return
-                for triple in graph_remove:
-                    removed_graph.add(triple)
-            else:
-                logger.info(f"No triples found for {uri}")
-
-        return removed_graph
+        return graph
 
     def as_tools(self) -> list[BaseTool]:
         return [
@@ -144,28 +149,3 @@ class RemoveIndividualPipeline(Pipeline):
         if tags is None:
             tags = []
         return None
-
-
-if __name__ == "__main__":
-    from naas_abi_core.engine.Engine import Engine
-
-    engine = Engine()
-    engine.load(module_names=["naas_abi"])
-    triple_store_service = ABIModule.get_instance().engine.services.triple_store
-
-    uris_to_remove = [
-        "http://ontology.naas.ai/abi/example-uri-1",
-        "http://ontology.naas.ai/abi/example-uri-2",
-    ]
-
-    configuration = RemoveIndividualPipelineConfiguration(
-        triple_store=triple_store_service
-    )
-
-    pipeline = RemoveIndividualPipeline(configuration)
-    graph = pipeline.run(
-        RemoveIndividualPipelineParameters(
-            uris_to_remove=uris_to_remove,
-        )
-    )
-    logger.info(graph.serialize(format="turtle"))
