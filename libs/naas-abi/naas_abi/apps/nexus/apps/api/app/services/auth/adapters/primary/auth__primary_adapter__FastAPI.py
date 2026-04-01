@@ -52,7 +52,11 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-AVATAR_DIR = Path("uploads/avatars")
+# Anchor to the api package root (same tree used by _mount_static_assets in main.py)
+# main.py uses: Path(__file__).parent.parent / "uploads"
+# This file lives at: .../apps/api/app/services/auth/adapters/primary/
+# Six parents up reaches .../apps/api/
+AVATAR_DIR = Path(__file__).parents[5] / "uploads" / "avatars"
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 MAX_AVATAR_SIZE = 2 * 1024 * 1024
@@ -310,6 +314,24 @@ async def upload_avatar(
             old_file.unlink(missing_ok=True)
 
     return {"avatar_url": avatar_url, "filename": unique_filename}
+
+
+@router.delete("/avatar")
+async def remove_avatar(
+    current_user: User = Depends(get_current_user_required),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> dict:
+    previous_avatar = current_user.avatar
+    try:
+        await auth_service.update_avatar(user_id=current_user.id, avatar_url=None)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="User not found") from exc
+
+    if previous_avatar and previous_avatar.startswith("/uploads/avatars/"):
+        old_file = AVATAR_DIR / os.path.basename(previous_avatar)
+        old_file.unlink(missing_ok=True)
+
+    return {"status": "ok"}
 
 
 class AuthFastAPIPrimaryAdapter:
