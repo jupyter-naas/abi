@@ -214,7 +214,7 @@ class CacheService(ServiceBase, ICacheService):
         return base64.b64decode(data.data)
 
     def __get_pickle(self, data: CachedData) -> Any:
-        return pickle.loads(base64.b64decode(data.data))
+        return pickle.loads(base64.b64decode(data.data))  # nosec B301 - data originates from this process's own cache writes; never from external untrusted input
 
     def set_text(self, key: str, value: str) -> None:
         assert isinstance(value, str), f"Value must be a string. Got {type(value)}"
