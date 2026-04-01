@@ -660,7 +660,7 @@ nexus:isRoleOf a owl:ObjectProperty ;
 
 nexus:description a owl:DatatypeProperty ;
     rdfs:label "description"@en ;
-    rdfs:domain nexus:Agent, nexus:AgentTool, nexus:AgentIntent ;
+    rdfs:domain nexus:Agent, nexus:AgentTool, nexus:AgentIntent, nexus:KnowledgeGraph, nexus:GraphView;
     rdfs:range xsd:string ;
     skos:definition "A description used in Nexus platform to identify a generically dependent continuant instance."@en ;
     skos:example "Agent used to search for information on the web." .

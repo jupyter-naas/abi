@@ -33,7 +33,7 @@ class GraphInfo(BaseModel):
 class GraphCreate(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     label: str = Field(..., min_length=1, max_length=200)
-    slug: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(None, min_length=1, max_length=200)
 
 
 class GraphClear(BaseModel):
@@ -166,13 +166,15 @@ async def create_graph(
     # Create graph URI
     graph_label = payload.label.strip()
     graph_id = slugify(graph_label)
-    if payload.slug:
-        graph_id = slugify(payload.slug)
+    if payload.description:
+        description = slugify(payload.description)
     new_graph_uri = GRAPH_BASE_URI + graph_id
     store.create_graph(new_graph_uri)
 
     # Add graph to nexus graph
     new_graph = KnowledgeGraph(_uri=new_graph_uri, label=payload.label.strip())
+    if payload.description:
+        new_graph.description = description
     store.insert(new_graph.rdf(), graph_name=NEXUS_GRAPH_URI)
     return GraphInfo(id=graph_id, uri=str(new_graph_uri), label=graph_label)
 

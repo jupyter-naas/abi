@@ -896,6 +896,7 @@ class KnowledgeGraph(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "description": "http://ontology.naas.ai/nexus/description",
         "has_graph_view": "http://ontology.naas.ai/nexus/hasGraphView",
         "has_role": "http://ontology.naas.ai/nexus/hasRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
@@ -903,6 +904,14 @@ class KnowledgeGraph(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_graph_view", "has_role"}
 
     # Data properties
+    description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A description used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
         Optional[datetime.datetime],
@@ -942,6 +951,7 @@ class GraphView(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "description": "http://ontology.naas.ai/nexus/description",
         "has_graph_filter": "http://ontology.naas.ai/nexus/hasGraphFilter",
         "has_role": "http://ontology.naas.ai/nexus/hasRole",
         "includes_knowledge_graph": "http://ontology.naas.ai/nexus/includesKnowledgeGraph",
@@ -954,6 +964,14 @@ class GraphView(RDFEntity):
     }
 
     # Data properties
+    description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A description used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
         Optional[datetime.datetime],

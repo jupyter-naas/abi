@@ -25,11 +25,10 @@ class GraphViewInfo(BaseModel):
     id: str
     uri: str
     label: str
+    description: str | None = None
     graph_names: list[str] = Field(default_factory=list)
     graph_filters: list[str] = Field(default_factory=list)
     scope: str = "workspace"
-    user_id: str | None = None
-    created_at: str | None = None
 
 
 class GraphTripleFilter(BaseModel):
@@ -124,10 +123,6 @@ def _resolve_view_uri(store: TripleStoreService, view_id: str) -> URIRef | None:
     return None
 
 
-def _graph_scope_clauses(graph_name: str) -> tuple[str, str]:
-    return f"GRAPH <{graph_name}> {{", "}"
-
-
 def _normalize_filter_part(value: str | None) -> str | None:
     if value is None:
         return None
@@ -220,11 +215,12 @@ async def list_views(
     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     PREFIX nexus: <http://ontology.naas.ai/nexus/>
-    SELECT ?uri ?label ?graph_names ?graph_filters
+    SELECT ?uri ?label ?description ?graph_names ?graph_filters
     WHERE {{
         GRAPH <{str(NEXUS_GRAPH_URI)}> {{
         ?uri rdf:type nexus:GraphView .
         ?uri rdfs:label ?label .
+        ?uri nexus:description ?description .
         ?uri nexus:includesKnowledgeGraph ?graph_names .
         ?uri nexus:hasGraphFilter ?graph_filters .
         }}
@@ -243,6 +239,7 @@ async def list_views(
                 "id": view_id.split("/")[-1],
                 "uri": view_id,
                 "label": str(row.label),
+                "description": str(row.description),
                 "graph_names": [],
                 "graph_filters": [],
                 "scope": "workspace",
@@ -263,10 +260,10 @@ async def list_views(
                 id=view["id"],
                 uri=view["uri"],
                 label=view["label"],
+                description=view["description"],
                 graph_names=view["graph_names"],
                 graph_filters=view["graph_filters"],
                 scope=view["scope"],
-                user_id=view["user_id"],
             )
         )
     return graph_views
@@ -290,11 +287,12 @@ async def get_view(
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     PREFIX nexus: <http://ontology.naas.ai/nexus/>
     PREFIX abi: <http://ontology.naas.ai/abi/>
-    SELECT ?uri ?label ?graph_names ?graph_filters
+    SELECT ?uri ?label ?description ?graph_names ?graph_filters
     WHERE {{
         GRAPH <{str(NEXUS_GRAPH_URI)}> {{
         FILTER(STR(?uri) = "{view_uri}")
         ?uri rdfs:label ?label .
+        ?uri nexus:description ?description .
         ?uri nexus:includesKnowledgeGraph ?graph_names .
         ?uri nexus:hasGraphFilter ?graph_filters .
         }}
@@ -314,10 +312,10 @@ async def get_view(
                 id=row_view_uri.split("/")[-1],
                 uri=row_view_uri,
                 label=str(row.label),
+                description=str(row.description),
                 graph_names=[],
                 graph_filters=[],
                 scope="workspace",
-                user_id=None,
             )
 
         if graph_name not in view_info.graph_names:

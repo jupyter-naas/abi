@@ -100,6 +100,19 @@ const LEGACY_VIEW_MAP: Record<string, GraphViewType> = {
   statistics: 'overview',
 };
 
+function isSystemGraph(option: GraphOption): boolean {
+  const id = option.id.trim().toLowerCase();
+  const name = option.name.trim().toLowerCase();
+  return (
+    id === 'schema' ||
+    id === 'nexus' ||
+    id.endsWith('/schema') ||
+    id.endsWith('/nexus') ||
+    name === 'schema' ||
+    name === 'nexus'
+  );
+}
+
 const isGraphViewType = (value: string): value is GraphViewType =>
   GRAPH_VIEW_TYPES.some((view) => view.id === value);
 
@@ -108,6 +121,7 @@ type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'create-gra
 interface OntologyClassOption {
   id: string;
   name: string;
+  description: string;
 }
 
 interface GraphOption {
@@ -264,6 +278,124 @@ function FilterOptionDropdown({
   );
 }
 
+function ClassOptionDropdown({
+  options,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+}: {
+  options: OntologyClassOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+        setSearchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const t = searchQuery.trim().toLowerCase();
+    if (!t) return options;
+    return options.filter(
+      (option) =>
+        option.name.toLowerCase().includes(t) ||
+        option.description.toLowerCase().includes(t)
+    );
+  }, [options, searchQuery]);
+
+  const selected = options.find((option) => option.id === value);
+  const selectedDisplay = selected
+    ? selected.description
+      ? `${selected.name}: ${selected.description}`
+      : selected.name
+    : '';
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((prev) => !prev)}
+        disabled={disabled}
+        className={cn(
+          'flex w-full items-center justify-between rounded-lg border bg-background px-3 py-2 text-left text-sm outline-none focus:ring-2 focus:ring-primary',
+          'hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60'
+        )}
+      >
+        <span className={cn('line-clamp-2 break-words', !value && 'text-muted-foreground')}>
+          {selectedDisplay || placeholder}
+        </span>
+        <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full max-h-64 overflow-hidden rounded-lg border bg-background shadow-lg">
+          <div className="sticky top-0 border-b bg-background p-2">
+            <input
+              type="text"
+              placeholder="Search class..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+                setSearchQuery('');
+              }}
+              className={cn('w-full px-3 py-2 text-left text-sm hover:bg-muted', !value && 'bg-muted')}
+            >
+              <span className="text-muted-foreground">{placeholder}</span>
+            </button>
+            {filtered.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  onChange(option.id);
+                  setOpen(false);
+                  setSearchQuery('');
+                }}
+                className={cn(
+                  'w-full px-3 py-2 text-left text-sm hover:bg-muted',
+                  value === option.id && 'bg-muted'
+                )}
+              >
+                <span className="block break-words">
+                  {option.name}
+                  {option.description ? `: ${option.description}` : ''}
+                </span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                No matches for &quot;{searchQuery}&quot;
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface GraphViewInfo {
   workspace_id: string;
   id: string;
@@ -337,6 +469,7 @@ export default function GraphPage() {
     setActiveViewType,
     selectedGraphId,
     visibleGraphIds,
+    selectGraph,
     setVisibleGraphs,
     views,
     activeSavedViewId,
@@ -356,6 +489,7 @@ export default function GraphPage() {
   const [classesLoading, setClassesLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingIndividual, setCreatingIndividual] = useState(false);
+  const [selectedIndividualGraphId, setSelectedIndividualGraphId] = useState('');
   const [viewName, setViewName] = useState('');
   const [graphOptions, setGraphOptions] = useState<GraphOption[]>([]);
   const [selectedViewGraphIds, setSelectedViewGraphIds] = useState<string[]>([]);
@@ -368,10 +502,10 @@ export default function GraphPage() {
     objects: [],
   });
   const [viewFormError, setViewFormError] = useState<string | null>(null);
-  const [viewScope, setViewScope] = useState<'workspace' | 'user'>('user');
+  const [viewDescription, setViewDescription] = useState('');
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
   const [graphName, setGraphName] = useState('');
-  const [graphSlug, setGraphSlug] = useState('');
+  const [graphDescription, setGraphDescription] = useState('');
   const [graphFormError, setGraphFormError] = useState<string | null>(null);
   const [creatingGraph, setCreatingGraph] = useState(false);
   const loadRequestIdRef = useRef(0);
@@ -383,6 +517,10 @@ export default function GraphPage() {
   const editingView = useMemo(
     () => (editingViewId ? views.find((view) => view.id === editingViewId) ?? null : null),
     [views, editingViewId]
+  );
+  const individualGraphOptions = useMemo(
+    () => graphOptions.filter((option) => !isSystemGraph(option)),
+    [graphOptions]
   );
 
   // Load graphs from API - fetches all visible graphs and merges them
@@ -741,13 +879,21 @@ export default function GraphPage() {
       const sourceItems = Array.isArray(data) ? data : (data as { items?: unknown[] })?.items || [];
       const normalizedClasses = sourceItems
         .map((item) => {
-          const typedItem = item as { id?: string; iri?: string; name?: string; label?: string };
+          const typedItem = item as {
+            id?: string;
+            iri?: string;
+            name?: string;
+            label?: string;
+            description?: string;
+            definition?: string;
+          };
           const id = typedItem.id || typedItem.iri || '';
           const name = typedItem.name || typedItem.label || typedItem.iri || '';
+          const description = typedItem.description || typedItem.definition || '';
           if (!id || !name) {
             return null;
           }
-          return { id, name };
+          return { id, name, description };
         })
         .filter((item): item is OntologyClassOption => item !== null)
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
@@ -765,6 +911,29 @@ export default function GraphPage() {
       loadOntologyClasses();
     }
   }, [pageMode, loadOntologyClasses]);
+
+  useEffect(() => {
+    if (pageMode !== 'create-individual') {
+      return;
+    }
+
+    if (individualGraphOptions.length === 0) {
+      if (selectedIndividualGraphId) {
+        setSelectedIndividualGraphId('');
+      }
+      return;
+    }
+
+    if (individualGraphOptions.some((option) => option.id === selectedIndividualGraphId)) {
+      return;
+    }
+
+    const preferredGraphId =
+      selectedGraphId && individualGraphOptions.some((option) => option.id === selectedGraphId)
+        ? selectedGraphId
+        : individualGraphOptions[0].id;
+    setSelectedIndividualGraphId(preferredGraphId);
+  }, [individualGraphOptions, pageMode, selectedGraphId, selectedIndividualGraphId]);
 
   const loadFilterOptions = useCallback(async (graphIds: string[]) => {
     const apiUrl = getApiUrl();
@@ -798,6 +967,7 @@ export default function GraphPage() {
   const resetCreateIndividualForm = () => {
     setIndividualLabel('');
     setSelectedClassId('');
+    setSelectedIndividualGraphId('');
     setCreateError(null);
   };
 
@@ -818,7 +988,7 @@ export default function GraphPage() {
     setPageMode('graph');
     setEditingViewId(null);
     setViewName('');
-    setViewScope('user');
+    setViewDescription('');
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
     setViewFormError(null);
@@ -828,7 +998,7 @@ export default function GraphPage() {
   const closeCreateGraphForm = () => {
     setPageMode('graph');
     setGraphName('');
-    setGraphSlug('');
+    setGraphDescription('');
     setGraphFormError(null);
     router.push(`/workspace/${workspaceId}/graph`);
   };
@@ -843,11 +1013,11 @@ export default function GraphPage() {
     setCreatingGraph(true);
     try {
       const apiUrl = getApiUrl();
-      const body: { workspace_id: string; label: string; slug?: string } = {
+      const body: { workspace_id: string; label: string; description?: string } = {
         workspace_id: workspaceId,
         label,
       };
-      if (graphSlug.trim()) body.slug = graphSlug.trim();
+      if (graphDescription.trim()) body.description = graphDescription.trim();
       const response = await authFetch(`${apiUrl}/api/graph/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -858,7 +1028,14 @@ export default function GraphPage() {
         throw new Error(err.detail || `Failed to create graph: ${response.status}`);
       }
       const created = await response.json();
-      setVisibleGraphs([created.id]);
+      const createdId = typeof created?.id === 'string' ? created.id : null;
+      if (!createdId) {
+        throw new Error('Created graph response is missing an id.');
+      }
+      setActiveSavedView(null);
+      selectGraph(createdId);
+      setVisibleGraphs([createdId]);
+      setActiveViewType('overview');
       closeCreateGraphForm();
       clearGraphPageCaches();
       await loadFromApi({ force: true });
@@ -895,7 +1072,7 @@ export default function GraphPage() {
     const payload = {
       workspace_id: workspaceId,
       name: normalizedName,
-      scope: viewScope,
+      description: viewDescription.trim() || undefined,
       graph_names: graphIds,
       filters: normalizedFilters,
     };
@@ -949,7 +1126,7 @@ export default function GraphPage() {
 
     if (editingView) {
       setViewName(editingView.name ?? '');
-      setViewScope(editingView.scope === 'workspace' ? 'workspace' : 'user');
+      setViewDescription('');
       setSelectedViewGraphIds(Array.isArray(editingView.graphIds) ? editingView.graphIds : []);
       const normalizedFilters = Array.isArray(editingView.filters)
         ? editingView.filters
@@ -975,7 +1152,7 @@ export default function GraphPage() {
     }
 
     setViewName('');
-    setViewScope('user');
+    setViewDescription('');
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
     setViewFormError(null);
@@ -984,10 +1161,17 @@ export default function GraphPage() {
   const handleCreateIndividual = async () => {
     const normalizedLabel = individualLabel.trim();
     if (!normalizedLabel) return;
+    if (!selectedIndividualGraphId) {
+      setCreateError('Please select a graph.');
+      return;
+    }
 
     setCreatingIndividual(true);
     setCreateError(null);
     try {
+      setActiveSavedView(null);
+      selectGraph(selectedIndividualGraphId);
+      setVisibleGraphs([selectedIndividualGraphId]);
       const selectedClass = availableClasses.find((item) => item.id === selectedClassId);
       const apiUrl = getApiUrl();
       const response = await authFetch(`${apiUrl}/api/graph/nodes`, {
@@ -1267,22 +1451,35 @@ export default function GraphPage() {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-sm font-medium">Class</label>
+                      <label className="mb-2 block text-sm font-medium">Graph *</label>
                       <select
-                        value={selectedClassId}
-                        onChange={(event) => setSelectedClassId(event.target.value)}
+                        value={selectedIndividualGraphId}
+                        onChange={(event) => setSelectedIndividualGraphId(event.target.value)}
                         className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        disabled={classesLoading}
+                        disabled={creatingIndividual || individualGraphOptions.length === 0}
                       >
                         <option value="">
-                          {classesLoading ? 'Loading classes...' : 'Select a class'}
+                          {individualGraphOptions.length > 0
+                            ? 'Select a graph'
+                            : 'No graph available (schema and nexus are excluded)'}
                         </option>
-                        {availableClasses.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
+                        {individualGraphOptions.map((graph) => (
+                          <option key={graph.id} value={graph.id}>
+                            {graph.name}
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Class</label>
+                      <ClassOptionDropdown
+                        options={availableClasses}
+                        value={selectedClassId}
+                        onChange={setSelectedClassId}
+                        placeholder={classesLoading ? 'Loading classes...' : 'Select a class'}
+                        disabled={classesLoading}
+                      />
                     </div>
 
                     {createError && (
@@ -1298,7 +1495,7 @@ export default function GraphPage() {
                       </button>
                       <button
                         onClick={handleCreateIndividual}
-                        disabled={!individualLabel.trim() || creatingIndividual}
+                        disabled={!individualLabel.trim() || !selectedIndividualGraphId || creatingIndividual}
                         className={cn(
                           'flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
                           'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
@@ -1347,17 +1544,14 @@ export default function GraphPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-2 block text-sm font-medium">Slug (optional)</label>
-                      <input
-                        type="text"
-                        value={graphSlug}
-                        onChange={(e) => setGraphSlug(e.target.value)}
-                        placeholder="e.g., my-ontology (defaults from name)"
+                      <label className="mb-2 block text-sm font-medium">Description (optional)</label>
+                      <textarea
+                        value={graphDescription}
+                        onChange={(e) => setGraphDescription(e.target.value)}
+                        placeholder="Describe what this graph is used for"
+                        rows={3}
                         className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
                       />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        URL-safe identifier. If empty, derived from name.
-                      </p>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -1413,17 +1607,14 @@ export default function GraphPage() {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-sm font-medium">Visibility</label>
-                      <select
-                        value={viewScope}
-                        onChange={(event) =>
-                          setViewScope(event.target.value === 'workspace' ? 'workspace' : 'user')
-                        }
+                      <label className="mb-2 block text-sm font-medium">Description</label>
+                      <textarea
+                        value={viewDescription}
+                        onChange={(event) => setViewDescription(event.target.value)}
+                        placeholder="Describe what this view shows"
+                        rows={3}
                         className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="user">Only me (user view)</option>
-                        <option value="workspace">Workspace (shared)</option>
-                      </select>
+                      />
                     </div>
 
                     <div>
