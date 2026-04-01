@@ -369,6 +369,91 @@ def list_individuals(
     return GraphData(nodes=graph_nodes, edges=graph_edges)
 
 
+def build_graph_overview(
+    triple_store: TripleStoreService, graph_uri: URIRef, limit: int = 500
+) -> GraphOverview:
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?uri ?label ?type
+    WHERE {{
+        GRAPH <{str(graph_uri)}> {{
+            ?uri a owl:NamedIndividual ;
+                 rdfs:label ?label ;
+                 rdf:type ?type .
+            FILTER(?type != owl:NamedIndividual)
+        }}
+    }}
+    LIMIT {int(limit)}
+    """
+    rows = triple_store.query(query)
+    nodes: list[dict[str, Any]] = []
+    class_dict: dict[str, str] = {}
+    type_counts: dict[str, int] = {}
+    for row in rows:
+        assert isinstance(row, ResultRow)
+
+        class_uri = str(row.type)
+        class_label = class_dict.get(class_uri)
+        if not class_label:
+            class_label = _get_ontology_label(triple_store, class_uri)
+            class_dict[class_uri] = class_label
+        type_counts[class_label] = type_counts.get(class_label, 0) + 1
+
+        nodes.append(
+            {
+                "uri": str(row.uri),
+                "label": str(row.label),
+                "type": str(row.type),
+                "type_label": class_label,
+            }
+        )
+
+    edges: list[dict[str, Any]] = []
+
+    node_uris = [node["uri"] for node in nodes]
+    if node_uris:
+        values_clause = " ".join(f"<{uri}>" for uri in node_uris)
+        query_edges = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        SELECT ?s ?p ?o
+        WHERE {{
+            GRAPH <{str(graph_uri)}> {{
+                VALUES ?s {{ {values_clause} }}
+                ?s ?p ?o .
+                FILTER(?p != rdf:type && isIRI(?o))
+            }}
+        }}
+        """
+        rows_edges = triple_store.query(query_edges)
+        for row_edge in rows_edges:
+            assert isinstance(row_edge, ResultRow)
+            edges.append(
+                {
+                    "s": str(row_edge.s),
+                    "p": str(row_edge.p),
+                    "o": str(row_edge.o),
+                }
+            )
+
+    kpis = {
+        "total_instances": len(nodes),
+        "total_relationships": len(edges),
+        "average_degree": (2 * len(edges) / len(nodes)) if nodes else 0,
+        "density": (len(edges) / (len(nodes) * (len(nodes) - 1))) if len(nodes) > 1 else 0,
+    }
+    instances_by_class = [
+        {"type": node_type, "count": count}
+        for node_type, count in sorted(type_counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+    return GraphOverview(
+        kpis=kpis,
+        instances_by_class=instances_by_class,
+    )
+
+
 @router.get("/{graph_id}/overview")
 async def get_graph_overview(
     request: Request,
@@ -380,36 +465,13 @@ async def get_graph_overview(
     """Get overview of a given graph."""
     await require_workspace_access(current_user.id, workspace_id)
 
-    graph_data = await get_graph_network(
-        request=request,
-        graph_id=graph_id,
-        workspace_id=workspace_id,
+    store = get_triple_store_service(request)
+    graph_uri = GRAPH_BASE_URI + graph_id
+
+    return build_graph_overview(
+        triple_store=store,
+        graph_uri=graph_uri,
         limit=limit,
-        current_user=current_user,
-    )
-
-    nodes: list[GraphNode] = graph_data.nodes
-    edges: list[GraphEdge] = graph_data.edges
-
-    kpis = {
-        "total_instances": len(nodes),
-        "total_relationships": len(edges),
-        "average_degree": (2 * len(edges) / len(nodes)) if nodes else 0,
-        "density": (len(edges) / (len(nodes) * (len(nodes) - 1))) if len(nodes) > 1 else 0,
-    }
-    type_counts: dict[str, int] = {}
-    for node in nodes:
-        node_type = (node.type or "unknown").strip() or "unknown"
-        type_counts[node_type] = type_counts.get(node_type, 0) + 1
-
-    instances_by_class = [
-        {"type": node_type, "count": count}
-        for node_type, count in sorted(type_counts.items(), key=lambda item: (-item[1], item[0]))
-    ]
-
-    return GraphOverview(
-        kpis=kpis,
-        instances_by_class=instances_by_class,
     )
 
 
