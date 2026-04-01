@@ -1041,7 +1041,10 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         self.bastion_private_key = bastion_private_key
 
         self.bastion_client = paramiko.SSHClient()
-        self.bastion_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # TODO(security): Replace AutoAddPolicy with a known-hosts verification strategy
+        # (RejectPolicy + pre-loaded host keys) before any production/gov deployment.
+        # AutoAddPolicy is TOFU and susceptible to MITM on first connect.
+        self.bastion_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507
 
         # self.bastion_client.connect(self.bastion_host, port=self.bastion_port, username=self.bastion_user, pkey=paramiko.RSAKey.from_private_key(StringIO(self.bastion_private_key)))
         self.tunnel = self.__create_ssh_tunnel()

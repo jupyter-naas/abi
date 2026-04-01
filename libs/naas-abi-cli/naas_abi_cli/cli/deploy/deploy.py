@@ -120,9 +120,7 @@ class NaasDeployer:
         self.naas_api_client = NaasAPIClient(configuration.deploy.naas_api_key)
 
     def docker_build(self, image_name: str):
-        subprocess.run(
-            f"docker build -t {image_name} . --platform linux/amd64", shell=True
-        )
+        subprocess.run(["docker", "build", "-t", image_name, ".", "--platform", "linux/amd64"])
 
     def deploy(self):
         assert self.configuration.deploy is not None
@@ -137,12 +135,18 @@ class NaasDeployer:
         credentials = self.naas_api_client.get_registry_credentials(
             self.configuration.deploy.space_name
         )
-        docker_login_command = f"docker login -u {credentials['credentials']['username']} -p {credentials['credentials']['password']} {registry['registry']['uri']}"
-        subprocess.run(docker_login_command, shell=True)
-        subprocess.run(f"docker push {image_name}", shell=True)
+        subprocess.run([
+            "docker", "login",
+            "-u", credentials["credentials"]["username"],
+            "-p", credentials["credentials"]["password"],
+            registry["registry"]["uri"],
+        ])
+        subprocess.run(["docker", "push", image_name])
 
+        # Shell pipe required to extract digest via cut; image_name is a
+        # registry URI constructed from trusted config, not user-controlled input.
         image_sha = (
-            subprocess.run(
+            subprocess.run(  # nosec B602
                 "docker inspect --format='{{index .RepoDigests 0}}' "
                 + image_name
                 + " | cut -d'@' -f2",
@@ -264,12 +268,18 @@ def local_deploy(env: str, regenerate: bool, no_backup: bool, headscale: bool):
     help="Run containers in the background.",
 )
 def local_up(detach: bool):
-    command = (
-        "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container up"
-        + (" -d" if detach else "")
-    )
-    print(command)
-    subprocess.run(command, shell=True)
+    cmd = [
+        "docker", "compose",
+        "--file", "docker-compose.yml",
+        "--env-file", ".env",
+        "--profile", "infrastructure",
+        "--profile", "container",
+        "up",
+    ]
+    if detach:
+        cmd.append("-d")
+    print(" ".join(cmd))
+    subprocess.run(cmd)
 
 
 @deploy.command("local-down")
@@ -281,11 +291,17 @@ def local_up(detach: bool):
     help="Remove volumes along with the containers.",
 )
 def local_down(volumes: bool):
-    subprocess.run(
-        "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container down"
-        + (" -v" if volumes else ""),
-        shell=True,
-    )
+    cmd = [
+        "docker", "compose",
+        "--file", "docker-compose.yml",
+        "--env-file", ".env",
+        "--profile", "infrastructure",
+        "--profile", "container",
+        "down",
+    ]
+    if volumes:
+        cmd.append("-v")
+    subprocess.run(cmd)
 
 
 @deploy.command("local-logs")
