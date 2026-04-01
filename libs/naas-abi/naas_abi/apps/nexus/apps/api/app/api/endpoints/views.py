@@ -1,6 +1,5 @@
 """Dedicated Graph Views API endpoints."""
 
-import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -9,7 +8,8 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.ontologies.modules.NexusPlatformOntology import GraphFilter, GraphView
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.graph import GraphEdge, GraphNode
+from naas_abi.ontologies.modules.NexusPlatformOntology import GraphFilter, GraphView, KnowledgeGraph
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, Field
 from rdflib import URIRef
@@ -18,6 +18,18 @@ from rdflib.query import ResultRow
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 NEXUS_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/nexus")
+
+
+class GraphViewInfo(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    id: str
+    uri: str
+    label: str
+    graph_names: list[str] = Field(default_factory=list)
+    graph_filters: list[str] = Field(default_factory=list)
+    scope: str = "workspace"
+    user_id: str | None = None
+    created_at: str | None = None
 
 
 class GraphTripleFilter(BaseModel):
@@ -37,19 +49,6 @@ class GraphFilterOptionsResponse(BaseModel):
     objects: list[GraphFilterOption]
 
 
-class GraphViewInfo(BaseModel):
-    workspace_id: str = Field(..., min_length=1, max_length=100)
-    id: str
-    uri: str
-    name: str
-    label: str
-    graph_names: list[str] = Field(default_factory=list)
-    filters: list[GraphTripleFilter] = Field(default_factory=list)
-    scope: str = "workspace"
-    user_id: str | None = None
-    created_at: str | None = None
-
-
 class CreateGraphView(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=200)
@@ -61,6 +60,7 @@ class CreateGraphView(BaseModel):
 
 class UpdateGraphView(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
+    id: str | None = None
     uri: str | None = None
     name: str = Field(..., min_length=1, max_length=200)
     graph_names: list[str] = Field(default_factory=list)
@@ -71,7 +71,13 @@ class UpdateGraphView(BaseModel):
 
 class DeleteGraphView(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
+    id: str | None = None
     uri: str | None = None
+
+
+class ViewOverview(BaseModel):
+    kpis: dict[str, Any]
+    instances_by_class: list[dict[str, Any]]
 
 
 def get_triple_store_service(request: Request) -> TripleStoreService:
@@ -90,15 +96,6 @@ def get_triple_store_service(request: Request) -> TripleStoreService:
             status_code=500,
             detail="Triple store is not initialized. Load API through naas_abi.ABIModule.",
         ) from exc
-
-
-def _normalize_filter_value(value: str | None) -> str | None:
-    if value is None:
-        return None
-    stripped = value.strip()
-    if not stripped or stripped == "unknown":
-        return None
-    return stripped
 
 
 def _resolve_view_uri(store: TripleStoreService, view_id: str) -> URIRef | None:
@@ -129,115 +126,6 @@ def _resolve_view_uri(store: TripleStoreService, view_id: str) -> URIRef | None:
 
 def _graph_scope_clauses(graph_name: str) -> tuple[str, str]:
     return f"GRAPH <{graph_name}> {{", "}"
-
-
-def _query_views(store: TripleStoreService, workspace_id: str) -> list[GraphViewInfo]:
-    sparql_query = f"""
-    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    PREFIX dcterms: <http://purl.org/dc/terms/>
-    PREFIX nexus: <http://ontology.naas.ai/nexus/>
-    SELECT ?uri ?label ?created ?graph_name ?subject_uri ?predicate_uri ?object_uri
-    WHERE {{
-        GRAPH <{str(NEXUS_GRAPH_URI)}> {{
-            ?uri rdf:type nexus:GraphView .
-            OPTIONAL {{ ?uri rdfs:label ?label . }}
-            OPTIONAL {{ ?uri dcterms:created ?created . }}
-            OPTIONAL {{ ?uri nexus:includesKnowledgeGraph ?graph_name . }}
-            OPTIONAL {{
-                ?uri nexus:hasGraphFilter ?filter .
-                OPTIONAL {{ ?filter nexus:subject_uri ?subject_uri . }}
-                OPTIONAL {{ ?filter nexus:predicate_uri ?predicate_uri . }}
-                OPTIONAL {{ ?filter nexus:object_uri ?object_uri . }}
-            }}
-        }}
-    }}
-    """
-    rows = store.query(sparql_query)
-    indexed: dict[str, GraphViewInfo] = {}
-    for row in rows:
-        assert isinstance(row, ResultRow)
-        uri = str(row.uri)
-        if uri not in indexed:
-            label_value = str(row.label) if getattr(row, "label", None) else uri.split("/")[-1]
-            indexed[uri] = GraphViewInfo(
-                workspace_id=workspace_id,
-                id=uri,
-                uri=uri,
-                name=label_value,
-                label=label_value,
-                graph_names=[],
-                filters=[],
-                created_at=str(row.created) if getattr(row, "created", None) else None,
-            )
-        graph_name = str(row.graph_name) if getattr(row, "graph_name", None) else None
-        if graph_name and graph_name not in indexed[uri].graph_names:
-            indexed[uri].graph_names.append(graph_name)
-        f_subject = _normalize_filter_value(
-            str(row.subject_uri) if getattr(row, "subject_uri", None) else None
-        )
-        f_predicate = _normalize_filter_value(
-            str(row.predicate_uri) if getattr(row, "predicate_uri", None) else None
-        )
-        f_object = _normalize_filter_value(
-            str(row.object_uri) if getattr(row, "object_uri", None) else None
-        )
-        if f_subject or f_predicate or f_object:
-            filter_entry = GraphTripleFilter(
-                subject_uri=f_subject,
-                predicate_uri=f_predicate,
-                object_uri=f_object,
-            )
-            if filter_entry not in indexed[uri].filters:
-                indexed[uri].filters.append(filter_entry)
-    return sorted(indexed.values(), key=lambda view: view.name.lower())
-
-
-def resolve_view_context(
-    store: TripleStoreService,
-    workspace_id: str,
-    user_id: str,
-    view_id: str,
-) -> tuple[list[str], list[dict[str, str | None]], GraphViewInfo]:
-    _ = workspace_id
-    _ = user_id
-    view_uri = _resolve_view_uri(store, view_id)
-    if view_uri is None:
-        raise HTTPException(status_code=404, detail="View not found")
-    views = _query_views(store, workspace_id)
-    target = next((view for view in views if view.uri == str(view_uri) or view.id == view_id), None)
-    if target is None:
-        raise HTTPException(status_code=404, detail="View not found")
-    return (
-        target.graph_names,
-        [item.model_dump() for item in target.filters],
-        target,
-    )
-
-
-def _build_view_graph(
-    name: str,
-    graph_names: list[str],
-    filters: list[GraphTripleFilter],
-    view_uri: URIRef | None = None,
-) -> GraphView:
-    view = GraphView(_uri=view_uri, label=name) if view_uri is not None else GraphView(label=name)
-    view.has_graph_filter = []
-    for filter_item in filters:
-        subject_uri = filter_item.subject_uri or "unknown"
-        predicate_uri = filter_item.predicate_uri or "unknown"
-        object_uri = filter_item.object_uri or "unknown"
-        label = f"Subject: {subject_uri} Predicate: {predicate_uri} Object: {object_uri}"
-        view.has_graph_filter.append(
-            GraphFilter(
-                label=label,
-                subject_uri=subject_uri,
-                predicate_uri=predicate_uri,
-                object_uri=object_uri,
-            )
-        )
-    view.includes_knowledge_graph = [URIRef(graph_name) for graph_name in graph_names]
-    return view
 
 
 def _normalize_filter_part(value: str | None) -> str | None:
@@ -323,81 +211,197 @@ async def list_views(
     current_user: User = Depends(get_current_user_required),
 ) -> list[GraphViewInfo]:
     _ = user_id
-    await require_workspace_access(current_user.id, workspace_id)
-    store = get_triple_store_service(request)
-    views = _query_views(store, workspace_id)
-    return views
 
-
-@router.get("/filter-options")
-async def list_graph_filter_options(
-    request: Request,
-    workspace_id: str,
-    graph_id: str | None = Query(default=None),
-    graph_names: list[str] | None = Query(default=None),
-    view_id: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user_required),
-) -> GraphFilterOptionsResponse:
     await require_workspace_access(current_user.id, workspace_id)
+
     store = get_triple_store_service(request)
 
-    if view_id:
-        graph_names_resolved, _, _ = resolve_view_context(
-            store=store,
-            workspace_id=workspace_id,
-            user_id=current_user.id,
-            view_id=view_id,
-        )
-        names = graph_names_resolved
-    elif graph_id:
-        names = [graph_id]
-    else:
-        names = [name for name in (graph_names or ["default"]) if name]
-    if not names:
-        names = ["default"]
+    sparql_query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX nexus: <http://ontology.naas.ai/nexus/>
+    SELECT ?uri ?label ?graph_names ?graph_filters
+    WHERE {{
+        GRAPH <{str(NEXUS_GRAPH_URI)}> {{
+        ?uri rdf:type nexus:GraphView .
+        ?uri rdfs:label ?label .
+        ?uri nexus:includesKnowledgeGraph ?graph_names .
+        ?uri nexus:hasGraphFilter ?graph_filters .
+        }}
+    }}
+    """
+    rows = store.query(sparql_query)
+    views_by_id: dict[str, dict] = {}
+    for row in rows:
+        assert isinstance(row, ResultRow)
+        view_id = str(row.uri)
+        graph_name = str(row.graph_names)
+        graph_filter = str(row.graph_filters)
 
-    def _collect_options(pattern: str) -> list[GraphFilterOption]:
-        values: dict[str, str] = {}
-        for graph_name in names:
-            graph_clause, graph_close = _graph_scope_clauses(graph_name)
-            rows = store.query(
-                f"""
-                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-                SELECT DISTINCT ?uri ?label
-                WHERE {{
-                    {graph_clause}
-                    {pattern}
-                    OPTIONAL {{ ?uri rdfs:label ?label . }}
-                    {graph_close}
-                }}
-                LIMIT 5000
-                """
+        if view_id not in views_by_id:
+            views_by_id[view_id] = {
+                "id": view_id.split("/")[-1],
+                "uri": view_id,
+                "label": str(row.label),
+                "graph_names": [],
+                "graph_filters": [],
+                "scope": "workspace",
+                "user_id": None,
+                "created_at": None,
+            }
+
+        if graph_name not in views_by_id[view_id]["graph_names"]:
+            views_by_id[view_id]["graph_names"].append(graph_name)
+        if graph_filter not in views_by_id[view_id]["graph_filters"]:
+            views_by_id[view_id]["graph_filters"].append(graph_filter)
+
+    graph_views: list[GraphViewInfo] = []
+    for view in views_by_id.values():
+        graph_views.append(
+            GraphViewInfo(
+                workspace_id=workspace_id,
+                id=view["id"],
+                uri=view["uri"],
+                label=view["label"],
+                graph_names=view["graph_names"],
+                graph_filters=view["graph_filters"],
+                scope=view["scope"],
+                user_id=view["user_id"],
             )
-            for row in rows:
-                assert isinstance(row, ResultRow)
-                uri = str(row.uri)
-                if not uri:
-                    continue
-                if uri not in values:
-                    label = (
-                        str(row.label)
-                        if getattr(row, "label", None)
-                        else uri.split("/")[-1].split("#")[-1]
-                    )
-                    values[uri] = label
-        return [
-            GraphFilterOption(uri=uri, label=label)
-            for uri, label in sorted(values.items(), key=lambda item: item[1].lower())
-        ]
+        )
+    return graph_views
 
-    subjects = _collect_options("?uri ?p ?o . FILTER(isIRI(?uri))")
-    predicates = _collect_options("?s ?uri ?o . FILTER(isIRI(?uri))")
-    objects = _collect_options("?s ?p ?uri . FILTER(isIRI(?uri))")
-    return GraphFilterOptionsResponse(
-        subjects=subjects,
-        predicates=predicates,
-        objects=objects,
-    )
+
+@router.get("/{view_id}")
+async def get_view(
+    request: Request,
+    view_id: str,
+    workspace_id: str = Query(..., description="Workspace ID"),
+    current_user: User = Depends(get_current_user_required),
+) -> GraphViewInfo:
+    # await require_workspace_access(current_user.id, workspace_id)
+
+    store = get_triple_store_service(request)
+
+    view_uri = f"http://ontology.naas.ai/abi/{view_id}"
+
+    sparql_query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX nexus: <http://ontology.naas.ai/nexus/>
+    PREFIX abi: <http://ontology.naas.ai/abi/>
+    SELECT ?uri ?label ?graph_names ?graph_filters
+    WHERE {{
+        GRAPH <{str(NEXUS_GRAPH_URI)}> {{
+        FILTER(STR(?uri) = "{view_uri}")
+        ?uri rdfs:label ?label .
+        ?uri nexus:includesKnowledgeGraph ?graph_names .
+        ?uri nexus:hasGraphFilter ?graph_filters .
+        }}
+    }}
+    """
+    rows = store.query(sparql_query)
+    view_info: GraphViewInfo | None = None
+    for row in rows:
+        assert isinstance(row, ResultRow)
+        row_view_uri = str(row.uri)
+        graph_name = str(row.graph_names)
+        graph_filter = str(row.graph_filters)
+
+        if view_info is None:
+            view_info = GraphViewInfo(
+                workspace_id=workspace_id,
+                id=row_view_uri.split("/")[-1],
+                uri=row_view_uri,
+                label=str(row.label),
+                graph_names=[],
+                graph_filters=[],
+                scope="workspace",
+                user_id=None,
+            )
+
+        if graph_name not in view_info.graph_names:
+            view_info.graph_names.append(graph_name)
+        if graph_filter not in view_info.graph_filters:
+            view_info.graph_filters.append(graph_filter)
+
+    # To do: assert
+
+    if view_info is None:
+        raise HTTPException(status_code=404, detail="View not found")
+
+    return view_info
+
+
+# @router.get("/filter-options")
+# async def list_graph_filter_options(
+#     request: Request,
+#     workspace_id: str,
+#     graph_id: str | None = Query(default=None),
+#     graph_names: list[str] | None = Query(default=None),
+#     view_id: str | None = Query(default=None),
+#     current_user: User = Depends(get_current_user_required),
+# ) -> GraphFilterOptionsResponse:
+#     await require_workspace_access(current_user.id, workspace_id)
+#     store = get_triple_store_service(request)
+
+#     if view_id:
+#         graph_names_resolved, _, _ = resolve_view_context(
+#             store=store,
+#             workspace_id=workspace_id,
+#             user_id=current_user.id,
+#             view_id=view_id,
+#         )
+#         names = graph_names_resolved
+#     elif graph_id:
+#         names = [graph_id]
+#     else:
+#         names = [name for name in (graph_names or ["default"]) if name]
+#     if not names:
+#         names = ["default"]
+
+#     def _collect_options(pattern: str) -> list[GraphFilterOption]:
+#         values: dict[str, str] = {}
+#         for graph_name in names:
+#             graph_clause, graph_close = _graph_scope_clauses(graph_name)
+#             rows = store.query(
+#                 f"""
+#                 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+#                 SELECT DISTINCT ?uri ?label
+#                 WHERE {{
+#                     {graph_clause}
+#                     {pattern}
+#                     OPTIONAL {{ ?uri rdfs:label ?label . }}
+#                     {graph_close}
+#                 }}
+#                 LIMIT 5000
+#                 """
+#             )
+#             for row in rows:
+#                 assert isinstance(row, ResultRow)
+#                 uri = str(row.uri)
+#                 if not uri:
+#                     continue
+#                 if uri not in values:
+#                     label = (
+#                         str(row.label)
+#                         if getattr(row, "label", None)
+#                         else uri.split("/")[-1].split("#")[-1]
+#                     )
+#                     values[uri] = label
+#         return [
+#             GraphFilterOption(uri=uri, label=label)
+#             for uri, label in sorted(values.items(), key=lambda item: item[1].lower())
+#         ]
+
+#     subjects = _collect_options("?uri ?p ?o . FILTER(isIRI(?uri))")
+#     predicates = _collect_options("?s ?uri ?o . FILTER(isIRI(?uri))")
+#     objects = _collect_options("?s ?p ?uri . FILTER(isIRI(?uri))")
+#     return GraphFilterOptionsResponse(
+#         subjects=subjects,
+#         predicates=predicates,
+#         objects=objects,
+#     )
 
 
 @router.post("/")
@@ -405,83 +409,50 @@ async def create_view(
     request: Request,
     payload: CreateGraphView,
     current_user: User = Depends(get_current_user_required),
-) -> GraphViewInfo:
-    _ = current_user
+) -> dict[str, str]:
+    import hashlib
+
+    from rdflib import Graph
+
     await require_workspace_access(current_user.id, payload.workspace_id)
+
     if len(payload.filters) == 0:
         raise HTTPException(status_code=400, detail="At least one filter is required")
     if len(payload.graph_names) == 0:
         raise HTTPException(status_code=400, detail="At least one graph is required")
-    view = _build_view_graph(payload.name, payload.graph_names, payload.filters)
+
     store = get_triple_store_service(request)
+
+    # Create graph filters
+    inserted_graph = Graph()
+    graph_filters: list[GraphFilter | URIRef | str] = []
+    for filter in payload.filters:
+        label = hashlib.sha256(
+            f"{filter.subject_uri}|{filter.predicate_uri}|{filter.object_uri}".encode()
+        ).hexdigest()
+        graph_filter = GraphFilter(
+            label=label,
+            subject_uri=filter.subject_uri,
+            predicate_uri=filter.predicate_uri,
+            object_uri=filter.object_uri,
+        )
+        inserted_graph += graph_filter.rdf()
+        graph_filters.append(graph_filter)
+
+    # List graphs
+    graphs: list[KnowledgeGraph | URIRef | str] = [
+        URIRef(graph_name) for graph_name in payload.graph_names
+    ]
+
+    # Create graph view
+    view = GraphView(
+        label=payload.name,
+        has_graph_filter=graph_filters,
+        includes_knowledge_graph=graphs,
+    )
     inserted_graph = view.rdf()
     store.insert(inserted_graph, graph_name=NEXUS_GRAPH_URI)
-    return GraphViewInfo(
-        workspace_id=payload.workspace_id,
-        id=str(view._uri),
-        uri=str(view._uri),
-        name=payload.name,
-        label=payload.name,
-        graph_names=payload.graph_names,
-        filters=payload.filters,
-        scope=payload.scope,
-        user_id=payload.user_id,
-    )
-
-
-@router.put("/{view_id}")
-async def update_view(
-    request: Request,
-    view_id: str,
-    payload: UpdateGraphView,
-    workspace_id: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user_required),
-) -> GraphViewInfo:
-    effective_workspace_id = payload.workspace_id or workspace_id
-    if not effective_workspace_id:
-        raise HTTPException(status_code=400, detail="workspace_id is required")
-    await require_workspace_access(current_user.id, effective_workspace_id)
-    if len(payload.filters) == 0:
-        raise HTTPException(status_code=400, detail="At least one filter is required")
-    if len(payload.graph_names) == 0:
-        raise HTTPException(status_code=400, detail="At least one graph is required")
-    store = get_triple_store_service(request)
-    resolved = payload.uri or view_id
-    view_uri = _resolve_view_uri(store, resolved)
-    if view_uri is None:
-        raise HTTPException(status_code=404, detail="View not found")
-    from naas_abi.pipelines.RemoveIndividualPipeline import (
-        RemoveIndividualPipeline,
-        RemoveIndividualPipelineConfiguration,
-        RemoveIndividualPipelineParameters,
-    )
-
-    pipeline = RemoveIndividualPipeline(
-        configuration=RemoveIndividualPipelineConfiguration(
-            triple_store=store,
-        )
-    )
-    pipeline.run(
-        parameters=RemoveIndividualPipelineParameters(
-            uri=view_uri,
-            graph_uri=NEXUS_GRAPH_URI,
-        )
-    )
-    updated_view = _build_view_graph(
-        payload.name, payload.graph_names, payload.filters, view_uri=view_uri
-    )
-    store.insert(updated_view.rdf(), graph_name=NEXUS_GRAPH_URI)
-    return GraphViewInfo(
-        workspace_id=effective_workspace_id,
-        id=str(view_uri),
-        uri=str(view_uri),
-        name=payload.name,
-        label=payload.name,
-        graph_names=payload.graph_names,
-        filters=payload.filters,
-        scope=payload.scope,
-        user_id=payload.user_id,
-    )
+    return {"status": "created"}
 
 
 @router.delete("/{view_id}")
@@ -521,38 +492,77 @@ async def delete_view(
     return {"status": "deleted"}
 
 
+@router.get("/{graph_id}/overview")
+async def get_view_overview(
+    request: Request,
+    view_id: str,
+    workspace_id: str = Query(..., description="Workspace ID"),
+    current_user: User = Depends(get_current_user_required),
+) -> ViewOverview:
+    """Get overview of a given graph."""
+    await require_workspace_access(current_user.id, workspace_id)
+
+    view_data = await get_view_network(
+        request=request,
+        view_id=view_id,
+        workspace_id=workspace_id,
+        current_user=current_user,
+    )
+
+    nodes: list[GraphNode] = view_data.nodes
+    edges: list[GraphEdge] = view_data.edges
+
+    kpis = {
+        "total_instances": len(nodes),
+        "total_relationships": len(edges),
+        "average_degree": (2 * len(edges) / len(nodes)) if nodes else 0,
+        "density": (len(edges) / (len(nodes) * (len(nodes) - 1))) if len(nodes) > 1 else 0,
+    }
+    type_counts: dict[str, int] = {}
+    for node in nodes:
+        node_type = (node.type or "unknown").strip() or "unknown"
+        type_counts[node_type] = type_counts.get(node_type, 0) + 1
+
+    instances_by_class = [
+        {"type": node_type, "count": count}
+        for node_type, count in sorted(type_counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+    return ViewOverview(
+        kpis=kpis,
+        instances_by_class=instances_by_class,
+    )
+
+
 @router.get("/{view_id}/network")
 async def get_view_network(
     request: Request,
     view_id: str,
-    workspace_id: str,
-    graph_names: list[str] | None = Query(default=None),
-    filters_uris: list[str] | None = Query(default=None),
+    workspace_id: str = Query(..., description="Workspace ID"),
     limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
 ) -> Any:
-    await require_workspace_access(current_user.id, workspace_id)
+    # await require_workspace_access(current_user.id, workspace_id)
     from naas_abi.apps.nexus.apps.api.app.api.endpoints import graph as graph_endpoints
 
     store = get_triple_store_service(request)
-    resolved_graph_names, resolved_graph_filters, _ = resolve_view_context(
-        store=store,
-        workspace_id=workspace_id,
-        user_id=current_user.id,
-        view_id=view_id,
-    )
-    effective_graph_names = (
-        [name for name in (graph_names or []) if name and name.strip()] or resolved_graph_names
-    )
-    effective_filters = (
-        get_graph_filters(store, filters_uris or []) if filters_uris else resolved_graph_filters
-    )
 
-    return await graph_endpoints.get_network(
+    view_info = await get_view(
         request=request,
+        view_id=view_id,
         workspace_id=workspace_id,
-        graph_names=effective_graph_names,
-        graph_filters=json.dumps(effective_filters),
-        limit=limit,
         current_user=current_user,
+    )
+    graph_names = view_info.graph_names
+    graph_filters = view_info.graph_filters
+
+    graph_filters_resolved = get_graph_filters(store, graph_filters or [])
+
+    return graph_endpoints.list_individuals(
+        triple_store=store,
+        workspace_id=workspace_id,
+        graph_names=graph_names,
+        graph_filters=graph_filters_resolved,
+        limit=limit,
+        depth=2,
     )
