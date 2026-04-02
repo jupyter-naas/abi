@@ -654,7 +654,6 @@ async def create_view(
     payload: CreateGraphView,
     current_user: User = Depends(get_current_user_required),
 ) -> dict[str, Any]:
-    import hashlib
 
     from rdflib import Graph
 
@@ -671,14 +670,13 @@ async def create_view(
     inserted_graph = Graph()
     graph_filters: list[GraphFilter | URIRef | str] = []
     for filter in payload.filters:
-        label = hashlib.sha256(
-            f"{filter.subject_uri}|{filter.predicate_uri}|{filter.object_uri}".encode()
-        ).hexdigest()
+        label = f"subject:{filter.subject_uri}|predicate:{filter.predicate_uri}|object:{filter.object_uri}"
         graph_filter = GraphFilter(
             label=label,
             subject_uri=filter.subject_uri if filter.subject_uri else "unknown",
             predicate_uri=filter.predicate_uri if filter.predicate_uri else "unknown",
             object_uri=filter.object_uri if filter.object_uri else "unknown",
+            creator=current_user.id,
         )
         inserted_graph += graph_filter.rdf()
         graph_filters.append(graph_filter)
@@ -694,6 +692,7 @@ async def create_view(
         description=payload.description,
         has_graph_filter=graph_filters,
         includes_knowledge_graph=graphs,
+        creator=current_user.id,
     )
     inserted_graph = view.rdf()
     store.insert(inserted_graph, graph_name=NEXUS_GRAPH_URI)
