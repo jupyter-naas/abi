@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v1.14.0 (2026-04-02)
+
+### Chores
+
+- Update .gitignore, enhance security checks in Makefile, and refine Python version setup in CI
+  workflow
+  ([`fbb7073`](https://github.com/jupyter-naas/abi/commit/fbb7073adf2ec04d71b013422122ae2321d96346))
+
+### Features
+
+- **auth**: Add avatar removal endpoint and update avatar handling
+  ([`506fa32`](https://github.com/jupyter-naas/abi/commit/506fa3208e540ea3bb22a877a0b5ed6f9a5f8200))
+
+- **auth**: Refactor avatar handling to use object storage and add avatar retrieval endpoint
+  ([`0ab8842`](https://github.com/jupyter-naas/abi/commit/0ab884234f7a9deadcd37d7ef99085953a4ad624))
+
+### Refactoring
+
+- **auth**: Clean up import statements and enhance error handling in avatar retrieval
+  ([`d414e84`](https://github.com/jupyter-naas/abi/commit/d414e84b11c45e3af9c94e5f98b3aab14066526b))
+
+- **auth**: Streamline import statements in FastAPI primary adapter
+  ([`f0ebacb`](https://github.com/jupyter-naas/abi/commit/f0ebacb6427b8d035147751b2bdd250804431a20))
+
+
 ## v1.13.0 (2026-03-30)
 
 ### Bug Fixes
