@@ -2,6 +2,123 @@
 
 <!-- version list -->
 
+## v1.15.0 (2026-04-02)
+
+### Bug Fixes
+
+- Add agent tools and intents to ontologies
+  ([`46a9410`](https://github.com/jupyter-naas/abi/commit/46a9410ac20e4b4f0c6edc45bb5f0bc9d620d5ce))
+
+- Add description to view and graph + improve graph clear and delete
+  ([`25cabc6`](https://github.com/jupyter-naas/abi/commit/25cabc6589f37c0e3e89c10353933e3465f4ef1b))
+
+- Add features and roles to ontology + generate py file
+  ([`e932509`](https://github.com/jupyter-naas/abi/commit/e9325090f1b44635f924030e97968c62dc72620f))
+
+- Agent tools & intents in pipeline
+  ([`863f200`](https://github.com/jupyter-naas/abi/commit/863f200c2606e1fe794ed3d4c91c670c872c82d0))
+
+- Auto seed demo data False
+  ([`ef690ed`](https://github.com/jupyter-naas/abi/commit/ef690ed7a0152911a43745f69438df32b000b89d))
+
+- Comment init view
+  ([`4f9724a`](https://github.com/jupyter-naas/abi/commit/4f9724a49e3d4d4964ddf54455df623caa129b3d))
+
+- Create views
+  ([`e1b6f4b`](https://github.com/jupyter-naas/abi/commit/e1b6f4b4072ef2c68b70b0d571ae61836aafeb49))
+
+- Error make check
+  ([`028b516`](https://github.com/jupyter-naas/abi/commit/028b516808c30931db03afbfdbe6dd0b48a6fb11))
+
+- Exclude turtle files from sandbox folders
+  ([`b62ee3d`](https://github.com/jupyter-naas/abi/commit/b62ee3d6eb35eef25eb9b73ebfc2171fa59e07f5))
+
+- Force update nexus graph
+  ([`2b64dfa`](https://github.com/jupyter-naas/abi/commit/2b64dfa4f7ee132a635198db1240d438ff59dbae))
+
+- Graph & view order + font
+  ([`a8b2af9`](https://github.com/jupyter-naas/abi/commit/a8b2af9dcf53d8f09c6317a8670d108b3be42783))
+
+- Hide actions clear / delete for nexus and schema graph
+  ([`1c8ed61`](https://github.com/jupyter-naas/abi/commit/1c8ed61fd4310873facbfc8923f1204bcc3baf9c))
+
+- Kg graph builder agent
+  ([`38b3687`](https://github.com/jupyter-naas/abi/commit/38b3687ba274a6321fc57b3ac1a03088803d88c5))
+
+- List graphs in nexus
+  ([`e474464`](https://github.com/jupyter-naas/abi/commit/e47446488c2ffe38d23ae4e9891bea18a1ec7ef0))
+
+- List ontologies
+  ([`2d29b93`](https://github.com/jupyter-naas/abi/commit/2d29b937296ac46159bf356525db807b0b725e6e))
+
+- Onto2py infite loop on nexus
+  ([`886577d`](https://github.com/jupyter-naas/abi/commit/886577dd29700f4a350c40b1e59bab97f4a4aef6))
+
+- Overview + loading time
+  ([`b6024c3`](https://github.com/jupyter-naas/abi/commit/b6024c372c4a280adfddf64b021b941f3e6629f3))
+
+- Remove blank nodes
+  ([`1cd035a`](https://github.com/jupyter-naas/abi/commit/1cd035a3803cf573365ddf492ef5ce650f041dfd))
+
+- Remove view
+  ([`1e05ac3`](https://github.com/jupyter-naas/abi/commit/1e05ac36339be7cac02413adf312a5219e3f4201))
+
+- Renaming endpoint view
+  ([`21d4b54`](https://github.com/jupyter-naas/abi/commit/21d4b5464b671e320113c72ccec9c5d7870190b6))
+
+- Tipo
+  ([`a49ab9b`](https://github.com/jupyter-naas/abi/commit/a49ab9bd244f687b2b16417c35ea09485775807c))
+
+- Update datasource ontology
+  ([`abc4a06`](https://github.com/jupyter-naas/abi/commit/abc4a06047eb189fffc49d44e60b05a6392f33d0))
+
+### Features
+
+- Add agent data properties
+  ([`41d8bd5`](https://github.com/jupyter-naas/abi/commit/41d8bd52fd80ae5f729628004185a14511de54b2))
+
+- Add intents and tools to class init
+  ([`1b90239`](https://github.com/jupyter-naas/abi/commit/1b9023923b49a8a2bc451480e0cc7d34617327c6))
+
+- Add user as creator
+  ([`0351d3d`](https://github.com/jupyter-naas/abi/commit/0351d3df0fc76b20e133e742c81f76d55f1aab23))
+
+- Bind namespace
+  ([`03c810c`](https://github.com/jupyter-naas/abi/commit/03c810cf35f4e6e20123dac09418dd18e38dfaea))
+
+- Create views api route
+  ([`3100292`](https://github.com/jupyter-naas/abi/commit/3100292cfc6631cfcb84a828cded9ae05147410c))
+
+- Init nexus pipeline & remove legacy
+  ([`b968172`](https://github.com/jupyter-naas/abi/commit/b968172bbd5da59e5bf6969ecff392a478c72721))
+
+- Init nexus platform ontologies + refactor structure + rm legacy
+  ([`76d571e`](https://github.com/jupyter-naas/abi/commit/76d571eb6c5d4ff3c267b42f078c2a1fd929797d))
+
+- Init nexus with pipeline and create onto2py files
+  ([`04cc5a0`](https://github.com/jupyter-naas/abi/commit/04cc5a0140c7952188231b5e45bc2e6db8004031))
+
+- Init views in pipeline nexus
+  ([`e060371`](https://github.com/jupyter-naas/abi/commit/e0603716c54632735bb23d6ecbbc9f1118bf0617))
+
+- Load pipeline nexus platform in init
+  ([`bec53e0`](https://github.com/jupyter-naas/abi/commit/bec53e04aaf2a6d1a8636ed7a59f960720ba6389))
+
+- Use pipeline in init
+  ([`713fe27`](https://github.com/jupyter-naas/abi/commit/713fe2796122ecbb2c413cff184926a619a6c6d8))
+
+### Refactoring
+
+- Graph and view nexus api endpoint & pages
+  ([`bc104ac`](https://github.com/jupyter-naas/abi/commit/bc104accec4bd3a517270d461ca0d47b623c4282))
+
+- Nexus platform pipeline
+  ([`2d9be72`](https://github.com/jupyter-naas/abi/commit/2d9be72a952c6fb194b9e3f8e525110f4b85d0be))
+
+- Remove individual pipeline
+  ([`468b46f`](https://github.com/jupyter-naas/abi/commit/468b46f75684298d7b3ea55f253a7385091b6de2))
+
+
 ## v1.14.0 (2026-04-02)
 
 ### Chores
