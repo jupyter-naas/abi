@@ -12,7 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.graph import GraphEdge, Grap
 from naas_abi.ontologies.modules.NexusPlatformOntology import GraphFilter, GraphView, KnowledgeGraph
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, Field
-from rdflib import RDF, RDFS, URIRef
+from rdflib import OWL, RDF, RDFS, URIRef
 from rdflib.query import ResultRow
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -90,8 +90,9 @@ class TriplePreviewRow(BaseModel):
 
 class TriplePreviewResponse(BaseModel):
     count: int
-    instance_count: int
-    relation_count: int
+    individual_count: int
+    object_properties_count: int
+    data_properties_count: int
     rows: list[TriplePreviewRow]
 
 
@@ -414,17 +415,18 @@ async def preview_graph_filters(
         return " ".join(conditions)
 
     unique_triples: set[tuple[str, str, str]] = set()
-    ordered_triples: list[tuple[str, str, str]] = []
+    ordered_triples: list[tuple[str, str, str, bool, bool]] = []
 
     try:
         for filter_item in normalized_filters:
             filter_clause = _filter_conditions(filter_item)
             triples_rows = store.query(
                 f"""
-                SELECT DISTINCT ?s ?p ?o
+                SELECT DISTINCT ?s ?p ?o (isIRI(?o) AS ?o_is_iri) (isLiteral(?o) AS ?o_is_literal)
                 WHERE {{
                     VALUES ?g {{ {graph_values} }}
                     GRAPH ?g {{
+                        FILTER(?o != <{str(OWL.NamedIndividual)}>)
                         {filter_clause}
                     }}
                 }}
@@ -436,32 +438,48 @@ async def preview_graph_filters(
                 if triple in unique_triples:
                     continue
                 unique_triples.add(triple)
-                ordered_triples.append(triple)
+                object_is_iri = str(getattr(row, "o_is_iri", "false")).lower() == "true"
+                object_is_literal = str(getattr(row, "o_is_literal", "false")).lower() == "true"
+                ordered_triples.append(
+                    (
+                        triple[0],
+                        triple[1],
+                        triple[2],
+                        object_is_iri,
+                        object_is_literal,
+                    )
+                )
     except Exception:
         # Keep preview endpoint stable even if the triple-store rejects a query pattern.
         return TriplePreviewResponse(
             count=0,
-            instance_count=0,
-            relation_count=0,
+            individual_count=0,
+            object_properties_count=0,
+            data_properties_count=0,
             rows=[],
         )
 
     total_count = len(unique_triples)
-    relation_count = sum(
-        1 for _, predicate, _ in unique_triples if predicate != str(RDF.type)
-    )
+    object_properties_count = 0
+    data_properties_count = 0
     nodes: set[str] = set()
-    for subject, predicate, object_value in unique_triples:
+    for subject, predicate, object_value, object_is_iri, object_is_literal in ordered_triples:
+        if object_is_iri and predicate != str(RDF.type):
+            object_properties_count += 1
+        if object_is_literal:
+            data_properties_count += 1
         if subject.startswith("http://") or subject.startswith("https://"):
             nodes.add(subject)
         if predicate == str(RDF.type):
             continue
-        if object_value.startswith("http://") or object_value.startswith("https://"):
+        if object_is_iri and (
+            object_value.startswith("http://") or object_value.startswith("https://")
+        ):
             nodes.add(object_value)
-    instance_count = len(nodes)
+    individual_count = len(nodes)
 
     rows: list[TriplePreviewRow] = []
-    for subject, predicate, object_value in ordered_triples[: int(payload.limit)]:
+    for subject, predicate, object_value, _, _ in ordered_triples[: int(payload.limit)]:
         s_label = (
             _label_from_iri(subject) if subject.startswith(("http://", "https://")) else subject
         )
@@ -485,8 +503,9 @@ async def preview_graph_filters(
 
     return TriplePreviewResponse(
         count=total_count,
-        instance_count=instance_count,
-        relation_count=relation_count,
+        individual_count=individual_count,
+        object_properties_count=object_properties_count,
+        data_properties_count=data_properties_count,
         rows=rows,
     )
 
@@ -533,9 +552,7 @@ async def list_views(
                 "uri": view_id,
                 "label": str(row.label),
                 "description": (
-                    str(getattr(row, "description"))
-                    if getattr(row, "description", None) is not None
-                    else None
+                    str(row.description) if getattr(row, "description", None) is not None else None
                 ),
                 "graph_names": [],
                 "graph_filters": [],
@@ -610,9 +627,7 @@ async def get_view(
                 uri=row_view_uri,
                 label=str(row.label),
                 description=(
-                    str(getattr(row, "description"))
-                    if getattr(row, "description", None) is not None
-                    else None
+                    str(row.description) if getattr(row, "description", None) is not None else None
                 ),
                 graph_names=[],
                 graph_filters=[],
@@ -702,7 +717,7 @@ async def delete_view(
     workspace_id: str | None = Query(default=None),
     payload: DeleteGraphView | None = None,
     current_user: User = Depends(get_current_user_required),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     effective_workspace_id = workspace_id or (payload.workspace_id if payload else None)
     if not effective_workspace_id:
         raise HTTPException(status_code=400, detail="workspace_id is required")
@@ -723,13 +738,19 @@ async def delete_view(
             triple_store=store,
         )
     )
-    pipeline.run(
+    graph = pipeline.run(
         parameters=RemoveIndividualPipelineParameters(
             uri=view_uri,
-            graph_uri=NEXUS_GRAPH_URI,
+            graph_names=[NEXUS_GRAPH_URI],
         )
     )
-    return {"status": "deleted"}
+    return {
+        "status": "deleted",
+        "view_id": str(view_uri).split("/")[-1],
+        "view_uri": str(view_uri),
+        "total_triples": len(graph),
+        "graph": graph.serialize(format="turtle"),
+    }
 
 
 @router.get("/{view_id}/overview")
