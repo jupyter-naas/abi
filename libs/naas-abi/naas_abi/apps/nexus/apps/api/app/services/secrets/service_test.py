@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
 from naas_abi.apps.nexus.apps.api.app.services.secrets.port import SecretRecord
 from naas_abi.apps.nexus.apps.api.app.services.secrets.secrets__schema import (
     SecretBulkImportInput,
@@ -28,6 +29,12 @@ def _secret(now: datetime) -> SecretRecord:
     )
 
 
+def _context() -> RequestContext:
+    return RequestContext(
+        token_data=TokenData(user_id="user-1", scopes={"*"}, is_authenticated=True)
+    )
+
+
 @pytest.mark.asyncio
 async def test_create_secret_raises_on_duplicate_key() -> None:
     now = datetime.now()
@@ -38,6 +45,7 @@ async def test_create_secret_raises_on_duplicate_key() -> None:
 
     with pytest.raises(ValueError):
         await service.create_secret(
+            context=_context(),
             secret=SecretCreateInput(
                 workspace_id="ws-1",
                 key="OPENAI_API_KEY",
@@ -56,6 +64,7 @@ async def test_update_secret_raises_when_not_found() -> None:
 
     with pytest.raises(SecretNotFoundError):
         await service.update_secret(
+            context=_context(),
             secret_id="missing",
             update=SecretUpdateInput(value="new"),
             now=datetime.now(),
@@ -83,6 +92,7 @@ async def test_bulk_import_counts_imported_and_updated() -> None:
     service = SecretsService(adapter=adapter)
 
     result = await service.bulk_import(
+        context=_context(),
         data=SecretBulkImportInput(
             workspace_id="ws-1",
             env_content="OPENAI_API_KEY=old\nANTHROPIC_API_KEY=new",
@@ -104,5 +114,9 @@ async def test_resolve_secret_returns_none_when_missing() -> None:
     )
     service = SecretsService(adapter=adapter)
 
-    value = await service.resolve_secret_value(workspace_id="ws-1", key="MISSING")
+    value = await service.resolve_secret_value(
+        context=_context(),
+        workspace_id="ws-1",
+        key="MISSING",
+    )
     assert value is None

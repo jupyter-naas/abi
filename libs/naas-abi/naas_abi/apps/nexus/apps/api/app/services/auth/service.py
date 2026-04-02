@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort, AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
     create_refresh_token,
+    hash_token,
     is_access_token_revoked,
     revoke_access_token,
     revoke_all_user_tokens,
@@ -303,6 +304,7 @@ class AuthService:
             return None
 
         token = secrets.token_urlsafe(32)
+        token_hash = hash_token(token)
         now = now_utc_naive()
         expires_at = now + timedelta(hours=1)
 
@@ -310,7 +312,7 @@ class AuthService:
         await self.adapter.create_password_reset_token(
             token_id=str(uuid4()),
             user_id=user.id,
-            token=token,
+            token=token_hash,
             expires_at=expires_at,
             created_at=now,
         )

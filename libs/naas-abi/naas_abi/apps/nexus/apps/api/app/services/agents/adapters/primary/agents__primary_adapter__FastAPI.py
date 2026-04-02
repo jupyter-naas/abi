@@ -16,6 +16,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentService,
     AgentUpdateInput,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
@@ -34,6 +35,12 @@ def get_agent_service(
     registry: ServiceRegistry = Depends(get_service_registry),
 ) -> AgentService:
     return registry.agents
+
+
+def request_context(current_user: User) -> RequestContext:
+    return RequestContext(
+        token_data=TokenData(user_id=current_user.id, scopes={"*"}, is_authenticated=True)
+    )
 
 
 def _extract_agent_suggestions(agent_cls: type) -> list[dict[str, str]] | None:
@@ -117,7 +124,10 @@ async def list_agents(
 
     await require_workspace_access(current_user.id, workspace_id)
 
-    agent_list = await agent_service.list_workspace_agents(workspace_id)
+    agent_list = await agent_service.list_workspace_agents(
+        context=request_context(current_user),
+        workspace_id=workspace_id,
+    )
     existing_agents_by_class_name = {
         agent.class_name: agent for agent in agent_list if agent.class_name
     }
@@ -156,7 +166,8 @@ async def list_agents(
             logger.debug("Creating agent in nexus backend: %s", name)
             system_prompt = _get_agent_system_prompt(agent_cls)
             created_agent = await agent_service.create_agent(
-                AgentCreateInput(
+                context=request_context(current_user),
+                data=AgentCreateInput(
                     name=name,
                     description=description or "",
                     workspace_id=workspace_id,
@@ -164,7 +175,7 @@ async def list_agents(
                     provider="abi",
                     enabled=enabled,
                     system_prompt=system_prompt,
-                )
+                ),
             )
             agent_list.append(created_agent)
             existing_agents_by_class_name[class_name] = created_agent
@@ -194,7 +205,10 @@ async def create_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
     await require_workspace_access(current_user.id, agent.workspace_id)
-    created_agent = await agent_service.create_agent(agent)
+    created_agent = await agent_service.create_agent(
+        context=request_context(current_user),
+        data=agent,
+    )
     logger.debug("Agent created: %s", created_agent)
     return created_agent
 
@@ -206,15 +220,19 @@ async def update_agent(
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
-    existing_agent = await agent_service.get_agent(agent_id)
+    existing_agent = await agent_service.get_agent(
+        context=request_context(current_user),
+        agent_id=agent_id,
+    )
     if not existing_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     await require_workspace_access(current_user.id, existing_agent.workspace_id)
 
     updated_agent = await agent_service.update_agent(
-        agent_id,
-        AgentUpdateInput(
+        context=request_context(current_user),
+        agent_id=agent_id,
+        updates=AgentUpdateInput(
             name=updates.name,
             description=updates.description,
             system_prompt=updates.system_prompt,
@@ -233,12 +251,18 @@ async def delete_agent(
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> dict[str, str]:
-    existing_agent = await agent_service.get_agent(agent_id)
+    existing_agent = await agent_service.get_agent(
+        context=request_context(current_user),
+        agent_id=agent_id,
+    )
     if not existing_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     await require_workspace_access(current_user.id, existing_agent.workspace_id)
-    await agent_service.delete_agent(agent_id)
+    await agent_service.delete_agent(
+        context=request_context(current_user),
+        agent_id=agent_id,
+    )
     return {"status": "deleted"}
 
 
@@ -248,7 +272,10 @@ async def get_agent(
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
-    agent = await agent_service.get_agent(agent_id)
+    agent = await agent_service.get_agent(
+        context=request_context(current_user),
+        agent_id=agent_id,
+    )
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 

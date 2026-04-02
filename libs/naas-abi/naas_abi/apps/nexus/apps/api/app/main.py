@@ -16,6 +16,9 @@ from naas_abi.apps.nexus.apps.api.app.api.router import api_router
 from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
+from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
+    register_service_exception_handlers,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ollama import ensure_ollama_ready, get_ollama_status
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -281,6 +284,7 @@ def create_app(app: FastAPI | None = None):
     if not getattr(app.state, "_nexus_api_patched", False):
         if attach_startup_handlers:
             _register_startup_handlers(app)
+        register_service_exception_handlers(app)
         _configure_middleware(app)
         _register_routes(app)
         _mount_static_assets(app)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
@@ -52,7 +51,6 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions a
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 AVATAR_STORAGE_PREFIX = "nexus/avatars"
 ALLOWED_AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
@@ -266,10 +264,7 @@ async def forgot_password(
     request: ForgotPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict:
-    token = await auth_service.forgot_password(request.email)
-    if token:
-        reset_link = f"http://localhost:3000/auth/reset-password?token={token}"
-        logger.info("Password reset link for %s: %s", request.email, reset_link)
+    await auth_service.forgot_password(request.email)
 
     return {
         "status": "success",
