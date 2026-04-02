@@ -196,7 +196,7 @@ class Settings(BaseSettings):
 
     # Demo data seeding (idempotent startup check)
     # When enabled, startup seeds demo data only if users table is empty.
-    auto_seed_demo_data: bool = True
+    auto_seed_demo_data: bool = False
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""

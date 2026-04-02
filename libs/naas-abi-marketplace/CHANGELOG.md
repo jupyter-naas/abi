@@ -2,6 +2,26 @@
 
 <!-- version list -->
 
+## v1.8.1 (2026-04-02)
+
+### Bug Fixes
+
+- Add tools and intents
+  ([`7676d70`](https://github.com/jupyter-naas/abi/commit/7676d70dd18d0776359b15e9b54a03f08e4ef88b))
+
+- Error make check
+  ([`028b516`](https://github.com/jupyter-naas/abi/commit/028b516808c30931db03afbfdbe6dd0b48a6fb11))
+
+- Support agent
+  ([`71ade48`](https://github.com/jupyter-naas/abi/commit/71ade48497cdd490ca14591071615a41f2b1284b))
+
+### Chores
+
+- Update .gitignore, enhance security checks in Makefile, and refine Python version setup in CI
+  workflow
+  ([`fbb7073`](https://github.com/jupyter-naas/abi/commit/fbb7073adf2ec04d71b013422122ae2321d96346))
+
+
 ## v1.8.0 (2026-03-06)
 
 ### Features

@@ -172,11 +172,14 @@ class BaseModule(Generic[TConfig]):
 
     def __load_ontologies(self):
         if os.path.exists(os.path.join(self.module_root_path, "ontologies")):
-            for file in glob.glob(
+            ontologies = glob.glob(
                 os.path.join(self.module_root_path, "ontologies", "**", "*.ttl"),
                 recursive=True,
-            ):
-                self.ontologies.append(file)
+            )
+            for ontology in ontologies:
+                if "sandbox" in ontology.lower():
+                    continue
+                self.ontologies.append(ontology)
 
 
 # class IModule(ABC):

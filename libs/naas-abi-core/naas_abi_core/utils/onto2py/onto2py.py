@@ -715,6 +715,15 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     # Save the Python code next to the input file if a file path was provided
     if ttl_file_path:
         py_file = Path(ttl_file_path).with_suffix(".py")
+
+        # Read the existing file if it exists
+        if py_file.exists():
+            with open(py_file, "r") as f:
+                existing_code = f.read()
+            if existing_code == python_code:
+                print(f"✅ {ttl_file_path} already converted to {py_file}")
+                return existing_code
+
         with open(py_file, "w") as f:
             f.write(python_code)
         print(f"✅ Successfully converted {ttl_file_path} to {py_file}")

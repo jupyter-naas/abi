@@ -321,27 +321,8 @@ class ABIModule(BaseModule):
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
 
-    # def on_initialized(self):
-    #     if (
-    #         self.configuration.anthropic_api_key is not None
-    #         and "naas_abi_marketplace.ai.claude" not in self.engine.modules
-    #     ):
-    #         raise ValueError(
-    #             "anthropic_api_key is provided but naas_abi_marketplace.ai.claude is not available"
-    #         )
-
-    def on_load(self):
-        super().on_load()
-        from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
-        from rdflib import URIRef
-
-        self.engine.services.triple_store.subscribe(
-            (URIRef("http://example.com/subject"), None, None),
-            lambda triple: print(f"Triple received: {triple.decode('utf-8')}"),
-            OntologyEvent.INSERT,
-        )
-
     def on_initialized(self):
+        super().on_initialized()
         # Initialize Nexus settings
 
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
@@ -351,6 +332,56 @@ class ABIModule(BaseModule):
         nexus_config.settings = nexus_config.Settings(**settings_kwargs)
 
         _initialize_nexus_service_registry()
+
+        import glob
+        import os
+
+        # Convert ontologies to Python classes.
+        from naas_abi_core import logger
+        from naas_abi_core.utils.onto2py import onto2py
+
+        ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
+        ttl_files = glob.glob(
+            os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
+        )
+
+        if not ttl_files:
+            logger.warning(f"No TTL files found in {ontologies_dir}")
+            return
+
+        for ttl_file in ttl_files:
+            try:
+                logger.debug(f"Converting {ttl_file} to Python")
+                onto2py(ttl_file)
+            except Exception as e:
+                logger.error(
+                    f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
+                )
+
+        # Initialize Nexus platform
+        from naas_abi.pipelines.NexusPlatformPipeline import (
+            NexusPlatformPipeline,
+            NexusPlatformPipelineConfiguration,
+            NexusPlatformPipelineParameters,
+        )
+
+        pipeline = NexusPlatformPipeline(
+            NexusPlatformPipelineConfiguration(
+                triple_store=self.engine.services.triple_store
+            )
+        )
+        pipeline.run(NexusPlatformPipelineParameters())
+
+    def on_load(self):
+        super().on_load()
+        # from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
+        # from rdflib import URIRef
+
+        # self.engine.services.triple_store.subscribe(
+        #     (URIRef("http://example.com/subject"), None, None),
+        #     lambda triple: print(f"Triple received: {triple.decode('utf-8')}"),
+        #     OntologyEvent.INSERT,
+        # )
 
     def api(self, app: FastAPI) -> None:
 

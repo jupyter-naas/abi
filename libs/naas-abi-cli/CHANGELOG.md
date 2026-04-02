@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.24.0 (2026-03-30)
+
+### Features
+
+- **service-portal**: Enhance index.html.template with improved layout and styling
+  ([`14cccf5`](https://github.com/jupyter-naas/abi/commit/14cccf5a4e7333946d4655a83d706e5a73102f27))
+
+
+## v1.23.1 (2026-03-28)
+
+### Bug Fixes
+
+- Abi cli bootstrap
+  ([`a8c5b4a`](https://github.com/jupyter-naas/abi/commit/a8c5b4a7af6722a7634715fb278a72bfcb79bc5a))
+
+
 ## v1.23.0 (2026-03-13)
 
 

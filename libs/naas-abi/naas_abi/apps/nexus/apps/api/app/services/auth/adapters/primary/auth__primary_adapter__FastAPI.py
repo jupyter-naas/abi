@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordRequestForm
 from naas_abi.apps.nexus.apps.api.app.services.audit import (
     log_login,
@@ -47,13 +47,39 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
 )
+from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions as StorageExceptions
+from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
 router = APIRouter()
 
-AVATAR_DIR = Path("uploads/avatars")
-AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+AVATAR_STORAGE_PREFIX = "nexus/avatars"
 ALLOWED_AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+AVATAR_MIME_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
 MAX_AVATAR_SIZE = 2 * 1024 * 1024
+
+
+def _get_object_storage(request: Request) -> ObjectStorageService:
+    storage = getattr(request.app.state, "object_storage", None)
+    if storage is not None:
+        return storage
+    try:
+        from naas_abi import ABIModule  # noqa: PLC0415
+
+        module = ABIModule.get_instance()
+        storage = module.engine.services.object_storage
+        request.app.state.object_storage = storage
+        return storage
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Object storage is not initialized.",
+        ) from exc
 
 
 @router.post("/register", response_model=AuthResponse)
@@ -271,6 +297,7 @@ async def upload_avatar(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user_required),
     auth_service: AuthService = Depends(get_auth_service),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict:
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
@@ -287,24 +314,69 @@ async def upload_avatar(
         raise HTTPException(status_code=400, detail="File too large (max 2MB)")
 
     unique_filename = f"{current_user.id}-{os.urandom(4).hex()}{ext}"
-    file_path = AVATAR_DIR / unique_filename
-    with open(file_path, "wb") as f:
-        f.write(content)
+    object_storage.put_object(AVATAR_STORAGE_PREFIX, unique_filename, content)
 
-    avatar_url = f"/uploads/avatars/{unique_filename}"
+    avatar_url = f"/api/auth/avatar/{unique_filename}"
     previous_avatar = current_user.avatar
     try:
         await auth_service.update_avatar(user_id=current_user.id, avatar_url=avatar_url)
     except UserNotFoundError as exc:
-        file_path.unlink(missing_ok=True)
+        try:
+            object_storage.delete_object(AVATAR_STORAGE_PREFIX, unique_filename)
+        except Exception:
+            pass
         raise HTTPException(status_code=404, detail="User not found") from exc
 
-    if previous_avatar and previous_avatar.startswith("/uploads/avatars/"):
-        old_file = AVATAR_DIR / os.path.basename(previous_avatar)
-        if old_file.name != unique_filename:
-            old_file.unlink(missing_ok=True)
+    _delete_old_avatar(object_storage, previous_avatar, unique_filename)
 
     return {"avatar_url": avatar_url, "filename": unique_filename}
+
+
+@router.get("/avatar/{filename}")
+async def get_avatar(
+    filename: str,
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
+) -> Response:
+    ext = os.path.splitext(filename)[1].lower()
+    media_type = AVATAR_MIME_TYPES.get(ext, "application/octet-stream")
+    try:
+        content = object_storage.get_object(AVATAR_STORAGE_PREFIX, filename)
+    except StorageExceptions.ObjectNotFound:
+        raise HTTPException(status_code=404, detail="Avatar not found") from None
+    return Response(content=content, media_type=media_type)
+
+
+@router.delete("/avatar")
+async def remove_avatar(
+    current_user: User = Depends(get_current_user_required),
+    auth_service: AuthService = Depends(get_auth_service),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
+) -> dict:
+    previous_avatar = current_user.avatar
+    try:
+        await auth_service.update_avatar(user_id=current_user.id, avatar_url=None)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="User not found") from exc
+
+    _delete_old_avatar(object_storage, previous_avatar)
+
+    return {"status": "ok"}
+
+
+def _delete_old_avatar(
+    object_storage: ObjectStorageService,
+    previous_avatar: str | None,
+    exclude_filename: str | None = None,
+) -> None:
+    if not previous_avatar or not previous_avatar.startswith("/api/auth/avatar/"):
+        return
+    key = previous_avatar.rsplit("/", 1)[-1]
+    if key == exclude_filename:
+        return
+    try:
+        object_storage.delete_object(AVATAR_STORAGE_PREFIX, key)
+    except Exception:
+        pass
 
 
 class AuthFastAPIPrimaryAdapter:

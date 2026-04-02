@@ -239,7 +239,7 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             row.used = True
 
     async def update_user_avatar(
-        self, user_id: str, avatar_url: str, now: datetime
+        self, user_id: str, avatar_url: str | None, now: datetime
     ) -> AuthUserRecord | None:
         result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
         user = result.scalar_one_or_none()
