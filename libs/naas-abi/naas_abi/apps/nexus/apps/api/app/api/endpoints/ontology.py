@@ -59,6 +59,11 @@ class OntologyFileItem(BaseModel):
     path: str
     module_name: str
     submodule_name: str | None = None
+    description: str | None = None
+    license: str | None = None
+    contributors: list[str] | None = None
+    date: str | None = None
+    imports: list[str] | None = None
 
 
 class OntologyOverviewStats(BaseModel):
@@ -974,43 +979,72 @@ async def list_ontology_files() -> dict[str, list[OntologyFileItem]]:
     Deduplicates ontology files across all modules but ensures at least
     one 'naas-abi' (or abi) entry is present for each unique file.
     """
+
+    from rdflib import DCTERMS, OWL, RDF, Graph, URIRef
+
+    ontology_files: list[OntologyFileItem] = []
+    seen_ontologies: set[str] = set()
+
     try:
         abi_module = ABIModule.get_instance()
+        abi_ontologies = abi_module.ontologies
+        abi_modules_ontologies: list[str] = [
+            ontology
+            for module in abi_module.engine.modules.values()
+            for ontology in module.ontologies
+        ]
 
-        ontology_files: list[OntologyFileItem] = []
-        seen_paths: set[str] = set()
+        abi_ontologies.extend(abi_modules_ontologies)
 
-        # Gather all ontologies, and keep a record if any belong to naas-abi/abi.
-        for module in abi_module.engine.modules.values():
-            module_name = str(module.__module__.split(".")[-1])
-            for ontology in module.ontologies:
-                ontology_path = str(ontology)
-                submodule_name = ontology_path.split("/")[-2]
-                if (
-                    "sparqlquery" in ontology_path.lower()
-                    or "sparqlqueries" in ontology_path.lower()
-                ):
-                    continue
-                if ontology_path not in seen_paths:
-                    if module_name.lower() in ontology_path.lower():
-                        seen_paths.add(ontology_path)
-                        ontology_files.append(
-                            OntologyFileItem(
-                                name=os.path.basename(ontology_path),
-                                path=ontology_path,
-                                module_name=module_name,
-                            )
-                        )
-                    elif "/naas-abi/" in ontology_path.lower():
-                        seen_paths.add(ontology_path)
-                        ontology_files.append(
-                            OntologyFileItem(
-                                name=os.path.basename(ontology_path),
-                                path=ontology_path,
-                                module_name="abi",
-                                submodule_name=submodule_name,
-                            )
-                        )
+        for ontology in abi_ontologies:
+            if ontology in seen_ontologies:
+                continue
+            seen_ontologies.add(ontology)
+
+            if "sandbox" in ontology.lower() or "modules" not in ontology.lower():
+                continue
+
+            ontology_graph = Graph()
+            ontology_graph.parse(ontology, format="turtle")
+
+            # Get metadata
+            ontology_uri = next(ontology_graph.subjects(RDF.type, OWL.Ontology), None)
+            if ontology_uri is None:
+                continue
+
+            # Metadata
+            title = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.title)
+            description = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.description)
+            license = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.license)
+            contributors = ontology_graph.objects(URIRef(str(ontology_uri)), DCTERMS.contributor)
+            date = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.date)
+            imports = ontology_graph.objects(URIRef(str(ontology_uri)), OWL.imports)
+
+            # Module name is the folder before "ontologies" in the path
+            ontology_parts = ontology.split("/")
+            try:
+                ontologies_index = ontology_parts.index("ontologies")
+                if ontologies_index > 0:
+                    module_name = ontology_parts[ontologies_index - 1]
+                else:
+                    module_name = ""
+            except ValueError:
+                # "ontologies" not found in path; fallback to first segment or empty
+                module_name = ontology_parts[0] if ontology_parts else ""
+
+            ontology_files.append(
+                OntologyFileItem(
+                    name=str(title),
+                    description=str(description),
+                    license=str(license),
+                    contributors=[str(contributor) for contributor in contributors],
+                    date=str(date),
+                    path=ontology,
+                    module_name=module_name,
+                    submodule_name=None,
+                    imports=[str(import_) for import_ in imports],
+                )
+            )
 
         ontology_files.sort(key=lambda item: (item.module_name.lower(), item.name.lower()))
         return {"items": ontology_files}

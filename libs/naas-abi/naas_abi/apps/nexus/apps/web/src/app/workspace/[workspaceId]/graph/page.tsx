@@ -100,6 +100,19 @@ const LEGACY_VIEW_MAP: Record<string, GraphViewType> = {
   statistics: 'overview',
 };
 
+function isSystemGraph(option: GraphOption): boolean {
+  const id = option.id.trim().toLowerCase();
+  const name = option.name.trim().toLowerCase();
+  return (
+    id === 'schema' ||
+    id === 'nexus' ||
+    id.endsWith('/schema') ||
+    id.endsWith('/nexus') ||
+    name === 'schema' ||
+    name === 'nexus'
+  );
+}
+
 const isGraphViewType = (value: string): value is GraphViewType =>
   GRAPH_VIEW_TYPES.some((view) => view.id === value);
 
@@ -108,6 +121,7 @@ type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'create-gra
 interface OntologyClassOption {
   id: string;
   name: string;
+  description: string;
 }
 
 interface GraphOption {
@@ -124,6 +138,33 @@ interface FilterOptionsResponse {
   subjects: FilterOption[];
   predicates: FilterOption[];
   objects: FilterOption[];
+}
+
+interface TriplePreviewRow {
+  subject: string;
+  predicate: string;
+  object: string;
+}
+
+interface TriplePreviewResponse {
+  count: number;
+  individual_count: number;
+  object_properties_count: number;
+  data_properties_count: number;
+  rows: TriplePreviewRow[];
+}
+
+interface ApiOverview {
+  kpis: {
+    total_instances: number;
+    total_relationships: number;
+    average_degree: number;
+    density: number;
+  };
+  instances_by_class: Array<{
+    type: string;
+    count: number;
+  }>;
 }
 
 interface ViewFilterDraft {
@@ -173,7 +214,7 @@ function FilterOptionDropdown({
   }, [options, searchQuery, value]);
 
   const selected = options.find((o) => o.uri === value);
-  const displayLabel = selected ? `${selected.label} (${selected.uri})` : '';
+  const displayLabel = selected ? selected.label : '';
 
   return (
     <div ref={ref} className="relative">
@@ -234,8 +275,124 @@ function FilterOptionDropdown({
                   value === option.uri && 'bg-muted'
                 )}
               >
-                <span className="truncate">
-                  {option.label} ({option.uri})
+                <span className="truncate">{option.label}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                No matches for &quot;{searchQuery}&quot;
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClassOptionDropdown({
+  options,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+}: {
+  options: OntologyClassOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+        setSearchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const t = searchQuery.trim().toLowerCase();
+    if (!t) return options;
+    return options.filter(
+      (option) =>
+        option.name.toLowerCase().includes(t) ||
+        option.description.toLowerCase().includes(t)
+    );
+  }, [options, searchQuery]);
+
+  const selected = options.find((option) => option.id === value);
+  const selectedDisplay = selected
+    ? selected.description
+      ? `${selected.name}: ${selected.description}`
+      : selected.name
+    : '';
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((prev) => !prev)}
+        disabled={disabled}
+        className={cn(
+          'flex w-full items-center justify-between rounded-lg border bg-background px-3 py-2 text-left text-sm outline-none focus:ring-2 focus:ring-primary',
+          'hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60'
+        )}
+      >
+        <span className={cn('line-clamp-2 break-words', !value && 'text-muted-foreground')}>
+          {selectedDisplay || placeholder}
+        </span>
+        <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full max-h-64 overflow-hidden rounded-lg border bg-background shadow-lg">
+          <div className="sticky top-0 border-b bg-background p-2">
+            <input
+              type="text"
+              placeholder="Search class..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+                setSearchQuery('');
+              }}
+              className={cn('w-full px-3 py-2 text-left text-sm hover:bg-muted', !value && 'bg-muted')}
+            >
+              <span className="text-muted-foreground">{placeholder}</span>
+            </button>
+            {filtered.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  onChange(option.id);
+                  setOpen(false);
+                  setSearchQuery('');
+                }}
+                className={cn(
+                  'w-full px-3 py-2 text-left text-sm hover:bg-muted',
+                  value === option.id && 'bg-muted'
+                )}
+              >
+                <span className="block break-words">
+                  {option.name}
+                  {option.description ? `: ${option.description}` : ''}
                 </span>
               </button>
             ))}
@@ -251,13 +408,54 @@ function FilterOptionDropdown({
   );
 }
 
-interface ApiGraphView {
-  id: string;
+interface GraphViewInfo {
   workspace_id: string;
-  name: string;
+  id: string;
+  label: string;
   graph_names: string[];
-  filters: GraphTripleFilter[];
+  graph_filters: string[];
+  scope: 'workspace' | 'user';
+  user_id?: string | null;
   created_at?: string;
+}
+
+const GRAPH_CACHE_TTL_MS = 10 * 60 * 1000;
+const GRAPH_CACHE_REFRESH_EVENT = 'graph-cache-refresh';
+
+type TimestampedCacheEntry<T> = {
+  data: T;
+  expiresAt: number;
+};
+
+const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[] }>>();
+const overviewCache = new Map<string, TimestampedCacheEntry<ApiOverview | null>>();
+const graphListCache = new Map<
+  string,
+  TimestampedCacheEntry<{
+    graphOptions: GraphOption[];
+    normalized: Array<{ id: string; label?: string }>;
+    defaultGraphName: string;
+  }>
+>();
+
+function readFreshCache<T>(cache: Map<string, TimestampedCacheEntry<T>>, key: string): T | undefined {
+  const hit = cache.get(key);
+  if (!hit) return undefined;
+  if (Date.now() > hit.expiresAt) {
+    cache.delete(key);
+    return undefined;
+  }
+  return hit.data;
+}
+
+function writeCache<T>(cache: Map<string, TimestampedCacheEntry<T>>, key: string, data: T): void {
+  cache.set(key, { data, expiresAt: Date.now() + GRAPH_CACHE_TTL_MS });
+}
+
+function clearGraphPageCaches(): void {
+  networkCache.clear();
+  overviewCache.clear();
+  graphListCache.clear();
 }
 
 export default function GraphPage() {
@@ -271,6 +469,7 @@ export default function GraphPage() {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<ApiOverview | null>(null);
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -280,7 +479,9 @@ export default function GraphPage() {
   const {
     activeViewType,
     setActiveViewType,
+    selectedGraphId,
     visibleGraphIds,
+    selectGraph,
     setVisibleGraphs,
     views,
     activeSavedViewId,
@@ -300,23 +501,33 @@ export default function GraphPage() {
   const [classesLoading, setClassesLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingIndividual, setCreatingIndividual] = useState(false);
+  const [selectedIndividualGraphId, setSelectedIndividualGraphId] = useState('');
   const [viewName, setViewName] = useState('');
   const [graphOptions, setGraphOptions] = useState<GraphOption[]>([]);
   const [selectedViewGraphIds, setSelectedViewGraphIds] = useState<string[]>([]);
   const [viewFilters, setViewFilters] = useState<ViewFilterDraft[]>([
     { subject_uri: '', predicate_uri: '', object_uri: '' },
   ]);
-  const [filterOptions, setFilterOptions] = useState<FilterOptionsResponse>({
-    subjects: [],
-    predicates: [],
-    objects: [],
+  const [viewFilterOptions, setViewFilterOptions] = useState<FilterOptionsResponse[]>([]);
+  const [triplePreview, setTriplePreview] = useState<TriplePreviewResponse>({
+    count: 0,
+    individual_count: 0,
+    object_properties_count: 0,
+    data_properties_count: 0,
+    rows: [],
   });
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [viewFormError, setViewFormError] = useState<string | null>(null);
+  const [viewDescription, setViewDescription] = useState('');
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
   const [graphName, setGraphName] = useState('');
-  const [graphSlug, setGraphSlug] = useState('');
+  const [graphDescription, setGraphDescription] = useState('');
   const [graphFormError, setGraphFormError] = useState<string | null>(null);
   const [creatingGraph, setCreatingGraph] = useState(false);
+  const loadRequestIdRef = useRef(0);
+  const overviewRequestIdRef = useRef(0);
+  const viewFilterOptionsRequestIdRef = useRef(0);
+  const viewPreviewRequestIdRef = useRef(0);
   const activeSavedView = useMemo(
     () => views.find((view) => view.id === activeSavedViewId) ?? null,
     [views, activeSavedViewId]
@@ -325,9 +536,15 @@ export default function GraphPage() {
     () => (editingViewId ? views.find((view) => view.id === editingViewId) ?? null : null),
     [views, editingViewId]
   );
+  const individualGraphOptions = useMemo(
+    () => graphOptions.filter((option) => !isSystemGraph(option)),
+    [graphOptions]
+  );
 
   // Load graphs from API - fetches all visible graphs and merges them
-  const loadFromApi = useCallback(async () => {
+  const loadFromApi = useCallback(async (options?: { force?: boolean }) => {
+    const forceRefresh = options?.force === true;
+    const requestId = ++loadRequestIdRef.current;
     setLoading(true);
     setError(null);
 
@@ -335,84 +552,107 @@ export default function GraphPage() {
       const apiUrl = getApiUrl();
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
-      let defaultGraphName = 'default';
+      let defaultGraphName = '';
       let normalized: { id: string; label?: string }[] = [];
 
       try {
-        const namesRes = await authFetch(
-          `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`
-        );
-      
-        if (!namesRes.ok) {
-          setGraphOptions([]);
-          return;
+        const listCacheKey = `graph-list:${workspaceId}`;
+        const cachedGraphList = !forceRefresh ? readFreshCache(graphListCache, listCacheKey) : undefined;
+        if (cachedGraphList) {
+          normalized = cachedGraphList.normalized;
+          defaultGraphName = cachedGraphList.defaultGraphName;
+          setGraphOptions(cachedGraphList.graphOptions);
+        } else {
+          const namesRes = await authFetch(
+            `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`
+          );
+
+          if (!namesRes.ok) {
+            setGraphOptions([]);
+          } else {
+            const namesData = await namesRes.json();
+            const graphs = Array.isArray(namesData)
+              ? namesData
+              : Array.isArray(namesData?.graphs)
+                ? namesData.graphs
+                : [];
+
+            // Proper type guard: id AND label must be string
+            normalized = graphs.filter(
+              (g: unknown): g is { id: string; label: string } =>
+                typeof g === "object" &&
+                g !== null &&
+                "id" in g &&
+                "label" in g &&
+                typeof (g as any).id === "string" &&
+                typeof (g as any).label === "string"
+            );
+
+            if (normalized.length === 0) {
+              setGraphOptions([]);
+            } else {
+              defaultGraphName = normalized[0].id;
+              const optionsToCache = normalized.map((g: { id: string; label?: string }) => ({
+                id: g.id,
+                name: g.label ?? g.id,
+              }));
+              setGraphOptions(optionsToCache);
+              writeCache(graphListCache, listCacheKey, {
+                graphOptions: optionsToCache,
+                normalized,
+                defaultGraphName,
+              });
+            }
+          }
         }
-      
-        const namesData = await namesRes.json();
-        const graphs = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
-      
-        // Proper type guard: id AND label must be string
-        const normalized = graphs.filter(
-          (g: unknown): g is { id: string; label: string } =>
-            typeof g === "object" &&
-            g !== null &&
-            "id" in g &&
-            "label" in g &&
-            typeof (g as any).id === "string" &&
-            typeof (g as any).label === "string"
-        );
-      
-        if (normalized.length === 0) {
-          setGraphOptions([]);
-          return;
-        }
-      
-        defaultGraphName = normalized[0].id;
-      
-        setGraphOptions(
-          normalized.map((g: { id: string; label?: string }) => ({
-            id: g.id,
-            name: g.label ?? g.id,
-          }))
-        );
       } catch {
         setGraphOptions([]);
       }
 
-      // Resolve label to graph id so we always pass graph_id (not label) to /network
-      const resolveToGraphId = (value: string) => {
-        const found = normalized.find(
-          (g) => g.id === value || (g.label ?? g.id) === value
-        );
-        return found ? found.id : value;
-      };
-
-      // Determine fetch strategy: view_id only if view selected, graph_id only if graph(s) selected.
-      const paramsBase = new URLSearchParams({ workspace_id: workspaceId });
-      let urlsToFetch: string[];
+      // Determine fetch strategy: use view endpoint when view selected; otherwise fetch selected graph.
+      type NetworkRequest = { url: string; init?: RequestInit };
+      let requestsToFetch: NetworkRequest[];
 
       if (activeSavedView) {
-        // View selected: single request with view_id only (backend gets graphs + filters from view)
-        paramsBase.set('view_id', activeSavedView.id);
-        urlsToFetch = [`${apiUrl}/api/graph/network?${paramsBase.toString()}`];
-      } else {
-        // Graph(s) selected: one request per graph with graph_id only (id, not label)
-        const graphIdsToFetch =
-          visibleGraphIds.length > 0
-            ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
-            : [defaultGraphName];
-        const safeGraphIds =
-          graphIdsToFetch.length > 0 ? graphIdsToFetch : [defaultGraphName];
-        urlsToFetch = safeGraphIds.map((graphIdOrLabel: string) => {
-          const params = new URLSearchParams({ workspace_id: workspaceId });
-          params.set('graph_id', resolveToGraphId(graphIdOrLabel));
-          return `${apiUrl}/api/graph/network?${params.toString()}`;
+        const params = new URLSearchParams({
+          workspace_id: workspaceId,
+          limit: '500',
         });
+        requestsToFetch = [
+          {
+            url: `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/network?${params.toString()}`,
+          },
+        ];
+      } else {
+        const graphIdsToFetch =
+          selectedGraphId
+            ? [selectedGraphId]
+            : visibleGraphIds.length > 0
+            ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
+            : normalized.map((graph) => graph.id);
+        const effectiveGraphId = graphIdsToFetch[0] ?? defaultGraphName ?? '';
+        const params = new URLSearchParams({
+          workspace_id: workspaceId,
+          limit: '500',
+        });
+        requestsToFetch = effectiveGraphId
+          ? [{ url: `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/network?${params.toString()}` }]
+          : [];
+      }
+
+      const networkCacheKey = `network:${requestsToFetch.map(({ url }) => url).join('||')}`;
+      const cachedNetwork = !forceRefresh ? readFreshCache(networkCache, networkCacheKey) : undefined;
+      if (cachedNetwork) {
+        if (requestId === loadRequestIdRef.current) {
+          setNodes(cachedNetwork.nodes);
+          setEdges(cachedNetwork.edges);
+        }
+        return;
       }
 
       const responses = await Promise.all(
-        urlsToFetch.map((url) =>
-          authFetch(url)
+        requestsToFetch.map(({ url, init }) =>
+          authFetch(url, init)
             .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
             .catch(() => ({ nodes: [], edges: [] }))
         )
@@ -450,36 +690,120 @@ export default function GraphPage() {
       // Deduplicate nodes and edges by ID
       const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values());
       const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values());
-      
+
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
+
       setNodes(uniqueNodes);
       setEdges(uniqueEdges);
+      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges });
     } catch (err) {
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
       console.error('Failed to load graph from API:', err);
       setError(err instanceof Error ? err.message : 'Failed to load graph');
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [workspaceId, visibleGraphIds, activeSavedView]);
+  }, [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView]);
+
+  const loadOverviewFromApi = useCallback(async (options?: { force?: boolean }) => {
+    const forceRefresh = options?.force === true;
+    if (pageMode !== 'graph' || activeViewType !== 'overview') {
+      return;
+    }
+
+    const requestId = ++overviewRequestIdRef.current;
+    const apiUrl = getApiUrl();
+    let overviewUrl: string | null = null;
+
+    if (activeSavedView) {
+      overviewUrl = `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+    } else {
+      const graphIdsToFetch =
+        selectedGraphId
+          ? [selectedGraphId]
+          : visibleGraphIds.length > 0
+          ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
+          : graphOptions.map((graph) => graph.id);
+      const effectiveGraphId = graphIdsToFetch[0] ?? '';
+      if (effectiveGraphId) {
+        overviewUrl = `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+      }
+    }
+
+    if (!overviewUrl) {
+      if (requestId === overviewRequestIdRef.current) {
+        setOverview(null);
+      }
+      return;
+    }
+
+    const overviewCacheKey = `overview:${overviewUrl}`;
+    const cachedOverview = !forceRefresh ? readFreshCache(overviewCache, overviewCacheKey) : undefined;
+    if (cachedOverview !== undefined) {
+      if (requestId === overviewRequestIdRef.current) {
+        setOverview(cachedOverview);
+      }
+      return;
+    }
+
+    try {
+      const response = await authFetch(overviewUrl);
+      const data = response.ok ? await response.json() : null;
+      if (requestId === overviewRequestIdRef.current) {
+        setOverview(data as ApiOverview | null);
+        writeCache(overviewCache, overviewCacheKey, data as ApiOverview | null);
+      }
+    } catch {
+      if (requestId === overviewRequestIdRef.current) {
+        setOverview(null);
+      }
+    }
+  }, [
+    activeSavedView,
+    activeViewType,
+    graphOptions,
+    pageMode,
+    selectedGraphId,
+    visibleGraphIds,
+    workspaceId,
+  ]);
 
   const loadViewsFromApi = useCallback(async () => {
     const apiUrl = getApiUrl();
     const response = await authFetch(
-      `${apiUrl}/api/graph/views?workspace_id=${encodeURIComponent(workspaceId)}`
+      `${apiUrl}/api/view/list?workspace_id=${encodeURIComponent(workspaceId)}`
     );
     if (!response.ok) {
       throw new Error(`Failed to load views: ${response.status}`);
     }
-    const data = await response.json();
-    const normalizedViews: GraphView[] = Array.isArray(data)
-      ? data.map((item: ApiGraphView) => ({
-        id: item.id,
-        name: item.name,
-        type: 'entities',
-        graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
-        filters: Array.isArray(item.filters) ? item.filters : [],
-        createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-      }))
-      : [];
+    const data: unknown = await response.json();
+    const apiViews: GraphViewInfo[] = Array.isArray(data) ? (data as GraphViewInfo[]) : [];
+    const normalizedViews: GraphView[] = apiViews.map((view) => ({
+      id: view.id,
+      name: view.label || view.id,
+      scope: view.scope,
+      userId: view.user_id ?? undefined,
+      type: 'entities',
+      graphIds: Array.isArray(view.graph_names) ? view.graph_names : [],
+      filters: Array.isArray(view.graph_filters)
+        ? view.graph_filters.map(
+            (uri) =>
+              ({
+                subject_uri: '',
+                predicate_uri: '',
+                object_uri: '',
+                uri,
+              }) as GraphTripleFilter
+          )
+        : [],
+      createdAt: view.created_at ? new Date(view.created_at) : new Date(),
+    }));
     setViews(normalizedViews);
   }, [workspaceId, setViews]);
 
@@ -487,6 +811,28 @@ export default function GraphPage() {
   useEffect(() => {
     loadFromApi();
   }, [loadFromApi]);
+
+  useEffect(() => {
+    if (pageMode !== 'graph' || activeViewType !== 'overview') {
+      setOverview(null);
+      return;
+    }
+    loadOverviewFromApi();
+  }, [activeViewType, loadOverviewFromApi, pageMode]);
+
+  useEffect(() => {
+    const onGraphCacheRefresh = () => {
+      clearGraphPageCaches();
+      void loadFromApi({ force: true });
+      if (pageMode === 'graph' && activeViewType === 'overview') {
+        void loadOverviewFromApi({ force: true });
+      } else {
+        setOverview(null);
+      }
+    };
+    window.addEventListener(GRAPH_CACHE_REFRESH_EVENT, onGraphCacheRefresh);
+    return () => window.removeEventListener(GRAPH_CACHE_REFRESH_EVENT, onGraphCacheRefresh);
+  }, [activeViewType, loadFromApi, loadOverviewFromApi, pageMode]);
 
   useEffect(() => {
     loadViewsFromApi().catch((err) => {
@@ -551,13 +897,21 @@ export default function GraphPage() {
       const sourceItems = Array.isArray(data) ? data : (data as { items?: unknown[] })?.items || [];
       const normalizedClasses = sourceItems
         .map((item) => {
-          const typedItem = item as { id?: string; iri?: string; name?: string; label?: string };
+          const typedItem = item as {
+            id?: string;
+            iri?: string;
+            name?: string;
+            label?: string;
+            description?: string;
+            definition?: string;
+          };
           const id = typedItem.id || typedItem.iri || '';
           const name = typedItem.name || typedItem.label || typedItem.iri || '';
+          const description = typedItem.description || typedItem.definition || '';
           if (!id || !name) {
             return null;
           }
-          return { id, name };
+          return { id, name, description };
         })
         .filter((item): item is OntologyClassOption => item !== null)
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
@@ -576,38 +930,157 @@ export default function GraphPage() {
     }
   }, [pageMode, loadOntologyClasses]);
 
-  const loadFilterOptions = useCallback(async (graphIds: string[]) => {
-    const apiUrl = getApiUrl();
-    const params = new URLSearchParams({
-      workspace_id: workspaceId,
-    });
-    const names = graphIds.length > 0 ? graphIds : ['default'];
-    for (const graphId of names) {
-      params.append('graph_names', graphId);
+  useEffect(() => {
+    if (pageMode !== 'create-individual') {
+      return;
     }
-    const response = await authFetch(`${apiUrl}/api/graph/filter-options?${params.toString()}`);
-    if (!response.ok) {
-      throw new Error(`Failed to load filter options: ${response.status}`);
+
+    if (individualGraphOptions.length === 0) {
+      if (selectedIndividualGraphId) {
+        setSelectedIndividualGraphId('');
+      }
+      return;
     }
-    const data = await response.json();
-    setFilterOptions({
-      subjects: Array.isArray(data?.subjects) ? data.subjects : [],
-      predicates: Array.isArray(data?.predicates) ? data.predicates : [],
-      objects: Array.isArray(data?.objects) ? data.objects : [],
-    });
-  }, [workspaceId]);
+
+    if (individualGraphOptions.some((option) => option.id === selectedIndividualGraphId)) {
+      return;
+    }
+
+    const preferredGraphId =
+      selectedGraphId && individualGraphOptions.some((option) => option.id === selectedGraphId)
+        ? selectedGraphId
+        : individualGraphOptions[0].id;
+    setSelectedIndividualGraphId(preferredGraphId);
+  }, [individualGraphOptions, pageMode, selectedGraphId, selectedIndividualGraphId]);
+
+  const loadRowFilterOptions = useCallback(
+    async (row: ViewFilterDraft, graphIds: string[]): Promise<FilterOptionsResponse> => {
+      const apiUrl = getApiUrl();
+      const params = new URLSearchParams({
+        workspace_id: workspaceId,
+      });
+      const names = graphIds.length > 0 ? graphIds : ['default'];
+      for (const graphId of names) {
+        params.append('graph_names', graphId);
+      }
+      if (row.subject_uri.trim()) params.set('subject_uri', row.subject_uri.trim());
+      if (row.predicate_uri.trim()) params.set('predicate_uri', row.predicate_uri.trim());
+      if (row.object_uri.trim()) params.set('object_uri', row.object_uri.trim());
+      const response = await authFetch(`${apiUrl}/api/view/filters/options?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load filter options: ${response.status}`);
+      }
+      const data = await response.json();
+      return {
+        subjects: Array.isArray(data?.subjects) ? data.subjects : [],
+        predicates: Array.isArray(data?.predicates) ? data.predicates : [],
+        objects: Array.isArray(data?.objects) ? data.objects : [],
+      };
+    },
+    [workspaceId]
+  );
+
+  const loadViewFilterPreview = useCallback(
+    async (graphIds: string[], filters: ViewFilterDraft[]) => {
+      const requestId = ++viewPreviewRequestIdRef.current;
+      const shouldPreview = filters.some(
+        (item) =>
+          item.subject_uri.trim().length > 0 ||
+          (item.predicate_uri.trim().length > 0 && item.object_uri.trim().length > 0)
+      );
+      if (!shouldPreview) {
+        if (requestId === viewPreviewRequestIdRef.current) {
+          setTriplePreview({
+            count: 0,
+            individual_count: 0,
+            object_properties_count: 0,
+            data_properties_count: 0,
+            rows: [],
+          });
+          setPreviewLoading(false);
+        }
+        return;
+      }
+
+      const apiUrl = getApiUrl();
+      setPreviewLoading(true);
+      try {
+        const response = await authFetch(`${apiUrl}/api/view/filters/preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            graph_names: graphIds.length > 0 ? graphIds : ['default'],
+            filters,
+            limit: 10,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to preview triples: ${response.status}`);
+        }
+        const data = await response.json();
+        if (requestId !== viewPreviewRequestIdRef.current) {
+          return;
+        }
+        setTriplePreview({
+          count: typeof data?.count === 'number' ? data.count : 0,
+          individual_count:
+            typeof data?.individual_count === 'number' ? data.individual_count : 0,
+          object_properties_count:
+            typeof data?.object_properties_count === 'number' ? data.object_properties_count : 0,
+          data_properties_count:
+            typeof data?.data_properties_count === 'number' ? data.data_properties_count : 0,
+          rows: Array.isArray(data?.rows) ? data.rows : [],
+        });
+      } catch (err) {
+        console.error('Failed to load triple preview:', err);
+        if (requestId === viewPreviewRequestIdRef.current) {
+          setTriplePreview({
+            count: 0,
+            individual_count: 0,
+            object_properties_count: 0,
+            data_properties_count: 0,
+            rows: [],
+          });
+        }
+      } finally {
+        if (requestId === viewPreviewRequestIdRef.current) {
+          setPreviewLoading(false);
+        }
+      }
+    },
+    [workspaceId]
+  );
 
   useEffect(() => {
     if (pageMode !== 'create-view') return;
-    loadFilterOptions(selectedViewGraphIds).catch((err) => {
-      console.error('Failed to load filter options:', err);
-      setFilterOptions({ subjects: [], predicates: [], objects: [] });
-    });
-  }, [pageMode, selectedViewGraphIds, loadFilterOptions]);
+    const graphIds = selectedViewGraphIds.length > 0 ? selectedViewGraphIds : ['default'];
+    const optionsRequestId = ++viewFilterOptionsRequestIdRef.current;
+
+    Promise.all(viewFilters.map((row) => loadRowFilterOptions(row, graphIds)))
+      .then((rows) => {
+        if (optionsRequestId !== viewFilterOptionsRequestIdRef.current) {
+          return;
+        }
+        setViewFilterOptions(rows);
+      })
+      .catch((err) => {
+        console.error('Failed to load filter options:', err);
+        if (optionsRequestId !== viewFilterOptionsRequestIdRef.current) {
+          return;
+        }
+        setViewFilterOptions(
+          viewFilters.map(() => ({ subjects: [], predicates: [], objects: [] }))
+        );
+      });
+
+    void loadViewFilterPreview(graphIds, viewFilters);
+  }, [loadRowFilterOptions, loadViewFilterPreview, pageMode, selectedViewGraphIds, viewFilters]);
 
   const resetCreateIndividualForm = () => {
     setIndividualLabel('');
     setSelectedClassId('');
+    setSelectedIndividualGraphId('');
     setCreateError(null);
   };
 
@@ -628,6 +1101,7 @@ export default function GraphPage() {
     setPageMode('graph');
     setEditingViewId(null);
     setViewName('');
+    setViewDescription('');
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
     setViewFormError(null);
@@ -637,7 +1111,7 @@ export default function GraphPage() {
   const closeCreateGraphForm = () => {
     setPageMode('graph');
     setGraphName('');
-    setGraphSlug('');
+    setGraphDescription('');
     setGraphFormError(null);
     router.push(`/workspace/${workspaceId}/graph`);
   };
@@ -652,11 +1126,11 @@ export default function GraphPage() {
     setCreatingGraph(true);
     try {
       const apiUrl = getApiUrl();
-      const body: { workspace_id: string; label: string; slug?: string } = {
+      const body: { workspace_id: string; label: string; description?: string } = {
         workspace_id: workspaceId,
         label,
       };
-      if (graphSlug.trim()) body.slug = graphSlug.trim();
+      if (graphDescription.trim()) body.description = graphDescription.trim();
       const response = await authFetch(`${apiUrl}/api/graph/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -667,9 +1141,17 @@ export default function GraphPage() {
         throw new Error(err.detail || `Failed to create graph: ${response.status}`);
       }
       const created = await response.json();
-      setVisibleGraphs([created.id]);
+      const createdId = typeof created?.id === 'string' ? created.id : null;
+      if (!createdId) {
+        throw new Error('Created graph response is missing an id.');
+      }
+      setActiveSavedView(null);
+      selectGraph(createdId);
+      setVisibleGraphs([createdId]);
+      setActiveViewType('overview');
       closeCreateGraphForm();
-      await loadFromApi();
+      clearGraphPageCaches();
+      await loadFromApi({ force: true });
       window.dispatchEvent(new CustomEvent('graph-list-update'));
     } catch (err) {
       setGraphFormError(err instanceof Error ? err.message : 'Failed to create graph');
@@ -703,47 +1185,62 @@ export default function GraphPage() {
     const payload = {
       workspace_id: workspaceId,
       name: normalizedName,
+      description: viewDescription.trim() || undefined,
       graph_names: graphIds,
       filters: normalizedFilters,
     };
 
-    let savedViewId: string | null = null;
-    if (editingViewId) {
-      const response = await authFetch(
-        `${apiUrl}/api/graph/views/${encodeURIComponent(editingViewId)}?workspace_id=${encodeURIComponent(workspaceId)}`,
-        {
-          method: 'PUT',
+    try {
+      let savedViewId: string | null = null;
+      if (editingViewId) {
+        const response = await authFetch(
+          `${apiUrl}/api/view/${encodeURIComponent(editingViewId)}?workspace_id=${encodeURIComponent(workspaceId)}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!response.ok) {
+          setViewFormError('Failed to update view.');
+          return;
+        }
+        const updated = await response.json();
+        savedViewId = typeof updated?.id === 'string' ? updated.id : editingViewId;
+      } else {
+        const response = await authFetch(`${apiUrl}/api/view/`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          setViewFormError('Failed to create view.');
+          return;
         }
-      );
-      if (!response.ok) {
-        setViewFormError('Failed to update view.');
-        return;
+        const created = await response.json();
+        savedViewId =
+          typeof created?.id === 'string'
+            ? created.id
+            : typeof created?.view_id === 'string'
+              ? created.view_id
+              : typeof created?.uri === 'string'
+                ? created.uri.split('/').pop() ?? null
+                : typeof created?.view_uri === 'string'
+                  ? created.view_uri.split('/').pop() ?? null
+                  : null;
       }
-      const updated = await response.json();
-      savedViewId = typeof updated?.id === 'string' ? updated.id : editingViewId;
-    } else {
-      const response = await authFetch(`${apiUrl}/api/graph/views`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        setViewFormError('Failed to create view.');
-        return;
-      }
-      const created = await response.json();
-      savedViewId = typeof created?.id === 'string' ? created.id : null;
-    }
 
-    await loadViewsFromApi();
-    if (savedViewId) {
-      setActiveSavedView(savedViewId);
+      await loadViewsFromApi();
+      if (savedViewId) {
+        setActiveSavedView(savedViewId);
+      }
+      setVisibleGraphs(graphIds);
+      setActiveViewType('overview');
+      closeCreateViewForm();
+    } catch (err) {
+      console.error('Failed to save graph view:', err);
+      setViewFormError('Failed to reach API. Verify backend is running and API URL is reachable.');
     }
-    setVisibleGraphs(graphIds);
-    setActiveViewType('entities');
-    closeCreateViewForm();
   };
 
   useEffect(() => {
@@ -751,6 +1248,7 @@ export default function GraphPage() {
 
     if (editingView) {
       setViewName(editingView.name ?? '');
+      setViewDescription('');
       setSelectedViewGraphIds(Array.isArray(editingView.graphIds) ? editingView.graphIds : []);
       const normalizedFilters = Array.isArray(editingView.filters)
         ? editingView.filters
@@ -776,18 +1274,34 @@ export default function GraphPage() {
     }
 
     setViewName('');
+    setViewDescription('');
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
+    setViewFilterOptions([]);
+    setTriplePreview({
+      count: 0,
+      individual_count: 0,
+      object_properties_count: 0,
+      data_properties_count: 0,
+      rows: [],
+    });
     setViewFormError(null);
   }, [pageMode, editingView]);
 
   const handleCreateIndividual = async () => {
     const normalizedLabel = individualLabel.trim();
     if (!normalizedLabel) return;
+    if (!selectedIndividualGraphId) {
+      setCreateError('Please select a graph.');
+      return;
+    }
 
     setCreatingIndividual(true);
     setCreateError(null);
     try {
+      setActiveSavedView(null);
+      selectGraph(selectedIndividualGraphId);
+      setVisibleGraphs([selectedIndividualGraphId]);
       const selectedClass = availableClasses.find((item) => item.id === selectedClassId);
       const apiUrl = getApiUrl();
       const response = await authFetch(`${apiUrl}/api/graph/nodes`, {
@@ -810,7 +1324,8 @@ export default function GraphPage() {
         throw new Error(`Failed with status ${response.status}`);
       }
 
-      await loadFromApi();
+      clearGraphPageCaches();
+      await loadFromApi({ force: true });
       closeCreateIndividualForm();
     } catch (err) {
       console.error('Failed to create individual:', err);
@@ -1037,7 +1552,7 @@ export default function GraphPage() {
           {/* Content based on view type */}
           <div className="flex flex-1 overflow-hidden">
             {pageMode === 'create-individual' && (
-              <div className="flex flex-1 flex-col bg-card p-6">
+              <div className="flex flex-1 flex-col overflow-y-auto bg-card p-6">
                 <div className="mx-auto w-full max-w-2xl">
                   <div className="mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1066,22 +1581,35 @@ export default function GraphPage() {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-sm font-medium">Class</label>
+                      <label className="mb-2 block text-sm font-medium">Graph *</label>
                       <select
-                        value={selectedClassId}
-                        onChange={(event) => setSelectedClassId(event.target.value)}
+                        value={selectedIndividualGraphId}
+                        onChange={(event) => setSelectedIndividualGraphId(event.target.value)}
                         className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        disabled={classesLoading}
+                        disabled={creatingIndividual || individualGraphOptions.length === 0}
                       >
                         <option value="">
-                          {classesLoading ? 'Loading classes...' : 'Select a class'}
+                          {individualGraphOptions.length > 0
+                            ? 'Select a graph'
+                            : 'No graph available (schema and nexus are excluded)'}
                         </option>
-                        {availableClasses.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
+                        {individualGraphOptions.map((graph) => (
+                          <option key={graph.id} value={graph.id}>
+                            {graph.name}
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Class</label>
+                      <ClassOptionDropdown
+                        options={availableClasses}
+                        value={selectedClassId}
+                        onChange={setSelectedClassId}
+                        placeholder={classesLoading ? 'Loading classes...' : 'Select a class'}
+                        disabled={classesLoading}
+                      />
                     </div>
 
                     {createError && (
@@ -1097,7 +1625,7 @@ export default function GraphPage() {
                       </button>
                       <button
                         onClick={handleCreateIndividual}
-                        disabled={!individualLabel.trim() || creatingIndividual}
+                        disabled={!individualLabel.trim() || !selectedIndividualGraphId || creatingIndividual}
                         className={cn(
                           'flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
                           'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
@@ -1146,17 +1674,14 @@ export default function GraphPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-2 block text-sm font-medium">Slug (optional)</label>
-                      <input
-                        type="text"
-                        value={graphSlug}
-                        onChange={(e) => setGraphSlug(e.target.value)}
-                        placeholder="e.g., my-ontology (defaults from name)"
+                      <label className="mb-2 block text-sm font-medium">Description (optional)</label>
+                      <textarea
+                        value={graphDescription}
+                        onChange={(e) => setGraphDescription(e.target.value)}
+                        placeholder="Describe what this graph is used for"
+                        rows={3}
                         className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
                       />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        URL-safe identifier. If empty, derived from name.
-                      </p>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -1183,7 +1708,7 @@ export default function GraphPage() {
             )}
 
             {pageMode === 'create-view' && (
-              <div className="flex flex-1 flex-col bg-card p-6">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-card p-6">
                 <div className="mx-auto w-full max-w-2xl">
                   <div className="mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1207,6 +1732,17 @@ export default function GraphPage() {
                         value={viewName}
                         onChange={(event) => setViewName(event.target.value)}
                         placeholder="e.g., Agents only"
+                        className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Description</label>
+                      <textarea
+                        value={viewDescription}
+                        onChange={(event) => setViewDescription(event.target.value)}
+                        placeholder="Describe what this view shows"
+                        rows={3}
                         className="w-full rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
@@ -1269,31 +1805,33 @@ export default function GraphPage() {
                             </div>
                             <div className="grid gap-2 md:grid-cols-3">
                               <FilterOptionDropdown
-                                options={filterOptions.subjects}
+                                options={viewFilterOptions[index]?.subjects ?? []}
                                 value={item.subject_uri}
                                 onChange={(v) =>
                                   setViewFilters((prev) =>
                                     prev.map((row, rowIndex) =>
-                                      rowIndex === index ? { ...row, subject_uri: v } : row
+                                      rowIndex === index
+                                        ? { ...row, subject_uri: v, predicate_uri: '', object_uri: '' }
+                                        : row
                                     )
                                   )
                                 }
                                 placeholder="Subject"
                               />
                               <FilterOptionDropdown
-                                options={filterOptions.predicates}
+                                options={viewFilterOptions[index]?.predicates ?? []}
                                 value={item.predicate_uri}
                                 onChange={(v) =>
                                   setViewFilters((prev) =>
                                     prev.map((row, rowIndex) =>
-                                      rowIndex === index ? { ...row, predicate_uri: v } : row
+                                      rowIndex === index ? { ...row, predicate_uri: v, object_uri: '' } : row
                                     )
                                   )
                                 }
                                 placeholder="Predicate"
                               />
                               <FilterOptionDropdown
-                                options={filterOptions.objects}
+                                options={viewFilterOptions[index]?.objects ?? []}
                                 value={item.object_uri}
                                 onChange={(v) =>
                                   setViewFilters((prev) =>
@@ -1335,6 +1873,44 @@ export default function GraphPage() {
                     </div>
                   </div>
                 </div>
+                <div className="mt-6 w-full">
+                  <div className="mb-2">
+                    <p className="text-sm font-medium">Triples Preview</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {previewLoading
+                        ? 'Loading...'
+                        : `Individuals: ${triplePreview.individual_count} • Object properties: ${triplePreview.object_properties_count} • Data properties: ${triplePreview.data_properties_count}`}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border">
+                    <table className="w-full table-fixed text-sm">
+                      <thead className="bg-muted/40 text-left">
+                        <tr>
+                          <th className="w-1/3 px-3 py-2 text-center font-medium">Subject</th>
+                          <th className="w-1/3 px-3 py-2 text-center font-medium">Predicate</th>
+                          <th className="w-1/3 px-3 py-2 text-center font-medium">Object</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {triplePreview.rows.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">
+                              No triples for current filters.
+                            </td>
+                          </tr>
+                        ) : (
+                          triplePreview.rows.slice(0, 10).map((row, rowIndex) => (
+                            <tr key={`preview-${rowIndex}`} className="border-t align-top">
+                              <td className="px-3 py-2">{row.subject}</td>
+                              <td className="px-3 py-2">{row.predicate}</td>
+                              <td className="px-3 py-2">{row.object}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1352,19 +1928,19 @@ export default function GraphPage() {
                   </button>
                 </div>
                 <div className="grid grid-cols-4 gap-6">
-                  <StatCard title="Total Nodes" value={stats.totalNodes} icon={Circle} />
-                  <StatCard title="Total Edges" value={stats.totalEdges} icon={Link2} />
-                  <StatCard title="Avg Degree" value={stats.avgDegree.toFixed(2)} icon={Share2} />
-                  <StatCard title="Density" value={(stats.density * 100).toFixed(1) + '%'} icon={Workflow} />
+                  <StatCard title="Instances" value={overview?.kpis.total_instances ?? stats.totalNodes} icon={Circle} />
+                  <StatCard title="Relationships" value={overview?.kpis.total_relationships ?? stats.totalEdges} icon={Link2} />
+                  <StatCard title="Average Degree" value={(overview?.kpis.average_degree ?? stats.avgDegree).toFixed(2)} icon={Share2} />
+                  <StatCard title="Density" value={((overview?.kpis.density ?? stats.density) * 100).toFixed(1) + '%'} icon={Workflow} />
                 </div>
 
-                {Object.keys(stats.nodesByType).length > 0 && (
+                {((overview?.instances_by_class.length ?? 0) > 0 || Object.keys(stats.nodesByType).length > 0) && (
                   <div className="mt-8">
                     <h3 className="mb-4 font-medium">Nodes by Type</h3>
                     <div className="rounded-lg border">
-                      {Object.entries(stats.nodesByType)
-                        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-                        .map(([type, count]) => (
+                      {(overview?.instances_by_class ?? Object.entries(stats.nodesByType).map(([type, count]) => ({ type, count })))
+                        .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type))
+                        .map(({ type, count }) => (
                         <div key={type} className="flex items-center justify-between border-b p-3 last:border-b-0">
                           <span className="flex items-center gap-2">
                             <Box size={14} className="text-blue-500" />
