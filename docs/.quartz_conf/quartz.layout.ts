@@ -4,13 +4,29 @@ import { QuartzComponent, QuartzComponentConstructor } from "./quartz/components
 
 const defaultTheme = process.env.DEFAULT_THEME === "light" ? "light" : "dark"
 
-/* ── Force default theme ─────────────────────────────────────── */
+/* ── Force default theme + preload Comfortaa ─────────────────── */
 const ForceDarkDefault: QuartzComponent = () => null
 ForceDarkDefault.beforeDOMLoaded = `
 const savedTheme = localStorage.getItem("theme")
 if (!savedTheme) {
   localStorage.setItem("theme", "${defaultTheme}")
   document.documentElement.setAttribute("saved-theme", "${defaultTheme}")
+}
+// Preconnect to Google Fonts for faster Comfortaa load
+if (!document.querySelector('link[href*="fonts.googleapis"]')) {
+  const preconn1 = document.createElement('link')
+  preconn1.rel = 'preconnect'
+  preconn1.href = 'https://fonts.googleapis.com'
+  document.head.appendChild(preconn1)
+  const preconn2 = document.createElement('link')
+  preconn2.rel = 'preconnect'
+  preconn2.href = 'https://fonts.gstatic.com'
+  preconn2.crossOrigin = 'anonymous'
+  document.head.appendChild(preconn2)
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = 'https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;500;600;700&display=swap'
+  document.head.appendChild(link)
 }
 `
 
@@ -23,9 +39,7 @@ NaasTopBar.afterDOMLoaded = `
   bar.innerHTML = \`
     <div class="naas-topbar-inner">
       <a href="https://naas.ai" class="naas-topbar-logo" aria-label="naas.ai home">
-        <svg width="72" height="20" viewBox="0 0 72 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <text x="0" y="16" font-family="Comfortaa, sans-serif" font-weight="700" font-size="16" fill="#22c55e">naas.ai</text>
-        </svg>
+        <span class="naas-topbar-wordmark">naas.ai</span>
       </a>
       <div class="naas-topbar-divider"></div>
       <span class="naas-topbar-section">Documentation</span>
