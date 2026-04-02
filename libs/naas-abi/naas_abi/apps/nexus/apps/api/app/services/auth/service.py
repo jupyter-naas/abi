@@ -338,7 +338,7 @@ class AuthService:
 
         await revoke_all_user_tokens(user.id)
 
-    async def update_avatar(self, user_id: str, avatar_url: str) -> AuthUserRecord:
+    async def update_avatar(self, user_id: str, avatar_url: str | None) -> AuthUserRecord:
         updated = await self.adapter.update_user_avatar(
             user_id=user_id,
             avatar_url=avatar_url,

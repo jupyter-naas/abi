@@ -157,7 +157,7 @@ def print_image(image_path: str):
                 pass  # Silently fail if we can't display the image
         elif platform.system() == "Windows":
             try:
-                subprocess.run(['start', '', image_path], shell=True)  # Windows-specific file opening
+                subprocess.run(['start', '', image_path], shell=True)  # nosec B602 - shell=True required for Windows 'start' command to open files
             except Exception:
                 pass
 

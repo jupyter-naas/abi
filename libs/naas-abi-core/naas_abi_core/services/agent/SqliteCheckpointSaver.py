@@ -74,9 +74,9 @@ class SqliteCheckpointSaver(InMemorySaver):
         if row is None:
             return
 
-        raw_storage = pickle.loads(row[0])
-        raw_writes = pickle.loads(row[1])
-        raw_blobs = pickle.loads(row[2])
+        raw_storage = pickle.loads(row[0])  # nosec B301 - data written by this process to a local SQLite DB; never deserializes external/untrusted input
+        raw_writes = pickle.loads(row[1])  # nosec B301
+        raw_blobs = pickle.loads(row[2])  # nosec B301
 
         storage: defaultdict[
             str,

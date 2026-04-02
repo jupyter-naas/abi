@@ -10,7 +10,6 @@ libs/naas-abi/naas_abi/apps/nexus/apps/api/.env
 venv/
 ENV/
 env/
-uv.lock
 
 # Config
 config.yaml
