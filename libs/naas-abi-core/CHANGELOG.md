@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.21.6 (2026-04-02)
+
+### Bug Fixes
+
+- Add graph names to filters
+  ([`e37cc97`](https://github.com/jupyter-naas/abi/commit/e37cc975d050c1dc03b952b308ac78eadaf87600))
+
+- Exclude turtle files from sandbox folders
+  ([`b62ee3d`](https://github.com/jupyter-naas/abi/commit/b62ee3d6eb35eef25eb9b73ebfc2171fa59e07f5))
+
+- Onto2py infite loop on nexus
+  ([`886577d`](https://github.com/jupyter-naas/abi/commit/886577dd29700f4a350c40b1e59bab97f4a4aef6))
+
+- Remove insert metadata in graph (done in nexus)
+  ([`89d3751`](https://github.com/jupyter-naas/abi/commit/89d3751651c1071dfd9efa41a438bc4f3edd7894))
+
+### Chores
+
+- Update .gitignore, enhance security checks in Makefile, and refine Python version setup in CI
+  workflow
+  ([`fbb7073`](https://github.com/jupyter-naas/abi/commit/fbb7073adf2ec04d71b013422122ae2321d96346))
+
+
 ## v1.21.5 (2026-03-27)
 
 ### Bug Fixes
