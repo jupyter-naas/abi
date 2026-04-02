@@ -20,11 +20,11 @@ const config: QuartzConfig = {
     theme: {
       fontOrigin: "googleFonts",
       cdnCaching: true,
-      typography: {
-        header: "Inter",
-        body: "Inter",
-        code: "JetBrains Mono",
-      },
+        typography: {
+          header: "Comfortaa",
+          body: "Comfortaa",
+          code: "JetBrains Mono",
+        },
       colors: {
         lightMode: {
           light: fromEnv("LIGHT_LIGHT", "#faf8f8"),
