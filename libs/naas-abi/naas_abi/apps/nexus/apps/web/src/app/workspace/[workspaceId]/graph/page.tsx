@@ -148,8 +148,9 @@ interface TriplePreviewRow {
 
 interface TriplePreviewResponse {
   count: number;
-  instance_count: number;
-  relation_count: number;
+  individual_count: number;
+  object_properties_count: number;
+  data_properties_count: number;
   rows: TriplePreviewRow[];
 }
 
@@ -510,8 +511,9 @@ export default function GraphPage() {
   const [viewFilterOptions, setViewFilterOptions] = useState<FilterOptionsResponse[]>([]);
   const [triplePreview, setTriplePreview] = useState<TriplePreviewResponse>({
     count: 0,
-    instance_count: 0,
-    relation_count: 0,
+    individual_count: 0,
+    object_properties_count: 0,
+    data_properties_count: 0,
     rows: [],
   });
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -988,7 +990,13 @@ export default function GraphPage() {
       );
       if (!shouldPreview) {
         if (requestId === viewPreviewRequestIdRef.current) {
-          setTriplePreview({ count: 0, instance_count: 0, relation_count: 0, rows: [] });
+          setTriplePreview({
+            count: 0,
+            individual_count: 0,
+            object_properties_count: 0,
+            data_properties_count: 0,
+            rows: [],
+          });
           setPreviewLoading(false);
         }
         return;
@@ -1016,14 +1024,24 @@ export default function GraphPage() {
         }
         setTriplePreview({
           count: typeof data?.count === 'number' ? data.count : 0,
-          instance_count: typeof data?.instance_count === 'number' ? data.instance_count : 0,
-          relation_count: typeof data?.relation_count === 'number' ? data.relation_count : 0,
+          individual_count:
+            typeof data?.individual_count === 'number' ? data.individual_count : 0,
+          object_properties_count:
+            typeof data?.object_properties_count === 'number' ? data.object_properties_count : 0,
+          data_properties_count:
+            typeof data?.data_properties_count === 'number' ? data.data_properties_count : 0,
           rows: Array.isArray(data?.rows) ? data.rows : [],
         });
       } catch (err) {
         console.error('Failed to load triple preview:', err);
         if (requestId === viewPreviewRequestIdRef.current) {
-          setTriplePreview({ count: 0, instance_count: 0, relation_count: 0, rows: [] });
+          setTriplePreview({
+            count: 0,
+            individual_count: 0,
+            object_properties_count: 0,
+            data_properties_count: 0,
+            rows: [],
+          });
         }
       } finally {
         if (requestId === viewPreviewRequestIdRef.current) {
@@ -1260,7 +1278,13 @@ export default function GraphPage() {
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
     setViewFilterOptions([]);
-    setTriplePreview({ count: 0, instance_count: 0, relation_count: 0, rows: [] });
+    setTriplePreview({
+      count: 0,
+      individual_count: 0,
+      object_properties_count: 0,
+      data_properties_count: 0,
+      rows: [],
+    });
     setViewFormError(null);
   }, [pageMode, editingView]);
 
@@ -1850,12 +1874,12 @@ export default function GraphPage() {
                   </div>
                 </div>
                 <div className="mt-6 w-full">
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-2">
                     <p className="text-sm font-medium">Triples Preview</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {previewLoading
                         ? 'Loading...'
-                        : `${triplePreview.instance_count} instance${triplePreview.instance_count === 1 ? '' : 's'} • ${triplePreview.relation_count} relation${triplePreview.relation_count === 1 ? '' : 's'}`}
+                        : `Individuals: ${triplePreview.individual_count} • Object properties: ${triplePreview.object_properties_count} • Data properties: ${triplePreview.data_properties_count}`}
                     </p>
                   </div>
                   <div className="rounded-lg border">

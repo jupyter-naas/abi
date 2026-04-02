@@ -37,9 +37,9 @@ class RemoveIndividualPipelineParameters(PipelineParameters):
         str,
         Field(description="URI to remove from the ontology"),
     ]
-    graph_uri: Annotated[
-        str,
-        Field(description="Graph URI to remove the individual from"),
+    graph_names: Annotated[
+        list[str],
+        Field(description="Graph names to remove the individual from"),
     ]
 
 
@@ -56,7 +56,7 @@ class RemoveIndividualPipeline(Pipeline):
             ABIModule.get_instance().engine.services.object_storage
         )
 
-    def get_all_triples_for_uri(self, uri: str):
+    def get_all_triples_for_uri(self, uri: str, graph_uri: str):
         """
         Retrieve all triples where the given URI appears as either a subject or object.
 
@@ -73,16 +73,18 @@ class RemoveIndividualPipeline(Pipeline):
         
         SELECT ?s ?p ?o
         WHERE {{
-            {{
-                # Find triples where the URI is the subject
-                <{uri}> ?p ?o .
-                BIND(<{uri}> AS ?s)
-            }}
-            UNION
-            {{
-                # Find triples where the URI is the object
-                ?s ?p <{uri}> .
-                BIND(<{uri}> AS ?o)
+            GRAPH <{graph_uri}> {{
+                {{
+                    # Find triples where the URI is the subject
+                    <{uri}> ?p ?o .
+                    BIND(<{uri}> AS ?s)
+                }}
+                UNION
+                {{
+                    # Find triples where the URI is the object
+                    ?s ?p <{uri}> .
+                    BIND(<{uri}> AS ?o)
+                }}
             }}
         }}
         """
@@ -95,35 +97,35 @@ class RemoveIndividualPipeline(Pipeline):
                 "Parameters must be of type RemoveIndividualPipelineParameters"
             )
 
-        graph_uri = parameters.graph_uri
-        graph_name = graph_uri.split("/")[-1]
-        output_dir = os.path.join(self.__configuration.datastore_path, graph_name)
+        removed_graph = Graph()
 
-        logger.info(
-            f"Removing triples for URI: {parameters.uri} from graph: {graph_uri}"
-        )
-        results = self.get_all_triples_for_uri(str(parameters.uri))
-        logger.info(f"Found {len(results)} triples for URI: {parameters.uri}")
+        for graph_uri in parameters.graph_names:
+            graph_name = graph_uri.split("/")[-1]
+            output_dir = os.path.join(self.__configuration.datastore_path, graph_name)
 
-        # Add triples to graph
-        graph = Graph()
-        for row in results:
-            assert isinstance(row, ResultRow)
-            s, p, o = row
-            graph.add((s, p, o))
+            results = self.get_all_triples_for_uri(str(parameters.uri), graph_uri)
+            rows = list(results)
+            logger.debug(
+                f"Found {len(rows)} triples for URI: {parameters.uri} in graph: {graph_uri}"
+            )
 
-        # Save graph and remove triples
-        if len(graph) > 0:
-            logger.info(f"✅ Removing {len(graph)} triples for URI: {parameters.uri}")
-            logger.info(graph.serialize(format="turtle"))
+            if not rows:
+                continue
+
+            graph = Graph()
+            for row in rows:
+                assert isinstance(row, ResultRow)
+                s, p, o = row
+                graph.add((s, p, o))
+
+            logger.debug(f"✅ Removing {len(graph)} triples for URI: {parameters.uri}")
             self.__storage_utils.save_triples(
                 graph, output_dir, f"{parameters.uri.split('/')[-1]}.ttl"
             )
-            self.__configuration.triple_store.remove(
-                graph, graph_name=URIRef(graph_uri)
-            )
+            self.__configuration.triple_store.remove(graph, graph_name=URIRef(graph_uri))
+            removed_graph += graph
 
-        return graph
+        return removed_graph
 
     def as_tools(self) -> list[BaseTool]:
         return [
