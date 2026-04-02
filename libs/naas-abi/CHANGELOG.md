@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.0 (2026-04-02)
+
+### Bug Fixes
+
+- Nexus pipeline
+  ([`85aedc5`](https://github.com/jupyter-naas/abi/commit/85aedc5eb8ca6bb1e6d88da4d9c78b36788a4065))
+
+
 ## v1.15.0 (2026-04-02)
 
 ### Bug Fixes
