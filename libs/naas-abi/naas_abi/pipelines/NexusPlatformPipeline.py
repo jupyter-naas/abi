@@ -335,7 +335,7 @@ class NexusPlatformPipeline(Pipeline):
 
         graph += self.initialize_nexus_graphs()
         graph += self.initialize_nexus_agents()
-        graph += self.initialize_nexus_graph_views()
+        # graph += self.initialize_nexus_graph_views()
 
         # Save graph
         graph.serialize(
