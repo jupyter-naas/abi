@@ -47,13 +47,14 @@ jobs:
           cp docs/.quartz_conf/quartz.config.ts quartz-build/quartz.config.ts
           cp docs/.quartz_conf/quartz.layout.ts quartz-build/quartz.layout.ts
           cp docs/.quartz_conf/custom.scss quartz-build/quartz/styles/custom.scss
+          cp docs/.quartz_conf/favicon.ico quartz-build/quartz/static/favicon.ico
 
       - name: Build Quartz
         working-directory: quartz-build
         env:
           BASE_URL: "docs.naas.ai"
-          SITE_TITLE: "ABI Docs"
-          SITE_TITLE_SUFFIX: " | ABI"
+          SITE_TITLE: "naas.ai Docs"
+          SITE_TITLE_SUFFIX: " | naas.ai"
           DARK_SECONDARY: "#22c55e"
           DARK_TERTIARY: "#22c55e"
           DARK_GRAY: "#22c55e"
