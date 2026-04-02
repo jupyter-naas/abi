@@ -195,7 +195,6 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     selectGraph,
     setVisibleGraphs,
     setActiveSavedView,
-    deleteView,
     setViews,
   } = useKnowledgeGraphStore();
 
@@ -282,44 +281,47 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     return () => window.removeEventListener('graph-list-update', onGraphListUpdate);
   }, [fetchGraphs]);
 
-  useEffect(() => {
-    const fetchViews = async () => {
-      if (!currentWorkspaceId) return;
-      try {
-        const apiUrl = getApiUrl();
-        const response = await authFetch(
-          `${apiUrl}/api/view/list?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
-        );
-        if (!response.ok) return;
-        const data = await response.json();
-        const normalizedViews: GraphView[] = Array.isArray(data)
-          ? data.map((item: {
-            id: string;
-            label?: string;
-            user_id?: string | null;
-            scope?: 'workspace' | 'user';
-            name?: string;
-            graph_names?: string[];
-            graph_filters?: string[];
-            created_at?: string;
-          }) => ({
-            id: item.id,
-            name: item.label ?? item.name ?? item.id,
-            scope: item.scope === 'workspace' ? 'workspace' : 'user',
-            userId: item.user_id ?? undefined,
-            type: 'entities',
-            graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
-            filters: [],
-            createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-          }))
-          : [];
-        setViews(normalizedViews);
-      } catch (error) {
-        console.error('Failed to fetch graph views:', error);
-      }
-    };
-    fetchViews();
+  const fetchViewsFromApi = useCallback(async (): Promise<GraphView[]> => {
+    if (!currentWorkspaceId) return [];
+    try {
+      const apiUrl = getApiUrl();
+      const response = await authFetch(
+        `${apiUrl}/api/view/list?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      const normalizedViews: GraphView[] = Array.isArray(data)
+        ? data.map((item: {
+          id: string;
+          label?: string;
+          user_id?: string | null;
+          scope?: 'workspace' | 'user';
+          name?: string;
+          graph_names?: string[];
+          graph_filters?: string[];
+          created_at?: string;
+        }) => ({
+          id: item.id,
+          name: item.label ?? item.name ?? item.id,
+          scope: item.scope === 'workspace' ? 'workspace' : 'user',
+          userId: item.user_id ?? undefined,
+          type: 'entities',
+          graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
+          filters: [],
+          createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+        }))
+        : [];
+      setViews(normalizedViews);
+      return normalizedViews;
+    } catch (error) {
+      console.error('Failed to fetch graph views:', error);
+      return [];
+    }
   }, [currentWorkspaceId, setViews]);
+
+  useEffect(() => {
+    void fetchViewsFromApi();
+  }, [fetchViewsFromApi]);
 
   const selectKnowledgeGraphRoot = () => {
     if (activeSavedViewId) {
@@ -424,7 +426,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                 <GraphItemRow
                   key={graph.id}
                   graph={graph}
-                  isSelected={showGraphRowSelection && selectedGraphId === graph.id}
+                  isSelected={showGraphRowSelection && !activeSavedViewId && selectedGraphId === graph.id}
                   onClick={() => {
                     setActiveSavedView(null);
                     selectGraph(graph.id);
@@ -589,22 +591,42 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                   onDelete={() => {
                     const workspaceId = currentWorkspaceId;
                     if (!workspaceId) return;
-                    if (confirm(`Delete view "${view.name}"?`)) {
-                      const run = async () => {
-                        try {
-                          const apiUrl = getApiUrl();
-                          const response = await authFetch(
-                            `${apiUrl}/api/view/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
-                            { method: 'DELETE' }
-                          );
-                          if (!response.ok) return;
-                          deleteView(view.id);
-                        } catch (error) {
-                          console.error('Failed to delete view:', error);
+                    const run = async () => {
+                      const shouldDelete = await confirm({
+                        title: `Delete view "${view.name}"?`,
+                        description:
+                          'This will remove the view definition and all its filters. This action cannot be undone.',
+                        confirmLabel: 'Delete View',
+                        destructive: true,
+                      });
+                      if (!shouldDelete) return;
+
+                      try {
+                        const apiUrl = getApiUrl();
+                        const response = await authFetch(
+                          `${apiUrl}/api/view/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
+                          { method: 'DELETE' }
+                        );
+                        if (!response.ok) return;
+
+                        const refreshedViews = await fetchViewsFromApi();
+
+                        const firstView = refreshedViews[0] ?? null;
+                        if (firstView) {
+                          selectGraph(null);
+                          setActiveSavedView(firstView.id);
+                          if (firstView.graphIds && firstView.graphIds.length > 0) {
+                            setVisibleGraphs(firstView.graphIds);
+                          }
+                        } else {
+                          setActiveSavedView(null);
                         }
-                      };
-                      void run();
-                    }
+                        router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
+                      } catch (error) {
+                        console.error('Failed to delete view:', error);
+                      }
+                    };
+                    void run();
                   }}
                   onSelect={() => {
                     selectGraph(null);

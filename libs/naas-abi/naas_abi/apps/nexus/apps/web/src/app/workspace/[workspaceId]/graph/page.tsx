@@ -140,6 +140,19 @@ interface FilterOptionsResponse {
   objects: FilterOption[];
 }
 
+interface TriplePreviewRow {
+  subject: string;
+  predicate: string;
+  object: string;
+}
+
+interface TriplePreviewResponse {
+  count: number;
+  instance_count: number;
+  relation_count: number;
+  rows: TriplePreviewRow[];
+}
+
 interface ApiOverview {
   kpis: {
     total_instances: number;
@@ -200,7 +213,7 @@ function FilterOptionDropdown({
   }, [options, searchQuery, value]);
 
   const selected = options.find((o) => o.uri === value);
-  const displayLabel = selected ? `${selected.label} (${selected.uri})` : '';
+  const displayLabel = selected ? selected.label : '';
 
   return (
     <div ref={ref} className="relative">
@@ -261,9 +274,7 @@ function FilterOptionDropdown({
                   value === option.uri && 'bg-muted'
                 )}
               >
-                <span className="truncate">
-                  {option.label} ({option.uri})
-                </span>
+                <span className="truncate">{option.label}</span>
               </button>
             ))}
             {filtered.length === 0 && (
@@ -496,11 +507,14 @@ export default function GraphPage() {
   const [viewFilters, setViewFilters] = useState<ViewFilterDraft[]>([
     { subject_uri: '', predicate_uri: '', object_uri: '' },
   ]);
-  const [filterOptions, setFilterOptions] = useState<FilterOptionsResponse>({
-    subjects: [],
-    predicates: [],
-    objects: [],
+  const [viewFilterOptions, setViewFilterOptions] = useState<FilterOptionsResponse[]>([]);
+  const [triplePreview, setTriplePreview] = useState<TriplePreviewResponse>({
+    count: 0,
+    instance_count: 0,
+    relation_count: 0,
+    rows: [],
   });
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [viewFormError, setViewFormError] = useState<string | null>(null);
   const [viewDescription, setViewDescription] = useState('');
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
@@ -510,6 +524,8 @@ export default function GraphPage() {
   const [creatingGraph, setCreatingGraph] = useState(false);
   const loadRequestIdRef = useRef(0);
   const overviewRequestIdRef = useRef(0);
+  const viewFilterOptionsRequestIdRef = useRef(0);
+  const viewPreviewRequestIdRef = useRef(0);
   const activeSavedView = useMemo(
     () => views.find((view) => view.id === activeSavedViewId) ?? null,
     [views, activeSavedViewId]
@@ -935,34 +951,113 @@ export default function GraphPage() {
     setSelectedIndividualGraphId(preferredGraphId);
   }, [individualGraphOptions, pageMode, selectedGraphId, selectedIndividualGraphId]);
 
-  const loadFilterOptions = useCallback(async (graphIds: string[]) => {
-    const apiUrl = getApiUrl();
-    const params = new URLSearchParams({
-      workspace_id: workspaceId,
-    });
-    const names = graphIds.length > 0 ? graphIds : ['default'];
-    for (const graphId of names) {
-      params.append('graph_names', graphId);
-    }
-    const response = await authFetch(`${apiUrl}/api/view/filter-options?${params.toString()}`);
-    if (!response.ok) {
-      throw new Error(`Failed to load filter options: ${response.status}`);
-    }
-    const data = await response.json();
-    setFilterOptions({
-      subjects: Array.isArray(data?.subjects) ? data.subjects : [],
-      predicates: Array.isArray(data?.predicates) ? data.predicates : [],
-      objects: Array.isArray(data?.objects) ? data.objects : [],
-    });
-  }, [workspaceId]);
+  const loadRowFilterOptions = useCallback(
+    async (row: ViewFilterDraft, graphIds: string[]): Promise<FilterOptionsResponse> => {
+      const apiUrl = getApiUrl();
+      const params = new URLSearchParams({
+        workspace_id: workspaceId,
+      });
+      const names = graphIds.length > 0 ? graphIds : ['default'];
+      for (const graphId of names) {
+        params.append('graph_names', graphId);
+      }
+      if (row.subject_uri.trim()) params.set('subject_uri', row.subject_uri.trim());
+      if (row.predicate_uri.trim()) params.set('predicate_uri', row.predicate_uri.trim());
+      if (row.object_uri.trim()) params.set('object_uri', row.object_uri.trim());
+      const response = await authFetch(`${apiUrl}/api/view/filters/options?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load filter options: ${response.status}`);
+      }
+      const data = await response.json();
+      return {
+        subjects: Array.isArray(data?.subjects) ? data.subjects : [],
+        predicates: Array.isArray(data?.predicates) ? data.predicates : [],
+        objects: Array.isArray(data?.objects) ? data.objects : [],
+      };
+    },
+    [workspaceId]
+  );
+
+  const loadViewFilterPreview = useCallback(
+    async (graphIds: string[], filters: ViewFilterDraft[]) => {
+      const requestId = ++viewPreviewRequestIdRef.current;
+      const shouldPreview = filters.some(
+        (item) =>
+          item.subject_uri.trim().length > 0 ||
+          (item.predicate_uri.trim().length > 0 && item.object_uri.trim().length > 0)
+      );
+      if (!shouldPreview) {
+        if (requestId === viewPreviewRequestIdRef.current) {
+          setTriplePreview({ count: 0, instance_count: 0, relation_count: 0, rows: [] });
+          setPreviewLoading(false);
+        }
+        return;
+      }
+
+      const apiUrl = getApiUrl();
+      setPreviewLoading(true);
+      try {
+        const response = await authFetch(`${apiUrl}/api/view/filters/preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            graph_names: graphIds.length > 0 ? graphIds : ['default'],
+            filters,
+            limit: 10,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to preview triples: ${response.status}`);
+        }
+        const data = await response.json();
+        if (requestId !== viewPreviewRequestIdRef.current) {
+          return;
+        }
+        setTriplePreview({
+          count: typeof data?.count === 'number' ? data.count : 0,
+          instance_count: typeof data?.instance_count === 'number' ? data.instance_count : 0,
+          relation_count: typeof data?.relation_count === 'number' ? data.relation_count : 0,
+          rows: Array.isArray(data?.rows) ? data.rows : [],
+        });
+      } catch (err) {
+        console.error('Failed to load triple preview:', err);
+        if (requestId === viewPreviewRequestIdRef.current) {
+          setTriplePreview({ count: 0, instance_count: 0, relation_count: 0, rows: [] });
+        }
+      } finally {
+        if (requestId === viewPreviewRequestIdRef.current) {
+          setPreviewLoading(false);
+        }
+      }
+    },
+    [workspaceId]
+  );
 
   useEffect(() => {
     if (pageMode !== 'create-view') return;
-    loadFilterOptions(selectedViewGraphIds).catch((err) => {
-      console.error('Failed to load filter options:', err);
-      setFilterOptions({ subjects: [], predicates: [], objects: [] });
-    });
-  }, [pageMode, selectedViewGraphIds, loadFilterOptions]);
+    const graphIds = selectedViewGraphIds.length > 0 ? selectedViewGraphIds : ['default'];
+    const optionsRequestId = ++viewFilterOptionsRequestIdRef.current;
+
+    Promise.all(viewFilters.map((row) => loadRowFilterOptions(row, graphIds)))
+      .then((rows) => {
+        if (optionsRequestId !== viewFilterOptionsRequestIdRef.current) {
+          return;
+        }
+        setViewFilterOptions(rows);
+      })
+      .catch((err) => {
+        console.error('Failed to load filter options:', err);
+        if (optionsRequestId !== viewFilterOptionsRequestIdRef.current) {
+          return;
+        }
+        setViewFilterOptions(
+          viewFilters.map(() => ({ subjects: [], predicates: [], objects: [] }))
+        );
+      });
+
+    void loadViewFilterPreview(graphIds, viewFilters);
+  }, [loadRowFilterOptions, loadViewFilterPreview, pageMode, selectedViewGraphIds, viewFilters]);
 
   const resetCreateIndividualForm = () => {
     setIndividualLabel('');
@@ -1095,7 +1190,7 @@ export default function GraphPage() {
         const updated = await response.json();
         savedViewId = typeof updated?.id === 'string' ? updated.id : editingViewId;
       } else {
-        const response = await authFetch(`${apiUrl}/api/views`, {
+        const response = await authFetch(`${apiUrl}/api/view/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1105,7 +1200,16 @@ export default function GraphPage() {
           return;
         }
         const created = await response.json();
-        savedViewId = typeof created?.id === 'string' ? created.id : null;
+        savedViewId =
+          typeof created?.id === 'string'
+            ? created.id
+            : typeof created?.view_id === 'string'
+              ? created.view_id
+              : typeof created?.uri === 'string'
+                ? created.uri.split('/').pop() ?? null
+                : typeof created?.view_uri === 'string'
+                  ? created.view_uri.split('/').pop() ?? null
+                  : null;
       }
 
       await loadViewsFromApi();
@@ -1113,7 +1217,7 @@ export default function GraphPage() {
         setActiveSavedView(savedViewId);
       }
       setVisibleGraphs(graphIds);
-      setActiveViewType('entities');
+      setActiveViewType('overview');
       closeCreateViewForm();
     } catch (err) {
       console.error('Failed to save graph view:', err);
@@ -1155,6 +1259,8 @@ export default function GraphPage() {
     setViewDescription('');
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
+    setViewFilterOptions([]);
+    setTriplePreview({ count: 0, instance_count: 0, relation_count: 0, rows: [] });
     setViewFormError(null);
   }, [pageMode, editingView]);
 
@@ -1422,7 +1528,7 @@ export default function GraphPage() {
           {/* Content based on view type */}
           <div className="flex flex-1 overflow-hidden">
             {pageMode === 'create-individual' && (
-              <div className="flex flex-1 flex-col bg-card p-6">
+              <div className="flex flex-1 flex-col overflow-y-auto bg-card p-6">
                 <div className="mx-auto w-full max-w-2xl">
                   <div className="mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1578,7 +1684,7 @@ export default function GraphPage() {
             )}
 
             {pageMode === 'create-view' && (
-              <div className="flex flex-1 flex-col bg-card p-6">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-card p-6">
                 <div className="mx-auto w-full max-w-2xl">
                   <div className="mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1675,31 +1781,33 @@ export default function GraphPage() {
                             </div>
                             <div className="grid gap-2 md:grid-cols-3">
                               <FilterOptionDropdown
-                                options={filterOptions.subjects}
+                                options={viewFilterOptions[index]?.subjects ?? []}
                                 value={item.subject_uri}
                                 onChange={(v) =>
                                   setViewFilters((prev) =>
                                     prev.map((row, rowIndex) =>
-                                      rowIndex === index ? { ...row, subject_uri: v } : row
+                                      rowIndex === index
+                                        ? { ...row, subject_uri: v, predicate_uri: '', object_uri: '' }
+                                        : row
                                     )
                                   )
                                 }
                                 placeholder="Subject"
                               />
                               <FilterOptionDropdown
-                                options={filterOptions.predicates}
+                                options={viewFilterOptions[index]?.predicates ?? []}
                                 value={item.predicate_uri}
                                 onChange={(v) =>
                                   setViewFilters((prev) =>
                                     prev.map((row, rowIndex) =>
-                                      rowIndex === index ? { ...row, predicate_uri: v } : row
+                                      rowIndex === index ? { ...row, predicate_uri: v, object_uri: '' } : row
                                     )
                                   )
                                 }
                                 placeholder="Predicate"
                               />
                               <FilterOptionDropdown
-                                options={filterOptions.objects}
+                                options={viewFilterOptions[index]?.objects ?? []}
                                 value={item.object_uri}
                                 onChange={(v) =>
                                   setViewFilters((prev) =>
@@ -1739,6 +1847,44 @@ export default function GraphPage() {
                         {editingView ? 'Save View' : 'Create View'}
                       </button>
                     </div>
+                  </div>
+                </div>
+                <div className="mt-6 w-full">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm font-medium">Triples Preview</p>
+                    <p className="text-xs text-muted-foreground">
+                      {previewLoading
+                        ? 'Loading...'
+                        : `${triplePreview.instance_count} instance${triplePreview.instance_count === 1 ? '' : 's'} • ${triplePreview.relation_count} relation${triplePreview.relation_count === 1 ? '' : 's'}`}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border">
+                    <table className="w-full table-fixed text-sm">
+                      <thead className="bg-muted/40 text-left">
+                        <tr>
+                          <th className="w-1/3 px-3 py-2 text-center font-medium">Subject</th>
+                          <th className="w-1/3 px-3 py-2 text-center font-medium">Predicate</th>
+                          <th className="w-1/3 px-3 py-2 text-center font-medium">Object</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {triplePreview.rows.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">
+                              No triples for current filters.
+                            </td>
+                          </tr>
+                        ) : (
+                          triplePreview.rows.slice(0, 10).map((row, rowIndex) => (
+                            <tr key={`preview-${rowIndex}`} className="border-t align-top">
+                              <td className="px-3 py-2">{row.subject}</td>
+                              <td className="px-3 py-2">{row.predicate}</td>
+                              <td className="px-3 py-2">{row.object}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
