@@ -172,7 +172,9 @@ async def create_graph(
     store.create_graph(new_graph_uri)
 
     # Add graph to nexus graph
-    new_graph = KnowledgeGraph(_uri=new_graph_uri, label=payload.label.strip())
+    new_graph = KnowledgeGraph(
+        _uri=new_graph_uri, label=payload.label.strip(), creator=current_user.id
+    )
     if payload.description:
         new_graph.description = description
     store.insert(new_graph.rdf(), graph_name=NEXUS_GRAPH_URI)
