@@ -52,9 +52,8 @@ const GraphItemRow = React.memo(function GraphItemRow({
     <div className="relative">
       <div
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer',
-          isSelected && 'bg-workspace-accent-10 text-workspace-accent',
-          'hover:bg-workspace-accent-10 text-foreground'
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          isSelected ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
         onClick={onClick}
       >
@@ -130,8 +129,8 @@ const ViewItemRow = React.memo(function ViewItemRow({
       <button
         onClick={onSelect}
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10',
-          isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-muted-foreground'
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
       >
         <Filter size={12} />

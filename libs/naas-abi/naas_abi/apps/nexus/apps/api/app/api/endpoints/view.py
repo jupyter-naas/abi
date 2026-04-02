@@ -580,6 +580,7 @@ async def list_views(
                 scope=view["scope"],
             )
         )
+    graph_views.sort(key=lambda x: x.label)
     return graph_views
 
 
