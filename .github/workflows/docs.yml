@@ -1,0 +1,70 @@
+name: Deploy Docs to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Checkout ABI
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Clone Quartz v4
+        run: git clone https://github.com/jackyzha0/quartz.git quartz-build --depth 1
+
+      - name: Install Quartz dependencies
+        working-directory: quartz-build
+        run: npm ci
+
+      - name: Copy ABI docs into Quartz content
+        run: |
+          cp -r docs/. quartz-build/content/
+          rm -rf quartz-build/content/.quartz_conf
+          rm -f quartz-build/content/docker-compose.yaml
+
+      - name: Apply custom Quartz config and styles
+        run: |
+          cp docs/.quartz_conf/quartz.config.ts quartz-build/quartz.config.ts
+          cp docs/.quartz_conf/quartz.layout.ts quartz-build/quartz.layout.ts
+          cp docs/.quartz_conf/custom.scss quartz-build/quartz/styles/custom.scss
+
+      - name: Build Quartz
+        working-directory: quartz-build
+        env:
+          BASE_URL: "docs.naas.ai"
+          SITE_TITLE: "ABI Docs"
+          SITE_TITLE_SUFFIX: " | ABI"
+          DARK_SECONDARY: "#22c55e"
+          DARK_TERTIARY: "#22c55e"
+          DARK_GRAY: "#22c55e"
+          DEFAULT_THEME: "dark"
+        run: npx quartz build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: abi-docs
+          directory: quartz-build/public
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
