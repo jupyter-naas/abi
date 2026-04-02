@@ -148,6 +148,9 @@ async def list_graphs(
         graph_id = graph_uri.split("/")[-1]
         graph_label = str(row.label) if row.label else graph_id
         graphs.append(GraphInfo(id=graph_id, uri=graph_uri, label=graph_label))
+
+    # Sort graphs by label
+    graphs.sort(key=lambda x: x.label)
     return graphs
 
 
