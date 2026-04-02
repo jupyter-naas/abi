@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Camera, Save, Upload, RefreshCw } from 'lucide-react';
+import { Camera, Save, X, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
@@ -87,6 +87,26 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAvatarRemove = async () => {
+    if (!avatarUrl) return;
+    try {
+      const { authFetch } = await import('@/stores/auth');
+      const response = await authFetch('/api/auth/avatar', { method: 'DELETE' });
+      if (response.ok) {
+        setAvatarUrl('');
+        if (authUser) {
+          setUser({ ...authUser, avatar: undefined });
+        }
+      } else {
+        const error = await response.json();
+        alert(`Remove failed: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Remove avatar error:', error);
+      alert('Failed to remove avatar');
+    }
+  };
+
   const handleSave = async () => {
     try {
       const { authFetch } = await import('@/stores/auth');
@@ -103,13 +123,15 @@ export default function ProfilePage() {
       }
 
       const updated = await response.json();
+      const normalizeAvatar = (a?: string) =>
+        a && a.startsWith('/') ? `${getApiUrl()}${a}` : a;
       // Update local store
       if (authUser) {
         setUser({
           ...authUser,
           name: updated.name,
           email: updated.email,
-          avatar: updated.avatar,
+          avatar: normalizeAvatar(updated.avatar),
           // Optional fields
           // @ts-ignore - store model extended
           company: updated.company,
@@ -176,6 +198,15 @@ export default function ProfilePage() {
           <p className="mt-1 text-xs text-muted-foreground">
             Click camera icon to upload avatar (max 2MB)
           </p>
+          {avatarUrl && (
+            <button
+              onClick={handleAvatarRemove}
+              className="mt-2 flex items-center gap-1 text-xs text-destructive hover:underline"
+            >
+              <X size={12} />
+              Remove picture
+            </button>
+          )}
         </div>
       </div>
 

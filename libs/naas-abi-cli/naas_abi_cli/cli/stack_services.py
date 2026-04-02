@@ -142,7 +142,7 @@ SERVICE_CATALOG: dict[str, ServiceDefinition] = {
 
 def _check_http(url: str, timeout: float = 1.5) -> tuple[bool, str]:
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
+        with urllib.request.urlopen(url, timeout=timeout) as response:  # nosec B310 - URL is a localhost health-check endpoint from static config, not user input
             status = getattr(response, "status", 200)
             return status < 500, f"HTTP {status}"
     except urllib.error.HTTPError as error:

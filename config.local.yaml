@@ -16,11 +16,12 @@ api:
     - "http://localhost:9879"
     - "http://localhost:3042"
     - "http://127.0.0.1:9879"
+    - "http://127.0.0.1:3042"
     - "https://nexus.localhost"
+    - "http://localhost"
 
 global_config:
   ai_mode: "cloud"
-
 
 modules:
   - module: naas_abi
@@ -43,19 +44,13 @@ modules:
           show_powered_by: false
           login_footer_text: "© ABI AI Platform (Beta)| Naas.ai"
         users:
-          - email: "florent@naas.ai"
-            name: "Florent Ravenel"
-            store_credentials_in_secrets: true
-          - email: "jeremy@naas.ai"
-            name: "Jeremy Ravenel"
-            store_credentials_in_secrets: true
-          - email: "maxime@naas.ai"
-            name: "Maxime Ravenel"
+          - email: "admin@example.com"
+            name: "Abi Admin"
             store_credentials_in_secrets: true
         organizations:
           - name: "Naas.ai"
             slug: "naas-ai"
-            owner_email: "florent@naas.ai"
+            owner_email: "admin@example.com"
             logo_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
             logo_rectangle_url: "https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-core/assets/logo.png"
             primary_color: "#34D399"
@@ -63,24 +58,16 @@ modules:
             login_footer_text: "© Naas.ai"
             show_powered_by: false
             members:
-              - email: "florent@naas.ai"
-                role: "owner"
-              - email: "jeremy@naas.ai"
-                role: "owner"
-              - email: "maxime@naas.ai"
+              - email: "admin@example.com"
                 role: "owner"
             workspaces:
               - name: "Naas.ai"
                 slug: "naas-ai"
-                owner_email: "florent@naas.ai"
+                owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
                 members:
-                  - email: "florent@naas.ai"
-                    role: "owner"
-                  - email: "jeremy@naas.ai"
-                    role: "owner"
-                  - email: "maxime@naas.ai"
+                  - email: "admin@example.com"
                     role: "owner"
 
   - module: naas_abi_marketplace.ai.chatgpt

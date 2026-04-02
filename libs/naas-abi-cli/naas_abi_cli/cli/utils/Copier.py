@@ -8,7 +8,7 @@ from rich.prompt import Prompt
 
 class ValueProvider(dict):
     def collect_values(self, template_string: str) -> None:
-        env = Environment()  # add your filters/tests if you use them
+        env = Environment()  # nosec B701 - autoescape not needed; Environment is used only for AST parsing (meta.find_undeclared_variables), never for rendering HTML output
         ast = env.parse(template_string)
         needed = meta.find_undeclared_variables(ast)
 

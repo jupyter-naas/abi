@@ -266,7 +266,7 @@ def api():
     reload_enabled = api_runtime_configuration.reload
 
     run_kwargs: dict = {
-        "host": "0.0.0.0",
+        "host": "0.0.0.0",  # nosec B104 - intentional; server must bind all interfaces to accept external connections
         "port": 9879,
         "reload": reload_enabled,
         "proxy_headers": True,
