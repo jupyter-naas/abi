@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
 from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.primary.secrets__primary_adapter__FastAPI import (  # noqa: E501
     SecretBulkImport,
     SecretCreate,
@@ -51,7 +52,13 @@ def _infer_category(key: str) -> str:
 
 async def resolve_secret_async(db: AsyncSession, workspace_id: str, key: str) -> str | None:
     service = SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
-    return await service.resolve_secret_value(workspace_id=workspace_id, key=key)
+    return await service.resolve_secret_value(
+        context=RequestContext(
+            token_data=TokenData(user_id="system", scopes={"*"}, is_authenticated=True)
+        ),
+        workspace_id=workspace_id,
+        key=key,
+    )
 
 
 __all__ = [

@@ -146,7 +146,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     if (!socket) return;
     
     socket.emit('join_workspace', { workspace_id: workspaceId }, (response: any) => {
-      if (response.users) {
+      if (response?.error) {
+        console.warn('Workspace join denied:', response.error);
+        setPresenceUsers([]);
+        return;
+      }
+      if (response?.users) {
         setPresenceUsers(response.users);
       }
     });

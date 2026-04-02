@@ -49,7 +49,10 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
         iam_service=iam_service,
     )
     search_service = SearchService()
-    agents_service = AgentService(AgentSecondaryAdapterPostgres(db_getter=db_getter))
+    agents_service = AgentService(
+        AgentSecondaryAdapterPostgres(db_getter=db_getter),
+        iam_service=iam_service,
+    )
 
     return ServiceRegistry.configure(
         RegistryServices(
