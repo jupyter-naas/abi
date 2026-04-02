@@ -1,6 +1,10 @@
 from typing import Optional
 
+from naas_abi import ABIModule
 from naas_abi_core.module.Module import BaseModule
+from naas_abi_core.modules.templatablesparqlquery import (
+    ABIModule as TemplatableSparqlQueryABIModuleModule,
+)
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -115,6 +119,7 @@ SUGGESTIONS: list = [
         "value": "Please present yourself and your capabilities.",
     },
 ]
+
 INTENTS: list = [
     Intent(
         intent_type=IntentType.RAW,
@@ -141,7 +146,8 @@ class AbiAgent(IntentAgent):
     logo_url: str = AVATAR_URL
     system_prompt: str = SYSTEM_PROMPT
     suggestions: list[dict] = SUGGESTIONS
-    intents: list[Intent] = INTENTS
+    tools: list = []
+    intents: list = INTENTS
 
     @classmethod
     def New(
@@ -151,11 +157,7 @@ class AbiAgent(IntentAgent):
     ) -> "AbiAgent":
         from queue import Queue
 
-        from naas_abi import ABIModule
         from naas_abi.models.default import get_model
-        from naas_abi_core.modules.templatablesparqlquery import (
-            ABIModule as TemplatableSparqlQueryABIModuleModule,
-        )
 
         # Define model
         model = get_model()

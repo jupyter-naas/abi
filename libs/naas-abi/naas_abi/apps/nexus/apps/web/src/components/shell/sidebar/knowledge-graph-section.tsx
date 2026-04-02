@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Waypoints, Plus, Filter, MoreVertical, Edit2, Trash2, Eraser,
   RefreshCw, Database, User, UserPlus, ChevronRight, Code,
@@ -8,9 +8,10 @@ import {
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useKnowledgeGraphStore, type GraphTripleFilter, type GraphView } from '@/stores/knowledge-graph';
+import { useKnowledgeGraphStore, type GraphView } from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { useConfirm } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 
@@ -21,7 +22,14 @@ interface GraphItem {
 }
 
 function isSchemaGraph(graph: GraphItem): boolean {
-  return graph.name === 'schema' || graph.id === 'schema' || graph.id.endsWith('/schema');
+  return (
+    graph.name === 'schema'
+    || graph.id === 'schema'
+    || graph.id.endsWith('/schema')
+    || graph.name === 'nexus'
+    || graph.id === 'nexus'
+    || graph.id.endsWith('/nexus')
+  );
 }
 
 const GraphItemRow = React.memo(function GraphItemRow({
@@ -44,9 +52,8 @@ const GraphItemRow = React.memo(function GraphItemRow({
     <div className="relative">
       <div
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer',
-          isSelected && 'bg-workspace-accent-10 text-workspace-accent',
-          'hover:bg-workspace-accent-10 text-foreground'
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          isSelected ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
         onClick={onClick}
       >
@@ -122,8 +129,8 @@ const ViewItemRow = React.memo(function ViewItemRow({
       <button
         onClick={onSelect}
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10',
-          isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-muted-foreground'
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
       >
         <Filter size={12} />
@@ -173,7 +180,9 @@ const ViewItemRow = React.memo(function ViewItemRow({
 });
 
 export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
+  const GRAPH_CACHE_REFRESH_EVENT = 'graph-cache-refresh';
   const router = useRouter();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { currentWorkspaceId } = useWorkspaceStore();
@@ -185,7 +194,6 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     selectGraph,
     setVisibleGraphs,
     setActiveSavedView,
-    deleteView,
     setViews,
   } = useKnowledgeGraphStore();
 
@@ -199,21 +207,33 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   const isSparqlView = requestedView === 'sparql';
   const showGraphRowSelection = isGraphRoute && !isCreateIndividualView && !isSparqlView;
 
-  const fetchGraphs = async () => {
+  useEffect(() => {
+    if (!currentWorkspaceId) return;
+    router.prefetch(graphPath);
+  }, [currentWorkspaceId, graphPath, router]);
+
+  const fetchGraphs = useCallback(async (options?: { force?: boolean }) => {
     if (!currentWorkspaceId) return;
     try {
       const apiUrl = getApiUrl();
-      let graphList: { id: string; label: string }[] = [{ id: 'default', label: 'default' }];
+      let graphList: { id: string; label: string }[] = [];
+      const listParams = new URLSearchParams({
+        workspace_id: currentWorkspaceId,
+      });
+      if (options?.force) {
+        // Avoid stale list after destructive mutations.
+        listParams.set('_ts', Date.now().toString());
+      }
       const namesRes = await authFetch(
-        `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+        `${apiUrl}/api/graph/list?${listParams.toString()}`
       );
       if (namesRes.ok) {
         const namesData = await namesRes.json();
-        const parsed = Array.isArray(namesData?.graphs) ? namesData.graphs : [];
+        const parsed = Array.isArray(namesData) ? namesData : [];
         const normalized = parsed
           .filter((g: unknown) => g && typeof g === 'object' && 'id' in g && typeof (g as { id: unknown }).id === 'string')
           .map((g: { id: string; label?: string }) => ({ id: g.id, label: g.label ?? g.id }));
-        if (normalized.length > 0) graphList = normalized;
+        graphList = normalized;
       }
 
       const graphs: GraphItem[] = graphList.map((graph) => ({
@@ -246,53 +266,83 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       }
       console.error('Failed to fetch graphs:', err);
     }
-  };
+  }, [currentWorkspaceId, selectGraph, selectedGraphId, setVisibleGraphs, visibleGraphIds]);
 
   useEffect(() => {
-    fetchGraphs();
-  }, [currentWorkspaceId, visibleGraphIds.length, setVisibleGraphs]);
+    void fetchGraphs();
+  }, [fetchGraphs]);
 
   useEffect(() => {
     const onGraphListUpdate = () => {
-      void fetchGraphs();
+      void fetchGraphs({ force: true });
     };
     window.addEventListener('graph-list-update', onGraphListUpdate);
     return () => window.removeEventListener('graph-list-update', onGraphListUpdate);
-  }, [currentWorkspaceId]);
+  }, [fetchGraphs]);
+
+  const fetchViewsFromApi = useCallback(async (): Promise<GraphView[]> => {
+    if (!currentWorkspaceId) return [];
+    try {
+      const apiUrl = getApiUrl();
+      const response = await authFetch(
+        `${apiUrl}/api/view/list?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      const normalizedViews: GraphView[] = Array.isArray(data)
+        ? data.map((item: {
+          id: string;
+          label?: string;
+          user_id?: string | null;
+          scope?: 'workspace' | 'user';
+          name?: string;
+          graph_names?: string[];
+          graph_filters?: string[];
+          created_at?: string;
+        }) => ({
+          id: item.id,
+          name: item.label ?? item.name ?? item.id,
+          scope: item.scope === 'workspace' ? 'workspace' : 'user',
+          userId: item.user_id ?? undefined,
+          type: 'entities',
+          graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
+          filters: [],
+          createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+        }))
+        : [];
+      setViews(normalizedViews);
+      return normalizedViews;
+    } catch (error) {
+      console.error('Failed to fetch graph views:', error);
+      return [];
+    }
+  }, [currentWorkspaceId, setViews]);
 
   useEffect(() => {
-    const fetchViews = async () => {
-      if (!currentWorkspaceId) return;
-      try {
-        const apiUrl = getApiUrl();
-        const response = await authFetch(
-          `${apiUrl}/api/graph/views?workspace_id=${encodeURIComponent(currentWorkspaceId)}`
-        );
-        if (!response.ok) return;
-        const data = await response.json();
-        const normalizedViews: GraphView[] = Array.isArray(data)
-          ? data.map((item: {
-            id: string;
-            name: string;
-            graph_names?: string[];
-            filters?: GraphTripleFilter[];
-            created_at?: string;
-          }) => ({
-            id: item.id,
-            name: item.name,
-            type: 'entities',
-            graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
-            filters: Array.isArray(item.filters) ? item.filters : [],
-            createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-          }))
-          : [];
-        setViews(normalizedViews);
-      } catch (error) {
-        console.error('Failed to fetch graph views:', error);
+    void fetchViewsFromApi();
+  }, [fetchViewsFromApi]);
+
+  const selectKnowledgeGraphRoot = () => {
+    if (activeSavedViewId) {
+      const activeView = views.find((view) => view.id === activeSavedViewId);
+      if (activeView?.graphIds && activeView.graphIds.length > 0) {
+        setVisibleGraphs(activeView.graphIds);
       }
-    };
-    fetchViews();
-  }, [currentWorkspaceId, setViews]);
+      return;
+    }
+
+    if (selectedGraphId && availableGraphs.some((graph) => graph.id === selectedGraphId)) {
+      setVisibleGraphs([selectedGraphId]);
+      return;
+    }
+
+    const firstGraphId = availableGraphs[0]?.id;
+    if (firstGraphId) {
+      setActiveSavedView(null);
+      selectGraph(firstGraphId);
+      setVisibleGraphs([firstGraphId]);
+    }
+  };
 
   return (
     <CollapsibleSection
@@ -302,7 +352,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       description="Visualize and explore your knowledge"
       href={graphPath}
       collapsed={collapsed}
-      onNavigate={() => setActiveSavedView(null)}
+      onNavigate={selectKnowledgeGraphRoot}
     >
       <div className="flex items-center gap-0.5 px-1 pb-1">
         <button
@@ -318,6 +368,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
         <button
           onClick={() => {
             setActiveSavedView(null);
+            window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
             router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
           }}
           className={cn(
@@ -374,7 +425,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                 <GraphItemRow
                   key={graph.id}
                   graph={graph}
-                  isSelected={showGraphRowSelection && selectedGraphId === graph.id}
+                  isSelected={showGraphRowSelection && !activeSavedViewId && selectedGraphId === graph.id}
                   onClick={() => {
                     setActiveSavedView(null);
                     selectGraph(graph.id);
@@ -384,8 +435,15 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                   onClear={
                     isSchemaGraph(graph)
                       ? undefined
-                      : () => {
-                          if (!confirm(`Clear all triples in graph "${graph.name}"? This cannot be undone.`)) return;
+                      : async () => {
+                          const shouldClear = await confirm({
+                            title: `Clear graph "${graph.name}"?`,
+                            description:
+                              'This will remove all triples from this graph. The graph itself will remain. This action cannot be undone.',
+                            confirmLabel: 'Clear Graph',
+                            destructive: true,
+                          });
+                          if (!shouldClear) return;
                           const run = async () => {
                             try {
                               const apiUrl = getApiUrl();
@@ -399,12 +457,20 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                               });
                               if (!response.ok) {
                                 const err = await response.json().catch(() => ({}));
-                                alert(err.detail || 'Failed to clear graph');
+                                const message =
+                                  typeof err?.detail === 'string'
+                                    ? err.detail
+                                    : 'Failed to clear graph';
+                                console.error('Failed to clear graph:', message, err);
                                 return;
                               }
+                              setActiveSavedView(null);
+                              selectGraph(graph.id);
+                              setVisibleGraphs([graph.id]);
+                              router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=overview'));
+                              window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
                             } catch (err) {
                               console.error('Failed to clear graph:', err);
-                              alert('Failed to clear graph');
                             }
                           };
                           void run();
@@ -413,8 +479,15 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                   onDelete={
                     isSchemaGraph(graph)
                       ? undefined
-                      : () => {
-                          if (!confirm(`Delete graph "${graph.name}"? This cannot be undone.`)) return;
+                      : async () => {
+                          const shouldDelete = await confirm({
+                            title: `Delete graph "${graph.name}"?`,
+                            description:
+                              'This will remove the graph and all its triples. This action cannot be undone.',
+                            confirmLabel: 'Delete Graph',
+                            destructive: true,
+                          });
+                          if (!shouldDelete) return;
                           const run = async () => {
                             try {
                               const apiUrl = getApiUrl();
@@ -428,14 +501,35 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                               });
                               if (!response.ok) {
                                 const err = await response.json().catch(() => ({}));
-                                alert(err.detail || 'Failed to delete graph');
+                                const message =
+                                  typeof err?.detail === 'string'
+                                    ? err.detail
+                                    : 'Failed to delete graph';
+                                console.error('Failed to delete graph:', message, err);
                                 return;
                               }
+                              // Force immediate UI refresh of graph list, then reconcile with backend.
+                              let remainingGraphsSnapshot: GraphItem[] = [];
+                              setAvailableGraphs((prev) => {
+                                remainingGraphsSnapshot = prev.filter((item) => item.id !== graph.id);
+                                return remainingGraphsSnapshot;
+                              });
+                              window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
                               window.dispatchEvent(new CustomEvent('graph-list-update'));
-                              await fetchGraphs();
+                              await fetchGraphs({ force: true });
+                              if (selectedGraphId === graph.id) {
+                                const nextGraphId = remainingGraphsSnapshot[0]?.id ?? null;
+                                setActiveSavedView(null);
+                                selectGraph(nextGraphId);
+                                if (nextGraphId) {
+                                  setVisibleGraphs([nextGraphId]);
+                                } else {
+                                  setVisibleGraphs([]);
+                                }
+                                router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
+                              }
                             } catch (err) {
                               console.error('Failed to delete graph:', err);
-                              alert('Failed to delete graph');
                             }
                           };
                           void run();
@@ -496,22 +590,42 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                   onDelete={() => {
                     const workspaceId = currentWorkspaceId;
                     if (!workspaceId) return;
-                    if (confirm(`Delete view "${view.name}"?`)) {
-                      const run = async () => {
-                        try {
-                          const apiUrl = getApiUrl();
-                          const response = await authFetch(
-                            `${apiUrl}/api/graph/views/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
-                            { method: 'DELETE' }
-                          );
-                          if (!response.ok) return;
-                          deleteView(view.id);
-                        } catch (error) {
-                          console.error('Failed to delete view:', error);
+                    const run = async () => {
+                      const shouldDelete = await confirm({
+                        title: `Delete view "${view.name}"?`,
+                        description:
+                          'This will remove the view definition and all its filters. This action cannot be undone.',
+                        confirmLabel: 'Delete View',
+                        destructive: true,
+                      });
+                      if (!shouldDelete) return;
+
+                      try {
+                        const apiUrl = getApiUrl();
+                        const response = await authFetch(
+                          `${apiUrl}/api/view/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
+                          { method: 'DELETE' }
+                        );
+                        if (!response.ok) return;
+
+                        const refreshedViews = await fetchViewsFromApi();
+
+                        const firstView = refreshedViews[0] ?? null;
+                        if (firstView) {
+                          selectGraph(null);
+                          setActiveSavedView(firstView.id);
+                          if (firstView.graphIds && firstView.graphIds.length > 0) {
+                            setVisibleGraphs(firstView.graphIds);
+                          }
+                        } else {
+                          setActiveSavedView(null);
                         }
-                      };
-                      void run();
-                    }
+                        router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
+                      } catch (error) {
+                        console.error('Failed to delete view:', error);
+                      }
+                    };
+                    void run();
                   }}
                   onSelect={() => {
                     selectGraph(null);
@@ -528,6 +642,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
         )}
       </div>
 
+      {confirmDialog}
     </CollapsibleSection>
   );
 }

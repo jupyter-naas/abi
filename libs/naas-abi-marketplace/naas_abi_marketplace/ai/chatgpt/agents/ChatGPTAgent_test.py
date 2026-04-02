@@ -1,10 +1,10 @@
 import pytest
-from naas_abi_marketplace.ai.chatgpt.agents.ChatGPTAgent import create_agent
+from naas_abi_marketplace.ai.chatgpt.agents.ChatGPTAgent import ChatGPTAgent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    return ChatGPTAgent.New()
 
 
 def test_agent_name(agent):
