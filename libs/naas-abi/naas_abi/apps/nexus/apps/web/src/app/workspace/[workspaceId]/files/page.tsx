@@ -364,7 +364,9 @@ export default function FilesPage() {
 
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
-      const response = await authFetch(`/api/files/raw/${encodedPath}`);
+      const response = await authFetch(
+        `/api/files/raw/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+      );
       if (!response.ok) {
         throw new Error('Failed to load PDF preview');
       }
@@ -405,7 +407,9 @@ export default function FilesPage() {
 
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
-      const response = await authFetch(`/api/files/preview/pdf/${encodedPath}`);
+      const response = await authFetch(
+        `/api/files/preview/pdf/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+      );
       if (!response.ok) {
         throw new Error('PPTX preview unavailable right now');
       }
@@ -439,7 +443,9 @@ export default function FilesPage() {
 
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
-      const response = await authFetch(`/api/files/raw/${encodedPath}`);
+      const response = await authFetch(
+        `/api/files/raw/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+      );
       if (!response.ok) {
         throw new Error('Failed to load image preview');
       }
@@ -472,7 +478,9 @@ export default function FilesPage() {
 
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
-      const response = await authFetch(`/api/files/${encodedPath}`);
+      const response = await authFetch(
+        `/api/files/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+      );
       if (!response.ok) {
         throw new Error('Failed to load markdown preview');
       }
@@ -496,7 +504,9 @@ export default function FilesPage() {
     if (file.type !== 'file') return;
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
-      const response = await authFetch(`/api/files/raw/${encodedPath}`);
+      const response = await authFetch(
+        `/api/files/raw/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+      );
       if (!response.ok) {
         throw new Error('Failed to download file');
       }

@@ -381,7 +381,12 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const fetchListing = async (targetPath: string) => {
-        const response = await authFetch(`${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}`);
+        const workspaceParam = workspaceId
+          ? `&workspace_id=${encodeURIComponent(workspaceId)}`
+          : '';
+        const response = await authFetch(
+          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}`
+        );
         if (!response.ok) {
           throw new Error('Failed to fetch files');
         }
@@ -418,7 +423,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     
     set({ labLoading: true });
     try {
-      const response = await authFetch(`${getApiBase()}/api/files/?path=${encodeURIComponent(workspaceId)}`);
+      const response = await authFetch(
+        `${getApiBase()}/api/files/?path=${encodeURIComponent(workspaceId)}&workspace_id=${encodeURIComponent(workspaceId)}`
+      );
       if (!response.ok) {
         throw new Error('Failed to fetch lab files');
       }
@@ -446,7 +453,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     try {
       // folderPath is relative to workspace, like "new-folder"
       const fullPath = `${workspaceId}/${folderPath}`;
-      const response = await authFetch(`${getApiBase()}/api/files/?path=${encodeURIComponent(fullPath)}`);
+      const response = await authFetch(
+        `${getApiBase()}/api/files/?path=${encodeURIComponent(fullPath)}&workspace_id=${encodeURIComponent(workspaceId)}`
+      );
       if (!response.ok) {
         throw new Error('Failed to fetch folder contents');
       }
@@ -473,10 +482,16 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     
     set({ loading: true, error: null });
     try {
+      const workspaceId = getCurrentWorkspaceId();
       const response = await authFetch(`${getApiBase()}/api/files/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: workspacePath, content, content_type: 'text/plain' }),
+        body: JSON.stringify({
+          path: workspacePath,
+          workspace_id: workspaceId,
+          content,
+          content_type: 'text/plain',
+        }),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -503,7 +518,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       const response = await authFetch(`${getApiBase()}/api/files/folder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: workspacePath }),
+        body: JSON.stringify({ path: workspacePath, workspace_id: getCurrentWorkspaceId() }),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -525,7 +540,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   deleteFile: async (path) => {
     set({ loading: true, error: null });
     try {
-      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}`, {
+      const workspaceId = getCurrentWorkspaceId();
+      const workspaceParam = workspaceId
+        ? `?workspace_id=${encodeURIComponent(workspaceId)}`
+        : '';
+      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -562,7 +581,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       const response = await authFetch(`${getApiBase()}/api/files/rename`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ old_path: oldPath, new_path: newPath }),
+        body: JSON.stringify({ old_path: oldPath, new_path: newPath, workspace_id: workspaceId }),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -612,6 +631,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       const formData = new FormData();
       formData.append('file', file);
       formData.append('path', uploadPath);
+      const workspaceId = getCurrentWorkspaceId();
+      if (workspaceId) {
+        formData.append('workspace_id', workspaceId);
+      }
 
       const response = await authFetch(`${getApiBase()}/api/files/upload`, {
         method: 'POST',
@@ -661,7 +684,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   readFile: async (path) => {
     try {
-      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}`);
+      const workspaceId = getCurrentWorkspaceId();
+      const workspaceParam = workspaceId
+        ? `?workspace_id=${encodeURIComponent(workspaceId)}`
+        : '';
+      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`);
       if (!response.ok) {
         throw new Error('Failed to read file');
       }
@@ -686,10 +713,19 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     }
     
     try {
-      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}`, {
+      const workspaceId = getCurrentWorkspaceId();
+      const workspaceParam = workspaceId
+        ? `?workspace_id=${encodeURIComponent(workspaceId)}`
+        : '';
+      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, content, content_type: 'text/plain' }),
+        body: JSON.stringify({
+          path,
+          workspace_id: workspaceId,
+          content,
+          content_type: 'text/plain',
+        }),
       });
       
       if (!response.ok) {
