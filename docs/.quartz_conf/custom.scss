@@ -88,18 +88,21 @@ body {
 
 .naas-topbar-logo {
   align-items: center;
-  color: var(--naas-green);
   display: flex;
   flex-shrink: 0;
-  font-family: "Comfortaa", sans-serif;
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
   text-decoration: none;
 }
 
-.naas-topbar-logo svg text {
-  fill: var(--naas-green);
+.naas-topbar-wordmark {
+  background: linear-gradient(135deg, #22c55e, #4ade80);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-family: "Comfortaa", ui-sans-serif, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
 .naas-topbar-divider {
