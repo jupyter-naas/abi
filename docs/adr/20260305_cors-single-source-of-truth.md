@@ -1,7 +1,7 @@
-# ADR 0001: Single Source of Truth for CORS
+# ADR: Single Source of Truth for CORS
 
 - Status: Accepted
-- Date: 2026-03-04
+- Date: 2026-03-05
 
 ## Context
 
