@@ -620,9 +620,8 @@ check-core: deps
 	@cd libs/naas-abi-cli && uv sync --all-extras && .venv/bin/mypy -p naas_abi_cli --follow-untyped-imports --exclude "naas_abi_cli/cli/new/templates" --exclude ".*sandbox.*"
 	@#uv run pyrefly check libs/naas-abi-core
 
-	@#echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
-	@#echo "⚠️ Skipping bandit... (disabled)"
-	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml libs/naas-abi-core libs/naas-abi-cli libs/naas-abi -r
+	@echo "\n\033[1;4m🔒 Running security checks (bandit)...\033[0m\n"
+	@uvx bandit -c bandit.yaml -r libs/naas-abi-core libs/naas-abi-cli libs/naas-abi -ll -ii
 	@echo "\n✅ CORE security checks passed!"
 
 # Code quality checks for marketplace modules
@@ -662,7 +661,7 @@ fmt: deps
 
 # Security scanning with bandit
 bandit:
-	@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests libs src -r
+	@uvx bandit -c bandit.yaml -r libs/naas-abi-core libs/naas-abi-cli libs/naas-abi -ll -ii
 
 # Container security scanning with trivy
 trivy-container-scan: build

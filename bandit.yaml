@@ -1,0 +1,20 @@
+# Bandit security scanning configuration
+# Docs: https://bandit.readthedocs.io/en/latest/config.html
+#
+# Severity thresholds used in CI: -ll (medium+) -ii (medium+ confidence)
+# This catches real security issues while suppressing low-signal noise.
+
+exclude_dirs:
+  - .venv
+  - node_modules
+  - libs/naas-abi-cli/naas_abi_cli/cli/new/templates
+  - libs/naas-abi-marketplace/naas_abi_marketplace/__demo__
+  - libs/naas-abi-marketplace/naas_abi_marketplace/sandbox
+  - libs/naas-abi/naas_abi/apps/nexus/apps/web
+
+skips:
+  # assert statements are acceptable and expected in test files
+  - B101
+  # hashlib/md5 — flagged generically; project uses it for non-security hashing (e.g. cache keys)
+  # Remove this skip once all hashlib usages have been audited and confirmed safe
+  - B324

@@ -51,6 +51,8 @@ export interface GraphTripleFilter {
 export interface GraphView {
   id: string;
   name: string;
+  scope?: 'workspace' | 'user';
+  userId?: string;
   type: GraphViewType;
   graphId?: string; // Optional - view can span multiple graphs
   graphIds?: string[];

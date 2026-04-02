@@ -3,7 +3,6 @@ import hashlib
 import io
 import os
 import uuid
-from datetime import datetime
 from typing import Callable, List
 
 import rdflib
@@ -14,7 +13,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
 )
-from rdflib import DCTERMS, OWL, RDF, RDFS, XSD, Graph, Literal, URIRef
+from rdflib import RDF, Graph, URIRef
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -161,43 +160,17 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return self.__triple_store_adapter.query_view(view, query)
 
-    def _insert_graph_metadata(self, graph_name: URIRef) -> None:
-        assert graph_name is not None
-        assert isinstance(graph_name, URIRef)
-        label = graph_name.split("/")[-1].split("#")[-1]
-        g = Graph()
-        g.add((graph_name, RDF.type, OWL.NamedIndividual))
-        g.add((graph_name, RDF.type, GRAPH_CLASS))
-        g.add((graph_name, RDFS.label, Literal(label)))
-        g.add(
-            (
-                graph_name,
-                DCTERMS.created,
-                Literal(
-                    datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z"),
-                    datatype=XSD.dateTime,
-                ),
-            )
-        )
-        self.insert(g, graph_name=graph_name)
-
     def create_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
         self.__triple_store_adapter.create_graph(graph_name)
 
-        # Insert schema graph into the new graph
-        self._insert_graph_metadata(graph_name)
-
     def clear_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
         self.__triple_store_adapter.clear_graph(graph_name)
-
-        # Insert schema graph into the new graph
-        self._insert_graph_metadata(graph_name)
 
     def drop_graph(self, graph_name: URIRef) -> None:
         self.__triple_store_adapter.drop_graph(graph_name)

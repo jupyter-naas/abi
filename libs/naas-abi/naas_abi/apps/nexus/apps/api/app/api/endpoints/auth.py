@@ -2,7 +2,7 @@
 
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
     ALLOWED_AVATAR_EXTENSIONS,
-    AVATAR_DIR,
+    AVATAR_STORAGE_PREFIX,
     MAX_AVATAR_SIZE,
     AuthResponse,
     ForgotPasswordRequest,
@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
     change_password,
     decode_token,
     forgot_password,
+    get_avatar,
     get_current_user,
     get_current_user_required,
     get_me,
@@ -30,6 +31,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
     oauth2_scheme,
     refresh_access_token,
     register,
+    remove_avatar,
     require_workspace_access,
     reset_password,
     router,
@@ -44,7 +46,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
 
 __all__ = [
     "ALLOWED_AVATAR_EXTENSIONS",
-    "AVATAR_DIR",
+    "AVATAR_STORAGE_PREFIX",
     "MAX_AVATAR_SIZE",
     "AuthResponse",
     "ForgotPasswordRequest",
@@ -63,6 +65,7 @@ __all__ = [
     "create_access_token",
     "decode_token",
     "forgot_password",
+    "get_avatar",
     "get_current_user",
     "get_current_user_required",
     "get_me",
@@ -74,6 +77,7 @@ __all__ = [
     "oauth2_scheme",
     "refresh_access_token",
     "register",
+    "remove_avatar",
     "require_workspace_access",
     "reset_password",
     "router",
