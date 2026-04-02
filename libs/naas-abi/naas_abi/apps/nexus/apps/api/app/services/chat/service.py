@@ -19,8 +19,12 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatPersistencePort,
     ChatSecretRecord,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authorization import (
+    ensure_scope,
+    ensure_workspace_access,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext
-from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError, IAMService
+from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
@@ -101,21 +105,6 @@ class ChatService:
         self.adapter = adapter
         self.iam_service = iam_service
 
-    def _resolve_iam_service(self) -> IAMService | None:
-        if self.iam_service is not None:
-            return self.iam_service
-        try:
-            from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import (
-                PostgresSessionRegistry,
-            )
-            from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
-
-            if PostgresSessionRegistry.instance().current_session() is None:
-                return None
-            return ServiceRegistry.instance().iam
-        except Exception:
-            return None
-
     async def list_conversations(
         self,
         context: RequestContext,
@@ -156,6 +145,11 @@ class ChatService:
         context: RequestContext,
         conversation_id: str,
     ) -> ChatConversationRecord | None:
+        self._ensure_scope(
+            context=context,
+            required_scope="chat.conversation.read",
+            denied_message="Conversation access denied",
+        )
         return await self.adapter.get_conversation_by_id_for_user(
             conversation_id,
             context.actor_user_id,
@@ -166,9 +160,27 @@ class ChatService:
         context: RequestContext,
         conversation_id: str,
     ) -> ChatConversationRecord | None:
+        self._ensure_scope(
+            context=context,
+            required_scope="chat.conversation.read",
+            denied_message="Conversation access denied",
+        )
         return await self.adapter.get_conversation_by_id_for_user(
             conversation_id,
             context.actor_user_id,
+        )
+
+    def _ensure_scope(
+        self,
+        context: RequestContext,
+        required_scope: str,
+        denied_message: str,
+    ) -> None:
+        ensure_scope(
+            context=context,
+            required_scope=required_scope,
+            denied_message=denied_message,
+            iam_service=self.iam_service,
         )
 
     async def _ensure_conversation_access(
@@ -178,15 +190,11 @@ class ChatService:
         action: str = "chat.conversation.read",
         required_scope: str | None = None,
     ) -> ChatConversationRecord:
-        iam_service = self._resolve_iam_service()
-        if iam_service:
-            try:
-                iam_service.ensure(
-                    token_data=context.token_data,
-                    required_scope=required_scope or action,
-                )
-            except IAMPermissionError as exc:
-                raise PermissionError("Conversation access denied") from exc
+        self._ensure_scope(
+            context=context,
+            required_scope=required_scope or action,
+            denied_message="Conversation access denied",
+        )
 
         conversation = await self.adapter.get_conversation_by_id_for_user(
             conversation_id,
@@ -203,16 +211,14 @@ class ChatService:
         action: str = "workspace.read",
         required_scope: str | None = None,
     ) -> None:
-        iam_service = self._resolve_iam_service()
-        if not iam_service:
-            return
-        try:
-            iam_service.ensure(
-                token_data=context.token_data,
-                required_scope=required_scope or action,
-            )
-        except IAMPermissionError as exc:
-            raise PermissionError("Workspace access denied") from exc
+        await ensure_workspace_access(
+            context=context,
+            workspace_id=workspace_id,
+            denied_message="Workspace access denied",
+            required_scope=required_scope or action,
+            iam_service=self.iam_service,
+            workspace_service=None,
+        )
 
     @staticmethod
     def _unwrap_json_content(raw: str) -> str:
@@ -437,6 +443,7 @@ class ChatService:
 
         has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
         provider = await self.resolve_provider(
+            context=context,
             provider=request.provider,
             has_images=has_images,
             agent_id=request.agent,
@@ -549,16 +556,58 @@ class ChatService:
         await self.adapter.delete_messages_by_conversation(conversation_id)
         return await self.adapter.delete_conversation(conversation_id)
 
-    async def get_agent(self, agent_id: str) -> ChatAgentRecord | None:
-        return await self.adapter.get_agent_by_id(agent_id)
+    async def get_agent(
+        self,
+        context: RequestContext,
+        agent_id: str,
+    ) -> ChatAgentRecord | None:
+        self._ensure_scope(
+            context=context,
+            required_scope="chat.agent.read",
+            denied_message="Agent access denied",
+        )
+        agent = await self.adapter.get_agent_by_id(agent_id)
+        if agent:
+            await self._ensure_workspace_access(context=context, workspace_id=agent.workspace_id)
+        return agent
 
-    async def get_abi_server(self, workspace_id: str) -> ChatInferenceServerRecord | None:
+    async def get_abi_server(
+        self,
+        context: RequestContext,
+        workspace_id: str,
+    ) -> ChatInferenceServerRecord | None:
+        self._ensure_scope(
+            context=context,
+            required_scope="chat.provider.read",
+            denied_message="Provider access denied",
+        )
+        await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
         return await self.adapter.get_enabled_workspace_abi_server(workspace_id)
 
-    async def get_workspace_secret(self, workspace_id: str, key: str) -> ChatSecretRecord | None:
+    async def get_workspace_secret(
+        self,
+        context: RequestContext,
+        workspace_id: str,
+        key: str,
+    ) -> ChatSecretRecord | None:
+        self._ensure_scope(
+            context=context,
+            required_scope="chat.secret.read",
+            denied_message="Secret access denied",
+        )
+        await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
         return await self.adapter.get_workspace_secret(workspace_id, key)
 
-    async def list_agent_names_by_ids(self, agent_ids: set[str]) -> dict[str, str]:
+    async def list_agent_names_by_ids(
+        self,
+        context: RequestContext,
+        agent_ids: set[str],
+    ) -> dict[str, str]:
+        self._ensure_scope(
+            context=context,
+            required_scope="chat.agent.read",
+            denied_message="Agent access denied",
+        )
         return await self.adapter.list_agent_names_by_ids(agent_ids)
 
     @staticmethod
@@ -593,6 +642,7 @@ class ChatService:
 
     async def resolve_provider(
         self,
+        context: RequestContext,
         provider: Any | None,
         has_images: bool,
         agent_id: str | None = None,
@@ -612,7 +662,7 @@ class ChatService:
 
         if agent_id:
             try:
-                agent = await self.get_agent(agent_id)
+                agent = await self.get_agent(context=context, agent_id=agent_id)
                 if agent and agent.provider:
                     workspace_id = agent.workspace_id
                     if agent.provider == "abi":
@@ -622,7 +672,10 @@ class ChatService:
                         external_agent_ref = (
                             agent.model_id or agent.class_name or agent.name or agent.id
                         )
-                        abi_server = await self.get_abi_server(workspace_id)
+                        abi_server = await self.get_abi_server(
+                            context=context,
+                            workspace_id=workspace_id,
+                        )
                         if abi_server:
                             return ResolvedProvider(
                                 id=f"abi-{abi_server.id}",
@@ -664,7 +717,11 @@ class ChatService:
 
                     secret_key = secret_key_map.get(agent.provider)
                     if secret_key and agent.model_id:
-                        secret = await self.get_workspace_secret(workspace_id, secret_key)
+                        secret = await self.get_workspace_secret(
+                            context=context,
+                            workspace_id=workspace_id,
+                            key=secret_key,
+                        )
                         if secret:
                             return ResolvedProvider(
                                 id=f"agent-{agent.provider}",
@@ -678,7 +735,10 @@ class ChatService:
                             )
 
                 if not agent and workspace_id and agent_id:
-                    abi_server = await self.get_abi_server(workspace_id)
+                    abi_server = await self.get_abi_server(
+                        context=context,
+                        workspace_id=workspace_id,
+                    )
                     if abi_server:
                         return ResolvedProvider(
                             id=f"abi-{abi_server.id}",
@@ -779,7 +839,7 @@ class ChatService:
             m["agent"] for m in source_messages if m["role"] == "assistant" and m.get("agent")
         }
         agent_ids.add(current_agent_id)
-        agents_map = await self.list_agent_names_by_ids(agent_ids)
+        agents_map = await self.list_agent_names_by_ids(context=context, agent_ids=agent_ids)
         current_agent_name = agents_map.get(current_agent_id, "Unknown Agent")
 
         messages: list[ProviderMessage] = []

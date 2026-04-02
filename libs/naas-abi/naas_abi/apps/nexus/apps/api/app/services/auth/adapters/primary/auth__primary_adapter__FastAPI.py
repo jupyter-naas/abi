@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 
@@ -50,7 +49,6 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
 )
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 AVATAR_DIR = Path("uploads/avatars")
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)
@@ -240,10 +238,7 @@ async def forgot_password(
     request: ForgotPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict:
-    token = await auth_service.forgot_password(request.email)
-    if token:
-        reset_link = f"http://localhost:3000/auth/reset-password?token={token}"
-        logger.info("Password reset link for %s: %s", request.email, reset_link)
+    await auth_service.forgot_password(request.email)
 
     return {
         "status": "success",

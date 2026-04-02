@@ -98,6 +98,7 @@ def to_complete_chat_input(request: ChatRequest) -> CompleteChatInput:
 
 
 async def resolve_provider(
+    context: RequestContext,
     provider: ProviderConfigRequest | None,
     has_images: bool,
     agent_id: str | None = None,
@@ -106,6 +107,7 @@ async def resolve_provider(
     async with AsyncSessionLocal() as db:
         with bind_registry(db) as registry:
             resolved = await registry.chat.resolve_provider(
+                context=context,
                 provider=provider,
                 has_images=has_images,
                 agent_id=agent_id,

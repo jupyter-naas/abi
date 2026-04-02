@@ -5,6 +5,7 @@ Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom 
 
 from collections.abc import AsyncGenerator
 from typing import Literal
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
@@ -45,6 +46,131 @@ class Message(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
     images: list[str] | None = None  # List of base64-encoded images
+
+
+class UnsafeProviderEndpointError(ValueError):
+    pass
+
+
+_OFFICIAL_ENDPOINTS: dict[str, str] = {
+    "xai": "https://api.x.ai/v1",
+    "openai": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com/v1",
+    "mistral": "https://api.mistral.ai/v1",
+    "google": "https://generativelanguage.googleapis.com/v1beta",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "perplexity": "https://api.perplexity.ai",
+}
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_SENSITIVE_QUERY_KEYS = {"token", "api_key", "key", "access_token", "auth", "authorization"}
+_REDACTED = "REDACTED"
+
+
+def redact_url_for_logs(url: str) -> str:
+    parsed = urlparse(url)
+    if not parsed.query:
+        return url
+    redacted_query = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        if key.lower() in _SENSITIVE_QUERY_KEYS:
+            redacted_query.append((key, _REDACTED))
+        else:
+            redacted_query.append((key, value))
+    return urlunparse(parsed._replace(query=urlencode(redacted_query, doseq=True)))
+
+
+def _is_ip_literal(host: str) -> bool:
+    import ipaddress
+
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_private_or_local_ip(host: str) -> bool:
+    import ipaddress
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _validate_endpoint_url(
+    endpoint: str,
+    *,
+    require_https: bool,
+    allow_localhost: bool,
+) -> str:
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in {"http", "https"}:
+        raise UnsafeProviderEndpointError("Provider endpoint must use http or https")
+    if require_https and parsed.scheme != "https":
+        raise UnsafeProviderEndpointError("Provider endpoint must use https")
+    if not parsed.hostname:
+        raise UnsafeProviderEndpointError("Provider endpoint must include a hostname")
+    if parsed.username or parsed.password:
+        raise UnsafeProviderEndpointError("Provider endpoint cannot include credentials")
+    if parsed.query or parsed.fragment:
+        raise UnsafeProviderEndpointError("Provider endpoint cannot include query parameters")
+
+    host = parsed.hostname.lower()
+    if host in {"169.254.169.254", "metadata.google.internal"}:
+        raise UnsafeProviderEndpointError("Provider endpoint targets forbidden metadata host")
+
+    if _is_ip_literal(host) and _is_private_or_local_ip(host):
+        if not allow_localhost or host not in _LOCAL_HOSTS:
+            raise UnsafeProviderEndpointError(
+                "Provider endpoint cannot target local/private IP ranges"
+            )
+
+    if host.endswith(".local") and not allow_localhost:
+        raise UnsafeProviderEndpointError("Provider endpoint cannot target local network hostnames")
+
+    if host in _LOCAL_HOSTS and not allow_localhost:
+        raise UnsafeProviderEndpointError("Provider endpoint cannot target localhost")
+
+    return endpoint.rstrip("/")
+
+
+def validated_provider_endpoint(config: ProviderConfig) -> str | None:
+    if config.type == "custom":
+        if not config.endpoint:
+            raise UnsafeProviderEndpointError("Custom endpoint URL is required")
+        return _validate_endpoint_url(config.endpoint, require_https=True, allow_localhost=False)
+
+    if config.type in _OFFICIAL_ENDPOINTS:
+        endpoint = config.endpoint or _OFFICIAL_ENDPOINTS[config.type]
+        validated = _validate_endpoint_url(endpoint, require_https=True, allow_localhost=False)
+        if urlparse(validated).hostname != urlparse(_OFFICIAL_ENDPOINTS[config.type]).hostname:
+            raise UnsafeProviderEndpointError(
+                f"Endpoint host is not allowed for provider type '{config.type}'"
+            )
+        return validated
+
+    if config.type == "ollama":
+        endpoint = config.endpoint or "http://localhost:11434"
+        return _validate_endpoint_url(endpoint, require_https=False, allow_localhost=True)
+
+    if config.type == "abi":
+        if config.endpoint and config.endpoint.startswith("inprocess://"):
+            return config.endpoint
+        if config.endpoint:
+            return _validate_endpoint_url(
+                config.endpoint, require_https=False, allow_localhost=True
+            )
+    return config.endpoint.rstrip("/") if config.endpoint else None
 
 
 async def complete_with_anthropic(
@@ -139,7 +265,7 @@ async def complete_with_ollama(
 ) -> str:
     """Complete chat using Ollama local API (non-streaming). Supports multimodal (images)."""
     # Always default to localhost if no endpoint provided
-    endpoint = (config.endpoint or "http://localhost:11434").rstrip("/")
+    endpoint = validated_provider_endpoint(config) or "http://localhost:11434"
 
     # Build messages list with optional images
     ollama_messages = []
@@ -182,7 +308,7 @@ async def stream_with_ollama(
     """
     import json
 
-    endpoint = (config.endpoint or "http://localhost:11434").rstrip("/")
+    endpoint = validated_provider_endpoint(config) or "http://localhost:11434"
 
     # Build messages list with optional images
     ollama_messages = []
@@ -241,7 +367,9 @@ async def stream_with_openai_compatible(
     import logging
 
     logger = logging.getLogger(__name__)
-    endpoint = config.endpoint.rstrip("/")
+    endpoint = validated_provider_endpoint(config)
+    if not endpoint:
+        raise UnsafeProviderEndpointError(f"Missing endpoint for provider type '{config.type}'")
 
     # Build messages list
     api_messages = []
@@ -288,7 +416,12 @@ async def stream_with_openai_compatible(
             if response.status_code != 200:
                 error_text = await response.aread()
                 error_body = error_text.decode()
-                logger.error(f"❌ HTTP {response.status_code}: {error_body[:500]}")
+                logger.error(
+                    "❌ HTTP %s from provider endpoint=%s model=%s",
+                    response.status_code,
+                    endpoint,
+                    config.model,
+                )
 
                 # Try to extract user-friendly error message
                 try:
@@ -470,8 +603,9 @@ async def complete_with_custom(
     system_prompt: str | None = None,
 ) -> str:
     """Complete chat using custom OpenAI-compatible endpoint."""
-    if not config.endpoint:
-        raise ValueError("Custom endpoint URL is required")
+    endpoint = validated_provider_endpoint(config)
+    if not endpoint:
+        raise UnsafeProviderEndpointError("Custom endpoint URL is required")
 
     # Build messages list (OpenAI format)
     api_messages = []
@@ -492,7 +626,7 @@ async def complete_with_custom(
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
-            f"{config.endpoint}/v1/chat/completions",
+            f"{endpoint}/v1/chat/completions",
             headers=headers,
             json={
                 "model": config.model,
@@ -793,7 +927,7 @@ async def stream_with_abi(
     # Build request URL with token as query param
     url = f"{endpoint}/agents/{agent_name}/stream-completion?token={token}"
 
-    logger.info(f"🔌 Streaming from ABI: {url} (agent: {agent_name})")
+    logger.info("🔌 Streaming from ABI: %s (agent: %s)", redact_url_for_logs(url), agent_name)
 
     # Use conversation ID as thread_id (or generate one from messages hash)
     thread_id = str(
@@ -858,7 +992,7 @@ async def stream_with_abi(
                             last_emitted_chunk = content
 
     except httpx.HTTPStatusError as e:
-        logger.error(f"ABI API error: {e.response.status_code} - {e.response.text}")
+        logger.error("ABI API error: status=%s endpoint=%s", e.response.status_code, endpoint)
         yield f"\n\n**Error:** ABI server returned {e.response.status_code}\n\n{e.response.text}"
     except Exception as e:
         logger.error(f"ABI streaming error: {e}")
@@ -909,9 +1043,7 @@ def _resolve_inprocess_abi_agent(agent_name: str):
     # fall back to agent/class-name matching instead of hard-failing.
     if target_module:
         module_paths = [
-            module.__class__.__module__.lower()
-            for module in modules.values()
-            if module is not None
+            module.__class__.__module__.lower() for module in modules.values() if module is not None
         ]
         if not any(target_module in module_path for module_path in module_paths):
             target_module = None
@@ -1007,7 +1139,9 @@ def _resolve_inprocess_abi_agent(agent_name: str):
                     f"{local_path}/{class_name_stripped.lower()}",
                 }
                 try:
-                    display_name = getattr(value.New(), "name", None) if hasattr(value, "New") else None
+                    display_name = (
+                        getattr(value.New(), "name", None) if hasattr(value, "New") else None
+                    )
                 except Exception:
                     display_name = None
                 if display_name:
