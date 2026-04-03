@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from uuid import uuid4
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.authorization import (
+    ensure_scope,
+    ensure_workspace_access,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext
+from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
 from naas_abi.apps.nexus.apps.api.app.services.secrets.port import (
     SecretRecord,
     SecretsPersistencePort,
@@ -41,8 +48,42 @@ def infer_secret_category(key: str) -> str:
 
 
 class SecretsService:
-    def __init__(self, adapter: SecretsPersistencePort):
+    def __init__(
+        self,
+        adapter: SecretsPersistencePort,
+        iam_service: IAMService | None = None,
+        workspace_access_checker: Callable[[str, str], Awaitable[str]] | None = None,
+    ):
         self.adapter = adapter
+        self.iam_service = iam_service
+        self.workspace_access_checker = workspace_access_checker
+
+    def _ensure_scope(
+        self, context: RequestContext, required_scope: str, denied_message: str
+    ) -> None:
+        ensure_scope(
+            context=context,
+            required_scope=required_scope,
+            denied_message=denied_message,
+            iam_service=self.iam_service,
+        )
+
+    async def _ensure_workspace_access(self, context: RequestContext, workspace_id: str) -> None:
+        if self.workspace_access_checker is not None:
+            try:
+                await self.workspace_access_checker(context.actor_user_id, workspace_id)
+            except PermissionError as exc:
+                raise PermissionError("Workspace access denied") from exc
+            return
+
+        await ensure_workspace_access(
+            context=context,
+            workspace_id=workspace_id,
+            denied_message="Workspace access denied",
+            required_scope="workspace.read",
+            iam_service=self.iam_service,
+            workspace_service=None,
+        )
 
     @staticmethod
     def encrypt(value: str) -> str:
@@ -70,11 +111,20 @@ class SecretsService:
             updated_at=record.updated_at,
         )
 
-    async def list_secrets(self, workspace_id: str) -> list[SecretOutput]:
+    async def list_secrets(self, context: RequestContext, workspace_id: str) -> list[SecretOutput]:
+        self._ensure_scope(context, "secret.read", "Secret access denied")
+        await self._ensure_workspace_access(context, workspace_id)
         rows = await self.adapter.list_by_workspace(workspace_id=workspace_id)
         return [self.to_output(row) for row in rows]
 
-    async def create_secret(self, secret: SecretCreateInput, now: datetime) -> SecretOutput:
+    async def create_secret(
+        self,
+        context: RequestContext,
+        secret: SecretCreateInput,
+        now: datetime,
+    ) -> SecretOutput:
+        self._ensure_scope(context, "secret.create", "Secret access denied")
+        await self._ensure_workspace_access(context, secret.workspace_id)
         existing = await self.adapter.get_by_workspace_key(
             workspace_id=secret.workspace_id,
             key=secret.key,
@@ -107,11 +157,17 @@ class SecretsService:
         )
 
     async def update_secret(
-        self, secret_id: str, update: SecretUpdateInput, now: datetime
+        self,
+        context: RequestContext,
+        secret_id: str,
+        update: SecretUpdateInput,
+        now: datetime,
     ) -> SecretOutput:
+        self._ensure_scope(context, "secret.update", "Secret access denied")
         row = await self.adapter.get_by_id(secret_id=secret_id)
         if not row:
             raise SecretNotFoundError(secret_id=secret_id)
+        await self._ensure_workspace_access(context, row.workspace_id)
 
         row.updated_at = now
         if update.value is not None:
@@ -123,15 +179,26 @@ class SecretsService:
         await self.adapter.commit()
         return self.to_output(row)
 
-    async def delete_secret(self, secret_id: str) -> None:
+    async def delete_secret(self, context: RequestContext, secret_id: str) -> None:
+        self._ensure_scope(context, "secret.delete", "Secret access denied")
+        row = await self.adapter.get_by_id(secret_id=secret_id)
+        if row is None:
+            raise SecretNotFoundError(secret_id=secret_id)
+        await self._ensure_workspace_access(context, row.workspace_id)
+
         deleted = await self.adapter.delete(secret_id=secret_id)
         if not deleted:
             raise SecretNotFoundError(secret_id=secret_id)
         await self.adapter.commit()
 
     async def bulk_import(
-        self, data: SecretBulkImportInput, now: datetime
+        self,
+        context: RequestContext,
+        data: SecretBulkImportInput,
+        now: datetime,
     ) -> SecretBulkImportResult:
+        self._ensure_scope(context, "secret.create", "Secret access denied")
+        await self._ensure_workspace_access(context, data.workspace_id)
         imported = 0
         updated = 0
 
@@ -182,7 +249,14 @@ class SecretsService:
         await self.adapter.commit()
         return SecretBulkImportResult(imported=imported, updated=updated)
 
-    async def resolve_secret_value(self, workspace_id: str, key: str) -> str | None:
+    async def resolve_secret_value(
+        self,
+        context: RequestContext,
+        workspace_id: str,
+        key: str,
+    ) -> str | None:
+        self._ensure_scope(context, "secret.read", "Secret access denied")
+        await self._ensure_workspace_access(context, workspace_id)
         row = await self.adapter.get_by_workspace_key(workspace_id=workspace_id, key=key)
         if not row:
             return None

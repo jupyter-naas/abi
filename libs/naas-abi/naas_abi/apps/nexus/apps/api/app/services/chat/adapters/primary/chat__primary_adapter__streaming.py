@@ -64,7 +64,11 @@ async def stream_chat_response(
 
     has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
     provider = await resolve_provider(
-        request.provider, has_images, request.agent, request.workspace_id
+        request_context(current_user),
+        request.provider,
+        has_images,
+        request.agent,
+        request.workspace_id,
     )
 
     logger.info(
@@ -252,7 +256,14 @@ async def stream_chat_response(
             yield "data: [DONE]\n\n"
         except Exception as exc:
             escaped_error = json.dumps(str(exc))[1:-1]
-            logger.error("Stream error: %s, %s, %s", str(exc), provider, request.agent)
+            logger.error(
+                "Stream error: %s provider_type=%s provider_name=%s provider_model=%s agent=%s",
+                str(exc),
+                getattr(provider, "type", None),
+                getattr(provider, "name", None),
+                getattr(provider, "model", None),
+                request.agent,
+            )
             try:
                 if assistant_msg_id:
                     await persist_stream_content(

@@ -4,6 +4,7 @@ import { QuartzComponent, QuartzComponentConstructor } from "./quartz/components
 
 const defaultTheme = process.env.DEFAULT_THEME === "light" ? "light" : "dark"
 
+/* ── Force default theme + preload Comfortaa ─────────────────── */
 const ForceDarkDefault: QuartzComponent = () => null
 ForceDarkDefault.beforeDOMLoaded = `
 const savedTheme = localStorage.getItem("theme")
@@ -11,18 +12,62 @@ if (!savedTheme) {
   localStorage.setItem("theme", "${defaultTheme}")
   document.documentElement.setAttribute("saved-theme", "${defaultTheme}")
 }
+// Preconnect to Google Fonts for faster Comfortaa load
+if (!document.querySelector('link[href*="fonts.googleapis"]')) {
+  const preconn1 = document.createElement('link')
+  preconn1.rel = 'preconnect'
+  preconn1.href = 'https://fonts.googleapis.com'
+  document.head.appendChild(preconn1)
+  const preconn2 = document.createElement('link')
+  preconn2.rel = 'preconnect'
+  preconn2.href = 'https://fonts.gstatic.com'
+  preconn2.crossOrigin = 'anonymous'
+  document.head.appendChild(preconn2)
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = 'https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;500;600;700&display=swap'
+  document.head.appendChild(link)
+}
+`
+
+/* ── naas.ai top navigation bar ──────────────────────────────── */
+const NaasTopBar: QuartzComponent = () => null
+NaasTopBar.afterDOMLoaded = `
+;(function () {
+  const bar = document.createElement('nav')
+  bar.id = 'naas-topbar'
+  bar.innerHTML = \`
+    <div class="naas-topbar-inner">
+      <a href="https://naas.ai" class="naas-topbar-logo" aria-label="naas.ai home">
+        <span class="naas-topbar-wordmark">naas.ai</span>
+      </a>
+      <div class="naas-topbar-divider"></div>
+      <span class="naas-topbar-section">Documentation</span>
+      <div class="naas-topbar-spacer"></div>
+      <a href="https://github.com/jupyter-naas/abi" class="naas-topbar-link" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <a href="https://naas.ai" class="naas-topbar-back">← naas.ai</a>
+      <a href="https://naas.ai/#get-started" class="naas-topbar-cta">Get Started</a>
+    </div>
+  \`
+  document.body.insertBefore(bar, document.body.firstChild)
+})()
 `
 
 const ForceDarkDefaultComponent: QuartzComponentConstructor = () => ForceDarkDefault
+const NaasTopBarComponent: QuartzComponentConstructor = () => NaasTopBar
 
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [],
-  afterBody: [ForceDarkDefaultComponent()],
+  afterBody: [ForceDarkDefaultComponent(), NaasTopBarComponent()],
   footer: Component.Footer({
     links: {
-      GitHub: "https://github.com/jackyzha0/quartz",
-      "Discord Community": "https://discord.gg/cRFFHYye7t",
+      "naas.ai": "https://naas.ai",
+      GitHub: "https://github.com/jupyter-naas/abi",
+      Discord: "https://discord.gg/cRFFHYye7t",
     },
   }),
 }

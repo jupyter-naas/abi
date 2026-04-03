@@ -208,7 +208,7 @@ async def test_finalize_streaming_response_updates_message_and_touches_conversat
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_conversation_rejects_other_user_conversation() -> None:
+async def test_get_or_create_conversation_creates_new_for_other_user_conversation() -> None:
     now = datetime.now()
     adapter = SimpleNamespace(
         get_conversation_by_id_for_user=AsyncMock(return_value=None),
@@ -223,18 +223,31 @@ async def test_get_or_create_conversation_rejects_other_user_conversation() -> N
                 updated_at=now,
             )
         ),
+        create_conversation=AsyncMock(
+            return_value=ChatConversationRecord(
+                id="conv-new",
+                workspace_id="ws-1",
+                user_id="user-1",
+                title="hello",
+                agent="aia",
+                created_at=now,
+                updated_at=now,
+            )
+        ),
     )
     service = ChatService(adapter=adapter)
 
-    with pytest.raises(PermissionError, match="Conversation not found"):
-        await service.get_or_create_conversation(
-            conversation_id="conv-1",
-            workspace_id="ws-1",
-            context=_context(),
-            request_message="hello",
-            agent="aia",
-            now=now,
-        )
+    conversation_id = await service.get_or_create_conversation(
+        conversation_id="conv-1",
+        workspace_id="ws-1",
+        context=_context(),
+        request_message="hello",
+        agent="aia",
+        now=now,
+    )
+
+    assert conversation_id == "conv-new"
+    assert adapter.create_conversation.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -262,6 +275,42 @@ async def test_list_messages_denies_when_scope_missing() -> None:
 
     with pytest.raises(PermissionError, match="Conversation access denied"):
         await service.list_messages(context=_context(), conversation_id="conv-1")
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_for_user_denies_when_scope_missing() -> None:
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=None),
+    )
+    iam_service = SimpleNamespace(
+        ensure=lambda *args, **kwargs: (_ for _ in ()).throw(
+            IAMPermissionError(scope="chat.conversation.read")
+        )
+    )
+    service = ChatService(adapter=adapter, iam_service=iam_service)
+
+    with pytest.raises(PermissionError, match="Conversation access denied"):
+        await service.get_conversation_for_user(context=_context(), conversation_id="conv-1")
+
+
+@pytest.mark.asyncio
+async def test_get_workspace_secret_denies_when_scope_missing() -> None:
+    adapter = SimpleNamespace(
+        get_workspace_secret=AsyncMock(return_value=None),
+    )
+    iam_service = SimpleNamespace(
+        ensure=lambda *args, **kwargs: (_ for _ in ()).throw(
+            IAMPermissionError(scope="chat.secret.read")
+        )
+    )
+    service = ChatService(adapter=adapter, iam_service=iam_service)
+
+    with pytest.raises(PermissionError, match="Secret access denied"):
+        await service.get_workspace_secret(
+            context=_context(),
+            workspace_id="ws-1",
+            key="OPENAI_API_KEY",
+        )
 
 
 @pytest.mark.asyncio

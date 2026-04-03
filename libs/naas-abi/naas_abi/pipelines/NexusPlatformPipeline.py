@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Dict, List
 
 from langchain_core.tools import BaseTool
@@ -336,14 +337,6 @@ class NexusPlatformPipeline(Pipeline):
         graph += self.initialize_nexus_graphs()
         graph += self.initialize_nexus_agents()
         # graph += self.initialize_nexus_graph_views()
-
-        # Save graph
-        graph.serialize(
-            destination="libs/naas-abi/naas_abi/ontologies/sandbox/nexus.ttl",
-            format="turtle",
-        )
-
-        # Return the Nexus graph
         return graph
 
     def as_tools(self) -> list[BaseTool]:

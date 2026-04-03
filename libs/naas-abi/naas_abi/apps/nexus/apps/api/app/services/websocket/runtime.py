@@ -12,8 +12,11 @@ import logging
 from datetime import datetime
 
 import socketio
-from fastapi import FastAPI
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import decode_token
+from fastapi import FastAPI, HTTPException
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    decode_token,
+    require_workspace_access,
+)
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import is_access_token_revoked
@@ -35,6 +38,13 @@ workspace_presence: dict[str, set[str]] = {}
 
 # user_id -> set of workspace_ids they're viewing
 user_workspaces: dict[str, set[str]] = {}
+
+
+def _workspace_in_session(session: dict, workspace_id: str) -> bool:
+    workspaces = session.get("workspaces")
+    if not isinstance(workspaces, set):
+        return False
+    return workspace_id in workspaces
 
 
 @sio.event
@@ -123,7 +133,26 @@ async def join_workspace(sid, data):
 
     async with sio.session(sid) as session:
         user_id = session.get("user_id")
-        session["workspaces"].add(workspace_id)
+        if not user_id:
+            return {"error": "unauthorized"}
+
+    try:
+        await require_workspace_access(user_id, workspace_id)
+    except HTTPException:
+        logger.warning(
+            "[WS] Workspace join denied sid=%s user=%s workspace=%s",
+            sid,
+            user_id,
+            workspace_id,
+        )
+        return {"error": "workspace access denied"}
+
+    async with sio.session(sid) as session:
+        workspaces = session.get("workspaces")
+        if not isinstance(workspaces, set):
+            workspaces = set()
+            session["workspaces"] = workspaces
+        workspaces.add(workspace_id)
 
     # Join Socket.IO room
     sio.enter_room(sid, f"workspace:{workspace_id}")
@@ -194,6 +223,8 @@ async def typing_start(sid, data):
 
     async with sio.session(sid) as session:
         user_id = session.get("user_id")
+        if not _workspace_in_session(session, workspace_id):
+            return {"error": "workspace not joined"}
 
     # Broadcast to workspace (excluding sender)
     await sio.emit(
@@ -212,6 +243,8 @@ async def typing_stop(sid, data):
 
     async with sio.session(sid) as session:
         user_id = session.get("user_id")
+        if not _workspace_in_session(session, workspace_id):
+            return {"error": "workspace not joined"}
 
     await sio.emit(
         "user_typing",
@@ -227,6 +260,10 @@ async def message_created(sid, data):
     workspace_id = data.get("workspace_id")
     conversation_id = data.get("conversation_id")
     message = data.get("message")
+
+    async with sio.session(sid) as session:
+        if not _workspace_in_session(session, workspace_id):
+            return {"error": "workspace not joined"}
 
     # Broadcast to all users in workspace
     await sio.emit(
@@ -249,6 +286,8 @@ async def cursor_position(sid, data):
 
     async with sio.session(sid) as session:
         user_id = session.get("user_id")
+        if not _workspace_in_session(session, workspace_id):
+            return {"error": "workspace not joined"}
 
     # Broadcast cursor position
     await sio.emit(

@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
 from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.secondary.postgres import (
     SecretsSecondaryAdapterPostgres,
 )
@@ -37,7 +38,16 @@ class SecretsFastAPIPrimaryAdapter:
 
 
 def get_secrets_service(db: AsyncSession = Depends(get_db)) -> SecretsService:
-    return SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
+    return SecretsService(
+        adapter=SecretsSecondaryAdapterPostgres(db=db),
+        workspace_access_checker=require_workspace_access,
+    )
+
+
+def request_context(current_user: User) -> RequestContext:
+    return RequestContext(
+        token_data=TokenData(user_id=current_user.id, scopes={"*"}, is_authenticated=True)
+    )
 
 
 class SecretCreate(BaseModel):
@@ -89,7 +99,10 @@ async def list_secrets(
     service: SecretsService = Depends(get_secrets_service),
 ) -> list[SecretResponse]:
     await require_workspace_access(current_user.id, workspace_id)
-    rows = await service.list_secrets(workspace_id=workspace_id)
+    rows = await service.list_secrets(
+        context=request_context(current_user),
+        workspace_id=workspace_id,
+    )
     return [_to_secret_response(row) for row in rows]
 
 
@@ -105,6 +118,7 @@ async def create_secret(
 
     try:
         row = await service.create_secret(
+            context=request_context(current_user),
             secret=SecretCreateInput(
                 workspace_id=secret.workspace_id,
                 key=secret.key,
@@ -139,6 +153,7 @@ async def update_secret(
 
     try:
         updated = await service.update_secret(
+            context=request_context(current_user),
             secret_id=secret_id,
             update=SecretUpdateInput(
                 value=update.value,
@@ -166,7 +181,10 @@ async def delete_secret(
         raise HTTPException(status_code=403, detail="Only admins and owners can manage secrets")
 
     try:
-        await service.delete_secret(secret_id=secret_id)
+        await service.delete_secret(
+            context=request_context(current_user),
+            secret_id=secret_id,
+        )
     except SecretNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Secret not found") from exc
     return {"status": "deleted"}
@@ -183,6 +201,7 @@ async def bulk_import_secrets(
         raise HTTPException(status_code=403, detail="Only admins and owners can manage secrets")
 
     result = await service.bulk_import(
+        context=request_context(current_user),
         data=SecretBulkImportInput(
             workspace_id=data.workspace_id,
             env_content=data.env_content,
