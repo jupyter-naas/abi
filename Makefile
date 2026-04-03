@@ -955,6 +955,9 @@ DOCS_WS_PORT     := 4042
 # - Patches Quartz's hardcoded WebSocket port 3001 → $(DOCS_WS_PORT) to avoid Docker conflicts.
 # - Symlinks docs/ as content so edits trigger instant browser refresh.
 docs:
+	@echo "→ Freeing ports $(DOCS_PORT) and $(DOCS_WS_PORT)..."
+	@lsof -ti :$(DOCS_PORT) | xargs kill -9 2>/dev/null || true
+	@lsof -ti :$(DOCS_WS_PORT) | xargs kill -9 2>/dev/null || true
 	@echo "→ Checking Quartz..."
 	@if [ ! -d "$(QUARTZ_LOCAL_DIR)" ]; then \
 		echo "  Cloning Quartz v4 (first run only)..."; \
