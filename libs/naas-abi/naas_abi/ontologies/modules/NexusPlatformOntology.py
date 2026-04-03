@@ -309,7 +309,7 @@ class Workspace(RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "has_conversation": "http://ontology.naas.ai/nexus/hasConversation",
         "has_marketplace_apps": "http://ontology.naas.ai/nexus/hasMarketplaceApps",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_workspace_role": "http://ontology.naas.ai/nexus/hasWorkspaceRole",
         "hosted_on": "http://ontology.naas.ai/nexus/hostedOn",
         "is_workspace_of": "http://ontology.naas.ai/nexus/isWorkspaceOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
@@ -318,7 +318,7 @@ class Workspace(RDFEntity):
     _object_properties: ClassVar[set[str]] = {
         "has_conversation",
         "has_marketplace_apps",
-        "has_role",
+        "has_workspace_role",
         "hosted_on",
         "is_workspace_of",
     }
@@ -359,11 +359,11 @@ class Workspace(RDFEntity):
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_role: Optional[
+    has_workspace_role: Optional[
         Annotated[
             List[Union[URIRef, WorkspaceRole, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates a workspace to a workspace role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -395,10 +395,10 @@ class Search(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_search_role": "http://ontology.naas.ai/nexus/hasSearchRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role"}
+    _object_properties: ClassVar[set[str]] = {"has_search_role"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -412,11 +412,11 @@ class Search(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_role: Optional[
+    has_search_role: Optional[
         Annotated[
             List[Union[SearchRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates a search artifact to a search role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -432,14 +432,14 @@ class Conversation(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "has_conversation_role": "http://ontology.naas.ai/nexus/hasConversationRole",
         "has_message": "http://ontology.naas.ai/nexus/hasMessage",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
         "is_conversation_of": "http://ontology.naas.ai/nexus/isConversationOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
+        "has_conversation_role",
         "has_message",
-        "has_role",
         "is_conversation_of",
     }
 
@@ -455,18 +455,18 @@ class Conversation(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
+    has_conversation_role: Optional[
+        Annotated[
+            List[Union[ConversationRole, URIRef, str]],
+            Field(
+                description="Relates a conversation to a conversation role that concretizes it in platform use."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
     has_message: Optional[
         Annotated[
             List[Union[Message, URIRef, str]],
             Field(description="Relates a conversation to a message it contains."),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_role: Optional[
-        Annotated[
-            List[Union[ConversationRole, URIRef, str]],
-            Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
-            ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
     is_conversation_of: Optional[
@@ -489,11 +489,11 @@ class Message(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_message_role": "http://ontology.naas.ai/nexus/hasMessageRole",
         "is_message_of": "http://ontology.naas.ai/nexus/isMessageOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role", "is_message_of"}
+    _object_properties: ClassVar[set[str]] = {"has_message_role", "is_message_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -507,11 +507,11 @@ class Message(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_role: Optional[
+    has_message_role: Optional[
         Annotated[
             List[Union[MessageRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates a message to a message role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -538,15 +538,19 @@ class Agent(RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "description": "http://ontology.naas.ai/nexus/description",
+        "has_agent_role": "http://ontology.naas.ai/nexus/hasAgentRole",
         "has_intent": "http://ontology.naas.ai/nexus/hasAgentIntent",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
         "has_tool": "http://ontology.naas.ai/nexus/hasAgentTool",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "logo_url": "http://ontology.naas.ai/nexus/logo_url",
         "module_path": "http://ontology.naas.ai/nexus/module_path",
         "system_prompt": "http://ontology.naas.ai/nexus/system_prompt",
     }
-    _object_properties: ClassVar[set[str]] = {"has_intent", "has_role", "has_tool"}
+    _object_properties: ClassVar[set[str]] = {
+        "has_agent_role",
+        "has_intent",
+        "has_tool",
+    }
 
     # Data properties
     description: Optional[
@@ -593,18 +597,18 @@ class Agent(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
+    has_agent_role: Optional[
+        Annotated[
+            List[Union[AgentRole, URIRef, str]],
+            Field(
+                description="Relates an agent to an agent role that concretizes it in platform use."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
     has_intent: Optional[
         Annotated[
             List[Union[AgentIntent, URIRef, str]],
             Field(description="Relates an agent to an intent available to it."),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_role: Optional[
-        Annotated[
-            List[Union[AgentRole, URIRef, str]],
-            Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
-            ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
     has_tool: Optional[
@@ -626,9 +630,10 @@ class AgentTool(RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "description": "http://ontology.naas.ai/nexus/description",
+        "is_tool_of": "http://ontology.naas.ai/nexus/isToolOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_tool_of"}
 
     # Data properties
     description: Optional[
@@ -649,6 +654,14 @@ class AgentTool(RDFEntity):
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
+    # Object properties
+    is_tool_of: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(description="Relates a tool to the agent on which it depends."),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
+
 
 class AgentIntent(RDFEntity):
     """
@@ -665,9 +678,10 @@ class AgentIntent(RDFEntity):
         "intent_target": "http://ontology.naas.ai/nexus/intent_target",
         "intent_type": "http://ontology.naas.ai/nexus/intent_type",
         "intent_value": "http://ontology.naas.ai/nexus/intent_value",
+        "is_intent_of": "http://ontology.naas.ai/nexus/isIntentOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_intent_of"}
 
     # Data properties
     description: Optional[
@@ -700,6 +714,14 @@ class AgentIntent(RDFEntity):
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
+    # Object properties
+    is_intent_of: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(description="Relates an intent to the agent on which it depends."),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
+
 
 class Ontology(RDFEntity):
     """
@@ -714,14 +736,14 @@ class Ontology(RDFEntity):
         "has_ontology_class": "http://ontology.naas.ai/nexus/hasOntologyClass",
         "has_ontology_module": "http://ontology.naas.ai/nexus/hasOntologyModule",
         "has_ontology_object_property": "http://ontology.naas.ai/nexus/hasOntologyObjectProperty",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_ontology_role": "http://ontology.naas.ai/nexus/hasOntologyRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
         "has_ontology_class",
         "has_ontology_module",
         "has_ontology_object_property",
-        "has_role",
+        "has_ontology_role",
     }
 
     # Data properties
@@ -756,11 +778,11 @@ class Ontology(RDFEntity):
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_role: Optional[
+    has_ontology_role: Optional[
         Annotated[
             List[Union[OntologyRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates an ontology to an ontology role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -776,11 +798,14 @@ class OntologyModule(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_ontology_module_role": "http://ontology.naas.ai/nexus/hasOntologyModuleRole",
         "is_ontology_module_of": "http://ontology.naas.ai/nexus/isOntologyModuleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role", "is_ontology_module_of"}
+    _object_properties: ClassVar[set[str]] = {
+        "has_ontology_module_role",
+        "is_ontology_module_of",
+    }
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -794,11 +819,11 @@ class OntologyModule(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_role: Optional[
+    has_ontology_module_role: Optional[
         Annotated[
             List[Union[OntologyModuleRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates an ontology module to an ontology module role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -822,10 +847,10 @@ class OntologyClass(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_ontology_class_role": "http://ontology.naas.ai/nexus/hasOntologyClassRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role"}
+    _object_properties: ClassVar[set[str]] = {"has_ontology_class_role"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -839,11 +864,11 @@ class OntologyClass(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_role: Optional[
+    has_ontology_class_role: Optional[
         Annotated[
             List[Union[OntologyClassRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates an ontology class to an ontology class role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -859,10 +884,10 @@ class OntologyObjectProperty(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_ontology_object_property_role": "http://ontology.naas.ai/nexus/hasOntologyObjectPropertyRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role"}
+    _object_properties: ClassVar[set[str]] = {"has_ontology_object_property_role"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -876,11 +901,11 @@ class OntologyObjectProperty(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_role: Optional[
+    has_ontology_object_property_role: Optional[
         Annotated[
             List[Union[OntologyObjectPropertyRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates an ontology object property to an ontology object property role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -898,10 +923,13 @@ class KnowledgeGraph(RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "description": "http://ontology.naas.ai/nexus/description",
         "has_graph_view": "http://ontology.naas.ai/nexus/hasGraphView",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_knowledge_graph_role": "http://ontology.naas.ai/nexus/hasKnowledgeGraphRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_graph_view", "has_role"}
+    _object_properties: ClassVar[set[str]] = {
+        "has_graph_view",
+        "has_knowledge_graph_role",
+    }
 
     # Data properties
     description: Optional[
@@ -931,11 +959,11 @@ class KnowledgeGraph(RDFEntity):
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_role: Optional[
+    has_knowledge_graph_role: Optional[
         Annotated[
             List[Union[KnowledgeGraphRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates a knowledge graph to a knowledge graph role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -953,13 +981,13 @@ class GraphView(RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "description": "http://ontology.naas.ai/nexus/description",
         "has_graph_filter": "http://ontology.naas.ai/nexus/hasGraphFilter",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_graph_view_role": "http://ontology.naas.ai/nexus/hasGraphViewRole",
         "includes_knowledge_graph": "http://ontology.naas.ai/nexus/includesKnowledgeGraph",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
         "has_graph_filter",
-        "has_role",
+        "has_graph_view_role",
         "includes_knowledge_graph",
     }
 
@@ -989,11 +1017,11 @@ class GraphView(RDFEntity):
             Field(description="Relates a graph view to a graph filter used in it."),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_role: Optional[
+    has_graph_view_role: Optional[
         Annotated[
             List[Union[GraphViewRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates a graph view to a graph view role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -1015,13 +1043,13 @@ class GraphFilter(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_graph_filter_role": "http://ontology.naas.ai/nexus/hasGraphFilterRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "object_uri": "http://ontology.naas.ai/nexus/object_uri",
         "predicate_uri": "http://ontology.naas.ai/nexus/predicate_uri",
         "subject_uri": "http://ontology.naas.ai/nexus/subject_uri",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role"}
+    _object_properties: ClassVar[set[str]] = {"has_graph_filter_role"}
 
     # Data properties
     subject_uri: Optional[
@@ -1053,11 +1081,11 @@ class GraphFilter(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_role: Optional[
+    has_graph_filter_role: Optional[
         Annotated[
             List[Union[GraphFilterRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates a graph filter to a graph filter role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -1073,10 +1101,10 @@ class Files(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_file_role": "http://ontology.naas.ai/nexus/hasFileRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role"}
+    _object_properties: ClassVar[set[str]] = {"has_file_role"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1090,11 +1118,11 @@ class Files(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_role: Optional[
+    has_file_role: Optional[
         Annotated[
             List[Union[FileRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates a file artifact to a file role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -1110,11 +1138,11 @@ class FileSystem(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "has_file_system_role": "http://ontology.naas.ai/nexus/hasFileSystemRole",
         "has_files": "http://ontology.naas.ai/nexus/hasFiles",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_files", "has_role"}
+    _object_properties: ClassVar[set[str]] = {"has_file_system_role", "has_files"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1128,18 +1156,18 @@ class FileSystem(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
+    has_file_system_role: Optional[
+        Annotated[
+            List[Union[FileSystemRole, URIRef, str]],
+            Field(
+                description="Relates a file system to a file system role that concretizes it in platform use."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
     has_files: Optional[
         Annotated[
             List[Union[Files, URIRef, str]],
             Field(description="Relates a file system to files accessible through it."),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_role: Optional[
-        Annotated[
-            List[Union[FileSystemRole, URIRef, str]],
-            Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
-            ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
@@ -1154,10 +1182,10 @@ class MarketplaceApps(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_role": "http://ontology.naas.ai/nexus/hasRole",
+        "has_marketplace_app_role": "http://ontology.naas.ai/nexus/hasMarketplaceAppRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_role"}
+    _object_properties: ClassVar[set[str]] = {"has_marketplace_app_role"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1171,11 +1199,11 @@ class MarketplaceApps(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_role: Optional[
+    has_marketplace_app_role: Optional[
         Annotated[
             List[Union[MarketplaceAppRole, URIRef, str]],
             Field(
-                description="Relates a generically dependent continuant in the Nexus platform to a role that concretizes it in platform use."
+                description="Relates a marketplace application to a marketplace application role that concretizes it in platform use."
             ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
@@ -1191,9 +1219,10 @@ class WorkspaceRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_workspace_role_of": "http://ontology.naas.ai/nexus/isWorkspaceRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_workspace_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1205,6 +1234,16 @@ class WorkspaceRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_workspace_role_of: Optional[
+        Annotated[
+            List[Union[URIRef, Workspace, str]],
+            Field(
+                description="Relates a workspace role to the workspace of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class SearchRole(RDFEntity):
@@ -1217,9 +1256,10 @@ class SearchRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_search_role_of": "http://ontology.naas.ai/nexus/isSearchRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_search_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1231,6 +1271,16 @@ class SearchRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_search_role_of: Optional[
+        Annotated[
+            List[Union[Search, URIRef, str]],
+            Field(
+                description="Relates a search role to the search artifact of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class ConversationRole(RDFEntity):
@@ -1243,9 +1293,10 @@ class ConversationRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_conversation_role_of": "http://ontology.naas.ai/nexus/isConversationRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_conversation_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1257,6 +1308,16 @@ class ConversationRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_conversation_role_of: Optional[
+        Annotated[
+            List[Union[Conversation, URIRef, str]],
+            Field(
+                description="Relates a conversation role to the conversation of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class MessageRole(RDFEntity):
@@ -1269,9 +1330,10 @@ class MessageRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_message_role_of": "http://ontology.naas.ai/nexus/isMessageRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_message_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1283,6 +1345,16 @@ class MessageRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_message_role_of: Optional[
+        Annotated[
+            List[Union[Message, URIRef, str]],
+            Field(
+                description="Relates a message role to the message of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class AgentRole(RDFEntity):
@@ -1295,11 +1367,21 @@ class AgentRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "description": "http://ontology.naas.ai/nexus/description",
+        "is_agent_role_of": "http://ontology.naas.ai/nexus/isAgentRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_agent_role_of"}
 
     # Data properties
+    description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A description used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
         Optional[datetime.datetime],
@@ -1309,6 +1391,16 @@ class AgentRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_agent_role_of: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(
+                description="Relates an agent role to the agent of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class OntologyRole(RDFEntity):
@@ -1321,9 +1413,10 @@ class OntologyRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_ontology_role_of": "http://ontology.naas.ai/nexus/isOntologyRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_ontology_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1335,6 +1428,16 @@ class OntologyRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_ontology_role_of: Optional[
+        Annotated[
+            List[Union[Ontology, URIRef, str]],
+            Field(
+                description="Relates an ontology role to the ontology of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class OntologyModuleRole(RDFEntity):
@@ -1347,9 +1450,10 @@ class OntologyModuleRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_ontology_module_role_of": "http://ontology.naas.ai/nexus/isOntologyModuleRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_ontology_module_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1361,6 +1465,16 @@ class OntologyModuleRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_ontology_module_role_of: Optional[
+        Annotated[
+            List[Union[OntologyModule, URIRef, str]],
+            Field(
+                description="Relates an ontology module role to the ontology module of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class OntologyClassRole(RDFEntity):
@@ -1373,9 +1487,10 @@ class OntologyClassRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_ontology_class_role_of": "http://ontology.naas.ai/nexus/isOntologyClassRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_ontology_class_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1387,6 +1502,16 @@ class OntologyClassRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_ontology_class_role_of: Optional[
+        Annotated[
+            List[Union[OntologyClass, URIRef, str]],
+            Field(
+                description="Relates an ontology class role to the ontology class of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class OntologyObjectPropertyRole(RDFEntity):
@@ -1401,9 +1526,10 @@ class OntologyObjectPropertyRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_ontology_object_property_role_of": "http://ontology.naas.ai/nexus/isOntologyObjectPropertyRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_ontology_object_property_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1415,6 +1541,16 @@ class OntologyObjectPropertyRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_ontology_object_property_role_of: Optional[
+        Annotated[
+            List[Union[OntologyObjectProperty, URIRef, str]],
+            Field(
+                description="Relates an ontology object property role to the ontology object property of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class KnowledgeGraphRole(RDFEntity):
@@ -1427,9 +1563,10 @@ class KnowledgeGraphRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_knowledge_graph_role_of": "http://ontology.naas.ai/nexus/isKnowledgeGraphRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_knowledge_graph_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1441,6 +1578,16 @@ class KnowledgeGraphRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_knowledge_graph_role_of: Optional[
+        Annotated[
+            List[Union[KnowledgeGraph, URIRef, str]],
+            Field(
+                description="Relates a knowledge graph role to the knowledge graph of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class GraphViewRole(RDFEntity):
@@ -1453,9 +1600,10 @@ class GraphViewRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_graph_view_role_of": "http://ontology.naas.ai/nexus/isGraphViewRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_graph_view_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1467,6 +1615,16 @@ class GraphViewRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_graph_view_role_of: Optional[
+        Annotated[
+            List[Union[GraphView, URIRef, str]],
+            Field(
+                description="Relates a graph view role to the graph view of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class GraphFilterRole(RDFEntity):
@@ -1479,9 +1637,10 @@ class GraphFilterRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_graph_filter_role_of": "http://ontology.naas.ai/nexus/isGraphFilterRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_graph_filter_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1493,6 +1652,16 @@ class GraphFilterRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_graph_filter_role_of: Optional[
+        Annotated[
+            List[Union[GraphFilter, URIRef, str]],
+            Field(
+                description="Relates a graph filter role to the graph filter of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class FileRole(RDFEntity):
@@ -1505,9 +1674,10 @@ class FileRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_file_role_of": "http://ontology.naas.ai/nexus/isFileRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_file_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1519,6 +1689,16 @@ class FileRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_file_role_of: Optional[
+        Annotated[
+            List[Union[Files, URIRef, str]],
+            Field(
+                description="Relates a file role to the file artifact of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class FileSystemRole(RDFEntity):
@@ -1531,9 +1711,10 @@ class FileSystemRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_file_system_role_of": "http://ontology.naas.ai/nexus/isFileSystemRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_file_system_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1545,6 +1726,16 @@ class FileSystemRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_file_system_role_of: Optional[
+        Annotated[
+            List[Union[FileSystem, URIRef, str]],
+            Field(
+                description="Relates a file system role to the file system of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class MarketplaceAppRole(RDFEntity):
@@ -1557,9 +1748,10 @@ class MarketplaceAppRole(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "is_marketplace_app_role_of": "http://ontology.naas.ai/nexus/isMarketplaceAppRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"is_marketplace_app_role_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
@@ -1571,6 +1763,16 @@ class MarketplaceAppRole(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    is_marketplace_app_role_of: Optional[
+        Annotated[
+            List[Union[MarketplaceApps, URIRef, str]],
+            Field(
+                description="Relates a marketplace application role to the marketplace application of which it is the role-side concretization."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 # Rebuild models to resolve forward references

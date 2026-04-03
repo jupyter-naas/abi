@@ -14,7 +14,7 @@ from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from pydantic import BaseModel, Field
 from rdflib import Graph
-from rdflib.namespace import OWL, RDF, RDFS
+from rdflib.namespace import OWL, RDF
 from rdflib.query import ResultRow
 from rdflib.term import URIRef
 
@@ -759,70 +759,70 @@ async def get_ontology_overview_graph(
                         },
                     )
 
-                for row in graph.query(subclass_query):
-                    assert isinstance(row, ResultRow)
-                    child_class = str(row.get("childClass")) if row.get("childClass") else ""
-                    parent_class = str(row.get("parentClass")) if row.get("parentClass") else ""
-                    if not child_class or not parent_class:
-                        continue
+                # for row in graph.query(subclass_query):
+                #     assert isinstance(row, ResultRow)
+                #     child_class = str(row.get("childClass")) if row.get("childClass") else ""
+                #     parent_class = str(row.get("parentClass")) if row.get("parentClass") else ""
+                #     if not child_class or not parent_class:
+                #         continue
 
-                    child_data = get_ontology_data(child_class) if child_class else None
-                    child_label = child_data.get("label", "Unknown") if child_data else None
-                    child_type = child_data.get("subClassOf") if child_data else None
-                    child_type_data = get_ontology_data(child_type) if child_type else None
-                    child_type_label = (
-                        child_type_data.get("label", "Unknown") if child_type_data else None
-                    )
+                #     child_data = get_ontology_data(child_class) if child_class else None
+                #     child_label = child_data.get("label", "Unknown") if child_data else None
+                #     child_type = child_data.get("subClassOf") if child_data else None
+                #     child_type_data = get_ontology_data(child_type) if child_type else None
+                #     child_type_label = (
+                #         child_type_data.get("label", "Unknown") if child_type_data else None
+                #     )
 
-                    parent_data = get_ontology_data(parent_class) if parent_class else None
-                    parent_label = parent_data.get("label", "Unknown") if parent_data else None
-                    parent_type = parent_data.get("subClassOf") if parent_data else None
-                    parent_type_data = get_ontology_data(parent_type) if parent_type else None
-                    parent_type_label = (
-                        parent_type_data.get("label", "Unknown") if parent_type_data else None
-                    )
+                #     parent_data = get_ontology_data(parent_class) if parent_class else None
+                #     parent_label = parent_data.get("label", "Unknown") if parent_data else None
+                #     parent_type = parent_data.get("subClassOf") if parent_data else None
+                #     parent_type_data = get_ontology_data(parent_type) if parent_type else None
+                #     parent_type_label = (
+                #         parent_type_data.get("label", "Unknown") if parent_type_data else None
+                #     )
 
-                    if child_class not in classes_by_iri:
-                        classes_by_iri[child_class] = OntologyOverviewGraphNode(
-                            id=child_class,
-                            label=child_label,
-                            type=child_type_label,
-                            properties={
-                                "iri": child_class,
-                                "definition": child_data.get("definition"),
-                                "parent_iri": child_type,
-                                "parent_label": child_type_label,
-                            },
-                        )
-                    if parent_class not in classes_by_iri:
-                        classes_by_iri[parent_class] = OntologyOverviewGraphNode(
-                            id=parent_class,
-                            label=parent_label,
-                            type=parent_type_label,
-                            properties={
-                                "iri": parent_class,
-                                "definition": parent_data.get("definition"),
-                                "parent_iri": parent_type,
-                                "parent_label": parent_type_label,
-                            },
-                        )
+                #     if child_class not in classes_by_iri:
+                #         classes_by_iri[child_class] = OntologyOverviewGraphNode(
+                #             id=child_class,
+                #             label=child_label,
+                #             type=child_type_label,
+                #             properties={
+                #                 "iri": child_class,
+                #                 "definition": child_data.get("definition"),
+                #                 "parent_iri": child_type,
+                #                 "parent_label": child_type_label,
+                #             },
+                #         )
+                #     if parent_class not in classes_by_iri:
+                #         classes_by_iri[parent_class] = OntologyOverviewGraphNode(
+                #             id=parent_class,
+                #             label=parent_label,
+                #             type=parent_type_label,
+                #             properties={
+                #                 "iri": parent_class,
+                #                 "definition": parent_data.get("definition"),
+                #                 "parent_iri": parent_type,
+                #                 "parent_label": parent_type_label,
+                #             },
+                #         )
 
-                    edge_id = f"{child_class}|is-a|{parent_class}"
-                    if edge_id in edges_by_id:
-                        continue
-                    edges_by_id[edge_id] = OntologyOverviewGraphEdge(
-                        id=edge_id,
-                        source=child_class,
-                        target=parent_class,
-                        type="is a",
-                        label="is a",
-                        properties={
-                            "relation_kind": "subclass_of",
-                            "iri": str(RDFS.subClassOf),
-                            "definition": "Subclass relationship between two classes.",
-                            "parent_property_iri": "",
-                        },
-                    )
+                #     edge_id = f"{child_class}|is-a|{parent_class}"
+                #     if edge_id in edges_by_id:
+                #         continue
+                #     edges_by_id[edge_id] = OntologyOverviewGraphEdge(
+                #         id=edge_id,
+                #         source=child_class,
+                #         target=parent_class,
+                #         type="is a",
+                #         label="is a",
+                #         properties={
+                #             "relation_kind": "subclass_of",
+                #             "iri": str(RDFS.subClassOf),
+                #             "definition": "Subclass relationship between two classes.",
+                #             "parent_property_iri": "",
+                #         },
+                #     )
 
             nodes = sorted(classes_by_iri.values(), key=lambda node: node.label.lower())
             edges = sorted(edges_by_id.values(), key=lambda edge: edge.label.lower())
