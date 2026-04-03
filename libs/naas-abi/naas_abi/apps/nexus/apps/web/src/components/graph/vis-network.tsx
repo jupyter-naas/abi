@@ -69,8 +69,14 @@ export function VisNetwork({
       (node as GraphNode & { logoUrl?: unknown }).logoUrl,
     ];
 
-    const found = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
-    return typeof found === 'string' ? found : undefined;
+    const found = candidates.find((value) => {
+      if (typeof value !== 'string') return false;
+      const normalized = value.trim();
+      if (!normalized) return false;
+      if (normalized.toLowerCase() === 'unknown') return false;
+      return true;
+    });
+    return typeof found === 'string' ? found.trim() : undefined;
   }, []);
 
   const toVisNode = useCallback((node: GraphNode): Node => {
