@@ -2,6 +2,7 @@
 
 import os
 import re
+import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -263,7 +264,7 @@ def parse_ttl(content: str, file_path: str) -> ReferenceOntology:
     )
 
 
-@cache(lambda uri: f"uri_metadata_{uri}", DataType.JSON, ttl=timedelta(days=1))
+@cache(lambda uri: f"metadata_uri_{uri}", DataType.JSON, ttl=timedelta(days=1))
 def get_uri_metadata(uri: str) -> dict:
     query = f"""
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -299,7 +300,9 @@ def get_uri_metadata(uri: str) -> dict:
     return result
 
 
-@cache(lambda uri: f"uri_metadata_{uri}", DataType.JSON, ttl=timedelta(days=1))
+# @cache(
+#     lambda ontology_iri: f"ontology_metadata_{ontology_iri}", DataType.JSON, ttl=timedelta(days=1)
+# )
 def get_ontology_metadata(ontology_iri: str) -> dict:
     from naas_abi import ABIModule
     from rdflib.query import ResultRow
@@ -335,6 +338,7 @@ def get_ontology_metadata(ontology_iri: str) -> dict:
         assert isinstance(row, ResultRow)
         result.update(
             {
+                "label": str(row.label) if getattr(row, "label", None) else None,
                 "comment": str(row.comment) if getattr(row, "comment", None) else None,
                 "versionInfo": str(row.versionInfo) if getattr(row, "versionInfo", None) else None,
                 "title": str(row.title) if getattr(row, "title", None) else None,
@@ -930,7 +934,7 @@ async def get_ontology_overview_graph(
 
                 ontologies_by_iri[ontology_iri] = OntologyOverviewGraphNode(
                     id=ontology_iri,
-                    label=ontology_title if ontology_title else ontology_label,
+                    label=str(ontology_title) if ontology_title else str(ontology_label),
                     type="Ontology",
                     properties=properties,
                 )
@@ -985,8 +989,17 @@ async def get_ontology_overview_graph(
     except HTTPException:
         raise
     except Exception as exc:
+        mode = "single_ontology" if ontology_path else "imports_overview"
         raise HTTPException(
-            status_code=500, detail=f"Failed to compute ontology overview graph: {exc}"
+            status_code=500,
+            detail={
+                "message": "Failed to compute ontology overview graph",
+                "mode": mode,
+                "ontology_path": ontology_path,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            },
         ) from exc
 
 
