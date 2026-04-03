@@ -164,6 +164,7 @@ INTENTS: list = [
 class ChatGPTAgent(IntentAgent):
     name: str = NAME
     description: str = DESCRIPTION
+    logo_url: str = AVATAR_URL
     tools: list = TOOLS
     intents: list = INTENTS
 
