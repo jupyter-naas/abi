@@ -11,6 +11,7 @@
 
 <http://ontology.naas.ai/abi/TemplatableSparqlQueryOntology> a owl:Ontology ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/TemplatableSparqlQueryOntology.ttl> ;
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Templatable Sparql Query Ontology."@en ;
     dc:license "" ;
