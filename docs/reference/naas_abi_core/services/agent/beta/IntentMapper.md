@@ -17,10 +17,10 @@
 ### Dataclass
 - `Intent`
   - Fields:
-    - `intent_value: str` — canonical text for the intent (used for embedding/indexing).
-    - `intent_type: IntentType` — classification of the intent target.
-    - `intent_target: Any` — arbitrary target object associated with the intent.
-    - `intent_scope: Optional[IntentScope] = IntentScope.ALL` — scope metadata.
+    - `intent_value: str` - canonical text for the intent (used for embedding/indexing).
+    - `intent_type: IntentType` - classification of the intent target.
+    - `intent_target: Any` - arbitrary target object associated with the intent.
+    - `intent_scope: Optional[IntentScope] = IntentScope.ALL` - scope metadata.
 
 ### Class: `IntentMapper`
 - `__init__(intents: list[Intent], embedding_model: Embeddings | None = None)`

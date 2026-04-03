@@ -7,13 +7,13 @@ A pipeline that updates a **Website** individual in an RDF triple store by optio
 - **`UpdateWebsitePipelineConfiguration`** (`PipelineConfiguration`)
   - Purpose: Holds dependencies required by the pipeline.
   - Fields:
-    - `triple_store: ITripleStoreService` — triple store service used to insert RDF graphs.
+    - `triple_store: ITripleStoreService` - triple store service used to insert RDF graphs.
 
 - **`UpdateWebsitePipelineParameters`** (`PipelineParameters`)
   - Purpose: Input parameters for the update operation.
   - Fields:
-    - `individual_uri: str` — website URI; must match `URI_REGEX` and **must start with** `http://ontology.naas.ai/abi/`.
-    - `owner_uri: Optional[str] = None` — optional owner URI (validated by `URI_REGEX`).
+    - `individual_uri: str` - website URI; must match `URI_REGEX` and **must start with** `http://ontology.naas.ai/abi/`.
+    - `owner_uri: Optional[str] = None` - optional owner URI (validated by `URI_REGEX`).
 
 - **`UpdateWebsitePipeline`** (`Pipeline`)
   - Purpose: Builds an RDF graph with the requested changes and inserts it into the configured triple store.

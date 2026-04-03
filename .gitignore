@@ -108,3 +108,11 @@ sandbox/
 coverage.xml
 htmlcov/
 secrets.yaml
+
+# Local Quartz docs build (make docs)
+.quartz-local/
+
+# Docusaurus
+website/node_modules
+website/.docusaurus
+website/build

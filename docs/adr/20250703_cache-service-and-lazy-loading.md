@@ -11,9 +11,9 @@ ABI's engine initialized all services and modules eagerly at startup. As the num
 
 Introduce two complementary mechanisms:
 
-1. **`CacheService`** — a new first-class service port with a filesystem adapter (`CacheFSAdapter`). It provides a get/set/invalidate interface keyed on content-addressable hashes. A `CacheFactory` wires the service from config. The cache is used for LLM responses, intent mapping, and SPARQL query results.
+1. **`CacheService`** - a new first-class service port with a filesystem adapter (`CacheFSAdapter`). It provides a get/set/invalidate interface keyed on content-addressable hashes. A `CacheFactory` wires the service from config. The cache is used for LLM responses, intent mapping, and SPARQL query results.
 
-2. **`LazyLoader`** — a wrapper that defers instantiation of services and modules until first access. Services and modules registered with `LazyLoader` are not initialized at startup; initialization occurs on the first call to the wrapped object.
+2. **`LazyLoader`** - a wrapper that defers instantiation of services and modules until first access. Services and modules registered with `LazyLoader` are not initialized at startup; initialization occurs on the first call to the wrapped object.
 
 ## Consequences
 

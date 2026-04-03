@@ -11,14 +11,14 @@ The Nexus API (FastAPI) had grown endpoint-heavy: route handlers contained busin
 
 Refactor the Nexus API toward hexagonal architecture using two cross-cutting infrastructure components:
 
-1. **`ServiceRegistry`** — a centralized bootstrap registry that instantiates and wires all domain services at application startup. Route handlers receive services via dependency injection rather than constructing them inline.
+1. **`ServiceRegistry`** - a centralized bootstrap registry that instantiates and wires all domain services at application startup. Route handlers receive services via dependency injection rather than constructing them inline.
 
-2. **`PostgresSessionRegistry`** — a request-scoped session resolver that provides a single Postgres session per request lifecycle, preventing session leaks and simplifying transaction management.
+2. **`PostgresSessionRegistry`** - a request-scoped session resolver that provides a single Postgres session per request lifecycle, preventing session leaks and simplifying transaction management.
 
 Domain logic is moved into dedicated service handlers under `app/services/<domain>/`, each following the ports-and-adapters structure:
-- `adapters/primary/` — FastAPI route handlers (thin, no business logic).
-- `adapters/secondary/` — infrastructure implementations (Postgres, etc.).
-- `ports/` — interface definitions.
+- `adapters/primary/` - FastAPI route handlers (thin, no business logic).
+- `adapters/secondary/` - infrastructure implementations (Postgres, etc.).
+- `ports/` - interface definitions.
 
 Affected domains: Auth, Chat, IAM, Workspaces, Organizations.
 

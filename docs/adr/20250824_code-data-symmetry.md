@@ -1,4 +1,4 @@
-# ADR: Code-Data Symmetry — Mirrored Storage Paths
+# ADR: Code-Data Symmetry - Mirrored Storage Paths
 
 - Status: Accepted
 - Date: 2025-08-24

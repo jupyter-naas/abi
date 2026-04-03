@@ -12,14 +12,14 @@
 - `UpdateSkillPipelineConfiguration(PipelineConfiguration)`
   - Holds dependencies for the pipeline.
   - Fields:
-    - `triple_store: ITripleStoreService` — triple store service used to read/insert graphs.
+    - `triple_store: ITripleStoreService` - triple store service used to read/insert graphs.
 
 - `UpdateSkillPipelineParameters(PipelineParameters)`
   - Input schema for `run`.
   - Fields:
-    - `individual_uri: str` — URI of the skill (must match `URI_REGEX`).
-    - `description: Optional[str] = None` — description text to add (if not already present).
-    - `person_uri: Optional[str] = None` — person URI to link via `ABI.isSkillOf` (must match `URI_REGEX`).
+    - `individual_uri: str` - URI of the skill (must match `URI_REGEX`).
+    - `description: Optional[str] = None` - description text to add (if not already present).
+    - `person_uri: Optional[str] = None` - person URI to link via `ABI.isSkillOf` (must match `URI_REGEX`).
 
 - `UpdateSkillPipeline(Pipeline)`
   - Main pipeline implementation.

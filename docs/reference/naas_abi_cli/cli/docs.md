@@ -14,9 +14,9 @@ CLI and helper utilities to:
 
 - `@dataclass DocSyncItem`  
   Represents a doc sync action:
-  - `source_file: Path` — Python source file
-  - `target_file: Path` — expected/generated Markdown file
-  - `reason: RegenerationReason` — `"missing"` or `"outdated"`
+  - `source_file: Path` - Python source file
+  - `target_file: Path` - expected/generated Markdown file
+  - `reason: RegenerationReason` - `"missing"` or `"outdated"`
 
 ### File discovery and staleness
 - `iter_python_files(source_root: Path, include_tests: bool = False) -> list[Path]`  

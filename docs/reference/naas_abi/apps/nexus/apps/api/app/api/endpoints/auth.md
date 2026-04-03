@@ -13,7 +13,7 @@
 ## Public API
 
 ### FastAPI router
-- `router: APIRouter` — mountable router exposing the endpoints below.
+- `router: APIRouter` - mountable router exposing the endpoints below.
 
 ### Dependencies (for other endpoints to reuse)
 - `get_current_user(token=Depends(oauth2_scheme)) -> User | None`
@@ -26,11 +26,11 @@
   - Returns role or raises `403` if user has no access.
 
 ### Helper functions
-- `verify_password(plain_password: str, hashed_password: str) -> bool` — bcrypt password verification.
-- `get_password_hash(password: str) -> str` — bcrypt password hashing.
+- `verify_password(plain_password: str, hashed_password: str) -> bool` - bcrypt password verification.
+- `get_password_hash(password: str) -> str` - bcrypt password hashing.
 - `create_access_token(data: dict, expires_delta: timedelta | None = None) -> tuple[str, str]`
   - Creates HS256 JWT with `exp` and a generated `jti`. Returns `(token, jti)`.
-- `decode_token(token: str) -> dict | None` — decodes JWT, returns payload or `None`.
+- `decode_token(token: str) -> dict | None` - decodes JWT, returns payload or `None`.
 
 ### Pydantic schemas
 - Request/response models:
@@ -70,8 +70,8 @@
 
 ## Configuration/Dependencies
 - Settings (from `naas_abi...core.config.settings`):
-  - `settings.secret_key` — HS256 signing key for JWT.
-  - `settings.access_token_expire_minutes` — access token TTL (minutes); used to compute `expires_in`.
+  - `settings.secret_key` - HS256 signing key for JWT.
+  - `settings.access_token_expire_minutes` - access token TTL (minutes); used to compute `expires_in`.
 - Database:
   - `get_db` provides an `AsyncSession`.
   - `async_engine` used directly for some SQL operations (`_get_user_by_id`, workspace role checks, password change insert).

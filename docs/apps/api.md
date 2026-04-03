@@ -1,0 +1,101 @@
+# REST API
+
+The ABI API is a FastAPI application that serves as the primary programmatic interface to the ABI stack. It auto-discovers and registers every loaded agent, workflow, and pipeline as API endpoints.
+
+Related pages: [[getting-started/quickstart|Quickstart]], [[apps/nexus|Nexus Web App]], [[apps/mcp-server|MCP Server]].
+
+---
+
+## Starting the API
+
+```bash
+# Development
+make api
+# or
+uv run python -m naas_abi_core.apps.api.api
+
+# Production (Docker)
+make api-prod
+```
+
+Default port: **9879**
+
+---
+
+## API documentation
+
+When the server is running:
+
+- `http://localhost:9879/docs` - Swagger UI (interactive)
+- `http://localhost:9879/redoc` - Redoc (readable)
+- `http://localhost:9879/openapi.json` - OpenAPI spec
+
+---
+
+## Authentication
+
+All endpoints require Bearer token authentication:
+
+```bash
+curl -X POST "http://localhost:9879/agents/abi/completion" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What organizations are in my knowledge graph?", "thread_id": 1}'
+```
+
+---
+
+## Auto-registered endpoints
+
+### Agents
+
+Every loaded agent is available at:
+
+```
+POST /agents/{agent_name}/completion
+POST /agents/{agent_name}/stream-completion
+```
+
+Request body:
+```json
+{
+  "prompt": "Your question or instruction",
+  "thread_id": 1
+}
+```
+
+### SPARQL query endpoint
+
+```
+POST /graph/query
+Body: { "query": "SELECT * WHERE { ?s ?p ?o } LIMIT 10" }
+```
+
+### Knowledge graph endpoints
+
+```
+GET  /graph/entities          # List entities
+POST /abi/sync                # Trigger a data sync
+GET  /ontology/classes        # List ontology classes
+```
+
+### Workspace and auth
+
+```
+POST /auth/login
+POST /auth/refresh
+GET  /workspaces
+GET  /organizations
+```
+
+---
+
+## CORS
+
+CORS origins are configured in `config.yaml` under `api.cors_origins`. This is the single source of truth - both the core API and the embedded Nexus API share the same origin list. See [[adr/20260305_cors-single-source-of-truth|ADR: CORS]].
+
+---
+
+## Tenant configuration
+
+The `/api/tenant` endpoint returns branding configuration for the current deployment (logo, colors, title). This is consumed by the Nexus frontend. Configuration is set in `config.yaml`. See [[adr/20260219_config-driven-tenant-provisioning|ADR: Tenant Provisioning]].

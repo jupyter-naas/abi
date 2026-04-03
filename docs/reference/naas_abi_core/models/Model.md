@@ -25,7 +25,7 @@
   - Class attributes:
     - `model_type: ModelType = ModelType.CHAT`
   - Additional instance attributes:
-    - `context_window: Optional[int]` — maximum context length in tokens
+    - `context_window: Optional[int]` - maximum context length in tokens
   - Constructor:
     - `ChatModel(model_id: str, provider: str, model: BaseChatModel, context_window: Optional[int] = None, ..., default_parameters: Optional[dict] = None)`
 

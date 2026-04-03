@@ -33,4 +33,4 @@ All three paths are registered in `MODULE_PATH` for auto-discovery. Marketplace 
 ### Tradeoffs
 - Three `MODULE_PATH` entries increase discovery scan time proportionally.
 - The `.disabled` suffix convention is non-standard; developers must remember to rename files to activate modules.
-- Boundary enforcement is by convention, not by code — nothing prevents core code from importing marketplace code directly.
+- Boundary enforcement is by convention, not by code - nothing prevents core code from importing marketplace code directly.

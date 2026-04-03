@@ -15,13 +15,13 @@ It also writes the inserted/removed triples to Turtle files under a configured d
 
 - `MergeIndividualsPipelineConfiguration(PipelineConfiguration)`
   - Fields:
-    - `triple_store: ITripleStoreService` — triplestore port used for querying/inserting/removing.
-    - `datastore_path: str = "datastore/ontology/merged_individual"` — folder used to store `.ttl` audit files.
+    - `triple_store: ITripleStoreService` - triplestore port used for querying/inserting/removing.
+    - `datastore_path: str = "datastore/ontology/merged_individual"` - folder used to store `.ttl` audit files.
 
 - `MergeIndividualsPipelineParameters(PipelineParameters)`
   - Fields (validated against `URI_REGEX`):
-    - `uri_to_keep: str` — URI that remains.
-    - `uri_to_merge: str` — URI that is merged into `uri_to_keep` and then removed.
+    - `uri_to_keep: str` - URI that remains.
+    - `uri_to_merge: str` - URI that is merged into `uri_to_keep` and then removed.
 
 - `MergeIndividualsPipeline(Pipeline)`
   - `get_all_triples_for_uri(uri: str)`

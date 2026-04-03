@@ -6,9 +6,9 @@
 ## Public API
 - `class GenericLoader(pydantic.BaseModel)`
   - Fields:
-    - `python_module: str | None` — fully qualified module path to import.
-    - `module_callable: str | None` — attribute name in the module to call.
-    - `custom_config: Dict[str, Any] | None` — keyword arguments passed to the callable.
+    - `python_module: str | None` - fully qualified module path to import.
+    - `module_callable: str | None` - attribute name in the module to call.
+    - `custom_config: Dict[str, Any] | None` - keyword arguments passed to the callable.
   - Methods:
     - `load() -> Any`
       - Imports `python_module` via `importlib.import_module`.

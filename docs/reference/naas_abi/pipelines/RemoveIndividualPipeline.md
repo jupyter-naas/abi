@@ -11,12 +11,12 @@ A pipeline that removes one or more RDF individuals from a triple store by:
 
 - `RemoveIndividualPipelineConfiguration(PipelineConfiguration)`
   - **Fields**
-    - `triple_store: ITripleStoreService` — triple store service used for SPARQL query and removal
-    - `datastore_path: str = "datastore/ontology/removed_individual"` — output path used when saving removed triples
+    - `triple_store: ITripleStoreService` - triple store service used for SPARQL query and removal
+    - `datastore_path: str = "datastore/ontology/removed_individual"` - output path used when saving removed triples
 
 - `RemoveIndividualPipelineParameters(PipelineParameters)`
   - **Fields**
-    - `uris_to_remove: List[str]` — list of URIs to remove (`min_items=1`)
+    - `uris_to_remove: List[str]` - list of URIs to remove (`min_items=1`)
 
 - `RemoveIndividualPipeline(Pipeline)`
   - `__init__(configuration: RemoveIndividualPipelineConfiguration)`

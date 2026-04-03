@@ -15,9 +15,9 @@ The SupervisorAgent routes user messages to specialized agents based on register
 
 Introduce **intent scope** as a first-class property on agents and intents. Each agent declares a scope that controls whether it is included in the supervisor's routing table:
 
-- **`supervisor`** — visible to the supervisor for general user query routing (default).
-- **`integration`** — available for direct invocation but excluded from the supervisor's default routing.
-- **`research`** — excluded from the supervisor; used for exploration and not production routing.
+- **`supervisor`** - visible to the supervisor for general user query routing (default).
+- **`integration`** - available for direct invocation but excluded from the supervisor's default routing.
+- **`research`** - excluded from the supervisor; used for exploration and not production routing.
 
 Agents can also declare `exclude_from_supervisor: bool` as a simpler binary control. The supervisor's intent table is built at startup by filtering agents to only those with `supervisor` scope.
 

@@ -7,9 +7,9 @@
 ## Public API
 - `class LazyLoader(loader: Callable)`
   - Holds:
-    - `loaded: bool` — whether the value has been loaded.
-    - `loader: Callable` — function used to compute/load the value.
-    - `value: Any` — cached loaded value (set on first use).
+    - `loaded: bool` - whether the value has been loaded.
+    - `loader: Callable` - function used to compute/load the value.
+    - `value: Any` - cached loaded value (set on first use).
 - `LazyLoader.__init__(loader: Callable)`
   - Initializes in an unloaded state.
 - `LazyLoader.is_loaded() -> bool`

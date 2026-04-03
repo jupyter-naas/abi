@@ -13,17 +13,17 @@
 - `UpdateLinkedInPagePipelineConfiguration(PipelineConfiguration)`
   - **Purpose:** Provide required services to the pipeline.
   - **Fields:**
-    - `triple_store: ITripleStoreService` — triple store used to read and insert RDF triples.
+    - `triple_store: ITripleStoreService` - triple store used to read and insert RDF triples.
 
 - `UpdateLinkedInPagePipelineParameters(PipelineParameters)`
   - **Purpose:** Input schema for updates (Pydantic-compatible).
   - **Fields:**
-    - `individual_uri: str` — URI of the LinkedIn page (must match `URI_REGEX`).
-    - `linkedin_id: Optional[str]` — LinkedIn unique ID.
-    - `linkedin_url: Optional[str]` — LinkedIn URL (with LinkedIn ID as identifier).
-    - `linkedin_public_id: Optional[str]` — LinkedIn public ID.
-    - `linkedin_public_url: Optional[str]` — must match `https?://.+\.linkedin\.com/(in|company|school|showcase)/[^?]+`
-    - `owner_uri: Optional[str]` — URI of the owner (must match `URI_REGEX`).
+    - `individual_uri: str` - URI of the LinkedIn page (must match `URI_REGEX`).
+    - `linkedin_id: Optional[str]` - LinkedIn unique ID.
+    - `linkedin_url: Optional[str]` - LinkedIn URL (with LinkedIn ID as identifier).
+    - `linkedin_public_id: Optional[str]` - LinkedIn public ID.
+    - `linkedin_public_url: Optional[str]` - must match `https?://.+\.linkedin\.com/(in|company|school|showcase)/[^?]+`
+    - `owner_uri: Optional[str]` - URI of the owner (must match `URI_REGEX`).
 
 - `UpdateLinkedInPagePipeline(Pipeline)`
   - **Purpose:** Orchestrates the update and persistence of missing triples.
