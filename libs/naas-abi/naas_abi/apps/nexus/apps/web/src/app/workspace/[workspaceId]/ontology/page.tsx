@@ -581,6 +581,16 @@ export default function OntologyPage() {
                 graphEdges={overviewGraphEdges}
                 loadingGraph={loadingOverviewGraph}
                 graphError={overviewGraphError}
+                onSelectClass={(classId) => {
+                  setSelectedItem(classId);
+                  setLastCatalogView('classes');
+                  setViewMode('classes');
+                }}
+                onSelectRelationship={(relationshipId) => {
+                  setSelectedItem(relationshipId);
+                  setLastCatalogView('relations');
+                  setViewMode('relations');
+                }}
                 onCreateEntity={openCreateEntity}
                 onCreateRelationship={openCreateRelationship}
               />
@@ -601,6 +611,7 @@ export default function OntologyPage() {
             <OntologySplitView
               mode={viewMode === 'relations' ? 'relations' : 'classes'}
               items={viewMode === 'relations' ? relationshipItems : classItems}
+              selectedItemId={selectedItemId}
               selectedItem={selectedItem}
               onSelectItem={setSelectedItem}
               allClasses={allClasses}
@@ -890,6 +901,7 @@ export default function OntologyPage() {
 function OntologySplitView({
   mode,
   items,
+  selectedItemId,
   selectedItem,
   onSelectItem,
   allClasses,
@@ -899,6 +911,7 @@ function OntologySplitView({
 }: {
   mode: 'classes' | 'relations';
   items: OntologyItem[];
+  selectedItemId: string | null;
   selectedItem?: OntologyItem;
   onSelectItem: (itemId: string | null) => void;
   allClasses: Array<ReferenceClass & { ontologyName: string }>;
@@ -1012,9 +1025,16 @@ function OntologySplitView({
     return autoExpanded;
   }, [items, query]);
 
-  const selectedItemInMode = selectedItem && selectedItem.type === (isClassMode ? 'entity' : 'relationship')
-    ? selectedItem
-    : undefined;
+  const selectedItemInMode = useMemo(() => {
+    const expectedType: OntologyItem['type'] = isClassMode ? 'entity' : 'relationship';
+    if (!selectedItemId) return undefined;
+    const inViewItem = items.find((item) => item.id === selectedItemId);
+    if (inViewItem && inViewItem.type === expectedType) return inViewItem;
+    if (selectedItem && selectedItem.id === selectedItemId && selectedItem.type === expectedType) {
+      return selectedItem;
+    }
+    return undefined;
+  }, [isClassMode, items, selectedItem, selectedItemId]);
 
   return (
     <div className="flex flex-1 overflow-hidden bg-card">
@@ -1050,7 +1070,9 @@ function OntologySplitView({
 
                     return (
                       <>
-                        <div
+                        <button
+                          type="button"
+                          onClick={() => onSelectItem(current.item.id)}
                           className={cn(
                             'flex w-full items-center gap-1 rounded-md py-1 pr-2 text-left text-sm transition-colors',
                             selectedItemInMode?.id === current.item.id
@@ -1085,14 +1107,11 @@ function OntologySplitView({
                             <span className="w-[18px]" />
                           )}
 
-                          <button
-                            onClick={() => onSelectItem(current.item.id)}
-                            className="flex flex-1 items-center gap-2 py-1 text-left"
-                          >
+                          <span className="flex flex-1 items-center gap-2 py-1 text-left">
                             <ModeIcon size={14} className={isClassMode ? 'text-blue-500' : 'text-green-500'} />
                             <span className="truncate">{current.item.name}</span>
-                          </button>
-                        </div>
+                          </span>
+                        </button>
                         {hasChildren && isExpanded && current.children.map((child) => renderNode(child, depth + 1))}
                       </>
                     );
@@ -1161,6 +1180,8 @@ function OntologyOverviewView({
   graphEdges,
   loadingGraph,
   graphError,
+  onSelectClass,
+  onSelectRelationship,
   onCreateEntity,
   onCreateRelationship,
 }: {
@@ -1169,6 +1190,8 @@ function OntologyOverviewView({
   graphEdges: OntologyOverviewGraphEdge[];
   loadingGraph: boolean;
   graphError: string | null;
+  onSelectClass: (classId: string) => void;
+  onSelectRelationship: (relationshipId: string) => void;
   onCreateEntity: () => void;
   onCreateRelationship: () => void;
 }) {
@@ -1384,15 +1407,19 @@ function OntologyOverviewView({
                         return (
                           <li
                             key={node.id}
-                            className="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                           >
-                            <Box size={14} className="mt-0.5 flex-shrink-0 text-blue-500" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-medium">{node.label}</span>
-                              <p className="text-xs text-muted-foreground line-clamp-2" title={definitionText}>
-                                {definitionText}
-                              </p>
-                            </div>
+                            <button
+                              onClick={() => onSelectClass(node.id)}
+                              className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                            >
+                              <Box size={14} className="mt-0.5 flex-shrink-0 text-blue-500" />
+                              <div className="min-w-0 flex-1">
+                                <span className="font-medium">{node.label}</span>
+                                <p className="text-xs text-muted-foreground line-clamp-2" title={definitionText}>
+                                  {definitionText}
+                                </p>
+                              </div>
+                            </button>
                           </li>
                         );
                       })}
@@ -1419,18 +1446,22 @@ function OntologyOverviewView({
                       {filteredRelations.map((edge) => (
                         <li
                           key={edge.id}
-                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                         >
-                          <Link2 size={14} className="flex-shrink-0 text-green-500" />
-                          <span className="truncate">
-                            {graphNodesById.get(edge.source)?.label ?? edge.source}
-                          </span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className="truncate font-medium">{edge.label ?? edge.type}</span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className="truncate">
-                            {graphNodesById.get(edge.target)?.label ?? edge.target}
-                          </span>
+                          <button
+                            onClick={() => onSelectRelationship(edge.id)}
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                          >
+                            <Link2 size={14} className="flex-shrink-0 text-green-500" />
+                            <span className="truncate">
+                              {graphNodesById.get(edge.source)?.label ?? edge.source}
+                            </span>
+                            <span className="text-muted-foreground">→</span>
+                            <span className="truncate font-medium">{edge.label ?? edge.type}</span>
+                            <span className="text-muted-foreground">→</span>
+                            <span className="truncate">
+                              {graphNodesById.get(edge.target)?.label ?? edge.target}
+                            </span>
+                          </button>
                         </li>
                       ))}
                     </ul>
