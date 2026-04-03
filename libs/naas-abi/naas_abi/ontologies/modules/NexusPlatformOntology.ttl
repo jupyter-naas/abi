@@ -13,9 +13,9 @@
 <http://ontology.naas.ai/abi/nexus/NexusPlatformOntology> a owl:Ontology ;
   owl:imports
     <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ,
-    <https://www.commoncoreontologies.org/AgentOntology> ,
-    <https://www.commoncoreontologies.org/InformationEntityOntology> ,
-    <https://www.commoncoreontologies.org/EventOntology> ;
+    <https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/heads/develop/src/cco-modules/AgentOntology.ttl> ,
+    <https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/heads/develop/src/cco-modules/InformationEntityOntology.ttl> ,
+    <https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/heads/develop/src/cco-modules/EventOntology.ttl> ;
   dc:title "Nexus Platform Ontology"@en ;
   dc:description "Ontology for core continuant concepts of the Nexus platform."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
@@ -88,7 +88,7 @@ nexus:Workspace a owl:Class ;
     rdfs:label "Workspace"@en ;
     skos:definition "A generically dependent continuant representing a configured digital workspace in the Nexus platform, including its structure, settings, permissions, and organization of resources and activities."@en ;
     skos:example "Naas.ai Main Workspace", "Customer X Workspace", "Internal Ontology Workspace"@en ;
-    rdfs:subClassOf cco:ont00001181 ,
+    rdfs:subClassOf bfo:BFO_0000031 ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isWorkspaceOf ;
           owl:someValuesFrom nexus:Organization
