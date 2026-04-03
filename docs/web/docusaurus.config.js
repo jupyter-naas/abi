@@ -128,12 +128,12 @@ const config = {
             label: "Capabilities",
           },
           {
-            to: "reference/libraries",
+            to: "reference/libraries/naas-abi-core/Architecture",
             position: "left",
             label: "Reference",
           },
           {
-            to: "updates",
+            href: "/category/updates",
             position: "left",
             label: "Updates",
           },

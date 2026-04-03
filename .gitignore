@@ -95,6 +95,14 @@ storage/vectorstore/*
 *.webp
 *.heic
 
+# Allow docs static assets
+!docs/web/static/**/*.png
+!docs/web/static/**/*.jpg
+!docs/web/static/**/*.gif
+!docs/web/static/**/*.jpeg
+!docs/web/static/**/*.webp
+!docs/web/static/**/*.svg
+
 # Keep demo data and assets in nexus
 !libs/naas-abi/naas_abi/apps/nexus/demo/**
 !libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
