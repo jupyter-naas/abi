@@ -7,16 +7,16 @@ A pipeline that updates RDF properties for an existing *commercial organization*
 - **`UpdateCommercialOrganizationPipelineConfiguration`** (`PipelineConfiguration`)
   - Holds dependencies for the pipeline.
   - Fields:
-    - `triple_store: ITripleStoreService` — service used to read/insert RDF triples.
+    - `triple_store: ITripleStoreService` - service used to read/insert RDF triples.
 
 - **`UpdateCommercialOrganizationPipelineParameters`** (`PipelineParameters`)
   - Input schema (Pydantic-style annotations) for updates:
-    - `individual_uri: str` (required) — URI of the commercial organization (validated by `URI_REGEX`).
-    - `legal_uri: Optional[str]` — URI for legal name individual.
-    - `ticker_uri: Optional[str]` — URI for ticker individual.
-    - `website_uri: Optional[str]` — URI for website individual.
-    - `linkedin_page_uri: Optional[str]` — URI for LinkedIn organization page individual.
-    - `logo_url: Optional[str]` — logo URL literal (pattern `https?://.*`).
+    - `individual_uri: str` (required) - URI of the commercial organization (validated by `URI_REGEX`).
+    - `legal_uri: Optional[str]` - URI for legal name individual.
+    - `ticker_uri: Optional[str]` - URI for ticker individual.
+    - `website_uri: Optional[str]` - URI for website individual.
+    - `linkedin_page_uri: Optional[str]` - URI for LinkedIn organization page individual.
+    - `logo_url: Optional[str]` - logo URL literal (pattern `https?://.*`).
 
 - **`UpdateCommercialOrganizationPipeline`** (`Pipeline`)
   - `__init__(configuration: UpdateCommercialOrganizationPipelineConfiguration)`

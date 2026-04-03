@@ -26,5 +26,5 @@ Introduce a config-driven tenant branding and startup provisioning system:
 
 ### Tradeoffs
 - Bootstrapped passwords are auto-generated; operators must retrieve them from the secret service on first deploy.
-- Startup provisioning runs on every API boot — its duration scales with the number of provisioned entities.
+- Startup provisioning runs on every API boot - its duration scales with the number of provisioned entities.
 - Branding config is served unauthenticated via `/api/tenant`; sensitive values must not be placed there.

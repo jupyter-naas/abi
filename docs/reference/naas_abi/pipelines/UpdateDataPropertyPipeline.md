@@ -15,15 +15,15 @@
 - `UpdateDataPropertyPipelineConfiguration(PipelineConfiguration)`
   - **Purpose:** Holds dependencies for the pipeline.
   - **Fields:**
-    - `triple_store: ITripleStoreService` — triple store service used to insert/remove triples.
+    - `triple_store: ITripleStoreService` - triple store service used to insert/remove triples.
 
 - `UpdateDataPropertyPipelineParameters(PipelineParameters)`
   - **Purpose:** Input parameters for updating a property.
   - **Fields:**
-    - `subject_uri: str` — subject URI (validated by `URI_REGEX`).
-    - `predicate_uri: str` — predicate URI (must match `^http.+$`).
-    - `object_new_value: str` — new literal value (annotated as `str`).
-    - `language: Optional[str]` — optional language tag for the literal.
+    - `subject_uri: str` - subject URI (validated by `URI_REGEX`).
+    - `predicate_uri: str` - predicate URI (must match `^http.+$`).
+    - `object_new_value: str` - new literal value (annotated as `str`).
+    - `language: Optional[str]` - optional language tag for the literal.
 
 - `UpdateDataPropertyPipeline(Pipeline)`
   - **Purpose:** Executes the update and returns the updated subject graph.

@@ -945,6 +945,52 @@ triplestore-export-turtle: deps
 # DOCUMENTATION & PUBLISHING
 # =============================================================================
 
+# Variables for local Quartz docs server
+QUARTZ_LOCAL_DIR := .quartz-local
+DOCS_PORT        := 4041
+DOCS_WS_PORT     := 4042
+
+# Serve docs locally with Quartz + live reload at http://localhost:$(DOCS_PORT)
+# - Clones Quartz v4 on first run (~30 s), then reuses it.
+# - Patches Quartz's hardcoded WebSocket port 3001 → $(DOCS_WS_PORT) to avoid Docker conflicts.
+# - Symlinks docs/ as content so edits trigger instant browser refresh.
+docs:
+	@echo "→ Checking Quartz..."
+	@if [ ! -d "$(QUARTZ_LOCAL_DIR)" ]; then \
+		echo "  Cloning Quartz v4 (first run only)..."; \
+		git clone https://github.com/jackyzha0/quartz.git $(QUARTZ_LOCAL_DIR) --depth 1 --quiet; \
+	fi
+	@echo "→ Installing dependencies..."
+	@cd $(QUARTZ_LOCAL_DIR) && npm ci --silent 2>/dev/null || npm install --silent
+	@echo "→ Patching WebSocket port 3001 → $(DOCS_WS_PORT) (avoids Docker/Dagster conflict)..."
+	@find $(QUARTZ_LOCAL_DIR)/quartz/cli -name "*.js" | \
+		xargs grep -l "3001" 2>/dev/null | \
+		xargs sed -i.bak 's/3001/$(DOCS_WS_PORT)/g' 2>/dev/null || true
+	@find $(QUARTZ_LOCAL_DIR)/quartz/cli -name "*.bak" -delete 2>/dev/null || true
+	@echo "→ Patching default theme → dark..."
+	@sed -i.bak 's/const userPref = window.matchMedia.*prefers-color-scheme.*$/const userPref = "dark"/' \
+		$(QUARTZ_LOCAL_DIR)/quartz/components/scripts/darkmode.inline.ts 2>/dev/null || true
+	@rm -f $(QUARTZ_LOCAL_DIR)/quartz/components/scripts/darkmode.inline.ts.bak
+	@echo "→ Linking docs/ as Quartz content (edits auto-reload)..."
+	@rm -rf $(QUARTZ_LOCAL_DIR)/content
+	@ln -sf "$(CURDIR)/docs" "$(QUARTZ_LOCAL_DIR)/content"
+	@echo "→ Applying naas.ai theme..."
+	@cp docs/.quartz_conf/quartz.config.ts $(QUARTZ_LOCAL_DIR)/quartz.config.ts
+	@cp docs/.quartz_conf/quartz.layout.ts $(QUARTZ_LOCAL_DIR)/quartz.layout.ts
+	@cp docs/.quartz_conf/custom.scss      $(QUARTZ_LOCAL_DIR)/quartz/styles/custom.scss
+	@echo ""
+	@echo "✓  Docs → http://localhost:$(DOCS_PORT)  (live reload on)"
+	@echo "   Edit any .md file in docs/ — browser refreshes automatically."
+	@echo "   Press Ctrl+C to stop."
+	@echo ""
+	@cd $(QUARTZ_LOCAL_DIR) && npx quartz build --serve --port $(DOCS_PORT)
+
+# Remove local Quartz build directory
+docs-clean:
+	@echo "Removing $(QUARTZ_LOCAL_DIR)..."
+	@rm -rf $(QUARTZ_LOCAL_DIR)
+	@echo "Done."
+
 # Generate ontology documentation
 docs-ontology: deps
 	@ echo "Generating ontology documentation..."
@@ -979,4 +1025,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology
+.PHONY: test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean

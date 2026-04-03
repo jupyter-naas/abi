@@ -15,8 +15,8 @@ Holds dependency declarations for a module.
 - **Constructor**
   - `ModuleDependencies(modules: List[str], services: List[type])`
 - **Properties**
-  - `modules: List[str]` — module dependency names/identifiers
-  - `services: List[type]` — service types required by the module
+  - `modules: List[str]` - module dependency names/identifiers
+  - `services: List[type]` - service types required by the module
 
 ### `class ModuleConfiguration(pydantic.BaseModel)`
 Base configuration model for modules.
@@ -29,8 +29,8 @@ Base configuration model for modules.
 Base interface for modules (generic over a configuration type `TConfig` bound to `ModuleConfiguration`).
 
 #### Class attributes
-- `dependencies: ModuleDependencies` — default is `ModuleDependencies(modules=[], services=[])`
-- `_instances: Dict[type, BaseModule]` — internal registry for `get_instance()`
+- `dependencies: ModuleDependencies` - default is `ModuleDependencies(modules=[], services=[])`
+- `_instances: Dict[type, BaseModule]` - internal registry for `get_instance()`
 
 #### Constructor
 - `BaseModule(engine: EngineProxy, configuration: TConfig)`
@@ -51,12 +51,12 @@ Base interface for modules (generic over a configuration type `TConfig` bound to
 #### Properties (read-only)
 - `engine -> EngineProxy`
 - `configuration -> TConfig`
-- `ontologies -> List[str]` — populated by `on_load()` via filesystem scan
-- `agents -> List[type[Agent]]` — set by `on_load()` via `ModuleAgentLoader`
+- `ontologies -> List[str]` - populated by `on_load()` via filesystem scan
+- `agents -> List[type[Agent]]` - set by `on_load()` via `ModuleAgentLoader`
 - `integrations -> List[Integration]`
 - `workflows -> List[Workflow]`
 - `pipelines -> List[Pipeline]`
-- `orchestrations -> List[type[Orchestrations]]` — set by `on_load()` via `ModuleOrchestrationLoader`
+- `orchestrations -> List[type[Orchestrations]]` - set by `on_load()` via `ModuleOrchestrationLoader`
 
 #### Lifecycle hooks
 - `on_load()`

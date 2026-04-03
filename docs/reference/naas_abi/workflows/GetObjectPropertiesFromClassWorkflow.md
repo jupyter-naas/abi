@@ -8,12 +8,12 @@
 
 ### Configuration
 - `GetObjectPropertiesFromClassWorkflowConfiguration(WorkflowConfiguration)`
-  - `triple_store: ITripleStoreService` — triple store service used when `ontology_file_path` is not provided.
-  - `ontology_file_path: Optional[str] = None` — path to a Turtle ontology file to parse with RDFLib.
+  - `triple_store: ITripleStoreService` - triple store service used when `ontology_file_path` is not provided.
+  - `ontology_file_path: Optional[str] = None` - path to a Turtle ontology file to parse with RDFLib.
 
 ### Parameters
 - `GetObjectPropertiesFromClassWorkflowParameters(WorkflowParameters)`
-  - `class_uri: str` — required; must match pattern `^http.*`.
+  - `class_uri: str` - required; must match pattern `^http.*`.
 
 ### Workflow
 - `GetObjectPropertiesFromClassWorkflow(Workflow)`

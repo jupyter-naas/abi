@@ -12,17 +12,17 @@ All endpoints require authentication; workspace-scoped endpoints require workspa
 ## Public API
 
 ### Router
-- `router: fastapi.APIRouter` — routes defined in this module.
+- `router: fastapi.APIRouter` - routes defined in this module.
 
 ### Pydantic schemas
-- `Workspace` — response model for workspaces (includes theme fields and optional inherited organization logos).
-- `WorkspaceCreate` — request model for creating a workspace (`name`, `slug`, optional `organization_id` and theme fields).
-- `WorkspaceUpdate` — request model for updating workspace branding/theme fields.
-- `WorkspaceMember` — response model for workspace members (includes joined `email`/`name`).
-- `WorkspaceMemberInvite` — request model for inviting an existing user by email and role.
-- `InferenceServer` — response model for inference server configuration.
-- `InferenceServerCreate` — request model for creating an inference server.
-- `InferenceServerUpdate` — request model for updating an inference server.
+- `Workspace` - response model for workspaces (includes theme fields and optional inherited organization logos).
+- `WorkspaceCreate` - request model for creating a workspace (`name`, `slug`, optional `organization_id` and theme fields).
+- `WorkspaceUpdate` - request model for updating workspace branding/theme fields.
+- `WorkspaceMember` - response model for workspace members (includes joined `email`/`name`).
+- `WorkspaceMemberInvite` - request model for inviting an existing user by email and role.
+- `InferenceServer` - response model for inference server configuration.
+- `InferenceServerCreate` - request model for creating an inference server.
+- `InferenceServerUpdate` - request model for updating an inference server.
 
 ### Endpoints (async)
 

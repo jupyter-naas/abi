@@ -9,8 +9,8 @@
 
 - **`GetSubjectGraphWorkflowParameters`** (`WorkflowParameters`)
   - Input parameters:
-    - `uri: str` — URI of the individual/instance (validated with `URI_REGEX`).
-    - `depth: int = 2` — Traversal depth for the subject graph.
+    - `uri: str` - URI of the individual/instance (validated with `URI_REGEX`).
+    - `depth: int = 2` - Traversal depth for the subject graph.
 
 - **`GetSubjectGraphWorkflow`** (`Workflow`)
   - `__init__(configuration: GetSubjectGraphWorkflowConfiguration)`

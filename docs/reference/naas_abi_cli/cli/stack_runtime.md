@@ -9,12 +9,12 @@ Utilities for interacting with a Docker Compose stack at runtime:
 - `@dataclass(frozen=True) ComposeServiceState`
   - Immutable representation of a Compose service’s runtime state.
   - Fields:
-    - `service: str` — service name.
-    - `container_name: str | None` — container name (if available).
-    - `state: str` — normalized container state (lowercased; defaults to `"unknown"`).
-    - `health: str | None` — health status (if provided by Compose output).
-    - `exit_code: int | None` — parsed exit code when available.
-    - `status: str | None` — status string (if provided).
+    - `service: str` - service name.
+    - `container_name: str | None` - container name (if available).
+    - `state: str` - normalized container state (lowercased; defaults to `"unknown"`).
+    - `health: str | None` - health status (if provided by Compose output).
+    - `exit_code: int | None` - parsed exit code when available.
+    - `status: str | None` - status string (if provided).
 
 - `run_compose(args: list[str], capture_output: bool = False) -> subprocess.CompletedProcess`
   - Runs `docker compose <args>`.

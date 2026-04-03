@@ -7,15 +7,15 @@ A pipeline that adds a named individual (instance) to an RDF triple store, or re
 - `AddIndividualPipelineConfiguration(PipelineConfiguration)` (dataclass)
   - Purpose: Provide dependencies for the pipeline.
   - Fields:
-    - `triple_store: ITripleStoreService` — triple store service used to insert and fetch graphs.
-    - `search_individual_configuration: SearchIndividualWorkflowConfiguration` — configuration passed to `SearchIndividualWorkflow`.
+    - `triple_store: ITripleStoreService` - triple store service used to insert and fetch graphs.
+    - `search_individual_configuration: SearchIndividualWorkflowConfiguration` - configuration passed to `SearchIndividualWorkflow`.
 
 - `AddIndividualPipelineParameters(PipelineParameters)` (Pydantic model)
   - Purpose: Input parameters for adding/searching an individual.
   - Fields:
-    - `individual_label: str` — label for the individual (stored as `rdfs:label`).
-    - `class_uri: str` — class URI the individual will be typed as.
-    - `threshold: Optional[int] = 80` — score threshold (0–100) to accept an existing individual from search results.
+    - `individual_label: str` - label for the individual (stored as `rdfs:label`).
+    - `class_uri: str` - class URI the individual will be typed as.
+    - `threshold: Optional[int] = 80` - score threshold (0–100) to accept an existing individual from search results.
 
 - `AddIndividualPipeline(Pipeline)`
   - `__init__(configuration: AddIndividualPipelineConfiguration)`

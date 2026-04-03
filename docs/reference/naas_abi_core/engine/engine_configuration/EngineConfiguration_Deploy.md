@@ -6,10 +6,10 @@
 ## Public API
 - **Class `DeployConfiguration(BaseModel)`**
   - **Fields**
-    - `workspace_id: str` — Workspace identifier.
-    - `space_name: str` — Target space name.
-    - `naas_api_key: str` — API key used for authentication.
-    - `env: dict[str, str] = {}` — Optional environment variables mapping.
+    - `workspace_id: str` - Workspace identifier.
+    - `space_name: str` - Target space name.
+    - `naas_api_key: str` - API key used for authentication.
+    - `env: dict[str, str] = {}` - Optional environment variables mapping.
 
 ## Configuration/Dependencies
 - **Dependency:** `pydantic.BaseModel`

@@ -7,11 +7,11 @@
 ## Public API
 - `UpdateTickerPipelineConfiguration`
   - Fields:
-    - `triple_store: ITripleStoreService` — triple store service used to read and write RDF graphs.
+    - `triple_store: ITripleStoreService` - triple store service used to read and write RDF graphs.
 
 - `UpdateTickerPipelineParameters` (Pydantic model)
-  - `individual_uri: str` — URI of the ticker individual (validated by `URI_REGEX`).
-  - `organization_uri: Optional[str]` — URI of the organization to link (validated by `URI_REGEX`).
+  - `individual_uri: str` - URI of the ticker individual (validated by `URI_REGEX`).
+  - `organization_uri: Optional[str]` - URI of the organization to link (validated by `URI_REGEX`).
 
 - `UpdateTickerPipeline(configuration)`
   - `run(parameters: PipelineParameters) -> rdflib.Graph`

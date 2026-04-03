@@ -10,11 +10,11 @@ Developers working on ABI locally needed to orchestrate multiple Docker services
 ## Decision
 
 Introduce an `abi stack` command group in the `naas-abi-cli` package with the following subcommands:
-- `abi stack start` — starts all Docker Compose services.
-- `abi stack stop` — stops all services.
-- `abi stack status` — probes service availability and prints a health summary.
-- `abi stack logs [service]` — streams logs for a named logical service (e.g. `core`, `api`, `web`).
-- `abi stack tui` — opens a Textual-powered terminal UI for interactive service inspection.
+- `abi stack start` - starts all Docker Compose services.
+- `abi stack stop` - stops all services.
+- `abi stack status` - probes service availability and prints a health summary.
+- `abi stack logs [service]` - streams logs for a named logical service (e.g. `core`, `api`, `web`).
+- `abi stack tui` - opens a Textual-powered terminal UI for interactive service inspection.
 
 Service readiness probing (TCP/HTTP checks) is encapsulated in a `StackRuntime` module, separate from the CLI layer, making it testable independently.
 

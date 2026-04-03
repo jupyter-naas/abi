@@ -15,16 +15,16 @@ A pipeline that:
 - `AIAgentOntologyGenerationConfiguration(PipelineConfiguration)`
   - Configuration for the pipeline.
   - Fields:
-    - `triple_store: ITripleStoreService` (required) — target triple store service used to `insert(Graph)`
-    - `datastore_path: str` — output root for generated ontologies (timestamped subfolders)
-    - `source_datastore_path: str` — input folder containing `*_llms_data.json` files
-    - `max_models_per_agent: int` — cap per agent for performance
+    - `triple_store: ITripleStoreService` (required) - target triple store service used to `insert(Graph)`
+    - `datastore_path: str` - output root for generated ontologies (timestamped subfolders)
+    - `source_datastore_path: str` - input folder containing `*_llms_data.json` files
+    - `max_models_per_agent: int` - cap per agent for performance
 
 - `AIAgentOntologyGenerationParameters(PipelineParameters)`
   - Execution parameters.
   - Fields:
-    - `force_regenerate: bool` — defined but not used in current implementation
-    - `agent_filter: Optional[List[str]]` — restrict generation to specific agent modules (keys like `["chatgpt","claude"]`)
+    - `force_regenerate: bool` - defined but not used in current implementation
+    - `agent_filter: Optional[List[str]]` - restrict generation to specific agent modules (keys like `["chatgpt","claude"]`)
 
 - `AIAgentOntologyGenerationPipeline(Pipeline)`
   - Main pipeline implementation.
@@ -49,11 +49,11 @@ A pipeline that:
 ## Configuration/Dependencies
 
 ### Required dependencies
-- `rdflib` (`Graph`, `Literal`, `Namespace`) — graph returned/inserted, though TTL is generated as plain text files.
-- `naas_abi_core.pipeline` — base `Pipeline`, `PipelineConfiguration`, `PipelineParameters`.
+- `rdflib` (`Graph`, `Literal`, `Namespace`) - graph returned/inserted, though TTL is generated as plain text files.
+- `naas_abi_core.pipeline` - base `Pipeline`, `PipelineConfiguration`, `PipelineParameters`.
 - `naas_abi_core.services.triple_store.TripleStorePorts.ITripleStoreService`
   - Must provide an `insert(graph: Graph)` method.
-- `langchain_core.tools` — for `as_tools()` (`BaseTool`, `StructuredTool`).
+- `langchain_core.tools` - for `as_tools()` (`BaseTool`, `StructuredTool`).
 
 ### Filesystem inputs/outputs
 - **Input**: latest file matching `*_llms_data.json` in `source_datastore_path`.

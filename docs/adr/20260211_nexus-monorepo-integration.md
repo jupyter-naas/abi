@@ -13,7 +13,7 @@ Integrate the Nexus app (both the Next.js web frontend and its FastAPI API layer
 
 The Nexus API is wired into the ABI engine as a module: it receives the engine's configured services (TripleStore, VectorStore, BusService, etc.) at startup, rather than bootstrapping its own service instances. The Next.js frontend lives at `apps/web/` and is managed with `pnpm`.
 
-The Nexus FastAPI app is mounted on the same process as the ABI core API, sharing the app instance and middleware (including CORS — see `20260305_cors-single-source-of-truth`).
+The Nexus FastAPI app is mounted on the same process as the ABI core API, sharing the app instance and middleware (including CORS - see `20260305_cors-single-source-of-truth`).
 
 ## Consequences
 

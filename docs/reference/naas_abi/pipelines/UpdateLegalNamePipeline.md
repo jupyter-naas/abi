@@ -7,11 +7,11 @@
 ## Public API
 - `UpdateLegalNamePipelineConfiguration(PipelineConfiguration)`
   - Fields:
-    - `triple_store: ITripleStoreService` — triple store service used to fetch and insert RDF triples.
+    - `triple_store: ITripleStoreService` - triple store service used to fetch and insert RDF triples.
 - `UpdateLegalNamePipelineParameters(PipelineParameters)`
   - Fields:
-    - `individual_uri: str` — URI of the legal name individual (validated by `URI_REGEX`).
-    - `organization_uri: Optional[str]` — organization URI to relate via `ABI.isLegalNameOf` (validated by `URI_REGEX`).
+    - `individual_uri: str` - URI of the legal name individual (validated by `URI_REGEX`).
+    - `organization_uri: Optional[str]` - organization URI to relate via `ABI.isLegalNameOf` (validated by `URI_REGEX`).
 - `UpdateLegalNamePipeline(Pipeline)`
   - `__init__(configuration: UpdateLegalNamePipelineConfiguration)`
     - Stores configuration (notably the triple store service).

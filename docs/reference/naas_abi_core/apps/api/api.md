@@ -49,9 +49,9 @@
   - Returns a landing HTML page using `API_LANDING_HTML` template.
 
 ### Routers (included at runtime)
-- `/agents` (tag: `Agents`) — protected by token validation.
-- `/pipelines` (tag: `Pipelines`) — protected by token validation.
-- `/workflows` (tag: `Workflows`) — protected by token validation.
+- `/agents` (tag: `Agents`) - protected by token validation.
+- `/pipelines` (tag: `Pipelines`) - protected by token validation.
+- `/workflows` (tag: `Workflows`) - protected by token validation.
 - Additional module routes: each engine module is allowed to register routes via `module.api(app)`.
 
 ## Configuration/Dependencies

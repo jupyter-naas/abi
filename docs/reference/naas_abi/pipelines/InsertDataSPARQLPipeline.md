@@ -8,11 +8,11 @@
 ### Classes
 - `InsertDataSPARQLPipelineConfiguration(PipelineConfiguration)`
   - **Fields**
-    - `triple_store: ITripleStoreService` — target triple store service used for insertion.
+    - `triple_store: ITripleStoreService` - target triple store service used for insertion.
 
 - `InsertDataSPARQLPipelineParameters(PipelineParameters)`
   - **Fields**
-    - `sparql_statement: str` — SPARQL `INSERT DATA` statement (optionally wrapped in ```sparql fences).
+    - `sparql_statement: str` - SPARQL `INSERT DATA` statement (optionally wrapped in ```sparql fences).
 
 - `InsertDataSPARQLPipeline(Pipeline)`
   - `__init__(configuration: InsertDataSPARQLPipelineConfiguration)`

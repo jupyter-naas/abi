@@ -1,4 +1,4 @@
-# ADR: onto2py — Ontology-to-Python Code Generation
+# ADR: onto2py - Ontology-to-Python Code Generation
 
 - Status: Accepted
 - Date: 2026-01-27
