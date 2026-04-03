@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Algolia Search Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"></script>
+</head>
+<body>
+    <h1>Direct Algolia Search Test</h1>
+    <p><strong>Debug Info:</strong></p>
+    <ul>
+        <li>App ID: NGBDVK8FYQ</li>
+        <li>Index: docs.naas.ai</li>
+        <li>Status: <span id="status">Loading...</span></li>
+    </ul>
+    
+    <input type="text" id="search-input" placeholder="Type to search..." style="width: 300px; padding: 10px; font-size: 16px;" />
+    <div id="search-results" style="margin-top: 20px;"></div>
+
+    <script>
+        const client = algoliasearch('NGBDVK8FYQ', 'f6ee1784b03f118828d7de35b9f7c178');
+        const index = client.initIndex('docs.naas.ai');
+        
+        document.getElementById('status').textContent = 'Ready';
+
+        document.getElementById('search-input').addEventListener('input', async (e) => {
+            const query = e.target.value;
+            console.log('Searching for:', query);
+            
+            if (query.length < 1) {
+                document.getElementById('search-results').innerHTML = '';
+                return;
+            }
+
+            try {
+                document.getElementById('search-results').innerHTML = '<p>Searching...</p>';
+                
+                const { hits, nbHits } = await index.search(query, {
+                    hitsPerPage: 10
+                });
+
+                console.log('Search results:', { hits, nbHits });
+
+                if (hits.length === 0) {
+                    document.getElementById('search-results').innerHTML = `<p>No results found for "${query}" (Total: ${nbHits})</p>`;
+                    return;
+                }
+
+                const resultsHtml = hits.map(hit => `
+                    <div style="border: 1px solid #ccc; margin: 10px 0; padding: 10px; border-radius: 5px;">
+                        <h3 style="margin: 0 0 10px 0; color: #333;">${hit.title || 'No title'}</h3>
+                        <p style="margin: 0 0 10px 0; color: #666;">${(hit.content || '').substring(0, 200)}...</p>
+                        <p style="margin: 0 0 10px 0; color: #999; font-size: 12px;">URL: ${hit.url || 'No URL'}</p>
+                        ${hit.url ? `<a href="${hit.url}" target="_blank" style="color: #007bff;">View Page</a>` : ''}
+                    </div>
+                `).join('');
+
+                document.getElementById('search-results').innerHTML = `
+                    <p><strong>Found ${nbHits} results:</strong></p>
+                    ${resultsHtml}
+                `;
+            } catch (error) {
+                console.error('Search error:', error);
+                document.getElementById('search-results').innerHTML = `
+                    <p style="color: red;">Search error: ${error.message}</p>
+                    <pre style="background: #f5f5f5; padding: 10px; font-size: 12px;">${JSON.stringify(error, null, 2)}</pre>
+                `;
+            }
+        });
+        
+        // Test connection on load
+        window.addEventListener('load', async () => {
+            try {
+                const { hits } = await index.search('', { hitsPerPage: 1 });
+                console.log('Connection test successful, total docs:', hits.length);
+                document.getElementById('status').textContent = `Connected (${hits.length} docs available)`;
+            } catch (error) {
+                console.error('Connection test failed:', error);
+                document.getElementById('status').textContent = 'Connection failed';
+            }
+        });
+    </script>
+</body>
+</html>
