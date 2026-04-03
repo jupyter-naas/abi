@@ -356,9 +356,9 @@ def list_individuals(
                 type=str(node_data.get("type_label") or node_data.get("type") or "unknown"),
                 label=str(node_data.get("label") or node_id),
                 properties={
-                    key: value
+                    key.split("/")[-1]: value
                     for key, value in node_data.items()
-                    if key not in {"uri", "label", "type", "type_label"}
+                    if key not in {"uri", "label", "type", "type_label"} and value != "unknown"
                 },
             )
         )
