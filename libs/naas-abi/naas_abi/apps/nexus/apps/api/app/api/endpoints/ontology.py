@@ -269,12 +269,13 @@ def get_uri_metadata(uri: str) -> dict:
     query = f"""
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?label ?definition ?example ?subClassOf ?subPropertyOf
+    SELECT ?label ?definition ?example ?subClassOf ?subPropertyOf ?comment
     WHERE {{
         GRAPH <http://ontology.naas.ai/graph/schema> {{
             OPTIONAL {{ <{uri}> rdfs:label ?label . }}
             OPTIONAL {{ <{uri}> skos:definition ?definition . }}
             OPTIONAL {{ <{uri}> skos:example ?example . }}
+            OPTIONAL {{ <{uri}> rdfs:comment ?comment . }}
             OPTIONAL {{
                 <{uri}> rdfs:subClassOf ?subClassOf .
                 FILTER(isIRI(?subClassOf))
@@ -296,6 +297,7 @@ def get_uri_metadata(uri: str) -> dict:
             "example": str(row.example) if row.example else None,
             "subClassOf": str(row.subClassOf) if row.subClassOf else None,
             "subPropertyOf": str(row.subPropertyOf) if row.subPropertyOf else None,
+            "comment": str(row.comment) if row.comment else None,
         }
     return result
 
@@ -393,8 +395,9 @@ async def list_classes(
             data = get_uri_metadata(iri)
             label = data.get("label", "Unknown")
             definition = data.get("definition")
-            example = data.get("example")
-            parent_id = data.get("subClassOf")
+            comment = data.get("comment", "Unknown")
+            example = data.get("example", "Unknown")
+            parent_id = data.get("subClassOf", "Unknown")
             parent_data = get_uri_metadata(parent_id) if parent_id else None
             parent_label = parent_data.get("label", "Unknown") if parent_data else None
 
@@ -402,7 +405,7 @@ async def list_classes(
                 id=iri,
                 name=label,
                 type="Class",
-                description=str(definition),
+                description=str(definition) if definition else str(comment),
                 example=str(example),
                 parent_id=str(parent_id),
                 parent_name=str(parent_label),
@@ -450,8 +453,9 @@ async def list_relations(
 
             data = get_uri_metadata(iri)
             label = data.get("label", "Unknown")
-            definition = data.get("definition")
-            parent_id = data.get("subPropertyOf")
+            definition = data.get("definition", "Unknown")
+            comment = data.get("comment", "Unknown")
+            parent_id = data.get("subPropertyOf", "Unknown")
             parent_data = get_uri_metadata(parent_id) if parent_id else None
             parent_label = parent_data.get("label", "Unknown") if parent_data else None
 
@@ -459,7 +463,7 @@ async def list_relations(
                 id=iri,
                 name=label,
                 type="Object Property",
-                description=str(definition),
+                description=str(definition) if definition else str(comment),
                 parent_id=str(parent_id),
                 parent_name=str(parent_label),
             )
@@ -698,19 +702,13 @@ async def get_ontology_overview_graph(
 
                     data = get_uri_metadata(class_iri)
                     class_label = data.get("label", "Unknown")
-                    definition = data.get("definition", "Unknown")
+                    definition = data.get("definition")
+                    comment = data.get("comment", "Unknown")
                     parent_iri = data.get("subClassOf", "Unknown")
                     parent_data = get_uri_metadata(parent_iri) if parent_iri else None
                     parent_label = parent_data.get("label", "Unknown") if parent_data else None
 
-                    existing = classes_by_iri.get(class_iri)
-                    if existing:
-                        if not existing.properties.get("definition") and definition:
-                            existing.properties["definition"] = definition
-                        if not existing.properties.get("parent_iri") and parent_iri:
-                            existing.properties["parent_iri"] = parent_iri
-                        if not existing.properties.get("parent_label") and parent_label:
-                            existing.properties["parent_label"] = parent_label
+                    if classes_by_iri.get(class_iri):
                         continue
 
                     classes_by_iri[class_iri] = OntologyOverviewGraphNode(
@@ -719,7 +717,8 @@ async def get_ontology_overview_graph(
                         type=parent_label,
                         properties={
                             "iri": class_iri,
-                            "definition": str(definition),
+                            "definition": str(definition) if definition else str(comment),
+                            "comment": str(comment),
                             "parent_iri": str(parent_iri),
                             "parent_label": str(parent_label),
                         },
@@ -739,6 +738,8 @@ async def get_ontology_overview_graph(
                     source_data = get_uri_metadata(source_iri) if source_iri else None
                     source_label = source_data.get("label", "Unknown") if source_data else None
                     source_type = source_data.get("subClassOf") if source_data else None
+                    source_definition = source_data.get("definition") if source_data else None
+                    source_comment = source_data.get("comment") if source_data else None
                     source_type_data = get_uri_metadata(source_type) if source_type else None
                     source_type_label = (
                         source_type_data.get("label", "Unknown") if source_type_data else None
@@ -746,6 +747,8 @@ async def get_ontology_overview_graph(
                     target_data = get_uri_metadata(target_iri) if target_iri else None
                     target_label = target_data.get("label", "Unknown") if target_data else None
                     target_type = target_data.get("subClassOf") if target_data else None
+                    target_definition = target_data.get("definition") if target_data else None
+                    target_comment = target_data.get("comment") if target_data else None
                     target_type_data = get_uri_metadata(target_type) if target_type else None
                     target_type_label = (
                         target_type_data.get("label", "Unknown") if target_type_data else None
@@ -758,7 +761,9 @@ async def get_ontology_overview_graph(
                             type=source_type_label,
                             properties={
                                 "iri": source_iri,
-                                "definition": str(source_data.get("definition", "")),
+                                "definition": str(source_definition)
+                                if source_definition
+                                else str(source_comment),
                                 "parent_iri": str(source_type),
                                 "parent_label": str(source_type_label),
                             },
@@ -770,7 +775,9 @@ async def get_ontology_overview_graph(
                             type=target_type_label,
                             properties={
                                 "iri": target_iri,
-                                "definition": str(target_data.get("definition", "")),
+                                "definition": str(target_definition)
+                                if target_definition
+                                else str(target_comment),
                                 "parent_iri": str(target_type),
                                 "parent_label": str(target_type_label),
                             },
@@ -876,7 +883,7 @@ async def get_ontology_overview_graph(
 
         # All ontologies selected: show ontology import dependencies
         ontologies_by_iri: dict[str, OntologyOverviewGraphNode] = {}
-        edges_by_id: dict[str, OntologyOverviewGraphEdge] = {}
+        edges_by_id = {}
 
         imports_query = """
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -897,7 +904,9 @@ async def get_ontology_overview_graph(
         for path in target_paths:
             graph = _load_ontology_graph(path)
 
-            for row in graph.subjects(RDF.type, OWL.Ontology):
+            subjects = graph.subjects(RDF.type, OWL.Ontology)
+
+            for row in list(subjects):
                 ontology_iri = str(row)
                 if not ontology_iri:
                     continue
