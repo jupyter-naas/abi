@@ -1,0 +1,8 @@
+{
+  "label": "Updates",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Architecture Decision Records \u2014 every significant technical decision made in ABI, with context, rationale, and consequences."
+  }
+}
