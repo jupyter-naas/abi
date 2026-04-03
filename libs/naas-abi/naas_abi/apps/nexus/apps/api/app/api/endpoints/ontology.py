@@ -2,17 +2,23 @@
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
+from naas_abi_core import logger
+from naas_abi_core.services.cache.CacheFactory import CacheFactory
+from naas_abi_core.services.cache.CachePort import DataType
 from pydantic import BaseModel, Field
 from rdflib import Graph
 from rdflib.namespace import OWL, RDF, RDFS
+from rdflib.query import ResultRow
 from rdflib.term import URIRef
+
+cache = CacheFactory.CacheFS_find_storage(subpath="ontology")
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -23,6 +29,7 @@ class OntologyItem(BaseModel):
     name: str
     type: str  # entity, relationship, schema, folder
     description: str | None = None
+    example: str | None = None
     parent_id: str | None = None
     parent_name: str | None = None
     created_at: datetime = datetime.now()
@@ -150,7 +157,7 @@ class ImportRequest(BaseModel):
 ontology_items: list[OntologyItem] = []
 
 
-def _load_ontology_graph(ontology_path: str) -> Graph:
+def _load_ontology_graph(ontology_path: str, add_imports: bool = False) -> Graph:
     extension = Path(ontology_path).suffix.lower()
     parse_format = {
         ".ttl": "turtle",
@@ -165,6 +172,25 @@ def _load_ontology_graph(ontology_path: str) -> Graph:
     except Exception:
         # Fallback to rdflib format auto-detection when explicit mapping fails.
         graph.parse(ontology_path)
+
+    if add_imports:
+        imports = graph.objects(None, OWL.imports)
+        for import_uri in imports:
+            graph_imports = Graph()
+            try:
+                import_path = str(import_uri)
+                import_extension = Path(import_path).suffix.lower()
+                import_parse_format = {
+                    ".ttl": "turtle",
+                    ".owl": "xml",
+                    ".rdf": "xml",
+                    ".nt": "nt",
+                }.get(import_extension)
+                graph_imports.parse(import_path, format=import_parse_format)
+            except Exception as e:
+                logger.error(f"Error parsing import {import_uri}: {e}")
+                continue
+            graph += graph_imports
     return graph
 
 
@@ -177,49 +203,6 @@ def _resolve_target_ontology_paths(
             raise HTTPException(status_code=404, detail="Ontology path not found")
         return [ontology_path]
     return ontology_paths
-
-
-def _sparql_iri(value: str) -> str | None:
-    """Return a safe SPARQL IRI token or None when value is invalid."""
-    candidate = value.strip()
-    if not candidate:
-        return None
-    # Basic guard to avoid malformed query injection.
-    if any(char in candidate for char in ("<", ">", '"', "'", " ")):
-        return None
-    return f"<{candidate}>"
-
-
-def _get_parent_labels_from_triple_store(parent_ids: set[str]) -> dict[str, str]:
-    """Resolve parent labels from the configured triple store service."""
-    if not parent_ids:
-        return {}
-
-    iri_values = [iri for value in sorted(parent_ids) if (iri := _sparql_iri(value)) is not None]
-    if not iri_values:
-        return {}
-
-    try:
-        triple_store_service = ABIModule.get_instance().engine.services.triple_store
-    except Exception:
-        return {}
-
-    query = f"""
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT ?parentId ?label WHERE {{
-            VALUES ?parentId {{ {" ".join(iri_values)} }}
-            OPTIONAL {{ ?parentId rdfs:label ?label . }}
-        }}
-    """
-
-    labels: dict[str, str] = {}
-    rows = triple_store_service.query(query)
-    for row in rows:
-        parent_id = str(getattr(row, "parentId", "") or "")
-        label = str(getattr(row, "label", "") or "")
-        if parent_id and label and parent_id not in labels:
-            labels[parent_id] = label
-    return labels
 
 
 def parse_ttl(content: str, file_path: str) -> ReferenceOntology:
@@ -280,6 +263,42 @@ def parse_ttl(content: str, file_path: str) -> ReferenceOntology:
     )
 
 
+@cache(lambda uri: f"ontology_data_{uri}", DataType.JSON, ttl=timedelta(days=1))
+def get_ontology_data(uri: str) -> dict:
+    query = f"""
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+    SELECT ?label ?definition ?example ?subClassOf ?subPropertyOf
+    WHERE {{
+        GRAPH <http://ontology.naas.ai/graph/schema> {{
+            OPTIONAL {{ <{uri}> rdfs:label ?label . }}
+            OPTIONAL {{ <{uri}> skos:definition ?definition . }}
+            OPTIONAL {{ <{uri}> skos:example ?example . }}
+            OPTIONAL {{
+                <{uri}> rdfs:subClassOf ?subClassOf .
+                FILTER(isIRI(?subClassOf))
+            }}
+            OPTIONAL {{
+                <{uri}> rdfs:subPropertyOf ?subPropertyOf .
+                FILTER(isIRI(?subPropertyOf))
+            }}
+        }}
+    }}
+    """
+    result: dict = {}
+    rows = ABIModule.get_instance().engine.services.triple_store.query(query)
+    for row in rows:
+        assert isinstance(row, ResultRow)
+        result = {
+            "label": str(row.label) if row.label else uri,
+            "definition": str(row.definition) if row.definition else None,
+            "example": str(row.example) if row.example else None,
+            "subClassOf": str(row.subClassOf) if row.subClassOf else None,
+            "subPropertyOf": str(row.subPropertyOf) if row.subPropertyOf else None,
+        }
+    return result
+
+
 @router.get("")
 async def list_ontology_items():
     """List all ontology items (OWL Classes and Object Properties) with label, definition, type, and subclassOf."""
@@ -306,15 +325,9 @@ async def list_classes(
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-        SELECT ?s ?label ?definition ?parentId WHERE {
+        SELECT ?s WHERE {
             ?s rdf:type owl:Class .
             FILTER(isIRI(?s))
-            OPTIONAL { ?s rdfs:label ?label . }
-            OPTIONAL { ?s skos:definition ?definition . }
-            OPTIONAL {
-                ?s rdfs:subClassOf ?parentId .
-                FILTER(isIRI(?parentId))
-            }
         }
     """
 
@@ -323,31 +336,27 @@ async def list_classes(
         for row in graph.query(query):
             assert isinstance(row, ResultRow)
             iri = str(row.get("s"))
-            label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
-            definition = str(row.get("definition")) if row.get("definition") else None
-            parent_id = str(row.get("parentId")) if row.get("parentId") else None
             existing = by_iri.get(iri)
             if existing:
-                if existing.parent_id is None and parent_id is not None:
-                    existing.parent_id = parent_id
-                if existing.description is None and definition is not None:
-                    existing.description = definition
                 continue
+
+            data = get_ontology_data(iri)
+            label = data.get("label", "Unknown")
+            definition = data.get("definition")
+            example = data.get("example")
+            parent_id = data.get("subClassOf")
+            parent_data = get_ontology_data(parent_id) if parent_id else None
+            parent_label = parent_data.get("label", "Unknown") if parent_data else None
 
             by_iri[iri] = OntologyItem(
                 id=iri,
                 name=label,
-                type="entity",
+                type="Class",
                 description=definition,
+                example=example,
                 parent_id=parent_id,
+                parent_name=parent_label,
             )
-
-    parent_labels = _get_parent_labels_from_triple_store(
-        {item.parent_id for item in by_iri.values() if item.parent_id}
-    )
-    for item in by_iri.values():
-        if item.parent_id:
-            item.parent_name = parent_labels.get(item.parent_id)
 
     items = sorted(by_iri.values(), key=lambda item: item.name.lower())
     return {"items": items}
@@ -386,9 +395,12 @@ async def list_relations(
         for row in graph.query(query):
             assert isinstance(row, ResultRow)
             iri = str(row.get("s"))
-            label = str(row.get("label")) if row.get("label") else iri.split("/")[-1]
-            definition = str(row.get("definition")) if row.get("definition") else None
-            parent_id = str(row.get("parentId")) if row.get("parentId") else None
+            data = get_ontology_data(iri)
+            label = data.get("label", "Unknown")
+            definition = data.get("definition")
+            parent_id = data.get("subPropertyOf")
+            parent_data = get_ontology_data(parent_id) if parent_id else None
+            parent_label = parent_data.get("label", "Unknown") if parent_data else None
             existing = by_iri.get(iri)
             if existing:
                 if existing.parent_id is None and parent_id is not None:
@@ -400,17 +412,11 @@ async def list_relations(
             by_iri[iri] = OntologyItem(
                 id=iri,
                 name=label,
-                type="relationship",
+                type="Object Property",
                 description=definition,
                 parent_id=parent_id,
+                parent_name=parent_label,
             )
-
-    parent_labels = _get_parent_labels_from_triple_store(
-        {item.parent_id for item in by_iri.values() if item.parent_id}
-    )
-    for item in by_iri.values():
-        if item.parent_id:
-            item.parent_name = parent_labels.get(item.parent_id)
 
     items = sorted(by_iri.values(), key=lambda item: item.name.lower())
     return {"items": items}
@@ -643,12 +649,13 @@ async def get_ontology_overview_graph(
                     class_iri = str(row.get("classIri"))
                     if not class_iri:
                         continue
-                    class_label = (
-                        str(row.get("label")) if row.get("label") else class_iri.split("/")[-1]
-                    )
-                    definition = str(row.get("definition")) if row.get("definition") else ""
-                    parent_iri = str(row.get("parentIri")) if row.get("parentIri") else ""
-                    parent_label = str(row.get("parentLabel")) if row.get("parentLabel") else ""
+
+                    data = get_ontology_data(class_iri)
+                    class_label = data.get("label", "Unknown")
+                    definition = data.get("definition")
+                    parent_iri = data.get("subClassOf")
+                    parent_data = get_ontology_data(parent_iri) if parent_iri else None
+                    parent_label = parent_data.get("label", "Unknown") if parent_data else None
 
                     existing = classes_by_iri.get(class_iri)
                     if existing:
@@ -663,7 +670,7 @@ async def get_ontology_overview_graph(
                     classes_by_iri[class_iri] = OntologyOverviewGraphNode(
                         id=class_iri,
                         label=class_label,
-                        type="Entity",
+                        type=parent_label,
                         properties={
                             "iri": class_iri,
                             "definition": definition,
@@ -683,19 +690,44 @@ async def get_ontology_overview_graph(
                     if not source_iri or not target_iri:
                         continue
 
+                    source_data = get_ontology_data(source_iri) if source_iri else None
+                    source_label = source_data.get("label", "Unknown") if source_data else None
+                    source_type = source_data.get("subClassOf") if source_data else None
+                    source_type_data = get_ontology_data(source_type) if source_type else None
+                    source_type_label = (
+                        source_type_data.get("label", "Unknown") if source_type_data else None
+                    )
+                    target_data = get_ontology_data(target_iri) if target_iri else None
+                    target_label = target_data.get("label", "Unknown") if target_data else None
+                    target_type = target_data.get("subClassOf") if target_data else None
+                    target_type_data = get_ontology_data(target_type) if target_type else None
+                    target_type_label = (
+                        target_type_data.get("label", "Unknown") if target_type_data else None
+                    )
+
                     if source_iri not in classes_by_iri:
                         classes_by_iri[source_iri] = OntologyOverviewGraphNode(
                             id=source_iri,
-                            label=source_iri.split("/")[-1],
-                            type="Entity",
-                            properties={"iri": source_iri},
+                            label=source_label,
+                            type=source_type_label,
+                            properties={
+                                "iri": source_iri,
+                                "definition": source_data.get("definition"),
+                                "parent_iri": source_type,
+                                "parent_label": source_type_label,
+                            },
                         )
                     if target_iri not in classes_by_iri:
                         classes_by_iri[target_iri] = OntologyOverviewGraphNode(
                             id=target_iri,
-                            label=target_iri.split("/")[-1],
-                            type="Entity",
-                            properties={"iri": target_iri},
+                            label=target_label,
+                            type=target_type_label,
+                            properties={
+                                "iri": target_iri,
+                                "definition": target_data.get("definition"),
+                                "parent_iri": target_type,
+                                "parent_label": target_type_label,
+                            },
                         )
 
                     property_label = (
@@ -734,28 +766,44 @@ async def get_ontology_overview_graph(
                     if not child_class or not parent_class:
                         continue
 
+                    child_data = get_ontology_data(child_class) if child_class else None
+                    child_label = child_data.get("label", "Unknown") if child_data else None
+                    child_type = child_data.get("subClassOf") if child_data else None
+                    child_type_data = get_ontology_data(child_type) if child_type else None
+                    child_type_label = (
+                        child_type_data.get("label", "Unknown") if child_type_data else None
+                    )
+
+                    parent_data = get_ontology_data(parent_class) if parent_class else None
+                    parent_label = parent_data.get("label", "Unknown") if parent_data else None
+                    parent_type = parent_data.get("subClassOf") if parent_data else None
+                    parent_type_data = get_ontology_data(parent_type) if parent_type else None
+                    parent_type_label = (
+                        parent_type_data.get("label", "Unknown") if parent_type_data else None
+                    )
+
                     if child_class not in classes_by_iri:
                         classes_by_iri[child_class] = OntologyOverviewGraphNode(
                             id=child_class,
-                            label=child_class.split("/")[-1],
-                            type="Entity",
+                            label=child_label,
+                            type=child_type_label,
                             properties={
                                 "iri": child_class,
-                                "definition": "",
-                                "parent_iri": "",
-                                "parent_label": "",
+                                "definition": child_data.get("definition"),
+                                "parent_iri": child_type,
+                                "parent_label": child_type_label,
                             },
                         )
                     if parent_class not in classes_by_iri:
                         classes_by_iri[parent_class] = OntologyOverviewGraphNode(
                             id=parent_class,
-                            label=parent_class.split("/")[-1],
-                            type="Entity",
+                            label=parent_label,
+                            type=parent_type_label,
                             properties={
                                 "iri": parent_class,
-                                "definition": "",
-                                "parent_iri": "",
-                                "parent_label": "",
+                                "definition": parent_data.get("definition"),
+                                "parent_iri": parent_type,
+                                "parent_label": parent_type_label,
                             },
                         )
 
@@ -821,6 +869,7 @@ async def get_ontology_overview_graph(
                 ontology_iri = str(row.get("ontologyIri"))
                 if not ontology_iri:
                     continue
+
                 ontology_label = (
                     str(row.get("label")) if row.get("label") else _label_from_iri(ontology_iri)
                 )
