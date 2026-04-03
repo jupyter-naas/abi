@@ -337,13 +337,6 @@ class NexusPlatformPipeline(Pipeline):
         graph += self.initialize_nexus_graphs()
         graph += self.initialize_nexus_agents()
         # graph += self.initialize_nexus_graph_views()
-
-        # Save graph
-        destination = Path("libs/naas-abi/naas_abi/ontologies/sandbox/nexus.ttl")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        graph.serialize(destination=str(destination), format="turtle")
-
-        # Return the Nexus graph
         return graph
 
     def as_tools(self) -> list[BaseTool]:
