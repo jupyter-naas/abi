@@ -1254,16 +1254,21 @@ function OntologyOverviewView({
     };
   }, [ontologyPath]);
 
+  const classTableNodes = useMemo(() => {
+    if (!isAllOntologiesOverview) return graphNodes;
+    return graphNodes.filter((node) => node.type.toLowerCase() === 'ontology');
+  }, [graphNodes, isAllOntologiesOverview]);
+
   const filteredClasses = useMemo(() => {
-    if (!listSearchQuery.trim()) return graphNodes;
+    if (!listSearchQuery.trim()) return classTableNodes;
     const q = listSearchQuery.toLowerCase();
-    return graphNodes.filter(
+    return classTableNodes.filter(
       (node) =>
         node.label.toLowerCase().includes(q) ||
         node.id.toLowerCase().includes(q) ||
         node.type.toLowerCase().includes(q)
     );
-  }, [graphNodes, listSearchQuery]);
+  }, [classTableNodes, listSearchQuery]);
 
   const graphNodesById = useMemo(
     () => new Map(graphNodes.map((node) => [node.id, node])),
@@ -1389,7 +1394,7 @@ function OntologyOverviewView({
                     {isAllOntologiesOverview ? 'Ontologies' : 'Classes'}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {filteredClasses.length} of {graphNodes.length}
+                    {filteredClasses.length} of {classTableNodes.length}
                   </p>
                 </div>
                 <div className="max-h-80 overflow-y-auto p-2">
@@ -1401,9 +1406,9 @@ function OntologyOverviewView({
                     <ul className="space-y-1">
                       {filteredClasses.map((node) => {
                         const definition = isAllOntologiesOverview
-                          ? (node.properties?.comment as string | undefined)
+                          ? ((node.properties?.comment || node.properties?.description) as string | undefined)
                           : (node.properties?.definition as string | undefined);
-                        const definitionText = definition?.trim() || 'No definition';
+                        const definitionText = definition?.trim() || (isAllOntologiesOverview ? 'No description' : 'No definition');
                         return (
                           <li
                             key={node.id}
@@ -1516,6 +1521,11 @@ function OntologyNetworkView({
     [graphNodes]
   );
   const selectedGraphNode = selectedGraphNodeId ? graphNodesById.get(selectedGraphNodeId) : null;
+  const selectedGraphNodeIsOntology = selectedGraphNode?.type === 'Ontology';
+  const selectedGraphNodeDescription =
+    selectedGraphNode?.properties?.comment ||
+    selectedGraphNode?.properties?.description ||
+    (selectedGraphNodeIsOntology ? 'No comment' : 'No definition');
   const selectedGraphEdge = selectedGraphEdgeId
     ? graphEdges.find((edge) => edge.id === selectedGraphEdgeId) || null
     : null;
@@ -1617,15 +1627,9 @@ function OntologyNetworkView({
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      {isAllOntologiesOverview ? 'Comment' : 'Definition'}
+                      {selectedGraphNodeIsOntology ? 'Comment' : 'Definition'}
                     </p>
-                    <p>
-                      {String(
-                        isAllOntologiesOverview
-                          ? selectedGraphNode.properties?.comment || 'No comment'
-                          : selectedGraphNode.properties?.definition || 'No definition'
-                      )}
-                    </p>
+                    <p>{String(selectedGraphNodeIsOntology ? selectedGraphNodeDescription : selectedGraphNode.properties?.definition || 'No definition')}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">
