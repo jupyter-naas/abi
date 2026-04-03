@@ -1,7 +1,7 @@
 """Knowledge Graph API endpoints backed by ABI TripleStoreService."""
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -11,12 +11,15 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
+from naas_abi_core.services.cache.CacheFactory import CacheFactory
+from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.SPARQL import SPARQLUtils
 from pydantic import BaseModel, Field
 from rdflib import OWL, RDF, RDFS, Literal, URIRef
 from rdflib.query import ResultRow
 
+cache = CacheFactory.CacheFS_find_storage(subpath="nexus/graph")
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 GRAPH_BASE_URI = URIRef("http://ontology.naas.ai/graph/")
@@ -233,6 +236,13 @@ def _get_ontology_label(triple_store: TripleStoreService, uri: str) -> str:
     return uri
 
 
+@cache(
+    lambda triple_store, workspace_id, graph_names, graph_filters: (
+        f"list_individuals_{str(triple_store)}_{workspace_id}_{str(graph_names)}_{str(graph_filters)}"
+    ),
+    DataType.PICKLE,
+    ttl=timedelta(days=1),
+)
 def list_individuals(
     triple_store: TripleStoreService,
     workspace_id: str,

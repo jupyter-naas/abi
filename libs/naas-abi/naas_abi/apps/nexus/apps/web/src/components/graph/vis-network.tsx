@@ -57,8 +57,28 @@ export function VisNetwork({
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
 
+  const getNodeLogoUrl = useCallback((node: GraphNode): string | undefined => {
+    const properties = node.properties ?? {};
+    const candidates: unknown[] = [
+      properties.logo_url,
+      properties.logoUrl,
+      properties['logo url'],
+      properties['http://ontology.naas.ai/nexus/logo_url'],
+      properties['https://ontology.naas.ai/nexus/logo_url'],
+      (node as GraphNode & { logo_url?: unknown }).logo_url,
+      (node as GraphNode & { logoUrl?: unknown }).logoUrl,
+    ];
+
+    const found = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+    return typeof found === 'string' ? found : undefined;
+  }, []);
+
   const toVisNode = useCallback((node: GraphNode): Node => {
     const colors = BFO_COLORS[node.type as keyof typeof BFO_COLORS] || BFO_COLORS['Entity'];
+    const logoUrl = getNodeLogoUrl(node);
+    const hasLogo = Boolean(logoUrl);
+    const shape = hasLogo ? 'circularImage' : (node.properties?.shape as string) || 'dot';
+
     return {
       id: node.id,
       label: node.label,
@@ -75,12 +95,13 @@ export function VisNetwork({
         strokeWidth: 3,
         strokeColor: '#ffffff',
       },
-      shape: (node.properties?.shape as string) || 'dot',
+      shape,
+      ...(hasLogo ? { image: logoUrl } : {}),
       size: (node.properties?.size as number) || node.size || 25,
       x: node.x,
       y: node.y,
     };
-  }, []);
+  }, [getNodeLogoUrl]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const color = EDGE_COLORS[edge.type] || '#94a3b8';
