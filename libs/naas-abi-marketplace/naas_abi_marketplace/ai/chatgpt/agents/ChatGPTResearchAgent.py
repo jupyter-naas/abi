@@ -24,6 +24,7 @@ TOOLS = [
 class ChatGPTResponsesAgent(Agent):
     name: str = NAME
     description: str = DESCRIPTION
+    logo_url: str = AVATAR_URL
     tools: list = TOOLS
 
     @classmethod

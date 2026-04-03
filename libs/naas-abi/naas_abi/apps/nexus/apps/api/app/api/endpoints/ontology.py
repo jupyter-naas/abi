@@ -300,9 +300,9 @@ def get_uri_metadata(uri: str) -> dict:
     return result
 
 
-@cache(
-    lambda ontology_iri: f"ontology_metadata_{ontology_iri}", DataType.JSON, ttl=timedelta(days=1)
-)
+# @cache(
+#     lambda ontology_iri: f"ontology_metadata_{ontology_iri}", DataType.JSON, ttl=timedelta(days=1)
+# )
 def get_ontology_metadata(ontology_iri: str) -> dict:
     from naas_abi import ABIModule
     from rdflib.query import ResultRow
