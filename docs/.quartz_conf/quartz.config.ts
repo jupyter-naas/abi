@@ -6,8 +6,8 @@ const fromEnv = (key: string, fallback: string) => env[key] ?? fallback
 
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: fromEnv("SITE_TITLE", "Documentation"),
-    pageTitleSuffix: fromEnv("SITE_TITLE_SUFFIX", ""),
+    pageTitle: fromEnv("SITE_TITLE", "naas.ai Docs"),
+    pageTitleSuffix: fromEnv("SITE_TITLE_SUFFIX", " | naas.ai"),
     enableSPA: true,
     enablePopovers: true,
     analytics: {
@@ -20,11 +20,11 @@ const config: QuartzConfig = {
     theme: {
       fontOrigin: "googleFonts",
       cdnCaching: true,
-      typography: {
-        header: "Inter",
-        body: "Inter",
-        code: "JetBrains Mono",
-      },
+        typography: {
+          header: "Comfortaa",
+          body: "Comfortaa",
+          code: "JetBrains Mono",
+        },
       colors: {
         lightMode: {
           light: fromEnv("LIGHT_LIGHT", "#faf8f8"),
@@ -38,15 +38,15 @@ const config: QuartzConfig = {
           textHighlight: fromEnv("LIGHT_TEXT_HIGHLIGHT", "#fff23688"),
         },
         darkMode: {
-          light: fromEnv("DARK_LIGHT", "#161618"),
-          lightgray: fromEnv("DARK_LIGHTGRAY", "#393639"),
-          gray: fromEnv("DARK_GRAY", "#818cf8"),
-          darkgray: fromEnv("DARK_DARKGRAY", "#d4d4d4"),
-          dark: fromEnv("DARK_DARK", "#ebebec"),
-          secondary: fromEnv("DARK_SECONDARY", "#818cf8"),
-          tertiary: fromEnv("DARK_TERTIARY", "#818cf8"),
-          highlight: fromEnv("DARK_HIGHLIGHT", "rgba(143, 159, 169, 0.15)"),
-          textHighlight: fromEnv("DARK_TEXT_HIGHLIGHT", "#b3aa0288"),
+          light: fromEnv("DARK_LIGHT", "hsl(240, 4%, 11%)"),
+          lightgray: fromEnv("DARK_LIGHTGRAY", "hsl(0, 0%, 18%)"),
+          gray: fromEnv("DARK_GRAY", "#22c55e"),
+          darkgray: fromEnv("DARK_DARKGRAY", "hsl(0, 0%, 65%)"),
+          dark: fromEnv("DARK_DARK", "hsl(0, 0%, 98%)"),
+          secondary: fromEnv("DARK_SECONDARY", "#22c55e"),
+          tertiary: fromEnv("DARK_TERTIARY", "#4ade80"),
+          highlight: fromEnv("DARK_HIGHLIGHT", "rgba(34, 197, 94, 0.08)"),
+          textHighlight: fromEnv("DARK_TEXT_HIGHLIGHT", "rgba(34, 197, 94, 0.2)"),
         },
       },
     },

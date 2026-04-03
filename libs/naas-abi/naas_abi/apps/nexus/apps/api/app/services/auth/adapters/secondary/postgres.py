@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthUserRecord,
     PasswordResetTokenRecord,
 )
+from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_token
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -214,9 +215,14 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         )
 
     async def get_password_reset_token(self, token: str) -> PasswordResetTokenRecord | None:
+        token_hash = hash_token(token)
         result = await self.db.execute(
             select(PasswordResetTokenModel).where(
-                (PasswordResetTokenModel.token == token) & (PasswordResetTokenModel.used.is_(False))
+                (
+                    (PasswordResetTokenModel.token == token_hash)
+                    | (PasswordResetTokenModel.token == token)
+                )
+                & (PasswordResetTokenModel.used.is_(False))
             )
         )
         row = result.scalar_one_or_none()
