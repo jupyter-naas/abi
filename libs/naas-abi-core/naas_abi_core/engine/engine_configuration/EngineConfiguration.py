@@ -7,16 +7,16 @@ import yaml
 from jinja2 import Template
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
-    BusAdapterPythonQueueConfiguration,
     BusAdapterConfiguration,
+    BusAdapterPythonQueueConfiguration,
     BusServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
-    KeyValueAdapterPythonConfiguration,
     KeyValueAdapterConfiguration,
+    KeyValueAdapterPythonConfiguration,
     KeyValueServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
@@ -35,8 +35,8 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreSe
     TripleStoreServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreService import (
-    VectorStoreAdapterQdrantInMemoryConfiguration,
     VectorStoreAdapterConfiguration,
+    VectorStoreAdapterQdrantInMemoryConfiguration,
     VectorStoreServiceConfiguration,
 )
 from naas_abi_core.services.secret.Secret import Secret
@@ -171,18 +171,16 @@ class EngineConfiguration(BaseModel):
     default_agent: str = "naas_abi AbiAgent"
 
     def ensure_default_modules(self) -> None:
-        if not any(
-            m.path == "naas_abi_core.modules.templatablesparqlquery"
-            or m.module == "naas_abi_core.modules.templatablesparqlquery"
-            for m in self.modules
-        ):
-            self.modules.append(
-                ModuleConfig(
-                    module="naas_abi_core.modules.templatablesparqlquery",
-                    enabled=True,
-                    config={},
+        default_modules = [
+            "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_core.modules.bfo",
+            "naas_abi_core.modules.cco",
+        ]
+        for module in default_modules:
+            if not any(m.path == module or m.module == module for m in self.modules):
+                self.modules.append(
+                    ModuleConfig(module=module, enabled=True, config={})
                 )
-            )
 
     @model_validator(mode="after")
     def validate_modules(self) -> Self:
