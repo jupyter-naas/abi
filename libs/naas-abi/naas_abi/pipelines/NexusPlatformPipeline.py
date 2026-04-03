@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from typing import Dict, List
 
 from langchain_core.tools import BaseTool
 from naas_abi.ontologies.modules.NexusPlatformOntology import (
     Agent,
     AgentIntent,
+    AgentRole,
     AgentTool,
     GraphFilter,
     GraphView,
@@ -160,6 +160,7 @@ class NexusPlatformPipeline(Pipeline):
         class_path: str | None = None,
         has_intent: list[AgentIntent | URIRef | str] | None = None,
         has_tool: list[AgentTool | URIRef | str] | None = None,
+        has_agent_role: list[AgentRole | URIRef | str] | None = None,
     ) -> Agent:
         agent = Agent(label=label)
         if description is not None:
@@ -178,14 +179,42 @@ class NexusPlatformPipeline(Pipeline):
             agent.has_intent = has_intent
         if has_tool is not None:
             agent.has_tool = has_tool
+        if has_agent_role is not None:
+            agent.has_agent_role = has_agent_role
         return agent
 
     def initialize_nexus_agents(self) -> Graph:
         """Ensure the Nexus graph is populated with Agent instances."""
         inserted_graph = Graph()
 
-        # Add agents from engine modules to the API
+        # Create agent roles in nexus graph
+        supervisor_role = AgentRole(
+            label="Supervisor Agent",
+            description="Agent capable of orchestrating other agents.",
+        )
+        inserted_graph += supervisor_role.rdf()
+        core_role = AgentRole(
+            label="Core Agent",
+            description="Agent capable of performing core tasks.",
+        )
+        inserted_graph += core_role.rdf()
+        ai_role = AgentRole(
+            label="AI Agent",
+            description="Agent to demonstrate AI provider capabilities.",
+        )
+        inserted_graph += ai_role.rdf()
+        domain_role = AgentRole(
+            label="Domain Agent",
+            description="Agent capable of performing tasks related to the domain.",
+        )
+        inserted_graph += domain_role.rdf()
+        application_role = AgentRole(
+            label="Application Agent",
+            description="Agent to chat with AI model.",
+        )
+        inserted_graph += application_role.rdf()
 
+        # Add agents from engine modules to the API
         from naas_abi import ABIModule
         from naas_abi_core.services.agent.Agent import Agent as RuntimeAgent
 
@@ -208,7 +237,9 @@ class NexusPlatformPipeline(Pipeline):
         logger.debug(f"Nexus agents: {nexus_agents}")
         nexus_agent_class_paths = {agent["class_path"] for agent in nexus_agents}
         for agent_cls in agents:
-            class_path = f"{agent_cls.__module__}/{agent_cls.__name__}"
+            module_name = str(agent_cls.__module__)
+            class_name = str(agent_cls.__name__)
+            class_path = f"{module_name}/{class_name}"
             if class_path in nexus_agent_class_paths:
                 continue
 
@@ -246,6 +277,18 @@ class NexusPlatformPipeline(Pipeline):
                     inserted_graph += agent_intent.rdf()
                     agent_intents.append(agent_intent)
 
+            agent_roles: list = []
+            if "naas_abi." in module_name:
+                agent_roles.append(supervisor_role)
+            elif "naas_abi_core." in module_name:
+                agent_roles.append(core_role)
+            elif "naas_abi_marketplace.ai." in module_name:
+                agent_roles.append(ai_role)
+            elif "naas_abi_marketplace.applications." in module_name:
+                agent_roles.append(application_role)
+            elif "naas_abi_marketplace.domains." in module_name:
+                agent_roles.append(domain_role)
+
             agent = self.create_agent_to_nexus_graph(
                 label=name,
                 description=description,
@@ -256,6 +299,7 @@ class NexusPlatformPipeline(Pipeline):
                 class_path=class_path,
                 has_intent=agent_intents,
                 has_tool=agent_tools,
+                has_agent_role=agent_roles,
             )
             inserted_graph += agent.rdf()
 
@@ -297,23 +341,23 @@ class NexusPlatformPipeline(Pipeline):
         )
         inserted_graph += agent_view.rdf()
 
-        # Graph view
-        graph_filter = GraphFilter(
-            label="Filter Nexus Graph Views",
-            predicate_uri=RDF.type,
-            object_uri=URIRef(GraphView._class_uri),
-        )
-        inserted_graph += graph_filter.rdf()
+        # # Graph view
+        # graph_filter = GraphFilter(
+        #     label="Filter Nexus Graph Views",
+        #     predicate_uri=RDF.type,
+        #     object_uri=URIRef(GraphView._class_uri),
+        # )
+        # inserted_graph += graph_filter.rdf()
 
-        graph_view = self.create_graph_view_to_nexus_graph(
-            label="Graph View",
-            has_graph_filter=[graph_filter],
-            includes_knowledge_graph=[
-                self.__nexus_graph_uri,
-                "http://ontology.naas.ai/graph/schema",
-            ],
-        )
-        inserted_graph += graph_view.rdf()
+        # graph_view = self.create_graph_view_to_nexus_graph(
+        #     label="Graph View",
+        #     has_graph_filter=[graph_filter],
+        #     includes_knowledge_graph=[
+        #         self.__nexus_graph_uri,
+        #         "http://ontology.naas.ai/graph/schema",
+        #     ],
+        # )
+        # inserted_graph += graph_view.rdf()
 
         self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
         return inserted_graph
@@ -336,7 +380,7 @@ class NexusPlatformPipeline(Pipeline):
 
         graph += self.initialize_nexus_graphs()
         graph += self.initialize_nexus_agents()
-        # graph += self.initialize_nexus_graph_views()
+        graph += self.initialize_nexus_graph_views()
         return graph
 
     def as_tools(self) -> list[BaseTool]:
