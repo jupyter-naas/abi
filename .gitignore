@@ -109,8 +109,11 @@ coverage.xml
 htmlcov/
 secrets.yaml
 
-# Local Quartz docs build (make docs)
-.quartz-local/
+# Docusaurus build output
+docs/web/build/
+docs/web/.docusaurus/
+docs/web/node_modules/
+
 
 # Docusaurus
 website/node_modules
