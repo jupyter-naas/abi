@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.1 (2026-04-03)
+
+### Bug Fixes
+
+- Remove graph saving logic from NexusPlatformPipeline
+  ([`193768e`](https://github.com/jupyter-naas/abi/commit/193768ebe2d999cc836df051f96aa90e8dc87f74))
+
+
 ## v1.16.0 (2026-04-02)
 
 ### Bug Fixes
