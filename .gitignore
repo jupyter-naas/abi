@@ -122,6 +122,10 @@ docs/web/build/
 docs/web/.docusaurus/
 docs/web/node_modules/
 
+# Legacy / deprecated doc systems (Quartz, Next.js legacy site)
+docs/.quartz_conf/
+docs/legacy/
+docs/next/
 
 # Docusaurus
 website/node_modules
