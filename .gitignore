@@ -96,12 +96,12 @@ storage/vectorstore/*
 *.heic
 
 # Allow docs static assets
-!docs/web/static/**/*.png
-!docs/web/static/**/*.jpg
-!docs/web/static/**/*.gif
-!docs/web/static/**/*.jpeg
-!docs/web/static/**/*.webp
-!docs/web/static/**/*.svg
+!docs/site/static/**/*.png
+!docs/site/static/**/*.jpg
+!docs/site/static/**/*.gif
+!docs/site/static/**/*.jpeg
+!docs/site/static/**/*.webp
+!docs/site/static/**/*.svg
 
 # Keep demo data and assets in nexus
 !libs/naas-abi/naas_abi/apps/nexus/demo/**
@@ -118,9 +118,9 @@ htmlcov/
 secrets.yaml
 
 # Docusaurus build output
-docs/web/build/
-docs/web/.docusaurus/
-docs/web/node_modules/
+docs/site/build/
+docs/site/.docusaurus/
+docs/site/node_modules/
 
 # Legacy / deprecated doc systems (Quartz, Next.js legacy site)
 docs/.quartz_conf/

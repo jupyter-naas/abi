@@ -950,18 +950,18 @@ DOCS_PORT := 3003
 # Serve docs locally with Docusaurus + live reload at http://localhost:$(DOCS_PORT)
 docs:
 	@echo "→ Starting docs dev server at http://localhost:$(DOCS_PORT)..."
-	@cd docs/web && npm install --silent && npm run start -- --port $(DOCS_PORT)
+	@cd docs/site && npm install --silent && npm run start -- --port $(DOCS_PORT)
 
 # Build docs for production
 docs-build:
 	@echo "→ Building docs..."
-	@cd docs/web && npm install --silent && npm run build
+	@cd docs/site && npm install --silent && npm run build
 
 # Clean Docusaurus cache and build output
 docs-clean:
 	@echo "→ Cleaning docs build..."
-	@cd docs/web && npm run clear
-	@rm -rf docs/web/build
+	@cd docs/site && npm run clear
+	@rm -rf docs/site/build
 	@echo "Done."
 
 # Generate ontology documentation
