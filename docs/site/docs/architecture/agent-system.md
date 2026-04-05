@@ -5,7 +5,7 @@ title: "Ontology-Driven AI System"
 
 # Ontology-Driven AI System
 
-ABI is an **AI Operating System** — build your own AI using ontologies as the unifying field connecting data, models, workflows, and systems.
+ABI is an **AI Operating System**: build your own AI using ontologies as the unifying field connecting data, models, workflows, and systems.
 
 ---
 
@@ -13,13 +13,13 @@ ABI is an **AI Operating System** — build your own AI using ontologies as the 
 
 Most AI systems treat data, models, and workflows as separate concerns stitched together with glue code. ABI takes a different approach: **ontologies are the unifying field**.
 
-An ontology is a formal, machine-readable description of the world — what entities exist, how they relate, and what operations can be performed on them. When your data, agents, workflows, and integrations all speak the same ontological language, they become composable by design rather than by accident.
+An ontology is a formal, machine-readable description of the world: what entities exist, how they relate, and what operations can be performed on them. When your data, agents, workflows, and integrations all speak the same ontological language, they become composable by design rather than by accident.
 
 ```bash
      Data sources          Knowledge Graph (RDF/OWL)
      ─────────────  ──────────────────────────────────────
      CRM, ERP,      Entities, relationships, facts, inferred
-     APIs, files    knowledge — queryable via SPARQL
+     APIs, files    knowledge, queryable via SPARQL
 
           ↕                         ↕
 
@@ -30,7 +30,7 @@ An ontology is a formal, machine-readable description of the world — what enti
      invoke tools               by events or schedules
 ```
 
-Everything in ABI — agents, pipelines, workflows, integrations — operates on the same shared knowledge graph. There is no ETL to a vector store, no separate "AI layer". The ontology IS the integration layer.
+Everything in ABI (agents, pipelines, workflows, integrations) operates on the same shared knowledge graph. There is no ETL to a vector store, no separate "AI layer". The ontology IS the integration layer.
 
 ---
 
@@ -58,7 +58,7 @@ You bring the domain. ABI provides the runtime.
 Agents are the user-facing interface to the system. Each agent is a LangGraph state machine with:
 
 - A **system prompt** defining its role and behavior
-- A **tool list** — workflows, integrations, or other agents it can invoke
+- A **tool list** (workflows, integrations, or other agents it can invoke)
 - An **intent declaration** controlling how the supervisor routes to it
 - Optional **persistent memory** (PostgreSQL-backed conversation history)
 
@@ -70,9 +70,9 @@ Each agent declares a scope:
 
 | Scope | Behavior |
 |---|---|
-| `supervisor` | Visible in the default routing table — production agents users can access directly |
-| `integration` | Available for direct invocation, excluded from supervisor routing — for agents requiring specific credentials |
-| `research` | Excluded from production routing — experimental or evaluation agents |
+| `supervisor` | Visible in the default routing table: production agents users can access directly |
+| `integration` | Available for direct invocation, excluded from supervisor routing, for agents requiring specific credentials |
+| `research` | Excluded from production routing: experimental or evaluation agents |
 
 ### Agent composition
 
@@ -91,7 +91,7 @@ SupervisorAgent
 
 | Agent | Role |
 |---|---|
-| `AbiAgent` | Root supervisor — routes all queries via intent matching |
+| `AbiAgent` | Root supervisor: routes all queries via intent matching |
 | `OntologyEngineerAgent` | Designs and extends ontologies using BFO/CCO |
 | `KnowledgeGraphBuilderAgent` | Converts unstructured descriptions into RDF triples |
 | `EntityToSPARQLAgent` | Converts natural-language queries into SPARQL |
@@ -100,7 +100,7 @@ SupervisorAgent
 
 ## Model layer
 
-All agents accept a `ChatModel` interface, not a specific provider. The default uses **OpenRouter** — one API key gives access to every supported model.
+All agents accept a `ChatModel` interface, not a specific provider. The default uses **OpenRouter**; one API key gives access to every supported model.
 
 For local or air-gapped deployments, models are served via **Ollama**:
 
@@ -128,8 +128,8 @@ Bearer token authentication is required for all REST endpoints.
 
 ## Further reading
 
-- [The ABI Stack](the-stack) — the four packages and how they fit together
-- [Knowledge Graph](knowledge-graph) — ontologies, RDF, and SPARQL in depth
-- [Creating an Agent](../capabilities/agents/creating-an-agent) — step-by-step guide
-- [Agent.New() Pattern](../updates/20260305_agent-class-new-pattern) — ADR
-- [Intent Scope Routing](../updates/20250925_intent-scope-agent-routing) — ADR
+- [The ABI Stack](the-stack): the four packages and how they fit together
+- [Knowledge Graph](knowledge-graph): ontologies, RDF, and SPARQL in depth
+- [Creating an Agent](../capabilities/agents/creating-an-agent): step-by-step guide
+- [Agent.New() Pattern](/updates/agent-class-new-pattern): ADR
+- [Intent Scope Routing](/updates/intent-scope-agent-routing): ADR
