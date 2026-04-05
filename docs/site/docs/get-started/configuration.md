@@ -77,16 +77,26 @@ global_config:
 
 ## Services
 
-### Triple Store (default: Apache Jena Fuseki)
+### Triple Store
+
+Default in the engine is **`oxigraph_embedded`** (embedded Oxigraph on disk under `storage/triplestore/oxigraph`). Full Docker setups that load **`config.local.yaml`** usually use **`apache_jena_tdb2`** (Apache Jena Fuseki). Other adapters include `oxigraph` (HTTP), `fs`, `aws_neptune`, and `object_storage`.
 
 ```yaml
 services:
   triple_store:
     triple_store_adapter:
-      adapter: "fuseki"         # or "fs", "oxigraph", "neptune"
+      adapter: "oxigraph_embedded"
       config:
-        endpoint: "http://localhost:3030"
-        dataset: "abi"
+        store_path: "storage/triplestore/oxigraph"
+        graph_base_iri: "http://ontology.naas.ai/graph/default"
+```
+
+Apache Jena Fuseki (TDB2) over HTTP:
+
+```yaml
+      adapter: "apache_jena_tdb2"
+      config:
+        jena_tdb2_url: "http://localhost:3030/ds"
 ```
 
 Filesystem adapter (no Docker required, dev/test only):
@@ -100,28 +110,43 @@ Filesystem adapter (no Docker required, dev/test only):
 
 ### Vector Store
 
+Default is **`qdrant_in_memory`** (persistent path under `storage/vectorstore/qdrant` with an in-process client). Use **`qdrant`** when pointing at a remote Qdrant service.
+
 ```yaml
 services:
   vector_store:
     vector_store_adapter:
-      adapter: "qdrant"             # or "qdrant_in_memory"
+      adapter: "qdrant_in_memory"   # default
       config:
-        url: "http://localhost:6333"
-        collection_name: "abi"
+        storage_path: "storage/vectorstore/qdrant"
+        timeout: 300
+```
+
+Remote Qdrant example:
+
+```yaml
+      adapter: "qdrant"
+      config:
+        host: "localhost"
+        port: 6333
 ```
 
 ### Object Storage
+
+Default is **`fs`** with `base_path` **`storage/datastore`**. Alternatives: **`s3`**, **`naas`**.
 
 ```yaml
 services:
   object_storage:
     object_storage_adapter:
-      adapter: "fs"                 # or "s3", "naas"
+      adapter: "fs"
       config:
         base_path: "storage/datastore"
 ```
 
 ### Secret
+
+Default is a single **`dotenv`** adapter reading **`.env`** (path can be overridden). Multiple adapters are supported; secrets are resolved in order.
 
 ```yaml
 services:
@@ -132,15 +157,15 @@ services:
           path: ".env"
 ```
 
-Multiple adapters are supported - secrets are resolved in order.
-
 ### Message Bus
+
+Default is **`python_queue`** (SQLite-backed queue under `storage/bus/`). Use **`rabbitmq`** for production deployments.
 
 ```yaml
 services:
   bus:
     bus_adapter:
-      adapter: "python_queue"       # or "rabbitmq"
+      adapter: "python_queue"
       config: {}
 ```
 
@@ -157,15 +182,19 @@ RabbitMQ for production:
 
 ### Key-Value Store
 
+Default is **`python`** (SQLite-backed store under `storage/kv/`). Use **`redis`** when you need a shared Redis instance.
+
 ```yaml
 services:
   kv:
     kv_adapter:
-      adapter: "python"             # or "redis"
+      adapter: "python"
       config: {}
 ```
 
 ### Cache
+
+Optional; add a `cache` section when you need a dedicated cache layer. A typical local choice is **`fs`** with a path under `storage/`.
 
 ```yaml
 services:

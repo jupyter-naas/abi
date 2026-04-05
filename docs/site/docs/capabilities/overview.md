@@ -36,4 +36,4 @@ Applications (10)        → Nexus (React) + REST API + MCP
 Deploy (11)              → Docker + Kubernetes + Helm
 ```
 
-Each capability is independently configurable — swap any component via `config.yaml` without touching application code. See [Configuration Reference](../get-started/configuration) for adapter options.
+Each capability is independently configurable: swap any component via `config.yaml` without touching application code. See [Configuration Reference](../get-started/configuration) for adapter options.
