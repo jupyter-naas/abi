@@ -683,13 +683,13 @@ async def get_ontology_overview_graph(
                 }
             """
 
-            subclass_query = """
-                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-                SELECT ?childClass ?parentClass WHERE {
-                    ?childClass rdfs:subClassOf ?parentClass .
-                    FILTER(isIRI(?childClass) && isIRI(?parentClass))
-                }
-            """
+            # subclass_query = """
+            #     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            #     SELECT ?childClass ?parentClass WHERE {
+            #         ?childClass rdfs:subClassOf ?parentClass .
+            #         FILTER(isIRI(?childClass) && isIRI(?parentClass))
+            #     }
+            # """
 
             for path in target_paths:
                 graph = _load_ontology_graph(path)
