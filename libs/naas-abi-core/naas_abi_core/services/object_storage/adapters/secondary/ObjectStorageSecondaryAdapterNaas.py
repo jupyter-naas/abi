@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from queue import Queue
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import pydash
 import requests
@@ -129,3 +129,10 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
         assert self.__s3_adapter is not None
 
         return self.__s3_adapter.list_objects(prefix, queue)
+
+    def get_object_metadata(self, prefix: str, key: str) -> Dict[str, Any]:
+        self.ensure_credentials()
+
+        assert self.__s3_adapter is not None
+
+        return self.__s3_adapter.get_object_metadata(prefix, key)
