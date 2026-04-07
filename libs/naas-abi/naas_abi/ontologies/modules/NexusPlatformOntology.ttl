@@ -12,10 +12,10 @@
 
 <http://ontology.naas.ai/abi/nexus/NexusPlatformOntology> a owl:Ontology ;
   owl:imports
-    <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ,
-    <https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/heads/develop/src/cco-modules/AgentOntology.ttl> ,
-    <https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/heads/develop/src/cco-modules/InformationEntityOntology.ttl> ,
-    <https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/heads/develop/src/cco-modules/EventOntology.ttl> ;
+    <http://purl.obolibrary.org/obo/bfo.owl> ,
+    <https://www.commoncoreontologies.org/AgentOntology> ,
+    <https://www.commoncoreontologies.org/InformationEntityOntology> ,
+    <https://www.commoncoreontologies.org/EventOntology> ;
   dc:title "Nexus Platform Ontology"@en ;
   dc:description "Ontology for core continuant concepts of the Nexus platform."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
