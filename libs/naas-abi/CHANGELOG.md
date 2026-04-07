@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.3 (2026-04-07)
+
+### Bug Fixes
+
+- Add static method in agents + update pipeline
+  ([`5a8aafc`](https://github.com/jupyter-naas/abi/commit/5a8aafcb84d51182e283ea251cb2aba98de0c0de))
+
+
 ## v1.16.2 (2026-04-03)
 
 ### Bug Fixes
