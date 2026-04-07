@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.9.0 (2026-04-07)
+
+### Bug Fixes
+
+- Add logo to agent + rm cache
+  ([`26d5f28`](https://github.com/jupyter-naas/abi/commit/26d5f28b1ef317409f946bf76c9a7664113ef23a))
+
+- Init sec gov module + create integration with company tickers
+  ([`d9d0547`](https://github.com/jupyter-naas/abi/commit/d9d0547fb3de06c0b547c104f7a70912f2ed27fe))
+
+### Features
+
+- Add routes submissions, tickers with exchange to integration
+  ([`64fe976`](https://github.com/jupyter-naas/abi/commit/64fe976538b8aa4e101e52eb74bf06f6d0f94d93))
+
+- Init organization module with ontology
+  ([`47e0550`](https://github.com/jupyter-naas/abi/commit/47e0550c93ee90437528cd0e244524acfcb422cb))
+
+
 ## v1.8.2 (2026-04-07)
 
 ### Bug Fixes
