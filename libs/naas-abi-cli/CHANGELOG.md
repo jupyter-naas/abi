@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v1.24.1 (2026-04-07)
+
+### Bug Fixes
+
+- Update uv.lock
+  ([`14e2af0`](https://github.com/jupyter-naas/abi/commit/14e2af0181a4c3f3fb10143c882a4b36ddd07a2f))
+
+- Update uv.lock
+  ([`5064ad7`](https://github.com/jupyter-naas/abi/commit/5064ad70649dc9e116f5b169224bb5879c82e97d))
+
+### Chores
+
+- Update .gitignore, enhance security checks in Makefile, and refine Python version setup in CI
+  workflow
+  ([`fbb7073`](https://github.com/jupyter-naas/abi/commit/fbb7073adf2ec04d71b013422122ae2321d96346))
+
+
 ## v1.24.0 (2026-03-30)
 
 ### Features
