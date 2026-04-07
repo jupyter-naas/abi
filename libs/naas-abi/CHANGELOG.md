@@ -2,6 +2,58 @@
 
 <!-- version list -->
 
+## v1.17.0 (2026-04-07)
+
+### Bug Fixes
+
+- Add logo to agent + rm cache
+  ([`26d5f28`](https://github.com/jupyter-naas/abi/commit/26d5f28b1ef317409f946bf76c9a7664113ef23a))
+
+- All ontologies not displayed in ontology section
+  ([`2bccf8e`](https://github.com/jupyter-naas/abi/commit/2bccf8e728ebe249da33ab9e7c72c4f60c8004f1))
+
+- Comment query
+  ([`5554de4`](https://github.com/jupyter-naas/abi/commit/5554de43c1ede1160899cba5df1e9500eedb190d))
+
+- Display class and object prop labels
+  ([`7266403`](https://github.com/jupyter-naas/abi/commit/7266403989bc5eee0c8e27861f9ed529fd4913c6))
+
+- Display ontology hower and active bar
+  ([`c0d2953`](https://github.com/jupyter-naas/abi/commit/c0d2953a5cbd1bb171ea627f47409a3a34c30fb6))
+
+- Load ontologies
+  ([`8f17414`](https://github.com/jupyter-naas/abi/commit/8f1741414030f130f3f15888386a35f12d065305))
+
+- Ontology display overview
+  ([`6fb4cae`](https://github.com/jupyter-naas/abi/commit/6fb4caeb77ef6150a6d958980f1883e3482744d2))
+
+- Ontology graph loading errors
+  ([`a9c9e3a`](https://github.com/jupyter-naas/abi/commit/a9c9e3a69640e8d6ad9ad5b3fead1e60ccee5a9e))
+
+- Ontology imports error
+  ([`c0747c4`](https://github.com/jupyter-naas/abi/commit/c0747c41727ff31627a6c51daa5dff014f8ebf2d))
+
+- Remove obj prop role
+  ([`2442820`](https://github.com/jupyter-naas/abi/commit/2442820379848180756c0da12ecd2c5ae28322f5))
+
+- Rm ontology triples in templatable sparql query tool
+  ([`379e097`](https://github.com/jupyter-naas/abi/commit/379e09717933a2b6d587ffbddd1b9950b92d4cfa))
+
+- Ruff errors
+  ([`cfd07e1`](https://github.com/jupyter-naas/abi/commit/cfd07e12d5c1b3cbd51685456eb8088c7fa13701))
+
+- Select classes or object properties
+  ([`359aa06`](https://github.com/jupyter-naas/abi/commit/359aa06f2111e42a494aec6748ead50036078dc6))
+
+### Features
+
+- Add agent role to kg + ontology
+  ([`17c2fad`](https://github.com/jupyter-naas/abi/commit/17c2fadc1ba7ee79d600d38058729c9ee968d511))
+
+- Display logo url
+  ([`9f58112`](https://github.com/jupyter-naas/abi/commit/9f58112045e46471ca9c79a2277cbe47d914967c))
+
+
 ## v1.16.3 (2026-04-07)
 
 ### Bug Fixes
