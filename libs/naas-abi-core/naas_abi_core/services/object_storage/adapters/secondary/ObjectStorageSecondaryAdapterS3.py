@@ -1,5 +1,5 @@
 from queue import Queue
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -192,3 +192,47 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                         if queue:
                             queue.put(prefix_key)
         return objects
+
+    def get_object_metadata(self, prefix: str, key: str) -> Dict[str, Any]:
+        """Get object metadata from S3.
+
+        Args:
+            prefix (str): Prefix/folder path
+            key (str): Object key name
+
+        Returns:
+            Dict[str, Any]: Object metadata including size and modified date
+        """
+        self.__object_exists(prefix, key)
+
+        response = self.s3_client.head_object(
+            Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key)
+        )
+
+        last_modified = response.get("LastModified")
+        last_modified_iso = last_modified.isoformat() if last_modified else None
+
+        etag = response.get("ETag", "").strip('"')
+        md5 = etag if etag and "-" not in etag else None
+
+        full_key = self.__get_full_key(prefix, key)
+        file_path = f"s3://{self.bucket_name}/{full_key}" if full_key else f"s3://{self.bucket_name}"
+
+        return {
+            "file_path": file_path,
+            "file_name": key.split("/")[-1] if key else "",
+            "file_size_bytes": response.get("ContentLength", 0),
+            # S3 doesn't expose created/accessed times via HEAD; keep keys but allow nulls.
+            "created_time": None,
+            "modified_time": last_modified_iso,
+            "accessed_time": None,
+            "is_file": True,
+            "is_directory": False,
+            "permissions": None,
+            "mime_type": response.get("ContentType", "") or None,
+            "encoding": None,
+            # ETag is MD5 only for single-part uploads; otherwise unknown.
+            "md5": md5,
+            "sha1": None,
+            "sha256": None,
+        }
