@@ -1436,7 +1436,9 @@ function OntologyOverviewView({
               {/* List of relations (edges) */}
               <div className="rounded-lg border bg-background">
                 <div className="border-b px-4 py-3">
-                  <h3 className="text-sm font-medium">Object Properties</h3>
+                  <h3 className="text-sm font-medium">
+                    {isAllOntologiesOverview ? 'Imports' : 'Object Properties'}
+                  </h3>
                   <p className="text-xs text-muted-foreground">
                     {filteredRelations.length} of {graphEdges.length}
                   </p>

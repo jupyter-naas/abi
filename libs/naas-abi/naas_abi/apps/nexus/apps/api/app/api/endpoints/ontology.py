@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user
 from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, Field
 from rdflib import Graph
 from rdflib.namespace import OWL, RDF, RDFS
@@ -156,6 +157,10 @@ class ImportRequest(BaseModel):
 
 # In-memory storage (replace with database later)
 ontology_items: list[OntologyItem] = []
+
+
+def get_triple_store_service() -> TripleStoreService:
+    return ABIModule.get_instance().engine.services.triple_store
 
 
 def _load_ontology_graph(ontology_path: str, add_imports: bool = False) -> Graph:
@@ -629,7 +634,11 @@ async def get_ontology_overview_graph(
     ontology_path: str | None = Query(None, alias="ontology_path"),
 ) -> OntologyOverviewGraph:
     """Return ontology dependency graph based on owl:imports relations."""
+    from rdflib import Graph
     from rdflib.query import ResultRow
+
+    # store = get_triple_store_service()
+    all_graphs = Graph()
 
     try:
         ontologies = await list_ontology_files()
@@ -682,14 +691,6 @@ async def get_ontology_overview_graph(
                     }
                 }
             """
-
-            # subclass_query = """
-            #     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            #     SELECT ?childClass ?parentClass WHERE {
-            #         ?childClass rdfs:subClassOf ?parentClass .
-            #         FILTER(isIRI(?childClass) && isIRI(?parentClass))
-            #     }
-            # """
 
             for path in target_paths:
                 graph = _load_ontology_graph(path)
@@ -812,71 +813,6 @@ async def get_ontology_overview_graph(
                         },
                     )
 
-                # for row in graph.query(subclass_query):
-                #     assert isinstance(row, ResultRow)
-                #     child_class = str(row.get("childClass")) if row.get("childClass") else ""
-                #     parent_class = str(row.get("parentClass")) if row.get("parentClass") else ""
-                #     if not child_class or not parent_class:
-                #         continue
-
-                #     child_data = get_uri_metadata(child_class) if child_class else None
-                #     child_label = child_data.get("label", "Unknown") if child_data else None
-                #     child_type = child_data.get("subClassOf") if child_data else None
-                #     child_type_data = get_uri_metadata(child_type) if child_type else None
-                #     child_type_label = (
-                #         child_type_data.get("label", "Unknown") if child_type_data else None
-                #     )
-
-                #     parent_data = get_uri_metadata(parent_class) if parent_class else None
-                #     parent_label = parent_data.get("label", "Unknown") if parent_data else None
-                #     parent_type = parent_data.get("subClassOf") if parent_data else None
-                #     parent_type_data = get_uri_metadata(parent_type) if parent_type else None
-                #     parent_type_label = (
-                #         parent_type_data.get("label", "Unknown") if parent_type_data else None
-                #     )
-
-                #     if child_class not in classes_by_iri:
-                #         classes_by_iri[child_class] = OntologyOverviewGraphNode(
-                #             id=child_class,
-                #             label=child_label,
-                #             type=child_type_label,
-                #             properties={
-                #                 "iri": child_class,
-                #                 "definition": child_data.get("definition"),
-                #                 "parent_iri": child_type,
-                #                 "parent_label": child_type_label,
-                #             },
-                #         )
-                #     if parent_class not in classes_by_iri:
-                #         classes_by_iri[parent_class] = OntologyOverviewGraphNode(
-                #             id=parent_class,
-                #             label=parent_label,
-                #             type=parent_type_label,
-                #             properties={
-                #                 "iri": parent_class,
-                #                 "definition": parent_data.get("definition"),
-                #                 "parent_iri": parent_type,
-                #                 "parent_label": parent_type_label,
-                #             },
-                #         )
-
-                #     edge_id = f"{child_class}|is-a|{parent_class}"
-                #     if edge_id in edges_by_id:
-                #         continue
-                #     edges_by_id[edge_id] = OntologyOverviewGraphEdge(
-                #         id=edge_id,
-                #         source=child_class,
-                #         target=parent_class,
-                #         type="is a",
-                #         label="is a",
-                #         properties={
-                #             "relation_kind": "subclass_of",
-                #             "iri": str(RDFS.subClassOf),
-                #             "definition": "Subclass relationship between two classes.",
-                #             "parent_property_iri": "",
-                #         },
-                #     )
-
             nodes = sorted(classes_by_iri.values(), key=lambda node: node.label.lower())
             edges = sorted(edges_by_id.values(), key=lambda edge: edge.label.lower())
             return OntologyOverviewGraph(nodes=nodes, edges=edges)
@@ -885,17 +821,6 @@ async def get_ontology_overview_graph(
         ontologies_by_iri: dict[str, OntologyOverviewGraphNode] = {}
         edges_by_id = {}
 
-        imports_query = """
-            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-            PREFIX owl: <http://www.w3.org/2002/07/owl#>
-            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            SELECT ?sourceOntology ?targetOntology WHERE {
-                ?sourceOntology rdf:type owl:Ontology .
-                ?sourceOntology owl:imports ?targetOntology .
-                FILTER(isIRI(?sourceOntology) && isIRI(?targetOntology))
-            }
-        """
-
         def _label_from_iri(iri: str) -> str:
             if "#" in iri:
                 return iri.rsplit("#", 1)[-1]
@@ -903,6 +828,9 @@ async def get_ontology_overview_graph(
 
         for path in target_paths:
             graph = _load_ontology_graph(path)
+
+            # Add graph to all graphs
+            all_graphs += graph
 
             subjects = graph.subjects(RDF.type, OWL.Ontology)
 
@@ -947,50 +875,66 @@ async def get_ontology_overview_graph(
                     type="Ontology",
                     properties=properties,
                 )
+                logger.debug(f"Adding ontology to graph: {ontology_iri} (ontology: {path})")
 
-            for row in graph.query(imports_query):
-                assert isinstance(row, ResultRow)
-                source_iri = str(row.get("sourceOntology")) if row.get("sourceOntology") else ""
-                target_iri = str(row.get("targetOntology")) if row.get("targetOntology") else ""
-                if not source_iri or not target_iri:
-                    continue
+        imports_query = """
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            SELECT ?sourceOntology ?targetOntology WHERE {
+                ?sourceOntology rdf:type owl:Ontology .
+                ?sourceOntology owl:imports ?targetOntology .
+                FILTER(isIRI(?sourceOntology) && isIRI(?targetOntology))
+            }
+        """
 
-                if source_iri not in ontologies_by_iri:
-                    ontologies_by_iri[source_iri] = OntologyOverviewGraphNode(
-                        id=source_iri,
-                        label=_label_from_iri(source_iri),
-                        type="Imports",
-                        properties={
-                            "iri": source_iri,
-                        },
-                    )
-                if target_iri not in ontologies_by_iri:
-                    ontologies_by_iri[target_iri] = OntologyOverviewGraphNode(
-                        id=target_iri,
-                        label=_label_from_iri(target_iri),
-                        type="Imports",
-                        properties={
-                            "iri": target_iri,
-                        },
-                    )
+        for row in all_graphs.query(imports_query):
+            assert isinstance(row, ResultRow)
+            source_iri = str(row.get("sourceOntology")) if row.get("sourceOntology") else ""
+            target_iri = str(row.get("targetOntology")) if row.get("targetOntology") else ""
+            if not source_iri or not target_iri:
+                continue
 
-                edge_id = f"{source_iri}|imports|{target_iri}"
-                if edge_id in edges_by_id:
-                    continue
-
-                edges_by_id[edge_id] = OntologyOverviewGraphEdge(
-                    id=edge_id,
-                    source=source_iri,
-                    target=target_iri,
-                    type="imports",
-                    label="imports",
+            # Create imports nodes if not existing as ontology
+            if not ontologies_by_iri.get(source_iri):
+                logger.warning(f"Creating imports node for '{source_iri}' (ontology: {path})")
+                ontologies_by_iri[source_iri] = OntologyOverviewGraphNode(
+                    id=source_iri,
+                    label=_label_from_iri(source_iri),
+                    type="Imports",
                     properties={
-                        "relation_kind": "imports",
-                        "iri": str(OWL.imports),
-                        "definition": "Ontology import dependency.",
-                        "parent_property_iri": "",
+                        "iri": source_iri,
                     },
                 )
+            if not ontologies_by_iri.get(target_iri):
+                logger.warning(f"Creating imports node for '{target_iri}' (ontology: {path})")
+                ontologies_by_iri[target_iri] = OntologyOverviewGraphNode(
+                    id=target_iri,
+                    label=_label_from_iri(target_iri),
+                    type="Imports",
+                    properties={
+                        "iri": target_iri,
+                    },
+                )
+
+            # Create relationship edge if not existing
+            edge_id = f"{source_iri}|imports|{target_iri}"
+            if edge_id in edges_by_id:
+                continue
+
+            edges_by_id[edge_id] = OntologyOverviewGraphEdge(
+                id=edge_id,
+                source=source_iri,
+                target=target_iri,
+                type="imports",
+                label="imports",
+                properties={
+                    "relation_kind": "imports",
+                    "iri": str(OWL.imports),
+                    "definition": "Ontology import dependency.",
+                    "parent_property_iri": "",
+                },
+            )
 
         nodes = sorted(ontologies_by_iri.values(), key=lambda node: node.label.lower())
         edges = sorted(edges_by_id.values(), key=lambda edge: edge.label.lower())
