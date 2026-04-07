@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v1.22.0 (2026-04-07)
+
+### Bug Fixes
+
+- Import bfo in template sparql onto
+  ([`c033a1c`](https://github.com/jupyter-naas/abi/commit/c033a1cb13b712f73b6f86b7ebe9f35143ea5cac))
+
+- Load core modules
+  ([`6eabc88`](https://github.com/jupyter-naas/abi/commit/6eabc888854a7fe3336a2668e34f55f20841a464))
+
+- Rm onto2py files
+  ([`60dae0c`](https://github.com/jupyter-naas/abi/commit/60dae0cc2e2ab0e4771e1d91613fc191701db9b9))
+
+### Features
+
+- Add defintion and examples
+  ([`9814afb`](https://github.com/jupyter-naas/abi/commit/9814afba05b520105d10ba19f8700c2cf06611a8))
+
+- Init bfo module
+  ([`310e585`](https://github.com/jupyter-naas/abi/commit/310e585aeafb89bda4f6331236d46258c0e632c9))
+
+- Init cco module
+  ([`cad8a8e`](https://github.com/jupyter-naas/abi/commit/cad8a8e9b51c663cbbd95dbbe147d075ec482719))
+
+
 ## v1.21.6 (2026-04-02)
 
 ### Bug Fixes
