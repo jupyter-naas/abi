@@ -1,10 +1,6 @@
 from typing import Optional
 
-from naas_abi import ABIModule
-from naas_abi_core.module.Module import BaseModule
-from naas_abi_core.modules.templatablesparqlquery import (
-    ABIModule as TemplatableSparqlQueryABIModuleModule,
-)
+from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -14,12 +10,20 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "Abi"
-AVATAR_URL = (
-    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
-)
-DESCRIPTION = "Coordinates and manages specialized agents."
-SYSTEM_PROMPT = """<role>
+
+class AbiAgent(IntentAgent):
+    """
+    Abi Supervisor Agent.
+
+    Run agent in terminal: LOG_LEVEL=DEBUG uv run abi chat abi AbiAgent
+    """
+
+    name: str = "Abi"
+    description: str = "Abi is a Supervisor Agent developed by NaasAI."
+    logo_url: str = (
+        "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+    )
+    system_prompt: str = """<role>
 You are Abi, the Supervisor Agent developed by NaasAI.
 </role>
 
@@ -112,57 +116,29 @@ You operate in a structured multi-agent environment:
 - Do not call multiple agents/tools at once.
 </constraints>
 """
+    suggestions: list[dict] = [
+        {
+            "label": "Abi Presentation",
+            "value": "Please present yourself and your capabilities.",
+        },
+    ]
 
-SUGGESTIONS: list = [
-    {
-        "label": "Abi Presentation",
-        "value": "Please present yourself and your capabilities.",
-    },
-]
-
-INTENTS: list = [
-    Intent(
-        intent_type=IntentType.RAW,
-        intent_value="who are you?",
-        intent_target="I am Abi, a Supervisor Agent developed by NaasAI.",
-    ),
-    Intent(
-        intent_type=IntentType.TOOL,
-        intent_value="what time is it",
-        intent_target="get_time",
-    ),
-]
-
-
-class AbiAgent(IntentAgent):
-    """
-    Abi Supervisor Agent.
-
-    Run agent in terminal: LOG_LEVEL=DEBUG uv run abi chat abi AbiAgent
-    """
-
-    name: str = NAME
-    description: str = DESCRIPTION
-    logo_url: str = AVATAR_URL
-    system_prompt: str = SYSTEM_PROMPT
-    suggestions: list[dict] = SUGGESTIONS
-    tools: list = []
-    intents: list = INTENTS
-
-    @classmethod
-    def New(
-        cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "AbiAgent":
-        from queue import Queue
-
+    @staticmethod
+    def get_model() -> ChatModel:
         from naas_abi.models.default import get_model
 
-        # Define model
-        model = get_model()
+        return get_model()
 
-        # Define tools
+    model: ChatModel = get_model()
+
+    @staticmethod
+    def get_tools(cls) -> list:
+        from naas_abi import ABIModule
+        from naas_abi_core.module.Module import BaseModule
+        from naas_abi_core.modules.templatablesparqlquery import (
+            ABIModule as TemplatableSparqlQueryABIModule,
+        )
+
         tools: list = []
 
         templatable_sparql_query_module: BaseModule = (
@@ -171,7 +147,7 @@ class AbiAgent(IntentAgent):
             ]
         )
         assert isinstance(
-            templatable_sparql_query_module, TemplatableSparqlQueryABIModuleModule
+            templatable_sparql_query_module, TemplatableSparqlQueryABIModule
         ), "TemplatableSparqlQueryABIModuleModule must be a subclass of BaseModule"
 
         agent_recommendation_tools = [
@@ -187,12 +163,19 @@ class AbiAgent(IntentAgent):
         )
         tools += sparql_query_tools_list
 
+        return tools
+
+    @staticmethod
+    def get_agents(cls) -> list:
+        from queue import Queue
+
+        from naas_abi import ABIModule
+
         # Define agents
         agents: list = []
         agent_queue: Queue = Queue()
 
-        if agent_shared_state is None:
-            agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=NAME)
+        agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=cls.name)
 
         for module in ABIModule.get_instance().engine.modules.values():
             for agent_cls in module.agents:
@@ -202,15 +185,19 @@ class AbiAgent(IntentAgent):
                 if agent_cls is cls:
                     continue
                 new_agent = agent_cls.New().duplicate(
-                    queue=agent_queue, agent_shared_state=agent_shared_state
+                    queue=agent_queue,
+                    agent_shared_state=agent_shared_state,
                 )
                 agents.append(new_agent)
+        return agents
 
+    @staticmethod
+    def get_intents(cls) -> list:
         # Define intents
-        intents: list = list(INTENTS)
+        intents: list = []
 
         # TODO: Create generic method in Agent.py to get agent intents + Use agent intents in supervisor agent
-        for agent in agents:
+        for agent in cls.get_agents(cls=cls):
             intents.append(
                 Intent(
                     intent_type=IntentType.AGENT,
@@ -232,30 +219,49 @@ class AbiAgent(IntentAgent):
                         intent_target=agent.name,
                     )
                     intents.append(new_intent)
+        return intents
 
+    @staticmethod
+    def get_system_prompt(cls) -> str:
         # TODO: Create generic method in Agent.py to add agents/tools names and descriptions in system prompt
         agents_string = "\n".join(
-            [f"- {agent.name}: {agent.description}" for agent in agents]
+            [
+                f"- {agent.name}: {agent.description}"
+                for agent in cls.get_agents(cls=cls)
+            ]
         )
         tools_string = "\n".join(
-            [f"- {tool.name}: {tool.description}" for tool in tools]
+            [f"- {tool.name}: {tool.description}" for tool in cls.get_tools(cls=cls)]
         )
-        system_prompt = SYSTEM_PROMPT.replace("[AGENTS]", agents_string).replace(
+        system_prompt = cls.system_prompt.replace("[AGENTS]", agents_string).replace(
             "[TOOLS]", tools_string
         )
+        return system_prompt
+
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "AbiAgent":
+
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(
+                thread_id="0", supervisor_agent=cls.name
+            )
 
         if agent_configuration is None:
             agent_configuration = AgentConfiguration(
-                system_prompt=system_prompt,
+                system_prompt=cls.system_prompt,
             )
 
         return cls(
-            name=NAME,
-            description=DESCRIPTION,
-            chat_model=model,
-            tools=tools,
-            agents=agents,
-            intents=intents,
+            name=cls.name,
+            description=cls.description,
+            chat_model=cls.get_model(),
+            tools=cls.get_tools(cls=cls),
+            agents=cls.get_agents(cls=cls),
+            intents=cls.get_intents(cls=cls),
             memory=None,
             state=agent_shared_state,
             configuration=agent_configuration,
