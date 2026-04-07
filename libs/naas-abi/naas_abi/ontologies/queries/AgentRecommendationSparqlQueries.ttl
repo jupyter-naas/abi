@@ -7,11 +7,6 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
 
-<http://naas.ai/ontology/abi/AgentRecommendationQueries> a owl:Ontology ;
-    dc:title "AI Agent Recommendation SPARQL Queries"@en ;
-    dc:description "Intent-based SPARQL queries for recommending AI agents based on user requirements"@en ;
-    dc11:contributor "ABI System" .
-
 #################################################################
 #    BFO Process-Centric Queries (PR #506 Architecture)
 #################################################################
