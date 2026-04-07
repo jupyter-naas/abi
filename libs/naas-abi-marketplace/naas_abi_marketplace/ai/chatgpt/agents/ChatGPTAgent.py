@@ -151,7 +151,7 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
     ]
 
     @staticmethod
-    def get_tools() -> list:
+    def get_tools(cls) -> list:
         from naas_abi_marketplace.ai.chatgpt import ABIModule
         from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIResponsesIntegration import (
             OpenAIResponsesIntegrationConfiguration,
@@ -175,7 +175,7 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
         return tools
 
     @staticmethod
-    def get_model() -> ChatModel:
+    def get_model(cls) -> ChatModel:
         from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
 
         return model
@@ -196,8 +196,8 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
         return ChatGPTAgent(
             name=cls.name,
             description=cls.description,
-            chat_model=cls.get_model(),
-            tools=cls.get_tools(),
+            chat_model=cls.get_model(cls=cls),
+            tools=cls.get_tools(cls=cls),
             intents=cls.intents,
             state=agent_shared_state,
             configuration=agent_configuration,
