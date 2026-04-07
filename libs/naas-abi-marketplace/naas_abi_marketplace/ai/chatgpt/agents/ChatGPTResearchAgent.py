@@ -1,31 +1,36 @@
 from typing import Optional
 
+from langchain_openai import ChatOpenAI
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
-from naas_abi_marketplace.ai.chatgpt import ABIModule
-
-NAME = "ChatGPT Research"
-DESCRIPTION = "ChatGPT Research Agent provides real-time answers to any question on the web using responses v1 OpenAI api."
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
-MODEL = "gpt-5-mini"
-SUGGESTIONS: list = []
-TOOLS = [
-    {
-        "name": "Web Search Preview",
-        "slug": "web_search_preview",
-        "description": "Search the web for information",
-    }
-]
 
 
 class ChatGPTResponsesAgent(Agent):
-    name: str = NAME
-    description: str = DESCRIPTION
-    logo_url: str = AVATAR_URL
-    tools: list = TOOLS
+    name: str = "ChatGPT Research"
+    description: str = "ChatGPT Research Agent provides real-time answers to any question on the web using responses v1 OpenAI api."
+    logo_url: str = (
+        "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
+    )
+    model_name = "gpt-5-mini"
+    native_tools: list = [{"type": "web_search_preview"}]
+
+    @staticmethod
+    def get_model(cls) -> ChatOpenAI:
+
+        from naas_abi_marketplace.ai.chatgpt import ABIModule
+        from pydantic import SecretStr
+
+        module: ABIModule = ABIModule.get_instance()
+
+        model = ChatOpenAI(
+            model=cls.model_name,
+            output_version="responses/v1",
+            api_key=SecretStr(module.configuration.openai_api_key),
+        )
+        return model
 
     @classmethod
     def New(
@@ -33,19 +38,6 @@ class ChatGPTResponsesAgent(Agent):
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "ChatGPTResponsesAgent":
-        # Define model
-        from langchain_openai import ChatOpenAI
-        from pydantic import SecretStr
-
-        module: ABIModule = ABIModule.get_instance()
-
-        model = ChatOpenAI(
-            model=MODEL,
-            output_version="responses/v1",
-            api_key=SecretStr(module.configuration.openai_api_key),
-        )
-
-        native_tools: list = [{"type": "web_search_preview"}]
 
         # Set configuration
         if agent_configuration is None:
@@ -54,10 +46,10 @@ class ChatGPTResponsesAgent(Agent):
             agent_shared_state = AgentSharedState(thread_id="0")
 
         return cls(
-            name=NAME,
-            description=DESCRIPTION,
-            chat_model=model,
-            native_tools=native_tools,
+            name=cls.name,
+            description=cls.description,
+            chat_model=cls.get_model(cls=cls),
+            native_tools=cls.native_tools,
             state=agent_shared_state,
             configuration=agent_configuration,
             memory=None,

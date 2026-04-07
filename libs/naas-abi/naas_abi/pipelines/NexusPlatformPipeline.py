@@ -251,15 +251,23 @@ class NexusPlatformPipeline(Pipeline):
             description = getattr(agent_cls, "description", None)
             logo_url = getattr(agent_cls, "logo_url", None)
             system_prompt = getattr(agent_cls, "system_prompt", None)
+            if system_prompt is None and hasattr(agent_cls, "get_system_prompt"):
+                system_prompt = agent_cls.get_system_prompt(cls=agent_cls)
             tools = getattr(agent_cls, "tools", None)
+            if tools is None and hasattr(agent_cls, "get_tools"):
+                tools = agent_cls.get_tools(cls=agent_cls)
             intents = getattr(agent_cls, "intents", None)
+            if intents is None and hasattr(agent_cls, "get_intents"):
+                intents = agent_cls.get_intents(cls=agent_cls)
 
             agent_tools: list = []
             if isinstance(tools, list):
                 for tool in tools:
+                    if not isinstance(tool, dict):
+                        continue
                     agent_tool = AgentTool(
-                        label=tool.get("name", ""),
-                        description=tool.get("description", ""),
+                        label=str(tool.get("name") or tool.get("type") or ""),
+                        description=str(tool.get("description", "")),
                     )
                     inserted_graph += agent_tool.rdf()
                     agent_tools.append(agent_tool)
@@ -303,6 +311,7 @@ class NexusPlatformPipeline(Pipeline):
             )
             inserted_graph += agent.rdf()
 
+        print(inserted_graph.serialize(format="turtle"))
         self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
         return inserted_graph
 

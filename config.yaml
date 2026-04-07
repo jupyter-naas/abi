@@ -33,17 +33,8 @@ modules:
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
-  - module: naas_abi_marketplace.domains.support
+  - module: naas_abi_marketplace.applications.git
     enabled: true
-    config:
-        default_repository: "jupyter-naas/abi"
-        github_project_id: 12
-        project_node_id: "PVT_kwDOBESWNM4AKRt3"
-        iteration_field_id: "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
-        status_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
-        status_option_id: "97363483"
-        priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
-        priority_option_id: "4fb76f2d"
   
   - module: naas_abi_marketplace.applications.github
     enabled: true
@@ -54,7 +45,7 @@ modules:
     enabled: true
     config:
       datastore_path: "sec_gov"
-      user_agent: "NAAS-ABI-Marketplace/1.0 (florent@naas.ai)"
+      user_agent: "NAAS-ABI-Marketplace/1.0 (abi@naas.ai)"
   
   - module: naas_abi_marketplace.applications.openrouter
     enabled: true
@@ -72,10 +63,19 @@ modules:
         - "openai/gpt-5.2"
         - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
-  #
-  # - module: naas_abi_marketplace.applications.git
-  #   enabled: true
-  #
+  
+  - module: naas_abi_marketplace.domains.support
+    enabled: true
+    config:
+        default_repository: "jupyter-naas/abi"
+        github_project_id: 12
+        project_node_id: "PVT_kwDOBESWNM4AKRt3"
+        iteration_field_id: "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
+        status_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
+        status_option_id: "97363483"
+        priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
+        priority_option_id: "4fb76f2d"
+  
 services:
   secret:
     secret_adapters:
