@@ -1,0 +1,8 @@
+{
+  "label": "Modules",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Package agents, pipelines, and ontologies into reusable, distributable modules."
+  }
+}
