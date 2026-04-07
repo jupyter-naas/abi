@@ -1717,7 +1717,10 @@ def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> 
             default_value = "'http://ontology.naas.ai/abi/unknown'"
         return f"{prop.name}: {final_type} = {default_value}"
     elif not prop.required and prop.property_type == "data":
-        return f"{prop.name}: {final_type} ='unknown'"
+        # Only string data properties get the sentinel default.
+        # Non-string types (int/bool/datetime/...) should default to None when optional.
+        if base_type == "str":
+            return f"{prop.name}: {final_type} ='unknown'"
     return f"{prop.name}: {final_type}"
 
 
