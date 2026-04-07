@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.2 (2026-04-03)
+
+### Bug Fixes
+
+- Remove unused import in NexusPlatformPipeline.py
+  ([`f829279`](https://github.com/jupyter-naas/abi/commit/f829279bfe4e0ea7a91bd01692332b95c1d7e91d))
+
+
 ## v1.16.1 (2026-04-03)
 
 ### Bug Fixes
