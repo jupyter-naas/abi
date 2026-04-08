@@ -139,6 +139,7 @@ class File(RDFEntity):
         "mime_type": "http://ontology.naas.ai/abi/document/mime_type",
         "modified_time": "http://ontology.naas.ai/abi/document/modified_time",
         "permissions": "http://ontology.naas.ai/abi/document/permissions",
+        "sha256": "http://ontology.naas.ai/abi/document/sha256",
     }
     _object_properties: ClassVar[set[str]] = {"embodies"}
 
@@ -187,6 +188,12 @@ class File(RDFEntity):
             Field(
                 description="The detected character encoding of the document when applicable."
             ),
+        ]
+    ] = "unknown"
+    sha256: Optional[
+        Annotated[
+            str,
+            Field(description="The SHA-256 checksum (hex) of the document content."),
         ]
     ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any
 
@@ -35,11 +37,15 @@ class AddFileFromDirPipelineConfiguration(PipelineConfiguration):
 
 
 class AddFileFromDirPipelineParameters(PipelineParameters):
-    folder_path: Annotated[
+    input_dir: Annotated[
         str,
         Field(
             description="Object storage prefix to ingest (recursive). Example: 'documents/my_folder'."
         ),
+    ]
+    output_dir: Annotated[
+        str,
+        Field(description="Directory to save the files to."),
     ]
     recursive: Annotated[
         bool,
@@ -81,16 +87,16 @@ class AddFileFromDirPipeline(Pipeline):
     def _normalize_object_prefix(prefix: str) -> str:
         return prefix.strip().replace("\\", "/").strip("/")
 
-    def _get_files_from_path(self, folder_path: str, *, recursive: bool) -> list[str]:
+    def _get_files_from_path(self, input_dir: str, *, recursive: bool) -> list[str]:
         """
-        Return all file object keys under `folder_path`.
+        Return all file object keys under `input_dir`.
 
         Prefixes are object-storage keys, not local paths: ``Path(...).is_dir()`` is
         wrong here. S3-style listings use trailing ``/`` for common prefixes; for
         adapters that don't include that suffix, we probe by attempting to list the
         entry as a prefix.
         """
-        root = self._normalize_object_prefix(folder_path)
+        root = self._normalize_object_prefix(input_dir)
         visited: set[str] = set()
         stack: list[str] = [root] if root else [""]
         files: list[str] = []
@@ -143,13 +149,21 @@ class AddFileFromDirPipeline(Pipeline):
         if not isinstance(parameters, AddFileFromDirPipelineParameters):
             raise ValueError("Parameters must be AddFileFromDirPipelineParameters")
 
+        # Setup output dir
+        output_dir_files = os.path.join(parameters.output_dir, "files")
+        output_dir_sha256 = os.path.join(parameters.output_dir, "sha256")
+
+        # Get files from input directory
+        object_keys = self._get_files_from_path(
+            parameters.input_dir, recursive=parameters.recursive
+        )
+        logger.info(f"Found {len(object_keys)} files in {parameters.input_dir}")
+
+        # Process files
         g = Graph()
         ingested = 0
-        object_keys = self._get_files_from_path(
-            parameters.folder_path, recursive=parameters.recursive
-        )
-        logger.info(f"Found {len(object_keys)} files in {parameters.folder_path}")
         for object_key in object_keys:
+            print(object_key)
             file_name = Path(object_key).name
             file_path = object_key
             mime_type = None
@@ -157,8 +171,6 @@ class AddFileFromDirPipeline(Pipeline):
             created_time = None
             modified_time = None
             accessed_time = None
-            is_file = True
-            is_directory = False
             permissions = None
             encoding = None
 
@@ -166,15 +178,21 @@ class AddFileFromDirPipeline(Pipeline):
                 meta = self._object_storage.get_object_metadata(
                     prefix="", key=object_key
                 )
-                mime_type = meta.get("mime_type") or None
-                file_size_bytes = int(meta.get("file_size_bytes") or 0)
-                created_time = self._parse_dt(meta.get("created_time"))
-                modified_time = self._parse_dt(meta.get("modified_time"))
-                accessed_time = self._parse_dt(meta.get("accessed_time"))
-                is_file = bool(meta.get("is_file", True))
-                is_directory = bool(meta.get("is_directory", False))
-                permissions = meta.get("permissions") or "unknown"
-                encoding = meta.get("encoding") or "unknown"
+                mime_type = meta.mime_type
+                file_size_bytes = meta.file_size_bytes
+                permissions = meta.permissions
+                encoding = meta.encoding
+                created_time = (
+                    self._parse_dt(meta.created_time) if meta.created_time else None
+                )
+                modified_time = (
+                    self._parse_dt(meta.modified_time) if meta.modified_time else None
+                )
+                accessed_time = (
+                    self._parse_dt(meta.accessed_time) if meta.accessed_time else None
+                )
+                permissions = meta.permissions
+                sha_256 = meta.sha256
 
             except Exception as e:
                 logger.warning(
@@ -182,8 +200,20 @@ class AddFileFromDirPipeline(Pipeline):
                 )
                 continue
 
-            logger.info(f"Adding file {file_name} to graph {self._graph_name}")
+            # Check if file already processed with sha256. If so, remove file from input directory
+            try:
+                self._object_storage.get_object(prefix=output_dir_sha256, key=sha_256)
+                logger.warning(
+                    f"File {file_name} already processed with sha256 {sha_256}"
+                )
+                continue
+            except Exception as e:
+                logger.warning(
+                    f"File {file_name} not processed with sha256 {sha_256}: {e}"
+                )
 
+            # Add file to graph
+            logger.info(f"Adding file {file_name} to graph {self._graph_name}")
             file = File(
                 label=file_name,
                 file_path=file_path,
@@ -192,19 +222,29 @@ class AddFileFromDirPipeline(Pipeline):
                 created_time=created_time,
                 modified_time=modified_time,
                 accessed_time=accessed_time,
-                is_file=is_file,
-                is_directory=is_directory,
+                sha256=sha_256,
+                mime_type=mime_type,
+                encoding=encoding,
+                permissions=permissions,
             )
-            if mime_type:
-                file.mime_type = mime_type
-            if permissions:
-                file.permissions = permissions
-            if encoding:
-                file.encoding = encoding
 
             g += file.rdf()
             ingested += 1
 
+            # Remove file from input directory + Add it to output directory
+            self._object_storage.put_object(
+                prefix=output_dir_sha256,
+                key=sha_256,
+                content=self._object_storage.get_object(prefix="", key=object_key),
+            )
+            self._object_storage.put_object(
+                prefix=output_dir_files,
+                key=f"{datetime.now().strftime('%Y%m%dT%H%M%S')}_{file_name}",
+                content=self._object_storage.get_object(prefix="", key=object_key),
+            )
+            self._object_storage.delete_object(prefix="", key=object_key)
+
+        # Insert instances to graph
         if len(g) > 0:
             self._triple_store.insert(g, graph_name=self._graph_name)
 
@@ -232,7 +272,8 @@ if __name__ == "__main__":
     object_storage = engine.services.object_storage
     triple_store = engine.services.triple_store
 
-    folder_path = "sec_gov"
+    input_dir = "document"
+    output_dir = "document_processed"
     graph_name = URIRef("http://ontology.naas.ai/graph/document")
 
     pipeline = AddFileFromDirPipeline(
@@ -243,6 +284,6 @@ if __name__ == "__main__":
         )
     )
     result_graph = pipeline.run(
-        AddFileFromDirPipelineParameters(folder_path=folder_path)
+        AddFileFromDirPipelineParameters(input_dir=input_dir, output_dir=output_dir)
     )
     print(result_graph.serialize(format="turtle"))
