@@ -1,9 +1,10 @@
 from queue import Queue
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     IObjectStorageAdapter,
     IObjectStorageDomain,
+    ObjectMetaData,
 )
 from naas_abi_core.services.ServiceBase import ServiceBase
 
@@ -42,5 +43,5 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
 
         return self.adapter.list_objects(prefix, queue)
 
-    def get_object_metadata(self, prefix: str, key: str) -> Dict[str, Any]:
+    def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         return self.adapter.get_object_metadata(prefix, key)

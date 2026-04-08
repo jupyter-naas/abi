@@ -1,16 +1,17 @@
+import hashlib
+import mimetypes
 import os
 import stat
 import tempfile
 import threading
 from datetime import datetime
 from queue import Queue
-import hashlib
-import mimetypes
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
     IObjectStorageAdapter,
+    ObjectMetaData,
 )
 
 
@@ -73,7 +74,7 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
                     queue.put(obj)
             return objects
 
-    def get_object_metadata(self, prefix: str, key: str) -> Dict[str, Any]:
+    def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         self.__path_exists(prefix, key)
 
         file_path = os.path.join(self.base_path, prefix, key)
@@ -81,26 +82,15 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
 
         mime_type, encoding = mimetypes.guess_type(file_path)
 
-        def compute_hash(path: str, algo: Any) -> str:
-            h = algo()
-            with open(path, "rb") as f:
-                for chunk in iter(lambda: f.read(4096), b""):
-                    h.update(chunk)
-            return h.hexdigest()
-
-        return {
-            "file_path": os.path.abspath(file_path),
-            "file_name": os.path.basename(file_path),
-            "file_size_bytes": stat_info.st_size,
-            "created_time": datetime.fromtimestamp(stat_info.st_ctime).isoformat(),
-            "modified_time": datetime.fromtimestamp(stat_info.st_mtime).isoformat(),
-            "accessed_time": datetime.fromtimestamp(stat_info.st_atime).isoformat(),
-            "is_file": os.path.isfile(file_path),
-            "is_directory": os.path.isdir(file_path),
-            "permissions": stat.filemode(stat_info.st_mode),
-            "mime_type": mime_type,
-            "encoding": encoding,
-            "md5": compute_hash(file_path, hashlib.md5),
-            "sha1": compute_hash(file_path, hashlib.sha1),
-            "sha256": compute_hash(file_path, hashlib.sha256),
-        }
+        return ObjectMetaData(
+            file_path=os.path.abspath(file_path),
+            file_name=os.path.basename(file_path),
+            file_size_bytes=stat_info.st_size,
+            created_time=datetime.fromtimestamp(stat_info.st_ctime),
+            modified_time=datetime.fromtimestamp(stat_info.st_mtime),
+            accessed_time=datetime.fromtimestamp(stat_info.st_atime),
+            permissions=stat.filemode(stat_info.st_mode),
+            mime_type=mime_type,
+            encoding=encoding,
+            sha256=hashlib.sha256(self.get_object(prefix, key)).hexdigest(),
+        )

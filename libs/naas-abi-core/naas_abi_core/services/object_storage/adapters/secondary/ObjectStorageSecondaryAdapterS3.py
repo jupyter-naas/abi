@@ -1,11 +1,14 @@
+import hashlib
+from datetime import datetime
 from queue import Queue
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
     IObjectStorageAdapter,
+    ObjectMetaData,
 )
 
 
@@ -193,7 +196,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                             queue.put(prefix_key)
         return objects
 
-    def get_object_metadata(self, prefix: str, key: str) -> Dict[str, Any]:
+    def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         """Get object metadata from S3.
 
         Args:
@@ -205,34 +208,40 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
         """
         self.__object_exists(prefix, key)
 
+        # Fields returned by the head_object method
+        # ContentLength → Size of the object in bytes
+        # LastModified → When the object was last updated
+        # ETag → Usually the MD5 hash (not always for multipart uploads)
+        # ContentType → MIME type (e.g., image/png, text/plain)
+        # Metadata → Custom user-defined metadata
+        # StorageClass → Storage tier (STANDARD, GLACIER, etc.)
+        # VersionId → Present if versioning is enabled
+        # ServerSideEncryption → Encryption type used
         response = self.s3_client.head_object(
             Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key)
         )
 
         last_modified = response.get("LastModified")
-        last_modified_iso = last_modified.isoformat() if last_modified else None
-
-        etag = response.get("ETag", "").strip('"')
-        md5 = etag if etag and "-" not in etag else None
+        last_modified_date = (
+            datetime.fromisoformat(last_modified.isoformat()) if last_modified else None
+        )
 
         full_key = self.__get_full_key(prefix, key)
-        file_path = f"s3://{self.bucket_name}/{full_key}" if full_key else f"s3://{self.bucket_name}"
+        file_path = (
+            f"s3://{self.bucket_name}/{full_key}"
+            if full_key
+            else f"s3://{self.bucket_name}"
+        )
 
-        return {
-            "file_path": file_path,
-            "file_name": key.split("/")[-1] if key else "",
-            "file_size_bytes": response.get("ContentLength", 0),
-            # S3 doesn't expose created/accessed times via HEAD; keep keys but allow nulls.
-            "created_time": None,
-            "modified_time": last_modified_iso,
-            "accessed_time": None,
-            "is_file": True,
-            "is_directory": False,
-            "permissions": None,
-            "mime_type": response.get("ContentType", "") or None,
-            "encoding": None,
-            # ETag is MD5 only for single-part uploads; otherwise unknown.
-            "md5": md5,
-            "sha1": None,
-            "sha256": None,
-        }
+        return ObjectMetaData(
+            file_path=file_path,
+            file_name=key.split("/")[-1] if key else "",
+            file_size_bytes=response.get("ContentLength", 0),
+            created_time=None,
+            modified_time=last_modified_date,
+            accessed_time=None,
+            permissions=None,
+            mime_type=response.get("ContentType", "") or None,
+            encoding=None,
+            sha256=hashlib.sha256(self.get_object(prefix, key)).hexdigest(),
+        )
