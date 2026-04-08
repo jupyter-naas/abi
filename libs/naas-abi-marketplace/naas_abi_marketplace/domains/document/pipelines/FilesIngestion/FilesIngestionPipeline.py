@@ -236,7 +236,10 @@ class FilesIngestionPipeline(Pipeline):
             # Move the file to the output directory.
             self.module.engine.services.object_storage.put_object(
                 prefix=parameters.output_path,
-                key=f"{datetime.now().strftime('%Y%m%dT%H%M%S')}_{file_name}",
+                # Handle files with or without an extension robustly
+                key=f"{file_name}_{datetime.now().strftime('%Y%m%dT%H%M%S')}" +
+                    (f"_{file_name.split('.')[-1]}" if '.' in file_name else ""),
+         
                 content=self.module.engine.services.object_storage.get_object(prefix="", key=object_key),
             )
             self.module.engine.services.object_storage.delete_object(prefix="", key=object_key)
