@@ -91,6 +91,5 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
             accessed_time=datetime.fromtimestamp(stat_info.st_atime),
             permissions=stat.filemode(stat_info.st_mode),
             mime_type=mime_type,
-            encoding=encoding,
-            sha256=hashlib.sha256(self.get_object(prefix, key)).hexdigest(),
+            encoding=encoding
         )
