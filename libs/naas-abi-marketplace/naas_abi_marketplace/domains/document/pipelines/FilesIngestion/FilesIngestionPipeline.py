@@ -16,37 +16,38 @@ from naas_abi_core.pipeline.pipeline import (
     PipelineConfiguration,
     PipelineParameters,
 )
-from naas_abi_core.services.object_storage.ObjectStorageService import (
-    ObjectStorageService,
-)
-from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology import (
     File,
 )
 from pydantic import Field
 from rdflib import Graph, URIRef
-
+from naas_abi_marketplace.domains.document import ABIModule
+import hashlib
+from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
+from naas_abi_marketplace.domains.document.pipelines.common import file_already_ingested
 
 @dataclass
 class FilesIngestionPipelineConfiguration(PipelineConfiguration):
     """Configuration for ingesting a local directory of files."""
+    pass
 
-    triple_store: TripleStoreService
-    object_storage: ObjectStorageService
-    graph_name: URIRef
 
 
 class FilesIngestionPipelineParameters(PipelineParameters):
-    input_dir: Annotated[
+    input_path: Annotated[
         str,
         Field(
             description="Object storage prefix to ingest (recursive). Example: 'documents/my_folder'."
         ),
     ]
-    output_dir: Annotated[
+    output_path: Annotated[
         str,
         Field(description="Directory to save the files to."),
     ]
+    graph_name: Annotated[
+        str,
+        Field(description="The graph name to ingest the files to."),
+    ] = "http://ontology.naas.ai/graph/document"
     recursive: Annotated[
         bool,
         Field(description="Whether to ingest the directory recursively."),
@@ -54,19 +55,16 @@ class FilesIngestionPipelineParameters(PipelineParameters):
 
 
 class FilesIngestionPipeline(Pipeline):
-    _triple_store: TripleStoreService
-    _object_storage: ObjectStorageService
-    _graph_name: URIRef
+    module: ABIModule
 
     def __init__(self, configuration: FilesIngestionPipelineConfiguration) -> None:
         super().__init__(configuration)
-        self._triple_store = configuration.triple_store
-        self._object_storage = configuration.object_storage
-        self._graph_name = configuration.graph_name
+        self.module = ABIModule.get_instance()
 
-        if self._graph_name not in self._triple_store.list_graphs():
-            self._triple_store.create_graph(self._graph_name)
-            logger.debug("Document graph created: %s", self._graph_name)
+    def __ensure_graph_exists(self, graph_name: str):
+        if graph_name not in [str(graph) for graph in self.module.engine.services.triple_store.list_graphs()]:
+            self.module.engine.services.triple_store.create_graph(URIRef(graph_name))
+            logger.debug("Document graph created: %s", graph_name)
 
     def _parse_dt(self, value: Any) -> dt.datetime | None:
         if value is None:
@@ -87,16 +85,16 @@ class FilesIngestionPipeline(Pipeline):
     def _normalize_object_prefix(prefix: str) -> str:
         return prefix.strip().replace("\\", "/").strip("/")
 
-    def _get_files_from_path(self, input_dir: str, *, recursive: bool) -> list[str]:
+    def _get_files_from_path(self, input_path: str, *, recursive: bool) -> list[str]:
         """
-        Return all file object keys under `input_dir`.
+        Return all file object keys under `input_path`.
 
         Prefixes are object-storage keys, not local paths: ``Path(...).is_dir()`` is
         wrong here. S3-style listings use trailing ``/`` for common prefixes; for
         adapters that don't include that suffix, we probe by attempting to list the
         entry as a prefix.
         """
-        root = self._normalize_object_prefix(input_dir)
+        root = self._normalize_object_prefix(input_path)
         visited: set[str] = set()
         stack: list[str] = [root] if root else [""]
         files: list[str] = []
@@ -108,11 +106,16 @@ class FilesIngestionPipeline(Pipeline):
             visited.add(prefix)
 
             try:
-                entries = self._object_storage.list_objects(prefix=prefix)
+                entries = self.module.engine.services.object_storage.list_objects(prefix=prefix)
+            except Exceptions.ObjectNotFound:
+                logger.warning(f"Object storage list_objects failed for {prefix}: Object not found")
+                continue
             except Exception as e:
                 logger.warning(
-                    "Object storage list_objects failed for %s: %s", prefix, e
+                    f"Object storage list_objects failed for {prefix}: {e}"
                 )
+                import traceback
+                logger.warning(traceback.format_exc())
                 continue
 
             for entry in entries:
@@ -131,7 +134,7 @@ class FilesIngestionPipeline(Pipeline):
                     # Some adapters don't include trailing "/" for directory keys.
                     # Try listing the entry as a prefix: if it succeeds, treat it as a directory.
                     try:
-                        self._object_storage.list_objects(prefix=entry_norm)
+                        self.module.engine.services.object_storage.list_objects(prefix=entry_norm)
                     except Exception:
                         pass
                     else:
@@ -149,21 +152,31 @@ class FilesIngestionPipeline(Pipeline):
         if not isinstance(parameters, FilesIngestionPipelineParameters):
             raise ValueError("Parameters must be FilesIngestionPipelineParameters")
 
-        # Setup output dir
-        output_dir_files = os.path.join(parameters.output_dir, "files")
-        output_dir_sha256 = os.path.join(parameters.output_dir, "sha256")
-
         # Get files from input directory
         object_keys = self._get_files_from_path(
-            parameters.input_dir, recursive=parameters.recursive
+            parameters.input_path, recursive=parameters.recursive
         )
-        logger.info(f"Found {len(object_keys)} files in {parameters.input_dir}")
+        logger.info(f"Found {len(object_keys)} files in {parameters.input_path}")
 
         # Process files
         g = Graph()
         ingested = 0
         for object_key in object_keys:
-            print(object_key)
+            # First we need to compute the sha256 of the file to be able to check if it has already been ingested.
+            sha_256 = hashlib.sha256(self.module.engine.services.object_storage.get_object(prefix="", key=object_key)).hexdigest()
+
+            if file_already_ingested(sha_256, parameters.graph_name):
+                logger.warning(
+                    f"File {object_key} already processed with sha256 {sha_256}. Skipping file."
+                )
+                
+                # We remove the file from the input directory to avoid processing it again.
+                # TODO: Should we move it to a specific directory?
+                self.module.engine.services.object_storage.delete_object(prefix="", key=object_key)
+                continue
+
+
+
             file_name = Path(object_key).name
             file_path = object_key
             mime_type = None
@@ -174,8 +187,9 @@ class FilesIngestionPipeline(Pipeline):
             permissions = None
             encoding = None
 
+
             try:
-                meta = self._object_storage.get_object_metadata(
+                meta = self.module.engine.services.object_storage.get_object_metadata(
                     prefix="", key=object_key
                 )
                 mime_type = meta.mime_type
@@ -192,7 +206,6 @@ class FilesIngestionPipeline(Pipeline):
                     self._parse_dt(meta.accessed_time) if meta.accessed_time else None
                 )
                 permissions = meta.permissions
-                sha_256 = meta.sha256
 
             except Exception as e:
                 logger.warning(
@@ -200,21 +213,9 @@ class FilesIngestionPipeline(Pipeline):
                 )
                 continue
 
-            # Check if file already processed with sha256. If so, remove file from input directory
-            try:
-                self._object_storage.get_object(prefix=output_dir_sha256, key=sha_256)
-                logger.warning(
-                    f"File {file_name} already processed with sha256 {sha_256}. Removing file from input directory."
-                )
-                self._object_storage.delete_object(prefix="", key=object_key)
-                continue
-            except Exception as e:
-                logger.warning(
-                    f"File {file_name} not processed with sha256 {sha_256}: {e}"
-                )
-
             # Add file to graph
-            logger.info(f"Adding file {file_name} to graph {self._graph_name}")
+            logger.info(f"Adding file {file_name} to graph {parameters.graph_name}")
+            
             file = File(
                 label=file_name,
                 file_path=file_path,
@@ -232,25 +233,21 @@ class FilesIngestionPipeline(Pipeline):
             g += file.rdf()
             ingested += 1
 
-            # Remove file from input directory + Add it to output directory
-            self._object_storage.put_object(
-                prefix=output_dir_sha256,
-                key=sha_256,
-                content=self._object_storage.get_object(prefix="", key=object_key),
-            )
-            self._object_storage.put_object(
-                prefix=output_dir_files,
+            # Move the file to the output directory.
+            self.module.engine.services.object_storage.put_object(
+                prefix=parameters.output_path,
                 key=f"{datetime.now().strftime('%Y%m%dT%H%M%S')}_{file_name}",
-                content=self._object_storage.get_object(prefix="", key=object_key),
+                content=self.module.engine.services.object_storage.get_object(prefix="", key=object_key),
             )
-            self._object_storage.delete_object(prefix="", key=object_key)
+            self.module.engine.services.object_storage.delete_object(prefix="", key=object_key)
 
         # Insert instances to graph
         if len(g) > 0:
-            self._triple_store.insert(g, graph_name=self._graph_name)
+            self.__ensure_graph_exists(parameters.graph_name)
+            self.module.engine.services.triple_store.insert(g, graph_name=parameters.graph_name)
 
         logger.info(
-            f"AddFileFromDirPipeline ingested {ingested} files ({len(g)} triples) into {self._graph_name}",
+            f"AddFileFromDirPipeline ingested {ingested} files ({len(g)} triples) into {parameters.graph_name}",
         )
         return g
 
@@ -266,25 +263,15 @@ if __name__ == "__main__":
     Command:
     uv run python libs/naas-abi-marketplace/naas_abi_marketplace/domains/document/pipelines/AddFileFromDirPipeline.py
     """
-    from naas_abi_core.engine.Engine import Engine
 
-    engine = Engine()
-    engine.load(module_names=["naas_abi_marketplace.domains.document"])
-    object_storage = engine.services.object_storage
-    triple_store = engine.services.triple_store
-
-    input_dir = "document"
-    output_dir = "document_processed"
+    input_path = "file_ingestion/input"
+    output_path = "file_ingestion/output"
     graph_name = URIRef("http://ontology.naas.ai/graph/document")
 
     pipeline = FilesIngestionPipeline(
-        FilesIngestionPipelineConfiguration(
-            object_storage=object_storage,
-            triple_store=triple_store,
-            graph_name=graph_name,
-        )
+        FilesIngestionPipelineConfiguration()
     )
     result_graph = pipeline.run(
-        FilesIngestionPipelineParameters(input_dir=input_dir, output_dir=output_dir)
+        FilesIngestionPipelineParameters(input_path=input_path, output_path=output_path, graph_name=graph_name)
     )
     print(result_graph.serialize(format="turtle"))

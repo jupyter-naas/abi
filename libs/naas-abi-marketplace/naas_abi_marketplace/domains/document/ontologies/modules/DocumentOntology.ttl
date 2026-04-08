@@ -142,3 +142,27 @@ doc:sha256 a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "The SHA-256 checksum (hex) of the document content."@en ;
     skos:example "The sha256 checksum of the document is '9dd332e7d9bb894763ffe97bc4f6d88d79fc44ed4ec317359dec8fc7fb755c6f'."@en .
+
+
+#################################################################
+# IngestionJob
+#################################################################
+
+doc:IngestionJob a owl:Class ;
+    rdfs:label "Ingestion Job"@en ;
+    skos:definition "An Ingestion Job is a job that ingests a document."@en ;
+    skos:example "An Ingestion Job that ingests the document 'document.pdf' from the location '/documents/document.pdf'."@en .
+
+doc:IngestionJobType a owl:DatatypeProperty ;
+    rdfs:label "ingestion job type"@en ;
+    rdfs:domain doc:IngestionJob ;
+    rdfs:range xsd:string ;
+    skos:definition "The type of the ingestion job."@en ;
+    skos:example "The type of the ingestion job is 'pdf'."@en .
+
+doc:refers_to_file a owl:ObjectProperty ;
+    rdfs:domain doc:IngestionJob ;
+    rdfs:range doc:File ;
+    rdfs:label "refers to file"@en ;
+    skos:definition "An Ingestion Job refers to a file."@en ;
+    skos:example "The Ingestion Job 'document.pdf' refers to the file 'document.pdf'."@en .

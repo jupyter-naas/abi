@@ -14,6 +14,14 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 # from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 # from naas_abi_core.services.bus.BusService import BusService
 # from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
+from pydantic import BaseModel
+
+
+class FileIngestionConfiguration(BaseModel):
+    input_path: str
+    output_path: str
+    graph_name: str
+    recursive: bool = True
 
 
 class ABIModule(BaseModule):
@@ -30,7 +38,7 @@ class ABIModule(BaseModule):
     )
 
     class Configuration(ModuleConfiguration):
-        pass
+        file_ingestion_pipelines: list[FileIngestionConfiguration] = []
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
