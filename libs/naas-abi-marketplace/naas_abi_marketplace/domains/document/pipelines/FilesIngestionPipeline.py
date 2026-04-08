@@ -28,7 +28,7 @@ from rdflib import Graph, URIRef
 
 
 @dataclass
-class AddFileFromDirPipelineConfiguration(PipelineConfiguration):
+class FilesIngestionPipelineConfiguration(PipelineConfiguration):
     """Configuration for ingesting a local directory of files."""
 
     triple_store: TripleStoreService
@@ -36,7 +36,7 @@ class AddFileFromDirPipelineConfiguration(PipelineConfiguration):
     graph_name: URIRef
 
 
-class AddFileFromDirPipelineParameters(PipelineParameters):
+class FilesIngestionPipelineParameters(PipelineParameters):
     input_dir: Annotated[
         str,
         Field(
@@ -53,12 +53,12 @@ class AddFileFromDirPipelineParameters(PipelineParameters):
     ] = True
 
 
-class AddFileFromDirPipeline(Pipeline):
+class FilesIngestionPipeline(Pipeline):
     _triple_store: TripleStoreService
     _object_storage: ObjectStorageService
     _graph_name: URIRef
 
-    def __init__(self, configuration: AddFileFromDirPipelineConfiguration) -> None:
+    def __init__(self, configuration: FilesIngestionPipelineConfiguration) -> None:
         super().__init__(configuration)
         self._triple_store = configuration.triple_store
         self._object_storage = configuration.object_storage
@@ -146,8 +146,8 @@ class AddFileFromDirPipeline(Pipeline):
         return files
 
     def run(self, parameters: PipelineParameters) -> Graph:
-        if not isinstance(parameters, AddFileFromDirPipelineParameters):
-            raise ValueError("Parameters must be AddFileFromDirPipelineParameters")
+        if not isinstance(parameters, FilesIngestionPipelineParameters):
+            raise ValueError("Parameters must be FilesIngestionPipelineParameters")
 
         # Setup output dir
         output_dir_files = os.path.join(parameters.output_dir, "files")
@@ -277,14 +277,14 @@ if __name__ == "__main__":
     output_dir = "document_processed"
     graph_name = URIRef("http://ontology.naas.ai/graph/document")
 
-    pipeline = AddFileFromDirPipeline(
-        AddFileFromDirPipelineConfiguration(
+    pipeline = FilesIngestionPipeline(
+        FilesIngestionPipelineConfiguration(
             object_storage=object_storage,
             triple_store=triple_store,
             graph_name=graph_name,
         )
     )
     result_graph = pipeline.run(
-        AddFileFromDirPipelineParameters(input_dir=input_dir, output_dir=output_dir)
+        FilesIngestionPipelineParameters(input_dir=input_dir, output_dir=output_dir)
     )
     print(result_graph.serialize(format="turtle"))
