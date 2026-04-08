@@ -135,8 +135,6 @@ class File(RDFEntity):
         "file_name": "http://ontology.naas.ai/abi/document/name",
         "file_path": "http://ontology.naas.ai/abi/document/path",
         "file_size_bytes": "http://ontology.naas.ai/abi/document/file_size_bytes",
-        "is_directory": "http://ontology.naas.ai/abi/document/is_directory",
-        "is_file": "http://ontology.naas.ai/abi/document/is_file",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "mime_type": "http://ontology.naas.ai/abi/document/mime_type",
         "modified_time": "http://ontology.naas.ai/abi/document/modified_time",
@@ -174,12 +172,6 @@ class File(RDFEntity):
             datetime.datetime,
             Field(description="The last accessed timestamp of the document."),
         ]
-    ]
-    is_file: Optional[
-        Annotated[bool, Field(description="True if the path points to a file.")]
-    ]
-    is_directory: Optional[
-        Annotated[bool, Field(description="True if the path points to a directory.")]
     ]
     permissions: Optional[
         Annotated[
@@ -224,80 +216,19 @@ class Document(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Document"
     _name: ClassVar[str] = "Document"
     _property_uris: ClassVar[dict] = {
-        "author": "http://ontology.naas.ai/abi/document/author",
-        "content": "http://ontology.naas.ai/abi/document/content",
         "created": "http://purl.org/dc/terms/created",
-        "creation_date": "http://ontology.naas.ai/abi/document/creation_date",
         "creator": "http://purl.org/dc/terms/creator",
-        "description": "http://ontology.naas.ai/abi/document/description",
         "isEmbodiedIn": "http://ontology.naas.ai/abi/document/isEmbodiedIn",
-        "keywords": "http://ontology.naas.ai/abi/document/keywords",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "language": "http://ontology.naas.ai/abi/document/language",
-        "md5": "http://ontology.naas.ai/abi/document/md5",
-        "sha1": "http://ontology.naas.ai/abi/document/sha1",
         "sha256": "http://ontology.naas.ai/abi/document/sha256",
-        "subject": "http://ontology.naas.ai/abi/document/subject",
-        "title": "http://ontology.naas.ai/abi/document/title",
     }
     _object_properties: ClassVar[set[str]] = {"isEmbodiedIn"}
 
     # Data properties
-    md5: Optional[
-        Annotated[
-            str, Field(description="The MD5 checksum (hex) of the document content.")
-        ]
-    ] = "unknown"
-    sha1: Optional[
-        Annotated[
-            str, Field(description="The SHA-1 checksum (hex) of the document content.")
-        ]
-    ] = "unknown"
     sha256: Optional[
         Annotated[
             str,
             Field(description="The SHA-256 checksum (hex) of the document content."),
-        ]
-    ] = "unknown"
-    content: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The textual content of the document (when extracted or provided)."
-            ),
-        ]
-    ] = "unknown"
-    title: Optional[Annotated[str, Field(description="The title of the document.")]] = (
-        "unknown"
-    )
-    author: Optional[
-        Annotated[str, Field(description="The author of the document.")]
-    ] = "unknown"
-    language: Optional[
-        Annotated[str, Field(description="The language of the document content.")]
-    ] = "unknown"
-    creation_date: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="The creation date of the document (when available from document-level metadata)."
-            ),
-        ]
-    ]
-    subject: Optional[
-        Annotated[str, Field(description="The subject of the document.")]
-    ] = "unknown"
-    description: Optional[
-        Annotated[
-            str, Field(description="A short description or abstract of the document.")
-        ]
-    ] = "unknown"
-    keywords: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Keywords associated with the document (typically a comma-separated list)."
-            ),
         ]
     ] = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
