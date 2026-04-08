@@ -204,8 +204,9 @@ class AddFileFromDirPipeline(Pipeline):
             try:
                 self._object_storage.get_object(prefix=output_dir_sha256, key=sha_256)
                 logger.warning(
-                    f"File {file_name} already processed with sha256 {sha_256}"
+                    f"File {file_name} already processed with sha256 {sha_256}. Removing file from input directory."
                 )
+                self._object_storage.delete_object(prefix="", key=object_key)
                 continue
             except Exception as e:
                 logger.warning(
