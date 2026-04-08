@@ -138,7 +138,7 @@ doc:encoding a owl:DatatypeProperty ;
 
 doc:sha256 a owl:DatatypeProperty ;
     rdfs:label "sha256"@en ;
-    rdfs:domain doc:Document ;
+    rdfs:domain doc:File, doc:Document ;
     rdfs:range xsd:string ;
     skos:definition "The SHA-256 checksum (hex) of the document content."@en ;
     skos:example "The sha256 checksum of the document is '9dd332e7d9bb894763ffe97bc4f6d88d79fc44ed4ec317359dec8fc7fb755c6f'."@en .
