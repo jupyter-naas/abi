@@ -243,5 +243,4 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             permissions=None,
             mime_type=response.get("ContentType", "") or None,
             encoding=None,
-            sha256=hashlib.sha256(self.get_object(prefix, key)).hexdigest(),
         )

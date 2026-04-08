@@ -24,7 +24,6 @@ class ObjectMetaData(BaseModel):
     permissions: Optional[str]
     mime_type: Optional[str]
     encoding: Optional[str]
-    sha256: str
 
 
 class IObjectStorageAdapter(ABC):
