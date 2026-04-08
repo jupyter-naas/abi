@@ -5,36 +5,36 @@ import uuid
 import datetime
 import os
 from rdflib import Graph, URIRef, Literal, Namespace
-from rdflib.namespace import RDF, RDFS, OWL, XSD
+from rdflib.namespace import RDF, RDFS, OWL, XSD, DCTERMS
 
-BFO = Namespace("http://purl.obolibrary.org/obo/")
-ABI = Namespace("http://ontology.naas.ai/abi/")
-CCO = Namespace("https://www.commoncoreontologies.org/")
-
-
+BFO = Namespace('http://purl.obolibrary.org/obo/')
+ABI = Namespace('http://ontology.naas.ai/abi/')
+CCO = Namespace('https://www.commoncoreontologies.org/')
 # Base class for all RDF entities
 class RDFEntity(BaseModel):
     """Base class for all RDF entities with URI and namespace management"""
-
     _namespace: ClassVar[str] = "http://ontology.naas.ai/abi/"
     _uri: str = ""
     _object_properties: ClassVar[set[str]] = set()
-
-    model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
-
+    
+    model_config = {
+        'arbitrary_types_allowed': True,
+        'extra': 'forbid'
+    }
+    
     def __init__(self, **kwargs):
-        uri = kwargs.pop("_uri", None)
+        uri = kwargs.pop('_uri', None)
         super().__init__(**kwargs)
         if uri is not None:
             self._uri = uri
         elif not self._uri:
             self._uri = f"{self._namespace}{uuid.uuid4()}"
-
+    
     @classmethod
     def set_namespace(cls, namespace: str):
         """Set the namespace for generating URIs"""
         cls._namespace = namespace
-
+        
     def rdf(
         self, subject_uri: str | None = None, visited: set[str] | None = None
     ) -> Graph:
@@ -49,13 +49,13 @@ class RDFEntity(BaseModel):
             visited = set()
 
         g = Graph()
-        g.bind("cco", CCO)
-        g.bind("bfo", BFO)
-        g.bind("abi", ABI)
-        g.bind("rdfs", RDFS)
-        g.bind("rdf", RDF)
-        g.bind("owl", OWL)
-        g.bind("xsd", XSD)
+        g.bind('cco', CCO)
+        g.bind('bfo', BFO)
+        g.bind('abi', ABI)
+        g.bind('rdfs', RDFS)
+        g.bind('rdf', RDF)
+        g.bind('owl', OWL)
+        g.bind('xsd', XSD)
 
         # Use stored URI or provided subject_uri
         if subject_uri is None:
@@ -72,27 +72,27 @@ class RDFEntity(BaseModel):
         visited.add(subject_uri)
 
         # Add class type
-        if hasattr(self, "_class_uri"):
+        if hasattr(self, '_class_uri'):
             g.add((subject, RDF.type, URIRef(self._class_uri)))
 
         # Add owl:NamedIndividual type
         g.add((subject, RDF.type, OWL.NamedIndividual))
 
         # Add label if it exists
-        if hasattr(self, "label"):
+        if hasattr(self, 'label'):
             g.add((subject, RDFS.label, Literal(self.label)))
 
-        object_props: set[str] = getattr(self, "_object_properties", set())
+        object_props: set[str] = getattr(self, '_object_properties', set())
 
         # Add properties
-        if hasattr(self, "_property_uris"):
+        if hasattr(self, '_property_uris'):
             for prop_name, prop_uri in self._property_uris.items():
                 is_object_prop = prop_name in object_props
                 prop_value = getattr(self, prop_name, None)
                 if prop_value is not None:
                     if isinstance(prop_value, list):
                         for item in prop_value:
-                            if hasattr(item, "rdf") and hasattr(item, "_uri"):
+                            if hasattr(item, 'rdf') and hasattr(item, '_uri'):
                                 # Check if this entity was already visited to prevent cycles
                                 if item._uri not in visited:
                                     # Add triples from related object
@@ -103,7 +103,7 @@ class RDFEntity(BaseModel):
                                 g.add((subject, URIRef(prop_uri), URIRef(str(item))))
                             else:
                                 g.add((subject, URIRef(prop_uri), Literal(item)))
-                    elif hasattr(prop_value, "rdf") and hasattr(prop_value, "_uri"):
+                    elif hasattr(prop_value, 'rdf') and hasattr(prop_value, '_uri'):
                         # Check if this entity was already visited to prevent cycles
                         if prop_value._uri not in visited:
                             # Add triples from related object
@@ -123,140 +123,68 @@ class File(RDFEntity):
     File
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/File"
-    _name: ClassVar[str] = "File"
-    _property_uris: ClassVar[dict] = {
-        "accessed_time": "http://ontology.naas.ai/abi/document/accessed_time",
-        "created": "http://purl.org/dc/terms/created",
-        "created_time": "http://ontology.naas.ai/abi/document/created_time",
-        "creator": "http://purl.org/dc/terms/creator",
-        "embodies": "http://ontology.naas.ai/abi/document/embodies",
-        "encoding": "http://ontology.naas.ai/abi/document/encoding",
-        "file_name": "http://ontology.naas.ai/abi/document/name",
-        "file_path": "http://ontology.naas.ai/abi/document/path",
-        "file_size_bytes": "http://ontology.naas.ai/abi/document/file_size_bytes",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "mime_type": "http://ontology.naas.ai/abi/document/mime_type",
-        "modified_time": "http://ontology.naas.ai/abi/document/modified_time",
-        "permissions": "http://ontology.naas.ai/abi/document/permissions",
-        "sha256": "http://ontology.naas.ai/abi/document/sha256",
-    }
-    _object_properties: ClassVar[set[str]] = {"embodies"}
+    _class_uri: ClassVar[str] = 'http://ontology.naas.ai/abi/document/File'
+    _name: ClassVar[str] = 'File'
+    _property_uris: ClassVar[dict] = {'accessed_time': 'http://ontology.naas.ai/abi/document/accessed_time', 'created': 'http://purl.org/dc/terms/created', 'created_time': 'http://ontology.naas.ai/abi/document/created_time', 'creator': 'http://purl.org/dc/terms/creator', 'embodies': 'http://ontology.naas.ai/abi/document/embodies', 'encoding': 'http://ontology.naas.ai/abi/document/encoding', 'file_name': 'http://ontology.naas.ai/abi/document/name', 'file_path': 'http://ontology.naas.ai/abi/document/path', 'file_size_bytes': 'http://ontology.naas.ai/abi/document/file_size_bytes', 'label': 'http://www.w3.org/2000/01/rdf-schema#label', 'mime_type': 'http://ontology.naas.ai/abi/document/mime_type', 'modified_time': 'http://ontology.naas.ai/abi/document/modified_time', 'permissions': 'http://ontology.naas.ai/abi/document/permissions', 'sha256': 'http://ontology.naas.ai/abi/document/sha256'}
+    _object_properties: ClassVar[set[str]] = {'embodies'}
 
     # Data properties
-    file_path: Optional[
-        Annotated[str, Field(description="The path of the document.")]
-    ] = "unknown"
-    file_name: Optional[
-        Annotated[str, Field(description="The name of the document.")]
-    ] = "unknown"
-    mime_type: Optional[
-        Annotated[str, Field(description="The MIME type of the document.")]
-    ] = "unknown"
-    file_size_bytes: Optional[
-        Annotated[int, Field(description="The size of the document in bytes.")]
-    ]
-    created_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The created timestamp of the document."),
-        ]
-    ]
-    modified_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The last modified timestamp of the document."),
-        ]
-    ]
-    accessed_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The last accessed timestamp of the document."),
-        ]
-    ]
-    permissions: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The file permissions of the document in Unix-like notation."
-            ),
-        ]
-    ] = "unknown"
-    encoding: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The detected character encoding of the document when applicable."
-            ),
-        ]
-    ] = "unknown"
-    sha256: Optional[
-        Annotated[
-            str,
-            Field(description="The SHA-256 checksum (hex) of the document content."),
-        ]
-    ] = "unknown"
+    file_path: Optional[Annotated[str, Field(description="The path of the document.")]] ='unknown'
+    file_name: Optional[Annotated[str, Field(description="The name of the document.")]] ='unknown'
+    mime_type: Optional[Annotated[str, Field(description="The MIME type of the document.")]] ='unknown'
+    file_size_bytes: Optional[Annotated[int, Field(description="The size of the document in bytes.")]]
+    created_time: Optional[Annotated[datetime.datetime, Field(description="The created timestamp of the document.")]]
+    modified_time: Optional[Annotated[datetime.datetime, Field(description="The last modified timestamp of the document.")]]
+    accessed_time: Optional[Annotated[datetime.datetime, Field(description="The last accessed timestamp of the document.")]]
+    permissions: Optional[Annotated[str, Field(description="The file permissions of the document in Unix-like notation.")]] ='unknown'
+    encoding: Optional[Annotated[str, Field(description="The detected character encoding of the document when applicable.")]] ='unknown'
+    sha256: Optional[Annotated[str, Field(description="The SHA-256 checksum (hex) of the document content.")]] ='unknown'
     label: Annotated[str, Field(description="Label of the resource.")]
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Annotated[Optional[datetime.datetime], Field(description="Date of creation of the resource.")] = datetime.datetime.now()
+    creator: Annotated[Optional[Any], Field(description="An entity responsible for making the resource.")] = os.environ.get('USER')
 
     # Object properties
-    embodies: Optional[
-        Annotated[
-            List[Union[Document, URIRef, str]],
-            Field(description="A file embodies a document."),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-
+    embodies: Optional[Annotated[List[Union[Document, URIRef, str]], Field(description="A file embodies a document.")]] = ['http://ontology.naas.ai/abi/unknown']
 
 class Document(RDFEntity):
     """
     Document
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Document"
-    _name: ClassVar[str] = "Document"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "isEmbodiedIn": "http://ontology.naas.ai/abi/document/isEmbodiedIn",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "sha256": "http://ontology.naas.ai/abi/document/sha256",
-    }
-    _object_properties: ClassVar[set[str]] = {"isEmbodiedIn"}
+    _class_uri: ClassVar[str] = 'http://ontology.naas.ai/abi/document/Document'
+    _name: ClassVar[str] = 'Document'
+    _property_uris: ClassVar[dict] = {'created': 'http://purl.org/dc/terms/created', 'creator': 'http://purl.org/dc/terms/creator', 'isEmbodiedIn': 'http://ontology.naas.ai/abi/document/isEmbodiedIn', 'label': 'http://www.w3.org/2000/01/rdf-schema#label', 'sha256': 'http://ontology.naas.ai/abi/document/sha256'}
+    _object_properties: ClassVar[set[str]] = {'isEmbodiedIn'}
 
     # Data properties
-    sha256: Optional[
-        Annotated[
-            str,
-            Field(description="The SHA-256 checksum (hex) of the document content."),
-        ]
-    ] = "unknown"
+    sha256: Optional[Annotated[str, Field(description="The SHA-256 checksum (hex) of the document content.")]] ='unknown'
     label: Annotated[str, Field(description="Label of the resource.")]
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Annotated[Optional[datetime.datetime], Field(description="Date of creation of the resource.")] = datetime.datetime.now()
+    creator: Annotated[Optional[Any], Field(description="An entity responsible for making the resource.")] = os.environ.get('USER')
 
     # Object properties
-    isEmbodiedIn: Optional[
-        Annotated[
-            List[Union[File, URIRef, str]],
-            Field(description="A document is embodied in a file."),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    isEmbodiedIn: Optional[Annotated[List[Union[File, URIRef, str]], Field(description="A document is embodied in a file.")]] = ['http://ontology.naas.ai/abi/unknown']
 
+class IngestionJob(RDFEntity):
+    """
+    Ingestion Job
+    """
+
+    _class_uri: ClassVar[str] = 'http://ontology.naas.ai/abi/document/IngestionJob'
+    _name: ClassVar[str] = 'Ingestion Job'
+    _property_uris: ClassVar[dict] = {'created': 'http://purl.org/dc/terms/created', 'creator': 'http://purl.org/dc/terms/creator', 'ingestion_job_type': 'http://ontology.naas.ai/abi/document/IngestionJobType', 'label': 'http://www.w3.org/2000/01/rdf-schema#label', 'refers_to_file': 'http://ontology.naas.ai/abi/document/refers_to_file'}
+    _object_properties: ClassVar[set[str]] = {'refers_to_file'}
+
+    # Data properties
+    ingestion_job_type: Optional[Annotated[str, Field(description="The type of the ingestion job.")]] ='unknown'
+    label: Annotated[str, Field(description="Label of the resource.")]
+    created: Annotated[Optional[datetime.datetime], Field(description="Date of creation of the resource.")] = datetime.datetime.now()
+    creator: Annotated[Optional[Any], Field(description="An entity responsible for making the resource.")] = os.environ.get('USER')
+
+    # Object properties
+    refers_to_file: Optional[Annotated[List[Union[File, URIRef, str]], Field(description="An Ingestion Job refers to a file.")]] = ['http://ontology.naas.ai/abi/unknown']
 
 # Rebuild models to resolve forward references
 File.model_rebuild()
 Document.model_rebuild()
+IngestionJob.model_rebuild()
