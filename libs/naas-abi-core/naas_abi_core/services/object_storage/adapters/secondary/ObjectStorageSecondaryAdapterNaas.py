@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from queue import Queue
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import pydash
 import requests
@@ -13,6 +13,7 @@ from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecon
 )
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     IObjectStorageAdapter,
+    ObjectMetaData,
 )
 
 NAAS_API_URL = "https://api.naas.ai/"
@@ -130,7 +131,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
 
         return self.__s3_adapter.list_objects(prefix, queue)
 
-    def get_object_metadata(self, prefix: str, key: str) -> Dict[str, Any]:
+    def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         self.ensure_credentials()
 
         assert self.__s3_adapter is not None

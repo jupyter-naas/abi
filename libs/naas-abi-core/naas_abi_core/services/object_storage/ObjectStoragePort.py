@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from queue import Queue
-from typing import Any, Dict, Optional
+from typing import Optional
+
+from pydantic import BaseModel
 
 
 class Exceptions:
@@ -9,6 +12,19 @@ class Exceptions:
 
     class ObjectAlreadyExists(Exception):
         pass
+
+
+class ObjectMetaData(BaseModel):
+    file_path: str
+    file_name: str
+    file_size_bytes: int
+    created_time: Optional[datetime]
+    modified_time: Optional[datetime]
+    accessed_time: Optional[datetime]
+    permissions: Optional[str]
+    mime_type: Optional[str]
+    encoding: Optional[str]
+    sha256: str
 
 
 class IObjectStorageAdapter(ABC):
@@ -29,7 +45,7 @@ class IObjectStorageAdapter(ABC):
         pass
 
     @abstractmethod
-    def get_object_metadata(self, prefix: str, key: str) -> Dict[str, Any]:
+    def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         pass
 
 
@@ -51,5 +67,5 @@ class IObjectStorageDomain(ABC):
         pass
 
     @abstractmethod
-    def get_object_metadata(self, prefix: str, key: str) -> Dict[str, Any]:
+    def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         pass
