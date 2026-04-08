@@ -238,7 +238,7 @@ class FilesIngestionPipeline(Pipeline):
                 prefix=parameters.output_path,
                 # Handle files with or without an extension robustly
                 key=f"{file_name}_{datetime.now().strftime('%Y%m%dT%H%M%S')}" +
-                    (f"_{file_name.split('.')[-1]}" if '.' in file_name else ""),
+                    (f".{file_name.split('.')[-1]}" if '.' in file_name else ""),
          
                 content=self.module.engine.services.object_storage.get_object(prefix="", key=object_key),
             )
