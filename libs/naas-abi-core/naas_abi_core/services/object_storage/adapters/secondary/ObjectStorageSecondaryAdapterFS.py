@@ -1,12 +1,17 @@
+import hashlib
+import mimetypes
 import os
-from queue import Queue
+import stat
 import tempfile
 import threading
+from datetime import datetime
+from queue import Queue
 from typing import Optional
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
     IObjectStorageAdapter,
+    ObjectMetaData,
 )
 
 
@@ -60,7 +65,31 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
     def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
         with self._lock:
             self.__path_exists(prefix)
-            return [
+            objects = [
                 os.path.join(prefix, f)
                 for f in os.listdir(os.path.join(self.base_path, prefix))
             ]
+            if queue:
+                for obj in objects:
+                    queue.put(obj)
+            return objects
+
+    def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
+        self.__path_exists(prefix, key)
+
+        file_path = os.path.join(self.base_path, prefix, key)
+        stat_info = os.stat(file_path)
+
+        mime_type, encoding = mimetypes.guess_type(file_path)
+
+        return ObjectMetaData(
+            file_path=os.path.abspath(file_path),
+            file_name=os.path.basename(file_path),
+            file_size_bytes=stat_info.st_size,
+            created_time=datetime.fromtimestamp(stat_info.st_ctime),
+            modified_time=datetime.fromtimestamp(stat_info.st_mtime),
+            accessed_time=datetime.fromtimestamp(stat_info.st_atime),
+            permissions=stat.filemode(stat_info.st_mode),
+            mime_type=mime_type,
+            encoding=encoding
+        )
