@@ -22,6 +22,7 @@ class FileIngestionConfiguration(BaseModel):
     output_path: str
     graph_name: str
     recursive: bool = True
+    delete_from_input: bool = False
 
 
 class ABIModule(BaseModule):
@@ -39,6 +40,9 @@ class ABIModule(BaseModule):
 
     class Configuration(ModuleConfiguration):
         file_ingestion_pipelines: list[FileIngestionConfiguration] = []
+        pdftomarkdown_enabled: bool = True
+        docxtomarkdown_enabled: bool = True
+        pptxtomarkdown_enabled: bool = True
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

@@ -1,10 +1,10 @@
 from naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology import (
-    File as _File,
+    Processor as _Processor,
 )
 
 
-class File(_File):
-    """Action class for File"""
+class Processor(_Processor):
+    """Action class for Processor"""
 
     def actions(self):
         """Action method - implement your logic here"""
