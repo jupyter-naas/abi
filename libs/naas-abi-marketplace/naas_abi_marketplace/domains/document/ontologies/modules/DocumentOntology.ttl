@@ -51,6 +51,13 @@ doc:Document a owl:Class ;
         owl:allValuesFrom doc:File
     ] .
 
+doc:Processor a owl:Class ;
+    rdfs:label "Processor"@en ;
+    rdfs:subClassOf bfo:BFO_0000031;
+    skos:definition "A Processor is a system that processes documents."@en ;
+    skos:example "A processor that converts a PDF file to a Markdown file."@en .
+
+
 #################################################################
 #    Object Properties
 #################################################################
@@ -68,6 +75,18 @@ doc:isEmbodiedIn a owl:ObjectProperty ;
     rdfs:range doc:File ;
     skos:definition "A document is embodied in a file."@en ;
     skos:example "The document 'Employment Contract' is embodied in the file 'employment_contract.pdf'."@en .
+
+doc:derivedFrom a owl:ObjectProperty ;
+    rdfs:domain doc:File ;
+    rdfs:range doc:File ;
+    skos:definition "A file is derived from another file."@en ;
+    skos:example "The file 'employment_contract.pdf' is derived from the file 'employment_contract_template.pdf'."@en .
+
+doc:processedBy a owl:ObjectProperty ;
+    rdfs:domain doc:File ;
+    rdfs:range doc:Processor ;
+    skos:definition "A file is processed by a processor."@en ;
+    skos:example "The file 'employment_contract.pdf' is processed by the processor 'PDF to Markdown Processor'."@en .
 
 #################################################################
 #    Data Properties
@@ -145,24 +164,23 @@ doc:sha256 a owl:DatatypeProperty ;
 
 
 #################################################################
-# IngestionJob
+#    Named Individuals (Processors)
 #################################################################
 
-doc:IngestionJob a owl:Class ;
-    rdfs:label "Ingestion Job"@en ;
-    skos:definition "An Ingestion Job is a job that ingests a document."@en ;
-    skos:example "An Ingestion Job that ingests the document 'document.pdf' from the location '/documents/document.pdf'."@en .
+doc:FileIngestionProcessor a owl:NamedIndividual ;
+    rdfs:label "File Ingestion Processor"@en ;
+    rdf:type doc:Processor ;
+    skos:definition "A File Ingestion Processor is a processor that ingests a file."@en ;
+    skos:example "A processor that ingests a file."@en .
 
-doc:IngestionJobType a owl:DatatypeProperty ;
-    rdfs:label "ingestion job type"@en ;
-    rdfs:domain doc:IngestionJob ;
-    rdfs:range xsd:string ;
-    skos:definition "The type of the ingestion job."@en ;
-    skos:example "The type of the ingestion job is 'pdf'."@en .
+doc:PDFToMarkdownProcessor a owl:NamedIndividual ;
+    rdfs:label "PDF to Markdown Processor"@en ;
+    rdf:type doc:Processor ;
+    skos:definition "A PDF to Markdown Processor is a processor that converts a PDF file to a Markdown file."@en ;
+    skos:example "A processor that converts a PDF file to a Markdown file."@en .
 
-doc:refers_to_file a owl:ObjectProperty ;
-    rdfs:domain doc:IngestionJob ;
-    rdfs:range doc:File ;
-    rdfs:label "refers to file"@en ;
-    skos:definition "An Ingestion Job refers to a file."@en ;
-    skos:example "The Ingestion Job 'document.pdf' refers to the file 'document.pdf'."@en .
+doc:DocxToMarkdownProcessor a owl:NamedIndividual ;
+    rdfs:label "Docx to Markdown Processor"@en ;
+    rdf:type doc:Processor ;
+    skos:definition "A Docx to Markdown Processor is a processor that converts a Docx file to a Markdown file."@en ;
+    skos:example "A processor that converts a Docx file to a Markdown file."@en .
