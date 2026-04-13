@@ -1,4 +1,3 @@
-import hashlib
 import mimetypes
 import os
 import stat
@@ -91,5 +90,5 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
             accessed_time=datetime.fromtimestamp(stat_info.st_atime),
             permissions=stat.filemode(stat_info.st_mode),
             mime_type=mime_type,
-            encoding=encoding
+            encoding=encoding,
         )
