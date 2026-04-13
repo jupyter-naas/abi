@@ -1,4 +1,3 @@
-import hashlib
 from datetime import datetime
 from queue import Queue
 from typing import Optional
