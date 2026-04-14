@@ -3,8 +3,11 @@ AI Provider Service - Handles communication with different AI backends.
 Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom OpenAI-compatible endpoints.
 """
 
+import importlib
+import pkgutil
+import threading
 from collections.abc import AsyncGenerator
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
@@ -65,6 +68,12 @@ _OFFICIAL_ENDPOINTS: dict[str, str] = {
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _SENSITIVE_QUERY_KEYS = {"token", "api_key", "key", "access_token", "auth", "authorization"}
 _REDACTED = "REDACTED"
+
+_INPROCESS_AGENT_INDEX: dict[str, callable] = {}
+_INPROCESS_AGENT_HINTS: list[str] = []
+_INPROCESS_AGENT_SIGNATURE: tuple[str, ...] | None = None
+_INPROCESS_AGENT_LOCK = threading.Lock()
+_INPROCESS_AGENT_INSTANCES: dict[str, object] = {}
 
 
 def redact_url_for_logs(url: str) -> str:
@@ -660,8 +669,54 @@ async def complete_chat(
         return await complete_with_cloudflare(messages, config, system_prompt)
     elif config.type == "custom":
         return await complete_with_custom(messages, config, system_prompt)
+    elif config.type == "abi":
+        return await complete_with_abi(messages, config, system_prompt)
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
+
+
+async def complete_with_abi(
+    messages: list[Message],
+    config: ProviderConfig,
+    system_prompt: str | None = None,
+) -> str:
+    del system_prompt
+
+    endpoint = (config.endpoint or "").rstrip("/")
+    if endpoint.startswith("inprocess://"):
+        agent = _resolve_inprocess_abi_agent(config.model)
+        if agent is None:
+            raise ValueError(f"In-process ABI agent not found: {config.model}")
+
+        latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
+        if not latest_user_message:
+            return ""
+
+        if hasattr(agent, "ainvoke"):
+            return await agent.ainvoke(latest_user_message)
+        if hasattr(agent, "invoke"):
+            return agent.invoke(latest_user_message)
+        raise ValueError(f"In-process ABI agent '{config.model}' cannot be invoked")
+
+    if not endpoint:
+        raise ValueError("ABI endpoint is required")
+
+    latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
+    payload = {
+        "prompt": latest_user_message,
+        "thread_id": str(hash(tuple(m.content for m in messages[-5:]))),
+    }
+    url = f"{endpoint}/agents/{config.model}/completion?token={config.api_key or ''}"
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            url, json=payload, headers={"Content-Type": "application/json"}
+        )
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict) and isinstance(data.get("completion"), str):
+            return data["completion"]
+        return str(data)
 
 
 # Known multimodal (vision) model patterns
@@ -999,167 +1054,238 @@ async def stream_with_abi(
         yield f"\n\n**Error:** Failed to connect to ABI server: {str(e)}"
 
 
-def _resolve_inprocess_abi_agent(agent_name: str):
-    """Resolve an ABI agent instance from in-process loaded modules."""
+def _normalize_agent_key(value: str) -> str:
+    return "".join(ch for ch in value.lower() if ch.isalnum())
+
+
+def _agent_candidates(runtime_name: str, class_name: str, module_path: str) -> set[str]:
+    class_name_stripped = class_name[:-5] if class_name.endswith("Agent") else class_name
+    module_path_norm = module_path.lower()
+    runtime_name_norm = runtime_name.strip().lower()
+    class_name_norm = class_name.strip().lower()
+    class_name_stripped_norm = class_name_stripped.strip().lower()
+    return {
+        runtime_name_norm,
+        class_name_norm,
+        class_name_stripped_norm,
+        f"{module_path_norm}/{runtime_name_norm}",
+        f"{module_path_norm}/{class_name_norm}",
+        f"{module_path_norm}/{class_name_stripped_norm}",
+    }
+
+
+def _build_runtime_agent_index(modules: dict[str, object]) -> tuple[dict[str, callable], list[str]]:
     import sys
 
-    from naas_abi import ABIModule
+    index: dict[str, callable] = {}
+    hints: set[str] = set()
 
-    abi_module = ABIModule.get_instance()
-    modules = getattr(getattr(abi_module, "engine", None), "modules", {}) or {}
+    for module in modules.values():
+        if module is None:
+            continue
+        module_path = module.__class__.__module__
+        for agent_cls in getattr(module, "agents", []) or []:
+            if agent_cls is None:
+                continue
+            agent_mod = sys.modules.get(agent_cls.__module__)
+            if agent_mod is None:
+                try:
+                    agent_mod = importlib.import_module(agent_cls.__module__)
+                except Exception:
+                    agent_mod = None
+            runtime_name = (
+                getattr(agent_mod, "NAME", None)
+                or getattr(agent_cls, "NAME", None)
+                or agent_cls.__name__
+            )
+            candidates = _agent_candidates(str(runtime_name), agent_cls.__name__, module_path)
+            hints.add(f"{module_path}/{str(runtime_name)}")
+            factory = getattr(agent_cls, "New", None)
+            if not callable(factory):
+                continue
+            for candidate in candidates:
+                index.setdefault(candidate, factory)
+                index.setdefault(_normalize_agent_key(candidate), factory)
+
+    return index, sorted(hints)
+
+
+def _build_local_agent_index() -> tuple[dict[str, callable], list[str]]:
+    index: dict[str, callable] = {}
+    hints: set[str] = set()
+
+    try:
+        from naas_abi import agents as agents_pkg
+    except Exception:
+        return index, []
+
+    for module_info in pkgutil.iter_modules(agents_pkg.__path__):
+        if module_info.ispkg:
+            continue
+        module_name = module_info.name
+        module_path = f"naas_abi.agents.{module_name}"
+        try:
+            mod = importlib.import_module(module_path)
+        except Exception:
+            continue
+
+        create_agent = getattr(mod, "create_agent", None)
+        for _, value in mod.__dict__.items():
+            if not isinstance(value, type):
+                continue
+            if getattr(value, "__module__", "") != module_path:
+                continue
+
+            runtime_name = (
+                getattr(mod, "NAME", None) or getattr(value, "NAME", None) or value.__name__
+            )
+            candidates = _agent_candidates(str(runtime_name), value.__name__, module_path)
+            hints.add(f"{module_path}/{str(runtime_name)}")
+
+            factory = getattr(value, "New", None)
+            if not callable(factory) and callable(create_agent):
+                factory = create_agent
+            if not callable(factory):
+                continue
+
+            for candidate in candidates:
+                index.setdefault(candidate, factory)
+                index.setdefault(_normalize_agent_key(candidate), factory)
+
+    return index, sorted(hints)
+
+
+def _runtime_signature(modules: dict[str, object]) -> tuple[str, ...]:
+    signature: list[str] = []
+    for module in modules.values():
+        if module is None:
+            continue
+        module_path = module.__class__.__module__
+        agent_names = sorted(
+            [
+                f"{agent_cls.__module__}.{agent_cls.__name__}"
+                for agent_cls in (getattr(module, "agents", []) or [])
+                if agent_cls is not None
+            ]
+        )
+        signature.append(f"{module_path}:{'|'.join(agent_names)}")
+    return tuple(sorted(signature))
+
+
+def _refresh_inprocess_agent_cache_if_needed(modules: dict[str, object]) -> None:
+    global _INPROCESS_AGENT_INDEX
+    global _INPROCESS_AGENT_HINTS
+    global _INPROCESS_AGENT_SIGNATURE
+
+    signature = _runtime_signature(modules)
+    if _INPROCESS_AGENT_SIGNATURE == signature and _INPROCESS_AGENT_INDEX:
+        return
+
+    runtime_index, runtime_hints = _build_runtime_agent_index(modules)
+    local_index, local_hints = _build_local_agent_index()
+
+    merged_index = dict(runtime_index)
+    for key, factory in local_index.items():
+        merged_index.setdefault(key, factory)
+
+    _INPROCESS_AGENT_INDEX = merged_index
+    _INPROCESS_AGENT_HINTS = sorted(set(runtime_hints + local_hints))
+    _INPROCESS_AGENT_SIGNATURE = signature
+    _INPROCESS_AGENT_INSTANCES.clear()
+
+
+def _resolve_inprocess_abi_agent(agent_name: str):
+    """Resolve an ABI agent instance from in-process loaded modules with caching."""
+    from naas_abi import ABIModule
 
     raw_target = (agent_name or "").strip()
     if not raw_target:
         return None
 
-    # Support:
-    # - "AgentName"
-    # - "module.path/AgentName"
-    # - "module.path:AgentName"
-    target_module = None
-    target_agent = raw_target
-    if "/" in raw_target:
-        parts = raw_target.split("/", 1)
-        target_module = parts[0].strip().lower() or None
-        target_agent = parts[1].strip()
-    elif ":" in raw_target:
-        # Only treat ":" as module separator for module-qualified targets.
-        # Human labels like "Anthropic: Claude Opus 4.6" should remain intact.
-        left, right = raw_target.split(":", 1)
-        if "." in left or "/" in left:
-            target_module = left.strip().lower() or None
-            target_agent = right.strip()
+    abi_module = ABIModule.get_instance()
+    modules = getattr(getattr(abi_module, "engine", None), "modules", {}) or {}
 
-    target_agent_norm = target_agent.lower()
-    raw_target_norm = raw_target.lower()
+    with _INPROCESS_AGENT_LOCK:
+        _refresh_inprocess_agent_cache_if_needed(modules)
+        lookup_order = [raw_target.lower(), _normalize_agent_key(raw_target)]
+        if "/" in raw_target:
+            _, right = raw_target.split("/", 1)
+            lookup_order.extend([right.strip().lower(), _normalize_agent_key(right.strip())])
 
-    def _normalize(value: str) -> str:
-        return "".join(ch for ch in value.lower() if ch.isalnum())
+        factory = None
+        for key in lookup_order:
+            factory = _INPROCESS_AGENT_INDEX.get(key)
+            if callable(factory):
+                break
 
-    target_agent_key = _normalize(target_agent)
-    raw_target_key = _normalize(raw_target)
+        if not callable(factory):
+            return None
 
-    # If a module prefix is provided but doesn't match any loaded module path,
-    # fall back to agent/class-name matching instead of hard-failing.
-    if target_module:
-        module_paths = [
-            module.__class__.__module__.lower() for module in modules.values() if module is not None
-        ]
-        if not any(target_module in module_path for module_path in module_paths):
-            target_module = None
+        factory_key = (
+            f"{getattr(factory, '__module__', '')}."
+            f"{getattr(factory, '__qualname__', getattr(factory, '__name__', 'factory'))}"
+        )
+        existing = _INPROCESS_AGENT_INSTANCES.get(factory_key)
+        if existing is not None:
+            return existing
 
-    for module in modules.values():
-        module_path = module.__class__.__module__
-        module_path_norm = module_path.lower()
-        if target_module and target_module not in module_path_norm:
-            continue
+        try:
+            instance = factory()
+        except Exception:
+            return None
 
-        for agent_cls in getattr(module, "agents", []) or []:
-            if agent_cls is None:
-                continue
-            try:
-                instantiated_agent = None
-                agent_mod = sys.modules.get(agent_cls.__module__)
-                module_level_name = (
-                    getattr(agent_mod, "NAME", None) if agent_mod is not None else None
-                )
-                runtime_name = (
-                    module_level_name or getattr(agent_cls, "NAME", None) or agent_cls.__name__
-                )
-                try:
-                    instantiated_agent = agent_cls.New()
-                    display_name = getattr(instantiated_agent, "name", None)
-                except Exception:
-                    display_name = None
-                class_name = agent_cls.__name__
-                class_name_stripped = (
-                    class_name[:-5] if class_name.endswith("Agent") else class_name
-                )
+        _INPROCESS_AGENT_INSTANCES[factory_key] = instance
+        return instance
 
-                candidate_names = {
-                    str(runtime_name).strip().lower(),
-                    class_name.strip().lower(),
-                    class_name_stripped.strip().lower(),
-                    f"{module_path_norm}/{str(runtime_name).strip().lower()}",
-                    f"{module_path_norm}/{class_name.strip().lower()}",
-                    f"{module_path_norm}/{class_name_stripped.strip().lower()}",
-                }
-                if display_name:
-                    candidate_names.add(str(display_name).strip().lower())
-                    candidate_names.add(f"{module_path_norm}/{str(display_name).strip().lower()}")
 
-                candidate_keys = {_normalize(c) for c in candidate_names}
-                if (
-                    target_agent_norm in candidate_names
-                    or raw_target_norm in candidate_names
-                    or target_agent_key in candidate_keys
-                    or raw_target_key in candidate_keys
-                ):
-                    return instantiated_agent or agent_cls.New()
-            except Exception:
-                continue
+def _extract_opencode_ui_event(event: dict[str, Any]) -> dict[str, Any] | None:
+    event_type = str(event.get("type") or "")
+    properties = event.get("properties") or {}
 
-    # Fallback: resolve from local naas_abi.agents package directly.
-    # In some runtimes, module.agents may not include local agents (AbiAgent, etc.).
-    try:
-        from importlib import import_module
+    if "question" in event_type.lower():
+        question_payload = properties.get("question") or properties
+        if not isinstance(question_payload, dict):
+            return None
+        question_text = str(question_payload.get("question") or "").strip()
+        options = question_payload.get("options")
+        cleaned_options: list[str] = []
+        if isinstance(options, list):
+            cleaned_options = [opt for opt in options if isinstance(opt, str)]
+        if question_text == "":
+            return None
+        return {
+            "event": "agent.question",
+            "question": question_text,
+            "options": cleaned_options,
+        }
 
-        from naas_abi_core.services.agent.Agent import Agent
+    if event_type != "message.part.updated":
+        return None
 
-        local_agent_module_names = [
-            "AbiAgent",
-            "EntitytoSPARQLAgent",
-            "KnowledgeGraphBuilderAgent",
-            "OntologyEngineerAgent",
-        ]
+    part = properties.get("part") or {}
+    if not isinstance(part, dict):
+        return None
 
-        for mod_name in local_agent_module_names:
-            mod = import_module(f"naas_abi.agents.{mod_name}")
-            create_agent = getattr(mod, "create_agent", None)
-            for _, value in mod.__dict__.items():
-                if not isinstance(value, type):
-                    continue
-                if not issubclass(value, Agent):
-                    continue
+    if part.get("type") != "tool":
+        return None
 
-                class_name = value.__name__
-                class_name_stripped = (
-                    class_name[:-5] if class_name.endswith("Agent") else class_name
-                )
-                runtime_name = (
-                    getattr(mod, "NAME", None) or getattr(value, "NAME", None) or class_name
-                )
-                local_path = f"naas_abi.agents.{mod_name}".lower()
-                local_candidates = {
-                    str(runtime_name).strip().lower(),
-                    class_name.lower(),
-                    class_name_stripped.lower(),
-                    f"{local_path}/{str(runtime_name).strip().lower()}",
-                    f"{local_path}/{class_name.lower()}",
-                    f"{local_path}/{class_name_stripped.lower()}",
-                }
-                try:
-                    display_name = (
-                        getattr(value.New(), "name", None) if hasattr(value, "New") else None
-                    )
-                except Exception:
-                    display_name = None
-                if display_name:
-                    local_candidates.add(str(display_name).strip().lower())
-                    local_candidates.add(f"{local_path}/{str(display_name).strip().lower()}")
-                local_keys = {_normalize(c) for c in local_candidates}
-                if (
-                    target_agent_norm in local_candidates
-                    or raw_target_norm in local_candidates
-                    or target_agent_key in local_keys
-                    or raw_target_key in local_keys
-                ):
-                    if not hasattr(value, "New") and callable(create_agent):
-                        value.New = create_agent
-                    if hasattr(value, "New"):
-                        return value.New()
-    except Exception:
-        pass
+    tool_name = str(part.get("tool") or "tool").strip()
+    state = part.get("state") or {}
+    if not isinstance(state, dict):
+        return None
+
+    status = str(state.get("status") or "").strip()
+    if status in {"pending", "running", "completed", "failed", "error", "cancelled"}:
+        payload: dict[str, Any] = {
+            "event": "tool",
+            "tool": tool_name,
+            "status": status,
+        }
+        output = state.get("output")
+        if isinstance(output, str) and output.strip():
+            payload["output"] = output.strip()
+        return payload
+
     return None
 
 
@@ -1167,9 +1293,10 @@ async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
     thread_id: str | None = None,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[str | dict[str, Any], None]:
     """Stream chat by invoking ABI agent directly in-process."""
     import asyncio
+    import json
     import logging
 
     logger = logging.getLogger(__name__)
@@ -1188,29 +1315,8 @@ async def stream_with_abi_inprocess(
     agent_name = config.model
     agent = _resolve_inprocess_abi_agent(agent_name)
     if agent is None:
-        # Expose available names to quickly diagnose bad IDs in UI/backend mapping.
-        try:
-            from naas_abi import ABIModule
-
-            available = []
-            modules = (
-                getattr(getattr(ABIModule.get_instance(), "engine", None), "modules", {}) or {}
-            )
-            for module in modules.values():
-                module_path = module.__class__.__module__
-                for agent_cls in getattr(module, "agents", []) or []:
-                    if agent_cls is None:
-                        continue
-                    agent_mod = __import__(agent_cls.__module__, fromlist=["*"])
-                    runtime_name = (
-                        getattr(agent_mod, "NAME", None)
-                        or getattr(agent_cls, "NAME", None)
-                        or agent_cls.__name__
-                    )
-                    available.append(f"{module_path}/{runtime_name}")
-            available_hint = ", ".join(sorted(set(available))[:20])
-        except Exception:
-            available_hint = "unavailable"
+        with _INPROCESS_AGENT_LOCK:
+            available_hint = ", ".join(_INPROCESS_AGENT_HINTS[:20]) or "unavailable"
         yield (
             f"\n\n**Error:** In-process ABI agent not found: {agent_name}\n"
             f"Available (sample): {available_hint}"
@@ -1223,6 +1329,47 @@ async def stream_with_abi_inprocess(
             agent.state.set_thread_id(str(thread_id))
         except Exception:
             pass
+
+    # New OpencodeAgent path: async event stream method.
+    if hasattr(agent, "astream"):
+        try:
+            emitted = False
+            async for raw_event in agent.astream(
+                latest_user_message,
+                thread_id=thread_id,
+            ):
+                if isinstance(raw_event, dict):
+                    obj = raw_event
+                else:
+                    try:
+                        obj = json.loads(raw_event)
+                    except Exception:
+                        continue
+
+                if not isinstance(obj, dict):
+                    continue
+
+                if obj.get("type") == "message.part.delta":
+                    props = obj.get("properties") or {}
+                    if props.get("field") == "text":
+                        delta = props.get("delta")
+                        if isinstance(delta, str) and delta:
+                            emitted = True
+                            yield delta
+                    continue
+
+                ui_event = _extract_opencode_ui_event(obj)
+                if ui_event:
+                    yield ui_event
+
+            if not emitted and hasattr(agent, "ainvoke"):
+                fallback_text = await agent.ainvoke(latest_user_message, thread_id=thread_id)
+                if isinstance(fallback_text, str) and fallback_text.strip():
+                    yield fallback_text
+        except Exception as exc:
+            logger.error(f"In-process ABI streaming error: {exc}")
+            yield f"\n\n**Error:** Failed to stream ABI agent response: {str(exc)}"
+        return
 
     stream_iter = iter(agent.stream_invoke(latest_user_message))
 
