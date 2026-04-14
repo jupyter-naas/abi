@@ -63,6 +63,9 @@ modules:
         - "openai/gpt-5.2"
         - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
+
+  - module: naas_abi_marketplace.domains.document
+    enabled: true
   
   - module: naas_abi_marketplace.domains.support
     enabled: true
