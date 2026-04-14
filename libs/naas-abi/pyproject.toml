@@ -34,7 +34,7 @@ dependencies = [
     "tenacity>=8.2.0",
     "PyYAML",
     "python-socketio>=5.16.1",
-    "thefuzz>=0.22.1",
+    "thefuzz>=0.22.1"
 ]
 license = { text = "MIT License" }
 
