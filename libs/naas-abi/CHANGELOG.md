@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.17.1 (2026-04-14)
+
+### Bug Fixes
+
+- Bump versions
+  ([`9096426`](https://github.com/jupyter-naas/abi/commit/90964266834d48b55770bccd536f26536bde9aec))
+
+- **nexus**: Files loading race condition
+  ([`86b82ee`](https://github.com/jupyter-naas/abi/commit/86b82ee10959b356dd0f812353ea5481066f41f0))
+
+
 ## v1.17.0 (2026-04-07)
 
 ### Bug Fixes
