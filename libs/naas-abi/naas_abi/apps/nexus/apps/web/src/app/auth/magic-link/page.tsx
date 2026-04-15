@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 
-export default function MagicLinkPage() {
+function MagicLinkPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { verifyMagicLink, isLoading, error, clearError, isAuthenticated } = useAuthStore();
@@ -70,5 +70,27 @@ export default function MagicLinkPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function MagicLinkPageFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-xl border p-6 text-center">
+        <div className="mb-4 flex justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+        <h1 className="text-lg font-semibold">Loading magic link</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Please wait while we prepare sign-in.</p>
+      </div>
+    </div>
+  );
+}
+
+export default function MagicLinkPage() {
+  return (
+    <Suspense fallback={<MagicLinkPageFallback />}>
+      <MagicLinkPageContent />
+    </Suspense>
   );
 }
