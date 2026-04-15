@@ -33,6 +33,7 @@ const legacyRoutes = [
 // Routes that are only for unauthenticated users
 const authRoutes = [
   '/auth/login',
+  '/auth/magic-link',
   '/auth/register',
   '/auth/forgot-password',
   '/login',        // Legacy alias

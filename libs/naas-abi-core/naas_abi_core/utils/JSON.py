@@ -4,6 +4,27 @@ import re
 from naas_abi_core import logger
 
 
+def _raw_decode_json_object(text: str) -> list | dict | None:
+    """Parse the first JSON object or array in *text*, skipping any leading prose.
+
+    Handles LLM output like: ``Some preamble.{ "key": "value" }`` where the
+    opening brace is not on its own line and there are no markdown fences.
+    """
+    decoder = json.JSONDecoder()
+    for opener in ("{", "["):
+        start = 0
+        while True:
+            idx = text.find(opener, start)
+            if idx == -1:
+                break
+            try:
+                obj, _ = decoder.raw_decode(text, idx)
+                return obj
+            except json.JSONDecodeError:
+                start = idx + 1
+    return None
+
+
 def extract_json_from_completion(completion_text: str) -> list | dict:
     """Extract JSON object from completion text that contains markdown formatting.
 
@@ -44,6 +65,9 @@ def extract_json_from_completion(completion_text: str) -> list | dict:
             logger.debug(f"JSON parse attempt failed: {str(e)}")
             continue
 
-    # If all attempts fail, return empty dict
+    raw = _raw_decode_json_object(json_str)
+    if raw is not None:
+        return raw
+
     logger.error("Failed to parse JSON after all cleanup attempts")
     return {}

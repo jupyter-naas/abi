@@ -26,6 +26,8 @@ export interface AuthState {
   error: string | null;
   
   // Actions
+  requestMagicLink: (email: string) => Promise<boolean>;
+  verifyMagicLink: (token: string) => Promise<boolean>;
   login: (email: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
@@ -47,72 +49,57 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
       
-  // Login with email/password
-  login: async (email: string, password: string): Promise<boolean> => {
+  requestMagicLink: async (email: string): Promise<boolean> => {
         set({ isLoading: true, error: null });
         
         try {
           const apiBase = getApiUrl();
-          const response = await fetch(`${apiBase}/api/auth/login`, {
+          const response = await fetch(`${apiBase}/api/auth/magic-link/request`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            credentials: 'include', // Important: allows cookies to be set
-            body: JSON.stringify({ email, password }),
+            credentials: 'include',
+            body: JSON.stringify({ email }),
           });
           
           if (!response.ok) {
             const data = await response.json();
-            throw new Error(data.detail || 'Login failed');
+            throw new Error(data.detail || 'Failed to send magic link');
           }
-          
-          const data = await response.json();
-          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
-          
-          // Set auth flag cookie for middleware
-          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000'; // 30 days
-          
-          set({
-            user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
-            token: data.access_token,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-          });
+
+          set({ isLoading: false, error: null });
           
           return true;
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Login failed',
+            error: error instanceof Error ? error.message : 'Failed to send magic link',
           });
           return false;
         }
       },
-      
-      // Register new account
-      register: async (email: string, password: string, name: string): Promise<boolean> => {
+
+      verifyMagicLink: async (token: string): Promise<boolean> => {
         set({ isLoading: true, error: null });
-        
+
         try {
           const apiBase = getApiUrl();
-          const response = await fetch(`${apiBase}/api/auth/register`, {
+          const response = await fetch(`${apiBase}/api/auth/magic-link/verify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            credentials: 'include', // Important: allows cookies to be set
-            body: JSON.stringify({ email, password, name }),
+            credentials: 'include',
+            body: JSON.stringify({ token }),
           });
-          
+
           if (!response.ok) {
             const data = await response.json();
-            throw new Error(data.detail || 'Registration failed');
+            throw new Error(data.detail || 'Magic link verification failed');
           }
-          
+
           const data = await response.json();
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
-          
-          // Set auth flag cookie for middleware
-          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000'; // 30 days
-          
+
+          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000';
+
           set({
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
             token: data.access_token,
@@ -125,10 +112,18 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Registration failed',
+            error: error instanceof Error ? error.message : 'Magic link verification failed',
           });
           return false;
         }
+      },
+
+      login: async (email: string, _password: string): Promise<boolean> => {
+        return get().requestMagicLink(email);
+      },
+
+      register: async (email: string, _password: string, _name: string): Promise<boolean> => {
+        return get().requestMagicLink(email);
       },
       
       // Logout - clears auth state and ALL persisted store data
@@ -242,13 +237,13 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   const response = await fetch(fullUrl, { ...options, headers });
   
   // Auto-logout on 401 to prevent stale token issues
-  if (response.status === 401) {
-    console.warn('Auth token expired or invalid, logging out...');
-    useAuthStore.getState().logout();
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+    if (response.status === 401) {
+      console.warn('Auth token expired or invalid, logging out...');
+      useAuthStore.getState().logout();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth/login';
+      }
     }
-  }
   
   return response;
 }

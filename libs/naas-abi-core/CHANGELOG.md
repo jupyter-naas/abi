@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.25.0 (2026-04-15)
+
+### Features
+
+- Add _raw_decode_json_object
+  ([`465fb4c`](https://github.com/jupyter-naas/abi/commit/465fb4cd42caba19bbaf97b2599e32a28d6394ef))
+
+
+## v1.24.0 (2026-04-14)
+
+
 ## v1.23.0 (2026-04-13)
 
 ### Bug Fixes

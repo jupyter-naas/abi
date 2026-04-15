@@ -11,6 +11,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusAdapterPythonQueueConfiguration,
     BusServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
+    EmailAdapterConfiguration,
+    EmailAdapterSMTPConfiguration,
+    EmailServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
@@ -101,6 +106,16 @@ class ServicesConfiguration(BaseModel):
                 persistence_path="storage/kv/python.sqlite3",
                 journal_mode="WAL",
                 busy_timeout_ms=5000,
+            ).model_dump(),
+        )
+    )
+    email: EmailServiceConfiguration = EmailServiceConfiguration(
+        email_adapter=EmailAdapterConfiguration(
+            adapter="smtp",
+            config=EmailAdapterSMTPConfiguration(
+                host="localhost",
+                port=1025,
+                timeout=10,
             ).model_dump(),
         )
     )

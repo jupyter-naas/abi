@@ -377,6 +377,13 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     // Do not force a workspace prefix here.
     const relativePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = getCurrentWorkspaceId();
+
+    // The files API requires a workspace when listing root.
+    // During app bootstrap the workspace can still be null.
+    if (!relativePath && !workspaceId) {
+      set({ files: [], currentPath: '', loading: false, error: null });
+      return;
+    }
     
     set({ loading: true, error: null });
     try {
