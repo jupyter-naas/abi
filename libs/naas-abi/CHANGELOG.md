@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.1 (2026-04-15)
+
+### Bug Fixes
+
+- Working on file upload and fixing build
+  ([`541fe08`](https://github.com/jupyter-naas/abi/commit/541fe086637d0f12b3384f14f3b4b9f3e4f1686a))
+
+
 ## v1.19.0 (2026-04-15)
 
 ### Bug Fixes
