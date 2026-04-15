@@ -186,8 +186,23 @@ class Settings(BaseSettings):
 
     # Authentication
     secret_key: str = "change-me-in-production"
+    auth_password_enabled: bool = False
+    magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
+    magic_link_expire_minutes: int = 15
+    magic_link_path: str = "/auth/magic-link"
+
+    # SMTP (magic link delivery)
+    smtp_enabled: bool = False
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = False
+    smtp_use_ssl: bool = False
+    smtp_from_email: EmailStr = "no-reply@nexus.example.com"
+    smtp_from_name: str = "NEXUS"
 
     # Rate Limiting
     rate_limit_enabled: bool = True

@@ -28,6 +28,16 @@ class PasswordResetTokenRecord:
     created_at: datetime
 
 
+@dataclass
+class MagicLinkTokenRecord:
+    id: str
+    user_id: str
+    token: str
+    expires_at: datetime
+    used: bool
+    created_at: datetime
+
+
 class AuthPersistencePort(ABC):
     @abstractmethod
     async def get_user_by_id(self, user_id: str) -> AuthUserRecord | None:
@@ -99,6 +109,29 @@ class AuthPersistencePort(ABC):
 
     @abstractmethod
     async def mark_password_reset_token_used(self, token_id: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def mark_unused_magic_link_tokens_used(self, user_id: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def create_magic_link_token(
+        self,
+        token_id: str,
+        user_id: str,
+        token: str,
+        expires_at: datetime,
+        created_at: datetime,
+    ) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_magic_link_token(self, token: str) -> MagicLinkTokenRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def mark_magic_link_token_used(self, token_id: str) -> None:
         raise NotImplementedError
 
     @abstractmethod
