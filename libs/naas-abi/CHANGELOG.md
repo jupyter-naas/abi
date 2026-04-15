@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.18.0 (2026-04-15)
+
+### Features
+
+- Make the email customizable
+  ([`9860f84`](https://github.com/jupyter-naas/abi/commit/9860f84186f8b411b2869f89d6197408a9d5352b))
+
+- Working on magic link system
+  ([`1d036ef`](https://github.com/jupyter-naas/abi/commit/1d036efbdbb05ddaf3baf7be9ef23a7373b20159))
+
+### Refactoring
+
+- Ontologies classes folder renamed (ontopy)
+  ([`0050ee8`](https://github.com/jupyter-naas/abi/commit/0050ee878b837bd75fdce8ad5d6c929992852bfe))
+
+
 ## v1.17.1 (2026-04-14)
 
 ### Bug Fixes
