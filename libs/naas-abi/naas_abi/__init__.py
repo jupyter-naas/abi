@@ -178,6 +178,7 @@ class NexusConfig(BaseModel):
     redis_url: str = "redis://localhost:6379/0"
 
     secret_key: str = "change-me-in-production"
+    auth_password_enabled: bool = False
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30

@@ -22,6 +22,7 @@ const providerTypes: { value: ProviderType; label: string; needsEndpoint: boolea
   { value: 'openai', label: 'OpenAI', needsEndpoint: false, needsApiKey: true, needsAccountId: false },
   { value: 'cloudflare', label: 'Cloudflare Workers AI', needsEndpoint: false, needsApiKey: true, needsAccountId: true },
   { value: 'ollama', label: 'Ollama (Local)', needsEndpoint: true, needsApiKey: false, needsAccountId: false },
+  { value: 'abi', label: 'ABI Server', needsEndpoint: true, needsApiKey: false, needsAccountId: false },
   { value: 'custom', label: 'Custom (OpenAI-compatible)', needsEndpoint: true, needsApiKey: true, needsAccountId: false },
 ];
 
@@ -40,6 +41,7 @@ const defaultModels: Record<ProviderType, string[]> = {
     '@cf/deepseek/deepseek-r1-distill-qwen-32b',
   ],
   ollama: [], // Will be fetched dynamically
+  abi: [],
   custom: [],
 };
 
@@ -69,7 +71,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
 
   // Fetch Ollama models when type is ollama
   useEffect(() => {
-    if (type === 'ollama') {
+    if (type === 'ollama' || type === 'abi') {
       fetchOllamaModels();
     }
   }, [type, endpoint]);
@@ -94,7 +96,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
   };
 
   const getModelsForType = () => {
-    if (type === 'ollama') {
+    if (type === 'ollama' || type === 'abi') {
       return ollamaModels;
     }
     return defaultModels[type];
@@ -159,7 +161,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
           </select>
         </div>
 
-        {/* Endpoint (for Ollama/Custom) */}
+        {/* Endpoint (for Ollama/ABI/Custom) */}
         {typeConfig?.needsEndpoint && (
           <div>
             <label className="mb-1.5 block text-sm font-medium">Endpoint URL</label>
@@ -246,11 +248,11 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
                 type="text"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder={type === 'ollama' ? 'No models found - run ollama pull <model>' : 'model-name'}
+                placeholder={type === 'ollama' || type === 'abi' ? 'No models found - run ollama pull <model>' : 'model-name'}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />
             )}
-            {type === 'ollama' && (
+            {(type === 'ollama' || type === 'abi') && (
               <button
                 type="button"
                 onClick={fetchOllamaModels}
