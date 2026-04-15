@@ -63,25 +63,41 @@ def dict_to_equal_string(d: dict) -> str:
 
 
 def print_tool_usage(message):
-    print_message = ""
-    tool_name = message.tool_calls[0]["name"]
-    arguments = ""
-    if (
-        "args" in message.tool_calls[0]
-        and len(message.tool_calls[0]["args"].values()) > 0
-    ):
-        arguments += dict_to_equal_string(message.tool_calls[0]["args"])
+    # Standard LangGraph/LangChain tool call payload.
+    if hasattr(message, "tool_calls") and message.tool_calls:
+        print_message = ""
+        tool_name = message.tool_calls[0]["name"]
+        arguments = ""
+        if (
+            "args" in message.tool_calls[0]
+            and len(message.tool_calls[0]["args"].values()) > 0
+        ):
+            arguments += dict_to_equal_string(message.tool_calls[0]["args"])
 
-    if tool_name.startswith("transfer_to_"):
-        tool_label = " ".join(
-            word.capitalize()
-            for word in tool_name.split("transfer_to_")[1].replace("_", " ").split()
-        )
-        print_message = f"\n🧞 [bold blue]Delegated to [/bold blue]{tool_label}"
-    else:
-        tool_label = tool_name.capitalize().replace("_", " ")
-        print_message = f"\n[bold blue]Tool Used:[/bold blue] {tool_label}\n{arguments}"
-    console.print(print_message)
+        if tool_name.startswith("transfer_to_"):
+            tool_label = " ".join(
+                word.capitalize()
+                for word in tool_name.split("transfer_to_")[1].replace("_", " ").split()
+            )
+            print_message = f"\n🧞 [bold blue]Delegated to [/bold blue]{tool_label}"
+        else:
+            tool_label = tool_name.capitalize().replace("_", " ")
+            print_message = (
+                f"\n[bold blue]Tool Used:[/bold blue] {tool_label}\n{arguments}"
+            )
+        console.print(print_message)
+        return
+
+    # Generic event payload used by OpencodeAgent streaming integration.
+    if isinstance(message, dict) and "content" in message:
+        console.print(f"\n[bold blue]Event:[/bold blue] {message['content']}")
+        return
+
+    if hasattr(message, "content"):
+        console.print(f"\n[bold blue]Event:[/bold blue] {message.content}")
+        return
+
+    console.print(f"\n[bold blue]Event:[/bold blue] {message}")
 
 
 def print_tool_response(response):
@@ -95,7 +111,7 @@ def clear_screen():
 def print_welcome_message(agent):
     # Set terminal title
     set_terminal_title()
-    
+
     # Skip the welcome - we already said hello in the CLI startup
     # Just quietly start the conversation
     pass
@@ -157,7 +173,7 @@ def print_image(image_path: str):
                 pass  # Silently fail if we can't display the image
         elif platform.system() == "Windows":
             try:
-                subprocess.run(['start', '', image_path], shell=True)  # nosec B602 - shell=True required for Windows 'start' command to open files
+                subprocess.run(["start", "", image_path], shell=True)  # nosec B602 - shell=True required for Windows 'start' command to open files
             except Exception:
                 pass
 
