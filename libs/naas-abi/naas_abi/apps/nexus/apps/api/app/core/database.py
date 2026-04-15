@@ -13,19 +13,39 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 
 # Known tables for safe row count queries
-KNOWN_TABLES = frozenset({
-    "users", "organizations", "organization_members",
-    "workspaces", "workspace_members", "conversations", "messages",
-    "ontologies", "graph_nodes", "graph_edges", "api_keys", "provider_configs",
-    "agent_configs", "secrets", "refresh_tokens", "revoked_tokens",
-    "audit_logs", "rate_limit_events", "password_changes", "workspace_secrets",
-})
+KNOWN_TABLES = frozenset(
+    {
+        "users",
+        "organizations",
+        "organization_members",
+        "workspaces",
+        "workspace_members",
+        "conversations",
+        "messages",
+        "ontologies",
+        "graph_nodes",
+        "graph_edges",
+        "api_keys",
+        "provider_configs",
+        "agent_configs",
+        "secrets",
+        "refresh_tokens",
+        "revoked_tokens",
+        "magic_link_tokens",
+        "audit_logs",
+        "rate_limit_events",
+        "password_changes",
+        "workspace_secrets",
+    }
+)
 
 
 # ============ ORM Base ============
 
+
 class Base(DeclarativeBase):
     """Declarative base for all ORM models."""
+
     pass
 
 
@@ -37,8 +57,8 @@ async_engine = create_async_engine(
     settings.database_url,
     echo=False,
     pool_pre_ping=True,  # Verify connections before using
-    pool_size=10,        # Connection pool size
-    max_overflow=20,     # Max connections above pool_size
+    pool_size=10,  # Connection pool size
+    max_overflow=20,  # Max connections above pool_size
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -89,7 +109,9 @@ async def init_db() -> None:
                 print(f"✗ Database connection failed after {max_retries} attempts")
                 print(f"  Error: {e}")
                 print("\n💡 Quick fix: Run 'make db-up' to start PostgreSQL")
-                raise ConnectionError("Database not available. Run 'make db-up' to start PostgreSQL.") from e
+                raise ConnectionError(
+                    "Database not available. Run 'make db-up' to start PostgreSQL."
+                ) from e
 
     migrations_dir = Path(__file__).parent.parent.parent / "migrations"
 
@@ -119,7 +141,7 @@ async def init_db() -> None:
                 continue
             # Remove inline comments
             if "--" in line:
-                line = line[:line.index("--")].strip()
+                line = line[: line.index("--")].strip()
             if line:
                 current_statement.append(line)
                 if line.endswith(";"):
@@ -170,7 +192,7 @@ async def table_exists(table_name: str) -> bool:
                     AND table_name = :name
                 )
             """),
-            {"name": table_name}
+            {"name": table_name},
         )
         return result.scalar()
 

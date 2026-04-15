@@ -21,6 +21,14 @@ class UserLogin(BaseModel):
     password: str = Field(..., min_length=1, max_length=128)
 
 
+class MagicLinkRequest(BaseModel):
+    email: EmailStr
+
+
+class MagicLinkVerifyRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
 class User(UserBase):
     id: str
     created_at: datetime

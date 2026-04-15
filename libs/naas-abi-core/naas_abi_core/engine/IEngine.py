@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from typing import (TYPE_CHECKING, Dict, List, Protocol, Union,
-                    runtime_checkable)
+from typing import TYPE_CHECKING, Dict, List, Protocol, Union, runtime_checkable
 
 from naas_abi_core.services.bus.BusService import BusService
+from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
-from naas_abi_core.services.object_storage.ObjectStorageService import \
-    ObjectStorageService
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
-from naas_abi_core.services.vector_store.VectorStoreService import \
-    VectorStoreService
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
 if TYPE_CHECKING:
     from naas_abi_core.module.Module import BaseModule
@@ -19,8 +18,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class ServicesAware(Protocol):
-    def set_services(self, services: "IEngine.Services") -> None:
-        ...
+    def set_services(self, services: "IEngine.Services") -> None: ...
 
 
 class IEngine:
@@ -31,6 +29,7 @@ class IEngine:
         __secret: Secret | None
         __bus: BusService | None
         __kv: KeyValueService | None
+        __email: EmailService | None
 
         def __init__(
             self,
@@ -40,6 +39,7 @@ class IEngine:
             secret: Secret | None = None,
             bus: BusService | None = None,
             kv: KeyValueService | None = None,
+            email: EmailService | None = None,
         ):
             self.__object_storage = object_storage
             self.__triple_store = triple_store
@@ -47,6 +47,7 @@ class IEngine:
             self.__secret = secret
             self.__bus = bus
             self.__kv = kv
+            self.__email = email
 
         @property
         def kv(self) -> KeyValueService:
@@ -88,6 +89,11 @@ class IEngine:
             return self.__bus
 
         @property
+        def email(self) -> EmailService:
+            assert self.__email is not None, "Email service is not initialized"
+            return self.__email
+
+        @property
         def all(
             self,
         ) -> List[
@@ -98,6 +104,7 @@ class IEngine:
                 Secret | None,
                 BusService | None,
                 KeyValueService | None,
+                EmailService | None,
             ]
         ]:
             return [
@@ -107,6 +114,7 @@ class IEngine:
                 self.__secret,
                 self.__bus,
                 self.__kv,
+                self.__email,
             ]
 
         def wire_services(self) -> None:
