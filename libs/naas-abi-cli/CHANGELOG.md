@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.24.2 (2026-04-14)
+
+### Bug Fixes
+
+- Bump versions
+  ([`9096426`](https://github.com/jupyter-naas/abi/commit/90964266834d48b55770bccd536f26536bde9aec))
+
+
 ## v1.24.1 (2026-04-07)
 
 ### Bug Fixes

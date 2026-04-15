@@ -1,6 +1,7 @@
 from io import StringIO
 
 import pytest
+import rdflib
 import requests
 from naas_abi_core.utils.onto2py.onto2py import onto2py
 from pydantic import ValidationError
@@ -269,3 +270,48 @@ ex:PetOwnerShape rdf:type sh:NodeShape ;
     # Assert this is raising a validation error
     with pytest.raises(ValidationError):
         module.PetOwner(hasName="John Doe", hasAge=30)
+
+
+def test_generated_rdf_entity_from_iri():
+    """Generated classes can load an instance from an IRI via SPARQL."""
+    ontology_ttl = """@prefix ex: <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Person rdf:type owl:Class ;
+    rdfs:label "Person" .
+
+ex:name rdf:type owl:DatatypeProperty ;
+    rdfs:domain ex:Person ;
+    rdfs:range xsd:string .
+
+ex:age rdf:type owl:DatatypeProperty ;
+    rdfs:domain ex:Person ;
+    rdfs:range xsd:integer .
+"""
+    module = ttl_to_module(StringIO(ontology_ttl), "from_iri_test_module")
+
+    with pytest.raises(ValueError):
+        module.Person.from_iri("http://example.org/john")
+
+    data_ttl = """@prefix ex: <http://example.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:john rdf:type ex:Person ;
+    ex:name "John Doe" ;
+    ex:age 42 ;
+    rdfs:label "John Doe" .
+"""
+    graph = rdflib.Graph()
+    graph.parse(data=data_ttl, format="turtle")
+
+    module.Person.set_query_executor(graph.query)
+    person = module.Person.from_iri("http://example.org/john")
+
+    assert person._uri == "http://example.org/john"
+    assert person.name == "John Doe"
+    assert person.age == 42
+    assert person.label == "John Doe"
