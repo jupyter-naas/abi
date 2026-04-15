@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.25.0 (2026-04-15)
+
+### Features
+
+- Update CLI based on new changes
+  ([`ff68d7c`](https://github.com/jupyter-naas/abi/commit/ff68d7cecbeae42519448a500c6bef5e624a37b7))
+
+
 ## v1.24.2 (2026-04-14)
 
 ### Bug Fixes
