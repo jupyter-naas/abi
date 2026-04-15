@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.19.0 (2026-04-15)
+
+### Bug Fixes
+
+- CodingAgent test
+  ([`030f1f9`](https://github.com/jupyter-naas/abi/commit/030f1f9128928ca6dbaf1eb74533d96a669d3326))
+
+### Features
+
+- Working on adding opencode agent
+  ([`3f515d4`](https://github.com/jupyter-naas/abi/commit/3f515d48275f55c8ce8844942c4cdc4912698446))
+
+
 ## v1.18.0 (2026-04-15)
 
 ### Features
