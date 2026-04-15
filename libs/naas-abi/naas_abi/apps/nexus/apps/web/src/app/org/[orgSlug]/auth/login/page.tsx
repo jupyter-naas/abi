@@ -283,7 +283,7 @@ export default function OrgLoginPage() {
               <CheckCircle className="h-12 w-12" />
             </div>
             <p className="text-center text-sm" style={{ color: mutedTextColor || undefined }}>
-              We sent a sign-in link to <strong>{email}</strong>.
+              If an account exists for <strong>{email}</strong>, we sent a sign-in link.
             </p>
             <button
               type="button"

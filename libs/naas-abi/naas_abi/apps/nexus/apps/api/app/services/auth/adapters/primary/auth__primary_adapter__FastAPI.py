@@ -477,15 +477,20 @@ async def _send_magic_link_email(to_email: str, token: str) -> None:
 
     query = urlencode({"token": token})
     magic_link_url = f"{settings.frontend_url.rstrip('/')}{settings.magic_link_path}?{query}"
-    text_body = (
-        "Use the link below to sign in to NEXUS:\n\n"
-        f"{magic_link_url}\n\n"
-        f"This link expires in {settings.magic_link_expire_minutes} minutes."
+    app_name = settings.magic_link_email_app_name
+    template_values = {
+        "app_name": app_name,
+        "magic_link_url": magic_link_url,
+        "expire_minutes": settings.magic_link_expire_minutes,
+    }
+    subject = settings.magic_link_email_subject_template.format_map(
+        _SafeTemplateValues(template_values)
     )
-    html_body = (
-        "<p>Use the link below to sign in to NEXUS:</p>"
-        f'<p><a href="{magic_link_url}">Sign in to NEXUS</a></p>'
-        f"<p>This link expires in {settings.magic_link_expire_minutes} minutes.</p>"
+    text_body = settings.magic_link_email_text_template.format_map(
+        _SafeTemplateValues(template_values)
+    )
+    html_body = settings.magic_link_email_html_template.format_map(
+        _SafeTemplateValues(template_values)
     )
     email_service = EmailFactory.EmailServiceSMTP(
         host=settings.smtp_host,
@@ -497,12 +502,17 @@ async def _send_magic_link_email(to_email: str, token: str) -> None:
     )
     email_service.send(
         to_email=to_email,
-        subject="Your NEXUS magic sign-in link",
+        subject=subject,
         text_body=text_body,
         html_body=html_body,
         from_email=str(settings.smtp_from_email),
         from_name=settings.smtp_from_name,
     )
+
+
+class _SafeTemplateValues(dict[str, object]):
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
 
 
 class AuthFastAPIPrimaryAdapter:

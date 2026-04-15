@@ -32,6 +32,10 @@ modules:
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
         redis_url: "redis://redis:6379/0"
         magic_link_allow_signup: false
+        magic_link_email_app_name: "ABI Platform"
+        magic_link_email_subject_template: "Your {app_name} sign-in link"
+        magic_link_email_text_template: "Use this link to sign in to {app_name}:\n\n{magic_link_url}\n\nThis link expires in {expire_minutes} minutes."
+        magic_link_email_html_template: "<p>Use this link to sign in to {app_name}:</p><p><a href=\"{magic_link_url}\">Sign in</a></p><p>This link expires in {expire_minutes} minutes.</p>"
         tenant:
           tab_title: "ABI AI Platform | Naas.ai"
           favicon_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
