@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.27.0 (2026-04-15)
+
+### Features
+
+- Working on adding opencode agent
+  ([`3f515d4`](https://github.com/jupyter-naas/abi/commit/3f515d48275f55c8ce8844942c4cdc4912698446))
+
+
 ## v1.26.0 (2026-04-15)
 
 
