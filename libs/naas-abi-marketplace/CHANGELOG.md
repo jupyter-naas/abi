@@ -2,6 +2,51 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-04-14)
+
+### Bug Fixes
+
+- Bump versions
+  ([`9096426`](https://github.com/jupyter-naas/abi/commit/90964266834d48b55770bccd536f26536bde9aec))
+
+- Dot location
+  ([`14ce581`](https://github.com/jupyter-naas/abi/commit/14ce581f96a977d0b989a747ac528bc5a79300b3))
+
+- Make the timetamp suffixed and not prefixed
+  ([`f04860b`](https://github.com/jupyter-naas/abi/commit/f04860b5675e2c82cdfc03ad320aedd5bf80e0cd))
+
+- Remove file from input dir
+  ([`0665cd0`](https://github.com/jupyter-naas/abi/commit/0665cd00721e54461274284e35e42200924da7a4))
+
+### Features
+
+- Add output dir to save sha256 and files
+  ([`6a68ab1`](https://github.com/jupyter-naas/abi/commit/6a68ab18b1dae2d97274c8ba2e10241517acab06))
+
+- Init document ontology
+  ([`f347d34`](https://github.com/jupyter-naas/abi/commit/f347d349b22efe563ee7e052283b34f02abb6234))
+
+- Init module document
+  ([`16442a4`](https://github.com/jupyter-naas/abi/commit/16442a4013d8089115974288d3bf9f899fffdceb))
+
+- Init pipeline
+  ([`7486b97`](https://github.com/jupyter-naas/abi/commit/7486b97ce228dc90f597e76de08fda2ac50deb8a))
+
+- Working on document module
+  ([`9b4a87a`](https://github.com/jupyter-naas/abi/commit/9b4a87a1dcb4539c18366886b398993081102718))
+
+- Working on ingestiong pipeline
+  ([`8efe02d`](https://github.com/jupyter-naas/abi/commit/8efe02daec122e08e6a99c6c9bfb2f624d3aac4f))
+
+### Refactoring
+
+- Remove data properties not used
+  ([`a496f3d`](https://github.com/jupyter-naas/abi/commit/a496f3d1e4102b6cd6858fb101b8952da32b6df3))
+
+- Rename pipeline
+  ([`cf40fdc`](https://github.com/jupyter-naas/abi/commit/cf40fdc578be10e61f4592f52fa7e9e7fa2486e5))
+
+
 ## v1.9.0 (2026-04-07)
 
 ### Bug Fixes

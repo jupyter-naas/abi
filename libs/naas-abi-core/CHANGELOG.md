@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.25.0 (2026-04-15)
+
+### Features
+
+- Add _raw_decode_json_object
+  ([`465fb4c`](https://github.com/jupyter-naas/abi/commit/465fb4cd42caba19bbaf97b2599e32a28d6394ef))
+
+
+## v1.24.0 (2026-04-14)
+
+
+## v1.23.0 (2026-04-13)
+
+### Bug Fixes
+
+- Remove unused lib
+  ([`d9ed7c1`](https://github.com/jupyter-naas/abi/commit/d9ed7c1eaf93ea6eae87aa43b7d310ea02c44093))
+
+### Features
+
+- Get object metadata
+  ([`0c2d4a5`](https://github.com/jupyter-naas/abi/commit/0c2d4a5818bcbd480159a2efd2030e3ed1b99e0e))
+
+
 ## v1.22.0 (2026-04-07)
 
 ### Bug Fixes
