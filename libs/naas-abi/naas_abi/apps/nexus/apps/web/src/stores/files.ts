@@ -5,7 +5,22 @@ import { useWorkspaceStore } from './workspace';
 import { authFetch } from './auth';
 
 // Helper to get current workspace ID
-const getCurrentWorkspaceId = () => useWorkspaceStore.getState().currentWorkspaceId;
+const getWorkspaceIdFromPathname = (): string | null => {
+  if (typeof window === 'undefined') return null;
+
+  const match = window.location.pathname.match(/\/workspace\/([^/]+)/);
+  if (!match?.[1]) return null;
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+};
+
+const getCurrentWorkspaceId = (): string | null => {
+  return useWorkspaceStore.getState().currentWorkspaceId ?? getWorkspaceIdFromPathname();
+};
 
 // Storage source types - only Local (synced folders) and Cloud
 export type StorageCategory = 'local' | 'cloud';
@@ -486,10 +501,15 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   createFile: async (path, content = '') => {
     const workspacePath = path.replace(/^\/+|\/+$/g, '');
+    const workspaceId = getCurrentWorkspaceId();
+
+    if (!workspaceId) {
+      set({ error: 'No workspace selected', loading: false });
+      return null;
+    }
     
     set({ loading: true, error: null });
     try {
-      const workspaceId = getCurrentWorkspaceId();
       const response = await authFetch(`${getApiBase()}/api/files/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -519,13 +539,19 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   createFolder: async (path) => {
     const workspacePath = path.replace(/^\/+|\/+$/g, '');
+    const workspaceId = getCurrentWorkspaceId();
+
+    if (!workspaceId) {
+      set({ error: 'No workspace selected', loading: false });
+      return null;
+    }
     
     set({ loading: true, error: null });
     try {
       const response = await authFetch(`${getApiBase()}/api/files/folder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: workspacePath, workspace_id: getCurrentWorkspaceId() }),
+        body: JSON.stringify({ path: workspacePath, workspace_id: workspaceId }),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -545,12 +571,15 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   deleteFile: async (path) => {
+    const workspaceId = getCurrentWorkspaceId();
+    if (!workspaceId) {
+      set({ error: 'No workspace selected', loading: false });
+      return false;
+    }
+
     set({ loading: true, error: null });
     try {
-      const workspaceId = getCurrentWorkspaceId();
-      const workspaceParam = workspaceId
-        ? `?workspace_id=${encodeURIComponent(workspaceId)}`
-        : '';
+      const workspaceParam = `?workspace_id=${encodeURIComponent(workspaceId)}`;
       const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`, {
         method: 'DELETE',
       });
@@ -632,16 +661,19 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   uploadFile: async (file) => {
     const { currentPath } = get();
     const uploadPath = currentPath ? currentPath : '';
+    const workspaceId = getCurrentWorkspaceId();
+
+    if (!workspaceId) {
+      set({ error: 'No workspace selected', loading: false });
+      return null;
+    }
 
     set({ loading: true, error: null });
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('path', uploadPath);
-      const workspaceId = getCurrentWorkspaceId();
-      if (workspaceId) {
-        formData.append('workspace_id', workspaceId);
-      }
+      formData.append('workspace_id', workspaceId);
 
       const response = await authFetch(`${getApiBase()}/api/files/upload`, {
         method: 'POST',
@@ -690,11 +722,14 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   readFile: async (path) => {
+    const workspaceId = getCurrentWorkspaceId();
+    if (!workspaceId) {
+      set({ error: 'No workspace selected' });
+      return null;
+    }
+
     try {
-      const workspaceId = getCurrentWorkspaceId();
-      const workspaceParam = workspaceId
-        ? `?workspace_id=${encodeURIComponent(workspaceId)}`
-        : '';
+      const workspaceParam = `?workspace_id=${encodeURIComponent(workspaceId)}`;
       const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`);
       if (!response.ok) {
         throw new Error('Failed to read file');
@@ -714,16 +749,19 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   saveFile: async (path) => {
     const { fileContents, unsavedChanges } = get();
     const content = fileContents[path];
+    const workspaceId = getCurrentWorkspaceId();
     
     if (content === undefined) {
       return false;
     }
+
+    if (!workspaceId) {
+      set({ error: 'No workspace selected' });
+      return false;
+    }
     
     try {
-      const workspaceId = getCurrentWorkspaceId();
-      const workspaceParam = workspaceId
-        ? `?workspace_id=${encodeURIComponent(workspaceId)}`
-        : '';
+      const workspaceParam = `?workspace_id=${encodeURIComponent(workspaceId)}`;
       const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
