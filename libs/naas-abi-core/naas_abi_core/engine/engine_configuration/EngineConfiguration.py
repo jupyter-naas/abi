@@ -46,7 +46,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreSe
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from rich.prompt import Prompt
 from typing_extensions import Literal, Self
 
@@ -130,6 +130,18 @@ class ApiConfiguration(BaseModel):
     reload: bool = True
 
 
+class OpencodeProviderConfiguration(BaseModel):
+    id: str
+    key: str
+    type: Literal["api"] = "api"
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class OpencodeConfiguration(BaseModel):
+    auth_file_path: str = "~/.local/share/opencode/auth.json"
+    providers: list[OpencodeProviderConfiguration] = Field(default_factory=list)
+
+
 class FirstPassConfiguration(BaseModel):
     """This is a first pass configuration that is used to load the secret service.
 
@@ -184,6 +196,8 @@ class EngineConfiguration(BaseModel):
     modules: List[ModuleConfig]
 
     default_agent: str = "naas_abi AbiAgent"
+
+    opencode: OpencodeConfiguration = OpencodeConfiguration()
 
     def ensure_default_modules(self) -> None:
         default_modules = [

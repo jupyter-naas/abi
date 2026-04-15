@@ -6,7 +6,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 
 
 def _configuration_yaml(
-    title: str, dotenv_path: str, reload: bool | None = None
+    title: str,
+    dotenv_path: str,
+    reload: bool | None = None,
+    extra_top_level: str = "",
 ) -> str:
     reload_line = f"\n  reload: {str(reload).lower()}" if reload is not None else ""
     return f"""
@@ -55,6 +58,7 @@ services:
     kv_adapter:
       adapter: "python"
       config: {{}}
+{extra_top_level}
 """.strip()
 
 
@@ -115,3 +119,27 @@ def test_from_yaml_content_fails_if_configured_dotenv_file_is_missing():
         EngineConfiguration.from_yaml_content(
             _configuration_yaml(title="BASE", dotenv_path=".env.missing")
         )
+
+
+def test_from_yaml_content_loads_opencode_provider_configuration(tmp_path):
+    dotenv = tmp_path / ".env.bootstrap"
+    dotenv.write_text("ENV=local\nOPENCODE_API_KEY=test-opencode\n", encoding="utf-8")
+
+    configuration = EngineConfiguration.from_yaml_content(
+        _configuration_yaml(
+            title="BASE",
+            dotenv_path=str(dotenv),
+            extra_top_level="""
+opencode:
+  auth_file_path: /tmp/opencode-auth.json
+  providers:
+    - id: openrouter
+      key: "{{ secret.OPENCODE_API_KEY }}"
+""".strip(),
+        )
+    )
+
+    assert configuration.opencode.auth_file_path == "/tmp/opencode-auth.json"
+    assert len(configuration.opencode.providers) == 1
+    assert configuration.opencode.providers[0].id == "openrouter"
+    assert configuration.opencode.providers[0].key == "test-opencode"

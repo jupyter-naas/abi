@@ -194,10 +194,16 @@ async def stream_chat_response(
         async def emit_stream(chunks) -> None:
             nonlocal full_response, buffered_chars
             async for chunk in chunks:
-                full_response += chunk
-                buffered_chars += len(chunk)
-                escaped = chunk.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-                yield_data = f'data: {{"content": "{escaped}"}}\n\n'
+                if isinstance(chunk, str):
+                    full_response += chunk
+                    buffered_chars += len(chunk)
+                    payload = {"content": chunk}
+                elif isinstance(chunk, dict):
+                    payload = chunk
+                else:
+                    continue
+
+                yield_data = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                 yield yield_data
                 await maybe_flush_incremental()
 

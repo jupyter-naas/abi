@@ -19,6 +19,16 @@ api:
 global_config:
   ai_mode: "cloud"
 
+opencode:
+  auth_file_path: "~/.local/share/opencode/auth.json"
+  providers:
+    - id: "openrouter"
+      key: "{{ secret.OPENROUTER_API_KEY }}"
+      type: "api"
+    - id: "openai"
+      key: "{{ secret.OPENAI_API_KEY }}"
+      type: "api"
+
 default_agent: naas_abi AbiAgent 
 modules:
   - module: naas_abi

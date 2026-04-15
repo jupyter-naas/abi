@@ -409,7 +409,8 @@ export function ChatInterface() {
       const supportsStreaming =
         !provider ||
         provider?.type === 'ollama' ||
-        provider?.type === 'cloudflare';
+        provider?.type === 'cloudflare' ||
+        provider?.type === 'abi';
       if (supportsStreaming) {
         setIsStreaming(true);
         setIsLoading(false); // Don't show loading dots for streaming
@@ -439,6 +440,48 @@ export function ChatInterface() {
 
         let thinkingContent = '';   // Accumulated thinking text
         let responseContent = '';   // Accumulated response text
+        const streamEvents: string[] = [];
+        const appendStreamEvent = (eventText: string) => {
+          const previous = streamEvents[streamEvents.length - 1];
+          if (previous !== eventText) {
+            streamEvents.push(eventText);
+          }
+        };
+
+        const renderStreamingMessage = (withCaret: boolean) => {
+          const eventsSection = streamEvents.length > 0
+            ? `🛠️ Tool activity:\n${streamEvents.map((eventText) => `- ${eventText}`).join('\n')}\n\n`
+            : '';
+
+          const body = thinkingContent
+            ? `<think>${thinkingContent}</think>\n\n${responseContent}`
+            : responseContent;
+
+          const contentBody = body || '';
+          const assembled = withCaret
+            ? `${eventsSection}${contentBody || '▌'}${contentBody ? '▌' : ''}`
+            : `${eventsSection}${contentBody}`;
+
+          updateLastMessage(conversationId!, assembled.trimEnd() || '▌');
+        };
+
+        const formatStreamEvent = (parsed: any): string | null => {
+          if (parsed?.event === 'tool') {
+            const toolName = typeof parsed.tool === 'string' ? parsed.tool : 'tool';
+            const status = typeof parsed.status === 'string' ? parsed.status : 'running';
+            if (status === 'completed') return `${toolName} completed`;
+            if (status === 'failed' || status === 'error') return `${toolName} failed`;
+            if (status === 'cancelled') return `${toolName} cancelled`;
+            if (status === 'pending') return `${toolName} queued`;
+            return `${toolName} running`;
+          }
+
+          if (parsed?.event === 'agent.question' && typeof parsed.question === 'string') {
+            return `Agent question: ${parsed.question}`;
+          }
+
+          return null;
+        };
 
         try {
           const controller = new AbortController();
@@ -495,7 +538,13 @@ export function ChatInterface() {
                 try {
                   const parsed = JSON.parse(data);
                   if (parsed.search) {
-                    updateLastMessage(conversationId!, '🌐 Searching the web...');
+                    appendStreamEvent('Web search in progress');
+                    renderStreamingMessage(true);
+                  }
+                  const streamEvent = formatStreamEvent(parsed);
+                  if (streamEvent) {
+                    appendStreamEvent(streamEvent);
+                    renderStreamingMessage(true);
                   }
                   if (parsed.content) {
                     const token = parsed.content as string;
@@ -509,34 +558,26 @@ export function ChatInterface() {
                     // Track <think> tags
                     if (token.includes('<think>')) {
                       isInThinking = true;
-                      // Build content with thinking - MessageBubble will render the collapsible
-                      const assembled = `<think>${thinkingContent}</think>`;
-                      updateLastMessage(conversationId!, assembled);
+                      renderStreamingMessage(false);
                       continue;
                     }
                     
                     if (token.includes('</think>')) {
                       isInThinking = false;
-                      // Close thinking, show response placeholder
-                      const assembled = `<think>${thinkingContent}</think>\n\n▌`;
-                      updateLastMessage(conversationId!, assembled);
+                      renderStreamingMessage(true);
                       continue;
                     }
                     
                     if (isInThinking) {
                       // Stream thinking content live
                       thinkingContent += token;
-                      const assembled = `<think>${thinkingContent}</think>`;
-                      updateLastMessage(conversationId!, assembled);
+                      renderStreamingMessage(false);
                       continue;
                     }
                     
                     // Regular response content
                     responseContent += token;
-                    const assembled = thinkingContent 
-                      ? `<think>${thinkingContent}</think>\n\n${responseContent}▌`
-                      : `${responseContent}▌`;
-                    updateLastMessage(conversationId!, assembled);
+                    renderStreamingMessage(true);
                   }
                   if (parsed.error) {
                     // Show error in current message and throw to trigger modal
@@ -557,16 +598,24 @@ export function ChatInterface() {
         }
         // Final: store full content with thinking duration
         const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
-        const finalContent = thinkingContent 
+        const eventsSection = streamEvents.length > 0
+          ? `🛠️ Tool activity:\n${streamEvents.map((eventText) => `- ${eventText}`).join('\n')}\n\n`
+          : '';
+        const finalBody = thinkingContent
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
+        const finalContent = `${eventsSection}${finalBody}`.trim();
         updateLastMessage(conversationId!, finalContent, thinkingDuration);
       } catch (streamError) {
         // Gracefully handle user-initiated aborts
         if ((streamError as any)?.name === 'AbortError') {
-          const finalContent = thinkingContent
+          const eventsSection = streamEvents.length > 0
+            ? `🛠️ Tool activity:\n${streamEvents.map((eventText) => `- ${eventText}`).join('\n')}\n\n`
+            : '';
+          const finalBody = thinkingContent
             ? `<think>${thinkingContent}</think>\n\n${responseContent}`
             : responseContent;
+          const finalContent = `${eventsSection}${finalBody}`.trim();
           if (conversationId) updateLastMessage(conversationId, finalContent);
         } else {
           // Streaming-specific error - throw to outer catch for modal handling
