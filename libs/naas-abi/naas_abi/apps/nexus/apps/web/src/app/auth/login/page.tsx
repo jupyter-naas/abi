@@ -169,7 +169,7 @@ export default function LoginPage() {
               <CheckCircle className="h-12 w-12" />
             </div>
             <p className="text-center text-sm" style={{ color: mutedTextColor }}>
-              We sent a magic link to <strong>{email}</strong>. Open it to sign in.
+              If an account exists for <strong>{email}</strong>, we sent a magic sign-in link.
             </p>
             <button
               type="button"
