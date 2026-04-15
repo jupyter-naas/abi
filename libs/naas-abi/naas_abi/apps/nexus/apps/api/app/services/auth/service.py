@@ -75,6 +75,24 @@ class ExpiredResetTokenError(ValueError):
         return "expired_reset_token"
 
 
+@dataclass
+class PasswordAuthenticationDisabledError(ValueError):
+    def __str__(self) -> str:
+        return "password_authentication_disabled"
+
+
+@dataclass
+class InvalidMagicLinkError(ValueError):
+    def __str__(self) -> str:
+        return "invalid_magic_link"
+
+
+@dataclass
+class ExpiredMagicLinkError(ValueError):
+    def __str__(self) -> str:
+        return "expired_magic_link"
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
@@ -118,6 +136,9 @@ class AuthService:
         user_agent: str | None,
         ip_address: str | None,
     ) -> tuple[AuthUserRecord, AuthTokens]:
+        if not settings.auth_password_enabled:
+            raise PasswordAuthenticationDisabledError()
+
         normalized_email = email.lower()
         if await self.adapter.user_exists_with_email(normalized_email):
             raise EmailAlreadyRegisteredError()
@@ -155,6 +176,9 @@ class AuthService:
         user_agent: str | None,
         ip_address: str | None,
     ) -> tuple[AuthUserRecord, AuthTokens]:
+        if not settings.auth_password_enabled:
+            raise PasswordAuthenticationDisabledError()
+
         normalized_email = email.lower()
         user = await self.adapter.get_user_by_email(normalized_email)
         if user is None:
@@ -180,6 +204,9 @@ class AuthService:
         )
 
     async def create_oauth_access_token(self, email: str, password: str) -> str:
+        if not settings.auth_password_enabled:
+            raise PasswordAuthenticationDisabledError()
+
         user = await self.adapter.get_user_by_email(email.lower())
         if user is None or not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError(reason="invalid_credentials")
@@ -273,6 +300,9 @@ class AuthService:
         ip_address: str | None,
         user_agent: str | None,
     ) -> None:
+        if not settings.auth_password_enabled:
+            raise PasswordAuthenticationDisabledError()
+
         user = await self.adapter.get_user_by_id(user_id)
         if user is None:
             raise UserNotFoundError(user_id=user_id)
@@ -299,6 +329,9 @@ class AuthService:
         await self.adapter.commit()
 
     async def forgot_password(self, email: str) -> str | None:
+        if not settings.auth_password_enabled:
+            raise PasswordAuthenticationDisabledError()
+
         user = await self.adapter.get_user_by_email(email.lower())
         if user is None:
             return None
@@ -320,6 +353,9 @@ class AuthService:
         return token
 
     async def reset_password(self, token: str, new_password: str) -> None:
+        if not settings.auth_password_enabled:
+            raise PasswordAuthenticationDisabledError()
+
         reset_token = await self.adapter.get_password_reset_token(token)
         if reset_token is None:
             raise InvalidResetTokenError()
@@ -350,3 +386,73 @@ class AuthService:
             raise UserNotFoundError(user_id=user_id)
         await self.adapter.commit()
         return updated
+
+    async def request_magic_link(self, email: str) -> str | None:
+        normalized_email = email.lower()
+        user = await self.adapter.get_user_by_email(normalized_email)
+        if user is None:
+            if not settings.magic_link_allow_signup:
+                return None
+
+            inferred_name = (
+                normalized_email.split("@", 1)[0].replace(".", " ").replace("_", " ").strip()
+            )
+            display_name = inferred_name.title() or "New User"
+            user = await self.adapter.create_user_with_personal_workspace(
+                user_id=str(uuid4()),
+                email=normalized_email,
+                name=display_name,
+                hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+                now=now_utc_naive(),
+            )
+
+        token = secrets.token_urlsafe(32)
+        token_hash = hash_token(token)
+        now = now_utc_naive()
+        expires_at = now + timedelta(minutes=settings.magic_link_expire_minutes)
+
+        await self.adapter.mark_unused_magic_link_tokens_used(user.id)
+        await self.adapter.create_magic_link_token(
+            token_id=str(uuid4()),
+            user_id=user.id,
+            token=token_hash,
+            expires_at=expires_at,
+            created_at=now,
+        )
+        await self.adapter.commit()
+        return token
+
+    async def verify_magic_link(
+        self,
+        token: str,
+        user_agent: str | None,
+        ip_address: str | None,
+    ) -> tuple[AuthUserRecord, AuthTokens]:
+        magic_token = await self.adapter.get_magic_link_token(token)
+        if magic_token is None:
+            raise InvalidMagicLinkError()
+        if magic_token.expires_at < now_utc_naive():
+            raise ExpiredMagicLinkError()
+
+        user = await self.adapter.get_user_by_id(magic_token.user_id)
+        if user is None:
+            raise UserNotFoundError(user_id=magic_token.user_id)
+
+        await self.adapter.mark_magic_link_token_used(magic_token.id)
+        await self.adapter.commit()
+
+        access_token, jti = create_access_token(data={"sub": user.id})
+        refresh_token = await create_refresh_token(
+            user_id=user.id,
+            access_token_jti=jti,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+        return (
+            user,
+            AuthTokens(
+                access_token=access_token,
+                refresh_token=refresh_token,
+                expires_in=settings.access_token_expire_minutes * 60,
+            ),
+        )
