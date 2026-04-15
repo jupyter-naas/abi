@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-marketplace"
-version = "1.9.0"
+version = "1.10.0"
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
@@ -150,4 +150,8 @@ applications-yahoofinance = [
 domains-ontology-engineer = [
     "thefuzz==0.22.1",
     "fuzzywuzzy-stubs==0.0.1"
+]
+domains-document = [
+    "pymupdf>=1.27.2.2",
+    "pymupdf4llm>=1.27.2.2",
 ]

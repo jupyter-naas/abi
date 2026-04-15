@@ -178,8 +178,23 @@ class NexusConfig(BaseModel):
     redis_url: str = "redis://localhost:6379/0"
 
     secret_key: str = "change-me-in-production"
+    magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
+    magic_link_expire_minutes: int = 15
+    magic_link_path: str = "/auth/magic-link"
+    magic_link_email_app_name: str = "NEXUS"
+    magic_link_email_subject_template: str = "Your {app_name} magic sign-in link"
+    magic_link_email_text_template: str = (
+        "Use the link below to sign in to {app_name}:\n\n"
+        "{magic_link_url}\n\n"
+        "This link expires in {expire_minutes} minutes."
+    )
+    magic_link_email_html_template: str = (
+        "<p>Use the link below to sign in to {app_name}:</p>"
+        '<p><a href="{magic_link_url}">Sign in to {app_name}</a></p>'
+        "<p>This link expires in {expire_minutes} minutes.</p>"
+    )
 
     rate_limit_enabled: bool = True
     rate_limit_login_attempts: int = 5
@@ -384,7 +399,6 @@ class ABIModule(BaseModule):
         # )
 
     def api(self, app: FastAPI) -> None:
-
         # Keep API and Nexus CORS aligned from a single source of truth.
         app.state.abi_cors_origins = self.engine.api_configuration.cors_origins
 

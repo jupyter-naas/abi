@@ -1,50 +1,71 @@
 """
-Authentication tests - AUTH-01 through AUTH-07.
-
-Tests login, registration, token validation, and session management.
+Authentication tests for magic-link login and token validation.
 Maps to: docs/TEST-PROTOCOL.md Section 2.
 """
 
-from tests.conftest import TEST_PASSWORD
 
-
-class TestLogin:
-    """AUTH-01/02: Login with valid and invalid credentials."""
-
-    async def test_login_valid_credentials(self, client, test_user):
-        """AUTH-01: Login with correct email/password returns token."""
+class TestMagicLink:
+    async def test_request_magic_link(self, client, test_user):
         response = await client.post(
-            "/api/auth/login",
-            json={"email": test_user["email"], "password": TEST_PASSWORD},
+            "/api/auth/magic-link/request",
+            json={"email": test_user["email"]},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "success"
+
+    async def test_request_magic_link_unknown_user_does_not_create_token(self, client):
+        from sqlalchemy import text
+
+        import app.core.database as db_module
+
+        email = "not-registered@example.com"
+        response = await client.post(
+            "/api/auth/magic-link/request",
+            json={"email": email},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "success"
+
+        with db_module.engine.connect() as conn:
+            user_row = conn.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": email},
+            ).fetchone()
+            assert user_row is None
+
+    async def test_verify_magic_link(self, client, test_user):
+        from sqlalchemy import text
+
+        import app.core.database as db_module
+
+        await client.post("/api/auth/magic-link/request", json={"email": test_user["email"]})
+
+        with db_module.engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT token FROM magic_link_tokens WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"user_id": test_user["id"]},
+            ).fetchone()
+            assert row is not None
+            hashed_token = row[0]
+
+        # Adapter accepts both hashed and plain token for backward compatibility.
+        response = await client.post(
+            "/api/auth/magic-link/verify",
+            json={"token": hashed_token},
         )
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
         assert data["user"]["id"] == test_user["id"]
-        assert data["user"]["email"] == test_user["email"]
-        assert data["token_type"] == "bearer"
 
-    async def test_login_invalid_password(self, client, test_user):
-        """AUTH-02: Login with wrong password returns 401."""
+    async def test_password_login_is_disabled(self, client, test_user):
         response = await client.post(
             "/api/auth/login",
-            json={"email": test_user["email"], "password": "wrongpassword"},
+            json={"email": test_user["email"], "password": "whatever"},
         )
-        assert response.status_code == 401
-        assert "Invalid" in response.json()["detail"]
-
-    async def test_login_nonexistent_user(self, client):
-        """Login with non-existent email returns 401."""
-        response = await client.post(
-            "/api/auth/login",
-            json={"email": "nobody@example.com", "password": "whatever"},
-        )
-        assert response.status_code == 401
-
-    async def test_login_missing_fields(self, client):
-        """Login with missing fields returns 422."""
-        response = await client.post("/api/auth/login", json={"email": "a@b.com"})
-        assert response.status_code == 422
+        assert response.status_code == 410
 
 
 class TestProtectedEndpoints:
@@ -77,7 +98,7 @@ class TestProtectedEndpoints:
 
         from app.api.endpoints.auth import create_access_token
 
-        token = create_access_token(
+        token, _ = create_access_token(
             data={"sub": "user-test"}, expires_delta=timedelta(seconds=-1)
         )
         response = await client.get(
@@ -85,50 +106,6 @@ class TestProtectedEndpoints:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 401
-
-
-class TestRegistration:
-    """User registration tests."""
-
-    async def test_register_new_user(self, client):
-        """Register creates a new user and returns token."""
-        response = await client.post(
-            "/api/auth/register",
-            json={
-                "email": "new@example.com",
-                "password": "securepass123",
-                "name": "New User",
-            },
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["user"]["email"] == "new@example.com"
-        assert data["user"]["name"] == "New User"
-
-    async def test_register_duplicate_email(self, client, test_user):
-        """Registering with an existing email returns 400."""
-        response = await client.post(
-            "/api/auth/register",
-            json={
-                "email": test_user["email"],
-                "password": "securepass123",
-                "name": "Duplicate",
-            },
-        )
-        assert response.status_code == 400
-
-    async def test_register_short_password(self, client):
-        """Password below minimum length returns 422."""
-        response = await client.post(
-            "/api/auth/register",
-            json={
-                "email": "short@example.com",
-                "password": "abc",
-                "name": "Short Pass",
-            },
-        )
-        assert response.status_code == 422
 
 
 class TestGetMe:

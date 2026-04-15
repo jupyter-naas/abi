@@ -5,6 +5,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.models import (
+    MagicLinkTokenModel,
     PasswordResetTokenModel,
     UserModel,
     WorkspaceMemberModel,
@@ -13,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthPersistencePort,
     AuthUserRecord,
+    MagicLinkTokenRecord,
     PasswordResetTokenRecord,
 )
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_token
@@ -55,6 +57,17 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
     @staticmethod
     def _to_reset_token_record(model: PasswordResetTokenModel) -> PasswordResetTokenRecord:
         return PasswordResetTokenRecord(
+            id=model.id,
+            user_id=model.user_id,
+            token=model.token,
+            expires_at=model.expires_at,
+            used=bool(model.used),
+            created_at=model.created_at,
+        )
+
+    @staticmethod
+    def _to_magic_link_token_record(model: MagicLinkTokenModel) -> MagicLinkTokenRecord:
+        return MagicLinkTokenRecord(
             id=model.id,
             user_id=model.user_id,
             token=model.token,
@@ -233,6 +246,55 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
     async def mark_password_reset_token_used(self, token_id: str) -> None:
         result = await self.db.execute(
             select(PasswordResetTokenModel).where(PasswordResetTokenModel.id == token_id)
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            row.used = True
+
+    async def mark_unused_magic_link_tokens_used(self, user_id: str) -> None:
+        result = await self.db.execute(
+            select(MagicLinkTokenModel).where(
+                (MagicLinkTokenModel.user_id == user_id) & (MagicLinkTokenModel.used.is_(False))
+            )
+        )
+        for row in result.scalars().all():
+            row.used = True
+
+    async def create_magic_link_token(
+        self,
+        token_id: str,
+        user_id: str,
+        token: str,
+        expires_at: datetime,
+        created_at: datetime,
+    ) -> None:
+        self.db.add(
+            MagicLinkTokenModel(
+                id=token_id,
+                user_id=user_id,
+                token=token,
+                expires_at=expires_at,
+                used=False,
+                created_at=created_at,
+            )
+        )
+
+    async def get_magic_link_token(self, token: str) -> MagicLinkTokenRecord | None:
+        token_hash = hash_token(token)
+        result = await self.db.execute(
+            select(MagicLinkTokenModel).where(
+                ((MagicLinkTokenModel.token == token_hash) | (MagicLinkTokenModel.token == token))
+                & (MagicLinkTokenModel.used.is_(False))
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return self._to_magic_link_token_record(row)
+
+    async def mark_magic_link_token_used(self, token_id: str) -> None:
+        result = await self.db.execute(
+            select(MagicLinkTokenModel).where(MagicLinkTokenModel.id == token_id)
         )
         row = result.scalar_one_or_none()
         if row is not None:
