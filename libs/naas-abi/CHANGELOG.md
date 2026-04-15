@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.2 (2026-04-15)
+
+### Bug Fixes
+
+- Trigger build
+  ([`e7e9fc3`](https://github.com/jupyter-naas/abi/commit/e7e9fc33ac3e645bb1969d8fd8323b16aac9c7c9))
+
+
 ## v1.19.1 (2026-04-15)
 
 ### Bug Fixes
