@@ -28,8 +28,10 @@ modules:
     enabled: true
     config:
       nexus_config:
+        frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
         redis_url: "redis://redis:6379/0"
+        magic_link_allow_signup: false
         tenant:
           tab_title: "ABI AI Platform | Naas.ai"
           favicon_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
@@ -126,3 +128,14 @@ services:
       adapter: "redis"
       config:
         redis_url: "redis://redis:6379"
+  email:
+    email_adapter:
+      adapter: "smtp"
+      config:
+        host: "{{ secret.SMTP_HOST }}"
+        port: "{{ secret.SMTP_PORT }}"
+        username: "{{ secret.SMTP_USERNAME }}"
+        password: "{{ secret.SMTP_PASSWORD }}"
+        use_tls: true
+        use_ssl: false
+        timeout: 10

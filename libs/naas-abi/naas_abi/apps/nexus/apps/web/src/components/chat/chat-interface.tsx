@@ -468,7 +468,7 @@ export function ChatInterface() {
           if (response.status === 401) {
             console.warn('Auth token expired, logging out...');
             useAuthStore.getState().logout();
-            window.location.href = '/login';
+            window.location.href = '/auth/login';
             return;
           }
           throw new Error(`API error: ${response.status}`);

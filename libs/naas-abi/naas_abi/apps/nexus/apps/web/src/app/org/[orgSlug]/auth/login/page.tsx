@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useTheme } from 'next-themes';
-import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore, OrganizationBranding } from '@/stores/organization';
@@ -27,13 +26,11 @@ export default function OrgLoginPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
 
-  const { login, isLoading, error, clearError, isAuthenticated, logout, user } = useAuthStore();
+  const { requestMagicLink, isLoading, error, clearError, isAuthenticated, logout, user } = useAuthStore();
   const { fetchBranding, brandingLoading, brandingError } = useOrganizationStore();
-  const { setTheme } = useTheme();
 
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [branding, setBranding] = useState<OrganizationBranding | null>(null);
   const [shouldCheckAuth, setShouldCheckAuth] = useState(true);
@@ -95,13 +92,9 @@ export default function OrgLoginPage() {
     e.preventDefault();
     clearError();
 
-    const success = await login(email, password);
+    const success = await requestMagicLink(email);
     if (success) {
-      // Apply org's preferred theme on login (light/dark/system)
-      if (branding?.defaultTheme) {
-        setTheme(branding.defaultTheme);
-      }
-      router.push(`/org/${orgSlug}/workspace`);
+      setLinkSent(true);
     }
   };
 
@@ -284,6 +277,31 @@ export default function OrgLoginPage() {
           </div>
         )}
 
+        {linkSent ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-center text-emerald-500">
+              <CheckCircle className="h-12 w-12" />
+            </div>
+            <p className="text-center text-sm" style={{ color: mutedTextColor || undefined }}>
+              We sent a sign-in link to <strong>{email}</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => setLinkSent(false)}
+              className={cn(
+                'flex h-11 w-full items-center justify-center px-4 text-sm font-medium text-white',
+                !buttonRadius && 'rounded-lg',
+                'hover:opacity-90 transition-all'
+              )}
+              style={{
+                backgroundColor: primaryColor,
+                borderRadius: buttonRadius || undefined,
+              }}
+            >
+              Send another link
+            </button>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email */}
           <div className="space-y-2">
@@ -315,59 +333,10 @@ export default function OrgLoginPage() {
             />
           </div>
 
-          {/* Password */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="password"
-                className="text-sm font-medium"
-                style={{ color: textColor || undefined }}
-              >
-                Password
-              </label>
-              <Link
-                href={`/org/${orgSlug}/auth/forgot-password`}
-                className="text-sm hover:underline"
-                style={{ color: primaryColor }}
-              >
-                Forgot password?
-              </Link>
-            </div>
-            <div className="relative">
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                required
-                disabled={isLoading}
-                className={cn(
-                  'flex h-11 w-full px-4 py-2 pr-10 text-sm',
-                  !inputColor && 'border bg-background',
-                  !inputRadius && 'rounded-lg',
-                  !inputColor && 'placeholder:text-muted-foreground',
-                  inputColor && 'org-input',
-                  'focus:outline-none focus:ring-2',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
-                )}
-                style={inputStyle}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-                style={{ color: mutedTextColor || undefined }}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading || !email || !password}
+            disabled={isLoading || !email}
             className={cn(
               'flex h-11 w-full items-center justify-center px-4 text-sm font-medium text-white',
               !buttonRadius && 'rounded-lg',
@@ -384,24 +353,17 @@ export default function OrgLoginPage() {
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Signing in...
+                Sending link...
               </>
             ) : (
-              'Sign in'
+              'Send magic link'
             )}
           </button>
         </form>
+        )}
 
-        {/* Sign up link */}
         <p className="mt-6 text-center text-sm" style={{ color: mutedTextColor || undefined }}>
-          Don&apos;t have an account?{' '}
-          <Link
-            href={`/org/${orgSlug}/auth/register`}
-            className="font-medium hover:underline"
-            style={{ color: primaryColor }}
-          >
-            Sign up
-          </Link>
+          Password sign-in is disabled for this organization.
         </p>
       </div>
 

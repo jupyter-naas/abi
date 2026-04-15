@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordRequestForm
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.audit import (
     log_login,
     log_logout,
@@ -23,6 +25,8 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     AuthResponse,
     ForgotPasswordRequest,
+    MagicLinkRequest,
+    MagicLinkVerifyRequest,
     PasswordChangeRequest,
     RefreshTokenRequest,
     RefreshTokenResponse,
@@ -38,8 +42,10 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     CurrentPasswordInvalidError,
     EmailAlreadyRegisteredError,
     EmailAlreadyTakenError,
+    ExpiredMagicLinkError,
     ExpiredResetTokenError,
     InvalidCredentialsError,
+    InvalidMagicLinkError,
     InvalidResetTokenError,
     UserNotFoundError,
 )
@@ -47,6 +53,7 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
 )
+from naas_abi_core.services.email.EmailFactory import EmailFactory
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions as StorageExceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
@@ -88,6 +95,12 @@ async def register(
     request: Request,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> AuthResponse:
+    if not settings.auth_password_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Password authentication is disabled. Use magic link sign-in.",
+        )
+
     identifier = get_rate_limit_identifier(request)
     await check_rate_limit(identifier, "/api/auth/register")
 
@@ -119,6 +132,12 @@ async def login(
     request: Request,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> AuthResponse:
+    if not settings.auth_password_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Password authentication is disabled. Use magic link sign-in.",
+        )
+
     identifier = get_rate_limit_identifier(request)
     await check_rate_limit(identifier, "/api/auth/login")
 
@@ -155,6 +174,13 @@ async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> Token:
+    if not settings.auth_password_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Password authentication is disabled.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
         access_token = await auth_service.create_oauth_access_token(
             email=form_data.username,
@@ -236,6 +262,12 @@ async def change_password(
     current_user: User = Depends(get_current_user_required),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict:
+    if not settings.auth_password_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Password authentication is disabled.",
+        )
+
     try:
         await auth_service.change_password(
             user_id=current_user.id,
@@ -264,6 +296,12 @@ async def forgot_password(
     request: ForgotPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict:
+    if not settings.auth_password_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Password authentication is disabled.",
+        )
+
     await auth_service.forgot_password(request.email)
 
     return {
@@ -277,6 +315,12 @@ async def reset_password(
     request: ResetPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict:
+    if not settings.auth_password_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Password authentication is disabled.",
+        )
+
     try:
         await auth_service.reset_password(token=request.token, new_password=request.new_password)
     except InvalidResetTokenError as exc:
@@ -290,6 +334,54 @@ async def reset_password(
         "status": "success",
         "message": "Password reset successfully. Please log in with your new password.",
     }
+
+
+@router.post("/magic-link/request")
+async def request_magic_link(
+    request: Request,
+    payload: MagicLinkRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> dict:
+    identifier = get_rate_limit_identifier(request)
+    await check_rate_limit(identifier, "/api/auth/magic-link/request")
+
+    token = await auth_service.request_magic_link(payload.email)
+    if token is not None:
+        await _send_magic_link_email(payload.email, token)
+    return {
+        "status": "success",
+        "message": "If an account exists with this email, a magic sign-in link has been sent.",
+    }
+
+
+@router.post("/magic-link/verify", response_model=AuthResponse)
+async def verify_magic_link(
+    request: Request,
+    payload: MagicLinkVerifyRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> AuthResponse:
+    try:
+        user, tokens = await auth_service.verify_magic_link(
+            token=payload.token,
+            user_agent=request.headers.get("user-agent"),
+            ip_address=request.client.host if request.client else None,
+        )
+    except InvalidMagicLinkError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid magic link"
+        ) from exc
+    except ExpiredMagicLinkError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Magic link has expired"
+        ) from exc
+
+    await log_login(user.id, success=True, request=request, details={"method": "magic_link"})
+    return AuthResponse(
+        user=to_user_schema(user),
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+        expires_in=tokens.expires_in,
+    )
 
 
 @router.post("/upload-avatar")
@@ -377,6 +469,40 @@ def _delete_old_avatar(
         object_storage.delete_object(AVATAR_STORAGE_PREFIX, key)
     except Exception:
         pass
+
+
+async def _send_magic_link_email(to_email: str, token: str) -> None:
+    if not settings.smtp_enabled:
+        return
+
+    query = urlencode({"token": token})
+    magic_link_url = f"{settings.frontend_url.rstrip('/')}{settings.magic_link_path}?{query}"
+    text_body = (
+        "Use the link below to sign in to NEXUS:\n\n"
+        f"{magic_link_url}\n\n"
+        f"This link expires in {settings.magic_link_expire_minutes} minutes."
+    )
+    html_body = (
+        "<p>Use the link below to sign in to NEXUS:</p>"
+        f'<p><a href="{magic_link_url}">Sign in to NEXUS</a></p>'
+        f"<p>This link expires in {settings.magic_link_expire_minutes} minutes.</p>"
+    )
+    email_service = EmailFactory.EmailServiceSMTP(
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        username=settings.smtp_username,
+        password=settings.smtp_password,
+        use_tls=settings.smtp_use_tls,
+        use_ssl=settings.smtp_use_ssl,
+    )
+    email_service.send(
+        to_email=to_email,
+        subject="Your NEXUS magic sign-in link",
+        text_body=text_body,
+        html_body=html_body,
+        from_email=str(settings.smtp_from_email),
+        from_name=settings.smtp_from_name,
+    )
 
 
 class AuthFastAPIPrimaryAdapter:
