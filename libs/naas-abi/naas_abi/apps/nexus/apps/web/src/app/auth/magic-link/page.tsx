@@ -20,8 +20,8 @@ function MagicLinkPageContent() {
     return requested;
   }, [searchParams]);
 
-  useEffect(() => {
-    if (!token) {
+  const handleConfirmSignIn = () => {
+    if (!token || isLoading) {
       return;
     }
     clearError();
@@ -30,7 +30,7 @@ function MagicLinkPageContent() {
         router.replace(redirect);
       }
     });
-  }, [token, verifyMagicLink, router, redirect, clearError]);
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -61,13 +61,33 @@ function MagicLinkPageContent() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md rounded-xl border p-6 text-center">
         <div className="mb-4 flex justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <AlertCircle className="h-8 w-8 text-primary" />
         </div>
-        <h1 className="text-lg font-semibold">Signing you in</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Please wait while we verify your magic link.</p>
+        <h1 className="text-lg font-semibold">Confirm sign-in</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          To continue, click the button below to confirm your sign-in request.
+        </p>
+        <button
+          type="button"
+          onClick={handleConfirmSignIn}
+          disabled={isLoading}
+          className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Verifying...
+            </>
+          ) : (
+            'Click to confirm sign-in'
+          )}
+        </button>
         {error && (
           <p className="mt-4 text-sm text-destructive">{error}</p>
         )}
+        <Link href="/auth/login" className="mt-4 inline-block text-sm font-medium underline">
+          Back to sign in
+        </Link>
       </div>
     </div>
   );
