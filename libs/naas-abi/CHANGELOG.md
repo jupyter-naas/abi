@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.20.0 (2026-04-16)
+
+### Features
+
+- **nexus**: Enforce workspace feature access by role
+  ([`af14f8f`](https://github.com/jupyter-naas/abi/commit/af14f8fe754dc478bbb9ee8b987ecf2fcd0a0697))
+
+
 ## v1.19.4 (2026-04-16)
 
 ### Bug Fixes
