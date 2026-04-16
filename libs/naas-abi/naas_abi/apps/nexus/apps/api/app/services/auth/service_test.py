@@ -52,7 +52,8 @@ async def test_forgot_password_for_unknown_user_does_not_store_token(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_request_magic_link_stores_hashed_token() -> None:
+async def test_request_magic_link_stores_hashed_token(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "magic_link_max_active", 5)
     adapter = AsyncMock()
     adapter.get_user_by_email.return_value = AuthUserRecord(
         id="user-1",
@@ -66,10 +67,36 @@ async def test_request_magic_link_stores_hashed_token() -> None:
     raw_token = await service.request_magic_link("USER@EXAMPLE.COM")
 
     assert raw_token
+    adapter.mark_unused_magic_link_tokens_used.assert_awaited_once_with(
+        "user-1",
+        keep_latest_unused=4,
+    )
     adapter.create_magic_link_token.assert_awaited_once()
     stored_token = adapter.create_magic_link_token.await_args.kwargs["token"]
     assert stored_token == hash_token(raw_token)
     assert stored_token != raw_token
+
+
+@pytest.mark.asyncio
+async def test_request_magic_link_with_non_positive_max_active_invalidates_all(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "magic_link_max_active", 0)
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = AuthUserRecord(
+        id="user-1",
+        email="user@example.com",
+        name="User",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    service = AuthService(adapter=adapter)
+
+    raw_token = await service.request_magic_link("user@example.com")
+
+    assert raw_token
+    adapter.mark_unused_magic_link_tokens_used.assert_awaited_once_with(
+        "user-1",
+        keep_latest_unused=0,
+    )
 
 
 @pytest.mark.asyncio

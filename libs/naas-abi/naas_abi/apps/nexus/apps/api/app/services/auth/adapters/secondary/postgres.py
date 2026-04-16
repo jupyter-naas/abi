@@ -251,12 +251,21 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         if row is not None:
             row.used = True
 
-    async def mark_unused_magic_link_tokens_used(self, user_id: str) -> None:
-        result = await self.db.execute(
-            select(MagicLinkTokenModel).where(
-                (MagicLinkTokenModel.user_id == user_id) & (MagicLinkTokenModel.used.is_(False))
-            )
+    async def mark_unused_magic_link_tokens_used(
+        self,
+        user_id: str,
+        keep_latest_unused: int = 0,
+    ) -> None:
+        if keep_latest_unused < 0:
+            keep_latest_unused = 0
+
+        statement = (
+            select(MagicLinkTokenModel)
+            .where((MagicLinkTokenModel.user_id == user_id) & (MagicLinkTokenModel.used.is_(False)))
+            .order_by(MagicLinkTokenModel.created_at.desc())
+            .offset(keep_latest_unused)
         )
+        result = await self.db.execute(statement)
         for row in result.scalars().all():
             row.used = True
 

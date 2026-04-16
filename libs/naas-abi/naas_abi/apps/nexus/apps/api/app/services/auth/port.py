@@ -112,7 +112,11 @@ class AuthPersistencePort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def mark_unused_magic_link_tokens_used(self, user_id: str) -> None:
+    async def mark_unused_magic_link_tokens_used(
+        self,
+        user_id: str,
+        keep_latest_unused: int = 0,
+    ) -> None:
         raise NotImplementedError
 
     @abstractmethod
