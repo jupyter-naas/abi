@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.4 (2026-04-16)
+
+### Bug Fixes
+
+- Add a CTA to signin after magic link to avoid mail bots authenticating
+  ([`ca51e6d`](https://github.com/jupyter-naas/abi/commit/ca51e6ddd7b19ac726ed9ba911421311aa9b916e))
+
+
 ## v1.19.3 (2026-04-16)
 
 ### Bug Fixes
