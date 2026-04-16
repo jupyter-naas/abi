@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_encrypt
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -54,6 +57,8 @@ class Workspace(BaseModel):
     updated_at: datetime | None = None
     organization_logo_url: str | None = None
     organization_logo_rectangle_url: str | None = None
+    current_user_role: str | None = None
+    feature_flags: dict[str, bool] = Field(default_factory=dict)
 
 
 class WorkspaceCreate(BaseModel):
@@ -131,7 +136,8 @@ class InferenceServerUpdate(BaseModel):
     models_path: str | None = None
 
 
-def _to_schema(record: WorkspaceRecord) -> Workspace:
+def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Workspace:
+    role = current_user_role or "member"
     return Workspace(
         id=record.id,
         name=record.name,
@@ -149,6 +155,13 @@ def _to_schema(record: WorkspaceRecord) -> Workspace:
         updated_at=record.updated_at,
         organization_logo_url=record.organization_logo_url,
         organization_logo_rectangle_url=record.organization_logo_rectangle_url,
+        current_user_role=current_user_role,
+        feature_flags=build_feature_flags(
+            role=role,
+            feature_flags_config=settings.feature_flags,
+            workspace_slug=record.slug,
+            workspace_id=record.id,
+        ),
     )
 
 
@@ -158,7 +171,10 @@ async def list_workspaces(
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> list[Workspace]:
     rows = await service.list_workspaces(user_id=current_user.id)
-    return [_to_schema(row) for row in rows]
+    roles = await asyncio.gather(
+        *[service.get_workspace_role(user_id=current_user.id, workspace_id=row.id) for row in rows]
+    )
+    return [_to_schema(row, role) for row, role in zip(rows, roles, strict=False)]
 
 
 @router.get("/{workspace_id}")
@@ -167,11 +183,11 @@ async def get_workspace(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> Workspace:
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
     row = await service.get_workspace(workspace_id=workspace_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return _to_schema(row)
+    return _to_schema(row, role)
 
 
 @router.get("/slug/{slug}")
@@ -183,8 +199,8 @@ async def get_workspace_by_slug(
     row = await service.get_workspace_by_slug(slug=slug)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    await require_workspace_access(current_user.id, row.id)
-    return _to_schema(row)
+    role = await require_workspace_access(current_user.id, row.id)
+    return _to_schema(row, role)
 
 
 @router.post("")
@@ -211,7 +227,7 @@ async def create_workspace(
         )
     except WorkspaceSlugAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="Slug already exists") from exc
-    return _to_schema(record)
+    return _to_schema(record, "owner")
 
 
 @router.delete("/{workspace_id}")
@@ -248,7 +264,7 @@ async def update_workspace(
     )
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return _to_schema(record)
+    return _to_schema(record, role)
 
 
 @router.get("/{workspace_id}/stats")
