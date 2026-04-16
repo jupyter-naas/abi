@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.27.1 (2026-04-16)
+
+### Bug Fixes
+
+- Manage blank nodes in oxigraph embedded adapter
+  ([`70e30c4`](https://github.com/jupyter-naas/abi/commit/70e30c4907a960e67669965e6dbbf5c1eca330e6))
+
+- Ruff linting + errors
+  ([`3fbfcae`](https://github.com/jupyter-naas/abi/commit/3fbfcaec129477375558316364d07db3baebb356))
+
+
 ## v1.27.0 (2026-04-15)
 
 ### Features
