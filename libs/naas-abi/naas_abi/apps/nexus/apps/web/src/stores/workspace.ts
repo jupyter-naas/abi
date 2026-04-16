@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { WorkspaceFeatureFlags } from '@/lib/feature-access';
 import { useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 
@@ -133,6 +134,8 @@ export interface Workspace {
   currentBranchId: string;
   createdAt: Date;
   updatedAt: Date;
+  currentUserRole?: string;
+  featureFlags?: WorkspaceFeatureFlags;
   isDemo?: boolean;
 }
 
@@ -739,6 +742,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         currentBranchId: `branch-main-${ws.id}`,
         createdAt: new Date(ws.created_at || Date.now()),
         updatedAt: new Date(ws.updated_at || Date.now()),
+        currentUserRole: ws.current_user_role,
+        featureFlags: ws.feature_flags,
       }));
       
       set({ workspaces });

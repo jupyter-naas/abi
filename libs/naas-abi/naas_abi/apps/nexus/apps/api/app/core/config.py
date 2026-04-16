@@ -61,6 +61,28 @@ class ExternalAppConfig(BaseModel):
     icon_emoji: str | None = None
 
 
+FeatureKey = Literal["chat", "files", "agents", "knowledge", "settings"]
+
+
+class FeatureFlagsConfig(BaseModel):
+    """Feature access policy exposed to Nexus frontend."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled_features: list[FeatureKey] = Field(
+        default_factory=lambda: ["chat", "files", "agents", "knowledge", "settings"]
+    )
+    role_baseline: dict[str, list[FeatureKey]] = Field(
+        default_factory=lambda: {
+            "owner": ["chat", "files", "agents", "knowledge", "settings"],
+            "admin": ["chat", "files", "agents", "knowledge", "settings"],
+            "member": ["chat", "files"],
+            "viewer": ["chat", "files"],
+        }
+    )
+    workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
+
+
 class UserSeedConfig(BaseModel):
     """User definition applied on startup (create by email if missing)."""
 
@@ -159,6 +181,9 @@ class Settings(BaseSettings):
 
     # Tenant branding (tab title, favicon)
     tenant: TenantConfig = Field(default_factory=TenantConfig)
+
+    # Feature access policy consumed by workspace bootstrap responses
+    feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
 
     # User seed configs (upserted by email on startup)
     users: list[UserSeedConfig] = Field(default_factory=list)

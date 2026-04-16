@@ -124,3 +124,24 @@ class TestWorkspaceLogoUpload:
         assert workspace_data["logo_url"] == payload["logo_url"]
 
         Path("uploads/logos", payload["filename"]).unlink(missing_ok=True)
+
+
+class TestWorkspaceFeatureFlags:
+    async def test_workspace_payload_contains_role_and_feature_flags(
+        self, client, test_user, test_workspace
+    ):
+        response = await client.get(
+            f"/api/workspaces/{test_workspace['id']}",
+            headers=test_user["headers"],
+        )
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert payload["current_user_role"] in {"owner", "admin", "member", "viewer"}
+        assert payload["feature_flags"] == {
+            "chat": True,
+            "files": True,
+            "agents": True,
+            "knowledge": True,
+            "settings": True,
+        }
