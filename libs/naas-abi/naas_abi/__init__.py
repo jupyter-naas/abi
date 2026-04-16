@@ -202,7 +202,7 @@ class NexusConfig(BaseModel):
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
     magic_link_allow_signup: bool = False
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 1440
     refresh_token_expire_days: int = 30
     magic_link_expire_minutes: int = 15
     magic_link_path: str = "/auth/magic-link"
