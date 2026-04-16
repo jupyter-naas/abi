@@ -41,6 +41,19 @@ modules:
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
         redis_url: "redis://redis:6379/0"
+        feature_flags:
+          enabled_features:
+            - chat
+            - files
+            - agents
+            - knowledge
+            - settings
+          role_baseline:
+            owner: [chat, files, agents, knowledge, settings]
+            admin: [chat, files, agents, knowledge, settings]
+            member: [chat, files]
+            viewer: [chat, files]
+          workspace_overrides: {}
         magic_link_allow_signup: false
         magic_link_email_app_name: "ABI Platform"
         magic_link_email_subject_template: "Your {app_name} sign-in link"
