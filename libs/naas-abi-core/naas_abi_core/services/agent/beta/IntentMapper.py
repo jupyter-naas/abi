@@ -2,15 +2,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Tuple
 
-# from dotenv import load_dotenv
 from langchain_core.embeddings import Embeddings
-from langchain_openai import OpenAIEmbeddings
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from naas_abi_core.utils.Logger import logger
 
 from .VectorStore import VectorStore
-
-# load_dotenv()
 
 
 class IntentScope(Enum):
@@ -36,24 +33,30 @@ class IntentMapper:
     intents: list[Intent]
     vector_store: VectorStore | None
     _embedding_model: Embeddings
-    model: ChatOpenAI
+    model: BaseChatModel
     system_prompt: str
 
     def __init__(
         self,
         intents: list[Intent],
         embedding_model: Embeddings | None = None,
+        model: BaseChatModel | None = None,
     ):
         self.intents = intents
         self._embedding_model = embedding_model or OpenAIEmbeddings(
             model="text-embedding-3-large"
         )
+        self.model = model or ChatOpenAI(model="gpt-4.1-mini")
         self.vector_store = None
 
         if embedding_model is None:
             logger.warning(
                 "No embedding_model provided to IntentMapper; using default OpenAIEmbeddings "
                 "model='text-embedding-3-large'."
+            )
+        if model is None:
+            logger.warning(
+                "No model provided to IntentMapper; using default ChatOpenAI model='gpt-4.1-mini'."
             )
 
         intents_values = [intent.intent_value for intent in intents]
@@ -71,8 +74,6 @@ class IntentMapper:
                 embeddings=vectors,
                 metadatas=metadatas,
             )
-
-        self.model = ChatOpenAI(model="gpt-4.1-mini")
 
         # Set the system prompt
         self.system_prompt = """
