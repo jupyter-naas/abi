@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.3 (2026-04-16)
+
+### Bug Fixes
+
+- Keep up to 5 magic links active at the same time
+  ([`712cc0e`](https://github.com/jupyter-naas/abi/commit/712cc0e464894602b776265e45b6da82f9ca4679))
+
+
 ## v1.19.2 (2026-04-15)
 
 ### Bug Fixes
