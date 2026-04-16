@@ -191,6 +191,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
     magic_link_expire_minutes: int = 15
+    magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"
     magic_link_email_app_name: str = "NEXUS"
     magic_link_email_subject_template: str = "Your {app_name} magic sign-in link"

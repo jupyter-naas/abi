@@ -411,7 +411,11 @@ class AuthService:
         now = now_utc_naive()
         expires_at = now + timedelta(minutes=settings.magic_link_expire_minutes)
 
-        await self.adapter.mark_unused_magic_link_tokens_used(user.id)
+        keep_latest_unused = max(settings.magic_link_max_active - 1, 0)
+        await self.adapter.mark_unused_magic_link_tokens_used(
+            user.id,
+            keep_latest_unused=keep_latest_unused,
+        )
         await self.adapter.create_magic_link_token(
             token_id=str(uuid4()),
             user_id=user.id,
