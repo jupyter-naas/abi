@@ -1,4 +1,6 @@
-from typing import Annotated
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Annotated
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import ToolCall, ToolMessage
@@ -6,7 +8,9 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from naas_abi_core import logger
-from naas_abi_core.services.agent.Agent import Agent
+
+if TYPE_CHECKING:
+    from naas_abi_core.services.agent.Agent import Agent
 
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
