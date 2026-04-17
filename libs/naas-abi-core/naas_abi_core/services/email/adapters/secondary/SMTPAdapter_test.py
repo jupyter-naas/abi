@@ -18,7 +18,7 @@ class _FakeSMTPBase:
         self.timeout = timeout
         self.did_starttls = False
         self.login_args: tuple[str, str] | None = None
-        self.messages = []
+        self.messages: list = []
         self.__class__.instances.append(self)
 
     def __enter__(self):
