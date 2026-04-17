@@ -123,23 +123,24 @@ def test_from_yaml_content_fails_if_configured_dotenv_file_is_missing():
 
 def test_from_yaml_content_loads_opencode_provider_configuration(tmp_path):
     dotenv = tmp_path / ".env.bootstrap"
+    auth_file_path = tmp_path / "opencode-auth.json"
     dotenv.write_text("ENV=local\nOPENCODE_API_KEY=test-opencode\n", encoding="utf-8")
 
     configuration = EngineConfiguration.from_yaml_content(
         _configuration_yaml(
             title="BASE",
             dotenv_path=str(dotenv),
-            extra_top_level="""
+            extra_top_level=f"""
 opencode:
-  auth_file_path: /tmp/opencode-auth.json
+  auth_file_path: {auth_file_path}
   providers:
     - id: openrouter
-      key: "{{ secret.OPENCODE_API_KEY }}"
+      key: "{{{{ secret.OPENCODE_API_KEY }}}}"
 """.strip(),
         )
     )
 
-    assert configuration.opencode.auth_file_path == "/tmp/opencode-auth.json"
+    assert configuration.opencode.auth_file_path == str(auth_file_path)
     assert len(configuration.opencode.providers) == 1
     assert configuration.opencode.providers[0].id == "openrouter"
     assert configuration.opencode.providers[0].key == "test-opencode"
