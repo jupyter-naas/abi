@@ -144,7 +144,7 @@ class IntentAgent(Agent):
             for intent in intents:
                 if intent.intent_type in [IntentType.TOOL, IntentType.AGENT]:
                     intent.intent_target = self.validate_name(intent.intent_target)
-                    intent.intent_scope = IntentScope.DIRECT
+                    intent.intent_scope = IntentScope.ALL
                 new_intents.append(intent)
 
             # Add default intents
