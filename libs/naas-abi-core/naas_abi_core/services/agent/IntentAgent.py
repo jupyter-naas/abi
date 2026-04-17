@@ -23,6 +23,7 @@ from .Agent import (
     create_checkpointer,
 )
 from .beta.IntentMapper import Intent, IntentMapper, IntentScope, IntentType
+from .intents.default_intents import DEFAULT_INTENTS
 
 _nlp = None
 
@@ -42,176 +43,6 @@ def get_nlp():
 
 
 MULTIPLES_INTENTS_MESSAGE = "I found multiple intents that could handle your request"
-DEFAULT_INTENTS: list = [
-    Intent(
-        intent_value="what's your name?",
-        intent_type=IntentType.AGENT,
-        intent_target="call_model",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="what do you do?",
-        intent_type=IntentType.AGENT,
-        intent_target="call_model",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="comment tu t'appelles?",
-        intent_type=IntentType.AGENT,
-        intent_target="call_model",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="que fais-tu?",
-        intent_type=IntentType.AGENT,
-        intent_target="call_model",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Hello",
-        intent_type=IntentType.RAW,
-        intent_target="Hello, what can I do for you?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Hi",
-        intent_type=IntentType.RAW,
-        intent_target="Hello, what can I do for you?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Hey",
-        intent_type=IntentType.RAW,
-        intent_target="Hello, what can I do for you?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Salut",
-        intent_type=IntentType.RAW,
-        intent_target="Bonjour, que puis-je faire pour vous?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Bonjour",
-        intent_type=IntentType.RAW,
-        intent_target="Bonjour, que puis-je faire pour vous?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Coucou",
-        intent_type=IntentType.RAW,
-        intent_target="Bonjour, que puis-je faire pour vous?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Hi there",
-        intent_type=IntentType.RAW,
-        intent_target="Hello, what can I do for you?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Hello there",
-        intent_type=IntentType.RAW,
-        intent_target="Hello, what can I do for you?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Hello, how are you?",
-        intent_type=IntentType.RAW,
-        intent_target="Hello, I am doing well thank you, how can I help you today?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Hi, how are you?",
-        intent_type=IntentType.RAW,
-        intent_target="Hello, I am doing well thank you, how can I help you today?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Bonjour, comment vas-tu?",
-        intent_type=IntentType.RAW,
-        intent_target="Bonjour, je vais bien merci, comment puis-je vous aider aujourd'hui?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Salut, ça va?",
-        intent_type=IntentType.RAW,
-        intent_target="Bonjour, je vais bien merci, comment puis-je vous aider aujourd'hui?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Thank you",
-        intent_type=IntentType.RAW,
-        intent_target="You're welcome, can I help you with anything else?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Thank you very much",
-        intent_type=IntentType.RAW,
-        intent_target="You're welcome, can I help you with anything else?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Thank you so much",
-        intent_type=IntentType.RAW,
-        intent_target="You're welcome, can I help you with anything else?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Merci",
-        intent_type=IntentType.RAW,
-        intent_target="Je vous en prie, puis-je vous aider avec autre chose?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Merci beaucoup",
-        intent_type=IntentType.RAW,
-        intent_target="Je vous en prie, puis-je vous aider avec autre chose?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="Merci bien",
-        intent_type=IntentType.RAW,
-        intent_target="Je vous en prie, puis-je vous aider avec autre chose?",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="List tools available",
-        intent_type=IntentType.TOOL,
-        intent_target="list_tools_available",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="What are the tools available?",
-        intent_type=IntentType.TOOL,
-        intent_target="list_tools_available",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="List sub-agents available",
-        intent_type=IntentType.TOOL,
-        intent_target="list_subagents_available",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="What are the sub-agents available?",
-        intent_type=IntentType.TOOL,
-        intent_target="list_subagents_available",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="List intents",
-        intent_type=IntentType.TOOL,
-        intent_target="list_intents_available",
-        intent_scope=IntentScope.DIRECT,
-    ),
-    Intent(
-        intent_value="What are your intents?",
-        intent_type=IntentType.TOOL,
-        intent_target="list_intents_available",
-        intent_scope=IntentScope.DIRECT,
-    ),
-]
 
 
 class IntentState(ABIAgentState):
@@ -250,6 +81,8 @@ class IntentAgent(Agent):
     _intents: list[Intent]
     _intent_mapper: IntentMapper
     _embedding_model: Embeddings | None
+    _enable_default_intents: bool
+    _enable_default_tools: bool
 
     def __init__(
         self,
@@ -266,8 +99,9 @@ class IntentAgent(Agent):
         threshold: float = 0.85,
         threshold_neighbor: float = 0.05,
         direct_intent_score: float = 0.90,
-        default_intents: bool = True,
+        enable_default_intents: bool = True,
         embedding_model: Embeddings | None = None,
+        enable_default_tools: bool = False,
     ):
         """Initialize the IntentAgent.
 
@@ -310,6 +144,7 @@ class IntentAgent(Agent):
             for intent in intents:
                 if intent.intent_type in [IntentType.TOOL, IntentType.AGENT]:
                     intent.intent_target = self.validate_name(intent.intent_target)
+                    intent.intent_scope = IntentScope.ALL
                 new_intents.append(intent)
 
             # Add default intents
@@ -321,8 +156,8 @@ class IntentAgent(Agent):
                         new_intents.append(default_intent)
             return new_intents
 
-        self._default_intents = default_intents
-        self._intents = _prepare_intents(intents, default_intents)
+        self._enable_default_intents = enable_default_intents
+        self._intents = _prepare_intents(intents, enable_default_intents)
         self._embedding_model = embedding_model
         if isinstance(chat_model, ChatModel):
             chat_model = chat_model.model
@@ -349,6 +184,7 @@ class IntentAgent(Agent):
             state=state,
             configuration=configuration,
             event_queue=event_queue,
+            enable_default_tools=enable_default_tools,
         )
 
     @property
@@ -1014,7 +850,8 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             threshold=self._threshold,
             threshold_neighbor=self._threshold_neighbor,
             direct_intent_score=self._direct_intent_score,
-            default_intents=self._default_intents,
+            enable_default_intents=self._enable_default_intents,
+            enable_default_tools=self._enable_default_tools,
         )
 
         return new_agent
