@@ -22,7 +22,7 @@ from .Agent import (
     AgentSharedState,
     create_checkpointer,
 )
-from .beta.IntentMapper import Intent, IntentMapper, IntentType
+from .beta.IntentMapper import Intent, IntentMapper, IntentScope, IntentType
 from .intents.default_intents import DEFAULT_INTENTS
 
 _nlp = None
@@ -144,6 +144,7 @@ class IntentAgent(Agent):
             for intent in intents:
                 if intent.intent_type in [IntentType.TOOL, IntentType.AGENT]:
                     intent.intent_target = self.validate_name(intent.intent_target)
+                    intent.intent_scope = IntentScope.DIRECT
                 new_intents.append(intent)
 
             # Add default intents
