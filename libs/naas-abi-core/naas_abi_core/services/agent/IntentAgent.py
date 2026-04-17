@@ -324,9 +324,12 @@ class IntentAgent(Agent):
         self._default_intents = default_intents
         self._intents = _prepare_intents(intents, default_intents)
         self._embedding_model = embedding_model
+        if isinstance(chat_model, ChatModel):
+            chat_model = chat_model.model
         self._intent_mapper = IntentMapper(
             self._intents,
             embedding_model=self._embedding_model,
+            model=chat_model,
         )
         self._threshold = threshold
         self._threshold_neighbor = threshold_neighbor
