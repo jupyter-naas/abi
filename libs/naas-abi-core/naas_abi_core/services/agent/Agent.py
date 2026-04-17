@@ -13,7 +13,6 @@ from enum import Enum
 from queue import Empty, Queue
 from typing import (
     TYPE_CHECKING,
-    Annotated,
     Any,
     Callable,
     Dict,
@@ -27,17 +26,13 @@ from typing import (
 
 import pydash as pd
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import BaseTool, StructuredTool, Tool, tool
-from langgraph.prebuilt import InjectedState
+from langchain_core.tools import BaseTool, StructuredTool, Tool
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.utils.Logger import logger
 
 # Pydantic imports for schema validation (keep - it's already loaded by other modules)
 from pydantic import BaseModel, Field
-
-###
-
 
 # Only import heavy modules for type checking
 if TYPE_CHECKING:
@@ -60,6 +55,9 @@ from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from sse_starlette.sse import EventSourceResponse
+
+from .tools.default_tools import default_tools
+from .tools.utils import can_bind_tools, make_handoff_tool
 
 _shared_checkpointer: BaseCheckpointSaver | None = None
 _shared_checkpointer_url: str | None = None
@@ -349,6 +347,7 @@ class Agent(Expose):
     _original_tools: list[Union[Tool, BaseTool, "Agent"]]
     _tools_by_name: dict[str, Union[Tool, BaseTool]]
     _native_tools: list[dict]
+    _enable_default_tools: bool
 
     # An agent can have other agents.
     # He will be responsible to load them as tools.
@@ -434,8 +433,9 @@ class Agent(Expose):
         logger.debug(f"Current active agent: {self._state.current_active_agent}")
 
         # We inject default tools
-        if enable_default_tools:
-            tools += self.default_tools()
+        self._enable_default_tools = enable_default_tools
+        if self._enable_default_tools:
+            tools += default_tools(self)
 
         # We store the original list of provided tools. This will be usefull for duplication.
         self._tools = tools
@@ -482,7 +482,7 @@ class Agent(Expose):
             tools_to_bind.extend(self._native_tools)
 
             # Test if the chat model can bind tools by trying with a default tool first
-            if self._can_bind_tools(base_chat_model):
+            if can_bind_tools(base_chat_model):
                 self._chat_model_with_tools = base_chat_model.bind_tools(tools_to_bind)
             else:
                 logger.warning(
@@ -515,166 +515,6 @@ class Agent(Expose):
 
         # We build the graph.
         self.build_graph()
-
-    def _can_bind_tools(self, chat_model: BaseChatModel) -> bool:
-        """Test if the chat model can bind tools by attempting to bind the get_time_date default tool.
-
-        Args:
-            chat_model (BaseChatModel): The chat model to test
-
-        Returns:
-            bool: True if the model can bind tools, False otherwise
-        """
-        try:
-            # Create the get_time_date tool that's used in default_tools()
-            @tool(return_direct=True)
-            def get_time_date(timezone: str = "Europe/Paris") -> str:
-                """Get the current time and date."""
-                from datetime import datetime
-                from zoneinfo import ZoneInfo
-
-                return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
-
-            # Try to bind this single tool to test if the model supports tool binding
-            chat_model.bind_tools([get_time_date])
-
-            # If we get here without an exception, the model supports tool binding
-            # logger.debug(f"Chat model {type(chat_model).__name__} supports tool calling.")
-            return True
-
-        except Exception as e:
-            # If binding tools raises an exception, the model doesn't support tools
-            logger.debug(
-                f"Chat model {type(chat_model).__name__} does not support tool calling: {e}"
-            )
-            return False
-
-    def default_tools(self) -> list[Tool | BaseTool]:
-        @tool(return_direct=True)
-        def request_help(reason: str):
-            """
-            Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
-
-            Use this tool if:
-            - You are unsure how to proceed.
-            - You lack the necessary knowledge or ability to complete the task.
-            - The user's request is outside your capabilities or unclear.
-
-            Args:
-                reason (str): A brief explanation of why you are requesting help (e.g., "I am uncertain about the next step", "I do not have the required capability", "The user's request is unclear").
-
-            The supervisor agent will review your reason and provide assistance or take over the conversation.
-            """
-            logger.debug(f"'{self.name}' is requesting help from the supervisor agent")
-            return "Requesting help from the supervisor agent."
-
-        @tool(return_direct=False)
-        def get_time_date(timezone: str = "Europe/Paris") -> str:
-            """Returns the current date and time for a given timezone."""
-            from datetime import datetime
-            from zoneinfo import ZoneInfo
-
-            return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
-
-        @tool(return_direct=True)
-        def get_current_active_agent() -> str:
-            """Returns the current active agent."""
-            return "The current active agent is: " + (
-                self._state.current_active_agent or self.name
-            )
-
-        @tool(return_direct=True)
-        def get_supervisor_agent() -> str:
-            """Returns the supervisor agent."""
-            if self._state.supervisor_agent is None:
-                return "I don't have a supervisor agent."
-            return "The supervisor agent is: " + self._state.supervisor_agent
-
-        @tool(return_direct=True)
-        def list_tools_available() -> str:
-            """Displays a formatted list of all available tools."""
-            if (
-                not hasattr(self, "_structured_tools")
-                or len(self._structured_tools) == 0
-            ):
-                return "I don't have any tools available to help you at the moment."
-
-            tools_text = "Here are the tools I can use to help you:\n\n"
-            for t in self._structured_tools:
-                if not t.name.startswith("transfer_to"):
-                    tools_text += f"- `{t.name}`: {t.description.splitlines()[0]}\n"
-            return tools_text.rstrip()
-
-        @tool(return_direct=True)
-        def list_subagents_available() -> str:
-            """Displays a formatted list of all available sub-agents."""
-            if not hasattr(self, "_agents") or len(self._agents) == 0:
-                return "I don't have any sub-agents that can assist me at the moment."
-
-            agents_text = "I can collaborate with these sub-agents:\n"
-            for agent in self._agents:
-                agents_text += f"- `{agent.name}`: {agent.description}\n"
-            return agents_text.rstrip()
-
-        @tool(return_direct=True)
-        def list_intents_available() -> str:
-            """Displays a formatted list of all available intents."""
-            if not hasattr(self, "_intents") or len(self._intents) == 0:
-                return "I haven't been configured with any specific intents yet."
-
-            from naas_abi_core.services.agent.IntentAgent import (
-                Intent,
-                IntentScope,
-                IntentType,
-            )
-
-            # Group intents by scope and type
-            intents_by_scope: dict[
-                Optional[IntentScope], dict[IntentType, list[Intent]]
-            ] = {}
-            for intent in self._intents:
-                if intent.intent_scope not in intents_by_scope:
-                    intents_by_scope[intent.intent_scope] = {}
-                if intent.intent_type not in intents_by_scope[intent.intent_scope]:
-                    intents_by_scope[intent.intent_scope][intent.intent_type] = []
-                intents_by_scope[intent.intent_scope][intent.intent_type].append(intent)
-
-            intents_text = "Here are all the intents I'm configured with:\n\n"
-            for scope, types_dict in intents_by_scope.items():
-                intents_text += f"### Intents for {str(scope)}\n\n"
-                for intent_type, intents in types_dict.items():
-                    intents_text += f"#### {str(intent_type)}\n\n"
-                    intents_text += "| Intent | Target |\n"
-                    intents_text += "|--------|--------|\n"
-                    for intent in intents:
-                        if intent.intent_scope == IntentType.RAW:
-                            intents_text += (
-                                f"| {intent.intent_value} | {intent.intent_target} |\n"
-                            )
-                        else:
-                            intents_text += f"| {intent.intent_value} | `{intent.intent_target}` |\n"
-                    intents_text += "\n"
-            return intents_text.rstrip()
-
-        tools: list[Tool | BaseTool] = [
-            get_time_date,
-            list_tools_available,
-            list_subagents_available,
-            list_intents_available,
-        ]
-        has_supervisor = (
-            self.state.supervisor_agent is not None
-            and self.state.supervisor_agent.strip() != ""
-            and self.state.supervisor_agent != self.name
-        )
-
-        if has_supervisor:
-            tools.append(request_help)
-
-        if self.state.supervisor_agent is not None or len(self._agents) > 0:
-            tools.append(get_current_active_agent)
-            tools.append(get_supervisor_agent)
-        return tools
 
     @property
     def structured_tools(self) -> list[Tool | BaseTool]:
@@ -1450,6 +1290,7 @@ SUBAGENT SYSTEM PROMPT:
             state=shared_state,  # Create new state instance
             configuration=self._configuration,
             event_queue=queue,
+            enable_default_tools=self._enable_default_tools,
         )
 
         return new_agent
@@ -1639,42 +1480,3 @@ SUBAGENT SYSTEM PROMPT:
 
     def hello(self) -> str:
         return "Hello"
-
-
-def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
-    """Create a tool that can return handoff via a Command"""
-    tool_name = f"transfer_to_{agent.name}"
-
-    @tool(tool_name)
-    def handoff_to_agent(
-        # # optionally pass current graph state to the tool (will be ignored by the LLM)
-        state: Annotated[dict, InjectedState],
-        # optionally pass the current tool call ID (will be ignored by the LLM)
-        tool_call: Annotated[ToolCall, ToolCall],
-    ):
-        """Ask another agent for help."""
-        agent_label = " ".join(
-            word.capitalize() for word in agent.name.replace("_", " ").split()
-        )
-
-        tool_message = ToolMessage(
-            content=f"Conversation transferred to {agent_label}",
-            name=tool_name,
-            tool_call_id=tool_call["id"],
-        )
-
-        agent.state.set_current_active_agent(agent.name)
-
-        return Command(
-            # navigate to another agent node in the PARENT graph
-            goto=agent.name,
-            graph=Command.PARENT if parent_graph else None,
-            # This is the state update that the agent `agent_name` will see when it is invoked.
-            # We're passing agent's FULL internal message history AND adding a tool message to make sure
-            # the resulting chat history is valid. See the paragraph above for more information.
-            update={"messages": state["messages"] + [tool_message]},
-        )
-
-    assert isinstance(handoff_to_agent, BaseTool)
-
-    return handoff_to_agent
