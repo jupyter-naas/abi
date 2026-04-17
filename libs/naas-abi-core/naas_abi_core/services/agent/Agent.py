@@ -399,6 +399,7 @@ class Agent(Expose):
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
         native_tools: list[dict] = [],
+        enable_default_tools: bool = False,
     ):
         """Initialize a new Agent instance.
 
@@ -433,7 +434,8 @@ class Agent(Expose):
         logger.debug(f"Current active agent: {self._state.current_active_agent}")
 
         # We inject default tools
-        tools += self.default_tools()
+        if enable_default_tools:
+            tools += self.default_tools()
 
         # We store the original list of provided tools. This will be usefull for duplication.
         self._tools = tools
