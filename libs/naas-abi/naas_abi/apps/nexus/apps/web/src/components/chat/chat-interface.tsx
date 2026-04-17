@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, Globe, ArrowUp, Download, ExternalLink } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, Globe, ArrowUp, Download, ExternalLink, Mic, Check, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -158,6 +158,17 @@ export function ChatInterface() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Voice capture state
+  const [voiceMode, setVoiceMode] = useState<'idle' | 'recording' | 'transcribing'>('idle');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const {
     activeConversationId,
@@ -332,9 +343,234 @@ export function ChatInterface() {
     setImageError(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((!input.trim() && attachedImages.length === 0) || isLoading) return;
+  // ---------- Voice capture ----------
+
+  const stopVoiceStream = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        // ignore
+      }
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => undefined);
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+  }, []);
+
+  const startVoiceRecording = async () => {
+    setVoiceError(null);
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setVoiceError('Microphone is not supported in this browser.');
+      return;
+    }
+    try {
+      // Browser handles the permission prompt. If denied, getUserMedia throws.
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      // Pick a supported mime type (Chrome/Firefox → webm; Safari → mp4)
+      const mimeCandidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ];
+      const mimeType = mimeCandidates.find(
+        (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)
+      );
+
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.start(200);
+
+      // Analyser for live waveform visualization
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          audioContextRef.current = ctx;
+          const source = ctx.createMediaStreamSource(stream);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+          analyserRef.current = analyser;
+        }
+      } catch {
+        // Waveform is non-critical - ignore failures
+      }
+
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((s) => s + 1);
+      }, 1000);
+
+      setVoiceMode('recording');
+    } catch (err) {
+      const name = (err as { name?: string })?.name;
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setVoiceError('Microphone access was denied. Please allow it in your browser settings.');
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setVoiceError('No microphone was found on this device.');
+      } else {
+        const message = err instanceof Error ? err.message : 'Unable to access microphone';
+        setVoiceError(message);
+      }
+      stopVoiceStream();
+      setVoiceMode('idle');
+    }
+  };
+
+  const cancelVoiceRecording = useCallback(() => {
+    stopVoiceStream();
+    audioChunksRef.current = [];
+    setRecordingSeconds(0);
+    setVoiceMode('idle');
+    setVoiceError(null);
+  }, [stopVoiceStream]);
+
+  const confirmVoiceRecording = useCallback(async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) {
+      cancelVoiceRecording();
+      return;
+    }
+
+    setVoiceMode('transcribing');
+
+    const blob: Blob = await new Promise((resolve) => {
+      const mimeType = recorder.mimeType || 'audio/webm';
+      if (recorder.state === 'inactive') {
+        resolve(new Blob(audioChunksRef.current, { type: mimeType }));
+        return;
+      }
+      recorder.onstop = () => {
+        resolve(new Blob(audioChunksRef.current, { type: mimeType }));
+      };
+      try {
+        recorder.stop();
+      } catch {
+        resolve(new Blob(audioChunksRef.current, { type: mimeType }));
+      }
+    });
+
+    // Release the mic once we have the audio
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => undefined);
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+
+    if (blob.size === 0) {
+      setVoiceError('No audio was captured. Please try again.');
+      setVoiceMode('idle');
+      return;
+    }
+
+    try {
+      const extension = blob.type.includes('mp4')
+        ? 'mp4'
+        : blob.type.includes('ogg')
+          ? 'ogg'
+          : 'webm';
+      const file = new File([blob], `recording.${extension}`, { type: blob.type });
+
+      const formData = new FormData();
+      formData.append('audio', file);
+
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Transcription failed (${response.status})`);
+      }
+
+      const { text } = (await response.json()) as { text?: string };
+      const transcript = (text || '').trim();
+
+      setVoiceMode('idle');
+      setRecordingSeconds(0);
+      audioChunksRef.current = [];
+
+      if (!transcript) {
+        setVoiceError('No speech was detected. Please try again.');
+        return;
+      }
+
+      // Auto-send the transcribed message
+      await handleSubmit(undefined, transcript);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Transcription failed';
+      setVoiceError(message);
+      setVoiceMode('idle');
+      setRecordingSeconds(0);
+      audioChunksRef.current = [];
+    }
+    // handleSubmit is stable via closure; intentionally omitted from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cancelVoiceRecording]);
+
+  // Keyboard shortcut: Ctrl+M validates the current voice recording
+  useEffect(() => {
+    if (voiceMode !== 'recording') return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        void confirmVoiceRecording();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelVoiceRecording();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [voiceMode, confirmVoiceRecording, cancelVoiceRecording]);
+
+  // Cleanup mic resources if the component unmounts while recording
+  useEffect(() => {
+    return () => {
+      stopVoiceStream();
+    };
+  }, [stopVoiceStream]);
+
+  const handleSubmit = async (e?: React.FormEvent, messageOverride?: string) => {
+    e?.preventDefault();
+    const sourceText = messageOverride !== undefined ? messageOverride : input;
+    if ((!sourceText.trim() && attachedImages.length === 0) || isLoading) return;
 
     let conversationId = activeConversationId;
     const existingConversationBeforeSend = activeConversationId
@@ -351,12 +587,17 @@ export function ChatInterface() {
     // Add user message with images
     addMessage(conversationId, {
       role: 'user',
-      content: input.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
+      content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
       images: currentImages.length > 0 ? currentImages : undefined,
     });
 
-    const userMessage = input.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
-    handleInputChange('');
+    const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
+    // Only clear the input field if the message came from the input
+    if (messageOverride === undefined) {
+      handleInputChange('');
+    } else {
+      setInput('');
+    }
     setAttachedImages([]); // Clear attached images after adding to message
     setImageError(null);
     setSearchEnabled(false); // Reset search toggle after sending
@@ -893,6 +1134,23 @@ export function ChatInterface() {
               </div>
             )}
             
+            {/* Voice error banner */}
+            {voiceError && (
+              <div className="mb-2 flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                <AlertCircle size={14} />
+                {voiceError}
+                <button
+                  type="button"
+                  onClick={() => setVoiceError(null)}
+                  className="ml-auto rounded p-0.5 hover:bg-destructive/10"
+                  aria-label="Dismiss"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+
+            {voiceMode === 'idle' ? (
             <div className="rounded-2xl border border-border/50 bg-card">
               {/* Hidden file input */}
               <input
@@ -954,21 +1212,48 @@ export function ChatInterface() {
                   </button>
                 </div>
                 
-                {/* Send button */}
-                <button
-                  type="submit"
-                  disabled={(!input.trim() && attachedImages.length === 0) || isLoading}
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                    (input.trim() || attachedImages.length > 0) && !isLoading
-                      ? 'bg-foreground text-background hover:opacity-80'
-                      : 'bg-muted text-muted-foreground'
-                  )}
-                >
-                  <ArrowUp size={18} />
-                </button>
+                <div className="flex items-center gap-1">
+                  {/* Voice capture (mic) */}
+                  <button
+                    type="button"
+                    onClick={startVoiceRecording}
+                    disabled={isLoading}
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+                      'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      isLoading && 'cursor-not-allowed opacity-50'
+                    )}
+                    title="Record voice message"
+                    aria-label="Record voice message"
+                  >
+                    <Mic size={18} />
+                  </button>
+
+                  {/* Send button */}
+                  <button
+                    type="submit"
+                    disabled={(!input.trim() && attachedImages.length === 0) || isLoading}
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center rounded-full transition-all',
+                      (input.trim() || attachedImages.length > 0) && !isLoading
+                        ? 'bg-foreground text-background hover:opacity-80'
+                        : 'bg-muted text-muted-foreground'
+                    )}
+                  >
+                    <ArrowUp size={18} />
+                  </button>
+                </div>
               </div>
             </div>
+            ) : (
+              <VoiceRecorderBar
+                mode={voiceMode}
+                seconds={recordingSeconds}
+                analyser={analyserRef.current}
+                onCancel={cancelVoiceRecording}
+                onConfirm={() => void confirmVoiceRecording()}
+              />
+            )}
             <p className="mt-2 text-center text-xs text-muted-foreground">
               AI doesn’t replace your judgment. You’re accountable for its use.
             </p>
@@ -1353,6 +1638,176 @@ const MessageBubble = React.memo(function MessageBubble({
     </div>
   );
 });
+
+/**
+ * Voice recorder UI that replaces the chat composer while the user records
+ * or while audio is being transcribed. Mirrors the pill-shaped bar from the
+ * design reference: left-aligned timer, live waveform in the middle, and
+ * cancel / validate controls on the right.
+ */
+function VoiceRecorderBar({
+  mode,
+  seconds,
+  analyser,
+  onCancel,
+  onConfirm,
+}: {
+  mode: 'recording' | 'transcribing';
+  seconds: number;
+  analyser: AnalyserNode | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Live waveform driven by the AnalyserNode (time-domain data)
+  useEffect(() => {
+    if (mode !== 'recording') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let rafId = 0;
+    const bufferLength = analyser?.fftSize ?? 512;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const draw = () => {
+      rafId = requestAnimationFrame(draw);
+      const { width, height } = canvas;
+      ctx.clearRect(0, 0, width, height);
+
+      const barCount = 48;
+      const barWidth = width / (barCount * 2);
+      const midY = height / 2;
+
+      const amplitudes: number[] = new Array(barCount).fill(0.05);
+      if (analyser) {
+        analyser.getByteTimeDomainData(dataArray);
+        const step = Math.max(1, Math.floor(dataArray.length / barCount));
+        for (let i = 0; i < barCount; i++) {
+          let peak = 0;
+          for (let j = 0; j < step; j++) {
+            const v = Math.abs(dataArray[i * step + j] - 128) / 128;
+            if (v > peak) peak = v;
+          }
+          amplitudes[i] = Math.max(0.05, peak);
+        }
+      } else {
+        // Fallback: animated idle pattern when no analyser is available
+        const t = Date.now() / 200;
+        for (let i = 0; i < barCount; i++) {
+          amplitudes[i] = 0.15 + 0.1 * Math.abs(Math.sin(t + i * 0.3));
+        }
+      }
+
+      ctx.fillStyle = 'currentColor';
+      for (let i = 0; i < barCount; i++) {
+        const amp = amplitudes[i];
+        const barHeight = Math.max(2, amp * height * 0.9);
+        const x = i * barWidth * 2 + barWidth / 2;
+        ctx.fillRect(x, midY - barHeight / 2, barWidth, barHeight);
+      }
+    };
+
+    draw();
+    return () => cancelAnimationFrame(rafId);
+  }, [mode, analyser]);
+
+  // Keep the canvas backing buffer in sync with its CSS size (HiDPI support)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.scale(dpr, dpr);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
+
+  const formatDuration = (total: number) => {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const isTranscribing = mode === 'transcribing';
+
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-border/50 bg-card px-3 py-2">
+      {/* Left: timer / status */}
+      <div className="flex min-w-[70px] items-center gap-2 pl-1 pr-2 text-xs font-medium text-muted-foreground tabular-nums">
+        {isTranscribing ? (
+          <>
+            <Loader2 size={14} className="animate-spin text-workspace-accent" />
+            <span>Transcribing…</span>
+          </>
+        ) : (
+          <>
+            <span
+              className="h-2 w-2 animate-pulse rounded-full bg-destructive"
+              aria-hidden="true"
+            />
+            <span>{formatDuration(seconds)}</span>
+          </>
+        )}
+      </div>
+
+      {/* Middle: waveform */}
+      <div
+        className={cn(
+          'relative flex h-8 flex-1 items-center',
+          isTranscribing ? 'text-muted-foreground/40' : 'text-foreground'
+        )}
+      >
+        <canvas ref={canvasRef} className="h-full w-full" />
+      </div>
+
+      {/* Right: cancel & validate */}
+      <div className="flex items-center gap-1 pr-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isTranscribing}
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+            'text-muted-foreground hover:bg-muted hover:text-foreground',
+            isTranscribing && 'cursor-not-allowed opacity-50'
+          )}
+          title="Cancel recording (Esc)"
+          aria-label="Cancel recording"
+        >
+          <X size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={isTranscribing}
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded-full transition-all',
+            isTranscribing
+              ? 'bg-muted text-muted-foreground'
+              : 'bg-foreground text-background hover:opacity-80'
+          )}
+          title="Validate (Ctrl + M)"
+          aria-label="Validate recording"
+        >
+          {isTranscribing ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Check size={18} />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function getMockResponse(userMessage: string, agent: AgentType): string {
   const responses: Record<string, string[]> = {
