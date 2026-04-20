@@ -157,6 +157,7 @@ export function ChatInterface() {
   const [searchEnabled, setSearchEnabled] = useState(false); // Force web search
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Voice capture state
@@ -508,6 +509,10 @@ export function ChatInterface() {
 
       const formData = new FormData();
       formData.append('audio', file);
+      const currentConversationId = activeConversationId;
+      if (currentConversationId) {
+        formData.append('conversation_id', currentConversationId);
+      }
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -519,7 +524,8 @@ export function ChatInterface() {
         throw new Error(errData.error || `Transcription failed (${response.status})`);
       }
 
-      const { text } = (await response.json()) as { text?: string };
+      const { text, conversation_id: echoedConversationId } =
+        (await response.json()) as { text?: string; conversation_id?: string | null };
       const transcript = (text || '').trim();
 
       setVoiceMode('idle');
@@ -531,8 +537,23 @@ export function ChatInterface() {
         return;
       }
 
-      // Auto-send the transcribed message
-      await handleSubmit(undefined, transcript);
+      const preservedConversationId = echoedConversationId ?? currentConversationId;
+      if (
+        preservedConversationId &&
+        useWorkspaceStore.getState().activeConversationId !== preservedConversationId
+      ) {
+        useWorkspaceStore.getState().setActiveConversation(preservedConversationId);
+      }
+
+      // On validate: send the transcript directly as a chat message.
+      // If the user had already typed something, prepend it so nothing is lost.
+      const existing = textareaRef.current?.value ?? '';
+      const combined = existing.trim()
+        ? `${existing.trim()} ${transcript}`
+        : transcript;
+
+      handleInputChange('');
+      await handleSubmit(undefined, combined);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Transcription failed';
       setVoiceError(message);
@@ -1165,6 +1186,7 @@ export function ChatInterface() {
               {/* Row 1: Textarea */}
               <div className="px-4 pt-3 pb-1">
                 <textarea
+                  ref={textareaRef}
                   value={input}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
@@ -1660,9 +1682,20 @@ function VoiceRecorderBar({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Live waveform driven by the AnalyserNode (time-domain data)
+  // Rolling history of amplitudes (oldest -> newest, left -> right).
+  // Each entry is in [0, 1]. Scrolled at a fixed cadence for steady motion.
+  const historyRef = useRef<number[]>([]);
+  const lastSampleAtRef = useRef(0);
+
+  // Design constants matching the reference (dashed grey rail + black bars).
+  const SLOT_WIDTH = 3;        // px per history slot (bar + gap)
+  const BAR_WIDTH = 1.4;       // px thickness of the black bars
+  const SAMPLE_INTERVAL_MS = 45; // timeline scroll speed
+  const SILENCE_FLOOR = 0.06;  // below this, only the dashed rail shows
+  const DASH_STEP = 6;         // px between dashed baseline dots
+  const DASH_WIDTH = 2;        // px length of each dot
+
   useEffect(() => {
-    if (mode !== 'recording') return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -1672,46 +1705,72 @@ function VoiceRecorderBar({
     const bufferLength = analyser?.fftSize ?? 512;
     const dataArray = new Uint8Array(bufferLength);
 
-    const draw = () => {
+    const draw = (now: number) => {
       rafId = requestAnimationFrame(draw);
-      const { width, height } = canvas;
+
+      const width = canvas.clientWidth || canvas.width;
+      const height = canvas.clientHeight || canvas.height;
       ctx.clearRect(0, 0, width, height);
 
-      const barCount = 48;
-      const barWidth = width / (barCount * 2);
       const midY = height / 2;
+      const maxBarHeight = height * 0.85;
 
-      const amplitudes: number[] = new Array(barCount).fill(0.05);
-      if (analyser) {
+      // --- 1. Measure current mic level (RMS) as a new history sample ---
+      let currentLevel = 0;
+      if (analyser && mode === 'recording') {
         analyser.getByteTimeDomainData(dataArray);
-        const step = Math.max(1, Math.floor(dataArray.length / barCount));
-        for (let i = 0; i < barCount; i++) {
-          let peak = 0;
-          for (let j = 0; j < step; j++) {
-            const v = Math.abs(dataArray[i * step + j] - 128) / 128;
-            if (v > peak) peak = v;
-          }
-          amplitudes[i] = Math.max(0.05, peak);
+        let sumSq = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = (dataArray[i] - 128) / 128;
+          sumSq += v * v;
         }
-      } else {
-        // Fallback: animated idle pattern when no analyser is available
-        const t = Date.now() / 200;
-        for (let i = 0; i < barCount; i++) {
-          amplitudes[i] = 0.15 + 0.1 * Math.abs(Math.sin(t + i * 0.3));
-        }
+        const rms = Math.sqrt(sumSq / dataArray.length);
+        // Shape the response: gentle lift for soft voice, clamp loud peaks.
+        currentLevel = Math.min(1, rms * 3.0);
       }
 
-      ctx.fillStyle = 'currentColor';
-      for (let i = 0; i < barCount; i++) {
-        const amp = amplitudes[i];
-        const barHeight = Math.max(2, amp * height * 0.9);
-        const x = i * barWidth * 2 + barWidth / 2;
-        ctx.fillRect(x, midY - barHeight / 2, barWidth, barHeight);
+      // --- 2. Advance the timeline at a fixed cadence (independent of FPS) ---
+      const maxSlots = Math.max(8, Math.ceil(width / SLOT_WIDTH));
+      if (lastSampleAtRef.current === 0) {
+        lastSampleAtRef.current = now;
+        historyRef.current = new Array(maxSlots).fill(0);
+      }
+      while (now - lastSampleAtRef.current >= SAMPLE_INTERVAL_MS) {
+        historyRef.current.push(currentLevel);
+        if (historyRef.current.length > maxSlots) {
+          historyRef.current.splice(0, historyRef.current.length - maxSlots);
+        }
+        lastSampleAtRef.current += SAMPLE_INTERVAL_MS;
+      }
+      // Pad if the history is shorter than the canvas (initial frames, resize).
+      if (historyRef.current.length < maxSlots) {
+        const pad = new Array(maxSlots - historyRef.current.length).fill(0);
+        historyRef.current = pad.concat(historyRef.current);
+      }
+
+      // --- 3. Draw the dashed grey baseline across the full width ---
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+      for (let x = 0; x <= width - DASH_WIDTH; x += DASH_STEP) {
+        ctx.fillRect(x, midY - 0.5, DASH_WIDTH, 1);
+      }
+
+      // --- 4. Overlay black oscillation bars for slots with audible voice ---
+      ctx.fillStyle = mode === 'transcribing' ? 'rgba(0, 0, 0, 0.45)' : '#111';
+      const history = historyRef.current;
+      for (let i = 0; i < maxSlots; i++) {
+        const level = history[i] ?? 0;
+        if (level < SILENCE_FLOOR) continue;
+
+        // Map i=0 -> left edge (oldest), i=maxSlots-1 -> right edge (now)
+        const x = i * SLOT_WIDTH + (SLOT_WIDTH - BAR_WIDTH) / 2;
+        const barHeight = Math.max(2, level * maxBarHeight);
+        ctx.fillRect(x, midY - barHeight / 2, BAR_WIDTH, barHeight);
       }
     };
 
-    draw();
+    rafId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(rafId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, analyser]);
 
   // Keep the canvas backing buffer in sync with its CSS size (HiDPI support)
@@ -1724,7 +1783,10 @@ function VoiceRecorderBar({
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       const ctx = canvas.getContext('2d');
-      if (ctx) ctx.scale(dpr, dpr);
+      if (ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+      }
     };
     resize();
     window.addEventListener('resize', resize);
