@@ -509,7 +509,7 @@ export function ChatInterface() {
 
       const formData = new FormData();
       formData.append('audio', file);
-      const currentConversationId = activeConversationId;
+      const currentConversationId = useWorkspaceStore.getState().activeConversationId;
       if (currentConversationId) {
         formData.append('conversation_id', currentConversationId);
       }
@@ -551,9 +551,10 @@ export function ChatInterface() {
       const combined = existing.trim()
         ? `${existing.trim()} ${transcript}`
         : transcript;
+      const selectedAgentAtSend = useWorkspaceStore.getState().selectedAgent;
 
       handleInputChange('');
-      await handleSubmit(undefined, combined);
+      await handleSubmit(undefined, combined, selectedAgentAtSend);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Transcription failed';
       setVoiceError(message);
@@ -561,8 +562,6 @@ export function ChatInterface() {
       setRecordingSeconds(0);
       audioChunksRef.current = [];
     }
-    // handleSubmit is stable via closure; intentionally omitted from deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cancelVoiceRecording]);
 
   // Keyboard shortcut: Ctrl+M validates the current voice recording
@@ -588,10 +587,15 @@ export function ChatInterface() {
     };
   }, [stopVoiceStream]);
 
-  const handleSubmit = async (e?: React.FormEvent, messageOverride?: string) => {
+  const handleSubmit = async (
+    e?: React.FormEvent,
+    messageOverride?: string,
+    agentOverride?: string
+  ) => {
     e?.preventDefault();
     const sourceText = messageOverride !== undefined ? messageOverride : input;
     if ((!sourceText.trim() && attachedImages.length === 0) || isLoading) return;
+    const effectiveAgent = agentOverride ?? selectedAgent;
 
     let conversationId = activeConversationId;
     const existingConversationBeforeSend = activeConversationId
@@ -626,7 +630,7 @@ export function ChatInterface() {
 
     try {
       // Get provider for current agent
-      const provider = getProviderForAgent(selectedAgent);
+      const provider = getProviderForAgent(effectiveAgent);
       const token = useAuthStore.getState().token;
       const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
 
@@ -642,7 +646,7 @@ export function ChatInterface() {
       } : null;
 
       // Get agent's system prompt
-      const agentData = getAgent(selectedAgent);
+      const agentData = getAgent(effectiveAgent);
       const systemPrompt = agentData?.systemPrompt || null;
       
       // If this is an existing thread with no local history loaded yet, fetch it first.
@@ -684,7 +688,7 @@ export function ChatInterface() {
         addMessage(conversationId, {
           role: 'assistant',
           content: searchEnabled ? '🌐 Searching the web...' : '▌',
-          agent: selectedAgent,
+          agent: effectiveAgent,
         });
         // Capture placeholder message id for controls
         {
@@ -761,7 +765,7 @@ export function ChatInterface() {
             message: userMessage,
             images: currentImages.length > 0 ? currentImages : null,
             messages: fullHistory,
-            agent: selectedAgent,
+            agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
             search_enabled: searchEnabled,
@@ -906,7 +910,7 @@ export function ChatInterface() {
             message: userMessage,
             images: currentImages.length > 0 ? currentImages : null,
             messages: fullHistory,
-            agent: selectedAgent,
+            agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
           }),
@@ -922,7 +926,7 @@ export function ChatInterface() {
         addMessage(conversationId!, {
           role: 'assistant',
           content: data.message.content,
-          agent: selectedAgent,
+          agent: effectiveAgent,
           thinkingDuration,
         });
       }
@@ -1010,7 +1014,7 @@ export function ChatInterface() {
             addMessage(conversationId, {
               role: 'assistant',
               content: `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`,
-              agent: selectedAgent,
+              agent: effectiveAgent,
             });
           }
         }
