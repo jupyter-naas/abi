@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.27.2 (2026-04-17)
+
+### Bug Fixes
+
+- Add default model if no openai key provided
+  ([`caf4286`](https://github.com/jupyter-naas/abi/commit/caf4286105ed0d147277a28e7ce99565f20292f3))
+
+- Add parameter to enable default tools
+  ([`d7341b7`](https://github.com/jupyter-naas/abi/commit/d7341b738c1d8abe3722b59493c0eecec49d2a2a))
+
+- Pass base chat model to intent mapper
+  ([`cf73bd0`](https://github.com/jupyter-naas/abi/commit/cf73bd0b6b93bdc9347d31b66cd92451f68c88d9))
+
+
 ## v1.27.1 (2026-04-16)
 
 ### Bug Fixes
