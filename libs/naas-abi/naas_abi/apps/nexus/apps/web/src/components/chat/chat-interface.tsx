@@ -554,7 +554,12 @@ export function ChatInterface() {
       const selectedAgentAtSend = useWorkspaceStore.getState().selectedAgent;
 
       handleInputChange('');
-      await handleSubmit(undefined, combined, selectedAgentAtSend);
+      await handleSubmit(
+        undefined,
+        combined,
+        selectedAgentAtSend,
+        preservedConversationId ?? undefined
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Transcription failed';
       setVoiceError(message);
@@ -590,16 +595,18 @@ export function ChatInterface() {
   const handleSubmit = async (
     e?: React.FormEvent,
     messageOverride?: string,
-    agentOverride?: string
+    agentOverride?: string,
+    conversationIdOverride?: string
   ) => {
     e?.preventDefault();
     const sourceText = messageOverride !== undefined ? messageOverride : input;
     if ((!sourceText.trim() && attachedImages.length === 0) || isLoading) return;
     const effectiveAgent = agentOverride ?? selectedAgent;
 
-    let conversationId = activeConversationId;
-    const existingConversationBeforeSend = activeConversationId
-      ? useWorkspaceStore.getState().conversations.find((c) => c.id === activeConversationId)
+    const latestActiveConversationId = useWorkspaceStore.getState().activeConversationId;
+    let conversationId = conversationIdOverride ?? latestActiveConversationId ?? activeConversationId;
+    const existingConversationBeforeSend = conversationId
+      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
       : null;
 
     // Create new conversation if none active
