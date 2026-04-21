@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 if TYPE_CHECKING:
     from naas_abi.apps.nexus.apps.api.app.services.agents.service import AgentService
     from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
+    from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
     from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
     from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
     from naas_abi.apps.nexus.apps.api.app.services.search.service import SearchService
@@ -28,6 +29,7 @@ class RegistryServices:
     agents: AgentService
     workspaces: WorkspaceService
     organizations: OrganizationService
+    graph: GraphService
 
 
 class ServiceRegistry:
@@ -70,6 +72,10 @@ class ServiceRegistry:
     @property
     def organizations(self) -> OrganizationService:
         return self._services.organizations
+
+    @property
+    def graph(self) -> GraphService:
+        return self._services.graph
 
 
 async def get_service_registry(db: AsyncSession = Depends(get_db)):
