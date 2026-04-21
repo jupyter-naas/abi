@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.28.1 (2026-04-21)
+
+### Bug Fixes
+
+- **bandit**: Nosec B108 on hardcoded /tmp path in config test
+  ([`408c4c8`](https://github.com/jupyter-naas/abi/commit/408c4c81ad0a0177e17ba64284a5029f461148c3))
+
+- **ci**: Resolve all PR check failures
+  ([`5ba33bb`](https://github.com/jupyter-naas/abi/commit/5ba33bbf83483126546daef8815be32f119a45a3))
+
+- **mypy**: Use list[Any] for SMTPAdapter_test messages to allow subscript
+  ([`80f42cb`](https://github.com/jupyter-naas/abi/commit/80f42cbe969ac812dac61d8e300f1d81c365e4d8))
+
+
 ## v1.28.0 (2026-04-21)
 
 ### Bug Fixes
