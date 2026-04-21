@@ -225,7 +225,6 @@ uv:
 		echo "📚 Don't worry - you can get it here: https://docs.astral.sh/uv/getting-started/installation/"; \
 		exit 1; \
 	fi
-	@ uv python find 3.10 > /dev/null || (uv python install 3.10 && uv python pin 3.10)
 
 # Create virtual environment and install all dependencies
 .venv:

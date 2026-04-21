@@ -139,7 +139,7 @@ opencode:
         )
     )
 
-    assert configuration.opencode.auth_file_path == "/tmp/opencode-auth.json"
+    assert configuration.opencode.auth_file_path == "/tmp/opencode-auth.json"  # nosec B108
     assert len(configuration.opencode.providers) == 1
     assert configuration.opencode.providers[0].id == "openrouter"
     assert configuration.opencode.providers[0].key == "test-opencode"
