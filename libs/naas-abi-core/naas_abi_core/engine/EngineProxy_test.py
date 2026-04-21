@@ -27,7 +27,7 @@ class _DummyEmailAdapter(IEmailAdapter):
 class _DummyEngine:
     def __init__(self, services: IEngine.Services) -> None:
         self.services = services
-        self.modules = {}
+        self.modules: dict[str, object] = {}
 
 
 def test_engine_proxy_services_exposes_email_service():
