@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.secondary.postgres 
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
+from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
 from naas_abi.apps.nexus.apps.api.app.services.iam.adapters.secondary.postgres import (
     IAMSecondaryAdapterPostgres,
 )
@@ -55,6 +56,7 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
         iam_service=iam_service,
     )
     graph_service = GraphService()
+    ontology_service = OntologyService()
 
     return ServiceRegistry.configure(
         RegistryServices(
@@ -65,5 +67,6 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
             workspaces=workspace_service,
             organizations=organization_service,
             graph=graph_service,
+            ontology=ontology_service,
         )
     )
