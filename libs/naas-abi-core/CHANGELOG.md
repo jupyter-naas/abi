@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.28.0 (2026-04-21)
+
+### Bug Fixes
+
+- **triple-store**: Harden ApacheJenaTDB2 adapter against Fuseki lock-contention 500s
+  ([`5d6a3fd`](https://github.com/jupyter-naas/abi/commit/5d6a3fdae37e3177fcaffd179736b514eb7a0a13))
+
+### Features
+
+- **config**: Wire KeyValueService into ApacheJenaTDB2 via engine configuration
+  ([`dacf894`](https://github.com/jupyter-naas/abi/commit/dacf89469d739426139b2d83aaaa843f5f8c91c0))
+
+- **triple-store**: Add optional distributed write lock via KeyValueService
+  ([`3e33396`](https://github.com/jupyter-naas/abi/commit/3e33396e4414ed1b3c5b277a8cc7b3b3745f52d2))
+
+
 ## v1.27.2 (2026-04-17)
 
 ### Bug Fixes
