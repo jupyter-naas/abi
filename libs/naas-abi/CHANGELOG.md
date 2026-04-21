@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.22.0 (2026-04-21)
+
+### Bug Fixes
+
+- Preserve voice in chat
+  ([`9b0bc7f`](https://github.com/jupyter-naas/abi/commit/9b0bc7fb1794a5c227f39523c13109e629878858))
+
+
 ## v1.21.1 (2026-04-21)
 
 ### Bug Fixes
