@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.28.2 (2026-04-21)
+
+### Bug Fixes
+
+- Silent tool transfer
+  ([`341ba01`](https://github.com/jupyter-naas/abi/commit/341ba01ab1f55f8908145f69d6cbe794e705ad2d))
+
+
 ## v1.28.1 (2026-04-21)
 
 ### Bug Fixes
