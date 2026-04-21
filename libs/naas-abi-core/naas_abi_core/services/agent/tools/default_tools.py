@@ -1,28 +1,9 @@
 from typing import Optional
 
 from langchain_core.tools import BaseTool, Tool, tool
-from naas_abi_core import logger
 
 
 def default_tools(self) -> list[Tool | BaseTool]:
-    @tool(return_direct=True)
-    def request_help(reason: str):
-        """
-        Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
-
-        Use this tool if:
-        - You are unsure how to proceed.
-        - You lack the necessary knowledge or ability to complete the task.
-        - The user's request is outside your capabilities or unclear.
-
-        Args:
-            reason (str): A brief explanation of why you are requesting help (e.g., "I am uncertain about the next step", "I do not have the required capability", "The user's request is unclear").
-
-        The supervisor agent will review your reason and provide assistance or take over the conversation.
-        """
-        logger.debug(f"'{self.name}' is requesting help from the supervisor agent")
-        return f"Requesting help from the supervisor agent because {reason}."
-
     @tool(return_direct=False)
     def get_time_date(timezone: str = "Europe/Paris") -> str:
         """Returns the current date and time for a given timezone."""
@@ -116,15 +97,6 @@ def default_tools(self) -> list[Tool | BaseTool]:
         list_subagents_available,
         list_intents_available,
     ]
-    has_supervisor = (
-        self.state.supervisor_agent is not None
-        and self.state.supervisor_agent.strip() != ""
-        and self.state.supervisor_agent != self.name
-    )
-
-    if has_supervisor:
-        tools.append(request_help)
-
     if self.state.supervisor_agent is not None or len(self._agents) > 0:
         tools.append(get_current_active_agent)
         tools.append(get_supervisor_agent)
