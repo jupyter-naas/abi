@@ -7,7 +7,6 @@ from naas_abi_core import logger
 @click.argument("agent-name", type=str, default="")
 def chat(module_name: str = "", agent_name: str = ""):
     from naas_abi_core.engine.Engine import Engine
-    from naas_abi_core.services.agent.Agent import Agent
 
     engine = Engine()
 
@@ -26,6 +25,5 @@ def chat(module_name: str = "", agent_name: str = ""):
     for agent_class in engine.modules[module_name].agents:
         logger.debug(f"Agent class: {agent_class.__name__}")
         if agent_class.__name__ == agent_name:
-            if isinstance(agent_class, type) and issubclass(agent_class, Agent):
-                run_agent(agent_class.New())
-                break
+            run_agent(agent_class.New())  # type: ignore[attr-defined]
+            break
