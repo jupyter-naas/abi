@@ -89,6 +89,7 @@ class IntentAgent(Agent):
         name: str,
         description: str,
         chat_model: BaseChatModel | ChatModel,
+        embedding_model: Embeddings | None = None,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         intents: list[Intent] = [],
@@ -100,8 +101,7 @@ class IntentAgent(Agent):
         threshold_neighbor: float = 0.05,
         direct_intent_score: float = 0.90,
         enable_default_intents: bool = True,
-        embedding_model: Embeddings | None = None,
-        enable_default_tools: bool = False,
+        enable_default_tools: bool = True,
     ):
         """Initialize the IntentAgent.
 
@@ -143,8 +143,8 @@ class IntentAgent(Agent):
             # Clean up tools and agents names
             for intent in intents:
                 if intent.intent_type in [IntentType.TOOL, IntentType.AGENT]:
-                    intent.intent_target = self.validate_name(intent.intent_target)
-                    intent.intent_scope = IntentScope.ALL
+                    intent.intent_target = Agent.validate_name(intent.intent_target)
+                    intent.intent_scope = IntentScope.DIRECT
                 new_intents.append(intent)
 
             # Add default intents

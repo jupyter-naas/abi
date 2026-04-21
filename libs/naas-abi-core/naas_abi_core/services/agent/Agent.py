@@ -13,6 +13,7 @@ from enum import Enum
 from queue import Empty, Queue
 from typing import (
     TYPE_CHECKING,
+    Annotated,
     Any,
     Callable,
     Dict,
@@ -26,7 +27,8 @@ from typing import (
 
 import pydash as pd
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import BaseTool, StructuredTool, Tool
+from langchain_core.tools import BaseTool, StructuredTool, Tool, tool
+from langgraph.prebuilt import InjectedState
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.utils.Logger import logger
@@ -57,7 +59,7 @@ from langgraph.types import Command
 from sse_starlette.sse import EventSourceResponse
 
 from .tools.default_tools import default_tools
-from .tools.utils import can_bind_tools, make_handoff_tool
+from .tools.utils import can_bind_tools
 
 _shared_checkpointer: BaseCheckpointSaver | None = None
 _shared_checkpointer_url: str | None = None
@@ -229,14 +231,20 @@ class AgentSharedState:
         return self._current_active_agent
 
     def set_current_active_agent(self, agent_name: Optional[str]):
-        self._current_active_agent = agent_name
+        if agent_name is None:
+            self._current_active_agent = None
+        else:
+            self._current_active_agent = Agent.validate_name(agent_name)
 
     @property
     def supervisor_agent(self) -> Optional[str]:
         return self._supervisor_agent
 
     def set_supervisor_agent(self, agent_name: Optional[str]):
-        self._supervisor_agent = agent_name
+        if agent_name is None:
+            self._supervisor_agent = None
+        else:
+            self._supervisor_agent = Agent.validate_name(agent_name)
 
     @property
     def requesting_help(self) -> bool:
@@ -398,7 +406,7 @@ class Agent(Expose):
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
         native_tools: list[dict] = [],
-        enable_default_tools: bool = False,
+        enable_default_tools: bool = True,
     ):
         """Initialize a new Agent instance.
 
@@ -409,7 +417,7 @@ class Agent(Expose):
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
                 If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
         """
-        self._name = self.validate_name(name)
+        self._name = Agent.validate_name(name)
         logger.debug(f"Initializing agent: '{self._name}'")
         self._description = description
         self._state = state
@@ -421,10 +429,37 @@ class Agent(Expose):
             self._state.set_supervisor_agent(self._state.supervisor_agent)
         logger.debug(f"Supervisor agent: {self._state.supervisor_agent}")
 
+        # Add tool request help if the agent has a supervisor agent.
+        @tool(return_direct=True)
+        def request_help(reason: str):
+            """
+            Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
+
+            Use this tool if:
+            - You are unsure how to proceed.
+            - You lack the necessary knowledge or ability to complete the task.
+            - The user's request is outside your capabilities or unclear.
+
+            Args:
+                reason (str): A brief explanation of why you are requesting help (e.g., "I am uncertain about the next step", "I do not have the required capability", "The user's request is unclear").
+
+            The supervisor agent will review your reason and provide assistance or take over the conversation.
+            """
+            logger.debug(f"'{self.name}' is requesting help from the supervisor agent")
+            return f"Requesting help from the supervisor agent because {reason}."
+
+        has_supervisor = (
+            self._state.supervisor_agent is not None
+            and self._state.supervisor_agent.strip() != ""
+            and self._state.supervisor_agent != self._name
+        )
+        if has_supervisor:
+            tools.append(request_help)
+
         # We validate the names of the agents.
-        agent_names: list[str] = [agent.name for agent in self._original_agents] + [
-            self._name
-        ]
+        agent_names: list[str] = [
+            Agent.validate_name(agent.name) for agent in self._original_agents
+        ] + [self._name]
         if (
             self._state.current_active_agent is not None
             and self._state.current_active_agent in agent_names
@@ -524,24 +559,27 @@ class Agent(Expose):
     def state(self) -> AgentSharedState:
         return self._state
 
-    def validate_name(self, name: str) -> str:
+    @staticmethod
+    def validate_name(name: str) -> str:
         # Only allow characters valid for graph node names (e.g. ':' is reserved and not allowed).
         pattern = r"^[a-zA-Z0-9_-]+$"
         if not re.match(pattern, name):
             # Replace invalid/reserved characters (including ':') with '_'
             valid_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
-            logger.warning(
+            logger.debug(
                 f"Name '{name}' does not match pattern '{pattern}' (e.g. ':' is reserved). Renaming to '{valid_name}'."
             )
             return valid_name.replace("__", "_")
         return name
 
-    def validate_tool_name(self, tool: BaseTool) -> BaseTool:
-        tool.name = self.validate_name(tool.name)
+    @staticmethod
+    def validate_tool_name(tool: BaseTool) -> BaseTool:
+        tool.name = Agent.validate_name(tool.name)
         return tool
 
-    def validate_agent_name(self, agent: Agent) -> Agent:
-        agent._name = self.validate_name(agent.name)
+    @staticmethod
+    def validate_agent_name(agent: Agent) -> Agent:
+        agent._name = Agent.validate_name(agent.name)
         return agent
 
     def prepare_tools(
@@ -567,14 +605,14 @@ class Agent(Expose):
                     _agents.append(t)
                     _agent_names.add(t.name)
                     for tool in t.as_tools():
-                        tool = self.validate_tool_name(tool)
+                        tool = Agent.validate_tool_name(tool)
                         if tool.name not in _tool_names:
                             _tools.append(tool)
                             _tool_names.add(tool.name)
             else:
                 # Accept both Tool and BaseTool
                 if hasattr(t, "name"):
-                    t = self.validate_tool_name(t)
+                    t = Agent.validate_tool_name(t)
                     if t.name not in _tool_names:
                         _tools.append(t)
                         _tool_names.add(t.name)
@@ -585,7 +623,7 @@ class Agent(Expose):
                 _agents.append(agent)
                 _agent_names.add(agent.name)
                 for tool in agent.as_tools():
-                    tool = self.validate_tool_name(tool)
+                    tool = Agent.validate_tool_name(tool)
                     if tool.name not in _tool_names:
                         _tools.append(tool)
                         _tool_names.add(tool.name)
@@ -594,10 +632,6 @@ class Agent(Expose):
 
     def as_tools(self, parent_graph: bool = False) -> list[BaseTool]:
         return [make_handoff_tool(agent=self, parent_graph=parent_graph)]
-
-    def render_system_prompt(self, state: ABIAgentState) -> Command:
-        system_prompt = self._configuration.get_system_prompt(state["messages"])
-        return Command(update={"system_prompt": system_prompt})
 
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(ABIAgentState)
@@ -625,6 +659,10 @@ class Agent(Expose):
             graph = patcher(graph)
 
         self.graph = graph.compile(checkpointer=self._checkpointer)
+
+    def render_system_prompt(self, state: ABIAgentState) -> Command:
+        system_prompt = self._configuration.get_system_prompt(state["messages"])
+        return Command(update={"system_prompt": system_prompt})
 
     def get_last_human_message(self, state: ABIAgentState) -> Any | None:
         """Get the appropriate human message based on AI message context.
@@ -669,9 +707,9 @@ class Agent(Expose):
             Command: Command to goto the current active agent
         """
         # Log the current active agent
-        logger.debug(f"😏 Supervisor agent: '{self.state.supervisor_agent}'")
-        logger.debug(f"🟢 Active agent: '{self.state.current_active_agent}'")
-        logger.debug(f"🤖 Current Agent: '{self.name}'")
+        logger.debug(f"😏 Supervisor agent: '{self._state.supervisor_agent}'")
+        logger.debug(f"🟢 Active agent: '{self._state.current_active_agent}'")
+        logger.debug(f"🤖 Current Agent: '{self._name}'")
 
         # Get the last human message
         last_human_message = self.get_last_human_message(state)
@@ -699,27 +737,26 @@ class Agent(Expose):
             )
 
             if agent is not None:
-                self._state.set_current_active_agent(agent.name)
-                return Command(goto=agent.name, update={"messages": state["messages"]})
+                agent_name = Agent.validate_name(agent.name)
+                self._state.set_current_active_agent(agent_name)
+                return Command(
+                    goto=agent_name,
+                    update={"messages": state["messages"]},
+                )
             else:
                 logger.debug(f"❌ Agent '{at_mention}' not found")
 
         if (
             self._state.current_active_agent is not None
-            and self._state.current_active_agent != self.name
+            and self._state.current_active_agent != self._name
         ):
             logger.debug(
-                f"⏩ Continuing conversation with agent '{self._state.current_active_agent}'"
+                f"⏩ Continuing conversation with: '{self._state.current_active_agent}'"
             )
-            # Check if current active agent is in list of agents.
-            if self._state.current_active_agent in [a.name for a in self._agents]:
-                self._state.set_current_active_agent(self._state.current_active_agent)
-                return Command(goto=self._state.current_active_agent)
-            else:
-                logger.debug(f"❌ Agent '{self._state.current_active_agent}' not found")
+            return Command(goto=self._state.current_active_agent)
 
         # self._state.set_current_active_agent(self.name)
-        logger.debug(f"💬 Starting chatting with agent '{self.name}'")
+        logger.debug(f"💬 Starting chatting with: '{self._name}'")
         updated_system_prompt = state["system_prompt"]
         if (
             self.state.supervisor_agent is not None
@@ -766,7 +803,7 @@ SUBAGENT SYSTEM PROMPT:
             # self._system_prompt = self._system_prompt + "\n" + current_date_str
             updated_system_prompt = updated_system_prompt + "\n" + current_date_str
             return Command(
-                goto="current_active_agent",
+                goto="continue_conversation",
                 update={"system_prompt": updated_system_prompt},
             )
 
@@ -1480,3 +1517,39 @@ SUBAGENT SYSTEM PROMPT:
 
     def hello(self) -> str:
         return "Hello"
+
+
+def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
+    """Create a tool that can return handoff via a Command"""
+    agent_name = agent.validate_name(agent.name)
+    tool_name = f"transfer_to_{agent_name}"
+
+    @tool(tool_name)
+    def handoff_to_agent(
+        # # optionally pass current graph state to the tool (will be ignored by the LLM)
+        state: Annotated[dict, InjectedState],
+        # optionally pass the current tool call ID (will be ignored by the LLM)
+        tool_call: Annotated[ToolCall, ToolCall],
+    ):
+        """Ask another agent for help."""
+        tool_message = ToolMessage(
+            content=f"Conversation transferred to {agent.name}",
+            name=tool_name,
+            tool_call_id=tool_call["id"],
+        )
+
+        agent.state.set_current_active_agent(agent_name)
+
+        return Command(
+            # navigate to another agent node in the PARENT graph
+            goto=agent_name,
+            graph=Command.PARENT if parent_graph else None,
+            # This is the state update that the agent `agent_name` will see when it is invoked.
+            # We're passing agent's FULL internal message history AND adding a tool message to make sure
+            # the resulting chat history is valid. See the paragraph above for more information.
+            update={"messages": state["messages"] + [tool_message]},
+        )
+
+    assert isinstance(handoff_to_agent, BaseTool)
+
+    return handoff_to_agent
