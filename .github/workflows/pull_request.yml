@@ -20,9 +20,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Run checks
         run: make check
@@ -60,9 +60,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
         with:
