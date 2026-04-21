@@ -893,6 +893,7 @@ SUBAGENT SYSTEM PROMPT:
 
         # Calling model
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
+        logger.debug(f"Model response: {response}")
         logger.debug(
             f"Model response content: {response.content if hasattr(response, 'content') else response}"
         )
@@ -1210,7 +1211,15 @@ SUBAGENT SYSTEM PROMPT:
                                 self._notify_ai_message(last_message, agent_name)
 
                     elif isinstance(last_message, ToolMessage):
-                        if last_message.id not in notified:
+                        is_handoff_tool_response = (
+                            hasattr(last_message, "name")
+                            and isinstance(last_message.name, str)
+                            and last_message.name.startswith("transfer_to_")
+                        )
+                        if (
+                            last_message.id not in notified
+                            and is_handoff_tool_response is False
+                        ):
                             self._notify_tool_response(last_message)
                             notified[last_message.id] = True
                     else:
@@ -1533,9 +1542,13 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
     ):
         """Ask another agent for help."""
         tool_message = ToolMessage(
-            content=f"Conversation transferred to {agent.name}",
+            content=f"__handoff__:{agent_name}",
             name=tool_name,
             tool_call_id=tool_call["id"],
+            additional_kwargs={
+                "internal": True,
+                "handoff_target": agent_name,
+            },
         )
 
         agent.state.set_current_active_agent(agent_name)
