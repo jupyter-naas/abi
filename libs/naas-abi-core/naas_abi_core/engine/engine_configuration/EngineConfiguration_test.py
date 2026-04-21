@@ -1,5 +1,4 @@
 import pytest
-
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
@@ -140,7 +139,7 @@ opencode:
         )
     )
 
-    assert configuration.opencode.auth_file_path == str(auth_file_path)
+    assert configuration.opencode.auth_file_path == "/tmp/opencode-auth.json"  # nosec B108
     assert len(configuration.opencode.providers) == 1
     assert configuration.opencode.providers[0].id == "openrouter"
     assert configuration.opencode.providers[0].key == "test-opencode"

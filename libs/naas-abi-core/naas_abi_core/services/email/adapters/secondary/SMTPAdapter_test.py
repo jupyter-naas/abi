@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import smtplib
+from typing import Any
 
 import pytest
 from naas_abi_core.services.email.adapters.secondary.SMTPAdapter import SMTPAdapter
@@ -18,7 +19,7 @@ class _FakeSMTPBase:
         self.timeout = timeout
         self.did_starttls = False
         self.login_args: tuple[str, str] | None = None
-        self.messages: list = []
+        self.messages: list[Any] = []
         self.__class__.instances.append(self)
 
     def __enter__(self):

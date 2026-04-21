@@ -3,6 +3,9 @@ from typing import TYPE_CHECKING, Any, Literal, Union
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
+    KeyValueServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
     ObjectStorageServiceConfiguration,
 )
@@ -43,12 +46,21 @@ class ApacheJenaTDB2AdapterConfiguration(BaseModel):
       config:
         jena_tdb2_url: "http://localhost:3030/ds"
         timeout: 60
+        # Optional: promote the intra-process threading.Lock to a distributed
+        # write lock so concurrent writers across different processes/instances
+        # are serialised via the key-value store.
+        key_value_service:
+          kv_adapter:
+            adapter: "redis"
+            config:
+              redis_url: "redis://localhost:6379"
     """
 
     model_config = ConfigDict(extra="forbid")
 
     jena_tdb2_url: str = "http://localhost:3030/ds"
     timeout: int = 60
+    key_value_service: KeyValueServiceConfiguration | None = None
 
 
 class AWSNeptuneAdapterConfiguration(BaseModel):
@@ -284,9 +296,19 @@ class TripleStoreAdapterConfiguration(GenericLoader):
                     ApacheJenaTDB2,
                 )
 
-                ApacheJenaTDB2AdapterConfiguration.model_validate(arguments)
+                assert isinstance(self.config, ApacheJenaTDB2AdapterConfiguration)
 
-                return ApacheJenaTDB2(**arguments)
+                kv_service = (
+                    self.config.key_value_service.load()
+                    if self.config.key_value_service is not None
+                    else None
+                )
+
+                return ApacheJenaTDB2(
+                    jena_tdb2_url=self.config.jena_tdb2_url,
+                    timeout=self.config.timeout,
+                    key_value_service=kv_service,
+                )
             elif self.adapter == "aws_neptune":
                 from naas_abi_core.services.triple_store.adaptors.secondary.AWSNeptune import (
                     AWSNeptune,

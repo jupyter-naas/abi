@@ -19,7 +19,7 @@ from typing import Any, AsyncIterator, Optional
 
 import httpx
 from fastapi import APIRouter
-from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.agent.OpencodeSessionService import OpencodeSessionService
 from naas_abi_core.utils.Expose import Expose
@@ -451,8 +451,8 @@ class OpencodeAgent(Expose):
             if await self._auto_approve_permission(client, session_id, permission_id):
                 self._approved_permissions.add(permission_id)
                 self._notify_tool_response(
-                    ToolMessage(
-                        content=(f"Auto-approved opencode permission `{permission_id}`")
+                    AIMessage(
+                        content=f"Auto-approved opencode permission `{permission_id}`"
                     )
                 )
 
@@ -475,7 +475,7 @@ class OpencodeAgent(Expose):
                 content = (
                     f"Selection requested by opencode:\n{question_text or ''}\n{rendered_options}"
                 ).strip()
-                self._notify_tool_response(ToolMessage(content=content))
+                self._notify_tool_response(AIMessage(content=content))
 
         if event_type != "message.part.updated":
             return
@@ -486,7 +486,7 @@ class OpencodeAgent(Expose):
 
         part_type = part.get("type")
         if part_type == "reasoning":
-            self._notify_tool_usage(ToolMessage(content="Model is reasoning..."))
+            self._notify_tool_usage(AIMessage(content="Model is reasoning..."))
             return
 
         if part_type != "tool":
@@ -503,13 +503,13 @@ class OpencodeAgent(Expose):
             dedupe = call_id or f"{tool_name}:{status}"
             if dedupe not in self._seen_tool_calls:
                 self._seen_tool_calls.add(dedupe)
-                self._notify_tool_usage(ToolMessage(content=f"{tool_name} ({status})"))
+                self._notify_tool_usage(AIMessage(content=f"{tool_name} ({status})"))
             return
 
         if status == "completed":
             output = state.get("output")
             if isinstance(output, str) and output:
-                self._notify_tool_response(ToolMessage(content=output))
+                self._notify_tool_response(AIMessage(content=output))
 
     async def _auto_approve_permission(
         self,
