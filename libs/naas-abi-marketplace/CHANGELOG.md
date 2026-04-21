@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.10.2 (2026-04-21)
+
+### Bug Fixes
+
+- Remove agent with no tool calling abilities
+  ([`fcc3f4d`](https://github.com/jupyter-naas/abi/commit/fcc3f4d895545a89d15b2eb5fb17d2b9f96c7dd2))
+
+
 ## v1.10.1 (2026-04-21)
 
 ### Bug Fixes
