@@ -11,7 +11,7 @@ from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 
 OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
-TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
+TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 
 router = APIRouter()
 
