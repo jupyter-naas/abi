@@ -54,6 +54,23 @@ on environment configuration. If you expect very large graphs, prefer chunked
 inserts (for example by byte-size windows) while keeping each chunk as one
 transactional update request.
 
+Retry behaviour on transient server errors
+------------------------------------------
+Fuseki/TDB2 uses a Multi-Reader/Single-Writer (MRSW) lock at the dataset level.
+Under concurrent write load the server may reject a write request with HTTP 500
+or 503 while the lock is held by another transaction.  These failures are
+*transient* – a short wait is usually enough for the lock to be released.
+
+The adapter handles this automatically:
+
+- ``max_retries`` (default: 3) controls how many additional attempts are made
+  after the first failure.
+- ``retry_delay`` (default: 0.5 s) is the base delay; actual wait time grows
+  exponentially (``retry_delay * 2 ** attempt``) with a small random jitter to
+  reduce thundering-herd effects.
+- Only HTTP 500 and 503 responses trigger a retry.  All other errors (4xx,
+  connection errors, etc.) are raised immediately.
+
 Blank node handling
 -------------------
 Blank nodes are filtered out in ``insert()`` and ``remove()`` payload builders,
@@ -73,7 +90,10 @@ Query behavior
 
 import json
 import logging
+import random
 import re
+import threading
+import time
 from typing import Any, Tuple, Union
 
 import rdflib
@@ -91,25 +111,112 @@ class ApacheJenaTDB2(ITripleStorePort):
     """HTTP adapter for Apache Jena Fuseki datasets backed by TDB2."""
 
     def __init__(
-        self, jena_tdb2_url: str = "http://localhost:3030/ds", timeout: int = 60
+        self,
+        jena_tdb2_url: str = "http://localhost:3030/ds",
+        timeout: int = 60,
+        max_retries: int = 3,
+        retry_delay: float = 0.5,
     ):
         self.jena_tdb2_url = jena_tdb2_url.rstrip("/")
         self.query_endpoint = f"{self.jena_tdb2_url}/query"
         self.update_endpoint = f"{self.jena_tdb2_url}/update"
         self.data_endpoint = f"{self.jena_tdb2_url}/data"
         self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self._session = requests.Session()
+        # Serialises concurrent writes from the same adapter instance so that
+        # only one SPARQL update is in-flight at a time, preventing TDB2 write-
+        # lock contention for the single-process case.
+        self._write_lock = threading.Lock()
 
         self._test_connection()
 
         logger.info("ApacheJenaTDB2 adapter initialized: %s", self.jena_tdb2_url)
 
     def _test_connection(self):
-        response = requests.get(
+        response = self._session.get(
             self.query_endpoint,
             params={"query": "ASK { ?s ?p ?o }"},
             timeout=self.timeout,
         )
         response.raise_for_status()
+
+    # ------------------------------------------------------------------
+    # Internal HTTP helpers with retry
+    # ------------------------------------------------------------------
+
+    _RETRYABLE_STATUS_CODES = frozenset({500, 503})
+
+    def _post_update(self, sparql: str) -> requests.Response:
+        """POST to the SPARQL update endpoint, retrying on transient 500/503.
+
+        The write lock is held for the full duration of the attempt loop so
+        that only one write transaction is in-flight at a time from this
+        adapter instance, preventing TDB2 write-lock contention.
+        """
+        with self._write_lock:
+            last_response: requests.Response | None = None
+            for attempt in range(self.max_retries + 1):
+                response = self._session.post(
+                    self.update_endpoint,
+                    headers={"Content-Type": "application/sparql-update"},
+                    data=sparql.encode("utf-8"),
+                    timeout=self.timeout,
+                )
+                if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
+                    delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                    logger.warning(
+                        "Fuseki update returned HTTP %d (attempt %d/%d); retrying in %.2fs",
+                        response.status_code,
+                        attempt + 1,
+                        self.max_retries + 1,
+                        delay,
+                    )
+                    last_response = response
+                    time.sleep(delay)
+                    continue
+                response.raise_for_status()
+                return response
+            # All retries exhausted – raise from the last response.
+            assert last_response is not None
+            last_response.raise_for_status()
+            return last_response  # unreachable, satisfies type checker
+
+    def _post_query(self, sparql: str) -> requests.Response:
+        """POST to the SPARQL query endpoint, retrying on transient 500/503.
+
+        Read queries are not serialised by the write lock — Fuseki/TDB2 allows
+        concurrent readers.
+        """
+        last_response: requests.Response | None = None
+        for attempt in range(self.max_retries + 1):
+            response = self._session.post(
+                self.query_endpoint,
+                headers={
+                    "Content-Type": "application/sparql-query",
+                    "Accept": "application/sparql-results+json,application/n-triples,text/turtle",
+                },
+                data=sparql.encode("utf-8"),
+                timeout=self.timeout,
+            )
+            if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
+                delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                logger.warning(
+                    "Fuseki query returned HTTP %d (attempt %d/%d); retrying in %.2fs",
+                    response.status_code,
+                    attempt + 1,
+                    self.max_retries + 1,
+                    delay,
+                )
+                last_response = response
+                time.sleep(delay)
+                continue
+            response.raise_for_status()
+            return response
+        assert last_response is not None
+        last_response.raise_for_status()
+        return last_response  # unreachable
 
     def __remove_blank_nodes(self, triples: Graph) -> Graph:
         clean_graph = Graph()
@@ -155,13 +262,7 @@ class ApacheJenaTDB2(ITripleStorePort):
         insert_query = self.__build_data_update(
             "INSERT DATA", triples, graph_name=graph_name
         )
-        response = requests.post(
-            self.update_endpoint,
-            headers={"Content-Type": "application/sparql-update"},
-            data=insert_query.encode("utf-8"),
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+        self._post_update(insert_query)
 
     def remove(self, triples: Graph, graph_name: URIRef | None = None):
         if len(triples) == 0:
@@ -170,13 +271,7 @@ class ApacheJenaTDB2(ITripleStorePort):
         delete_query = self.__build_data_update(
             "DELETE DATA", triples, graph_name=graph_name
         )
-        response = requests.post(
-            self.update_endpoint,
-            headers={"Content-Type": "application/sparql-update"},
-            data=delete_query.encode("utf-8"),
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+        self._post_update(delete_query)
 
     def get(self) -> Graph:
         result = self.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
@@ -220,24 +315,9 @@ class ApacheJenaTDB2(ITripleStorePort):
         is_update = self.__is_update_query(query)
 
         if is_update:
-            response = requests.post(
-                self.update_endpoint,
-                headers={"Content-Type": "application/sparql-update"},
-                data=query.encode("utf-8"),
-                timeout=self.timeout,
-            )
+            response = self._post_update(query)
         else:
-            response = requests.post(
-                self.query_endpoint,
-                headers={
-                    "Content-Type": "application/sparql-query",
-                    "Accept": "application/sparql-results+json,application/n-triples,text/turtle",
-                },
-                data=query.encode("utf-8"),
-                timeout=self.timeout,
-            )
-
-        response.raise_for_status()
+            response = self._post_query(query)
 
         if is_update:
             return rdflib.query.Result("SELECT")
@@ -323,10 +403,12 @@ class ApacheJenaTDB2(ITripleStorePort):
         assert isinstance(graph_name, URIRef)
         self.query(f"CREATE GRAPH <{str(graph_name)}>")
 
-    def clear_graph(self, graph_name: URIRef) -> None:
-        assert graph_name is not None
-        assert isinstance(graph_name, URIRef)
-        self.query(f"CLEAR GRAPH <{str(graph_name)}>")
+    def clear_graph(self, graph_name: URIRef | None = None) -> None:
+        if graph_name is None:
+            self.query("CLEAR DEFAULT")
+        else:
+            assert isinstance(graph_name, URIRef)
+            self.query(f"CLEAR GRAPH <{str(graph_name)}>")
 
     def drop_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
