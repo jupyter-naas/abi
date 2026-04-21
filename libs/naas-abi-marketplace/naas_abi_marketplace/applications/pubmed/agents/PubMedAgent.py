@@ -3,13 +3,12 @@ import os
 import tempfile
 from typing import List, cast
 
-from langchain_core.tools import BaseTool, Tool
+from langchain_core.tools import BaseTool, Tool, tool
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
-    tool,
 )
 from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
 from naas_abi_marketplace.applications.pubmed import ABIModule
