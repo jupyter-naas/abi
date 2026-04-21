@@ -21,12 +21,11 @@ import httpx
 from fastapi import APIRouter
 from langchain_core.messages import AIMessage, AnyMessage
 from langchain_core.tools import BaseTool, StructuredTool
-from pydantic import BaseModel, Field
-from sse_starlette.sse import EventSourceResponse
-
 from naas_abi_core.services.agent.OpencodeSessionService import OpencodeSessionService
 from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.utils.Logger import logger
+from pydantic import BaseModel, Field
+from sse_starlette.sse import EventSourceResponse
 
 
 class OpencodeError(Exception):

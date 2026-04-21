@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import ModuleDependencies

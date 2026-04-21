@@ -76,6 +76,15 @@ modules:
           - email: "admin@example.com"
             name: "Abi Admin"
             store_credentials_in_secrets: true
+          - email: "florent@naas.ai"
+            name: "Florent"
+            store_credentials_in_secrets: true
+          - email: "jeremy@naas.ai"
+            name: "Jeremy"
+            store_credentials_in_secrets: true
+          - email: "maxime@naas.ai"
+            name: "Maxime"
+            store_credentials_in_secrets: true
         organizations:
           - name: "Naas.ai"
             slug: "naas-ai"
@@ -89,6 +98,12 @@ modules:
             members:
               - email: "admin@example.com"
                 role: "owner"
+              - email: "florent@naas.ai"
+                role: "owner"
+              - email: "jeremy@naas.ai"
+                role: "owner"
+              - email: "maxime@naas.ai"
+                role: "owner"
             workspaces:
               - name: "Naas.ai"
                 slug: "naas-ai"
@@ -98,11 +113,22 @@ modules:
                 members:
                   - email: "admin@example.com"
                     role: "owner"
+                  - email: "florent@naas.ai"
+                    role: "owner"
+                  - email: "jeremy@naas.ai"
+                    role: "owner"
+                  - email: "maxime@naas.ai"
+                    role: "owner"
 
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
+  - module: naas_abi_marketplace.applications.github
+    enabled: true
+    config:
+      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
 
   - module: naas_abi_marketplace.applications.openrouter
     enabled: true
@@ -114,11 +140,22 @@ modules:
         - "deepseek/deepseek-v3.2"
         - "google/gemini-3.1-pro-preview"
         - "mistralai/mistral-large-2512"
-        - "openai/gpt-4.1"
         - "openai/gpt-4.1-mini"
-        - "openai/gpt-5.1"
         - "openai/gpt-5.2"
+        - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
+
+  - module: naas_abi_marketplace.domains.support
+    enabled: true
+    config:
+        default_repository: "jupyter-naas/abi"
+        github_project_id: 12
+        project_node_id: "PVT_kwDOBESWNM4AKRt3"
+        iteration_field_id: "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
+        status_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
+        status_option_id: "97363483"
+        priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
+        priority_option_id: "4fb76f2d"
 
 services:
   secret:
