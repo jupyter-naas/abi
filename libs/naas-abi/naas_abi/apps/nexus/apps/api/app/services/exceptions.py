@@ -30,6 +30,10 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     UnsupportedPreviewError,
     UploadTooLargeError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
+    GraphProtectedError,
+    GraphServiceUnavailableError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationDomainAlreadyExistsError,
@@ -78,6 +82,8 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     WorkspacePermissionError: (403, lambda _exc: "You do not have access to this workspace"),
     WorkspaceSlugAlreadyExistsError: (400, lambda _exc: "Slug already exists"),
     WorkspaceMemberAlreadyExistsError: (400, lambda _exc: "User is already a member"),
+    GraphProtectedError: (400, _default_detail),
+    GraphServiceUnavailableError: (500, _default_detail),
     IAMPermissionError: (403, _default_detail),
     SecretAlreadyExistsError: (400, lambda _exc: "Secret with this key already exists"),
     SecretNotFoundError: (404, lambda _exc: "Secret not found"),
