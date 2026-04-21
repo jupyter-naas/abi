@@ -255,6 +255,125 @@ def test_write_lock_is_present():
 
 
 # ---------------------------------------------------------------------------
+# Distributed lock via KeyValueService
+# ---------------------------------------------------------------------------
+
+def _build_adapter_with_kv() -> tuple:
+    """Return (adapter, mock_kv_service) with a mocked KeyValueService injected."""
+    mock_kv = MagicMock()
+    # Default: lock always acquired on first attempt.
+    mock_kv.set_if_not_exists.return_value = True
+    mock_kv.delete_if_value_matches.return_value = True
+
+    mock_session = MagicMock()
+    mock_session.get.return_value = _ok_response()
+    mock_session.post.return_value = _ok_response()
+    with patch(
+        "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.Session",
+        return_value=mock_session,
+    ):
+        adapter = ApacheJenaTDB2(
+            jena_tdb2_url="http://localhost:3030/ds",
+            timeout=30,
+            key_value_service=mock_kv,
+        )
+    return adapter, mock_kv
+
+
+def test_distributed_lock_acquired_and_released_on_insert():
+    adapter, mock_kv = _build_adapter_with_kv()
+
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    adapter.insert(graph)
+
+    assert mock_kv.set_if_not_exists.call_count == 1
+    call_kwargs = mock_kv.set_if_not_exists.call_args
+    assert call_kwargs.args[0] == adapter._dataset_lock_key
+    assert call_kwargs.kwargs["ttl"] == adapter.timeout + 10
+
+    assert mock_kv.delete_if_value_matches.call_count == 1
+    # The token passed to release must match the one used to acquire.
+    acquire_token = mock_kv.set_if_not_exists.call_args.args[1]
+    release_token = mock_kv.delete_if_value_matches.call_args.args[1]
+    assert acquire_token == release_token
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_distributed_lock_retries_when_busy_then_succeeds(mock_sleep):
+    adapter, mock_kv = _build_adapter_with_kv()
+    adapter.max_retries = 2
+
+    # Lock busy on first attempt, free on second.
+    mock_kv.set_if_not_exists.side_effect = [False, True]
+
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    adapter.insert(graph)
+
+    assert mock_kv.set_if_not_exists.call_count == 2
+    assert mock_sleep.call_count == 1
+    assert mock_kv.delete_if_value_matches.call_count == 1
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_distributed_lock_raises_after_all_attempts_exhausted(mock_sleep):
+    adapter, mock_kv = _build_adapter_with_kv()
+    adapter.max_retries = 2
+
+    mock_kv.set_if_not_exists.return_value = False  # Lock never released.
+
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+
+    with pytest.raises(RuntimeError, match="distributed write lock"):
+        adapter.insert(graph)
+
+    assert mock_kv.set_if_not_exists.call_count == 3  # 1 + 2 retries
+    assert mock_kv.delete_if_value_matches.call_count == 0
+
+
+def test_distributed_lock_released_even_when_http_raises():
+    """The distributed lock must be released even if the HTTP POST fails."""
+    adapter, mock_kv = _build_adapter_with_kv()
+    adapter.max_retries = 0  # No HTTP retries so the error surfaces immediately.
+
+    err_response = Mock(status_code=500)
+    err_response.raise_for_status.side_effect = requests.HTTPError(response=err_response)
+    adapter._session.post.return_value = err_response
+
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+
+    with pytest.raises(requests.HTTPError):
+        adapter.insert(graph)
+
+    # Lock must still be released in the finally block.
+    assert mock_kv.delete_if_value_matches.call_count == 1
+
+
+def test_dataset_lock_key_is_stable_and_url_scoped():
+    """Two adapters for different URLs must get different lock keys."""
+    adapter_a, _ = _build_adapter_with_kv()
+
+    mock_kv = MagicMock()
+    mock_kv.set_if_not_exists.return_value = True
+    mock_session = MagicMock()
+    mock_session.get.return_value = _ok_response()
+    mock_session.post.return_value = _ok_response()
+    with patch(
+        "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.Session",
+        return_value=mock_session,
+    ):
+        adapter_b = ApacheJenaTDB2(
+            jena_tdb2_url="http://other-host:3030/ds2",
+            key_value_service=mock_kv,
+        )
+
+    assert adapter_a._dataset_lock_key != adapter_b._dataset_lock_key
+
+
+# ---------------------------------------------------------------------------
 # clear_graph default graph
 # ---------------------------------------------------------------------------
 
