@@ -147,6 +147,7 @@ async def get_conversation(
 async def upload_file_for_chat(
     conversation_id: str,
     file: FastAPIUploadFile = FastAPIFile(...),
+    workspace_id: str | None = Form(default=None, max_length=100),
     embedding_model: str = Form(default="text-embedding-3-small", max_length=200),
     embedding_dimension: int = Form(default=1536, ge=8, le=4096),
     current_user: User = Depends(get_current_user_required),
@@ -159,7 +160,17 @@ async def upload_file_for_chat(
         conversation_id=conversation_id,
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        if not workspace_id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        await require_workspace_access(current_user.id, workspace_id)
+        row = await chat_service.create_conversation(
+            context=request_context(current_user),
+            workspace_id=workspace_id,
+            title="New Conversation",
+            agent="aia",
+            now=datetime.now(UTC),
+            conversation_id=conversation_id,
+        )
 
     await require_workspace_access(current_user.id, row.workspace_id)
 
@@ -225,7 +236,17 @@ async def ingest_my_drive_file_for_chat(
         conversation_id=conversation_id,
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        if not payload.workspace_id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        await require_workspace_access(current_user.id, payload.workspace_id)
+        row = await chat_service.create_conversation(
+            context=request_context(current_user),
+            workspace_id=payload.workspace_id,
+            title="New Conversation",
+            agent="aia",
+            now=datetime.now(UTC),
+            conversation_id=conversation_id,
+        )
 
     await require_workspace_access(current_user.id, row.workspace_id)
 

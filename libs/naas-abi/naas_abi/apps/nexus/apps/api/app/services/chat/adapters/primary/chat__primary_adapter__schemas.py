@@ -84,6 +84,7 @@ class ChatResponse(BaseModel):
 
 class ChatIngestMyDriveFileRequest(BaseModel):
     source_path: str = Field(..., min_length=1, max_length=1000)
+    workspace_id: str | None = Field(default=None, max_length=100)
     embedding_model: str = Field(default="text-embedding-3-small", min_length=1, max_length=200)
     embedding_dimension: int = Field(default=1536, ge=8, le=4096)
 
