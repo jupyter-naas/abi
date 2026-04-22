@@ -394,6 +394,37 @@ class MessageModel(Base):
     conversation = relationship("ConversationModel", back_populates="messages")
 
 
+class ChatIngestionJobModel(Base):
+    __tablename__ = "chat_ingestion_jobs"
+
+    id = Column(String, primary_key=True)
+    conversation_id = Column(
+        String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_type = Column(String, nullable=False, default="my_drive")
+    source_path = Column(Text, nullable=False)
+    embedding_model = Column(String, nullable=False, default="hash-v1")
+    embedding_dimension = Column(Integer, nullable=False, default=256)
+    status = Column(String, nullable=False, default="queued", index=True)
+    progress = Column(Integer, nullable=True)
+    cache_hit = Column(Boolean, nullable=True)
+    file_sha256 = Column(String, nullable=True)
+    collection_name = Column(String, nullable=True)
+    chunks_count = Column(Integer, nullable=True)
+    error_code = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    attempt = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+    started_at = Column(DateTime(timezone=False), nullable=True)
+    finished_at = Column(DateTime(timezone=False), nullable=True)
+
+
 # ============================================
 # Ontologies
 # ============================================

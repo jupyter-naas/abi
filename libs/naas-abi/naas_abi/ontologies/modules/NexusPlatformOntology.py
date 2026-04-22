@@ -1,21 +1,24 @@
 from __future__ import annotations
+
+import datetime
+import os
+import uuid
 from typing import (
     Annotated,
     Any,
     Callable,
     ClassVar,
+    Iterable,
     List,
     Optional,
     Union,
     get_args,
     get_origin,
 )
+
 from pydantic import BaseModel, Field, ValidationError
-import uuid
-import datetime
-import os
-from rdflib import Graph, URIRef, Literal, Namespace
-from rdflib.namespace import RDF, RDFS, OWL, XSD
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -29,7 +32,7 @@ class RDFEntity(BaseModel):
     _namespace: ClassVar[str] = "http://ontology.naas.ai/abi/"
     _uri: str = ""
     _object_properties: ClassVar[set[str]] = set()
-    _query_executor: ClassVar[Callable[[str], object] | None] = None
+    _query_executor: ClassVar[Callable[[str], Iterable[object]] | None] = None
 
     model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
 
@@ -47,7 +50,9 @@ class RDFEntity(BaseModel):
         cls._namespace = namespace
 
     @classmethod
-    def set_query_executor(cls, query_executor: Callable[[str], object] | None):
+    def set_query_executor(
+        cls, query_executor: Callable[[str], Iterable[object]] | None
+    ):
         """Set the SPARQL query executor used by from_iri()."""
         cls._query_executor = query_executor
 
@@ -117,7 +122,7 @@ class RDFEntity(BaseModel):
     def from_iri(
         cls,
         iri: str,
-        query_executor: Callable[[str], object] | None = None,
+        query_executor: Callable[[str], Iterable[object]] | None = None,
         graph_name: str | None = None,
     ):
         """Load a class instance from an IRI using SPARQL query results."""
@@ -166,7 +171,7 @@ class RDFEntity(BaseModel):
         }
         object_props: set[str] = getattr(cls, "_object_properties", set())
         model_fields = getattr(cls, "model_fields", {})
-        values: dict[str, object] = {}
+        values: dict[str, Any] = {}
 
         for row in results:  # type: ignore[assignment]
             predicate = cls._extract_result_value(row, "p")
@@ -216,7 +221,9 @@ class RDFEntity(BaseModel):
             return cls(_uri=iri, **values)
         except ValidationError:
             # Keep loading permissive for partially populated RDF resources.
-            return cls.model_construct(_uri=iri, **values)
+            return cls.model_construct(
+                _fields_set=set(values.keys()), _uri=iri, **values
+            )
 
     def rdf(
         self, subject_uri: str | None = None, visited: set[str] | None = None
@@ -1237,12 +1244,14 @@ class GraphFilter(RDFEntity):
     # Data properties
     subject_uri: Optional[
         Annotated[
-            str, Field(description="The URI of the subject filtering the graph view.")
+            str,
+            Field(description="The URI of the subject filtering the graph view."),
         ]
     ] = "unknown"
     predicate_uri: Optional[
         Annotated[
-            str, Field(description="The URI of the predicate filtering the graph view.")
+            str,
+            Field(description="The URI of the predicate filtering the graph view."),
         ]
     ] = "unknown"
     object_uri: Optional[

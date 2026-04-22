@@ -74,6 +74,8 @@ Query behavior
 import json
 import logging
 import re
+import threading
+import time
 from typing import Any, Tuple, Union
 
 import rdflib
@@ -86,30 +88,102 @@ from rdflib import BNode, Graph, URIRef
 
 logger = logging.getLogger(__name__)
 
+# Retryable HTTP status codes for Fuseki write-lock conflicts.
+_RETRYABLE_STATUS = {500, 503}
+_WRITE_RETRY_ATTEMPTS = 3
+_WRITE_RETRY_BACKOFF_BASE = 0.5  # seconds; doubled on each attempt
+
 
 class ApacheJenaTDB2(ITripleStorePort):
-    """HTTP adapter for Apache Jena Fuseki datasets backed by TDB2."""
+    """HTTP adapter for Apache Jena Fuseki datasets backed by TDB2.
+
+    Concurrency notes
+    -----------------
+    TDB2 uses a Multiple-Readers / Single-Writer (MRSW) lock model.  Concurrent
+    write transactions will conflict on the server and typically produce HTTP 500
+    responses.  To avoid this, the adapter serialises *all write operations*
+    through a per-instance ``threading.Lock``.  Read-only SPARQL queries bypass
+    the lock and are allowed to execute concurrently.
+
+    Additionally, write requests are retried up to ``_WRITE_RETRY_ATTEMPTS``
+    times with exponential back-off so that transient lock conflicts from
+    *other* clients (e.g. multiple adapter instances pointing at the same
+    Fuseki server) are handled gracefully.
+    """
 
     def __init__(
-        self, jena_tdb2_url: str = "http://localhost:3030/ds", timeout: int = 60
+        self,
+        jena_tdb2_url: str = "http://localhost:3030/ds",
+        timeout: int = 60,
+        write_retry_attempts: int = _WRITE_RETRY_ATTEMPTS,
+        write_retry_backoff_base: float = _WRITE_RETRY_BACKOFF_BASE,
     ):
         self.jena_tdb2_url = jena_tdb2_url.rstrip("/")
         self.query_endpoint = f"{self.jena_tdb2_url}/query"
         self.update_endpoint = f"{self.jena_tdb2_url}/update"
         self.data_endpoint = f"{self.jena_tdb2_url}/data"
         self.timeout = timeout
+        self.write_retry_attempts = write_retry_attempts
+        self.write_retry_backoff_base = write_retry_backoff_base
+
+        # Serialise concurrent write operations to avoid TDB2 MRSW lock conflicts.
+        self._write_lock = threading.Lock()
+
+        # Reuse TCP connections across requests.
+        self._session = requests.Session()
 
         self._test_connection()
 
         logger.info("ApacheJenaTDB2 adapter initialized: %s", self.jena_tdb2_url)
 
     def _test_connection(self):
-        response = requests.get(
+        response = self._session.get(
             self.query_endpoint,
             params={"query": "ASK { ?s ?p ?o }"},
             timeout=self.timeout,
         )
         response.raise_for_status()
+
+    def _post_write(self, data: bytes) -> requests.Response:
+        """Send a SPARQL Update request, serialising through the write lock.
+
+        Retries on retryable HTTP errors (e.g. 500 from TDB2 lock timeout) with
+        exponential back-off before re-raising the last exception.
+        """
+        last_exc: Exception | None = None
+        with self._write_lock:
+            for attempt in range(self.write_retry_attempts):
+                try:
+                    response = self._session.post(
+                        self.update_endpoint,
+                        headers={"Content-Type": "application/sparql-update"},
+                        data=data,
+                        timeout=self.timeout,
+                    )
+                    if response.status_code not in _RETRYABLE_STATUS:
+                        response.raise_for_status()
+                        return response
+                    # Retryable error — log and back off before next attempt.
+                    logger.warning(
+                        "Fuseki write returned %s (attempt %d/%d), retrying...",
+                        response.status_code,
+                        attempt + 1,
+                        self.write_retry_attempts,
+                    )
+                    last_exc = requests.HTTPError(response=response)
+                except requests.exceptions.RequestException as exc:
+                    logger.warning(
+                        "Fuseki write request failed (attempt %d/%d): %s",
+                        attempt + 1,
+                        self.write_retry_attempts,
+                        exc,
+                    )
+                    last_exc = exc
+
+                if attempt < self.write_retry_attempts - 1:
+                    time.sleep(self.write_retry_backoff_base * (2**attempt))
+
+        raise last_exc  # type: ignore[misc]
 
     def __remove_blank_nodes(self, triples: Graph) -> Graph:
         clean_graph = Graph()
@@ -155,13 +229,7 @@ class ApacheJenaTDB2(ITripleStorePort):
         insert_query = self.__build_data_update(
             "INSERT DATA", triples, graph_name=graph_name
         )
-        response = requests.post(
-            self.update_endpoint,
-            headers={"Content-Type": "application/sparql-update"},
-            data=insert_query.encode("utf-8"),
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+        self._post_write(insert_query.encode("utf-8"))
 
     def remove(self, triples: Graph, graph_name: URIRef | None = None):
         if len(triples) == 0:
@@ -170,13 +238,7 @@ class ApacheJenaTDB2(ITripleStorePort):
         delete_query = self.__build_data_update(
             "DELETE DATA", triples, graph_name=graph_name
         )
-        response = requests.post(
-            self.update_endpoint,
-            headers={"Content-Type": "application/sparql-update"},
-            data=delete_query.encode("utf-8"),
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+        self._post_write(delete_query.encode("utf-8"))
 
     def get(self) -> Graph:
         result = self.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
@@ -220,14 +282,9 @@ class ApacheJenaTDB2(ITripleStorePort):
         is_update = self.__is_update_query(query)
 
         if is_update:
-            response = requests.post(
-                self.update_endpoint,
-                headers={"Content-Type": "application/sparql-update"},
-                data=query.encode("utf-8"),
-                timeout=self.timeout,
-            )
+            response = self._post_write(query.encode("utf-8"))
         else:
-            response = requests.post(
+            response = self._session.post(
                 self.query_endpoint,
                 headers={
                     "Content-Type": "application/sparql-query",
@@ -236,8 +293,7 @@ class ApacheJenaTDB2(ITripleStorePort):
                 data=query.encode("utf-8"),
                 timeout=self.timeout,
             )
-
-        response.raise_for_status()
+            response.raise_for_status()
 
         if is_update:
             return rdflib.query.Result("SELECT")

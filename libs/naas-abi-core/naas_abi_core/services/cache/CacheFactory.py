@@ -3,7 +3,13 @@ import os
 from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import (
     CacheFSAdapter,
 )
+from naas_abi_core.services.cache.adapters.secondary.CacheObjectStorageAdapter import (
+    CacheObjectStorageAdapter,
+)
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.utils.Storage import NoStorageFolderFound, find_storage_folder
 
 
@@ -29,3 +35,14 @@ class CacheFactory:
                     os.path.join(find_storage_folder(os.getcwd(), needle), subpath)
                 )
             )
+
+    @staticmethod
+    def CacheObjectStorage(
+        object_storage: ObjectStorageService,
+        cache_prefix: str = "cache",
+    ) -> CacheService:
+        return CacheService(
+            CacheObjectStorageAdapter(
+                object_storage=object_storage, prefix=cache_prefix
+            )
+        )

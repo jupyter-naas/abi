@@ -7,11 +7,14 @@ from collections import OrderedDict
 from typing import Any, Callable
 
 from naas_abi_core import logger
-from naas_abi_core.services.cache.CachePort import (CachedData,
-                                                    CacheExpiredError,
-                                                    CacheNotFoundError,
-                                                    DataType, ICacheAdapter,
-                                                    ICacheService)
+from naas_abi_core.services.cache.CachePort import (
+    CachedData,
+    CacheExpiredError,
+    CacheNotFoundError,
+    DataType,
+    ICacheAdapter,
+    ICacheService,
+)
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -30,7 +33,6 @@ class CacheService(ServiceBase, ICacheService):
             DataType.BINARY: self.__get_binary,
             DataType.PICKLE: self.__get_pickle,
         }
-
 
     def __call__(
         self,
@@ -227,12 +229,37 @@ class CacheService(ServiceBase, ICacheService):
         )
         self.adapter.set(key, cached_data)
 
+    def set_json_if_absent(self, key: str, value: Any) -> bool:
+        cached_data = CachedData(
+            key=key, data=json.dumps(value), data_type=DataType.JSON
+        )
+        try:
+            return self.adapter.set_if_absent(key, cached_data)
+        except NotImplementedError:
+            if self.exists(key):
+                return False
+            self.adapter.set(key, cached_data)
+            return True
+
     def set_binary(self, key: str, value: bytes) -> None:
         assert isinstance(value, bytes), f"Value must be a bytes. Got {type(value)}"
         cached_data = CachedData(
             key=key, data=base64.b64encode(value).decode(), data_type=DataType.BINARY
         )
         self.adapter.set(key, cached_data)
+
+    def set_binary_if_absent(self, key: str, value: bytes) -> bool:
+        assert isinstance(value, bytes), f"Value must be a bytes. Got {type(value)}"
+        cached_data = CachedData(
+            key=key, data=base64.b64encode(value).decode(), data_type=DataType.BINARY
+        )
+        try:
+            return self.adapter.set_if_absent(key, cached_data)
+        except NotImplementedError:
+            if self.exists(key):
+                return False
+            self.adapter.set(key, cached_data)
+            return True
 
     def set_pickle(self, key: str, value: Any) -> None:
         cached_data = CachedData(
@@ -244,3 +271,6 @@ class CacheService(ServiceBase, ICacheService):
 
     def exists(self, key: str) -> bool:
         return self.adapter.exists(key)
+
+    def delete(self, key: str) -> None:
+        self.adapter.delete(key)

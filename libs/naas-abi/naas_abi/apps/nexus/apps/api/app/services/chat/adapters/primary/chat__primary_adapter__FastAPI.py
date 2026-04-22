@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Form, HTTPException, Query
+from fastapi import File as FastAPIFile
+from fastapi import UploadFile as FastAPIUploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -17,6 +21,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__dependencies import (
     bind_registry,
     get_chat_service,
+    get_object_storage_service,
     request_context,
     to_complete_chat_input,
 )
@@ -24,6 +29,9 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     export_conversation_as_response,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
+    ChatFileIngestionResponse,
+    ChatIngestionJobStatusResponse,
+    ChatIngestMyDriveFileRequest,
     ChatRequest,
     ChatResponse,
     Conversation,
@@ -35,7 +43,14 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__streaming import (
     stream_chat_response,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_jobs import (
+    ChatIngestionJobService,
+)
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
+    publish_chat_ingestion_job,
+)
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import check_ollama_status
+from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -45,6 +60,20 @@ router = APIRouter()
 class ChatFastAPIPrimaryAdapter:
     def __init__(self) -> None:
         self.router = router
+
+
+def _to_ingestion_response(result) -> ChatFileIngestionResponse:
+    return ChatFileIngestionResponse(
+        conversation_id=result.conversation_id,
+        source_path=result.source_path,
+        collection_name=result.collection_name,
+        file_sha256=result.file_sha256,
+        cache_hit=result.cache_hit,
+        chunks_count=result.chunks_count,
+        statuses=result.statuses,
+        embedding_model=result.embedding_model,
+        embedding_dimension=result.embedding_dimension,
+    )
 
 
 @router.get("/conversations")
@@ -109,6 +138,171 @@ async def get_conversation(
         ]
 
     return to_conversation(row, messages)
+
+
+@router.post(
+    "/conversations/{conversation_id}/files/upload",
+    response_model=ChatFileIngestionResponse,
+)
+async def upload_file_for_chat(
+    conversation_id: str,
+    file: FastAPIUploadFile = FastAPIFile(...),
+    embedding_model: str = Form(default="text-embedding-3-small", max_length=200),
+    embedding_dimension: int = Form(default=1536, ge=8, le=4096),
+    current_user: User = Depends(get_current_user_required),
+    chat_service: ChatService = Depends(get_chat_service),
+    object_storage: ObjectStorageService = Depends(get_object_storage_service),
+    db: AsyncSession = Depends(get_db),
+) -> ChatFileIngestionResponse:
+    row = await chat_service.get_conversation_for_user(
+        context=request_context(current_user),
+        conversation_id=conversation_id,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    await require_workspace_access(current_user.id, row.workspace_id)
+
+    upload_prefix = f"my-drive/{current_user.id}/uploads"
+    filename = (file.filename or "untitled").split("/")[-1].split("\\")[-1]
+    object_storage.put_object(upload_prefix, filename, await file.read())
+    source_path = f"{upload_prefix}/{filename}"
+
+    jobs = ChatIngestionJobService(db)
+    job = await jobs.create_job(
+        job_id=f"job-{uuid4().hex}",
+        conversation_id=conversation_id,
+        workspace_id=row.workspace_id,
+        user_id=current_user.id,
+        source_type="upload",
+        source_path=source_path,
+        embedding_model=embedding_model,
+        embedding_dimension=embedding_dimension,
+    )
+
+    await asyncio.to_thread(
+        publish_chat_ingestion_job,
+        {
+            "job_id": job.id,
+            "conversation_id": job.conversation_id,
+            "workspace_id": job.workspace_id,
+            "user_id": job.user_id,
+            "source_type": job.source_type,
+            "source_path": job.source_path,
+            "embedding_model": job.embedding_model,
+            "embedding_dimension": job.embedding_dimension,
+        },
+    )
+
+    return ChatFileIngestionResponse(
+        job_id=job.id,
+        status=job.status,
+        conversation_id=job.conversation_id,
+        source_path=job.source_path,
+        collection_name=f"chat_{job.conversation_id}",
+        file_sha256="",
+        cache_hit=False,
+        chunks_count=0,
+        statuses=[job.status],
+        embedding_model=job.embedding_model,
+        embedding_dimension=job.embedding_dimension,
+    )
+
+
+@router.post(
+    "/conversations/{conversation_id}/files/ingest",
+    response_model=ChatFileIngestionResponse,
+)
+async def ingest_my_drive_file_for_chat(
+    conversation_id: str,
+    payload: ChatIngestMyDriveFileRequest,
+    current_user: User = Depends(get_current_user_required),
+    chat_service: ChatService = Depends(get_chat_service),
+    db: AsyncSession = Depends(get_db),
+) -> ChatFileIngestionResponse:
+    row = await chat_service.get_conversation_for_user(
+        context=request_context(current_user),
+        conversation_id=conversation_id,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    await require_workspace_access(current_user.id, row.workspace_id)
+
+    jobs = ChatIngestionJobService(db)
+    job = await jobs.create_job(
+        job_id=f"job-{uuid4().hex}",
+        conversation_id=conversation_id,
+        workspace_id=row.workspace_id,
+        user_id=current_user.id,
+        source_type="my_drive",
+        source_path=payload.source_path,
+        embedding_model=payload.embedding_model,
+        embedding_dimension=payload.embedding_dimension,
+    )
+
+    await asyncio.to_thread(
+        publish_chat_ingestion_job,
+        {
+            "job_id": job.id,
+            "conversation_id": job.conversation_id,
+            "workspace_id": job.workspace_id,
+            "user_id": job.user_id,
+            "source_type": job.source_type,
+            "source_path": job.source_path,
+            "embedding_model": job.embedding_model,
+            "embedding_dimension": job.embedding_dimension,
+        },
+    )
+
+    return ChatFileIngestionResponse(
+        job_id=job.id,
+        status=job.status,
+        conversation_id=job.conversation_id,
+        source_path=job.source_path,
+        collection_name=f"chat_{job.conversation_id}",
+        file_sha256="",
+        cache_hit=False,
+        chunks_count=0,
+        statuses=[job.status],
+        embedding_model=job.embedding_model,
+        embedding_dimension=job.embedding_dimension,
+    )
+
+
+@router.get("/ingestion-jobs/{job_id}", response_model=ChatIngestionJobStatusResponse)
+async def get_ingestion_job_status(
+    job_id: str,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> ChatIngestionJobStatusResponse:
+    jobs = ChatIngestionJobService(db)
+    job = await jobs.get_job_for_user(job_id=job_id, user_id=current_user.id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
+
+    await require_workspace_access(current_user.id, job.workspace_id)
+
+    return ChatIngestionJobStatusResponse(
+        job_id=job.id,
+        conversation_id=job.conversation_id,
+        workspace_id=job.workspace_id,
+        source_path=job.source_path,
+        status=job.status,
+        progress=job.progress,
+        cache_hit=job.cache_hit,
+        file_sha256=job.file_sha256,
+        collection_name=job.collection_name,
+        chunks_count=job.chunks_count,
+        error_code=job.error_code,
+        error_message=job.error_message,
+        attempt=job.attempt,
+        max_attempts=job.max_attempts,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+    )
 
 
 @router.post("/complete")

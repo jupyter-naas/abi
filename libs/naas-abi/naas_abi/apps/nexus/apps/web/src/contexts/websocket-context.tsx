@@ -30,6 +30,7 @@ interface WebSocketContextType {
   startTyping: (workspaceId: string, conversationId: string) => void;
   stopTyping: (workspaceId: string, conversationId: string) => void;
   onMessage: (callback: (data: any) => void) => () => void;
+  socket: Socket | null;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -201,7 +202,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     leaveWorkspace,
     startTyping,
     stopTyping,
-    onMessage
+    onMessage,
   };
 
   return (
