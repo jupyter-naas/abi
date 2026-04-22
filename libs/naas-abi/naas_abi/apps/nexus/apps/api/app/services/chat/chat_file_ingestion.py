@@ -278,7 +278,7 @@ class ChatFileIngestionService:
         except (KeyError, zipfile.BadZipFile) as exc:
             raise ChatFileIngestionError("Invalid DOCX content: missing word/document.xml") from exc
 
-        root = ET.fromstring(xml_content)
+        root = ET.fromstring(xml_content)  # nosec B314 — XML from a trusted DOCX zip, no external entity expansion
         lines: list[str] = []
         for paragraph in root.findall(".//w:body/w:p", ns_map):
             style_elem = paragraph.find("./w:pPr/w:pStyle", ns_map)
@@ -330,7 +330,7 @@ class ChatFileIngestionService:
                 markdown_parts: list[str] = []
                 for slide_index, slide_path in enumerate(slide_paths, start=1):
                     slide_xml = pptx_file.read(slide_path)
-                    root = ET.fromstring(slide_xml)
+                    root = ET.fromstring(slide_xml)  # nosec B314 — XML from a trusted PPTX zip, no external entity expansion
                     lines: list[str] = []
                     for paragraph in root.findall(".//a:p", ns_map):
                         parts: list[str] = []

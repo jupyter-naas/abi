@@ -190,19 +190,19 @@ class CacheAdapterEntry(GenericLoader):
             return CacheFSAdapter(cfg.base_path)
 
         if self.adapter == "redis":
-            cfg = CacheAdapterRedisConfiguration(**self.config)
+            redis_cfg = CacheAdapterRedisConfiguration(**self.config)
             from naas_abi_core.services.cache.adapters.secondary.CacheRedisAdapter import (
                 CacheRedisAdapter,
             )
             return CacheRedisAdapter(
-                redis_url=cfg.redis_url,
-                prefix=cfg.prefix,
-                socket_timeout=cfg.socket_timeout,
+                redis_url=redis_cfg.redis_url,
+                prefix=redis_cfg.prefix,
+                socket_timeout=redis_cfg.socket_timeout,
             )
 
         if self.adapter == "object_storage":
-            cfg = CacheAdapterObjectStorageConfiguration(**self.config)
-            return ObjectStorageBackedAdapter(cache_prefix=cfg.cache_prefix)
+            os_cfg = CacheAdapterObjectStorageConfiguration(**self.config)
+            return ObjectStorageBackedAdapter(cache_prefix=os_cfg.cache_prefix)
 
         raise ValueError(f"Unknown cache adapter: {self.adapter!r}")
 
