@@ -47,12 +47,13 @@ async def transcribe_audio(
 
     preserved_conversation_id = (conversation_id or "").strip() or None
 
+    timeout = httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=30.0)
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.post(
                 OPENAI_TRANSCRIBE_URL,
                 headers={"Authorization": f"Bearer {api_key}"},
-                data={"model": TRANSCRIBE_MODEL},
+                data={"model": TRANSCRIBE_MODEL, "response_format": "json"},
                 files={
                     "file": (
                         filename,
@@ -61,9 +62,26 @@ async def transcribe_audio(
                     )
                 },
             )
+    except httpx.TimeoutException:
+        return JSONResponse(
+            {
+                "error": "OpenAI transcription request timed out",
+                "conversation_id": preserved_conversation_id,
+            },
+            status_code=504,
+        )
+    except httpx.HTTPError as exc:
+        message = str(exc) if str(exc) else "Network error while calling OpenAI"
+        return JSONResponse(
+            {"error": message, "conversation_id": preserved_conversation_id},
+            status_code=502,
+        )
     except Exception as exc:
         message = str(exc) if str(exc) else "Unknown error"
-        return JSONResponse({"error": message}, status_code=500)
+        return JSONResponse(
+            {"error": message, "conversation_id": preserved_conversation_id},
+            status_code=500,
+        )
 
     if response.status_code >= 400:
         detail = response.text if response.text else ""
