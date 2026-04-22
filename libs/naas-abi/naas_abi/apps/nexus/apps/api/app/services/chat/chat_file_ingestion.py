@@ -250,6 +250,8 @@ class ChatFileIngestionService:
             return self._docx_to_markdown(content)
         if ext == ".pptx":
             return self._pptx_to_markdown(content)
+        if ext == ".xlsx":
+            return self._xlsx_to_markdown(content)
         if ext == ".pdf":
             try:
                 import pymupdf4llm
@@ -347,3 +349,54 @@ class ChatFileIngestionService:
                 return "\n\n".join(markdown_parts).strip()
         except (KeyError, zipfile.BadZipFile) as exc:
             raise ChatFileIngestionError("Invalid PPTX content: unable to read slide XML") from exc
+
+    @staticmethod
+    def _xlsx_to_markdown(content: bytes) -> str:
+        try:
+            import openpyxl
+        except ImportError as exc:
+            raise ChatFileIngestionError("XLSX support requires openpyxl") from exc
+
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        except Exception as exc:
+            raise ChatFileIngestionError("Invalid XLSX content") from exc
+
+        parts: list[str] = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows = list(ws.iter_rows(values_only=True))
+            # Drop trailing all-None rows
+            while rows and all(cell is None for cell in rows[-1]):
+                rows.pop()
+            if not rows:
+                continue
+
+            parts.append(f"## {sheet_name}")
+
+            # Determine column count from the widest row
+            col_count = max(len(row) for row in rows)
+
+            def cell_str(val: object) -> str:
+                if val is None:
+                    return ""
+                return re.sub(r"[\|\n\r]", " ", str(val)).strip()
+
+            header, *data_rows = rows
+            header_cells = [cell_str(v) for v in header] + [""] * (col_count - len(header))
+            separator = ["---"] * col_count
+
+            table_lines = [
+                "| " + " | ".join(header_cells) + " |",
+                "| " + " | ".join(separator) + " |",
+            ]
+            for row in data_rows:
+                cells = [cell_str(v) for v in row] + [""] * (col_count - len(row))
+                table_lines.append("| " + " | ".join(cells) + " |")
+
+            parts.append("\n".join(table_lines))
+
+        wb.close()
+        if not parts:
+            raise ChatFileIngestionError("Empty content extracted from XLSX")
+        return "\n\n".join(parts).strip()
