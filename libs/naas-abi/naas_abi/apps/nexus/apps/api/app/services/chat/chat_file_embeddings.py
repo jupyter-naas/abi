@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 
@@ -94,22 +94,44 @@ def _build_openai_embedder(embedding_model: str, embedding_dimension: int):
     return OpenAIEmbeddings(**kwargs)
 
 
+_EMBED_BATCH_SIZE = 100  # chunks per OpenAI API call when progress tracking
+
+
 def embed_texts(
     texts: Sequence[str],
     embedding_model: str,
     embedding_dimension: int,
+    on_progress: Callable[[int], None] | None = None,
 ) -> list[np.ndarray]:
     """Embed multiple texts.
 
     Uses hash-based embeddings when ``embedding_model == "hash-v1"`` (no API
     key required, for tests / offline use).  All other model names are routed
     through LangChain's OpenAI embeddings.
+
+    Args:
+        on_progress: Optional callback called after each batch with a
+            0-100 percentage indicating how much of the embedding work
+            is complete.
     """
     if embedding_model == "hash-v1":
         return embed_many_hash(texts, embedding_model, embedding_dimension)
 
     lc_model = _build_openai_embedder(embedding_model, embedding_dimension)
-    return [np.array(v, dtype=float) for v in lc_model.embed_documents(list(texts))]
+
+    if on_progress is None or len(texts) <= _EMBED_BATCH_SIZE:
+        return [np.array(v, dtype=float) for v in lc_model.embed_documents(list(texts))]
+
+    # Process in fixed-size batches so the caller can report incremental progress.
+    total = len(texts)
+    results: list[np.ndarray] = []
+    for i in range(0, total, _EMBED_BATCH_SIZE):
+        batch = list(texts[i : i + _EMBED_BATCH_SIZE])
+        vecs = lc_model.embed_documents(batch)
+        results.extend(np.array(v, dtype=float) for v in vecs)
+        done = min(i + _EMBED_BATCH_SIZE, total)
+        on_progress(int(done / total * 100))
+    return results
 
 
 def embed_text(

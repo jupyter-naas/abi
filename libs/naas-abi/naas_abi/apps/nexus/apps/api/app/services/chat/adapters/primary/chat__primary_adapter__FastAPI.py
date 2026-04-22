@@ -190,6 +190,12 @@ async def upload_file_for_chat(
         embedding_model=embedding_model,
         embedding_dimension=embedding_dimension,
     )
+    # Commit the job row BEFORE publishing to RabbitMQ.
+    # The get_db() dependency only commits after the handler returns, so without
+    # this explicit commit the worker can receive the message and try to look up
+    # the job before the row is visible in the database — causing update_status
+    # to return None and the worker to exit silently, leaving the job at "queued".
+    await db.commit()
 
     await asyncio.to_thread(
         publish_chat_ingestion_job,
@@ -261,6 +267,8 @@ async def ingest_my_drive_file_for_chat(
         embedding_model=payload.embedding_model,
         embedding_dimension=payload.embedding_dimension,
     )
+    # Same race-condition guard as upload: commit before publishing.
+    await db.commit()
 
     await asyncio.to_thread(
         publish_chat_ingestion_job,
