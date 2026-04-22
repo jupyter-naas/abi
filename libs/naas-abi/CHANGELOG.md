@@ -2,6 +2,53 @@
 
 <!-- version list -->
 
+## v1.22.4 (2026-04-22)
+
+
+## v1.22.3 (2026-04-22)
+
+
+## v1.22.2 (2026-04-22)
+
+
+## v1.22.1 (2026-04-22)
+
+### Bug Fixes
+
+- Create method to get api key and assert not None
+  ([`839f52c`](https://github.com/jupyter-naas/abi/commit/839f52c6139cb21d6f3a4afdeb5d33821a84b6de))
+
+- Improv error handling messages for transcribe
+  ([`6bea732`](https://github.com/jupyter-naas/abi/commit/6bea732ff53284986b51c517693d5917aa7736ed))
+
+
+## v1.22.0 (2026-04-21)
+
+### Bug Fixes
+
+- Preserve voice in chat
+  ([`9b0bc7f`](https://github.com/jupyter-naas/abi/commit/9b0bc7fb1794a5c227f39523c13109e629878858))
+
+
+## v1.21.1 (2026-04-21)
+
+### Bug Fixes
+
+- **ci**: Resolve all PR check failures
+  ([`5ba33bb`](https://github.com/jupyter-naas/abi/commit/5ba33bbf83483126546daef8815be32f119a45a3))
+
+
+## v1.21.0 (2026-04-16)
+
+
+## v1.20.0 (2026-04-16)
+
+### Features
+
+- **nexus**: Enforce workspace feature access by role
+  ([`af14f8f`](https://github.com/jupyter-naas/abi/commit/af14f8fe754dc478bbb9ee8b987ecf2fcd0a0697))
+
+
 ## v1.19.4 (2026-04-16)
 
 ### Bug Fixes

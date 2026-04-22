@@ -68,6 +68,28 @@ class ExternalAppConfig(BaseModel):
     icon_emoji: str | None = None
 
 
+FeatureKey = Literal["chat", "files", "agents", "knowledge", "settings"]
+
+
+class FeatureFlagsConfig(BaseModel):
+    """Feature access policy exposed to Nexus frontend."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled_features: list[FeatureKey] = Field(
+        default_factory=lambda: ["chat", "files", "agents", "knowledge", "settings"]
+    )
+    role_baseline: dict[str, list[FeatureKey]] = Field(
+        default_factory=lambda: {
+            "owner": ["chat", "files", "agents", "knowledge", "settings"],
+            "admin": ["chat", "files", "agents", "knowledge", "settings"],
+            "member": ["chat", "files"],
+            "viewer": ["chat", "files"],
+        }
+    )
+    workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
+
+
 class UserSeedConfig(BaseModel):
     """User definition applied on startup (create by email if missing)."""
 
@@ -183,7 +205,7 @@ class NexusConfig(BaseModel):
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
     magic_link_allow_signup: bool = False
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 1440
     refresh_token_expire_days: int = 30
     magic_link_expire_minutes: int = 15
     magic_link_path: str = "/auth/magic-link"
@@ -217,6 +239,7 @@ class NexusConfig(BaseModel):
     auto_seed_demo_data: bool = True
 
     tenant: TenantConfig = Field(default_factory=TenantConfig)
+    feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
 

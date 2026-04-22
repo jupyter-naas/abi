@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.25.2 (2026-04-21)
+
+
+## v1.25.1 (2026-04-21)
+
+### Bug Fixes
+
+- **ci**: Resolve all PR check failures
+  ([`5ba33bb`](https://github.com/jupyter-naas/abi/commit/5ba33bbf83483126546daef8815be32f119a45a3))
+
+- **mypy**: Suppress attr-defined on agent_class.New() in chat CLI
+  ([`247a959`](https://github.com/jupyter-naas/abi/commit/247a9591e78f77f4ab5224b5189c34bbb88f1eff))
+
+### Chores
+
+- **cli**: Add distributed Fuseki write lock to new project template
+  ([`265105e`](https://github.com/jupyter-naas/abi/commit/265105e19f956604c85d34dd8835f946042a6d82))
+
+
 ## v1.25.0 (2026-04-15)
 
 ### Features

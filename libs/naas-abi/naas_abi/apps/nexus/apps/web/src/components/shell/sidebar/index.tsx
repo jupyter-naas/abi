@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Check, ChevronsUpDown, PanelLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
@@ -35,12 +36,21 @@ export function Sidebar() {
   const { fetchFiles, fetchLabFiles } = useFilesStore();
   const { fetchItems: fetchOntology } = useOntologyStore();
 
+  const canChat = useFeature('chat');
+  const canFiles = useFeature('files');
+  const canAgents = useFeature('agents');
+  const canKnowledge = useFeature('knowledge');
+
   useEffect(() => {
     setMounted(true);
-    fetchFiles();
-    fetchLabFiles();
-    fetchOntology();
-  }, [fetchFiles, fetchLabFiles, fetchOntology]);
+    if (canFiles) {
+      fetchFiles();
+      fetchLabFiles();
+    }
+    if (canKnowledge) {
+      fetchOntology();
+    }
+  }, [canFiles, canKnowledge, fetchFiles, fetchLabFiles, fetchOntology]);
 
   // Close workspace menu on click outside
   useEffect(() => {
@@ -176,13 +186,13 @@ export function Sidebar() {
 
       {/* Navigation Sections */}
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-        <SearchSection collapsed={collapsed} />
-        <ChatSection collapsed={collapsed} />
-        <OntologySection collapsed={collapsed} />
-        <KnowledgeGraphSection collapsed={collapsed} />
-        <FilesSection collapsed={collapsed} />
-        <LabSection collapsed={collapsed} />
-        <AppsSection collapsed={collapsed} />
+        {canKnowledge && <SearchSection collapsed={collapsed} />}
+        {canChat && <ChatSection collapsed={collapsed} />}
+        {canKnowledge && <OntologySection collapsed={collapsed} />}
+        {canKnowledge && <KnowledgeGraphSection collapsed={collapsed} />}
+        {canFiles && <FilesSection collapsed={collapsed} />}
+        {canAgents && <LabSection collapsed={collapsed} />}
+        {canAgents && <AppsSection collapsed={collapsed} />}
       </nav>
     </aside>
   );

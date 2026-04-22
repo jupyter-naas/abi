@@ -25,5 +25,5 @@ def chat(module_name: str = "", agent_name: str = ""):
     for agent_class in engine.modules[module_name].agents:
         logger.debug(f"Agent class: {agent_class.__name__}")
         if agent_class.__name__ == agent_name:
-            run_agent(agent_class.New())
+            run_agent(agent_class.New())  # type: ignore[attr-defined]
             break
