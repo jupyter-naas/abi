@@ -2,6 +2,58 @@
 
 <!-- version list -->
 
+## v1.28.2 (2026-04-21)
+
+### Bug Fixes
+
+- Silent tool transfer
+  ([`341ba01`](https://github.com/jupyter-naas/abi/commit/341ba01ab1f55f8908145f69d6cbe794e705ad2d))
+
+
+## v1.28.1 (2026-04-21)
+
+### Bug Fixes
+
+- **bandit**: Nosec B108 on hardcoded /tmp path in config test
+  ([`408c4c8`](https://github.com/jupyter-naas/abi/commit/408c4c81ad0a0177e17ba64284a5029f461148c3))
+
+- **ci**: Resolve all PR check failures
+  ([`5ba33bb`](https://github.com/jupyter-naas/abi/commit/5ba33bbf83483126546daef8815be32f119a45a3))
+
+- **mypy**: Use list[Any] for SMTPAdapter_test messages to allow subscript
+  ([`80f42cb`](https://github.com/jupyter-naas/abi/commit/80f42cbe969ac812dac61d8e300f1d81c365e4d8))
+
+
+## v1.28.0 (2026-04-21)
+
+### Bug Fixes
+
+- **triple-store**: Harden ApacheJenaTDB2 adapter against Fuseki lock-contention 500s
+  ([`5d6a3fd`](https://github.com/jupyter-naas/abi/commit/5d6a3fdae37e3177fcaffd179736b514eb7a0a13))
+
+### Features
+
+- **config**: Wire KeyValueService into ApacheJenaTDB2 via engine configuration
+  ([`dacf894`](https://github.com/jupyter-naas/abi/commit/dacf89469d739426139b2d83aaaa843f5f8c91c0))
+
+- **triple-store**: Add optional distributed write lock via KeyValueService
+  ([`3e33396`](https://github.com/jupyter-naas/abi/commit/3e33396e4414ed1b3c5b277a8cc7b3b3745f52d2))
+
+
+## v1.27.2 (2026-04-17)
+
+### Bug Fixes
+
+- Add default model if no openai key provided
+  ([`caf4286`](https://github.com/jupyter-naas/abi/commit/caf4286105ed0d147277a28e7ce99565f20292f3))
+
+- Add parameter to enable default tools
+  ([`d7341b7`](https://github.com/jupyter-naas/abi/commit/d7341b738c1d8abe3722b59493c0eecec49d2a2a))
+
+- Pass base chat model to intent mapper
+  ([`cf73bd0`](https://github.com/jupyter-naas/abi/commit/cf73bd0b6b93bdc9347d31b66cd92451f68c88d9))
+
+
 ## v1.27.1 (2026-04-16)
 
 ### Bug Fixes

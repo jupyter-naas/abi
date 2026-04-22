@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import ModuleDependencies
@@ -27,7 +26,7 @@ class _DummyEmailAdapter(IEmailAdapter):
 class _DummyEngine:
     def __init__(self, services: IEngine.Services) -> None:
         self.services = services
-        self.modules = {}
+        self.modules: dict[str, object] = {}
 
 
 def test_engine_proxy_services_exposes_email_service():

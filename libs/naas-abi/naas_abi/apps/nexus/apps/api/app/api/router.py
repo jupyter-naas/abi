@@ -11,6 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     search,
     secrets,
     tenant,
+    transcribe,
     view,
     websocket,
 )
@@ -44,3 +45,4 @@ api_router.include_router(providers_router, prefix="/providers", tags=["provider
 api_router.include_router(websocket.router, prefix="/websocket", tags=["websocket"])
 api_router.include_router(abi.router, prefix="/abi", tags=["abi"])
 api_router.include_router(tenant.router, prefix="/tenant", tags=["tenant"])
+api_router.include_router(transcribe.router, prefix="/transcribe", tags=["transcribe"])
