@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.22.1 (2026-04-22)
+
+### Bug Fixes
+
+- Create method to get api key and assert not None
+  ([`839f52c`](https://github.com/jupyter-naas/abi/commit/839f52c6139cb21d6f3a4afdeb5d33821a84b6de))
+
+- Improv error handling messages for transcribe
+  ([`6bea732`](https://github.com/jupyter-naas/abi/commit/6bea732ff53284986b51c517693d5917aa7736ed))
+
+
 ## v1.22.0 (2026-04-21)
 
 ### Bug Fixes
