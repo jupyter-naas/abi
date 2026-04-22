@@ -15,18 +15,22 @@ TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 
 router = APIRouter()
 
-openai_api_key = (
-    ABIModule.get_instance()
-    .engine.modules["naas_abi_marketplace.ai.chatgpt"]
-    .configuration.openai_api_key
-)
+
+def get_api_key():
+    api_key = (
+        ABIModule.get_instance()
+        .engine.modules["naas_abi_marketplace.ai.chatgpt"]
+        .configuration.openai_api_key
+    )
+    assert api_key is not None
+    return api_key
 
 
 @router.post("", include_in_schema=True)
 @router.post("/", include_in_schema=False)
 async def transcribe_audio(
     audio: UploadFile = File(...),
-    api_key_override: str | None = Form(default=openai_api_key, alias="apiKey"),
+    api_key_override: str | None = Form(default=get_api_key(), alias="apiKey"),
     conversation_id: str | None = Form(default=None, alias="conversation_id"),
 ) -> JSONResponse:
     if not audio.filename:
