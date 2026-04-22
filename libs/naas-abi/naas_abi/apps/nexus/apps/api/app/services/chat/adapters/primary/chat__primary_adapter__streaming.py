@@ -111,6 +111,11 @@ async def stream_chat_response(
                     db=db,
                     conversation_id=conversation_id,
                 )
+                provider_messages = registry.chat._inject_chat_vector_context(
+                    provider_messages=provider_messages,
+                    conversation_id=conversation_id,
+                    user_id=current_user.id,
+                )
             await db.commit()
         except Exception:
             await db.rollback()

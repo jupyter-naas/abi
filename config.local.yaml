@@ -60,8 +60,12 @@ modules:
           show_powered_by: false
           login_footer_text: "© ABI AI Platform (Beta)| Naas.ai"
         users:
-          - email: "admin@example.com"
-            name: "Abi Admin"
+          - email: "maxime@naas.ai"
+            name: "Maxime Jublou"
+          - email: "jeremy@naas.ai"
+            name: "Jeremy Ravenel"
+          - email: "florent@naas.ai"
+            name: "Florent Ravenel"
             store_credentials_in_secrets: true
         organizations:
           - name: "Naas.ai"
@@ -74,7 +78,11 @@ modules:
             login_footer_text: "© Naas.ai"
             show_powered_by: false
             members:
-              - email: "admin@example.com"
+              - email: "maxime@naas.ai"
+                role: "owner"
+              - email: "jeremy@naas.ai"
+                role: "owner"
+              - email: "florent@naas.ai"
                 role: "owner"
             workspaces:
               - name: "Naas.ai"
@@ -83,7 +91,11 @@ modules:
                 primary_color: "#34D399"
                 accent_color: "#34D399"
                 members:
-                  - email: "admin@example.com"
+                  - email: "maxime@naas.ai"
+                    role: "owner"
+                  - email: "jeremy@naas.ai"
+                    role: "owner"
+                  - email: "florent@naas.ai"
                     role: "owner"
 
   - module: naas_abi_marketplace.ai.chatgpt

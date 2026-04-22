@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, Globe, ArrowUp, Download, ExternalLink } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, Globe, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -30,6 +30,8 @@ const getLogoUrl = (url: string | null): string | undefined => {
 // Max image size for uploads (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const SUPPORTED_DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'pptx', 'txt', 'md', 'json', 'csv'];
+const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,.pdf,.docx,.pptx,.txt,.md,.json,.csv';
 
 // Match http(s) URLs for linkification and preview
 const URL_REGEX = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
@@ -154,8 +156,18 @@ export function ChatInterface() {
   const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [attachedImages, setAttachedImages] = useState<string[]>([]); // Base64 images
   const [imageError, setImageError] = useState<string | null>(null);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [searchEnabled, setSearchEnabled] = useState(false); // Force web search
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // My Drive picker state
+  const [showMyDrivePicker, setShowMyDrivePicker] = useState(false);
+  const [myDriveFiles, setMyDriveFiles] = useState<Array<{name: string; path: string; type: string}>>([]);
+  const [myDriveLoading, setMyDriveLoading] = useState(false);
+  const [myDrivePath, setMyDrivePath] = useState('');
+  const myDrivePickerRef = useRef<HTMLDivElement>(null);
+  // Per-job ingestion status tracking
+  const [ingestionJobs, setIngestionJobs] = useState<Map<string, {filename: string; status: string; progress?: number; error?: string; conversationId: string}>>(new Map());
+  const ingestionAbortRefs = useRef<Map<string, AbortController>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -170,7 +182,7 @@ export function ChatInterface() {
     loadConversationMessages,
   } = useWorkspaceStore();
 
-  const { startTyping, stopTyping, onMessage } = useWebSocket();
+  const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
   const { getAgent } = useAgentsStore();
@@ -267,6 +279,83 @@ export function ChatInterface() {
     };
   }, []);
 
+  // Listen for ingestion status events from the server and update per-job state
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleIngestionStatus = (data: any) => {
+      const { job_id, status, progress, conversation_id, error, cache_hit, chunks_count } = data;
+      if (!job_id) return;
+
+      setIngestionJobs((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(job_id);
+        if (!existing) return prev;
+        next.set(job_id, { ...existing, status, progress: progress ?? existing.progress, error });
+        return next;
+      });
+
+      if (status === 'ready' && conversation_id) {
+        setIngestionJobs((prev) => {
+          const existing = prev.get(job_id);
+          const filename = existing?.filename ?? 'file';
+          const cacheLabel = cache_hit ? 'cache hit' : 'cache miss';
+          addMessage(conversation_id, {
+            role: 'system',
+            content: `\`${filename}\` indexed for this chat (${cacheLabel})${chunks_count ? ` — ${chunks_count} chunks` : ''}.`,
+          });
+          const next = new Map(prev);
+          next.delete(job_id);
+          return next;
+        });
+        // Abort the fallback polling loop since WS delivered the result
+        ingestionAbortRefs.current.get(job_id)?.abort();
+        ingestionAbortRefs.current.delete(job_id);
+      }
+
+      if (status === 'failed' && conversation_id) {
+        setIngestionJobs((prev) => {
+          const existing = prev.get(job_id);
+          const filename = existing?.filename ?? 'file';
+          addMessage(conversation_id, {
+            role: 'system',
+            content: `Failed to index \`${filename}\`: ${error || 'Unknown error'}`,
+          });
+          // Keep in map so the user can retry
+          const next = new Map(prev);
+          if (existing) next.set(job_id, { ...existing, status: 'failed', error });
+          return next;
+        });
+        ingestionAbortRefs.current.get(job_id)?.abort();
+        ingestionAbortRefs.current.delete(job_id);
+      }
+    };
+
+    socket.on('chat.ingestion.status', handleIngestionStatus);
+    return () => {
+      socket.off('chat.ingestion.status', handleIngestionStatus);
+    };
+  }, [socket, addMessage]);
+
+  // Abort all polling loops on unmount
+  useEffect(() => {
+    return () => {
+      ingestionAbortRefs.current.forEach((ctrl) => ctrl.abort());
+    };
+  }, []);
+
+  // Close My Drive picker when clicking outside
+  useEffect(() => {
+    if (!showMyDrivePicker) return;
+    const handler = (e: MouseEvent) => {
+      if (myDrivePickerRef.current && !myDrivePickerRef.current.contains(e.target as Node)) {
+        setShowMyDrivePicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMyDrivePicker]);
+
   // Use null on server to prevent hydration mismatch
   const workspaceConversations = mounted ? getWorkspaceConversations() : [];
   const activeConversation = mounted
@@ -282,20 +371,217 @@ export function ChatInterface() {
     scrollToBottom();
   }, [activeConversation?.messages]);
 
-  // Handle image file selection
+  const isSupportedDocument = (file: File): boolean => {
+    const ext = file.name.toLowerCase().split('.').pop() || '';
+    return SUPPORTED_DOCUMENT_EXTENSIONS.includes(ext);
+  };
+
+  // Poll a job until done; WebSocket events will abort early when the server delivers results.
+  const pollIngestionJob = async (
+    jobId: string,
+    filename: string,
+    conversationId: string,
+    token: string | null,
+  ): Promise<void> => {
+    const abortController = new AbortController();
+    ingestionAbortRefs.current.set(jobId, abortController);
+
+    try {
+      const maxAttempts = 120;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (abortController.signal.aborted) return;
+
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, 1000);
+          abortController.signal.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new DOMException('Aborted', 'AbortError'));
+          }, { once: true });
+        });
+
+        if (abortController.signal.aborted) return;
+
+        let statusResponse: Response;
+        try {
+          statusResponse = await fetch(
+            `${getApiBase()}/api/chat/ingestion-jobs/${jobId}`,
+            {
+              headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+              signal: abortController.signal,
+            },
+          );
+        } catch {
+          continue;
+        }
+
+        if (!statusResponse.ok) continue;
+
+        const job = await statusResponse.json();
+
+        // Keep local state in sync with polling result
+        setIngestionJobs((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(jobId);
+          if (existing) next.set(jobId, { ...existing, status: job.status, progress: job.progress });
+          return next;
+        });
+
+        if (job.status === 'ready') {
+          const cacheLabel = job.cache_hit ? 'cache hit' : 'cache miss';
+          addMessage(conversationId, {
+            role: 'system',
+            content: `\`${filename}\` indexed for this chat (${cacheLabel}).`,
+          });
+          setIngestionJobs((prev) => { const next = new Map(prev); next.delete(jobId); return next; });
+          return;
+        }
+
+        if (job.status === 'failed') {
+          // Keep in map — user can retry
+          setIngestionJobs((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(jobId);
+            if (existing) next.set(jobId, { ...existing, status: 'failed', error: job.error_message });
+            return next;
+          });
+          throw new Error(job.error_message || `Ingestion failed for ${filename}`);
+        }
+      }
+
+      throw new Error(`Ingestion timeout for ${filename}`);
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return; // WS already handled it
+      throw err;
+    } finally {
+      ingestionAbortRefs.current.delete(jobId);
+    }
+  };
+
+  const uploadDocumentToChat = async (file: File): Promise<void> => {
+    let conversationId = activeConversationId;
+    if (!conversationId) {
+      conversationId = createConversation();
+    }
+
+    const token = useAuthStore.getState().token;
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(
+      `${getApiBase()}/api/chat/conversations/${conversationId}/files/upload`,
+      {
+        method: 'POST',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: formData,
+      },
+    );
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.detail || `Failed to upload ${file.name}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.job_id) {
+      // Synchronous ingestion result (small file, cache hit)
+      const cacheLabel = result.cache_hit ? 'cache hit' : 'cache miss';
+      addMessage(conversationId, {
+        role: 'system',
+        content: `\`${file.name}\` indexed for this chat (${cacheLabel}).`,
+      });
+      return;
+    }
+
+    setIngestionJobs((prev) => {
+      const next = new Map(prev);
+      next.set(result.job_id, { filename: file.name, status: 'queued', conversationId });
+      return next;
+    });
+
+    await pollIngestionJob(result.job_id, file.name, conversationId, token);
+  };
+
+  const fetchMyDriveFiles = async (path = '') => {
+    setMyDriveLoading(true);
+    const token = useAuthStore.getState().token;
+    try {
+      const params = new URLSearchParams({ scope: 'my_drive', path });
+      const res = await fetch(`${getApiBase()}/api/files/?${params}`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setMyDriveFiles(
+        (data.files ?? []).map((f: any) => ({ name: f.name, path: f.path, type: f.type })),
+      );
+      setMyDrivePath(path);
+    } finally {
+      setMyDriveLoading(false);
+    }
+  };
+
+  const ingestFromMyDrive = async (sourcePath: string, filename: string): Promise<void> => {
+    let conversationId = activeConversationId;
+    if (!conversationId) {
+      conversationId = createConversation();
+    }
+    setShowMyDrivePicker(false);
+
+    const token = useAuthStore.getState().token;
+    const res = await fetch(
+      `${getApiBase()}/api/chat/conversations/${conversationId}/files/ingest`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ source_path: sourcePath }),
+      },
+    );
+
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error(payload?.detail || `Failed to ingest ${filename}`);
+    }
+
+    const result = await res.json();
+
+    if (!result.job_id) {
+      const cacheLabel = result.cache_hit ? 'cache hit' : 'cache miss';
+      addMessage(conversationId, {
+        role: 'system',
+        content: `\`${filename}\` indexed from My Drive (${cacheLabel}).`,
+      });
+      return;
+    }
+
+    setIngestionJobs((prev) => {
+      const next = new Map(prev);
+      next.set(result.job_id, { filename, status: 'queued', conversationId });
+      return next;
+    });
+
+    await pollIngestionJob(result.job_id, filename, conversationId, token);
+  };
+
+  // Handle attachment selection (images + documents)
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
     
     setImageError(null);
     const newImages: string[] = [];
+    let hasDocumentUpload = false;
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      const isImage = SUPPORTED_IMAGE_TYPES.includes(file.type);
+      const isDocument = isSupportedDocument(file);
       
-      // Validate file type
-      if (!SUPPORTED_IMAGE_TYPES.includes(file.type)) {
-        setImageError(`Unsupported file type: ${file.type}. Use JPEG, PNG, GIF, or WebP.`);
+      if (!isImage && !isDocument) {
+        setImageError(`Unsupported file: ${file.name}. Supported: images, PDF, DOCX, PPTX, TXT, MD, JSON, CSV.`);
         continue;
       }
       
@@ -305,7 +591,18 @@ export function ChatInterface() {
         continue;
       }
       
-      // Convert to base64
+      if (isDocument) {
+        hasDocumentUpload = true;
+        try {
+          await uploadDocumentToChat(file);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : `Failed to upload ${file.name}`;
+          setImageError(detail);
+        }
+        continue;
+      }
+
+      // Convert image to base64
       const base64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -325,6 +622,7 @@ export function ChatInterface() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    void hasDocumentUpload; // tracking is now handled by ingestionJobs state
   };
 
   const removeImage = (index: number) => {
@@ -892,13 +1190,57 @@ export function ChatInterface() {
                 {imageError}
               </div>
             )}
+            {/* Per-job ingestion status (progressive + retry on failure) */}
+            {ingestionJobs.size > 0 && (
+              <div className="mb-2 flex flex-col gap-1">
+                {Array.from(ingestionJobs.entries()).map(([jobId, job]) => {
+                  const isFailed = job.status === 'failed';
+                  return (
+                    <div
+                      key={jobId}
+                      className={cn(
+                        'flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
+                        isFailed
+                          ? 'bg-destructive/10 text-destructive'
+                          : 'bg-muted text-muted-foreground',
+                      )}
+                    >
+                      {isFailed ? (
+                        <AlertCircle size={14} className="shrink-0" />
+                      ) : (
+                        <Loader2 size={14} className="shrink-0 animate-spin" />
+                      )}
+                      <span className="flex-1 truncate">
+                        {isFailed
+                          ? `Failed: ${job.filename}${job.error ? ` — ${job.error}` : ''}`
+                          : `${job.filename} — ${job.status}${job.progress != null ? ` (${job.progress}%)` : ''}`}
+                      </span>
+                      {isFailed && (
+                        <button
+                          type="button"
+                          title="Retry ingestion"
+                          className="ml-1 flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium hover:bg-destructive/20"
+                          onClick={() => {
+                            setIngestionJobs((prev) => { const next = new Map(prev); next.delete(jobId); return next; });
+                            void ingestFromMyDrive(job.filename, job.filename).catch(() => {});
+                          }}
+                        >
+                          <RefreshCw size={11} />
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             
             <div className="rounded-2xl border border-border/50 bg-card">
               {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
+                accept={ATTACHMENT_ACCEPT}
                 multiple
                 className="hidden"
                 onChange={handleImageSelect}
@@ -933,10 +1275,101 @@ export function ChatInterface() {
                       'text-muted-foreground hover:bg-muted hover:text-foreground',
                       attachedImages.length > 0 && 'bg-workspace-accent/15 text-workspace-accent'
                     )}
-                    title="Attach file"
+                    title="Attach image or document"
                   >
                     <Plus size={20} />
                   </button>
+
+                  {/* My Drive picker */}
+                  <div className="relative" ref={myDrivePickerRef}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!showMyDrivePicker) {
+                          void fetchMyDriveFiles('');
+                        }
+                        setShowMyDrivePicker((v) => !v);
+                      }}
+                      className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+                        showMyDrivePicker
+                          ? 'bg-workspace-accent/15 text-workspace-accent'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                      title="Select file from My Drive"
+                    >
+                      <HardDrive size={16} />
+                    </button>
+
+                    {showMyDrivePicker && (
+                      <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
+                        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                          <span className="text-xs font-medium">My Drive</span>
+                          {myDrivePath && (
+                            <button
+                              type="button"
+                              className="text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                const parent = myDrivePath.includes('/')
+                                  ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
+                                  : '';
+                                void fetchMyDriveFiles(parent);
+                              }}
+                            >
+                              ← Back
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowMyDrivePicker(false)}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto py-1">
+                          {myDriveLoading && (
+                            <div className="flex items-center justify-center py-4">
+                              <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                            </div>
+                          )}
+                          {!myDriveLoading && myDriveFiles.length === 0 && (
+                            <p className="px-3 py-3 text-center text-xs text-muted-foreground">
+                              No files in My Drive
+                            </p>
+                          )}
+                          {!myDriveLoading &&
+                            myDriveFiles.map((file) => (
+                              <button
+                                key={file.path}
+                                type="button"
+                                className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                onClick={() => {
+                                  if (file.type === 'folder') {
+                                    void fetchMyDriveFiles(file.path);
+                                  } else {
+                                    void ingestFromMyDrive(file.path, file.name).catch((err) => {
+                                      setImageError(
+                                        err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
+                                      );
+                                    });
+                                  }
+                                }}
+                              >
+                                <span className="shrink-0 text-muted-foreground">
+                                  {file.type === 'folder' ? '📁' : '📄'}
+                                </span>
+                                <span className="flex-1 truncate text-left">{file.name}</span>
+                                {file.type === 'file' && (
+                                  <span className="shrink-0 text-muted-foreground">Add</span>
+                                )}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Search the web (globe) */}
                   <button

@@ -16,6 +16,9 @@ from naas_abi.apps.nexus.apps.api.app.api.router import api_router
 from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
+    start_chat_ingestion_consumer,
+)
 from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
     register_service_exception_handlers,
 )
@@ -57,6 +60,11 @@ async def _startup(app: FastAPI) -> None:
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
 
     await apply_configuration_seeds(getattr(app.state, "secret_service", None))
+
+    try:
+        start_chat_ingestion_consumer(app)
+    except Exception:
+        logging.getLogger(__name__).exception("Unable to start chat ingestion consumer")
 
     # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
     # print("Checking Ollama status...")

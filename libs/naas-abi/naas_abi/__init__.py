@@ -6,11 +6,13 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
@@ -280,7 +282,7 @@ class ABIModule(BaseModule):
             "naas_abi_marketplace.applications.zoho#soft",
             "naas_abi_marketplace.domains.support#soft",
         ],
-        services=[Secret, TripleStoreService, ObjectStorageService],
+        services=[Secret, TripleStoreService, ObjectStorageService, VectorStoreService, BusService],
     )
 
     class Configuration(ModuleConfiguration):

@@ -22,6 +22,12 @@ class CacheMemoryAdapter(ICacheAdapter):
     def set(self, key: str, value: CachedData) -> None:
         self.cache[key] = value
 
+    def set_if_absent(self, key: str, value: CachedData) -> bool:
+        if key in self.cache:
+            return False
+        self.cache[key] = value
+        return True
+
     def delete(self, key: str) -> None:
         if key not in self.cache:
             raise CacheNotFoundError(f"Cache not found: {key}")
@@ -29,6 +35,27 @@ class CacheMemoryAdapter(ICacheAdapter):
 
     def exists(self, key: str) -> bool:
         return key in self.cache
+
+
+def test_cache_service_explicit_methods() -> None:
+    cache_service = CacheService(CacheMemoryAdapter())
+
+    assert cache_service.exists("k") is False
+
+    cache_service.set_json("k", {"v": 1})
+    assert cache_service.exists("k") is True
+    assert cache_service.get("k") == {"v": 1}
+
+    cache_service.delete("k")
+    assert cache_service.exists("k") is False
+
+
+def test_set_if_absent_json() -> None:
+    cache_service = CacheService(CacheMemoryAdapter())
+
+    assert cache_service.set_json_if_absent("k", {"v": 1}) is True
+    assert cache_service.set_json_if_absent("k", {"v": 2}) is False
+    assert cache_service.get("k") == {"v": 1}
 
 
 def test_cache_service():

@@ -22,6 +22,7 @@ KNOWN_TABLES = frozenset(
         "workspace_members",
         "conversations",
         "messages",
+        "chat_ingestion_jobs",
         "ontologies",
         "graph_nodes",
         "graph_edges",

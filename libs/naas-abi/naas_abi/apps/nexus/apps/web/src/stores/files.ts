@@ -39,6 +39,7 @@ export interface StorageSource {
 export const defaultStorageSources: StorageSource[] = [
   // Local - default workspace storage on server
   { id: 'workspace', name: 'Workspace', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Workspace files (create, edit, upload)' },
+  { id: 'my-drive', name: 'My Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Personal files shared across workspaces' },
   
   // Cloud sources - third-party cloud storage
   { id: 'google-drive', name: 'Google Drive', icon: 'cloud', category: 'cloud', enabled: false, connected: false, description: 'Sync with Google Drive' },
@@ -145,6 +146,10 @@ interface FilesState {
 import { getApiUrl } from '@/lib/config';
 
 const getApiBase = () => getApiUrl();
+
+const getFilesScope = (activeSource: string): 'workspace' | 'my_drive' => {
+  return activeSource === 'my-drive' ? 'my_drive' : 'workspace';
+};
 
 export const useFilesStore = create<FilesState>((set, get) => ({
   // Files page state (Finder-like)
@@ -392,10 +397,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     // Do not force a workspace prefix here.
     const relativePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = getCurrentWorkspaceId();
+    const scope = getFilesScope(get().activeSource);
 
     // The files API requires a workspace when listing root.
     // During app bootstrap the workspace can still be null.
-    if (!relativePath && !workspaceId) {
+    if (scope === 'workspace' && !relativePath && !workspaceId) {
       set({ files: [], currentPath: '', loading: false, error: null });
       return;
     }
@@ -403,11 +409,12 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const fetchListing = async (targetPath: string) => {
-        const workspaceParam = workspaceId
+        const workspaceParam = scope === 'workspace' && workspaceId
           ? `&workspace_id=${encodeURIComponent(workspaceId)}`
           : '';
+        const scopeParam = `&scope=${scope}`;
         const response = await authFetch(
-          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}`
+          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}`
         );
         if (!response.ok) {
           throw new Error('Failed to fetch files');
@@ -421,7 +428,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
       // Fallback: if root appears empty, try workspace root.
       // This handles deployments where objects are scoped under workspace IDs.
-      if (!relativePath && resolvedFiles.length === 0 && workspaceId) {
+      if (scope === 'workspace' && !relativePath && resolvedFiles.length === 0 && workspaceId) {
         const workspaceFiles = await fetchListing(workspaceId);
         if (workspaceFiles.length > 0) {
           resolvedPath = workspaceId;
@@ -502,8 +509,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   createFile: async (path, content = '') => {
     const workspacePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = getCurrentWorkspaceId();
+    const scope = getFilesScope(get().activeSource);
 
-    if (!workspaceId) {
+    if (scope === 'workspace' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return null;
     }
@@ -516,6 +524,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         body: JSON.stringify({
           path: workspacePath,
           workspace_id: workspaceId,
+          scope,
           content,
           content_type: 'text/plain',
         }),
@@ -540,8 +549,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   createFolder: async (path) => {
     const workspacePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = getCurrentWorkspaceId();
+    const scope = getFilesScope(get().activeSource);
 
-    if (!workspaceId) {
+    if (scope === 'workspace' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return null;
     }
@@ -551,7 +561,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       const response = await authFetch(`${getApiBase()}/api/files/folder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: workspacePath, workspace_id: workspaceId }),
+        body: JSON.stringify({ path: workspacePath, workspace_id: workspaceId, scope }),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -572,15 +582,19 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   deleteFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
+    const scope = getFilesScope(get().activeSource);
+    if (scope === 'workspace' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return false;
     }
 
     set({ loading: true, error: null });
     try {
-      const workspaceParam = `?workspace_id=${encodeURIComponent(workspaceId)}`;
-      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`, {
+      const workspaceParam = scope === 'workspace' && workspaceId
+        ? `workspace_id=${encodeURIComponent(workspaceId)}&`
+        : '';
+      const scopeParam = `scope=${scope}`;
+      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}?${workspaceParam}${scopeParam}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -607,7 +621,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   renameFile: async (oldPath, newPath) => {
     const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
+    const scope = getFilesScope(get().activeSource);
+    if (scope === 'workspace' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return false;
     }
@@ -617,7 +632,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       const response = await authFetch(`${getApiBase()}/api/files/rename`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ old_path: oldPath, new_path: newPath, workspace_id: workspaceId }),
+        body: JSON.stringify({ old_path: oldPath, new_path: newPath, workspace_id: workspaceId, scope }),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -662,8 +677,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const { currentPath } = get();
     const uploadPath = currentPath ? currentPath : '';
     const workspaceId = getCurrentWorkspaceId();
+    const scope = getFilesScope(get().activeSource);
 
-    if (!workspaceId) {
+    if (scope === 'workspace' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return null;
     }
@@ -673,7 +689,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       const formData = new FormData();
       formData.append('file', file);
       formData.append('path', uploadPath);
-      formData.append('workspace_id', workspaceId);
+      if (scope === 'workspace' && workspaceId) {
+        formData.append('workspace_id', workspaceId);
+      }
+      formData.append('scope', scope);
 
       const response = await authFetch(`${getApiBase()}/api/files/upload`, {
         method: 'POST',
@@ -723,14 +742,18 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   readFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
+    const scope = getFilesScope(get().activeSource);
+    if (scope === 'workspace' && !workspaceId) {
       set({ error: 'No workspace selected' });
       return null;
     }
 
     try {
-      const workspaceParam = `?workspace_id=${encodeURIComponent(workspaceId)}`;
-      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`);
+      const workspaceParam = scope === 'workspace' && workspaceId
+        ? `workspace_id=${encodeURIComponent(workspaceId)}&`
+        : '';
+      const scopeParam = `scope=${scope}`;
+      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}?${workspaceParam}${scopeParam}`);
       if (!response.ok) {
         throw new Error('Failed to read file');
       }
@@ -750,24 +773,29 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const { fileContents, unsavedChanges } = get();
     const content = fileContents[path];
     const workspaceId = getCurrentWorkspaceId();
+    const scope = getFilesScope(get().activeSource);
     
     if (content === undefined) {
       return false;
     }
 
-    if (!workspaceId) {
+    if (scope === 'workspace' && !workspaceId) {
       set({ error: 'No workspace selected' });
       return false;
     }
     
     try {
-      const workspaceParam = `?workspace_id=${encodeURIComponent(workspaceId)}`;
-      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}${workspaceParam}`, {
+      const workspaceParam = scope === 'workspace' && workspaceId
+        ? `workspace_id=${encodeURIComponent(workspaceId)}&`
+        : '';
+      const scopeParam = `scope=${scope}`;
+      const response = await authFetch(`${getApiBase()}/api/files/${encodeURIComponent(path)}?${workspaceParam}${scopeParam}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           path,
           workspace_id: workspaceId,
+          scope,
           content,
           content_type: 'text/plain',
         }),

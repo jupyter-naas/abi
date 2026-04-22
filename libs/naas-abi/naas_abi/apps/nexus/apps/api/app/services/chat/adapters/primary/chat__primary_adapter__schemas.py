@@ -82,6 +82,47 @@ class ChatResponse(BaseModel):
     provider_used: str | None = None
 
 
+class ChatIngestMyDriveFileRequest(BaseModel):
+    source_path: str = Field(..., min_length=1, max_length=1000)
+    embedding_model: str = Field(default="text-embedding-3-small", min_length=1, max_length=200)
+    embedding_dimension: int = Field(default=1536, ge=8, le=4096)
+
+
+class ChatFileIngestionResponse(BaseModel):
+    job_id: str | None = None
+    status: str | None = None
+    conversation_id: str
+    source_path: str
+    collection_name: str
+    file_sha256: str
+    cache_hit: bool
+    chunks_count: int
+    statuses: list[str] = Field(default_factory=list)
+    embedding_model: str
+    embedding_dimension: int
+
+
+class ChatIngestionJobStatusResponse(BaseModel):
+    job_id: str
+    conversation_id: str
+    workspace_id: str
+    source_path: str
+    status: str
+    progress: int | None = None
+    cache_hit: bool | None = None
+    file_sha256: str | None = None
+    collection_name: str | None = None
+    chunks_count: int | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    attempt: int
+    max_attempts: int
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
 def to_conversation(row: Any, messages: list[Message] | None = None) -> Conversation:
     return Conversation(
         id=row.id,

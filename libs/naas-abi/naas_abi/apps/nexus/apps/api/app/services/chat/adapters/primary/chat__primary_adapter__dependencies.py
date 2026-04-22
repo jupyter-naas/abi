@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
@@ -19,9 +19,15 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     ChatProviderConfigInput,
     CompleteChatInput,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
+    ChatFileIngestionService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry, get_service_registry
+from naas_abi_core.services.cache.CacheFactory import CacheFactory
+from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -59,6 +65,58 @@ def get_chat_service(
     registry: ServiceRegistry = Depends(get_service_registry),
 ) -> ChatService:
     return registry.chat
+
+
+def get_object_storage_service(request: Request) -> ObjectStorageService:
+    storage = getattr(request.app.state, "object_storage", None)
+    if storage is not None:
+        return storage
+
+    from naas_abi import ABIModule
+
+    module = ABIModule.get_instance()
+    storage = module.engine.services.object_storage
+    request.app.state.object_storage = storage
+    return storage
+
+
+def get_vector_store_service(request: Request) -> VectorStoreService:
+    vector_store = getattr(request.app.state, "vector_store", None)
+    if vector_store is not None:
+        return vector_store
+
+    from naas_abi import ABIModule
+
+    module = ABIModule.get_instance()
+    vector_store = module.engine.services.vector_store
+    request.app.state.vector_store = vector_store
+    return vector_store
+
+
+def get_cache_service(request: Request):
+    cache_service = getattr(request.app.state, "cache_service", None)
+    if cache_service is not None:
+        return cache_service
+
+    object_storage = get_object_storage_service(request)
+    cache_service = CacheFactory.CacheObjectStorage(
+        object_storage=object_storage,
+        cache_prefix="cache",
+    )
+    request.app.state.cache_service = cache_service
+    return cache_service
+
+
+def get_chat_file_ingestion_service(
+    object_storage: ObjectStorageService = Depends(get_object_storage_service),
+    vector_store: VectorStoreService = Depends(get_vector_store_service),
+    cache_service=Depends(get_cache_service),
+) -> ChatFileIngestionService:
+    return ChatFileIngestionService(
+        object_storage=object_storage,
+        vector_store=vector_store,
+        cache_service=cache_service,
+    )
 
 
 def to_complete_chat_input(request: ChatRequest) -> CompleteChatInput:
