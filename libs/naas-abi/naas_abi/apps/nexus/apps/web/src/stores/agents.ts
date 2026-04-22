@@ -73,9 +73,14 @@ export interface Agent {
   updatedAt: Date;
 }
 
+// Re-fetch agents at most once every 5 minutes per workspace
+const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
+
 interface AgentsState {
   agents: Agent[];
-  
+  /** Timestamp (ms) of the last successful fetch per workspaceId */
+  lastFetchedAt: Record<string, number>;
+
   // Actions
   addAgent: (agent: Omit<Agent, 'id' | 'isDefault' | 'createdAt' | 'updatedAt'>) => Promise<string>;
   updateAgent: (id: string, updates: Partial<Omit<Agent, 'id' | 'isDefault' | 'createdAt'>>) => Promise<void>;
@@ -83,8 +88,8 @@ interface AgentsState {
   toggleAgent: (id: string) => Promise<void>; // Toggle enabled state
   setAgentProvider: (agentId: string, providerId: string | null) => void;
   getAgent: (id: string) => Agent | undefined;
-  fetchAgents: (workspaceId: string) => Promise<void>;
-  
+  fetchAgents: (workspaceId: string, force?: boolean) => Promise<void>;
+
   // Auto-create agents from enabled providers
   syncAgentsFromProviders: (enabledProviderIds: string[], providerNames: Record<string, string>) => void;
 }
@@ -98,13 +103,22 @@ export const useAgentsStore = create<AgentsState>()(
   persist(
     (set, get) => ({
       agents: [],
+      lastFetchedAt: {},
 
-      fetchAgents: async (workspaceId: string) => {
+      fetchAgents: async (workspaceId: string, force = false) => {
+        // Skip if we fetched recently for this workspace (unless forced)
+        if (!force) {
+          const lastFetched = get().lastFetchedAt[workspaceId];
+          if (lastFetched && Date.now() - lastFetched < AGENTS_CACHE_TTL_MS) {
+            return;
+          }
+        }
+
         try {
           const { authFetch } = await import('./auth');
           const { getApiUrl } = await import('@/lib/config');
           const API_BASE = getApiUrl();
-          
+
           const response = await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
           if (response.ok) {
             const data = await response.json();
@@ -136,8 +150,11 @@ export const useAgentsStore = create<AgentsState>()(
               createdAt: new Date(a.created_at),
               updatedAt: new Date(a.updated_at),
             }));
-            set({ agents: formattedAgents });
-            
+            set({
+              agents: formattedAgents,
+              lastFetchedAt: { ...get().lastFetchedAt, [workspaceId]: Date.now() },
+            });
+
             // Reset selectedAgent if it's not in the new agent list
             const { useWorkspaceStore } = await import('./workspace');
             const currentSelected = useWorkspaceStore.getState().selectedAgent;
