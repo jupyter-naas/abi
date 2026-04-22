@@ -15,7 +15,6 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_jobs import (
     ChatIngestionJobService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.websocket.service import WebSocketService
-from naas_abi_core.services.cache.CacheFactory import CacheFactory
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +80,10 @@ async def process_chat_ingestion_job(payload: dict[str, Any]) -> None:
 
     try:
         module = ABIModule.get_instance()
-        cache_service = CacheFactory.CacheObjectStorage(
-            object_storage=module.engine.services.object_storage,
-            cache_prefix="cache",
-        )
         ingestion_service = ChatFileIngestionService(
             object_storage=module.engine.services.object_storage,
             vector_store=module.engine.services.vector_store,
-            cache_service=cache_service,
+            cache_service=module.engine.services.cache,
         )
 
         async with AsyncSessionLocal() as db:

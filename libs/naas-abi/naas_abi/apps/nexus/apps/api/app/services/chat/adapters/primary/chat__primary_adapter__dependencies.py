@@ -25,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry, get_service_registry
-from naas_abi_core.services.cache.CacheFactory import CacheFactory
+from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -93,16 +93,15 @@ def get_vector_store_service(request: Request) -> VectorStoreService:
     return vector_store
 
 
-def get_cache_service(request: Request):
+def get_cache_service(request: Request) -> CacheService:
     cache_service = getattr(request.app.state, "cache_service", None)
     if cache_service is not None:
         return cache_service
 
-    object_storage = get_object_storage_service(request)
-    cache_service = CacheFactory.CacheObjectStorage(
-        object_storage=object_storage,
-        cache_prefix="cache",
-    )
+    from naas_abi import ABIModule
+
+    module = ABIModule.get_instance()
+    cache_service = module.engine.services.cache
     request.app.state.cache_service = cache_service
     return cache_service
 

@@ -11,6 +11,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusAdapterPythonQueueConfiguration,
     BusServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_CacheService import (
+    CacheAdapterConfiguration,
+    CacheAdapterFSConfiguration,
+    CacheServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
     EmailAdapterSMTPConfiguration,
@@ -116,6 +121,14 @@ class ServicesConfiguration(BaseModel):
                 host="localhost",
                 port=1025,
                 timeout=10,
+            ).model_dump(),
+        )
+    )
+    cache: CacheServiceConfiguration = CacheServiceConfiguration(
+        cache_adapter=CacheAdapterConfiguration(
+            adapter="fs",
+            config=CacheAdapterFSConfiguration(
+                base_path="storage/cache",
             ).model_dump(),
         )
     )
