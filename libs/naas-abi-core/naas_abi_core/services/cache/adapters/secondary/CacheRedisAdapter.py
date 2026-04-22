@@ -55,7 +55,8 @@ class CacheRedisAdapter(ICacheAdapter):
         raw = self._client.get(self._redis_key(key))
         if raw is None:
             raise CacheNotFoundError(f"Cache entry not found: {key}")
-        return CachedData(**json.loads(raw))
+        # decode_responses=True guarantees raw is str; mypy stubs don't narrow this
+        return CachedData(**json.loads(raw))  # type: ignore[arg-type]
 
     def set(self, key: str, value: CachedData) -> None:
         self._client.set(self._redis_key(key), json.dumps(value.model_dump()))
