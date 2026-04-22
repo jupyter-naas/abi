@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Dict, List, Protocol, Union, runtime_checkable
 
 from naas_abi_core.services.bus.BusService import BusService
+from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
@@ -30,6 +31,7 @@ class IEngine:
         __bus: BusService | None
         __kv: KeyValueService | None
         __email: EmailService | None
+        __cache: CacheService | None
 
         def __init__(
             self,
@@ -40,6 +42,7 @@ class IEngine:
             bus: BusService | None = None,
             kv: KeyValueService | None = None,
             email: EmailService | None = None,
+            cache: CacheService | None = None,
         ):
             self.__object_storage = object_storage
             self.__triple_store = triple_store
@@ -48,6 +51,7 @@ class IEngine:
             self.__bus = bus
             self.__kv = kv
             self.__email = email
+            self.__cache = cache
 
         @property
         def kv(self) -> KeyValueService:
@@ -94,6 +98,14 @@ class IEngine:
             return self.__email
 
         @property
+        def cache(self) -> CacheService:
+            assert self.__cache is not None, "Cache service is not initialized"
+            return self.__cache
+
+        def cache_available(self) -> bool:
+            return self.__cache is not None
+
+        @property
         def all(
             self,
         ) -> List[
@@ -105,6 +117,7 @@ class IEngine:
                 BusService | None,
                 KeyValueService | None,
                 EmailService | None,
+                CacheService | None,
             ]
         ]:
             return [
@@ -115,6 +128,7 @@ class IEngine:
                 self.__bus,
                 self.__kv,
                 self.__email,
+                self.__cache,
             ]
 
         def wire_services(self) -> None:
