@@ -34,13 +34,13 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyFileNotFoundError,
     OntologyParseError,
     OntologyPathNotFoundError,
     OntologyServiceUnavailableError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationDomainAlreadyExistsError,
     OrganizationMemberAlreadyExistsError,

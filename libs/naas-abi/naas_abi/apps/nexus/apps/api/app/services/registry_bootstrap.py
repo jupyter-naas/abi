@@ -12,11 +12,11 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.secondary.postgres 
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
-from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
 from naas_abi.apps.nexus.apps.api.app.services.iam.adapters.secondary.postgres import (
     IAMSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
+from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )

@@ -5,8 +5,8 @@ Deprecated: import graph router and schemas from
 """
 
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary import (
-    GraphCreate,
     GraphClear,
+    GraphCreate,
     GraphData,
     GraphDelete,
     GraphEdge,
