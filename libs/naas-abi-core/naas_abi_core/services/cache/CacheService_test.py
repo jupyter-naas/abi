@@ -214,6 +214,68 @@ def test_two_tier_get_raises_if_absent_everywhere() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Hot-tier resilience — errors degrade gracefully to cold
+# ---------------------------------------------------------------------------
+
+
+class _BrokenAdapter(ICacheAdapter):
+    """Adapter that always raises a connection-style error."""
+
+    def get(self, key: str) -> CachedData:
+        raise OSError("Redis connection refused")
+
+    def set(self, key: str, value: CachedData) -> None:
+        raise OSError("Redis connection refused")
+
+    def set_if_absent(self, key: str, value: CachedData) -> bool:
+        raise OSError("Redis connection refused")
+
+    def delete(self, key: str) -> None:
+        raise OSError("Redis connection refused")
+
+    def exists(self, key: str) -> bool:
+        raise OSError("Redis connection refused")
+
+
+def _broken_hot_cold() -> tuple[CacheMemoryAdapter, CacheService]:
+    """Hot tier always raises; cold tier is a normal memory adapter."""
+    cold_adapter = CacheMemoryAdapter()
+    svc = CacheService(
+        adapters=[(TIER_HOT, _BrokenAdapter()), (TIER_COLD, cold_adapter)]
+    )
+    return cold_adapter, svc
+
+
+def test_broken_hot_get_falls_through_to_cold() -> None:
+    cold, cache = _broken_hot_cold()
+
+    cold.set("k", CachedData(key="k", data='{"v": 1}', data_type=DataType.JSON))
+
+    # Hot raises OSError → should fall through silently to cold
+    result = cache.get("k")
+    assert result == {"v": 1}
+
+
+def test_broken_hot_exists_falls_through_to_cold() -> None:
+    cold, cache = _broken_hot_cold()
+
+    assert cache.exists("k") is False  # cold empty
+
+    cold.set("k", CachedData(key="k", data="x", data_type=DataType.TEXT))
+    assert cache.exists("k") is True   # found in cold despite hot being broken
+
+
+def test_broken_hot_get_raises_not_found_when_cold_also_misses() -> None:
+    _, cache = _broken_hot_cold()
+
+    try:
+        cache.get("missing")
+        assert False, "Expected CacheNotFoundError"
+    except CacheNotFoundError:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Decorator (cache.__call__)
 # ---------------------------------------------------------------------------
 
