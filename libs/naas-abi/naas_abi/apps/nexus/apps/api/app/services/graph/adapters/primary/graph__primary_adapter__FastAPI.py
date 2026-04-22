@@ -12,8 +12,8 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     get_graph_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
-    GraphCreate,
     GraphClear,
+    GraphCreate,
     GraphData,
     GraphDelete,
     GraphEdge,
