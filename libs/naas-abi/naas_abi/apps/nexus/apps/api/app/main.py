@@ -2,6 +2,7 @@
 NEXUS API - Main Application Entry Point
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -25,6 +26,27 @@ from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
 from naas_abi.apps.nexus.apps.api.app.services.ollama import ensure_ollama_ready, get_ollama_status
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
+
+
+async def _prefetch_agent_class_registry() -> None:
+    """Warm up the agent class registry in a thread-pool worker.
+
+    The registry build triggers dynamic imports of all ~160 agent modules, which
+    is synchronous and CPU/IO-bound.  Running it via run_in_executor keeps the
+    event loop free during startup while ensuring the cache is hot before the
+    first GET /agents/ request arrives.
+    """
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
+            _get_agent_class_registry,
+        )
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _get_agent_class_registry)
+        _log.info("✓ Agent class registry pre-populated at startup")
+    except Exception:
+        _log.exception("Background agent registry pre-fetch failed (non-fatal)")
 
 
 async def _startup(app: FastAPI) -> None:
@@ -65,6 +87,11 @@ async def _startup(app: FastAPI) -> None:
         start_chat_ingestion_consumer(app)
     except Exception:
         logging.getLogger(__name__).exception("Unable to start chat ingestion consumer")
+
+    # Pre-populate the agent class registry in the background so the first
+    # GET /agents/ request returns instantly from cache instead of waiting
+    # for all agent modules to be imported.  create_task returns immediately.
+    asyncio.create_task(_prefetch_agent_class_registry())
 
     # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
     # print("Checking Ollama status...")
