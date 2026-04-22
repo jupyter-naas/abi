@@ -493,13 +493,9 @@ def test_inject_augments_user_message_when_collection_exists(monkeypatch) -> Non
     )
 
     @dataclass
-    class _FakeDoc:
+    class _FakeMatch:
         metadata: dict
         payload: dict
-
-    @dataclass
-    class _FakeMatch:
-        document: _FakeDoc
         score: float = 0.9
 
     class _FakeVectorStore:
@@ -509,10 +505,8 @@ def test_inject_augments_user_message_when_collection_exists(monkeypatch) -> Non
         def search_similar(self, collection_name, query_vector, k, **kwargs):
             return [
                 _FakeMatch(
-                    document=_FakeDoc(
-                        metadata={"user_id": "u", "filename": "report.txt"},
-                        payload={"text": "Important fact from the document."},
-                    )
+                    metadata={"user_id": "u", "filename": "report.txt"},
+                    payload={"text": "Important fact from the document."},
                 )
             ]
 
@@ -551,13 +545,9 @@ def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
     )
 
     @dataclass
-    class _FakeDoc:
+    class _FakeMatch:
         metadata: dict
         payload: dict
-
-    @dataclass
-    class _FakeMatch:
-        document: _FakeDoc
         score: float = 0.9
 
     class _FakeVectorStore:
@@ -567,10 +557,8 @@ def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
         def search_similar(self, collection_name, query_vector, k, **kwargs):
             return [
                 _FakeMatch(
-                    document=_FakeDoc(
-                        metadata={"user_id": "other-user", "filename": "secret.txt"},
-                        payload={"text": "Secret data belonging to another user."},
-                    )
+                    metadata={"user_id": "other-user", "filename": "secret.txt"},
+                    payload={"text": "Secret data belonging to another user."},
                 )
             ]
 
