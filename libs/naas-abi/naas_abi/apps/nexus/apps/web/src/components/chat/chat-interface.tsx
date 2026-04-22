@@ -741,6 +741,7 @@ export function ChatInterface() {
 
         let thinkingContent = '';   // Accumulated thinking text
         let responseContent = '';   // Accumulated response text
+        let streamSources: string[] = [];  // RAG source filenames
         const streamEvents: string[] = [];
         const appendStreamEvent = (eventText: string) => {
           const previous = streamEvents[streamEvents.length - 1];
@@ -838,6 +839,9 @@ export function ChatInterface() {
                 
                 try {
                   const parsed = JSON.parse(data);
+                  if (parsed.sources && Array.isArray(parsed.sources)) {
+                    streamSources = parsed.sources as string[];
+                  }
                   if (parsed.search) {
                     appendStreamEvent('Web search in progress');
                     renderStreamingMessage(true);
@@ -906,7 +910,7 @@ export function ChatInterface() {
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
         const finalContent = `${eventsSection}${finalBody}`.trim();
-        updateLastMessage(conversationId!, finalContent, thinkingDuration);
+        updateLastMessage(conversationId!, finalContent, thinkingDuration, streamSources.length > 0 ? streamSources : undefined);
       } catch (streamError) {
         // Gracefully handle user-initiated aborts
         if ((streamError as any)?.name === 'AbortError') {
@@ -917,7 +921,7 @@ export function ChatInterface() {
             ? `<think>${thinkingContent}</think>\n\n${responseContent}`
             : responseContent;
           const finalContent = `${eventsSection}${finalBody}`.trim();
-          if (conversationId) updateLastMessage(conversationId, finalContent);
+          if (conversationId) updateLastMessage(conversationId, finalContent, undefined, streamSources.length > 0 ? streamSources : undefined);
         } else {
           // Streaming-specific error - throw to outer catch for modal handling
           throw streamError as any;
@@ -963,6 +967,7 @@ export function ChatInterface() {
           content: data.message.content,
           agent: selectedAgent,
           thinkingDuration,
+          sources: data.context_used?.length > 0 ? data.context_used : undefined,
         });
       }
     } catch (error) {
@@ -1824,6 +1829,21 @@ const MessageBubble = React.memo(function MessageBubble({
             </ReactMarkdown>
           )}
         </div>
+
+        {/* Source pills — shown when RAG context was used */}
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
+            {message.sources.map((src) => (
+              <span
+                key={src}
+                className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs text-muted-foreground"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                {src}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -120,9 +120,11 @@ class ChatService:
         embedding_model: str = DEFAULT_EMBEDDING_MODEL,
         embedding_dimension: int = DEFAULT_EMBEDDING_DIMENSION,
         top_k: int = 5,
-    ) -> list[ProviderMessage]:
+    ) -> tuple[list[ProviderMessage], list[str]]:
+        _empty: tuple[list[ProviderMessage], list[str]] = (provider_messages, [])
+
         if not conversation_id:
-            return provider_messages
+            return _empty
 
         latest_user_index = -1
         latest_user_content = ""
@@ -133,21 +135,21 @@ class ChatService:
                 break
 
         if latest_user_index < 0 or not latest_user_content.strip():
-            return provider_messages
+            return _empty
 
         try:
             from naas_abi import ABIModule
 
             vector_store = ABIModule.get_instance().engine.services.vector_store
         except Exception:
-            return provider_messages
+            return _empty
 
         collection_name = build_chat_collection_name(conversation_id)
         try:
             if collection_name not in vector_store.list_collections():
-                return provider_messages
+                return _empty
         except Exception:
-            return provider_messages
+            return _empty
 
         try:
             query_vector = embed_text(
@@ -163,9 +165,10 @@ class ChatService:
                 include_metadata=True,
             )
         except Exception:
-            return provider_messages
+            return _empty
 
         context_chunks: list[str] = []
+        seen_filenames: list[str] = []
         for match in matches:
             metadata = match.metadata or {}
             if metadata.get("user_id") != user_id:
@@ -183,9 +186,11 @@ class ChatService:
 
             filename = str(metadata.get("filename") or "document")
             context_chunks.append(f"[{filename}] {chunk_text.strip()}")
+            if filename not in seen_filenames:
+                seen_filenames.append(filename)
 
         if not context_chunks:
-            return provider_messages
+            return _empty
 
         context_block = "\n\n".join(context_chunks)
         augmented = list(provider_messages)
@@ -199,7 +204,7 @@ class ChatService:
             ),
             images=augmented[latest_user_index].images,
         )
-        return augmented
+        return augmented, seen_filenames
 
     async def list_conversations(
         self,
@@ -547,6 +552,7 @@ class ChatService:
         )
 
         provider_used: str | None = None
+        context_sources: list[str] = []
         if provider:
             try:
                 provider_messages = await self.build_provider_messages_with_agents(
@@ -555,7 +561,7 @@ class ChatService:
                     current_agent_id=request.agent,
                     conversation_id=conversation_id,
                 )
-                provider_messages = self._inject_chat_vector_context(
+                provider_messages, context_sources = self._inject_chat_vector_context(
                     provider_messages=provider_messages,
                     conversation_id=conversation_id,
                     user_id=context.actor_user_id,
@@ -621,6 +627,7 @@ class ChatService:
             assistant_agent=request.agent,
             provider_used=provider_used,
             created_at=now,
+            context_sources=context_sources,
         )
 
     async def update_conversation(
