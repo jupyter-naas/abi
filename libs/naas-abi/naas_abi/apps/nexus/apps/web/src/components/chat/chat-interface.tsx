@@ -466,6 +466,7 @@ export function ChatInterface() {
     const token = useAuthStore.getState().token;
     const formData = new FormData();
     formData.append('file', file);
+    if (currentWorkspaceId) formData.append('workspace_id', currentWorkspaceId);
 
     const response = await fetch(
       `${getApiBase()}/api/chat/conversations/${conversationId}/files/upload`,
@@ -537,7 +538,7 @@ export function ChatInterface() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ source_path: sourcePath }),
+        body: JSON.stringify({ source_path: sourcePath, workspace_id: currentWorkspaceId }),
       },
     );
 
