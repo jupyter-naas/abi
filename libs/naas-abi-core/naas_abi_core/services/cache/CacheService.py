@@ -365,6 +365,10 @@ class CacheService(ServiceBase, ICacheService):
         If you want to promote, call ``cache.hot.set_*(…)`` explicitly after
         a successful cold read.
 
+        Non-``CacheNotFoundError`` / ``CacheExpiredError`` exceptions from
+        intermediate tiers (e.g. Redis connection failures) are logged as
+        warnings and treated as misses so the system degrades gracefully.
+
         Raises :class:`CacheNotFoundError` if the key is absent from every tier.
         """
         for tier_name, adapter in self._adapters:
@@ -372,13 +376,29 @@ class CacheService(ServiceBase, ICacheService):
                 return SingleTierCacheService(adapter).get(key, ttl)
             except (CacheNotFoundError, CacheExpiredError):
                 continue
+            except Exception as exc:
+                logger.warning(
+                    "Cache tier %r unavailable during get(%r), falling through: %s",
+                    tier_name, key, exc,
+                )
+                continue
         raise CacheNotFoundError(f"Cache not found in any tier: {key!r}")
 
     def exists(self, key: str) -> bool:
-        """Return True if the key exists in *any* tier (hot checked first)."""
-        for _, adapter in self._adapters:
-            if adapter.exists(key):
-                return True
+        """Return True if the key exists in *any* tier (hot checked first).
+
+        Unavailable tiers (e.g. Redis connection failure) are treated as
+        misses and logged as warnings.
+        """
+        for tier_name, adapter in self._adapters:
+            try:
+                if adapter.exists(key):
+                    return True
+            except Exception as exc:
+                logger.warning(
+                    "Cache tier %r unavailable during exists(%r), treating as miss: %s",
+                    tier_name, key, exc,
+                )
         return False
 
     # ------------------------------------------------------------------
