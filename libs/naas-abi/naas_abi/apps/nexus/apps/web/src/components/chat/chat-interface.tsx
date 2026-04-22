@@ -168,6 +168,8 @@ export function ChatInterface() {
   // Per-job ingestion status tracking
   const [ingestionJobs, setIngestionJobs] = useState<Map<string, {filename: string; status: string; progress?: number; error?: string; conversationId: string}>>(new Map());
   const ingestionAbortRefs = useRef<Map<string, AbortController>>(new Map());
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1236,7 +1238,46 @@ export function ChatInterface() {
               </div>
             )}
             
-            <div className="rounded-2xl border border-border/50 bg-card">
+            <div
+              className={cn(
+                'relative rounded-2xl border bg-card transition-colors',
+                isDragOver
+                  ? 'border-workspace-accent border-2 bg-workspace-accent/5'
+                  : 'border-border/50',
+              )}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                dragCounterRef.current += 1;
+                if (e.dataTransfer.types.includes('Files')) setIsDragOver(true);
+              }}
+              onDragLeave={() => {
+                dragCounterRef.current -= 1;
+                if (dragCounterRef.current === 0) setIsDragOver(false);
+              }}
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                dragCounterRef.current = 0;
+                setIsDragOver(false);
+                const files = Array.from(e.dataTransfer.files);
+                if (!files.length) return;
+                const docs = files.filter((f) => !f.type.startsWith('image/'));
+                const imgs = files.filter((f) => f.type.startsWith('image/'));
+                docs.forEach((f) => void uploadDocumentToChat(f).catch(() => {}));
+                if (imgs.length) {
+                  // re-use existing image attach flow via a synthetic FileList
+                  const dt = new DataTransfer();
+                  imgs.forEach((f) => dt.items.add(f));
+                  const synth = { target: { files: dt.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                  void handleImageSelect(synth);
+                }
+              }}
+            >
+              {isDragOver && (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl">
+                  <span className="text-sm font-medium text-workspace-accent">Drop file to attach</span>
+                </div>
+              )}
               {/* Hidden file input */}
               <input
                 ref={fileInputRef}
