@@ -312,14 +312,9 @@ export function ChatInterface() {
       if (status === 'ready' && conversation_id) {
         setIngestionJobs((prev) => {
           const existing = prev.get(job_id);
-          const filename = existing?.filename ?? 'file';
-          const cacheLabel = cache_hit ? 'cache hit' : 'cache miss';
-          addMessage(conversation_id, {
-            role: 'system',
-            content: `\`${filename}\` indexed for this chat (${cacheLabel})${chunks_count ? ` — ${chunks_count} chunks` : ''}.`,
-          });
+          if (!existing) return prev;
           const next = new Map(prev);
-          next.delete(job_id);
+          next.set(job_id, { ...existing, status: 'uploaded' });
           return next;
         });
         // Abort the fallback polling loop since WS delivered the result
@@ -441,12 +436,12 @@ export function ChatInterface() {
         });
 
         if (job.status === 'ready') {
-          const cacheLabel = job.cache_hit ? 'cache hit' : 'cache miss';
-          addMessage(conversationId, {
-            role: 'system',
-            content: `\`${filename}\` indexed for this chat (${cacheLabel}).`,
+          setIngestionJobs((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(jobId);
+            if (existing) next.set(jobId, { ...existing, status: 'uploaded' });
+            return next;
           });
-          setIngestionJobs((prev) => { const next = new Map(prev); next.delete(jobId); return next; });
           return;
         }
 
@@ -499,11 +494,12 @@ export function ChatInterface() {
     const result = await response.json();
 
     if (!result.job_id) {
-      // Synchronous ingestion result (small file, cache hit)
-      const cacheLabel = result.cache_hit ? 'cache hit' : 'cache miss';
-      addMessage(conversationId, {
-        role: 'system',
-        content: `\`${file.name}\` indexed for this chat (${cacheLabel}).`,
+      // Synchronous ingestion result (small file, cache hit) — show uploaded state in bar
+      const syncJobId = `sync-${file.name}-${Date.now()}`;
+      setIngestionJobs((prev) => {
+        const next = new Map(prev);
+        next.set(syncJobId, { filename: file.name, status: 'uploaded', conversationId });
+        return next;
       });
       return;
     }
@@ -564,10 +560,12 @@ export function ChatInterface() {
     const result = await res.json();
 
     if (!result.job_id) {
-      const cacheLabel = result.cache_hit ? 'cache hit' : 'cache miss';
-      addMessage(conversationId, {
-        role: 'system',
-        content: `\`${filename}\` indexed from My Drive (${cacheLabel}).`,
+      // Synchronous ingestion (cache hit) — show uploaded state in bar
+      const syncJobId = `sync-${filename}-${Date.now()}`;
+      setIngestionJobs((prev) => {
+        const next = new Map(prev);
+        next.set(syncJobId, { filename, status: 'uploaded', conversationId });
+        return next;
       });
       return;
     }
@@ -1476,6 +1474,7 @@ export function ChatInterface() {
               <div className="mb-2 flex flex-col gap-1">
                 {Array.from(ingestionJobs.entries()).map(([jobId, job]) => {
                   const isFailed = job.status === 'failed';
+                  const isUploaded = job.status === 'uploaded';
                   return (
                     <div
                       key={jobId}
@@ -1483,18 +1482,24 @@ export function ChatInterface() {
                         'flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
                         isFailed
                           ? 'bg-destructive/10 text-destructive'
-                          : 'bg-muted text-muted-foreground',
+                          : isUploaded
+                            ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                            : 'bg-muted text-muted-foreground',
                       )}
                     >
                       {isFailed ? (
                         <AlertCircle size={14} className="shrink-0" />
+                      ) : isUploaded ? (
+                        <Check size={14} className="shrink-0" />
                       ) : (
                         <Loader2 size={14} className="shrink-0 animate-spin" />
                       )}
                       <span className="flex-1 truncate">
                         {isFailed
                           ? `Failed: ${job.filename}${job.error ? ` — ${job.error}` : ''}`
-                          : `${job.filename} — ${job.status}${job.progress != null ? ` (${job.progress}%)` : ''}`}
+                          : isUploaded
+                            ? `${job.filename} — uploaded`
+                            : `${job.filename} — ${job.status}${job.progress != null ? ` (${job.progress}%)` : ''}`}
                       </span>
                       {isFailed && (
                         <button
@@ -1508,6 +1513,16 @@ export function ChatInterface() {
                         >
                           <RefreshCw size={11} />
                           Retry
+                        </button>
+                      )}
+                      {isUploaded && (
+                        <button
+                          type="button"
+                          title="Dismiss"
+                          className="ml-1 shrink-0 rounded-md p-0.5 hover:bg-green-500/20"
+                          onClick={() => setIngestionJobs((prev) => { const next = new Map(prev); next.delete(jobId); return next; })}
+                        >
+                          <X size={11} />
                         </button>
                       )}
                     </div>

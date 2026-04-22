@@ -153,21 +153,6 @@ export function FilesSection({ collapsed }: { collapsed: boolean }) {
           <div className="ml-3 space-y-0.5">
             <button
               onClick={() => {
-                setActiveSource('workspace');
-                router.push(getWorkspacePath(currentWorkspaceId, '/files'));
-              }}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
-                'hover:bg-workspace-accent-10',
-                activeSource === 'workspace' && 'bg-workspace-accent-15 text-workspace-accent'
-              )}
-            >
-              <HardDrive size={12} className="text-muted-foreground" />
-              <span className="flex-1 truncate text-left">Workspace</span>
-            </button>
-
-            <button
-              onClick={() => {
                 setActiveSource('my-drive');
                 router.push(getWorkspacePath(currentWorkspaceId, '/files'));
               }}
@@ -179,6 +164,21 @@ export function FilesSection({ collapsed }: { collapsed: boolean }) {
             >
               <HardDrive size={12} className="text-muted-foreground" />
               <span className="flex-1 truncate text-left">My Drive</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveSource('workspace');
+                router.push(getWorkspacePath(currentWorkspaceId, '/files'));
+              }}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                'hover:bg-workspace-accent-10',
+                activeSource === 'workspace' && 'bg-workspace-accent-15 text-workspace-accent'
+              )}
+            >
+              <HardDrive size={12} className="text-muted-foreground" />
+              <span className="flex-1 truncate text-left">Workspace Drive</span>
             </button>
 
             {syncedFolders.map((folder) => (

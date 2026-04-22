@@ -38,8 +38,8 @@ export interface StorageSource {
 // Default storage sources
 export const defaultStorageSources: StorageSource[] = [
   // Local - default workspace storage on server
-  { id: 'workspace', name: 'Workspace', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Workspace files (create, edit, upload)' },
   { id: 'my-drive', name: 'My Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Personal files shared across workspaces' },
+  { id: 'workspace', name: 'Workspace Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Workspace files (create, edit, upload)' },
   
   // Cloud sources - third-party cloud storage
   { id: 'google-drive', name: 'Google Drive', icon: 'cloud', category: 'cloud', enabled: false, connected: false, description: 'Sync with Google Drive' },

@@ -5,6 +5,7 @@ import io
 import re
 import uuid
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
@@ -21,6 +22,15 @@ from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
+
+# Callback type: (stage_name, overall_progress_pct 0-100) -> None
+ProgressCallback = Callable[[str, int], None]
+
+# PDF conversion: progress spans 30 % → 70 % of the overall job
+_PDF_PROGRESS_START = 30
+_PDF_PROGRESS_END = 70
+# Number of progress updates to emit during PDF conversion (approx)
+_PDF_PROGRESS_STEPS = 20
 
 
 class ChatFileIngestionError(Exception):
@@ -63,6 +73,7 @@ class ChatFileIngestionService:
         content: bytes,
         embedding_model: str = "hash-v1",
         embedding_dimension: int = 256,
+        on_progress: ProgressCallback | None = None,
     ) -> ChatFileIngestionResult:
         safe_filename = PurePosixPath(filename or "untitled").name
         if not safe_filename:
@@ -77,6 +88,7 @@ class ChatFileIngestionService:
             source_path=source_path,
             embedding_model=embedding_model,
             embedding_dimension=embedding_dimension,
+            on_progress=on_progress,
         )
 
     def ingest_from_path(
@@ -86,6 +98,7 @@ class ChatFileIngestionService:
         source_path: str,
         embedding_model: str = "hash-v1",
         embedding_dimension: int = 256,
+        on_progress: ProgressCallback | None = None,
     ) -> ChatFileIngestionResult:
         statuses = ["hashing", "cache_lookup"]
 
@@ -124,15 +137,41 @@ class ChatFileIngestionService:
                 vectors = [np.array(v, dtype=float) for v in cached_vectors]
                 cache_hit = True
                 statuses.append("reusing_vectors")
+                if on_progress:
+                    on_progress("reusing_vectors", 90)
 
         if not cache_hit:
             statuses.extend(["converting", "chunking", "vectorizing"])
-            markdown = self._to_markdown(normalized_source, file_content)
+
+            # --- Converting ---
+            if on_progress:
+                on_progress("converting", _PDF_PROGRESS_START)
+            markdown = self._to_markdown(normalized_source, file_content, on_progress=on_progress)
             if not markdown.strip():
                 raise ChatFileIngestionError("Empty content extracted from file")
-            chunks = chunk_markdown(markdown)
-            vectors = embed_texts(chunks, embedding_model, embedding_dimension)
 
+            # --- Chunking ---
+            if on_progress:
+                on_progress("chunking", 72)
+            chunks = chunk_markdown(markdown)
+
+            # --- Vectorizing ---
+            if on_progress:
+                on_progress("vectorizing", 75)
+
+            def _embed_progress(batch_pct: int) -> None:
+                # Map 0-100 embed progress → 75-90% overall
+                if on_progress:
+                    on_progress("vectorizing", 75 + int(batch_pct * 0.15))
+
+            vectors = embed_texts(
+                chunks,
+                embedding_model,
+                embedding_dimension,
+                on_progress=_embed_progress if on_progress else None,
+            )
+
+            # --- Cache write ---
             payload = {
                 "schema_version": 1,
                 "file_sha256": file_sha,
@@ -146,6 +185,12 @@ class ChatFileIngestionService:
             }
             self.cache_service.set_json_if_absent(cache_key, payload)
 
+        # "upserting" progress applies to both cache-hit and cache-miss paths.
+        # Emit it here so the UI always shows the upsert stage while batches
+        # are written to the vector store.
+        if on_progress:
+            on_progress("upserting", 92)
+
         self._upsert_chunks(
             collection_name=collection_name,
             chunks=chunks,
@@ -157,6 +202,7 @@ class ChatFileIngestionService:
             embedding_model=embedding_model,
             embedding_dimension=embedding_dimension,
             cache_hit=cache_hit,
+            on_progress=on_progress,
         )
 
         statuses.append("ready")
@@ -191,6 +237,7 @@ class ChatFileIngestionService:
         embedding_model: str,
         embedding_dimension: int,
         cache_hit: bool,
+        on_progress: ProgressCallback | None = None,
     ) -> None:
         if not chunks:
             raise ChatFileIngestionError("No chunks generated from content")
@@ -203,11 +250,20 @@ class ChatFileIngestionService:
             distance_metric="cosine",
         )
 
+        # Qdrant has a default payload size limit of 32 MB per upsert request.
+        # For large documents (hundreds of pages) a single batch of all chunks
+        # easily exceeds that: 1536-dim vectors alone are ~12 bytes/float as
+        # JSON, so 2000 chunks × 1536 dims ≈ 36 MB.  We therefore upsert in
+        # fixed-size batches that keep each request well under the limit.
+        _UPSERT_BATCH = 100
+
         now_iso = datetime.now(UTC).isoformat()
+        filename = PurePosixPath(source_path).name
+
+        # Pre-build all IDs, metadata, and payloads.
         ids: list[str] = []
         metadata: list[dict] = []
         payloads: list[dict] = []
-        filename = PurePosixPath(source_path).name
 
         for index, chunk in enumerate(chunks):
             # Qdrant requires point IDs to be unsigned integers or UUIDs.
@@ -217,6 +273,10 @@ class ChatFileIngestionService:
             ).hexdigest()
             doc_id = str(uuid.UUID(hex=raw[:32]))
             ids.append(doc_id)
+            # NOTE: do NOT store chunk_text in metadata — it would duplicate the
+            # text that is already stored in the payload ({"text": chunk}) and
+            # double the request size.  The search service reads payload["text"]
+            # first and only falls back to metadata["chunk_text"] for legacy points.
             metadata.append(
                 {
                     "thread_id": conversation_id,
@@ -229,20 +289,34 @@ class ChatFileIngestionService:
                     "cache_hit": cache_hit,
                     "chunk_index": index,
                     "ingested_at": now_iso,
-                    "chunk_text": chunk,
                 }
             )
             payloads.append({"text": chunk})
 
-        self.vector_store.add_documents(
-            collection_name=collection_name,
-            ids=ids,
-            vectors=vectors,
-            metadata=metadata,
-            payloads=payloads,
-        )
+        # Upsert in batches to stay under Qdrant's payload size limit.
+        # Report progress from 92 % → 99 % so the UI shows movement while
+        # batches are written (the worker emits the final 100 % as "ready").
+        total = len(ids)
+        for start in range(0, total, _UPSERT_BATCH):
+            end = min(start + _UPSERT_BATCH, total)
+            self.vector_store.add_documents(
+                collection_name=collection_name,
+                ids=ids[start:end],
+                vectors=vectors[start:end],
+                metadata=metadata[start:end],
+                payloads=payloads[start:end],
+            )
+            if on_progress:
+                # Map batch completion (0-100) to 92-99 % overall.
+                batch_pct = int(end / total * 100)
+                on_progress("upserting", 92 + int(batch_pct * 0.07))
 
-    def _to_markdown(self, source_path: str, content: bytes) -> str:
+    def _to_markdown(
+        self,
+        source_path: str,
+        content: bytes,
+        on_progress: ProgressCallback | None = None,
+    ) -> str:
         ext = PurePosixPath(source_path).suffix.lower()
         if ext in {".md", ".txt", ".py", ".json", ".yaml", ".yml", ".csv"}:
             return content.decode("utf-8")
@@ -253,19 +327,60 @@ class ChatFileIngestionService:
         if ext == ".xlsx":
             return self._xlsx_to_markdown(content)
         if ext == ".pdf":
-            try:
-                import pymupdf4llm
-            except ImportError as exc:
-                raise ChatFileIngestionError("PDF support requires pymupdf4llm") from exc
-
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(suffix=".pdf") as temp:
-                temp.write(content)
-                temp.flush()
-                return str(pymupdf4llm.to_markdown(temp.name))
-
+            return self._pdf_to_markdown(content, on_progress=on_progress)
         raise ChatFileIngestionError(f"Unsupported file type: {ext}")
+
+    @staticmethod
+    def _pdf_to_markdown(
+        content: bytes,
+        on_progress: ProgressCallback | None = None,
+    ) -> str:
+        """Convert a PDF to Markdown.
+
+        When *on_progress* is supplied and the document has more than
+        ``_PDF_PROGRESS_STEPS`` pages, the conversion is performed in batches
+        so the caller receives incremental progress events in the
+        ``_PDF_PROGRESS_START`` → ``_PDF_PROGRESS_END`` percent range.
+        """
+        try:
+            import pymupdf4llm
+        except ImportError as exc:
+            raise ChatFileIngestionError("PDF support requires pymupdf4llm") from exc
+
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+            tmp.write(content)
+            tmp.flush()
+
+            if on_progress is not None:
+                # Try to count pages and process in batches for granular progress.
+                try:
+                    import fitz  # PyMuPDF — always available as a pymupdf4llm dep
+
+                    with fitz.open(tmp.name) as doc:
+                        total_pages = len(doc)
+
+                    if total_pages > _PDF_PROGRESS_STEPS:
+                        batch_size = max(1, total_pages // _PDF_PROGRESS_STEPS)
+                        parts: list[str] = []
+                        for start in range(0, total_pages, batch_size):
+                            end = min(start + batch_size, total_pages)
+                            pages = list(range(start, end))
+                            part = str(pymupdf4llm.to_markdown(tmp.name, pages=pages))
+                            parts.append(part)
+                            pct = _PDF_PROGRESS_START + int(
+                                (end / total_pages)
+                                * (_PDF_PROGRESS_END - _PDF_PROGRESS_START)
+                            )
+                            on_progress("converting", pct)
+                        return "\n\n".join(parts)
+                except Exception:
+                    # fitz not available or page-batch failed — fall through to
+                    # the single-call path; progress will stall at 30 % until done.
+                    pass
+
+            return str(pymupdf4llm.to_markdown(tmp.name))
 
     @staticmethod
     def _docx_to_markdown(content: bytes) -> str:
