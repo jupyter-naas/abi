@@ -409,7 +409,7 @@ def _msg(role: str, content: str) -> ProviderMessage:
 def test_inject_returns_unchanged_when_no_conversation_id() -> None:
     service = _make_service_with_no_adapter()
     msgs = [_msg("user", "What is the capital of France?")]
-    result = service._inject_chat_vector_context(
+    result, sources = service._inject_chat_vector_context(
         provider_messages=msgs,
         conversation_id=None,
         user_id="u",
@@ -417,12 +417,13 @@ def test_inject_returns_unchanged_when_no_conversation_id() -> None:
         embedding_dimension=32,
     )
     assert result == msgs
+    assert sources == []
 
 
 def test_inject_returns_unchanged_when_no_user_message() -> None:
     service = _make_service_with_no_adapter()
     msgs = [_msg("system", "You are an assistant.")]
-    result = service._inject_chat_vector_context(
+    result, sources = service._inject_chat_vector_context(
         provider_messages=msgs,
         conversation_id="conv-1",
         user_id="u",
@@ -430,6 +431,7 @@ def test_inject_returns_unchanged_when_no_user_message() -> None:
         embedding_dimension=32,
     )
     assert result == msgs
+    assert sources == []
 
 
 def test_inject_returns_unchanged_when_abimmodule_unavailable() -> None:
@@ -437,7 +439,7 @@ def test_inject_returns_unchanged_when_abimmodule_unavailable() -> None:
     service = _make_service_with_no_adapter()
     msgs = [_msg("user", "Tell me about the document.")]
     # ABIModule.get_instance() will raise or return None in this context → graceful fallback
-    result = service._inject_chat_vector_context(
+    result, sources = service._inject_chat_vector_context(
         provider_messages=msgs,
         conversation_id="conv-1",
         user_id="u",
@@ -446,6 +448,7 @@ def test_inject_returns_unchanged_when_abimmodule_unavailable() -> None:
     )
     # Should return the original messages unchanged (no crash)
     assert result is msgs or result == msgs
+    assert sources == []
 
 
 def test_inject_returns_unchanged_when_collection_does_not_exist(monkeypatch) -> None:
@@ -475,7 +478,7 @@ def test_inject_returns_unchanged_when_collection_does_not_exist(monkeypatch) ->
 
     service = _make_service_with_no_adapter()
     msgs = [_msg("user", "Tell me about the document.")]
-    result = service._inject_chat_vector_context(
+    result, sources = service._inject_chat_vector_context(
         provider_messages=msgs,
         conversation_id="conv-1",
         user_id="u",
@@ -483,6 +486,7 @@ def test_inject_returns_unchanged_when_collection_does_not_exist(monkeypatch) ->
         embedding_dimension=32,
     )
     assert result == msgs
+    assert sources == []
 
 
 def test_inject_augments_user_message_when_collection_exists(monkeypatch) -> None:
@@ -525,7 +529,7 @@ def test_inject_augments_user_message_when_collection_exists(monkeypatch) -> Non
 
     service = _make_service_with_no_adapter()
     msgs = [_msg("user", "Tell me about the document.")]
-    result = service._inject_chat_vector_context(
+    result, sources = service._inject_chat_vector_context(
         provider_messages=msgs,
         conversation_id="conv-1",
         user_id="u",
@@ -536,6 +540,7 @@ def test_inject_augments_user_message_when_collection_exists(monkeypatch) -> Non
     assert len(result) == 1
     assert "DOCUMENT CONTEXT" in result[0].content
     assert "Important fact from the document." in result[0].content
+    assert sources == ["report.txt"]
 
 
 def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
@@ -577,7 +582,7 @@ def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
 
     service = _make_service_with_no_adapter()
     msgs = [_msg("user", "Tell me about the document.")]
-    result = service._inject_chat_vector_context(
+    result, sources = service._inject_chat_vector_context(
         provider_messages=msgs,
         conversation_id="conv-1",
         user_id="u",    # different from "other-user"
@@ -586,3 +591,4 @@ def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
     )
     # No chunks from other-user → message must be unaugmented
     assert result == msgs
+    assert sources == []

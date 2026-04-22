@@ -354,7 +354,7 @@ async def complete_chat(
             agent=result.assistant_agent,
             created_at=datetime.now(UTC),
         ),
-        context_used=[],
+        context_used=result.context_sources,
         provider_used=result.provider_used,
     )
 

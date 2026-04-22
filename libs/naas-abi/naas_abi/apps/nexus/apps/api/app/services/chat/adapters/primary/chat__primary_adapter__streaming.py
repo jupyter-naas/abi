@@ -111,7 +111,7 @@ async def stream_chat_response(
                     db=db,
                     conversation_id=conversation_id,
                 )
-                provider_messages = registry.chat._inject_chat_vector_context(
+                provider_messages, context_sources = registry.chat._inject_chat_vector_context(
                     provider_messages=provider_messages,
                     conversation_id=conversation_id,
                     user_id=current_user.id,
@@ -214,6 +214,8 @@ async def stream_chat_response(
 
         try:
             yield f'data: {{"conversation_id": "{conversation_id}"}}\n\n'
+            if context_sources:
+                yield f'data: {json.dumps({"sources": context_sources})}\n\n'
             if search_context:
                 yield 'data: {"search": true}\n\n'
 
