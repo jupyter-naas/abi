@@ -168,7 +168,7 @@ async def upload_file_for_chat(
             workspace_id=workspace_id,
             title="New Conversation",
             agent="aia",
-            now=datetime.now(UTC),
+            now=datetime.now(UTC).replace(tzinfo=None),
             conversation_id=conversation_id,
         )
 
@@ -244,7 +244,7 @@ async def ingest_my_drive_file_for_chat(
             workspace_id=payload.workspace_id,
             title="New Conversation",
             agent="aia",
-            now=datetime.now(UTC),
+            now=datetime.now(UTC).replace(tzinfo=None),
             conversation_id=conversation_id,
         )
 
