@@ -5,20 +5,19 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import numpy as np
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     ChatInputMessage,
     CompleteChatInput,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.port import ChatConversationRecord
-from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService, ResolvedProvider
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
     RequestContext,
     TokenData,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 
 
 def _conversation(now: datetime) -> ChatConversationRecord:
@@ -492,7 +491,6 @@ def test_inject_returns_unchanged_when_collection_does_not_exist(monkeypatch) ->
 def test_inject_augments_user_message_when_collection_exists(monkeypatch) -> None:
     """When matching chunks exist the last user message must include the context block."""
     from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import (
-        embed_text_hash,
         build_chat_collection_name,
     )
 

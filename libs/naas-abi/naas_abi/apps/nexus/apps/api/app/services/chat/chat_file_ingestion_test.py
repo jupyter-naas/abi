@@ -5,13 +5,12 @@ import zipfile
 from dataclasses import dataclass
 
 import pytest
-
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
     ChatFileIngestionError,
     ChatFileIngestionService,
 )
 from naas_abi_core.services.cache.CachePort import CachedData, CacheNotFoundError
-from naas_abi_core.services.cache.CacheService import CacheService, TIER_COLD
+from naas_abi_core.services.cache.CacheService import TIER_COLD, CacheService
 
 # ---------------------------------------------------------------------------
 # In-memory test doubles

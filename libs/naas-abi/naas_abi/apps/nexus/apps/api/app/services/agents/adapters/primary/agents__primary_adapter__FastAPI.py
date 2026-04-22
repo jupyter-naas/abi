@@ -34,11 +34,11 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 # themselves never change at runtime, so we compute the mapping once and
 # reuse it for every subsequent request.
 # ---------------------------------------------------------------------------
-_agent_class_registry: dict[str, "type[Agent]"] | None = None  # noqa: F821
+_agent_class_registry: dict[str, type[Agent]] | None = None  # noqa: F821
 _agent_class_registry_lock = threading.Lock()
 
 
-def _get_agent_class_registry() -> "dict[str, type[Agent]]":  # noqa: F821
+def _get_agent_class_registry() -> dict[str, type[Agent]]:  # noqa: F821
     """Return (and lazily build) the process-level agent class registry.
 
     Thread-safe double-checked locking ensures the expensive discovery runs

@@ -1,5 +1,4 @@
 import numpy as np
-
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import (
     build_chat_collection_name,
     build_embedding_cache_key,
