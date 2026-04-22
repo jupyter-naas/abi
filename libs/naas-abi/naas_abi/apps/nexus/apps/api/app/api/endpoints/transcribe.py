@@ -17,11 +17,7 @@ router = APIRouter()
 def get_api_key():
     from naas_abi import ABIModule
 
-    api_key = (
-        ABIModule.get_instance()
-        .engine.modules["naas_abi_marketplace.ai.chatgpt"]
-        .configuration.openai_api_key
-    )
+    api_key = ABIModule.get_instance().engine.services.secret.get("OPENAI_API_KEY")
     assert api_key is not None
     return api_key
 
