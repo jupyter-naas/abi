@@ -324,3 +324,59 @@ def test_ingest_bad_docx_raises() -> None:
             user_id="u", conversation_id="c", filename="bad.docx",
             content=b"not a zip", embedding_model="hash-v1", embedding_dimension=32,
         )
+
+
+def _minimal_xlsx(sheets: dict[str, list[list[object]]]) -> bytes:
+    """Build an in-memory .xlsx with the given {sheet_name: [[row]]} data."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)  # remove default empty sheet
+    for sheet_name, rows in sheets.items():
+        ws = wb.create_sheet(title=sheet_name)
+        for row in rows:
+            ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_ingest_xlsx_single_sheet() -> None:
+    """A single-sheet workbook produces a Markdown table with the sheet as heading."""
+    service = _make_service()
+    content = _minimal_xlsx({
+        "Sales": [
+            ["Name", "Q1", "Q2"],
+            ["Alice", 100, 200],
+            ["Bob", 150, 250],
+        ]
+    })
+    result = service.upload_and_ingest(
+        user_id="u", conversation_id="c", filename="report.xlsx",
+        content=content, embedding_model="hash-v1", embedding_dimension=32,
+    )
+    assert result.chunks_count > 0
+    assert result.cache_hit is False
+
+
+def test_ingest_xlsx_multiple_sheets() -> None:
+    """Multi-sheet workbooks include a heading per sheet."""
+    service = _make_service()
+    content = _minimal_xlsx({
+        "Sheet1": [["A", "B"], [1, 2]],
+        "Sheet2": [["X", "Y"], [3, 4]],
+    })
+    result = service.upload_and_ingest(
+        user_id="u", conversation_id="c", filename="multi.xlsx",
+        content=content, embedding_model="hash-v1", embedding_dimension=32,
+    )
+    assert result.chunks_count > 0
+
+
+def test_ingest_xlsx_bad_content_raises() -> None:
+    service = _make_service()
+    with pytest.raises(ChatFileIngestionError, match="Invalid XLSX"):
+        service.upload_and_ingest(
+            user_id="u", conversation_id="c", filename="bad.xlsx",
+            content=b"not an xlsx", embedding_model="hash-v1", embedding_dimension=32,
+        )
