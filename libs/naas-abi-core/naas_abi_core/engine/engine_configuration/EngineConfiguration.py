@@ -12,9 +12,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_CacheService import (
-    CacheAdapterConfiguration,
+    CacheAdapterEntry,
     CacheAdapterFSConfiguration,
     CacheServiceConfiguration,
+    TIER_COLD,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
@@ -125,12 +126,13 @@ class ServicesConfiguration(BaseModel):
         )
     )
     cache: CacheServiceConfiguration = CacheServiceConfiguration(
-        cache_adapter=CacheAdapterConfiguration(
-            adapter="fs",
-            config=CacheAdapterFSConfiguration(
-                base_path="storage/cache",
-            ).model_dump(),
-        )
+        adapters=[
+            CacheAdapterEntry(
+                adapter="fs",
+                tier=TIER_COLD,
+                config=CacheAdapterFSConfiguration(base_path="storage/cache").model_dump(),
+            )
+        ]
     )
 
 

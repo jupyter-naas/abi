@@ -1,43 +1,48 @@
 """Engine configuration for the Cache service.
 
-Supported adapters
-------------------
-* ``fs``             – file-system backed (default, no external dependency)
+Supported adapters per tier
+---------------------------
+* ``fs``             – file-system backed (no external dependency)
 * ``redis``          – Redis backed (requires ``redis`` package)
-* ``object_storage`` – object-storage backed; wired automatically after the
-                       engine starts, so it shares the same object-storage
-                       instance as the rest of the engine.
+* ``object_storage`` – uses the engine's ObjectStorageService, wired
+                       automatically once the engine starts
 
-Example YAML configuration
---------------------------
+Tier conventions
+----------------
+* ``hot``  – fast, possibly volatile (Redis, in-memory)
+* ``cold`` – durable, slower (object-storage, filesystem) [**default**]
+
+Example: single cold tier (default, equivalent to the previous single-adapter API)
 ::
 
     services:
       cache:
-        cache_adapter:
-          adapter: "redis"
-          config:
-            redis_url: "{{ secret.REDIS_URL }}"
-            prefix: "naas:cache"
+        adapters:
+          - adapter: fs
+            tier: cold
+            config:
+              base_path: "storage/cache"
+
+Example: Redis hot + object-storage cold
+::
 
     services:
       cache:
-        cache_adapter:
-          adapter: "object_storage"
-          config:
-            cache_prefix: "cache"
-
-    services:
-      cache:
-        cache_adapter:
-          adapter: "fs"
-          config:
-            base_path: "storage/cache"
+        adapters:
+          - adapter: redis
+            tier: hot
+            config:
+              redis_url: "{{ secret.REDIS_URL }}"
+              prefix: "naas:cache"
+          - adapter: object_storage
+            tier: cold
+            config:
+              cache_prefix: "cache"
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
@@ -45,12 +50,16 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
-from naas_abi_core.services.cache.CachePort import ICacheAdapter
+from naas_abi_core.services.cache.CachePort import CachedData, ICacheAdapter
 from naas_abi_core.services.cache.CacheService import CacheService
 from pydantic import BaseModel, ConfigDict, model_validator
 
 if TYPE_CHECKING:
     from naas_abi_core.engine.IEngine import IEngine
+
+# Tier name constants — defined early so they can be used as defaults below
+TIER_HOT = "hot"
+TIER_COLD = "cold"
 
 
 # ---------------------------------------------------------------------------
@@ -59,133 +68,116 @@ if TYPE_CHECKING:
 
 
 class CacheAdapterFSConfiguration(BaseModel):
-    """File-system cache adapter configuration."""
-
     model_config = ConfigDict(extra="forbid")
-
     base_path: str = "storage/cache"
 
 
 class CacheAdapterRedisConfiguration(BaseModel):
-    """Redis cache adapter configuration."""
-
     model_config = ConfigDict(extra="forbid")
-
     redis_url: str = "redis://localhost:6379/0"
     prefix: str = "naas:cache"
     socket_timeout: float | None = None
 
 
 class CacheAdapterObjectStorageConfiguration(BaseModel):
-    """Object-storage cache adapter configuration.
-
-    The ``ObjectStorageService`` is injected automatically when the engine
-    wires its services, so no connection parameters are needed here.
-    """
-
+    """Object-storage adapter — ObjectStorageService injected at engine wiring time."""
     model_config = ConfigDict(extra="forbid")
-
     cache_prefix: str = "cache"
 
 
 # ---------------------------------------------------------------------------
-# Deferred object-storage backed CacheService
+# Deferred object-storage adapter (wired via engine's wire_services())
 # ---------------------------------------------------------------------------
 
 
 class _NoOpCacheAdapter(ICacheAdapter):
-    """Placeholder adapter that fails loudly if called before wiring."""
+    """Placeholder that raises loudly if called before wiring."""
 
-    def _fail(self) -> None:  # pragma: no cover
+    def _fail(self) -> Any:  # pragma: no cover
         raise RuntimeError(
-            "ObjectStorageBackedCacheService has not been wired yet. "
-            "Ensure engine.wire_services() is called before using this service."
+            "ObjectStorageBackedAdapter has not been wired yet. "
+            "Ensure engine.wire_services() is called before using the cache."
         )
 
-    def get(self, key):  # type: ignore[override]
-        self._fail()
-
-    def set(self, key, value):  # type: ignore[override]
-        self._fail()
-
-    def set_if_absent(self, key, value):  # type: ignore[override]
-        self._fail()
-
-    def delete(self, key):  # type: ignore[override]
-        self._fail()
-
-    def exists(self, key):  # type: ignore[override]
-        self._fail()
+    def get(self, key: str) -> CachedData: return self._fail()  # type: ignore[return-value]
+    def set(self, key: str, value: CachedData) -> None: self._fail()
+    def set_if_absent(self, key: str, value: CachedData) -> bool: return self._fail()  # type: ignore[return-value]
+    def delete(self, key: str) -> None: self._fail()
+    def exists(self, key: str) -> bool: return self._fail()  # type: ignore[return-value]
 
 
-class ObjectStorageBackedCacheService(CacheService):
-    """CacheService that lazily wires its object-storage adapter.
+class ObjectStorageBackedAdapter(ICacheAdapter):
+    """ICacheAdapter that lazily initialises CacheObjectStorageAdapter.
 
-    When the engine calls ``wire_services()`` this subclass replaces the
-    placeholder adapter with a real ``CacheObjectStorageAdapter`` using the
-    already-loaded ``ObjectStorageService``.
+    ``wire_services(services)`` is called by ``CacheService.set_services()``
+    during engine startup, after ``ObjectStorageService`` is available.
     """
 
     def __init__(self, cache_prefix: str = "cache") -> None:
-        super().__init__(adapter=_NoOpCacheAdapter())
         self._cache_prefix = cache_prefix
+        self._inner: ICacheAdapter = _NoOpCacheAdapter()
 
-    def set_services(self, services: "IEngine.Services") -> None:
-        super().set_services(services)
+    def wire_services(self, services: "IEngine.Services") -> None:
         from naas_abi_core.services.cache.adapters.secondary.CacheObjectStorageAdapter import (
             CacheObjectStorageAdapter,
         )
-
-        self.adapter = CacheObjectStorageAdapter(
+        self._inner = CacheObjectStorageAdapter(
             object_storage=services.object_storage,
             prefix=self._cache_prefix,
         )
 
+    def get(self, key: str) -> CachedData:
+        return self._inner.get(key)
+
+    def set(self, key: str, value: CachedData) -> None:
+        self._inner.set(key, value)
+
+    def set_if_absent(self, key: str, value: CachedData) -> bool:
+        return self._inner.set_if_absent(key, value)
+
+    def delete(self, key: str) -> None:
+        self._inner.delete(key)
+
+    def exists(self, key: str) -> bool:
+        return self._inner.exists(key)
+
 
 # ---------------------------------------------------------------------------
-# Unified adapter configuration
+# Per-entry adapter configuration (one entry = one tier)
 # ---------------------------------------------------------------------------
 
 
-class CacheAdapterConfiguration(GenericLoader):
+class CacheAdapterEntry(GenericLoader):
+    """One adapter entry in the cache stack."""
+
     adapter: Literal["fs", "redis", "object_storage", "custom"]
+    tier: str = TIER_COLD  # "hot" | "cold" | any custom name
     config: dict | None = None
 
     @model_validator(mode="after")
-    def validate_adapter(self) -> "CacheAdapterConfiguration":
+    def _validate(self) -> "CacheAdapterEntry":
         if self.adapter == "custom":
             return self
-
         assert self.config is not None, (
-            "config is required when adapter is not 'custom'"
+            f"config is required for adapter={self.adapter!r}"
         )
-
-        if self.adapter == "fs":
+        validators = {
+            "fs": (CacheAdapterFSConfiguration, "fs"),
+            "redis": (CacheAdapterRedisConfiguration, "redis"),
+            "object_storage": (CacheAdapterObjectStorageConfiguration, "object_storage"),
+        }
+        if self.adapter in validators:
+            model, name = validators[self.adapter]
             pydantic_model_validator(
-                CacheAdapterFSConfiguration,
+                model,
                 self.config,
-                "Invalid configuration for services.cache.cache_adapter 'fs' adapter",
+                f"Invalid config for services.cache adapter {name!r}",
             )
-        elif self.adapter == "redis":
-            pydantic_model_validator(
-                CacheAdapterRedisConfiguration,
-                self.config,
-                "Invalid configuration for services.cache.cache_adapter 'redis' adapter",
-            )
-        elif self.adapter == "object_storage":
-            pydantic_model_validator(
-                CacheAdapterObjectStorageConfiguration,
-                self.config,
-                "Invalid configuration for services.cache.cache_adapter 'object_storage' adapter",
-            )
-
         return self
 
-    def load(self) -> CacheService:  # type: ignore[override]
-        """Return a fully constructed (or deferred) ``CacheService``."""
-
+    def load_adapter(self) -> ICacheAdapter:
+        """Instantiate and return the raw ``ICacheAdapter``."""
         if self.adapter == "custom":
-            # GenericLoader.load() instantiates an arbitrary class from config
             return super().load()  # type: ignore[return-value]
 
         assert self.config is not None
@@ -195,26 +187,22 @@ class CacheAdapterConfiguration(GenericLoader):
             from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import (
                 CacheFSAdapter,
             )
-
-            return CacheService(adapter=CacheFSAdapter(cfg.base_path))
+            return CacheFSAdapter(cfg.base_path)
 
         if self.adapter == "redis":
             cfg = CacheAdapterRedisConfiguration(**self.config)
             from naas_abi_core.services.cache.adapters.secondary.CacheRedisAdapter import (
                 CacheRedisAdapter,
             )
-
-            return CacheService(
-                adapter=CacheRedisAdapter(
-                    redis_url=cfg.redis_url,
-                    prefix=cfg.prefix,
-                    socket_timeout=cfg.socket_timeout,
-                )
+            return CacheRedisAdapter(
+                redis_url=cfg.redis_url,
+                prefix=cfg.prefix,
+                socket_timeout=cfg.socket_timeout,
             )
 
         if self.adapter == "object_storage":
             cfg = CacheAdapterObjectStorageConfiguration(**self.config)
-            return ObjectStorageBackedCacheService(cache_prefix=cfg.cache_prefix)
+            return ObjectStorageBackedAdapter(cache_prefix=cfg.cache_prefix)
 
         raise ValueError(f"Unknown cache adapter: {self.adapter!r}")
 
@@ -225,7 +213,17 @@ class CacheAdapterConfiguration(GenericLoader):
 
 
 class CacheServiceConfiguration(BaseModel):
-    cache_adapter: CacheAdapterConfiguration
+    adapters: list[CacheAdapterEntry] = [
+        CacheAdapterEntry(
+            adapter="fs",
+            tier=TIER_COLD,
+            config=CacheAdapterFSConfiguration(base_path="storage/cache").model_dump(),
+        )
+    ]
 
     def load(self) -> CacheService:
-        return self.cache_adapter.load()
+        return CacheService(
+            adapters=[
+                (entry.tier, entry.load_adapter()) for entry in self.adapters
+            ]
+        )

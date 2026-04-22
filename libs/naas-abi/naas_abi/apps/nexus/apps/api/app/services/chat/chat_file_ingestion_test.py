@@ -11,7 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
     ChatFileIngestionService,
 )
 from naas_abi_core.services.cache.CachePort import CachedData, CacheNotFoundError
-from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.cache.CacheService import CacheService, TIER_COLD
 
 # ---------------------------------------------------------------------------
 # In-memory test doubles
@@ -88,7 +88,7 @@ def _make_service() -> ChatFileIngestionService:
     return ChatFileIngestionService(
         object_storage=_MemoryObjectStorage(),
         vector_store=_MemoryVectorStore(),
-        cache_service=CacheService(_MemoryCacheAdapter()),
+        cache_service=CacheService(adapters=[(TIER_COLD, _MemoryCacheAdapter())]),
     )
 
 
@@ -183,7 +183,7 @@ def test_same_file_different_model_is_cache_miss() -> None:
 def test_multiple_files_share_same_collection() -> None:
     vs = _MemoryVectorStore()
     os_ = _MemoryObjectStorage()
-    cache = CacheService(_MemoryCacheAdapter())
+    cache = CacheService(adapters=[(TIER_COLD, _MemoryCacheAdapter())])
     service = ChatFileIngestionService(
         object_storage=os_, vector_store=vs, cache_service=cache
     )
@@ -208,7 +208,7 @@ def test_idempotent_ingest_same_file_twice() -> None:
     service = ChatFileIngestionService(
         object_storage=_MemoryObjectStorage(),
         vector_store=_MemoryVectorStore(),
-        cache_service=CacheService(adapter),
+        cache_service=CacheService(adapters=[(TIER_COLD, adapter)]),
     )
 
     content = b"Stable content\n" * 300
