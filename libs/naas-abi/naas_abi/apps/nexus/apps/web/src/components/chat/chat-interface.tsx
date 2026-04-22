@@ -514,7 +514,7 @@ export function ChatInterface() {
         formData.append('conversation_id', currentConversationId);
       }
 
-      const response = await fetch('/api/transcribe', {
+      const response = await fetch(`${getApiBase()}/api/transcribe`, {
         method: 'POST',
         body: formData,
       });
