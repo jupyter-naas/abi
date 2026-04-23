@@ -1,0 +1,53 @@
+# Dev overrides — values filled in automatically by `abi deploy aws deploy-apps`
+# based on the terraform outputs. You can also hand-edit these for testing.
+
+global:
+  env: dev
+  awsAccountId: "REPLACE_ME"
+  awsRegion: "us-east-1"
+  imageTag: "latest"
+
+externalSecrets:
+  serviceAccountRoleArn: ""  # terraform output: external_secrets_role_arn
+  secrets:
+    rds: "abi/dev/rds/main"
+    redis: "abi/dev/redis"
+    rabbitmq: "abi/dev/rabbitmq"
+
+abiApi:
+  image:
+    repository: ""  # {account}.dkr.ecr.{region}.amazonaws.com/abi/abi
+  serviceAccount:
+    roleArn: ""  # terraform output: abi_api_role_arn
+  extraEnvFrom:
+    - secretRef:
+        name: abi-rds
+    - secretRef:
+        name: abi-redis
+    - secretRef:
+        name: abi-rabbitmq
+
+dagster:
+  image:
+    repository: ""  # {account}.dkr.ecr.{region}.amazonaws.com/abi/dagster
+  extraEnvFrom:
+    - secretRef:
+        name: abi-rds
+
+mcpServer:
+  image:
+    repository: ""
+
+nexusWeb:
+  image:
+    repository: ""
+  env:
+    NEXUS_API_URL: "http://abi-api:9879"
+
+servicePortal:
+  image:
+    repository: ""
+
+ingress:
+  enabled: true
+  certificateArn: ""  # optional ACM ARN

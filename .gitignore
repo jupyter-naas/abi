@@ -117,6 +117,12 @@ coverage.xml
 htmlcov/
 secrets.yaml
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
 # Docusaurus build output
 docs/site/build/
 docs/site/.docusaurus/

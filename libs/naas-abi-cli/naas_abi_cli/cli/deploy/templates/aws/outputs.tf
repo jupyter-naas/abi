@@ -1,0 +1,13 @@
+output "cluster_name" { value = module.eks.cluster_name }
+output "cluster_endpoint" { value = module.eks.cluster_endpoint }
+output "ecr_repositories" { value = module.ecr.repository_urls }
+output "s3_buckets" { value = module.s3.buckets }
+output "rds_secret_arn" { value = module.rds_postgres.secret_arn }
+output "redis_secret_arn" { value = module.redis.secret_arn }
+output "rabbitmq_secret_arn" { value = module.rabbitmq.secret_arn }
+output "neptune_endpoint" { value = module.neptune.endpoint }
+output "abi_api_role_arn" { value = module.irsa_abi_api.role_arn }
+output "lb_controller_role_arn" { value = module.platform_addons.lb_controller_role_arn }
+output "external_secrets_role_arn" { value = module.platform_addons.external_secrets_role_arn }
+output "tenant_secrets_role_arn" { value = module.platform_addons.tenant_secrets_role_arn }
+output "region" { value = var.region }

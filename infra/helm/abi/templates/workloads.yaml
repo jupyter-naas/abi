@@ -1,0 +1,5 @@
+{{- include "abi.workload" (dict "ctx" . "name" "abi-api"        "svcKey" "abiApi") }}
+{{- include "abi.workload" (dict "ctx" . "name" "dagster"        "svcKey" "dagster") }}
+{{- include "abi.workload" (dict "ctx" . "name" "mcp-server"     "svcKey" "mcpServer") }}
+{{- include "abi.workload" (dict "ctx" . "name" "nexus-web"      "svcKey" "nexusWeb") }}
+{{- include "abi.workload" (dict "ctx" . "name" "service-portal" "svcKey" "servicePortal") }}
