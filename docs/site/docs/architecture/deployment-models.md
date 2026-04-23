@@ -75,4 +75,4 @@ config.production.yaml   # Production overrides
 config.airgap.yaml       # Air-gapped overrides
 ```
 
-The active environment is selected via the `ABI_ENV` environment variable. See [[getting-started/configuration|Configuration Reference]].
+The active environment is selected via the `ABI_ENV` environment variable. See [Configuration Reference](/get-started/configuration).

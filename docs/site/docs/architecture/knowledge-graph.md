@@ -90,7 +90,7 @@ libs/naas-abi/naas_abi/modules/crm/ontologies/
 
 This gives you a single source of truth: the `.ttl` file defines the RDF schema, and the generated `.py` file gives you type-checked Python access to ontology entities. No drift, no hand-written class definitions.
 
-See [[building/creating-an-ontology|Creating an Ontology]] for usage.
+See [Creating an Ontology](/capabilities/knowledge-graph/creating-an-ontology) for usage.
 
 ---
 
@@ -108,8 +108,8 @@ Agents interact with the knowledge graph in two ways:
 
 | Backend | Use case | ADR |
 |---------|---------|-----|
-| Apache Jena Fuseki (TDB2) | Default for production and local dev | [[adr/20260212_apache-jena-fuseki-default-triplestore\|ADR-2026-02]] |
-| Oxigraph | Alternative for lightweight local dev | [[adr/20250807_oxigraph-local-triplestore\|ADR-2025-08]] |
+| Apache Jena Fuseki (TDB2) | Default for production and local dev | [ADR-2026-02](/updates/apache-jena-fuseki-default-triplestore) |
+| Oxigraph | Alternative for lightweight local dev | [ADR-2025-08](/updates/oxigraph-local-triplestore) |
 | AWS Neptune | Cloud-managed production | - |
 | Filesystem | Dev/test without a running server | - |
 

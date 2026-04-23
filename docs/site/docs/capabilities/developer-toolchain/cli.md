@@ -10,13 +10,13 @@ The CLI is part of the `naas-abi-cli` package and is installed automatically wit
 
 ```bash
 uv sync --all-extras
-```yaml
+```
 
 Verify:
 
 ```bash
 abi --help
-```bash
+```
 
 ---
 
@@ -31,7 +31,7 @@ abi stack status         # Health check with per-service readiness probe
 abi stack logs           # Stream logs from all services
 abi stack logs api       # Stream logs from the API service
 abi stack tui            # Open interactive terminal UI for service inspection
-```bash
+```
 
 `abi stack status` probes each service for readiness (TCP/HTTP) rather than relying on Docker container status. A container can be "running" but not yet accepting connections - `status` tells you when it is actually ready.
 
@@ -45,7 +45,7 @@ Start a terminal agent session.
 abi chat                         # Chat with the default ABI supervisor agent
 abi chat --agent my_agent        # Chat with a specific agent by name
 abi chat --thread 42             # Continue conversation thread 42
-```bash
+```
 
 ---
 
@@ -56,7 +56,7 @@ Deploy ABI to a remote environment.
 ```bash
 abi deploy --env production      # Deploy using config.production.yaml
 abi deploy --env staging
-```bash
+```
 
 ---
 

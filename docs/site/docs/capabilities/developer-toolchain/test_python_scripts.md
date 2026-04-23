@@ -72,7 +72,7 @@ def test_division(calculator):
  # Test division by zero
  with pytest.raises(ValueError):
  calculator.divide(5, 0)
-```bash
+```
 
 ### Advanced Test Examples
 
@@ -97,7 +97,7 @@ def test_process_data(data_processor, sample_data):
  result = data_processor.process(sample_data)
  assert len(result) == 5
  assert result[0] == 2 # Assuming processing doubles the values
-```bash
+```
 
 #### Testing Exceptions
 
@@ -117,7 +117,7 @@ def test_invalid_input(calculator):
 
  with pytest.raises(ValueError, match="Cannot divide by zero"):
  calculator.divide(10, 0)
-```bash
+```
 
 #### Parametrized Tests
 
@@ -134,7 +134,7 @@ def test_addition_parametrized(calculator, a, b, expected):
  """Test addition with multiple input combinations"""
  result = calculator.add(a, b)
  assert result == expected
-```bash
+```
 
 ## Running Tests
 
@@ -142,7 +142,7 @@ def test_addition_parametrized(calculator, a, b, expected):
 
 ```bash
 uv run python -m pytest src/custom/modules/your_module_name/pipelines/your_pipeline_name_test.py
-```bash
+```
 
 ### Running All Tests
 
@@ -155,7 +155,7 @@ uv run python -m pytest -v
 
 # Run tests and show print statements
 uv run python -m pytest -s
-```bash
+```
 
 ### Running Tests with Specific Options
 
@@ -174,7 +174,7 @@ uv run python -m pytest -x
 
 # Run tests in parallel (requires pytest-xdist)
 uv run python -m pytest -n auto
-```bash
+```
 
 ## Test Output
 
@@ -194,7 +194,7 @@ collected 4 items
 src/custom/modules/mymodule/calculator_test.py .... [100%]
 
 ============================== 4 passed in 0.02s ==============================
-```bash
+```
 
 ## Best Practices
 

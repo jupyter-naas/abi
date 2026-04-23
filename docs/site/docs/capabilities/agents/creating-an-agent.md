@@ -136,7 +136,7 @@ return cls(
 | `integration` | The agent requires live API credentials. Available for direct call, not auto-routed. |
 | `research` | Experimental agent. Excluded from all routing. |
 
-See [[adr/20250925_intent-scope-agent-routing|ADR: Intent Scope]].
+See [ADR: Intent Scope](/updates/intent-scope-agent-routing).
 
 ---
 

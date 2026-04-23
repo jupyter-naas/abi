@@ -5,8 +5,7 @@ sidebar_position: 1
 # ABI Project Makefile Documentation
 
 ## Table of Contents
-- [ABI Project Makefile Documentation](#abi-project-makefile-documentation)
- - [Table of Contents](#table-of-contents)
+- [Table of Contents](#table-of-contents)
  - [Introduction](#introduction)
  - [Environment Setup](#environment-setup)
  - [.venv](#venv)
@@ -63,7 +62,7 @@ This documentation explains the Makefile used in the ABI project, which primaril
 
 ```bash
 make .venv
-```bash
+```
 
 This target sets up a virtual environment inside a Docker container using Poetry. It's a foundational target that many other targets depend on.
 
@@ -75,7 +74,7 @@ This target sets up a virtual environment inside a Docker container using Poetry
 
 ```bash
 make dev-build
-```bash
+```
 
 **What it does:** Builds all the Docker containers defined in the docker-compose.yml file.
 
@@ -85,7 +84,7 @@ make dev-build
 
 ```bash
 make install
-```bash
+```
 
 **What it does:** Installs all dependencies using Poetry and specifically updates the `abi` package.
 
@@ -95,7 +94,7 @@ make install
 
 ```bash
 make add dep=<package-name>
-```bash
+```
 
 **What it does:** Adds a new dependency to the project using Poetry.
 
@@ -108,7 +107,7 @@ make add dep=<package-name>
 
 ```bash
 make abi-add dep=<package-name>
-```bash
+```
 
 **What it does:** Adds a new dependency specifically to the `lib` directory of the project.
 
@@ -121,7 +120,7 @@ make abi-add dep=<package-name>
 
 ```bash
 make lock
-```bash
+```
 
 **What it does:** Updates the Poetry lock file without installing packages.
 
@@ -133,7 +132,7 @@ make lock
 
 ```bash
 make sh
-```bash
+```
 
 **What it does:** Opens an interactive bash shell in the ABI Docker container.
 
@@ -143,7 +142,7 @@ make sh
 
 ```bash
 make api
-```bash
+```
 
 **What it does:** Starts the API server on port 9879.
 
@@ -153,7 +152,7 @@ make api
 
 ```bash
 make api-prod
-```bash
+```
 
 **What it does:** Builds and runs the production API server in a Docker container.
 
@@ -163,7 +162,7 @@ make api-prod
 
 ```bash
 make sparql-terminal
-```bash
+```
 
 **What it does:** Opens an interactive SPARQL terminal for querying the triplestore.
 
@@ -175,7 +174,7 @@ make sparql-terminal
 
 ```bash
 make test
-```bash
+```
 
 **What it does:** Runs all the Python tests using pytest.
 
@@ -187,7 +186,7 @@ make test
 
 ```bash
 make dvc-login
-```bash
+```
 
 **What it does:** Sets up Data Version Control (DVC) authentication.
 
@@ -197,7 +196,7 @@ make dvc-login
 
 ```bash
 make storage-pull
-```bash
+```
 
 **What it does:** Pulls data from the remote storage.
 
@@ -207,7 +206,7 @@ make storage-pull
 
 ```bash
 make storage-push
-```bash
+```
 
 **What it does:** Pushes local data changes to the remote storage.
 
@@ -217,7 +216,7 @@ make storage-push
 
 ```bash
 make triplestore-prod-remove
-```bash
+```
 
 **What it does:** Removes the production triplestore data.
 
@@ -227,7 +226,7 @@ make triplestore-prod-remove
 
 ```bash
 make triplestore-prod-override
-```bash
+```
 
 **What it does:** Overrides the production triplestore with local data.
 
@@ -237,7 +236,7 @@ make triplestore-prod-override
 
 ```bash
 make triplestore-prod-pull
-```bash
+```
 
 **What it does:** Pulls triplestore data from production.
 
@@ -249,7 +248,7 @@ make triplestore-prod-pull
 
 ```bash
 make build
-```bash
+```
 
 **What it does:** Builds the Docker image for the project. This is an alias for `build.linux.x86_64`.
 
@@ -259,7 +258,7 @@ make build
 
 ```bash
 make build.linux.x86_64
-```bash
+```
 
 **What it does:** Builds a Docker image specifically for Linux x86_64 architecture.
 
@@ -271,7 +270,7 @@ make build.linux.x86_64
 
 ```bash
 make chat-naas-agent
-```bash
+```
 
 **What it does:** Starts the Naas agent in terminal mode.
 
@@ -281,7 +280,7 @@ make chat-naas-agent
 
 ```bash
 make chat-abi-agent
-```bash
+```
 
 **What it does:** Starts the Abi agent in terminal mode.
 
@@ -291,7 +290,7 @@ make chat-abi-agent
 
 ```bash
 make chat-ontology-agent
-```bash
+```
 
 **What it does:** Starts the Ontology agent in terminal mode.
 
@@ -301,7 +300,7 @@ make chat-ontology-agent
 
 ```bash
 make chat-support-agent
-```bash
+```
 
 **What it does:** Starts the Support agent in terminal mode.
 
@@ -313,7 +312,7 @@ make chat-support-agent
 
 ```bash
 make oxigraph-up
-```bash
+```
 
 **What it does:** Starts the Oxigraph triple store container.
 
@@ -323,7 +322,7 @@ make oxigraph-up
 
 ```bash
 make oxigraph-down
-```bash
+```
 
 **What it does:** Stops the Oxigraph triple store container.
 
@@ -333,7 +332,7 @@ make oxigraph-down
 
 ```bash
 make oxigraph-status
-```bash
+```
 
 **What it does:** Shows the current status of the Oxigraph container.
 
@@ -343,7 +342,7 @@ make oxigraph-status
 
 ```bash
 make dev-up
-```bash
+```
 
 **What it does:** Starts development services including Oxigraph and YasGUI (SPARQL web UI).
 
@@ -353,7 +352,7 @@ make dev-up
 
 ```bash
 make dev-down
-```bash
+```
 
 **What it does:** Stops all development services.
 
@@ -363,7 +362,7 @@ make dev-down
 
 ```bash
 make container-up
-```bash
+```
 
 **What it does:** Starts the ABI application in container mode.
 
@@ -373,7 +372,7 @@ make container-up
 
 ```bash
 make container-down
-```bash
+```
 
 **What it does:** Stops the ABI container.
 
@@ -385,7 +384,7 @@ make container-down
 
 ```bash
 make clean
-```bash
+```
 
 **What it does:** Cleans up build artifacts, caches, and Docker containers.
 

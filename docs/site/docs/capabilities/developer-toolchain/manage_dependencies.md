@@ -21,22 +21,22 @@ Both packages use Poetry for dependency management, and all operations should be
 
 ```bash
 make add dep=<library-name>
-```bash
+```
 
 For example:
 ```bash
 make add dep=requests
-```bash
+```
 
 To specify a specific version:
 ```bash
 make add dep="requests==2.28.1"
-```bash
+```
 
 To add a package with extras:
 ```bash
 make add dep="uvicorn[standard]"
-```bash
+```
 
 This will:
 - Add the dependency to your root `pyproject.toml`
@@ -47,12 +47,12 @@ This will:
 
 ```bash
 make abi-add dep=<library-name>
-```bash
+```
 
 For example:
 ```bash
 make abi-add dep=numpy
-```bash
+```
 
 This will:
 - Add the dependency to the `lib/pyproject.toml` file
@@ -65,7 +65,7 @@ To update the lock files after manual changes to `pyproject.toml`:
 
 ```bash
 make lock
-```bash
+```
 
 ## Installing All Dependencies
 
@@ -73,7 +73,7 @@ To install all dependencies after cloning the project or after updating lock fil
 
 ```bash
 make install
-```bash
+```
 
 This command:
 - Installs all dependencies from both the main project and the `lib/abi` project
@@ -85,7 +85,7 @@ To access a shell inside the Docker container with all dependencies loaded:
 
 ```bash
 make sh
-```bash
+```
 
 This allows you to run commands that depend on the installed packages without having to install Poetry or the dependencies locally.
 
@@ -109,7 +109,7 @@ The Docker setup ensures that:
 ```bash
 make clean
 make install
-```bash
+```
 
 ### Adding a dependency only for development
 
@@ -118,7 +118,7 @@ Edit the appropriate `pyproject.toml` file manually to add the dependency under 
 ```bash
 make lock
 make install
-```bash
+```
 
 ### Resolving dependency conflicts
 

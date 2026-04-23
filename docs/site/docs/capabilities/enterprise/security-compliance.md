@@ -59,7 +59,7 @@ graph TD
 
  class A,B,C,D,E,F,G,H,I platform
  class J,K,L infrastructure
-```bash
+```
 
 ### Authentication & Authorization
 
@@ -83,7 +83,7 @@ saml_config:
  encryption:
  certificate: "/path/to/saml-cert.pem"
  algorithm: "AES256-GCM"
-```bash
+```
 
 **Role-Based Access Control (RBAC)**:
 - **Hierarchical Roles**: Nested role inheritance with permission aggregation
@@ -126,7 +126,7 @@ key_management:
  enabled: true
  schedule: "90 days"
  automatic: true
-```bash
+```
 
 **Data Loss Prevention (DLP)**:
 - **Content Scanning**: Automated scanning for sensitive data patterns
@@ -162,7 +162,7 @@ network_security:
  - from: "application-services"
  to: "database"
  ports: [5432]
-```bash
+```
 
 **Intrusion Detection and Prevention**:
 - **Network IDS**: Real-time network intrusion detection
@@ -199,7 +199,7 @@ soc2_controls:
  - data_validation: "Input validation and sanitization"
  - error_handling: "Comprehensive error logging and handling"
  - change_management: "Controlled deployment processes"
-```bash
+```
 
 ### ISO 27001
 
@@ -253,7 +253,7 @@ fedramp_controls:
  - SC-7: "Boundary Protection"
  - SC-8: "Transmission Confidentiality and Integrity"
  - SC-13: "Cryptographic Protection"
-```bash
+```
 
 ### GDPR Compliance
 
@@ -288,7 +288,7 @@ gdpr_compliance:
  pseudonymization: "Automatic PII pseudonymization"
  encryption: "End-to-end encryption for personal data"
  retention_policies: "Automated data retention and deletion"
-```bash
+```
 
 ### HIPAA Compliance
 
@@ -339,7 +339,7 @@ gdpr_compliance:
  "execution_time_ms": 45
  }
 }
-```bash
+```
 
 ### Security Information and Event Management (SIEM)
 
@@ -367,7 +367,7 @@ threat_detection:
  event: "role_change"
  condition: "elevated_permissions"
  action: "require_approval"
-```bash
+```
 
 ### Compliance Reporting
 

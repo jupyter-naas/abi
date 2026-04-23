@@ -21,8 +21,15 @@ const config = {
   organizationName: "jupyter-naas",
   projectName: "abi",
 
-  onBrokenLinks: "warn",
-  onBrokenMarkdownLinks: "warn",
+  onBrokenLinks: "throw",
+
+  markdown: {
+    mermaid: true,
+    format: 'detect',
+    hooks: {
+      onBrokenMarkdownLinks: "throw",
+    },
+  },
 
   // Even if you don't use internalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
@@ -62,11 +69,6 @@ const config = {
       },
     ],
   ],
-
-  markdown: {
-    mermaid: true,
-    format: 'detect',
-  },
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
@@ -128,7 +130,7 @@ const config = {
             label: "Capabilities",
           },
           {
-            to: "reference/libraries/naas-abi-core/Architecture",
+            to: "/category/reference",
             position: "left",
             label: "Reference",
           },
