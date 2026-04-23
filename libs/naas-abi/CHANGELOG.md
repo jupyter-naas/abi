@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.24.0 (2026-04-23)
+
+### Bug Fixes
+
+- Resolve ruff import sorting violations in ontology and graph services
+  ([`d233cce`](https://github.com/jupyter-naas/abi/commit/d233ccecae7cedbb1af54a9aac4eb85de511f89e))
+
+### Features
+
+- **nexus**: Migrate graph endpoint to hexagonal architecture
+  ([`a790d12`](https://github.com/jupyter-naas/abi/commit/a790d1200340f7b78107bc1a3ea2c796b21e7bf6))
+
+- **nexus**: Migrate ontology endpoint to hexagonal architecture
+  ([`88f8868`](https://github.com/jupyter-naas/abi/commit/88f88684f750fd4f8401385bfdc4f0c2c20f992b))
+
+
 ## v1.23.0 (2026-04-23)
 
 ### Bug Fixes
