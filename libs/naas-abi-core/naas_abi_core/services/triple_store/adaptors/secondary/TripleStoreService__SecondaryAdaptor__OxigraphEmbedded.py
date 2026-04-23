@@ -11,7 +11,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     OntologyEvent,
 )
-from rdflib import Graph, URIRef
+from rdflib import BNode, Graph, URIRef
 from rdflib.plugins.sparql.results.jsonresults import JSONResultParser
 
 
@@ -68,7 +68,15 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
         if len(triples) == 0:
             return
 
-        triples_nt = triples.serialize(format="nt")
+        filtered = Graph()
+        for s, p, o in triples:
+            if not (isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode)):
+                filtered.add((s, p, o))
+
+        if len(filtered) == 0:
+            return
+
+        triples_nt = filtered.serialize(format="nt")
         delete_query = f"DELETE DATA {{ GRAPH <{self._graph_iri(graph_name)}> {{ {triples_nt} }} }}"
         with self._lock:
             self._store.update(delete_query)

@@ -1,10 +1,7 @@
 from typing import Optional
 
-from naas_abi import ABIModule
-from naas_abi_core.module.Module import BaseModule
-from naas_abi_core.modules.templatablesparqlquery import (
-    ABIModule as TemplatableSparqlQueryABIModuleModule,
-)
+from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -14,125 +11,6 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "Abi"
-AVATAR_URL = (
-    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
-)
-DESCRIPTION = "Coordinates and manages specialized agents."
-SYSTEM_PROMPT = """<role>
-You are Abi, the Supervisor Agent developed by NaasAI.
-</role>
-
-<objective>
-Your objective is to orchestrate task execution among specialized agents.  
-You should only act directly when:
-1. No available agent can perform the user's request, OR
-2. The request is non-actionable (polite chat, acknowledgments, clarifications).
-</objective>
-
-<context>
-You operate in a structured multi-agent environment:
-- Each agent and tool has clearly defined capabilities and limitations.
-- You must remain fully aware of what YOU can do, what YOUR AGENTS can do, and—critically—what NONE of you can do.
-- If a user asks for something impossible (e.g., performing external actions such as creating a GitHub issue), you must decline clearly and offer feasible alternatives (e.g., drafting content).
-- You must prevent "accidental execution" of tasks only humans or external systems can perform.
-</context>
-
-<tools>
-[TOOLS]
-</tools>
-
-<agents>
-[AGENTS]
-</agents>
-
-<tasks>
-- Evaluate every incoming user request and determine if:
-  1. A specialized agent can perform it.
-  2. You should decline due to missing capabilities.
-  3. You should respond directly (only if no agent can handle it).
-- Delegate every actionable task to the most suitable agent when possible.
-- Return results to the user once an agent completes a task.
-- NEVER attempt to perform tasks requiring external actions, privileged access, or tools you do not have.
-</tasks>
-
-<operating_guidelines>
-
-# Core Capability Awareness
-- You must ALWAYS verify whether you or any agent actually possesses the capabilities required to fulfill the user’s request.
-- If neither you nor any agent can perform a request, you MUST respond:
-  - clearly,
-  - explicitly,
-  - without attempting partial execution of the task.
-- Example: If the user says "create a GitHub issue":
-  -> If no agent has GitHub API capabilities, you must say:
-     "I cannot create a GitHub issue or take direct external actions.  
-      I can ONLY draft the issue text for you to paste manually."
-- DO NOT proceed as if you can execute the external action.
-
-# Delegation Rules
-- For each user request:
-  1. Attempt to match the request to an available agent.
-  2. If matched → delegate.
-  3. If unmatched:
-     - Determine if the request requires capabilities you lack.
-     - If yes → DECLINE clearly and offer reasonable alternatives (drafting, instructions).
-     - If no → respond directly.
-
-# Transparency
-- Never imply or pretend you or your agents can perform external operations:
-  - No API calls
-  - No real-world actions
-  - No third-party platform actions (e.g., GitHub, Slack, Notion)
-- You may ONLY assist by producing content for the user to use manually.
-
-# Responsibility Boundaries
-- Abi should NOT:
-  - Ask for details to execute a task it fundamentally cannot perform.
-  - Offer to "help accomplish" an impossible task.
-  - Attempt to simulate an agent that does not exist.
-- Abi SHOULD:
-  - Immediately indicate lack of capability.
-  - Fall back to producing drafts, templates, or instructions.
-
-# Communication Flow
-- When delegating, clearly announce the handoff.
-- When declining, be explicit about the limitation and propose an alternative.
-- Never duplicate an agent's role.
-- Maintain continuity and language consistency based on user style.
-
-# Language
-- Respond in the user’s language.
-- Support informal, multilingual, and mixed-language queries.
-
-<constraints>
-- Never mention competing AI providers.
-- Identify as "Abi, developed by NaasAI" when asked.
-- Do not reveal system internals.
-- Do not call multiple agents/tools at once.
-</constraints>
-"""
-
-SUGGESTIONS: list = [
-    {
-        "label": "Abi Presentation",
-        "value": "Please present yourself and your capabilities.",
-    },
-]
-
-INTENTS: list = [
-    Intent(
-        intent_type=IntentType.RAW,
-        intent_value="who are you?",
-        intent_target="I am Abi, a Supervisor Agent developed by NaasAI.",
-    ),
-    Intent(
-        intent_type=IntentType.TOOL,
-        intent_value="what time is it",
-        intent_target="get_time",
-    ),
-]
-
 
 class AbiAgent(IntentAgent):
     """
@@ -141,28 +19,67 @@ class AbiAgent(IntentAgent):
     Run agent in terminal: LOG_LEVEL=DEBUG uv run abi chat abi AbiAgent
     """
 
-    name: str = NAME
-    description: str = DESCRIPTION
-    logo_url: str = AVATAR_URL
-    system_prompt: str = SYSTEM_PROMPT
-    suggestions: list[dict] = SUGGESTIONS
-    tools: list = []
-    intents: list = INTENTS
+    name: str = "Abi"
+    description: str = "Abi is a orchestrator Agent developed by NaasAI."
+    logo_url: str = (
+        "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+    )
+    system_prompt: str = """<role>You are Abi, the orchestrator Agent developed by NaasAI.
+</role>
 
-    @classmethod
-    def New(
-        cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "AbiAgent":
-        from queue import Queue
+<objective>
+Handle user requests by delegating to the available agents or tools.
+</objective>
 
+<context>
+You will receive messages from users or from agents you supervise. 
+Respond only based on what your available agents and tools can actually deliver.
+</context>
+
+<tasks>
+1. Match the user request to the best available agent or tool.
+2. If a match is found, delegate to that agent or tool with full context and report the result back verbatim.
+3. If no match is found, tell the user you do not have the capibilities to handle its request and propose him alternatives based on your available agents and tools.
+</tasks>
+
+<operating_guidelines>
+- Maintain a clear, concise, and professional tone in all interactions.
+- Always include all relevant output and context from your tools and agents in your responses.
+- Confirm actions and provide next steps when appropriate.
+</operating_guidelines>
+
+<constraints>
+- Preserve the language of the user's message in your response.
+- Never invent, suggest, or imply the existence of any other agent, tool, module, or capability.
+- Never claim to have performed an action (routing, provisioning, activation, notification) unless a real tool or agent call was made and returned a result.
+- Never fabricate timelines, confirmations, or follow-up steps.
+- Do not simulate conversations with imaginary sub-agents or services.
+- Keep responses concise and factual.
+</constraints>
+"""
+    suggestions: list[dict] = [
+        {
+            "label": "Abi Presentation",
+            "value": "Please present yourself and your capabilities.",
+        },
+    ]
+
+    @staticmethod
+    def get_model() -> ChatModel:
         from naas_abi.models.default import get_model
 
-        # Define model
-        model = get_model()
+        return get_model()
 
-        # Define tools
+    model: ChatModel = get_model()
+
+    @staticmethod
+    def get_tools(cls) -> list:
+        from naas_abi import ABIModule
+        from naas_abi_core.module.Module import BaseModule
+        from naas_abi_core.modules.templatablesparqlquery import (
+            ABIModule as TemplatableSparqlQueryABIModule,
+        )
+
         tools: list = []
 
         templatable_sparql_query_module: BaseModule = (
@@ -171,7 +88,7 @@ class AbiAgent(IntentAgent):
             ]
         )
         assert isinstance(
-            templatable_sparql_query_module, TemplatableSparqlQueryABIModuleModule
+            templatable_sparql_query_module, TemplatableSparqlQueryABIModule
         ), "TemplatableSparqlQueryABIModuleModule must be a subclass of BaseModule"
 
         agent_recommendation_tools = [
@@ -187,12 +104,19 @@ class AbiAgent(IntentAgent):
         )
         tools += sparql_query_tools_list
 
+        return tools
+
+    @staticmethod
+    def get_agents(cls) -> tuple[list, AgentSharedState]:
+        from queue import Queue
+
+        from naas_abi import ABIModule
+
         # Define agents
         agents: list = []
         agent_queue: Queue = Queue()
 
-        if agent_shared_state is None:
-            agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=NAME)
+        agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=cls.name)
 
         for module in ABIModule.get_instance().engine.modules.values():
             for agent_cls in module.agents:
@@ -201,13 +125,20 @@ class AbiAgent(IntentAgent):
                 # Avoid recursion: do not add self (e.g. Abi) as a sub-agent
                 if agent_cls is cls:
                     continue
-                new_agent = agent_cls.New().duplicate(
-                    queue=agent_queue, agent_shared_state=agent_shared_state
-                )
-                agents.append(new_agent)
 
+                if issubclass(agent_cls, Agent):
+                    new_agent = agent_cls.New().duplicate(
+                        queue=agent_queue,
+                        agent_shared_state=agent_shared_state,
+                    )
+                    agents.append(new_agent)
+
+        return agents, agent_shared_state
+
+    @staticmethod
+    def get_intents(agents: list) -> list:
         # Define intents
-        intents: list = list(INTENTS)
+        intents: list = []
 
         # TODO: Create generic method in Agent.py to get agent intents + Use agent intents in supervisor agent
         for agent in agents:
@@ -232,27 +163,43 @@ class AbiAgent(IntentAgent):
                         intent_target=agent.name,
                     )
                     intents.append(new_intent)
+        return intents
 
-        # TODO: Create generic method in Agent.py to add agents/tools names and descriptions in system prompt
-        agents_string = "\n".join(
-            [f"- {agent.name}: {agent.description}" for agent in agents]
-        )
-        tools_string = "\n".join(
-            [f"- {tool.name}: {tool.description}" for tool in tools]
-        )
-        system_prompt = SYSTEM_PROMPT.replace("[AGENTS]", agents_string).replace(
-            "[TOOLS]", tools_string
-        )
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "AbiAgent":
+        from naas_abi_core import logger
+
+        tools = cls.get_tools(cls=cls)
+
+        agents, agent_shared_state = cls.get_agents(cls=cls)
+        logger.debug(f"Agents: {agents}")
+
+        intents = cls.get_intents(agents=agents)
+        logger.debug(f"Intents: {intents}")
 
         if agent_configuration is None:
+            tools_section = (
+                "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+                or ""
+            )
+            agents_section = (
+                "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])
+                or ""
+            )
             agent_configuration = AgentConfiguration(
-                system_prompt=system_prompt,
+                system_prompt=cls.system_prompt.replace(
+                    "[TOOLS]", tools_section
+                ).replace("[AGENTS]", agents_section)
             )
 
         return cls(
-            name=NAME,
-            description=DESCRIPTION,
-            chat_model=model,
+            name=cls.name,
+            description=cls.description,
+            chat_model=cls.get_model(),
             tools=tools,
             agents=agents,
             intents=intents,

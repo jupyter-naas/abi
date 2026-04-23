@@ -2,6 +2,129 @@
 
 <!-- version list -->
 
+## v1.28.2 (2026-04-21)
+
+### Bug Fixes
+
+- Silent tool transfer
+  ([`341ba01`](https://github.com/jupyter-naas/abi/commit/341ba01ab1f55f8908145f69d6cbe794e705ad2d))
+
+
+## v1.28.1 (2026-04-21)
+
+### Bug Fixes
+
+- **bandit**: Nosec B108 on hardcoded /tmp path in config test
+  ([`408c4c8`](https://github.com/jupyter-naas/abi/commit/408c4c81ad0a0177e17ba64284a5029f461148c3))
+
+- **ci**: Resolve all PR check failures
+  ([`5ba33bb`](https://github.com/jupyter-naas/abi/commit/5ba33bbf83483126546daef8815be32f119a45a3))
+
+- **mypy**: Use list[Any] for SMTPAdapter_test messages to allow subscript
+  ([`80f42cb`](https://github.com/jupyter-naas/abi/commit/80f42cbe969ac812dac61d8e300f1d81c365e4d8))
+
+
+## v1.28.0 (2026-04-21)
+
+### Bug Fixes
+
+- **triple-store**: Harden ApacheJenaTDB2 adapter against Fuseki lock-contention 500s
+  ([`5d6a3fd`](https://github.com/jupyter-naas/abi/commit/5d6a3fdae37e3177fcaffd179736b514eb7a0a13))
+
+### Features
+
+- **config**: Wire KeyValueService into ApacheJenaTDB2 via engine configuration
+  ([`dacf894`](https://github.com/jupyter-naas/abi/commit/dacf89469d739426139b2d83aaaa843f5f8c91c0))
+
+- **triple-store**: Add optional distributed write lock via KeyValueService
+  ([`3e33396`](https://github.com/jupyter-naas/abi/commit/3e33396e4414ed1b3c5b277a8cc7b3b3745f52d2))
+
+
+## v1.27.2 (2026-04-17)
+
+### Bug Fixes
+
+- Add default model if no openai key provided
+  ([`caf4286`](https://github.com/jupyter-naas/abi/commit/caf4286105ed0d147277a28e7ce99565f20292f3))
+
+- Add parameter to enable default tools
+  ([`d7341b7`](https://github.com/jupyter-naas/abi/commit/d7341b738c1d8abe3722b59493c0eecec49d2a2a))
+
+- Pass base chat model to intent mapper
+  ([`cf73bd0`](https://github.com/jupyter-naas/abi/commit/cf73bd0b6b93bdc9347d31b66cd92451f68c88d9))
+
+
+## v1.27.1 (2026-04-16)
+
+### Bug Fixes
+
+- Manage blank nodes in oxigraph embedded adapter
+  ([`70e30c4`](https://github.com/jupyter-naas/abi/commit/70e30c4907a960e67669965e6dbbf5c1eca330e6))
+
+- Ruff linting + errors
+  ([`3fbfcae`](https://github.com/jupyter-naas/abi/commit/3fbfcaec129477375558316364d07db3baebb356))
+
+
+## v1.27.0 (2026-04-15)
+
+### Features
+
+- Working on adding opencode agent
+  ([`3f515d4`](https://github.com/jupyter-naas/abi/commit/3f515d48275f55c8ce8844942c4cdc4912698446))
+
+
+## v1.26.0 (2026-04-15)
+
+
+## v1.25.0 (2026-04-15)
+
+### Features
+
+- Add _raw_decode_json_object
+  ([`465fb4c`](https://github.com/jupyter-naas/abi/commit/465fb4cd42caba19bbaf97b2599e32a28d6394ef))
+
+
+## v1.24.0 (2026-04-14)
+
+
+## v1.23.0 (2026-04-13)
+
+### Bug Fixes
+
+- Remove unused lib
+  ([`d9ed7c1`](https://github.com/jupyter-naas/abi/commit/d9ed7c1eaf93ea6eae87aa43b7d310ea02c44093))
+
+### Features
+
+- Get object metadata
+  ([`0c2d4a5`](https://github.com/jupyter-naas/abi/commit/0c2d4a5818bcbd480159a2efd2030e3ed1b99e0e))
+
+
+## v1.22.0 (2026-04-07)
+
+### Bug Fixes
+
+- Import bfo in template sparql onto
+  ([`c033a1c`](https://github.com/jupyter-naas/abi/commit/c033a1cb13b712f73b6f86b7ebe9f35143ea5cac))
+
+- Load core modules
+  ([`6eabc88`](https://github.com/jupyter-naas/abi/commit/6eabc888854a7fe3336a2668e34f55f20841a464))
+
+- Rm onto2py files
+  ([`60dae0c`](https://github.com/jupyter-naas/abi/commit/60dae0cc2e2ab0e4771e1d91613fc191701db9b9))
+
+### Features
+
+- Add defintion and examples
+  ([`9814afb`](https://github.com/jupyter-naas/abi/commit/9814afba05b520105d10ba19f8700c2cf06611a8))
+
+- Init bfo module
+  ([`310e585`](https://github.com/jupyter-naas/abi/commit/310e585aeafb89bda4f6331236d46258c0e632c9))
+
+- Init cco module
+  ([`cad8a8e`](https://github.com/jupyter-naas/abi/commit/cad8a8e9b51c663cbbd95dbbe147d075ec482719))
+
+
 ## v1.21.6 (2026-04-02)
 
 ### Bug Fixes

@@ -1,3 +1,4 @@
+from datetime import datetime
 from queue import Queue
 from typing import Optional
 
@@ -6,6 +7,7 @@ from botocore.exceptions import ClientError
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
     IObjectStorageAdapter,
+    ObjectMetaData,
 )
 
 
@@ -192,3 +194,52 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                         if queue:
                             queue.put(prefix_key)
         return objects
+
+    def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
+        """Get object metadata from S3.
+
+        Args:
+            prefix (str): Prefix/folder path
+            key (str): Object key name
+
+        Returns:
+            Dict[str, Any]: Object metadata including size and modified date
+        """
+        self.__object_exists(prefix, key)
+
+        # Fields returned by the head_object method
+        # ContentLength → Size of the object in bytes
+        # LastModified → When the object was last updated
+        # ETag → Usually the MD5 hash (not always for multipart uploads)
+        # ContentType → MIME type (e.g., image/png, text/plain)
+        # Metadata → Custom user-defined metadata
+        # StorageClass → Storage tier (STANDARD, GLACIER, etc.)
+        # VersionId → Present if versioning is enabled
+        # ServerSideEncryption → Encryption type used
+        response = self.s3_client.head_object(
+            Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key)
+        )
+
+        last_modified = response.get("LastModified")
+        last_modified_date = (
+            datetime.fromisoformat(last_modified.isoformat()) if last_modified else None
+        )
+
+        full_key = self.__get_full_key(prefix, key)
+        file_path = (
+            f"s3://{self.bucket_name}/{full_key}"
+            if full_key
+            else f"s3://{self.bucket_name}"
+        )
+
+        return ObjectMetaData(
+            file_path=file_path,
+            file_name=key.split("/")[-1] if key else "",
+            file_size_bytes=response.get("ContentLength", 0),
+            created_time=None,
+            modified_time=last_modified_date,
+            accessed_time=None,
+            permissions=None,
+            mime_type=response.get("ContentType", "") or None,
+            encoding=None,
+        )

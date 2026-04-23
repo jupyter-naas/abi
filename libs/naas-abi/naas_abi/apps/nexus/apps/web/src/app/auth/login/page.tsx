@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -23,13 +23,12 @@ function isLightColor(hex: string): boolean {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading, error, clearError, isAuthenticated } = useAuthStore();
+  const { requestMagicLink, isLoading, error, clearError, isAuthenticated } = useAuthStore();
   const tenant = useTenant();
   
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string }>({});
+  const [linkSent, setLinkSent] = useState(false);
   const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
@@ -48,21 +47,18 @@ export default function LoginPage() {
     clearError();
     
     // Validate fields (inline)
-    const errors: { email?: string; password?: string } = {};
+    const errors: { email?: string } = {};
     if (!email.trim()) {
       errors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       errors.email = 'Enter a valid email address';
     }
-    if (!password) {
-      errors.password = 'Password is required';
-    }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
     
-    const success = await login(email, password);
+    const success = await requestMagicLink(email);
     if (success) {
-      router.push('/');
+      setLinkSent(true);
     }
   };
   
@@ -167,6 +163,32 @@ export default function LoginPage() {
           </div>
         )}
         
+        {linkSent ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-center text-emerald-500">
+              <CheckCircle className="h-12 w-12" />
+            </div>
+            <p className="text-center text-sm" style={{ color: mutedTextColor }}>
+              If an account exists for <strong>{email}</strong>, we sent a magic sign-in link.
+            </p>
+            <button
+              type="button"
+              onClick={() => setLinkSent(false)}
+              className={cn(
+                'flex h-11 w-full items-center justify-center px-4 text-sm font-medium text-white',
+                'transition-all',
+                'focus:outline-none focus:ring-2 focus:ring-offset-2'
+              )}
+              style={{
+                backgroundColor: primaryColor,
+                borderRadius: buttonRadius,
+                '--tw-ring-color': primaryColor,
+              } as React.CSSProperties}
+            >
+              Send another link
+            </button>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email */}
           <div className="space-y-2">
@@ -209,66 +231,6 @@ export default function LoginPage() {
             )}
           </div>
           
-          {/* Password */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="password"
-                className="text-sm font-medium"
-                style={{ color: textColor }}
-              >
-                Password
-              </label>
-              <Link
-                href="/auth/forgot-password"
-                className="text-sm hover:underline"
-                style={{ color: primaryColor }}
-              >
-                Forgot password?
-              </Link>
-            </div>
-            <div className="relative">
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (fieldErrors.password) setFieldErrors((fe) => ({ ...fe, password: undefined }));
-                }}
-                placeholder="Enter your password"
-                required
-                disabled={isLoading}
-                className={cn(
-                  'flex h-11 w-full px-4 py-2 pr-10 text-sm',
-                  'focus:outline-none focus:ring-2',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
-                )}
-                aria-invalid={!!fieldErrors.password}
-                aria-describedby={fieldErrors.password ? 'password-error' : undefined}
-                style={{
-                  ...inputStyle,
-                  ...(fieldErrors.password
-                    ? { border: '1px solid #ef4444', backgroundColor: '#fee2e2' }
-                    : {}),
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-                style={{ color: mutedTextColor }}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            {fieldErrors.password && (
-              <p id="password-error" className="text-xs text-destructive">
-                {fieldErrors.password}
-              </p>
-            )}
-          </div>
-          
           {/* Submit Button */}
           <button
             type="submit"
@@ -294,24 +256,17 @@ export default function LoginPage() {
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Signing in...
+                Sending magic link...
               </>
             ) : (
-              'Sign in'
+              'Send magic link'
             )}
           </button>
         </form>
+        )}
         
-        {/* Sign up link */}
         <p className="mt-6 text-center text-sm" style={{ color: mutedTextColor }}>
-          Don&apos;t have an account?{' '}
-          <Link
-            href="/auth/register"
-            className="font-medium hover:underline"
-            style={{ color: primaryColor }}
-          >
-            Sign up
-          </Link>
+          Password sign-in is disabled for this workspace.
         </p>
       </div>
       {tenant.show_terms_footer && (

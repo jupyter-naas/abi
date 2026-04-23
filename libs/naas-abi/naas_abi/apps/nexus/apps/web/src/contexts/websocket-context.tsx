@@ -89,7 +89,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         socketInstance.disconnect();
         useAuthStore.getState().logout();
         if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          window.location.href = '/auth/login';
         }
         return;
       }

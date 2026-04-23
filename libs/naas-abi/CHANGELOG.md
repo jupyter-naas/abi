@@ -2,6 +2,193 @@
 
 <!-- version list -->
 
+## v1.22.4 (2026-04-22)
+
+
+## v1.22.3 (2026-04-22)
+
+
+## v1.22.2 (2026-04-22)
+
+
+## v1.22.1 (2026-04-22)
+
+### Bug Fixes
+
+- Create method to get api key and assert not None
+  ([`839f52c`](https://github.com/jupyter-naas/abi/commit/839f52c6139cb21d6f3a4afdeb5d33821a84b6de))
+
+- Improv error handling messages for transcribe
+  ([`6bea732`](https://github.com/jupyter-naas/abi/commit/6bea732ff53284986b51c517693d5917aa7736ed))
+
+
+## v1.22.0 (2026-04-21)
+
+### Bug Fixes
+
+- Preserve voice in chat
+  ([`9b0bc7f`](https://github.com/jupyter-naas/abi/commit/9b0bc7fb1794a5c227f39523c13109e629878858))
+
+
+## v1.21.1 (2026-04-21)
+
+### Bug Fixes
+
+- **ci**: Resolve all PR check failures
+  ([`5ba33bb`](https://github.com/jupyter-naas/abi/commit/5ba33bbf83483126546daef8815be32f119a45a3))
+
+
+## v1.21.0 (2026-04-16)
+
+
+## v1.20.0 (2026-04-16)
+
+### Features
+
+- **nexus**: Enforce workspace feature access by role
+  ([`af14f8f`](https://github.com/jupyter-naas/abi/commit/af14f8fe754dc478bbb9ee8b987ecf2fcd0a0697))
+
+
+## v1.19.4 (2026-04-16)
+
+### Bug Fixes
+
+- Add a CTA to signin after magic link to avoid mail bots authenticating
+  ([`ca51e6d`](https://github.com/jupyter-naas/abi/commit/ca51e6ddd7b19ac726ed9ba911421311aa9b916e))
+
+
+## v1.19.3 (2026-04-16)
+
+### Bug Fixes
+
+- Keep up to 5 magic links active at the same time
+  ([`712cc0e`](https://github.com/jupyter-naas/abi/commit/712cc0e464894602b776265e45b6da82f9ca4679))
+
+
+## v1.19.2 (2026-04-15)
+
+### Bug Fixes
+
+- Trigger build
+  ([`e7e9fc3`](https://github.com/jupyter-naas/abi/commit/e7e9fc33ac3e645bb1969d8fd8323b16aac9c7c9))
+
+
+## v1.19.1 (2026-04-15)
+
+### Bug Fixes
+
+- Working on file upload and fixing build
+  ([`541fe08`](https://github.com/jupyter-naas/abi/commit/541fe086637d0f12b3384f14f3b4b9f3e4f1686a))
+
+
+## v1.19.0 (2026-04-15)
+
+### Bug Fixes
+
+- CodingAgent test
+  ([`030f1f9`](https://github.com/jupyter-naas/abi/commit/030f1f9128928ca6dbaf1eb74533d96a669d3326))
+
+### Features
+
+- Working on adding opencode agent
+  ([`3f515d4`](https://github.com/jupyter-naas/abi/commit/3f515d48275f55c8ce8844942c4cdc4912698446))
+
+
+## v1.18.0 (2026-04-15)
+
+### Features
+
+- Make the email customizable
+  ([`9860f84`](https://github.com/jupyter-naas/abi/commit/9860f84186f8b411b2869f89d6197408a9d5352b))
+
+- Working on magic link system
+  ([`1d036ef`](https://github.com/jupyter-naas/abi/commit/1d036efbdbb05ddaf3baf7be9ef23a7373b20159))
+
+### Refactoring
+
+- Ontologies classes folder renamed (ontopy)
+  ([`0050ee8`](https://github.com/jupyter-naas/abi/commit/0050ee878b837bd75fdce8ad5d6c929992852bfe))
+
+
+## v1.17.1 (2026-04-14)
+
+### Bug Fixes
+
+- Bump versions
+  ([`9096426`](https://github.com/jupyter-naas/abi/commit/90964266834d48b55770bccd536f26536bde9aec))
+
+- **nexus**: Files loading race condition
+  ([`86b82ee`](https://github.com/jupyter-naas/abi/commit/86b82ee10959b356dd0f812353ea5481066f41f0))
+
+
+## v1.17.0 (2026-04-07)
+
+### Bug Fixes
+
+- Add logo to agent + rm cache
+  ([`26d5f28`](https://github.com/jupyter-naas/abi/commit/26d5f28b1ef317409f946bf76c9a7664113ef23a))
+
+- All ontologies not displayed in ontology section
+  ([`2bccf8e`](https://github.com/jupyter-naas/abi/commit/2bccf8e728ebe249da33ab9e7c72c4f60c8004f1))
+
+- Comment query
+  ([`5554de4`](https://github.com/jupyter-naas/abi/commit/5554de43c1ede1160899cba5df1e9500eedb190d))
+
+- Display class and object prop labels
+  ([`7266403`](https://github.com/jupyter-naas/abi/commit/7266403989bc5eee0c8e27861f9ed529fd4913c6))
+
+- Display ontology hower and active bar
+  ([`c0d2953`](https://github.com/jupyter-naas/abi/commit/c0d2953a5cbd1bb171ea627f47409a3a34c30fb6))
+
+- Load ontologies
+  ([`8f17414`](https://github.com/jupyter-naas/abi/commit/8f1741414030f130f3f15888386a35f12d065305))
+
+- Ontology display overview
+  ([`6fb4cae`](https://github.com/jupyter-naas/abi/commit/6fb4caeb77ef6150a6d958980f1883e3482744d2))
+
+- Ontology graph loading errors
+  ([`a9c9e3a`](https://github.com/jupyter-naas/abi/commit/a9c9e3a69640e8d6ad9ad5b3fead1e60ccee5a9e))
+
+- Ontology imports error
+  ([`c0747c4`](https://github.com/jupyter-naas/abi/commit/c0747c41727ff31627a6c51daa5dff014f8ebf2d))
+
+- Remove obj prop role
+  ([`2442820`](https://github.com/jupyter-naas/abi/commit/2442820379848180756c0da12ecd2c5ae28322f5))
+
+- Rm ontology triples in templatable sparql query tool
+  ([`379e097`](https://github.com/jupyter-naas/abi/commit/379e09717933a2b6d587ffbddd1b9950b92d4cfa))
+
+- Ruff errors
+  ([`cfd07e1`](https://github.com/jupyter-naas/abi/commit/cfd07e12d5c1b3cbd51685456eb8088c7fa13701))
+
+- Select classes or object properties
+  ([`359aa06`](https://github.com/jupyter-naas/abi/commit/359aa06f2111e42a494aec6748ead50036078dc6))
+
+### Features
+
+- Add agent role to kg + ontology
+  ([`17c2fad`](https://github.com/jupyter-naas/abi/commit/17c2fadc1ba7ee79d600d38058729c9ee968d511))
+
+- Display logo url
+  ([`9f58112`](https://github.com/jupyter-naas/abi/commit/9f58112045e46471ca9c79a2277cbe47d914967c))
+
+
+## v1.16.3 (2026-04-07)
+
+### Bug Fixes
+
+- Add static method in agents + update pipeline
+  ([`5a8aafc`](https://github.com/jupyter-naas/abi/commit/5a8aafcb84d51182e283ea251cb2aba98de0c0de))
+
+
+## v1.16.2 (2026-04-03)
+
+### Bug Fixes
+
+- Remove unused import in NexusPlatformPipeline.py
+  ([`f829279`](https://github.com/jupyter-naas/abi/commit/f829279bfe4e0ea7a91bd01692332b95c1d7e91d))
+
+
 ## v1.16.1 (2026-04-03)
 
 ### Bug Fixes

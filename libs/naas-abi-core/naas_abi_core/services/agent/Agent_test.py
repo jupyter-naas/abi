@@ -72,61 +72,6 @@ def test_tools_no_agents(model):
         chunks.append(chunk)
 
 
-# This test is not consistent.
-# def test_agents_no_tools(model):
-#     from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
-#     from queue import Queue
-#     import json
-#     import pydash as pd
-
-#     queue = Queue()
-
-#     agent = Agent(
-#         name="Test Agent",
-#         description="A test agent",
-#         chat_model=model,
-#         tools=[
-#             Agent(
-#                 name="Greeter",
-#                 description="A greeter agent",
-#                 chat_model=model,
-#                 tools=[],
-#                 agents=[],
-#                 configuration=AgentConfiguration(
-#                     system_prompt="You are a greeter agent. You must greet the user with the name they provide in the form 'Hello, <name>!' and nothing else."
-#                 ),
-#                 event_queue=queue,
-#             )
-#         ],
-#         agents=[],
-#         configuration=AgentConfiguration(
-#             system_prompt="The user will send you his name. You must call the greeter agent and output it's result and nothing else. You must call it only once."
-#         ),
-#         event_queue=queue,
-#     )
-
-#     chunks = []
-
-#     for _, chunk in agent.stream("ABI"):
-#         chunks.append(chunk)
-#         if 'call_model' in chunk:
-#             print(f'\n\t Call Model: {type(chunk)}')
-#             print(pd.get(chunk, "call_model.messages[-1].content"))
-#             print('\n')
-#         elif 'call_tools' in chunk:
-#             print(f'\n\t Call Tools: {type(chunk)}')
-#             print(pd.get(chunk, "call_tools.messages[-1].content"))
-#             print('\n')
-#         else:
-#             print(f'\n\t Unknown: {type(chunk)}')
-#             print(chunk)
-#             print('\n')
-#         assert len(chunks) <= 5
-
-#     assert len(chunks) == 5
-#     assert list(chunks[-1].values())[0]['messages'][-1].content == "Hello, ABI!"
-
-
 def test_agent_duplication(model):
     from queue import Queue
 
@@ -147,8 +92,8 @@ def test_agent_duplication(model):
         name="Test Agent",
         description="A test agent",
         chat_model=model,
-        tools=[sub_agent],
-        agents=[],
+        tools=[],
+        agents=[sub_agent],
         configuration=AgentConfiguration(system_prompt=""),
         event_queue=queue,
     )
@@ -159,25 +104,26 @@ def test_agent_duplication(model):
     assert id(duplicated_agent.agents[0]) != id(first_agent.agents[0])
 
 
-# def test_agent_stream_invoke(model):
-#     from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
+def test_agent_stream_invoke(model):
+    from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
 
-#     agent = Agent(
-#         name="Greeting Agent",
-#         description="A Greeting agent",
-#         chat_model=model,
-#         tools=[],
-#         agents=[],
-#         configuration=AgentConfiguration(system_prompt="You are a Greeting agent"),
-#     )
+    agent = Agent(
+        name="Greeting Agent",
+        description="A Greeting agent",
+        chat_model=model,
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(system_prompt="You are a Greeting agent"),
+    )
 
-#     events = []
-#     for event in agent.stream_invoke("My name is ABI"):
-#         events.append(event)
+    events = []
+    for event in agent.stream_invoke("My name is ABI"):
+        events.append(event)
 
-#     assert len(events) == 2
-#     assert events[0]["event"] == "message"
-#     assert events[1]["event"] == "done"
+    assert len(events) == 3, events
+    assert events[0]["event"] == "ai_message", events[0]
+    assert events[1]["event"] == "message", events[1]
+    assert events[2]["event"] == "done", events[2]
 
 
 def test_agent_stream_invoke_isolation(model):

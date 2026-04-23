@@ -19,6 +19,16 @@ api:
 global_config:
   ai_mode: "cloud"
 
+opencode:
+  auth_file_path: "~/.local/share/opencode/auth.json"
+  providers:
+    - id: "openrouter"
+      key: "{{ secret.OPENROUTER_API_KEY }}"
+      type: "api"
+    - id: "openai"
+      key: "{{ secret.OPENAI_API_KEY }}"
+      type: "api"
+
 default_agent: naas_abi AbiAgent 
 modules:
   - module: naas_abi
@@ -33,6 +43,40 @@ modules:
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
+  - module: naas_abi_marketplace.applications.git
+    enabled: true
+  
+  - module: naas_abi_marketplace.applications.github
+    enabled: true
+    config:
+      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
+
+  - module: naas_abi_marketplace.applications.sec_gov
+    enabled: true
+    config:
+      datastore_path: "sec_gov"
+      user_agent: "NAAS-ABI-Marketplace/1.0 (abi@naas.ai)"
+  
+  - module: naas_abi_marketplace.applications.openrouter
+    enabled: true
+    config:
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+      include_models:
+        - "anthropic/claude-opus-4.6"
+        - "anthropic/claude-sonnet-4.6"
+        - "deepseek/deepseek-v3.2"
+        - "google/gemini-3.1-pro-preview"
+        - "mistralai/mistral-large-2512"
+        - "openai/gpt-4.1"
+        - "openai/gpt-4.1-mini"
+        - "openai/gpt-5.1"
+        - "openai/gpt-5.2"
+        - "perplexity/sonar-pro-search"
+        - "x-ai/grok-4.1-fast"
+
+  - module: naas_abi_marketplace.domains.document
+    enabled: true
+  
   - module: naas_abi_marketplace.domains.support
     enabled: true
     config:
@@ -45,31 +89,6 @@ modules:
         priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
         priority_option_id: "4fb76f2d"
   
-  - module: naas_abi_marketplace.applications.github
-    enabled: true
-    config:
-      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
-  #
-  # - module: naas_abi_marketplace.applications.openrouter
-  #   enabled: true
-  #   config:
-  #     openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
-  #     include_models:
-  #       - "anthropic/claude-opus-4.6"
-  #       - "anthropic/claude-sonnet-4.6"
-  #       - "deepseek/deepseek-v3.2"
-  #       - "google/gemini-3.1-pro-preview"
-  #       - "mistralai/mistral-large-2512"
-  #       - "openai/gpt-4.1"
-  #       - "openai/gpt-4.1-mini"
-  #       - "openai/gpt-5.1"
-  #       - "openai/gpt-5.2"
-  #       - "perplexity/sonar-pro-search"
-  #       - "x-ai/grok-4.1-fast"
-  #
-  # - module: naas_abi_marketplace.applications.git
-  #   enabled: true
-  #
 services:
   secret:
     secret_adapters:

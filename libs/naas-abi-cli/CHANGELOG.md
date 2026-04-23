@@ -2,6 +2,58 @@
 
 <!-- version list -->
 
+## v1.25.2 (2026-04-21)
+
+
+## v1.25.1 (2026-04-21)
+
+### Bug Fixes
+
+- **ci**: Resolve all PR check failures
+  ([`5ba33bb`](https://github.com/jupyter-naas/abi/commit/5ba33bbf83483126546daef8815be32f119a45a3))
+
+- **mypy**: Suppress attr-defined on agent_class.New() in chat CLI
+  ([`247a959`](https://github.com/jupyter-naas/abi/commit/247a9591e78f77f4ab5224b5189c34bbb88f1eff))
+
+### Chores
+
+- **cli**: Add distributed Fuseki write lock to new project template
+  ([`265105e`](https://github.com/jupyter-naas/abi/commit/265105e19f956604c85d34dd8835f946042a6d82))
+
+
+## v1.25.0 (2026-04-15)
+
+### Features
+
+- Update CLI based on new changes
+  ([`ff68d7c`](https://github.com/jupyter-naas/abi/commit/ff68d7cecbeae42519448a500c6bef5e624a37b7))
+
+
+## v1.24.2 (2026-04-14)
+
+### Bug Fixes
+
+- Bump versions
+  ([`9096426`](https://github.com/jupyter-naas/abi/commit/90964266834d48b55770bccd536f26536bde9aec))
+
+
+## v1.24.1 (2026-04-07)
+
+### Bug Fixes
+
+- Update uv.lock
+  ([`14e2af0`](https://github.com/jupyter-naas/abi/commit/14e2af0181a4c3f3fb10143c882a4b36ddd07a2f))
+
+- Update uv.lock
+  ([`5064ad7`](https://github.com/jupyter-naas/abi/commit/5064ad70649dc9e116f5b169224bb5879c82e97d))
+
+### Chores
+
+- Update .gitignore, enhance security checks in Makefile, and refine Python version setup in CI
+  workflow
+  ([`fbb7073`](https://github.com/jupyter-naas/abi/commit/fbb7073adf2ec04d71b013422122ae2321d96346))
+
+
 ## v1.24.0 (2026-03-30)
 
 ### Features

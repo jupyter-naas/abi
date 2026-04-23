@@ -31,8 +31,6 @@ importers:
         specifier: ^5.3.3
         version: 5.9.3
 
-  apps/api: {}
-
   apps/web:
     dependencies:
       '@monaco-editor/react':

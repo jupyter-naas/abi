@@ -7,16 +7,21 @@ import yaml
 from jinja2 import Template
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
-    BusAdapterPythonQueueConfiguration,
     BusAdapterConfiguration,
+    BusAdapterPythonQueueConfiguration,
     BusServiceConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
+    EmailAdapterConfiguration,
+    EmailAdapterSMTPConfiguration,
+    EmailServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
-    KeyValueAdapterPythonConfiguration,
     KeyValueAdapterConfiguration,
+    KeyValueAdapterPythonConfiguration,
     KeyValueServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
@@ -35,13 +40,13 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreSe
     TripleStoreServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreService import (
-    VectorStoreAdapterQdrantInMemoryConfiguration,
     VectorStoreAdapterConfiguration,
+    VectorStoreAdapterQdrantInMemoryConfiguration,
     VectorStoreServiceConfiguration,
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from rich.prompt import Prompt
 from typing_extensions import Literal, Self
 
@@ -104,6 +109,16 @@ class ServicesConfiguration(BaseModel):
             ).model_dump(),
         )
     )
+    email: EmailServiceConfiguration = EmailServiceConfiguration(
+        email_adapter=EmailAdapterConfiguration(
+            adapter="smtp",
+            config=EmailAdapterSMTPConfiguration(
+                host="localhost",
+                port=1025,
+                timeout=10,
+            ).model_dump(),
+        )
+    )
 
 
 class ApiConfiguration(BaseModel):
@@ -113,6 +128,18 @@ class ApiConfiguration(BaseModel):
     favicon_path: str = "assets/favicon.ico"
     cors_origins: List[str] = ["http://localhost:9879"]
     reload: bool = True
+
+
+class OpencodeProviderConfiguration(BaseModel):
+    id: str
+    key: str
+    type: Literal["api"] = "api"
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class OpencodeConfiguration(BaseModel):
+    auth_file_path: str = "~/.local/share/opencode/auth.json"
+    providers: list[OpencodeProviderConfiguration] = Field(default_factory=list)
 
 
 class FirstPassConfiguration(BaseModel):
@@ -170,19 +197,19 @@ class EngineConfiguration(BaseModel):
 
     default_agent: str = "naas_abi AbiAgent"
 
+    opencode: OpencodeConfiguration = OpencodeConfiguration()
+
     def ensure_default_modules(self) -> None:
-        if not any(
-            m.path == "naas_abi_core.modules.templatablesparqlquery"
-            or m.module == "naas_abi_core.modules.templatablesparqlquery"
-            for m in self.modules
-        ):
-            self.modules.append(
-                ModuleConfig(
-                    module="naas_abi_core.modules.templatablesparqlquery",
-                    enabled=True,
-                    config={},
+        default_modules = [
+            "naas_abi_core.modules.templatablesparqlquery",
+            "naas_abi_core.modules.bfo",
+            "naas_abi_core.modules.cco",
+        ]
+        for module in default_modules:
+            if not any(m.path == module or m.module == module for m in self.modules):
+                self.modules.append(
+                    ModuleConfig(module=module, enabled=True, config={})
                 )
-            )
 
     @model_validator(mode="after")
     def validate_modules(self) -> Self:

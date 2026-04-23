@@ -7,6 +7,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     ApiConfiguration,
 )
 from naas_abi_core.services.bus.BusService import BusService
+from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -97,6 +98,12 @@ class ServicesProxy:
         self.__ensure_access(KeyValueService)
 
         return self.__engine.services.kv
+
+    @property
+    def email(self) -> EmailService:
+        self.__ensure_access(EmailService)
+
+        return self.__engine.services.email
 
 
 class EngineProxy:

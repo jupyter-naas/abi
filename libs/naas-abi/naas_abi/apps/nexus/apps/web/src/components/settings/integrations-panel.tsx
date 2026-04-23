@@ -33,6 +33,7 @@ const providerIcons: Record<ProviderType, React.ReactNode> = {
   openai: <Cloud size={18} />,
   cloudflare: <Cloud size={18} />,
   ollama: <Server size={18} />,
+  abi: <Server size={18} />,
   custom: <Code size={18} />,
 };
 
@@ -41,6 +42,7 @@ const providerLabels: Record<ProviderType, string> = {
   openai: 'OpenAI',
   cloudflare: 'Cloudflare',
   ollama: 'Ollama',
+  abi: 'ABI',
   custom: 'Custom',
 };
 
@@ -53,7 +55,7 @@ export function IntegrationsPanel() {
   
   // Helper to check if provider has credentials configured
   const hasCredentials = (provider: ProviderConfig) => {
-    if (provider.type === 'ollama') return true; // Doesn't need credentials
+    if (provider.type === 'ollama' || provider.type === 'abi') return true; // Doesn't need credentials
     if (provider.apiKeySecretKey) {
       const secret = secrets.find(s => s.key === provider.apiKeySecretKey);
       return !!secret; // Secret exists means it has a value (server-side encrypted)

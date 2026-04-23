@@ -2,6 +2,94 @@
 
 <!-- version list -->
 
+## v1.10.2 (2026-04-21)
+
+### Bug Fixes
+
+- Remove agent with no tool calling abilities
+  ([`fcc3f4d`](https://github.com/jupyter-naas/abi/commit/fcc3f4d895545a89d15b2eb5fb17d2b9f96c7dd2))
+
+
+## v1.10.1 (2026-04-21)
+
+### Bug Fixes
+
+- **ci**: Resolve all PR check failures
+  ([`5ba33bb`](https://github.com/jupyter-naas/abi/commit/5ba33bbf83483126546daef8815be32f119a45a3))
+
+
+## v1.10.0 (2026-04-14)
+
+### Bug Fixes
+
+- Bump versions
+  ([`9096426`](https://github.com/jupyter-naas/abi/commit/90964266834d48b55770bccd536f26536bde9aec))
+
+- Dot location
+  ([`14ce581`](https://github.com/jupyter-naas/abi/commit/14ce581f96a977d0b989a747ac528bc5a79300b3))
+
+- Make the timetamp suffixed and not prefixed
+  ([`f04860b`](https://github.com/jupyter-naas/abi/commit/f04860b5675e2c82cdfc03ad320aedd5bf80e0cd))
+
+- Remove file from input dir
+  ([`0665cd0`](https://github.com/jupyter-naas/abi/commit/0665cd00721e54461274284e35e42200924da7a4))
+
+### Features
+
+- Add output dir to save sha256 and files
+  ([`6a68ab1`](https://github.com/jupyter-naas/abi/commit/6a68ab18b1dae2d97274c8ba2e10241517acab06))
+
+- Init document ontology
+  ([`f347d34`](https://github.com/jupyter-naas/abi/commit/f347d349b22efe563ee7e052283b34f02abb6234))
+
+- Init module document
+  ([`16442a4`](https://github.com/jupyter-naas/abi/commit/16442a4013d8089115974288d3bf9f899fffdceb))
+
+- Init pipeline
+  ([`7486b97`](https://github.com/jupyter-naas/abi/commit/7486b97ce228dc90f597e76de08fda2ac50deb8a))
+
+- Working on document module
+  ([`9b4a87a`](https://github.com/jupyter-naas/abi/commit/9b4a87a1dcb4539c18366886b398993081102718))
+
+- Working on ingestiong pipeline
+  ([`8efe02d`](https://github.com/jupyter-naas/abi/commit/8efe02daec122e08e6a99c6c9bfb2f624d3aac4f))
+
+### Refactoring
+
+- Remove data properties not used
+  ([`a496f3d`](https://github.com/jupyter-naas/abi/commit/a496f3d1e4102b6cd6858fb101b8952da32b6df3))
+
+- Rename pipeline
+  ([`cf40fdc`](https://github.com/jupyter-naas/abi/commit/cf40fdc578be10e61f4592f52fa7e9e7fa2486e5))
+
+
+## v1.9.0 (2026-04-07)
+
+### Bug Fixes
+
+- Add logo to agent + rm cache
+  ([`26d5f28`](https://github.com/jupyter-naas/abi/commit/26d5f28b1ef317409f946bf76c9a7664113ef23a))
+
+- Init sec gov module + create integration with company tickers
+  ([`d9d0547`](https://github.com/jupyter-naas/abi/commit/d9d0547fb3de06c0b547c104f7a70912f2ed27fe))
+
+### Features
+
+- Add routes submissions, tickers with exchange to integration
+  ([`64fe976`](https://github.com/jupyter-naas/abi/commit/64fe976538b8aa4e101e52eb74bf06f6d0f94d93))
+
+- Init organization module with ontology
+  ([`47e0550`](https://github.com/jupyter-naas/abi/commit/47e0550c93ee90437528cd0e244524acfcb422cb))
+
+
+## v1.8.2 (2026-04-07)
+
+### Bug Fixes
+
+- Add static method in agents + update pipeline
+  ([`5a8aafc`](https://github.com/jupyter-naas/abi/commit/5a8aafcb84d51182e283ea251cb2aba98de0c0de))
+
+
 ## v1.8.1 (2026-04-02)
 
 ### Bug Fixes

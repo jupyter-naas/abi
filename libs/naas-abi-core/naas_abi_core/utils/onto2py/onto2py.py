@@ -2,6 +2,7 @@ import io
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -722,11 +723,16 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
                 existing_code = f.read()
             if existing_code == python_code:
                 print(f"✅ {ttl_file_path} already converted to {py_file}")
-                return existing_code
-
-        with open(py_file, "w") as f:
-            f.write(python_code)
-        print(f"✅ Successfully converted {ttl_file_path} to {py_file}")
+            else:
+                with open(py_file, "w") as f:
+                    f.write(python_code)
+                _run_ruff([str(py_file)])
+                print(f"✅ Successfully converted {ttl_file_path} to {py_file}")
+        else:
+            with open(py_file, "w") as f:
+                f.write(python_code)
+            _run_ruff([str(py_file)])
+            print(f"✅ Successfully converted {ttl_file_path} to {py_file}")
 
         # Create individual class files
         create_class_files(ttl_file_path, classes, py_file, overwrite)
@@ -1017,7 +1023,7 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
                 property_type="data",
                 range_classes={"str": 1},
                 description="An entity responsible for making the resource.",
-                default_value="os.environ.get('USER')",
+                default_value='os.environ.get("USER")',
                 required=True,  # Mandatory property with default
             )
             class_info.properties.append(creator_prop)
@@ -1065,6 +1071,7 @@ def create_class_files(
 
     created_count = 0
     skipped_count = 0
+    created_files: list[str] = []
 
     for class_uri, class_info in classes.items():
         # Parse URI: remove "http://" or "https://" prefix and split by "/"
@@ -1080,6 +1087,9 @@ def create_class_files(
 
         # Split by "/" to get path components
         uri_parts = [part for part in uri_str.split("/") if part]
+        # Ensure generated folder names are valid Python package segments.
+        # Ontology domains commonly contain dots (e.g., ontology.naas.ai).
+        uri_parts = [part.replace(".", "_") for part in uri_parts]
 
         if not uri_parts:
             continue
@@ -1189,9 +1199,13 @@ class {class_info.name}(_{class_info.name}):
         try:
             with open(class_file, "w") as f:
                 f.write(class_file_content)
+            created_files.append(str(class_file))
             created_count += 1
         except Exception as e:
             print(f"⚠️  Warning: Failed to create class file {class_file}: {e}")
+
+    # Lint all created class files in one batch
+    _run_ruff(created_files)
 
     if created_count > 0 or skipped_count > 0:
         print(
@@ -1199,10 +1213,68 @@ class {class_info.name}(_{class_info.name}):
         )
 
 
-def apply_linting(code: str) -> str:
-    """Apply ruff formatting to the generated code"""
+def _find_ruff() -> Optional[str]:
+    """Locate the ruff binary, trying several common locations."""
+    candidates = [
+        "ruff",
+        str(Path(sys.executable).parent / "ruff"),
+        "uvx ruff",
+    ]
+    for candidate in candidates:
+        parts = candidate.split()
+        try:
+            result = subprocess.run(
+                [*parts, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode == 0:
+                return candidate
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
+            continue
+    return None
+
+
+def _run_ruff(paths: list[str]) -> None:
+    """Run ruff fix-all + organize-imports + format on the given file paths.
+
+    Mirrors the editor settings:
+      source.fixAll        -> ruff check --fix
+      source.organizeImports -> ruff check --fix --extend-select I
+      editor.formatOnSave  -> ruff format
+    """
+    if not paths:
+        return
+    ruff = _find_ruff()
+    if ruff is None:
+        return
+    ruff_parts = ruff.split()
     try:
-        # Write code to a temporary file
+        subprocess.run(
+            [*ruff_parts, "check", "--fix", "--extend-select", "I", *paths],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        subprocess.run(
+            [*ruff_parts, "format", *paths],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        pass
+    except Exception:
+        pass
+
+
+def apply_linting(code: str) -> str:
+    """Apply ruff fix-all, organize-imports, and formatting to generated code."""
+    try:
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".py", delete=False
         ) as tmp_file:
@@ -1210,37 +1282,17 @@ def apply_linting(code: str) -> str:
             tmp_path = tmp_file.name
 
         try:
-            # Run ruff format
-            subprocess.run(
-                ["ruff", "format", tmp_path],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,  # Don't raise on error
-            )
+            _run_ruff([tmp_path])
 
-            # Run ruff check --fix
-            subprocess.run(
-                ["ruff", "check", "--fix", tmp_path],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,  # Don't raise on error
-            )
-
-            # Read the formatted code
             with open(tmp_path, "r") as f:
                 formatted_code = f.read()
 
             return formatted_code
         finally:
-            # Clean up temporary file
             Path(tmp_path).unlink(missing_ok=True)
     except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
-        # If ruff is not available or fails, return original code
         return code
     except Exception:
-        # On any other error, return original code
         return code
 
 
@@ -1282,62 +1334,254 @@ def generate_python_code(
                 needs_os = True
 
     # Build typing imports
-    typing_imports = ["Annotated", "Optional", "ClassVar"]
+    typing_imports = [
+        "Annotated",
+        "Any",
+        "Callable",
+        "ClassVar",
+        "Iterable",
+        "Optional",
+        "get_args",
+        "get_origin",
+    ]
     if needs_list:
         typing_imports.append("List")
     if needs_union:
         typing_imports.append("Union")
-    if needs_any:
-        typing_imports.append("Any")
 
-    typing_import_str = ", ".join(sorted(typing_imports))
-
-    code_lines = [
-        "from __future__ import annotations",
-        f"from typing import {typing_import_str}",
-        "from pydantic import BaseModel, Field",
-        "import uuid",
-    ]
-
+    # Build sorted stdlib imports
+    stdlib_lines: list[str] = ["import uuid"]
     if needs_datetime:
-        code_lines.append("import datetime")
-
+        stdlib_lines.append("import datetime")
     if needs_os:
-        code_lines.append("import os")
+        stdlib_lines.append("import os")
+    stdlib_lines.sort()
+
+    # Build multi-line typing import block
+    typing_block = ["from typing import ("] + [
+        f"    {name}," for name in sorted(typing_imports)
+    ] + [")"]
+
+    code_lines: list[str] = (
+        ["from __future__ import annotations", ""]
+        + stdlib_lines
+        + typing_block
+        + [
+            "",
+            "from pydantic import BaseModel, Field, ValidationError",
+            "from rdflib import Graph, Literal, Namespace, URIRef",
+            "from rdflib.namespace import OWL, RDF, RDFS, XSD",
+        ]
+    )
 
     code_lines.extend(
         [
-            "from rdflib import Graph, URIRef, Literal, Namespace",
-            "from rdflib.namespace import RDF, RDFS, OWL, XSD, DCTERMS",
             "",
-            "BFO = Namespace('http://purl.obolibrary.org/obo/')",
-            "ABI = Namespace('http://ontology.naas.ai/abi/')",
-            "CCO = Namespace('https://www.commoncoreontologies.org/')",
+            'BFO = Namespace("http://purl.obolibrary.org/obo/")',
+            'ABI = Namespace("http://ontology.naas.ai/abi/")',
+            'CCO = Namespace("https://www.commoncoreontologies.org/")',
+            "",
+            "",
             "# Base class for all RDF entities",
             "class RDFEntity(BaseModel):",
             '    """Base class for all RDF entities with URI and namespace management"""',
+            "",
             '    _namespace: ClassVar[str] = "http://ontology.naas.ai/abi/"',
             '    _uri: str = ""',
             "    _object_properties: ClassVar[set[str]] = set()",
-            "    ",
-            "    model_config = {",
-            "        'arbitrary_types_allowed': True,",
-            "        'extra': 'forbid'",
-            "    }",
-            "    ",
+            "    _query_executor: ClassVar[Callable[[str], Iterable[object]] | None] = None",
+            "",
+            '    model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}',
+            "",
             "    def __init__(self, **kwargs):",
-            "        uri = kwargs.pop('_uri', None)",
+            '        uri = kwargs.pop("_uri", None)',
             "        super().__init__(**kwargs)",
             "        if uri is not None:",
             "            self._uri = uri",
             "        elif not self._uri:",
             '            self._uri = f"{self._namespace}{uuid.uuid4()}"',
-            "    ",
+            "",
             "    @classmethod",
             "    def set_namespace(cls, namespace: str):",
             '        """Set the namespace for generating URIs"""',
             "        cls._namespace = namespace",
-            "        ",
+            "",
+            "    @classmethod",
+            "    def set_query_executor(",
+            "        cls, query_executor: Callable[[str], Iterable[object]] | None",
+            "    ):",
+            '        """Set the SPARQL query executor used by from_iri()."""',
+            "        cls._query_executor = query_executor",
+            "",
+            "    @staticmethod",
+            "    def _extract_result_value(row: object, key: str) -> object | None:",
+            '        """Extract a SPARQL binding value from a ResultRow-like object."""',
+            "        if hasattr(row, key):",
+            "            return getattr(row, key)",
+            "        try:",
+            "            return row[key]  # type: ignore[index]",
+            "        except Exception:",
+            "            pass",
+            "",
+            '        labels = getattr(row, "labels", None)',
+            "        if labels and key in labels:",
+            "            try:",
+            "                return row[key]  # type: ignore[index]",
+            "            except Exception:",
+            "                pass",
+            "",
+            "        if isinstance(row, (list, tuple)):",
+            '            idx = 0 if key == "p" else 1',
+            "            if len(row) > idx:",
+            "                return row[idx]",
+            "",
+            "        return None",
+            "",
+            "    @staticmethod",
+            "    def _coerce_rdf_value(value: object, is_object_property: bool) -> object:",
+            '        """Convert RDFLib values to python values used by generated models."""',
+            "        if value is None:",
+            "            return None",
+            "        if is_object_property:",
+            "            return str(value)",
+            "        if isinstance(value, Literal):",
+            "            return value.toPython()",
+            "        return str(value)",
+            "",
+            "    @staticmethod",
+            "    def _field_expects_list(field_annotation: object) -> bool:",
+            '        """Return True when a field annotation contains a list type."""',
+            "        origin = get_origin(field_annotation)",
+            "        if origin in (list, List):",
+            "            return True",
+            "        if origin is Annotated:",
+            "            args = get_args(field_annotation)",
+            "            if args:",
+            "                return RDFEntity._field_expects_list(args[0])",
+            "            return False",
+            "        if origin is Union:",
+            "            return any(",
+            "                RDFEntity._field_expects_list(arg)",
+            "                for arg in get_args(field_annotation)",
+            "                if arg is not type(None)",
+            "            )",
+            "        return False",
+            "",
+            "    @staticmethod",
+            "    def _fallback_label_from_iri(iri: str) -> str:",
+            '        """Build a best-effort label from an IRI."""',
+            '        trimmed = iri.rstrip("/")',
+            '        if "#" in trimmed:',
+            '            return trimmed.split("#")[-1] or trimmed',
+            '        return trimmed.split("/")[-1] or trimmed',
+            "",
+            "    @classmethod",
+            "    def from_iri(",
+            "        cls,",
+            "        iri: str,",
+            "        query_executor: Callable[[str], Iterable[object]] | None = None,",
+            "        graph_name: str | None = None,",
+            "    ):",
+            '        """Load a class instance from an IRI using SPARQL query results."""',
+            "        iri = str(iri).strip()",
+            "        if not iri:",
+            '            raise ValueError("iri must be a non-empty string")',
+            '        if "<" in iri or ">" in iri:',
+            '            raise ValueError("iri must not contain angle brackets")',
+            "        if graph_name is not None:",
+            "            graph_name = str(graph_name).strip()",
+            "            if not graph_name:",
+            "                graph_name = None",
+            '            elif "<" in graph_name or ">" in graph_name:',
+            '                raise ValueError("graph_name must not contain angle brackets")',
+            "",
+            "        executor = query_executor or cls._query_executor",
+            "        if executor is None:",
+            "            raise ValueError(",
+            '                "No query executor configured. Pass query_executor to from_iri() "',
+            '                "or set it with set_query_executor()."',
+            "            )",
+            "",
+            "        if graph_name:",
+            '            sparql_query = f"""',
+            "                SELECT ?p ?o",
+            "                WHERE {{",
+            "                    GRAPH <{graph_name}> {{",
+            "                        <{iri}> ?p ?o .",
+            "                        FILTER(?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)",
+            "                    }}",
+            "                }}",
+            '            """',
+            "        else:",
+            '            sparql_query = f"""',
+            "                SELECT ?p ?o",
+            "                WHERE {{",
+            "                    <{iri}> ?p ?o .",
+            "                    FILTER(?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)",
+            "                }}",
+            '            """',
+            "",
+            "        results = executor(sparql_query)",
+            "        reverse_property_uris = {",
+            "            prop_uri: prop_name",
+            '            for prop_name, prop_uri in getattr(cls, "_property_uris", {}).items()',
+            "        }",
+            '        object_props: set[str] = getattr(cls, "_object_properties", set())',
+            '        model_fields = getattr(cls, "model_fields", {})',
+            "        values: dict[str, Any] = {}",
+            "",
+            "        for row in results:  # type: ignore[assignment]",
+            '            predicate = cls._extract_result_value(row, "p")',
+            '            obj = cls._extract_result_value(row, "o")',
+            "            if predicate is None:",
+            "                continue",
+            "            prop_name = reverse_property_uris.get(str(predicate))",
+            "            if not prop_name:",
+            "                continue",
+            "",
+            "            coerced = cls._coerce_rdf_value(",
+            "                obj,",
+            "                is_object_property=prop_name in object_props,",
+            "            )",
+            "            field_info = model_fields.get(prop_name)",
+            "            expects_list = False",
+            "            if field_info is not None:",
+            "                expects_list = cls._field_expects_list(field_info.annotation)",
+            "",
+            "            if prop_name not in values:",
+            "                if expects_list:",
+            "                    values[prop_name] = [coerced]",
+            "                else:",
+            "                    values[prop_name] = coerced",
+            "            else:",
+            "                existing = values[prop_name]",
+            "                if isinstance(existing, list):",
+            "                    existing.append(coerced)",
+            "                elif expects_list:",
+            "                    values[prop_name] = [existing, coerced]",
+            "                else:",
+            "                    values[prop_name] = existing",
+            "",
+            '        if "label" in model_fields and "label" not in values:',
+            '            values["label"] = cls._fallback_label_from_iri(iri)',
+            "",
+            "        for field_name, field_info in model_fields.items():",
+            "            if field_name in values:",
+            "                continue",
+            "            if field_info.is_required():",
+            "                if cls._field_expects_list(field_info.annotation):",
+            "                    values[field_name] = []",
+            "                else:",
+            "                    values[field_name] = None",
+            "",
+            "        try:",
+            "            return cls(_uri=iri, **values)",
+            "        except ValidationError:",
+            "            # Keep loading permissive for partially populated RDF resources.",
+            "            return cls.model_construct(",
+            "                _fields_set=set(values.keys()), _uri=iri, **values",
+            "            )",
+            "",
             "    def rdf(",
             "        self, subject_uri: str | None = None, visited: set[str] | None = None",
             "    ) -> Graph:",
@@ -1352,13 +1596,13 @@ def generate_python_code(
             "            visited = set()",
             "",
             "        g = Graph()",
-            "        g.bind('cco', CCO)",
-            "        g.bind('bfo', BFO)",
-            "        g.bind('abi', ABI)",
-            "        g.bind('rdfs', RDFS)",
-            "        g.bind('rdf', RDF)",
-            "        g.bind('owl', OWL)",
-            "        g.bind('xsd', XSD)",
+            '        g.bind("cco", CCO)',
+            '        g.bind("bfo", BFO)',
+            '        g.bind("abi", ABI)',
+            '        g.bind("rdfs", RDFS)',
+            '        g.bind("rdf", RDF)',
+            '        g.bind("owl", OWL)',
+            '        g.bind("xsd", XSD)',
             "",
             "        # Use stored URI or provided subject_uri",
             "        if subject_uri is None:",
@@ -1375,27 +1619,27 @@ def generate_python_code(
             "        visited.add(subject_uri)",
             "",
             "        # Add class type",
-            "        if hasattr(self, '_class_uri'):",
+            '        if hasattr(self, "_class_uri"):',
             "            g.add((subject, RDF.type, URIRef(self._class_uri)))",
             "",
             "        # Add owl:NamedIndividual type",
             "        g.add((subject, RDF.type, OWL.NamedIndividual))",
             "",
             "        # Add label if it exists",
-            "        if hasattr(self, 'label'):",
+            '        if hasattr(self, "label"):',
             "            g.add((subject, RDFS.label, Literal(self.label)))",
             "",
-            "        object_props: set[str] = getattr(self, '_object_properties', set())",
+            '        object_props: set[str] = getattr(self, "_object_properties", set())',
             "",
             "        # Add properties",
-            "        if hasattr(self, '_property_uris'):",
+            '        if hasattr(self, "_property_uris"):',
             "            for prop_name, prop_uri in self._property_uris.items():",
             "                is_object_prop = prop_name in object_props",
             "                prop_value = getattr(self, prop_name, None)",
             "                if prop_value is not None:",
             "                    if isinstance(prop_value, list):",
             "                        for item in prop_value:",
-            "                            if hasattr(item, 'rdf') and hasattr(item, '_uri'):",
+            '                            if hasattr(item, "rdf") and hasattr(item, "_uri"):',
             "                                # Check if this entity was already visited to prevent cycles",
             "                                if item._uri not in visited:",
             "                                    # Add triples from related object",
@@ -1406,7 +1650,7 @@ def generate_python_code(
             "                                g.add((subject, URIRef(prop_uri), URIRef(str(item))))",
             "                            else:",
             "                                g.add((subject, URIRef(prop_uri), Literal(item)))",
-            "                    elif hasattr(prop_value, 'rdf') and hasattr(prop_value, '_uri'):",
+            '                    elif hasattr(prop_value, "rdf") and hasattr(prop_value, "_uri"):',
             "                        # Check if this entity was already visited to prevent cycles",
             "                        if prop_value._uri not in visited:",
             "                            # Add triples from related object",
@@ -1429,6 +1673,7 @@ def generate_python_code(
 
     for class_info in sorted_classes:
         code_lines.extend(generate_class_code(class_info, needs_any))
+        code_lines.append("")
         code_lines.append("")
 
     # Add model_rebuild() calls for forward references
@@ -1570,23 +1815,26 @@ def generate_class_code(
         lines.append("")
 
     # Add class-specific metadata
-    lines.append(f"    _class_uri: ClassVar[str] = '{class_info.uri}'")
+    lines.append(f'    _class_uri: ClassVar[str] = "{class_info.uri}"')
 
     # Add _name property with rdfs:label
     class_label = class_info.label if class_info.label else class_info.name
-    # Escape single quotes in the label
-    class_label_escaped = class_label.replace("'", "\\'")
-    lines.append(f"    _name: ClassVar[str] = '{class_label_escaped}'")
+    class_label_escaped = class_label.replace('"', '\\"')
+    lines.append(f'    _name: ClassVar[str] = "{class_label_escaped}"')
 
-    # Add property URI mapping
+    # Add property URI mapping — multi-line when it would exceed the line limit
+    LINE_LIMIT = 88
     if class_info.property_uris:
-        prop_uris_dict = ", ".join(
-            [
-                f"'{prop_name}': '{prop_uri}'"
-                for prop_name, prop_uri in sorted(class_info.property_uris.items())
-            ]
-        )
-        lines.append(f"    _property_uris: ClassVar[dict] = {{{prop_uris_dict}}}")
+        sorted_items = sorted(class_info.property_uris.items())
+        inline = ", ".join(f'"{k}": "{v}"' for k, v in sorted_items)
+        single_line = f"    _property_uris: ClassVar[dict] = {{{inline}}}"
+        if len(single_line) <= LINE_LIMIT:
+            lines.append(single_line)
+        else:
+            lines.append("    _property_uris: ClassVar[dict] = {")
+            for prop_name, prop_uri in sorted_items:
+                lines.append(f'        "{prop_name}": "{prop_uri}",')
+            lines.append("    }")
     else:
         lines.append("    _property_uris: ClassVar[dict] = {}")
 
@@ -1594,8 +1842,15 @@ def generate_class_code(
         {prop.name for prop in properties_list if prop.property_type == "object"}
     )
     if object_prop_names:
-        names = ", ".join(f"'{name}'" for name in object_prop_names)
-        lines.append(f"    _object_properties: ClassVar[set[str]] = {{{names}}}")
+        names = ", ".join(f'"{name}"' for name in object_prop_names)
+        single_line = f"    _object_properties: ClassVar[set[str]] = {{{names}}}"
+        if len(single_line) <= LINE_LIMIT:
+            lines.append(single_line)
+        else:
+            lines.append("    _object_properties: ClassVar[set[str]] = {")
+            for name in object_prop_names:
+                lines.append(f'        "{name}",')
+            lines.append("    }")
     else:
         lines.append("    _object_properties: ClassVar[set[str]] = set()")
 
@@ -1630,7 +1885,7 @@ def generate_class_code(
             lines.append("")
         lines.append(f"    # {group_label}")
         for prop in props:
-            lines.append(f"    {generate_property_code(prop, has_any_import)}")
+            lines.extend(generate_property_code(prop, has_any_import))
         emitted_property_group = True
 
     if not emitted_property_group:
@@ -1639,86 +1894,120 @@ def generate_class_code(
     return lines
 
 
-def generate_property_code(prop: PropertyInfo, has_any_import: bool = False) -> str:
-    """Generate code for a single property using Annotated"""
+def generate_property_code(
+    prop: PropertyInfo, has_any_import: bool = False
+) -> List[str]:
+    """Generate code lines for a single property using Annotated.
 
-    # Determine base type annotation (without Optional or Annotated)
+    Returns a list of lines already prefixed with 4-space indentation.
+    """
+    INDENT = "    "
+    LINE_LIMIT = 88
+
+    # Determine base type annotation
     if prop.property_type == "object":
-        # Build union type parts based on range_classes with their cardinalities
         union_type_parts_set = {"str", "URIRef"}
-
-        # Add all classes from range_classes dict (regardless of cardinality)
-        # We'll wrap the entire Union in List if any class needs to be a list
-        for class_name, cardinality in prop.range_classes.items():
+        for class_name in prop.range_classes:
             union_type_parts_set.add(class_name)
 
-        # Check if we need to wrap in List (if any cardinality is None or > 1)
-        needs_lists = False
-        for cardinality in prop.range_classes.values():
-            if cardinality is None or cardinality > 1:
-                needs_lists = True
-                break
-
-        # Build the Union type with all scalar types
-        union_type_parts = sorted(union_type_parts_set)
-        union_types = ", ".join(union_type_parts)
-
-        # Wrap in List if needed, otherwise just use Union
-        if needs_lists:
-            base_type = f"List[Union[{union_types}]]"
-        else:
-            base_type = f"Union[{union_types}]"
+        needs_lists = any(
+            c is None or c > 1 for c in prop.range_classes.values()
+        )
+        union_types = ", ".join(sorted(union_type_parts_set))
+        base_type = (
+            f"List[Union[{union_types}]]" if needs_lists else f"Union[{union_types}]"
+        )
     elif prop.property_type == "data" and prop.datatype:
-        # For data properties, check if any range class has cardinality > 1
-        # (data properties don't use range_classes, so this is a fallback)
         base_type = prop.datatype
     else:
-        # Use Any if imported, otherwise use object as fallback
         base_type = "Any" if has_any_import else "object"
 
-    # Build Field annotation with description if available
-    field_args = []
+    # Build Field() call
     if prop.description:
-        # Escape quotes in description
         description = prop.description.replace('"', '\\"')
-        field_args.append(f'description="{description}"')
-
-    # Build the Field() call
-    if field_args:
-        field_str = f"Field({', '.join(field_args)})"
+        field_str = f'Field(description="{description}")'
     else:
         field_str = "Field()"
 
-    # Determine if we need Optional wrapper
-    # For fields with default values, use Annotated[Optional[Type], Field(...)]
-    # For required fields without defaults, use Annotated[Type, Field(...)]
-    # For optional fields without defaults, use Optional[Annotated[Type, Field(...)]]
+    # Determine default value string (use double quotes)
     if prop.default_value:
-        # Pattern: Annotated[Optional[Type], Field(...)] when there's a default
+        default_str = prop.default_value.replace("'USER'", '"USER"')
+    elif not prop.required and prop.property_type == "object":
+        if base_type.startswith("List["):
+            default_str = '["http://ontology.naas.ai/abi/unknown"]'
+        else:
+            default_str = '"http://ontology.naas.ai/abi/unknown"'
+    elif not prop.required and prop.property_type == "data" and base_type == "str":
+        default_str = '"unknown"'
+    else:
+        default_str = None
+
+    # Build type annotation
+    if prop.default_value:
         final_type = f"Annotated[Optional[{base_type}], {field_str}]"
     elif not prop.required:
-        # Pattern: Optional[Annotated[Type, Field(...)]] for optional fields
-        annotated_type = f"Annotated[{base_type}, {field_str}]"
-        final_type = f"Optional[{annotated_type}]"
+        final_type = f"Optional[Annotated[{base_type}, {field_str}]]"
     else:
-        # Pattern: Annotated[Type, Field(...)] for required fields
         final_type = f"Annotated[{base_type}, {field_str}]"
 
-    # Handle default value assignment
+    # Assemble single-line version
+    assignment = f" = {default_str}" if default_str is not None else ""
+    single_line = f"{INDENT}{prop.name}: {final_type}{assignment}"
+
+    if len(single_line) <= LINE_LIMIT:
+        return [single_line]
+
+    # Line too long — emit multi-line form
+    lines: List[str] = []
+
+    def _field_lines(depth: int) -> List[str]:
+        """Return Field(...) lines at the given indent depth."""
+        inline = f"{INDENT * depth}{field_str},"
+        if len(inline) <= LINE_LIMIT:
+            return [inline]
+        # Field itself needs wrapping (very long description)
+        if prop.description:
+            return [
+                f"{INDENT * depth}Field(",
+                f'{INDENT * (depth + 1)}description="{description}"',
+                f"{INDENT * depth}),",
+            ]
+        return [f"{INDENT * depth}Field(),"]
+
     if prop.default_value:
-        # Default value goes after the type annotation
-        return f"{prop.name}: {final_type} = {prop.default_value}"
-    elif not prop.required and prop.property_type == "object":
-        # Determine if this is a list type based on base_type
-        is_list_type = base_type.startswith("List[")
-        if is_list_type:
-            default_value = "['http://ontology.naas.ai/abi/unknown']"
+        # Annotated[Optional[T], Field(...)] = default_value
+        lines.append(f"{INDENT}{prop.name}: Annotated[")
+        lines.append(f"{INDENT * 2}Optional[{base_type}],")
+        lines += _field_lines(2)
+        lines.append(f"{INDENT}]")
+        if default_str is not None:
+            lines[-1] += f" = {default_str}"
+    elif not prop.required:
+        # Optional[Annotated[T, Field(...)]]
+        # Keep inner Annotated[...] on one line if it fits
+        inner = f"Annotated[{base_type}, {field_str}]"
+        inner_line = f"{INDENT * 2}{inner}"
+        if len(inner_line) <= LINE_LIMIT:
+            lines.append(f"{INDENT}{prop.name}: Optional[")
+            lines.append(inner_line)
+            lines.append(f"{INDENT}]")
         else:
-            default_value = "'http://ontology.naas.ai/abi/unknown'"
-        return f"{prop.name}: {final_type} = {default_value}"
-    elif not prop.required and prop.property_type == "data":
-        return f"{prop.name}: {final_type} ='unknown'"
-    return f"{prop.name}: {final_type}"
+            lines.append(f"{INDENT}{prop.name}: Optional[")
+            lines.append(f"{INDENT * 2}Annotated[")
+            lines.append(f"{INDENT * 3}{base_type},")
+            lines += _field_lines(3)
+            lines.append(f"{INDENT * 2}]")
+            lines.append(f"{INDENT}]")
+        if default_str is not None:
+            lines[-1] += f" = {default_str}"
+    else:
+        # Annotated[T, Field(...)]
+        lines.append(f"{INDENT}{prop.name}: Annotated[")
+        lines.append(f"{INDENT * 2}{base_type},")
+        lines += _field_lines(2)
+        lines.append(f"{INDENT}]")
+
+    return lines
 
 
 if __name__ == "__main__":
