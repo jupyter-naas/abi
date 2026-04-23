@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v1.29.0 (2026-04-23)
+
+### Bug Fixes
+
+- **ci**: Resolve mypy and bandit failures in check-core
+  ([`89712a2`](https://github.com/jupyter-naas/abi/commit/89712a26e633bdb68e10b728fbbb6157a1409ef7))
+
+- **engine**: Expose cache service via ServicesProxy
+  ([`6ba8c83`](https://github.com/jupyter-naas/abi/commit/6ba8c832a11234a1252fe32ccce70c1d42127692))
+
+### Features
+
+- **cache**: Default to Redis hot + object-storage cold; resilient read-through
+  ([`bbdfbda`](https://github.com/jupyter-naas/abi/commit/bbdfbdab91756eba2969d551b6ded3e96010b6e5))
+
+- **cache**: Multi-tier hot/cold cache with explicit tier targeting
+  ([`3d1cf07`](https://github.com/jupyter-naas/abi/commit/3d1cf07f244eb44fe904107633c3ba8cae34191d))
+
+- **cache**: Register CacheService in engine with configurable fs/redis/object_storage backends
+  ([`f353ffc`](https://github.com/jupyter-naas/abi/commit/f353ffc7c09a91aef02ec9f4b2c5c5e1fef881a9))
+
+- **chat**: Add My Drive file ingestion with RAG support
+  ([`0d73b77`](https://github.com/jupyter-naas/abi/commit/0d73b77519948181632ecbae49576afc18717c60))
+
+
 ## v1.28.2 (2026-04-21)
 
 ### Bug Fixes
