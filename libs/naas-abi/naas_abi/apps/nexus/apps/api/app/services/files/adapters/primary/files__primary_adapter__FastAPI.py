@@ -72,6 +72,16 @@ def _normalize_workspace_id(workspace_id: str) -> str:
     return normalized
 
 
+def _normalize_user_id(user_id: str) -> str:
+    normalized = FilesService.normalize_relative_path(user_id)
+    if "/" in normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="user_id must be a single path segment",
+        )
+    return normalized
+
+
 def _resolve_workspace_scoped_path(path: str, workspace_id: str | None) -> tuple[str, str]:
     normalized_path = FilesService.normalize_relative_path(path, allow_empty=True)
     normalized_workspace = _normalize_workspace_id(workspace_id) if workspace_id else None
@@ -95,6 +105,17 @@ def _resolve_workspace_scoped_path(path: str, workspace_id: str | None) -> tuple
     return workspace, normalized_path
 
 
+def _resolve_my_drive_scoped_path(path: str, user_id: str) -> str:
+    normalized_path = FilesService.normalize_relative_path(path, allow_empty=True)
+    normalized_user = _normalize_user_id(user_id)
+    root = f"my-drive/{normalized_user}"
+    if not normalized_path:
+        return root
+    if normalized_path == root or normalized_path.startswith(f"{root}/"):
+        return normalized_path
+    return f"{root}/{normalized_path}"
+
+
 async def _authorize_workspace_path(
     current_user: User,
     path: str,
@@ -105,14 +126,30 @@ async def _authorize_workspace_path(
     return resolved_path
 
 
+async def _authorize_path(
+    current_user: User,
+    path: str,
+    workspace_id: str | None,
+    scope: str,
+) -> str:
+    if scope == "my_drive":
+        return _resolve_my_drive_scoped_path(path=path, user_id=current_user.id)
+    return await _authorize_workspace_path(
+        current_user=current_user,
+        path=path,
+        workspace_id=workspace_id,
+    )
+
+
 @router.get("/", response_model=FileListResponse)
 async def list_files(
     path: str = Query("", description="Directory path to list"),
     workspace_id: str | None = Query(default=None, max_length=100),
+    scope: str = Query(default="workspace", pattern="^(workspace|my_drive)$"),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_workspace_path(current_user, path, workspace_id)
+    scoped_path = await _authorize_path(current_user, path, workspace_id, scope)
     return _to_file_list_response_schema(files_service.list_files(path=scoped_path))
 
 
@@ -122,7 +159,9 @@ async def create_file(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_workspace_path(current_user, payload.path, payload.workspace_id)
+    scoped_path = await _authorize_path(
+        current_user, payload.path, payload.workspace_id, payload.scope
+    )
     return _to_file_info_schema(
         files_service.create_file(
             path=scoped_path,
@@ -138,7 +177,9 @@ async def create_folder(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_workspace_path(current_user, payload.path, payload.workspace_id)
+    scoped_path = await _authorize_path(
+        current_user, payload.path, payload.workspace_id, payload.scope
+    )
     return _to_file_info_schema(files_service.create_folder(path=scoped_path))
 
 
@@ -148,16 +189,23 @@ async def rename_file(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_old_path = await _authorize_workspace_path(
+    scoped_old_path = await _authorize_path(
         current_user,
         payload.old_path,
         payload.workspace_id,
+        payload.scope,
     )
-    scoped_new_path = await _authorize_workspace_path(
+    scoped_new_path = await _authorize_path(
         current_user,
         payload.new_path,
         payload.workspace_id,
+        payload.scope,
     )
+
+    if payload.scope == "my_drive":
+        return _to_file_info_schema(
+            files_service.rename(old_path=scoped_old_path, new_path=scoped_new_path)
+        )
 
     old_workspace = scoped_old_path.split("/", 1)[0]
     new_workspace = scoped_new_path.split("/", 1)[0]
@@ -177,10 +225,11 @@ async def upload_file(
     file: FastAPIUploadFile = FastAPIFile(...),
     path: str = Form("", max_length=500),
     workspace_id: str | None = Form(default=None),
+    scope: str = Form(default="workspace"),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_workspace_path(current_user, path, workspace_id)
+    scoped_path = await _authorize_path(current_user, path, workspace_id, scope)
     content = await file.read()
     return _to_file_info_schema(
         files_service.upload_file(
@@ -196,10 +245,11 @@ async def upload_file(
 async def preview_file_as_pdf(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
+    scope: str = Query(default="workspace", pattern="^(workspace|my_drive)$"),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_workspace_path(current_user, path, workspace_id)
+    scoped_path = await _authorize_path(current_user, path, workspace_id, scope)
     preview = files_service.preview_file_as_pdf(path=scoped_path)
 
     return Response(
@@ -213,10 +263,11 @@ async def preview_file_as_pdf(
 async def read_file_raw(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
+    scope: str = Query(default="workspace", pattern="^(workspace|my_drive)$"),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_workspace_path(current_user, path, workspace_id)
+    scoped_path = await _authorize_path(current_user, path, workspace_id, scope)
     raw_file = files_service.read_file_raw(path=scoped_path)
 
     return Response(
@@ -230,10 +281,11 @@ async def read_file_raw(
 async def read_file(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
+    scope: str = Query(default="workspace", pattern="^(workspace|my_drive)$"),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_workspace_path(current_user, path, workspace_id)
+    scoped_path = await _authorize_path(current_user, path, workspace_id, scope)
     return _to_file_content_schema(files_service.read_file(path=scoped_path))
 
 
@@ -242,11 +294,12 @@ async def update_file(
     path: str,
     payload: CreateFileRequest,
     workspace_id: str | None = Query(default=None, max_length=100),
+    scope: str = Query(default="workspace", pattern="^(workspace|my_drive)$"),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
     effective_workspace_id = workspace_id or payload.workspace_id
-    scoped_path = await _authorize_workspace_path(current_user, path, effective_workspace_id)
+    scoped_path = await _authorize_path(current_user, path, effective_workspace_id, scope)
     return _to_file_info_schema(
         files_service.update_file(
             path=scoped_path,
@@ -260,8 +313,9 @@ async def update_file(
 async def delete_file(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
+    scope: str = Query(default="workspace", pattern="^(workspace|my_drive)$"),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_workspace_path(current_user, path, workspace_id)
+    scoped_path = await _authorize_path(current_user, path, workspace_id, scope)
     return files_service.delete_path(path=scoped_path)

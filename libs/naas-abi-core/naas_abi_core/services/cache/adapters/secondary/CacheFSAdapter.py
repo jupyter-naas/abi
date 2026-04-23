@@ -48,6 +48,23 @@ class CacheFSAdapter(ICacheAdapter):
                 temp_path = temp_file.name
             os.replace(temp_path, path)
 
+    def set_if_absent(self, key: str, value: CachedData) -> bool:
+        path = self.__entry_path(key)
+        payload = json.dumps(value.model_dump(), indent=4)
+        with self._lock:
+            if os.path.exists(path):
+                return False
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.cache_dir,
+                delete=False,
+            ) as temp_file:
+                temp_file.write(payload)
+                temp_path = temp_file.name
+            os.replace(temp_path, path)
+            return True
+
     def delete(self, key: str) -> None:
         path = self.__entry_path(key)
         with self._lock:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -16,6 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
     TokenData,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
+from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 
 
 def _conversation(now: datetime) -> ChatConversationRecord:
@@ -368,7 +370,7 @@ async def test_complete_chat_request_with_provider_uses_completion(monkeypatch) 
         return_value=[ChatInputMessage(role="user", content="hello")]
     )
 
-    async def _fake_complete_chat(messages, config, system_prompt):
+    async def _fake_complete_chat(messages, config, system_prompt, thread_id=None):
         return '{"content":"assistant answer"}'
 
     monkeypatch.setattr(
@@ -389,3 +391,202 @@ async def test_complete_chat_request_with_provider_uses_completion(monkeypatch) 
 
     assert result.provider_used == "OpenAI (gpt-4o-mini)"
     assert result.assistant_content == "assistant answer"
+
+
+# ---------------------------------------------------------------------------
+# Tests: _inject_chat_vector_context (agent retrieval)
+# ---------------------------------------------------------------------------
+
+def _make_service_with_no_adapter() -> ChatService:
+    return ChatService(adapter=SimpleNamespace())
+
+
+def _msg(role: str, content: str) -> ProviderMessage:
+    return ProviderMessage(role=role, content=content)
+
+
+def test_inject_returns_unchanged_when_no_conversation_id() -> None:
+    service = _make_service_with_no_adapter()
+    msgs = [_msg("user", "What is the capital of France?")]
+    result, sources = service._inject_chat_vector_context(
+        provider_messages=msgs,
+        conversation_id=None,
+        user_id="u",
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+    assert result == msgs
+    assert sources == []
+
+
+def test_inject_returns_unchanged_when_no_user_message() -> None:
+    service = _make_service_with_no_adapter()
+    msgs = [_msg("system", "You are an assistant.")]
+    result, sources = service._inject_chat_vector_context(
+        provider_messages=msgs,
+        conversation_id="conv-1",
+        user_id="u",
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+    assert result == msgs
+    assert sources == []
+
+
+def test_inject_returns_unchanged_when_abimmodule_unavailable() -> None:
+    """When ABIModule is not initialised (e.g. unit tests), retrieval should be a no-op."""
+    service = _make_service_with_no_adapter()
+    msgs = [_msg("user", "Tell me about the document.")]
+    # ABIModule.get_instance() will raise or return None in this context → graceful fallback
+    result, sources = service._inject_chat_vector_context(
+        provider_messages=msgs,
+        conversation_id="conv-1",
+        user_id="u",
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+    # Should return the original messages unchanged (no crash)
+    assert result is msgs or result == msgs
+    assert sources == []
+
+
+def test_inject_returns_unchanged_when_collection_does_not_exist(monkeypatch) -> None:
+    """If the collection is absent the chat flow must continue without retrieval."""
+
+    @dataclass
+    class _FakeVectorStore:
+        def list_collections(self):
+            return []  # collection does not exist
+
+    class _FakeEngine:
+        class services:
+            vector_store = _FakeVectorStore()
+
+    class _FakeModule:
+        engine = _FakeEngine()
+
+        @classmethod
+        def get_instance(cls):
+            return cls()
+
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.chat.service.ABIModule",
+        _FakeModule,
+        raising=False,
+    )
+
+    service = _make_service_with_no_adapter()
+    msgs = [_msg("user", "Tell me about the document.")]
+    result, sources = service._inject_chat_vector_context(
+        provider_messages=msgs,
+        conversation_id="conv-1",
+        user_id="u",
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+    assert result == msgs
+    assert sources == []
+
+
+def test_inject_augments_user_message_when_collection_exists(monkeypatch) -> None:
+    """When matching chunks exist the last user message must include the context block."""
+    from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import (
+        build_chat_collection_name,
+    )
+
+    @dataclass
+    class _FakeMatch:
+        metadata: dict
+        payload: dict
+        score: float = 0.9
+
+    class _FakeVectorStore:
+        def list_collections(self):
+            return [build_chat_collection_name("conv-1")]
+
+        def search_similar(self, collection_name, query_vector, k, **kwargs):
+            return [
+                _FakeMatch(
+                    metadata={"user_id": "u", "filename": "report.txt"},
+                    payload={"text": "Important fact from the document."},
+                )
+            ]
+
+    class _FakeEngine:
+        class services:
+            vector_store = _FakeVectorStore()
+
+    class _FakeModule:
+        engine = _FakeEngine()
+
+        @classmethod
+        def get_instance(cls):
+            return cls()
+
+    monkeypatch.setattr("naas_abi.ABIModule", _FakeModule, raising=False)
+
+    service = _make_service_with_no_adapter()
+    msgs = [_msg("user", "Tell me about the document.")]
+    result, sources = service._inject_chat_vector_context(
+        provider_messages=msgs,
+        conversation_id="conv-1",
+        user_id="u",
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+
+    assert len(result) == 1
+    assert "DOCUMENT CONTEXT" in result[0].content
+    assert "Important fact from the document." in result[0].content
+    assert sources == ["report.txt"]
+
+
+def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
+    """Chunks belonging to a different user must not be injected (user isolation)."""
+    from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import (
+        build_chat_collection_name,
+    )
+
+    @dataclass
+    class _FakeMatch:
+        metadata: dict
+        payload: dict
+        score: float = 0.9
+
+    class _FakeVectorStore:
+        def list_collections(self):
+            return [build_chat_collection_name("conv-1")]
+
+        def search_similar(self, collection_name, query_vector, k, **kwargs):
+            return [
+                _FakeMatch(
+                    metadata={"user_id": "other-user", "filename": "secret.txt"},
+                    payload={"text": "Secret data belonging to another user."},
+                )
+            ]
+
+    class _FakeEngine:
+        class services:
+            vector_store = _FakeVectorStore()
+
+    class _FakeModule:
+        engine = _FakeEngine()
+
+        @classmethod
+        def get_instance(cls):
+            return cls()
+
+    monkeypatch.setattr("naas_abi.ABIModule", _FakeModule, raising=False)
+
+    service = _make_service_with_no_adapter()
+    msgs = [_msg("user", "Tell me about the document.")]
+    result, sources = service._inject_chat_vector_context(
+        provider_messages=msgs,
+        conversation_id="conv-1",
+        user_id="u",    # different from "other-user"
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+    # No chunks from other-user → message must be unaugmented
+    assert result == msgs
+    assert sources == []

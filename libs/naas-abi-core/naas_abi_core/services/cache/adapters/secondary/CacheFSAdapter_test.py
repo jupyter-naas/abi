@@ -28,3 +28,18 @@ def test_atomic_concurrent_writes(tmp_path):
 
     result = adapter.get("k")
     assert result.data.startswith("v-")
+
+
+def test_set_if_absent(tmp_path):
+    adapter = CacheFSAdapter(str(tmp_path / "cache"))
+
+    first = adapter.set_if_absent(
+        "k", CachedData(key="k", data="v1", data_type=DataType.TEXT)
+    )
+    second = adapter.set_if_absent(
+        "k", CachedData(key="k", data="v2", data_type=DataType.TEXT)
+    )
+
+    assert first is True
+    assert second is False
+    assert adapter.get("k").data == "v1"

@@ -117,18 +117,34 @@ export default function WorkspaceIdLayout({
   const [authReady, setAuthReady] = useState(false);
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
-  // Wait for auth store to rehydrate from localStorage before doing anything
+  // Wait for the auth store to rehydrate from localStorage, then silently
+  // validate / refresh the session. authReady becomes true only after
+  // checkAuth() resolves so the redirect (authReady && !token) never fires
+  // prematurely while a token refresh is in flight.
   useEffect(() => {
-    // Zustand persist rehydrates synchronously on first render in most cases,
-    // but we add a small delay to be safe
+    let cancelled = false;
+    let started = false;
+
+    const runAuth = async () => {
+      if (started) return;
+      started = true;
+      await useAuthStore.getState().checkAuth();
+      if (!cancelled) setAuthReady(true);
+    };
+
     const unsub = useAuthStore.persist.onFinishHydration(() => {
-      setAuthReady(true);
+      void runAuth();
     });
-    // If already hydrated (e.g., navigating between pages)
+
+    // If already hydrated (e.g., navigating between pages in the same session)
     if (useAuthStore.persist.hasHydrated()) {
-      setAuthReady(true);
+      void runAuth();
     }
-    return unsub;
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, []);
 
   // Redirect to login if not authenticated (after hydration)

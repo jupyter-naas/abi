@@ -1,0 +1,9 @@
+{
+  "label": "Capabilities",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Everything you can build and operate with ABI."
+  },
+  "description": "Full-stack AI operating system \u2014 12 capabilities from secure LLM access to enterprise automation, each backed by open-source components."
+}

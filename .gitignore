@@ -95,6 +95,14 @@ storage/vectorstore/*
 *.webp
 *.heic
 
+# Allow docs static assets
+!docs/site/static/**/*.png
+!docs/site/static/**/*.jpg
+!docs/site/static/**/*.gif
+!docs/site/static/**/*.jpeg
+!docs/site/static/**/*.webp
+!docs/site/static/**/*.svg
+
 # Keep demo data and assets in nexus
 !libs/naas-abi/naas_abi/apps/nexus/demo/**
 !libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
@@ -114,3 +122,18 @@ secrets.yaml
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+
+# Docusaurus build output
+docs/site/build/
+docs/site/.docusaurus/
+docs/site/node_modules/
+
+# Legacy / deprecated doc systems (Quartz, Next.js legacy site)
+docs/.quartz_conf/
+docs/legacy/
+docs/next/
+
+# Docusaurus
+website/node_modules
+website/.docusaurus
+website/build

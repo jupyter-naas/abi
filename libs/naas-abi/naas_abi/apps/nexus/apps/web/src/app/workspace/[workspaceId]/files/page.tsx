@@ -760,7 +760,7 @@ export default function FilesPage() {
                   <th className="pb-2 font-medium">Name</th>
                   <th className="pb-2 font-medium">Size</th>
                   <th className="pb-2 font-medium">Modified</th>
-                  <th className="pb-2 font-medium w-10"></th>
+                  <th className="pb-2 font-medium w-16"></th>
                 </tr>
               </thead>
               <tbody>
@@ -803,7 +803,19 @@ export default function FilesPage() {
                       {formatDate(file.modified)}
                     </td>
                     <td className="py-2">
-                      <div className="relative">
+                      <div className="relative flex items-center justify-end gap-0.5">
+                        {file.type === 'file' && (
+                          <button
+                            title="Download"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadFileToDesktop(file);
+                            }}
+                            className="hidden h-6 w-6 items-center justify-center rounded text-muted-foreground/50 hover:bg-muted hover:text-foreground group-hover:flex"
+                          >
+                            <Download size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -880,6 +892,19 @@ export default function FilesPage() {
                                 View Markdown
                               </button>
                             )}
+                            {file.type === 'file' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveContextMenu(null);
+                                  downloadFileToDesktop(file);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+                              >
+                                <Download size={12} />
+                                Download
+                              </button>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -912,32 +937,45 @@ export default function FilesPage() {
             /* Grid view */
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
               {filteredFiles.map((file) => (
-                <button
-                  key={file.path}
-                  onClick={() => {
-                    if (file.type === 'folder') {
-                      if (isLocalFolder && activeSyncedFolder) {
-                        fetchLocalFiles(activeSyncedFolder.id, file.path);
+                <div key={file.path} className="group relative">
+                  <button
+                    onClick={() => {
+                      if (file.type === 'folder') {
+                        if (isLocalFolder && activeSyncedFolder) {
+                          fetchLocalFiles(activeSyncedFolder.id, file.path);
+                        } else {
+                          fetchFiles(file.path);
+                        }
+                      } else if (isPresentationFile(file)) {
+                        openPresentationPreview(file);
+                      } else if (isImageFile(file)) {
+                        openImageViewer(file);
+                      } else if (isMarkdownFile(file)) {
+                        openMarkdownViewer(file);
+                      } else if (isPdfFile(file)) {
+                        openPdfViewer(file);
                       } else {
-                        fetchFiles(file.path);
+                        openFile(file.path);
                       }
-                    } else if (isPresentationFile(file)) {
-                      openPresentationPreview(file);
-                    } else if (isImageFile(file)) {
-                      openImageViewer(file);
-                    } else if (isMarkdownFile(file)) {
-                      openMarkdownViewer(file);
-                    } else if (isPdfFile(file)) {
-                      openPdfViewer(file);
-                    } else {
-                      openFile(file.path);
-                    }
-                  }}
-                  className="group flex flex-col items-center gap-2 rounded-lg border p-4 hover:bg-muted/50"
-                >
-                  {getFileIcon(file, 40)}
-                  <span className="w-full truncate text-center text-sm">{file.name}</span>
-                </button>
+                    }}
+                    className="flex w-full flex-col items-center gap-2 rounded-lg border p-4 hover:bg-muted/50"
+                  >
+                    {getFileIcon(file, 40)}
+                    <span className="w-full truncate text-center text-sm">{file.name}</span>
+                  </button>
+                  {file.type === 'file' && (
+                    <button
+                      title="Download"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadFileToDesktop(file);
+                      }}
+                      className="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded bg-background/80 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground group-hover:flex"
+                    >
+                      <Download size={13} />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}

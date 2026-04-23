@@ -2,6 +2,63 @@
 
 <!-- version list -->
 
+## v1.23.0 (2026-04-23)
+
+### Bug Fixes
+
+- **auth**: Persist refresh token and add silent session renewal
+  ([`b2d5216`](https://github.com/jupyter-naas/abi/commit/b2d5216068ed728f92e73c5ee395b8bd56b5cef5))
+
+- **chat**: Auto-create conversation on first file upload/ingest
+  ([`b9cac75`](https://github.com/jupyter-naas/abi/commit/b9cac757bed7b0cfa36a838615e2b2fb4bc88140))
+
+- **chat**: Strip timezone from datetime before INSERT into TIMESTAMP WITHOUT TIME ZONE
+  ([`b5bf8ca`](https://github.com/jupyter-naas/abi/commit/b5bf8ca4999b34c2c840c2835ad6477dab6b0651))
+
+- **ci**: Resolve mypy and bandit failures in check-core
+  ([`89712a2`](https://github.com/jupyter-naas/abi/commit/89712a26e633bdb68e10b728fbbb6157a1409ef7))
+
+- **ci**: Resolve ruff linting errors
+  ([`eb4b926`](https://github.com/jupyter-naas/abi/commit/eb4b92662d5f2765d93a3cd6f646a0332e69a744))
+
+- **test**: Update _FakeMatch stubs to flat SearchResult shape
+  ([`a3461b8`](https://github.com/jupyter-naas/abi/commit/a3461b805e7eebb9169fe2ab7561f00b2bcb5327))
+
+### Features
+
+- **cache**: Multi-tier hot/cold cache with explicit tier targeting
+  ([`3d1cf07`](https://github.com/jupyter-naas/abi/commit/3d1cf07f244eb44fe904107633c3ba8cae34191d))
+
+- **cache**: Register CacheService in engine with configurable fs/redis/object_storage backends
+  ([`f353ffc`](https://github.com/jupyter-naas/abi/commit/f353ffc7c09a91aef02ec9f4b2c5c5e1fef881a9))
+
+- **chat**: Add drag-and-drop file support on the chat bar
+  ([`cf70021`](https://github.com/jupyter-naas/abi/commit/cf70021f3d6e05e671e24385165c694264ab2564))
+
+- **chat**: Add granular ingestion progress, fix worker race condition, and file browser UX
+  ([`38b0629`](https://github.com/jupyter-naas/abi/commit/38b06295b75615854a4c649e4724b0cc88c71865))
+
+- **chat**: Add My Drive file ingestion with RAG support
+  ([`0d73b77`](https://github.com/jupyter-naas/abi/commit/0d73b77519948181632ecbae49576afc18717c60))
+
+- **chat**: Add XLSX ingestion support via openpyxl
+  ([`040720e`](https://github.com/jupyter-naas/abi/commit/040720e2700f25b87edfef458f38742d4034fa06))
+
+- **chat**: Surface RAG source attribution as document pills
+  ([`8255595`](https://github.com/jupyter-naas/abi/commit/8255595543a2a2a32692ac512a114e2571a6abb4))
+
+### Performance Improvements
+
+- **agents**: Cache agent class registry process-wide
+  ([`b2d5216`](https://github.com/jupyter-naas/abi/commit/b2d5216068ed728f92e73c5ee395b8bd56b5cef5))
+
+- **agents**: Pre-populate agent class registry at API startup
+  ([`6a9a395`](https://github.com/jupyter-naas/abi/commit/6a9a39531b2532d59dd6bec96dddbe472e4f1437))
+
+
+## v1.22.5 (2026-04-23)
+
+
 ## v1.22.4 (2026-04-22)
 
 
