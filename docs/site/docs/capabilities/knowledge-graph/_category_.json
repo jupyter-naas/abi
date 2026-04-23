@@ -1,0 +1,8 @@
+{
+  "label": "Knowledge Graph",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Build and query ontologies, run SPARQL, and ingest RDF data via pipelines."
+  }
+}
