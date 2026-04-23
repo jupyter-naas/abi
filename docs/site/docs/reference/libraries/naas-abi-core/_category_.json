@@ -1,8 +1,0 @@
-{
-  "label": "naas-abi-core",
-  "position": 1,
-  "link": {
-    "type": "generated-index",
-    "description": "Engine, module system, services, and apps \u2014 complete library reference for naas-abi-core."
-  }
-}
