@@ -67,26 +67,41 @@ class RabbitMQAdapter(IBusAdapter):
         digest = hashlib.sha256(f"{topic}:{routing_key}".encode("utf-8")).hexdigest()
         return f"naas-abi.{digest}"
 
-    def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+    def _do_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+        """Internal: publish on the current channel, declaring exchange if needed."""
         channel = self._ensure_publish_channel()
-        try:
-            if topic not in self.__declared_publish_exchanges:
-                channel.exchange_declare(
-                    exchange=topic,
-                    exchange_type="topic",
-                    durable=True,
-                )
-                self.__declared_publish_exchanges.add(topic)
-
-            channel.basic_publish(
+        if topic not in self.__declared_publish_exchanges:
+            channel.exchange_declare(
                 exchange=topic,
-                routing_key=routing_key,
-                body=payload,
-                properties=pika.BasicProperties(delivery_mode=2),
+                exchange_type="topic",
+                durable=True,
             )
-        except Exception as exc:
+            self.__declared_publish_exchanges.add(topic)
+
+        channel.basic_publish(
+            exchange=topic,
+            routing_key=routing_key,
+            body=payload,
+            properties=pika.BasicProperties(delivery_mode=2),
+        )
+
+    def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+        """Publish *payload* to *topic* / *routing_key*.
+
+        Automatically reconnects once if the idle connection was closed by the
+        broker (e.g. due to a missed heartbeat while the process was not
+        actively publishing).
+        """
+        try:
+            self._do_publish(topic, routing_key, payload)
+        except Exception:
+            # Connection was stale — drop it and retry with a fresh one.
             self._close_publish_connection()
-            raise ConnectionError("RabbitMQ publish failed") from exc
+            try:
+                self._do_publish(topic, routing_key, payload)
+            except Exception as exc:
+                self._close_publish_connection()
+                raise ConnectionError("RabbitMQ publish failed") from exc
 
     def topic_consume(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]

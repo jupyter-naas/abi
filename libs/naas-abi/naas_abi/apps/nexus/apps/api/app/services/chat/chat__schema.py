@@ -69,3 +69,4 @@ class CompleteChatResult:
     assistant_agent: str
     provider_used: str | None
     created_at: datetime
+    context_sources: list[str] = field(default_factory=list)

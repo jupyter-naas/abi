@@ -652,6 +652,7 @@ async def complete_chat(
     messages: list[Message],
     config: ProviderConfig,
     system_prompt: str | None = None,
+    thread_id: str | None = None,
 ) -> str:
     """
     Route chat completion to the appropriate provider.
@@ -670,7 +671,7 @@ async def complete_chat(
     elif config.type == "custom":
         return await complete_with_custom(messages, config, system_prompt)
     elif config.type == "abi":
-        return await complete_with_abi(messages, config, system_prompt)
+        return await complete_with_abi(messages, config, system_prompt, thread_id=thread_id)
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
 
@@ -679,6 +680,7 @@ async def complete_with_abi(
     messages: list[Message],
     config: ProviderConfig,
     system_prompt: str | None = None,
+    thread_id: str | None = None,
 ) -> str:
     del system_prompt
 
@@ -693,7 +695,7 @@ async def complete_with_abi(
             return ""
 
         if hasattr(agent, "ainvoke"):
-            return await agent.ainvoke(latest_user_message)
+            return await agent.ainvoke(latest_user_message, thread_id=thread_id)
         if hasattr(agent, "invoke"):
             return agent.invoke(latest_user_message)
         raise ValueError(f"In-process ABI agent '{config.model}' cannot be invoked")
@@ -704,7 +706,7 @@ async def complete_with_abi(
     latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
     payload = {
         "prompt": latest_user_message,
-        "thread_id": str(hash(tuple(m.content for m in messages[-5:]))),
+        "thread_id": thread_id or str(hash(tuple(m.content for m in messages[-5:]))),
     }
     url = f"{endpoint}/agents/{config.model}/completion?token={config.api_key or ''}"
 

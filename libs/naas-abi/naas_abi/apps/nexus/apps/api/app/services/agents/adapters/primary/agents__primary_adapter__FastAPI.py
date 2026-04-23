@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +25,62 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
 from naas_abi_core import logger
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+# ---------------------------------------------------------------------------
+# Process-level agent class registry cache
+#
+# Building this registry is expensive: it iterates every engine module and
+# triggers dynamic Python imports for all ~160 agent classes.  The classes
+# themselves never change at runtime, so we compute the mapping once and
+# reuse it for every subsequent request.
+# ---------------------------------------------------------------------------
+_agent_class_registry: dict[str, type[Agent]] | None = None  # noqa: F821
+_agent_class_registry_lock = threading.Lock()
+
+
+def _get_agent_class_registry() -> dict[str, type[Agent]]:  # noqa: F821
+    """Return (and lazily build) the process-level agent class registry.
+
+    Thread-safe double-checked locking ensures the expensive discovery runs
+    at most once even under concurrent first requests.
+    """
+    global _agent_class_registry
+
+    if _agent_class_registry is not None:
+        return _agent_class_registry
+
+    with _agent_class_registry_lock:
+        if _agent_class_registry is not None:
+            return _agent_class_registry
+
+        from naas_abi import ABIModule
+        from naas_abi_core.services.agent.Agent import Agent
+
+        abi_module = ABIModule.get_instance()
+        all_agent_classes: list[type[Agent]] = list(abi_module.agents)
+
+        for module in abi_module.engine.modules.values():
+            for agent_cls in module.agents:
+                if agent_cls is None:
+                    continue
+                all_agent_classes.append(agent_cls)
+
+        registry: dict[str, type[Agent]] = {}
+        for agent_cls in all_agent_classes:
+            name = _get_agent_class_name(agent_cls)
+            if not name:
+                logger.warning(
+                    "Skipping agent %s because it has no resolvable name"
+                    " (use class attribute 'name' or 'NAME')",
+                    agent_cls,
+                )
+                continue
+            class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
+            registry[class_name] = agent_cls
+
+        logger.info("Agent class registry built: %d agents indexed", len(registry))
+        _agent_class_registry = registry
+        return _agent_class_registry
 
 
 class AgentsFastAPIPrimaryAdapter:
@@ -124,6 +181,7 @@ async def list_agents(
 
     await require_workspace_access(current_user.id, workspace_id)
 
+    # Retrieve agent records from the database (fast)
     agent_list = await agent_service.list_workspace_agents(
         context=request_context(current_user),
         workspace_id=workspace_id,
@@ -132,54 +190,38 @@ async def list_agents(
         agent.class_name: agent for agent in agent_list if agent.class_name
     }
 
-    from naas_abi import ABIModule
-    from naas_abi_core.services.agent.Agent import Agent
+    # Retrieve the cached class registry — expensive only on the very first call
+    # (triggers dynamic Python imports for all agent modules).  Subsequent calls
+    # return instantly from the process-level cache.
+    class_name_to_agent_class = _get_agent_class_registry()
 
-    abi_module = ABIModule.get_instance()
-    module_agents = list(abi_module.agents)
-    agents: list[type[Agent]] = []
-    agents.extend(module_agents)
-
-    for module in abi_module.engine.modules.values():
-        for agent_cls in module.agents:
-            if agent_cls is None:
-                continue
-            agents.append(agent_cls)
-
-    class_name_to_agent_class: dict[str, type[Agent]] = {}
-    for agent_cls in agents:
-        name = _get_agent_class_name(agent_cls)
-        description = _get_agent_class_description(agent_cls)
-        if not name:
-            logger.warning(
-                "Skipping agent %s because it has no resolvable name (use class attribute 'name' or 'NAME')",  # noqa: E501
-                agent_cls,
-            )
+    # Persist any newly discovered agent classes to the database
+    for class_name, agent_cls in class_name_to_agent_class.items():
+        if class_name in existing_agents_by_class_name:
             continue
 
-        class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
-        class_name_to_agent_class[class_name] = agent_cls
-        existing_agent = existing_agents_by_class_name.get(class_name)
+        name = _get_agent_class_name(agent_cls)
+        description = _get_agent_class_description(agent_cls)
         enabled = name == "Abi"
 
-        if not existing_agent:
-            logger.debug("Creating agent in nexus backend: %s", name)
-            system_prompt = _get_agent_system_prompt(agent_cls)
-            created_agent = await agent_service.create_agent(
-                context=request_context(current_user),
-                data=AgentCreateInput(
-                    name=name,
-                    description=description or "",
-                    workspace_id=workspace_id,
-                    class_name=class_name,
-                    provider="abi",
-                    enabled=enabled,
-                    system_prompt=system_prompt,
-                ),
-            )
-            agent_list.append(created_agent)
-            existing_agents_by_class_name[class_name] = created_agent
+        logger.debug("Creating agent in nexus backend: %s", name)
+        system_prompt = _get_agent_system_prompt(agent_cls)
+        created_agent = await agent_service.create_agent(
+            context=request_context(current_user),
+            data=AgentCreateInput(
+                name=name,
+                description=description or "",
+                workspace_id=workspace_id,
+                class_name=class_name,
+                provider="abi",
+                enabled=enabled,
+                system_prompt=system_prompt,
+            ),
+        )
+        agent_list.append(created_agent)
+        existing_agents_by_class_name[class_name] = created_agent
 
+    # Enrich DB records with class-level metadata (suggestions, logo, intents)
     enriched_agent_list: list[AgentRecord] = []
     for agent in agent_list:
         suggestions = None

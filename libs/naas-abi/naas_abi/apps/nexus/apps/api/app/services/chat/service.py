@@ -7,9 +7,16 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+import numpy as np
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
     CompleteChatResult,
+)
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import (
+    DEFAULT_EMBEDDING_DIMENSION,
+    DEFAULT_EMBEDDING_MODEL,
+    build_chat_collection_name,
+    embed_text,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatAgentRecord,
@@ -104,6 +111,100 @@ class ChatService:
     def __init__(self, adapter: ChatPersistencePort, iam_service: IAMService | None = None):
         self.adapter = adapter
         self.iam_service = iam_service
+
+    def _inject_chat_vector_context(
+        self,
+        provider_messages: list[ProviderMessage],
+        conversation_id: str | None,
+        user_id: str,
+        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+        embedding_dimension: int = DEFAULT_EMBEDDING_DIMENSION,
+        top_k: int = 5,
+    ) -> tuple[list[ProviderMessage], list[str]]:
+        _empty: tuple[list[ProviderMessage], list[str]] = (provider_messages, [])
+
+        if not conversation_id:
+            return _empty
+
+        latest_user_index = -1
+        latest_user_content = ""
+        for index in range(len(provider_messages) - 1, -1, -1):
+            if provider_messages[index].role == "user":
+                latest_user_index = index
+                latest_user_content = provider_messages[index].content
+                break
+
+        if latest_user_index < 0 or not latest_user_content.strip():
+            return _empty
+
+        try:
+            from naas_abi import ABIModule
+
+            vector_store = ABIModule.get_instance().engine.services.vector_store
+        except Exception:
+            return _empty
+
+        collection_name = build_chat_collection_name(conversation_id)
+        try:
+            if collection_name not in vector_store.list_collections():
+                return _empty
+        except Exception:
+            return _empty
+
+        try:
+            query_vector = embed_text(
+                latest_user_content,
+                embedding_model=embedding_model,
+                embedding_dimension=embedding_dimension,
+            )
+            matches = vector_store.search_similar(
+                collection_name=collection_name,
+                query_vector=np.array(query_vector, dtype=float),
+                k=top_k,
+                include_vectors=False,
+                include_metadata=True,
+            )
+        except Exception:
+            return _empty
+
+        context_chunks: list[str] = []
+        seen_filenames: list[str] = []
+        for match in matches:
+            metadata = match.metadata or {}
+            if metadata.get("user_id") != user_id:
+                continue
+
+            chunk_text = ""
+            payload = match.payload
+            if isinstance(payload, dict) and isinstance(payload.get("text"), str):
+                chunk_text = payload["text"]
+            elif isinstance(metadata.get("chunk_text"), str):
+                chunk_text = metadata["chunk_text"]
+
+            if not chunk_text.strip():
+                continue
+
+            filename = str(metadata.get("filename") or "document")
+            context_chunks.append(f"[{filename}] {chunk_text.strip()}")
+            if filename not in seen_filenames:
+                seen_filenames.append(filename)
+
+        if not context_chunks:
+            return _empty
+
+        context_block = "\n\n".join(context_chunks)
+        augmented = list(provider_messages)
+        augmented[latest_user_index] = ProviderMessage(
+            role="user",
+            content=(
+                f"{latest_user_content}\n\n"
+                "---\n"
+                "DOCUMENT CONTEXT (retrieved from chat file index):\n"
+                f"{context_block}"
+            ),
+            images=augmented[latest_user_index].images,
+        )
+        return augmented, seen_filenames
 
     async def list_conversations(
         self,
@@ -451,6 +552,7 @@ class ChatService:
         )
 
         provider_used: str | None = None
+        context_sources: list[str] = []
         if provider:
             try:
                 provider_messages = await self.build_provider_messages_with_agents(
@@ -458,6 +560,11 @@ class ChatService:
                     context=context,
                     current_agent_id=request.agent,
                     conversation_id=conversation_id,
+                )
+                provider_messages, context_sources = self._inject_chat_vector_context(
+                    provider_messages=provider_messages,
+                    conversation_id=conversation_id,
+                    user_id=context.actor_user_id,
                 )
                 system_prompt = request.system_prompt or AGENT_SYSTEM_PROMPTS.get(
                     request.agent,
@@ -479,6 +586,7 @@ class ChatService:
                         model=provider.model,
                     ),
                     system_prompt=system_prompt,
+                    thread_id=conversation_id,
                 )
                 response_content = self._unwrap_json_content(response_content)
                 provider_used = f"{provider.name} ({provider.model})"
@@ -519,6 +627,7 @@ class ChatService:
             assistant_agent=request.agent,
             provider_used=provider_used,
             created_at=now,
+            context_sources=context_sources,
         )
 
     async def update_conversation(
