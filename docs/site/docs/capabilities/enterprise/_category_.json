@@ -1,0 +1,8 @@
+{
+  "label": "Enterprise",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "description": "Production deployment, security, high availability, air-gapped, and marketplace."
+  }
+}

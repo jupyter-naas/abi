@@ -1,0 +1,265 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* You can override the default Infima variables here. */
+:root {
+  --ifm-color-primary: #47dd82;
+  --ifm-color-primary-dark: #4cdf88;
+  --ifm-color-primary-darker: #47dd82;
+  --ifm-color-primary-darkest: #4cdf88;
+  --ifm-color-primary-light: #47dd82;
+  --ifm-color-primary-lighter: #4cdf88;
+  --ifm-color-primary-lightest: #47dd82;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+/* For readability concerns, you should choose a lighter palette in dark mode. */
+[data-theme="dark"] {
+  --ifm-color-primary: #47dd82;
+  --ifm-color-primary-dark: #4cdf88;
+  --ifm-color-primary-darker: #47dd82;
+  --ifm-color-primary-darkest: #4cdf88;
+  --ifm-color-primary-light: #47dd82;
+  --ifm-color-primary-lighter: #4cdf88;
+  --ifm-color-primary-lightest: #4cdf88;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+.cardContainer_node_modules-\@docusaurus-theme-classic-lib-theme-DocCard-styles-module
+  *:last-child {
+  margin-bottom: 0;
+  display: none;
+}
+
+.padding-bottom--lg {
+  padding-bottom: 110px !important;
+}
+
+.textRight {
+  text-align: right;
+}
+
+@media (max-width: 767px) {
+  .textCenter {
+    text-align: center;
+  }
+
+  .mobCenter {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .h_w_lg {
+    flex-direction: column;
+  }
+
+  .textCenterMobile {
+    text-align: center;
+  }
+}
+
+.footer {
+  background-color: #181b1d;
+  color: var(--ifm-footer-color);
+  padding: var(--ifm-footer-padding-vertical)
+    var(--ifm-footer-padding-horizontal);
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.footer--dark {
+  --ifm-footer-background-color: #181b1d;
+  --ifm-footer-color: var(--ifm-footer-link-color);
+  --ifm-footer-link-color: var(--ifm-color-secondary);
+  --ifm-footer-title-color: var(--ifm-color-white);
+}
+
+.markdown h1:first-child {
+  --ifm-h1-font-size: 2.5rem;
+  margin-bottom: calc(
+    var(--ifm-h1-vertical-rhythm-bottom) * var(--ifm-leading)
+  );
+}
+
+.markdown h1 {
+  --ifm-h1-font-size: 2.5rem;
+}
+
+.markdown h2 {
+  --ifm-h2-font-size: 2rem;
+}
+
+.markdown h3 {
+  --ifm-h3-font-size: 1.5rem;
+}
+
+.markdown h4 {
+  --ifm-h4-font-size: 1.25rem;
+}
+
+.markdown h5 {
+  --ifm-h5-font-size: 1.125rem;
+}
+
+.markdown h6 {
+  --ifm-h6-font-size: 1rem;
+}
+
+/* Body text and paragraph sizing */
+.markdown p,
+.markdown li,
+.markdown td,
+.markdown th {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* Large text for lead paragraphs */
+.markdown .lead,
+.markdown > p:first-of-type {
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+/* Small text for captions, footnotes */
+.markdown small,
+.markdown .small {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Code text sizing */
+.markdown code {
+  font-size: 0.9rem;
+}
+
+.markdown pre code {
+  font-size: 0.875rem;
+}
+
+/* Navbar CTA styling */
+.navbar__item--cta a {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white !important;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.navbar__item--cta a:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  text-decoration: none;
+}
+
+/* Dropdown menu styling */
+.dropdown__menu {
+  min-width: 180px;
+}
+
+/* Navbar dark theme styling - match exact body background */
+[data-theme="dark"] .navbar {
+  --ifm-navbar-background-color: var(--ifm-background-color);
+  background-color: var(--ifm-background-color) !important;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+/* Ensure navbar matches body background in dark mode */
+[data-theme="dark"] .navbar--dark {
+  --ifm-navbar-background-color: var(--ifm-background-color);
+  background-color: var(--ifm-background-color) !important;
+}
+
+/* ===== ALGOLIA SEARCH CUSTOMIZATION ===== */
+/* Light theme search styling */
+[data-theme="light"] .DocSearch {
+  --docsearch-primary-color: #47dd82;
+  --docsearch-text-color: var(--ifm-font-color-base);
+  --docsearch-muted-color: var(--ifm-color-secondary-darkest);
+  --docsearch-container-background: rgba(94, 100, 112, 0.7);
+  /* Modal */
+  --docsearch-modal-background: var(--ifm-color-secondary-lighter);
+  /* Search box */
+  --docsearch-searchbox-background: var(--ifm-color-secondary);
+  --docsearch-searchbox-focus-background: var(--ifm-color-white);
+  /* Hit */
+  --docsearch-hit-color: var(--ifm-font-color-base);
+  --docsearch-hit-active-color: var(--ifm-color-white);
+  --docsearch-hit-background: var(--ifm-color-white);
+  --docsearch-hit-shadow: 0 1px 3px 0 #47dd82;
+  /* Footer */
+  --docsearch-footer-background: var(--ifm-color-white);
+}
+
+/* Dark theme search styling - matches your dark + green theme */
+[data-theme="dark"] .DocSearch {
+  --docsearch-primary-color: #47dd82;
+  --docsearch-text-color: var(--ifm-font-color-base);
+  --docsearch-muted-color: var(--ifm-color-secondary-darkest);
+  --docsearch-container-background: rgba(47, 55, 69, 0.8);
+  /* Modal - match your dark background */
+  --docsearch-modal-background: var(--ifm-background-color);
+  --docsearch-modal-shadow: 0 25px 50px -12px rgba(71, 221, 130, 0.25);
+  /* Search box */
+  --docsearch-searchbox-background: var(--ifm-background-color);
+  --docsearch-searchbox-focus-background: var(--ifm-color-emphasis-100);
+  --docsearch-searchbox-shadow: 0 0 0 2px #47dd82;
+  /* Hit */
+  --docsearch-hit-color: var(--ifm-font-color-base);
+  --docsearch-hit-active-color: var(--ifm-color-white);
+  --docsearch-hit-background: var(--ifm-color-emphasis-100);
+  --docsearch-hit-shadow: 0 1px 3px 0 rgba(71, 221, 130, 0.3);
+  /* Footer */
+  --docsearch-footer-background: var(--ifm-background-surface-color);
+  --docsearch-key-gradient: linear-gradient(-26.5deg, #2c2c2c 0%, #1a1a1a 100%);
+  --docsearch-key-shadow: inset 0 -2px 0 0 #000, inset 0 0 1px 1px #333;
+  /* Highlight color for search terms */
+  --docsearch-highlight-color: #47dd82;
+}
+
+/* Additional custom styling for better integration */
+.DocSearch-Button {
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-theme="dark"] .DocSearch-Button {
+  background: var(--ifm-color-emphasis-100) !important;
+  border: 1px solid var(--ifm-color-emphasis-200) !important;
+}
+
+[data-theme="dark"] .DocSearch-Button:hover {
+  background: var(--ifm-color-emphasis-200) !important;
+  border-color: #47dd82 !important;
+  box-shadow: 0 0 0 1px rgba(71, 221, 130, 0.3) !important;
+}
+
+/* Search result highlighting */
+[data-theme="dark"] .DocSearch-Hit mark {
+  background: rgba(71, 221, 130, 0.3) !important;
+  color: #47dd82 !important;
+}
+
+/* Keystroke styling for better readability */
+[data-theme="dark"] .DocSearch-Commands-Key {
+  background: linear-gradient(-26.5deg, #2c2c2c 0%, #1a1a1a 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid #333 !important;
+  box-shadow:
+    inset 0 -2px 0 0 #000,
+    inset 0 0 1px 1px #333 !important;
+}
+
+[data-theme="dark"] .DocSearch-Button-Key {
+  background: linear-gradient(-26.5deg, #2c2c2c 0%, #1a1a1a 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid #333 !important;
+  box-shadow:
+    inset 0 -2px 0 0 #000,
+    inset 0 0 1px 1px #333 !important;
+}
