@@ -1,0 +1,161 @@
+# Default values for the ABI umbrella chart.
+# Override per environment via -f values.<env>.yaml or --set.
+
+global:
+  project: abi
+  env: dev
+  # AWS account ID used to build ECR image references.
+  awsAccountId: ""
+  awsRegion: "us-east-1"
+  # Base image tag used when a service doesn't pin its own.
+  imageTag: "latest"
+  # SecretStore name — created by the external-secrets block below
+  # (or referencing an existing SecretStore if createSecretStore=false).
+  secretStoreName: abi-aws
+
+# Per-tenant namespace (chart is installed once per tenant).
+namespace:
+  create: true
+  name: abi
+  labels: {}
+
+# --- Cross-service secrets pulled from AWS Secrets Manager via ESO ---
+externalSecrets:
+  enabled: true
+  createSecretStore: true
+  # IRSA role that ESO's ServiceAccount will assume to read Secrets Manager.
+  # Provided by the terraform stack: output `external_secrets_role_arn`.
+  serviceAccountRoleArn: ""
+  refreshInterval: 1m
+  # Logical -> Secrets Manager secret name mapping. Populated per env.
+  secrets:
+    rds: ""       # e.g. "abi/dev/rds/main"
+    redis: ""     # e.g. "abi/dev/redis"
+    rabbitmq: ""  # e.g. "abi/dev/rabbitmq"
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+abiApi:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ""           # e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/abi/abi
+    tag: ""                  # falls back to global.imageTag
+    pullPolicy: IfNotPresent
+  serviceAccount:
+    create: true
+    name: abi-api
+    # IRSA role ARN — provided by terraform output `abi_api_role_arn`.
+    roleArn: ""
+  service:
+    port: 9879
+    streamlitPort: 8501
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits: { cpu: "2", memory: "4Gi" }
+  env: {}
+  extraEnvFrom: []
+
+dagster:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  serviceAccount:
+    create: true
+    name: dagster
+    roleArn: ""
+  service:
+    port: 3000
+  resources:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits: { cpu: "1", memory: "2Gi" }
+
+mcpServer:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  serviceAccount:
+    create: true
+    name: mcp-server
+    roleArn: ""
+  service:
+    port: 8080
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits: { cpu: "500m", memory: "1Gi" }
+
+nexusWeb:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    port: 3000
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits: { cpu: "500m", memory: "1Gi" }
+  env: {}
+
+servicePortal:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    port: 80
+  resources:
+    requests: { cpu: "50m", memory: "128Mi" }
+    limits: { cpu: "250m", memory: "512Mi" }
+
+synapse:
+  # Matrix/Synapse is OPTIONAL and disabled by default.
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: matrixdotorg/synapse
+    tag: latest
+  service:
+    port: 8008
+  persistence:
+    size: 10Gi
+    storageClass: gp3
+
+# ---------------------------------------------------------------------------
+# Ingress (AWS ALB via aws-load-balancer-controller)
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: alb
+  # If certificateArn is empty, ALB listens on HTTP only (fine for dev).
+  certificateArn: ""
+  # Host → service routing. An empty host means "match any" (ALB default).
+  hosts:
+    - host: ""
+      paths:
+        - path: /api
+          service: abi-api
+          port: 9879
+        - path: /dagster
+          service: dagster
+          port: 3000
+        - path: /mcp
+          service: mcp-server
+          port: 8080
+        - path: /
+          service: nexus-web
+          port: 3000
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /

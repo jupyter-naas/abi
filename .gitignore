@@ -108,3 +108,9 @@ sandbox/
 coverage.xml
 htmlcov/
 secrets.yaml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

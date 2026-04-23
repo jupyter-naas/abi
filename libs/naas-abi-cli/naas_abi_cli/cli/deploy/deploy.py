@@ -12,12 +12,16 @@ from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
 
+from .aws import aws as aws_group
 from .local import setup_local_deploy
 
 
 @click.group("deploy")
 def deploy():
     pass
+
+
+deploy.add_command(aws_group)
 
 
 class Container(BaseModel):

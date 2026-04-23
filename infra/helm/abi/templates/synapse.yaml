@@ -1,0 +1,68 @@
+{{- if .Values.synapse.enabled -}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: synapse-data
+  namespace: {{ include "abi.namespace" . }}
+  labels:
+    app.kubernetes.io/name: synapse
+    {{- include "abi.commonLabels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.synapse.persistence.storageClass | default "gp3" }}
+  resources:
+    requests:
+      storage: {{ .Values.synapse.persistence.size }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: synapse
+  namespace: {{ include "abi.namespace" . }}
+  labels:
+    app.kubernetes.io/name: synapse
+    {{- include "abi.commonLabels" . | nindent 4 }}
+spec:
+  serviceName: synapse
+  replicas: {{ .Values.synapse.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: synapse
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synapse
+        {{- include "abi.commonLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: synapse
+          image: "{{ .Values.synapse.image.repository }}:{{ .Values.synapse.image.tag }}"
+          ports:
+            - name: http
+              containerPort: {{ .Values.synapse.service.port }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: synapse-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: synapse
+  namespace: {{ include "abi.namespace" . }}
+  labels:
+    app.kubernetes.io/name: synapse
+    {{- include "abi.commonLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: synapse
+  ports:
+    - name: http
+      port: {{ .Values.synapse.service.port }}
+      targetPort: http
+{{- end }}

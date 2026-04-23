@@ -1,0 +1,6 @@
+apiVersion: v2
+name: abi
+description: Umbrella chart deploying the ABI stack on AWS EKS.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
