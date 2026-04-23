@@ -46,7 +46,7 @@ spec:
  limits:
  memory: "4Gi"
  cpu: "2000m"
-```bash
+```
 
 ### Multi-Region Deployment
 
@@ -84,7 +84,7 @@ graph TD
 
  class A,B,C,D,E,F platform
  class G,H infrastructure
-```bash
+```
 
 ### Auto-Scaling Configuration
 
@@ -114,7 +114,7 @@ spec:
  target:
  type: Utilization
  averageUtilization: 80
-```bash
+```
 
 **Vertical Pod Autoscaler (VPA)**:
 - Automatic resource request optimization
@@ -172,7 +172,7 @@ storage:
  distributed_storage: 10 TB minimum
  backup_storage: 20 TB minimum
  replication_factor: 3
-```bash
+```
 
 **Local Model Hosting**:
 - **Ollama Integration**: Local LLM hosting with GPU acceleration
@@ -219,7 +219,7 @@ graph TD
  class A,B,C platform
  class D,E,F infrastructure
  class G,H,I external
-```bash
+```
 
 ### Custom Infrastructure Integration
 
@@ -304,7 +304,7 @@ scif_deployment:
  - biometric_authentication: true
  - multi_factor_authentication: true
  - continuous_monitoring: true
-```bash
+```
 
 ## Deployment Planning
 

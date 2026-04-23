@@ -96,12 +96,12 @@ If you prefer to deploy ABI on your own hardware instead of using NAAS spaces, y
  ```bash
  git clone https://github.com/your-username/abi.git
  cd abi
- ```bash
+ ```
 
 2. **Create a .env file** with required environment variables:
  ```bash
  touch .env
- ```bash
+ ```
 
  Add the following to the .env file:
  ```
@@ -110,23 +110,23 @@ If you prefer to deploy ABI on your own hardware instead of using NAAS spaces, y
  GITHUB_ACCESS_TOKEN=your_github_token # Optional for GitHub integration features
  ABI_API_KEY=your_api_key
  ENV=prod
- ```bash
+ ```
 
 3. **Build the Docker image**:
  ```bash
  make build
- ```bash
+ ```
  This builds the container for linux/amd64 architecture.
 
 4. **Run the API in production mode**:
  ```bash
  make api-prod
- ```bash
+ ```
 
  Or run the Docker container directly:
  ```bash
  docker run --rm -it -p 9879:9879 --env-file .env abi:latest
- ```turtle
+ ```
 
 5. **Access the API**:
  The API will be accessible at `http://localhost:9879`
@@ -157,18 +157,18 @@ For a more maintainable setup, especially on a server:
 
  volumes:
  abi-data:
- ```bash
+ ```
 
 2. **Build and start the service**:
  ```bash
  docker compose build
  docker compose up -d
- ```bash
+ ```
 
 3. **Check logs**:
  ```bash
  docker compose logs -f
- ```bash
+ ```
 
 ### Deployment on High-Performance Hardware
 
@@ -188,7 +188,7 @@ For deployment on specialized hardware (e.g., GPU machines, DGX stations):
  - driver: nvidia
  count: all
  capabilities: [gpu]
- ```bash
+ ```
 
 2. **Multiple CPU cores**: For dual SCC2 or multi-core machines, you may want to adjust container resource limits:
 
@@ -201,7 +201,7 @@ For deployment on specialized hardware (e.g., GPU machines, DGX stations):
  limits:
  cpus: '8'
  memory: 16G
- ```bash
+ ```
 
 ### Production Considerations
 

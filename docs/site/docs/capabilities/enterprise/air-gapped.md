@@ -58,7 +58,7 @@ pip download --dest ./python-packages -r requirements.txt
 # Package AI models
 mkdir ai-models
 # Download and package your selected models
-```bash
+```
 
 ### 2. Secure Transfer
 
@@ -74,7 +74,7 @@ gpg --symmetric --cipher-algo AES256 naas-offline.tar.gz
 
 # Transfer via approved secure media
 # Verify checksums after transfer
-```bash
+```
 
 ### 3. Environment Setup
 
@@ -92,7 +92,7 @@ python -m http.server --directory python-packages 8080
 
 # Install Naas with local packages
 pip install --index-url http://localhost:8080 --trusted-host localhost naas
-```bash
+```
 
 ## Local AI Model Configuration
 
@@ -129,7 +129,7 @@ services:
  - driver: nvidia
  count: 1
  capabilities: [gpu]
-```bash
+```
 
 ### Model Configuration
 
@@ -152,7 +152,7 @@ agent = Agent(
  model="llama2:7b"
  )
 )
-```bash
+```
 
 ## Data Security and Isolation
 
@@ -171,7 +171,7 @@ parameters:
  type: gp3
  encrypted: "true"
  kmsKeyId: alias/k8s-storage-key
-```bash
+```
 
 ### Network Policies
 
@@ -206,7 +206,7 @@ spec:
  ports:
  - protocol: TCP
  port: 5432
-```bash
+```
 
 ## Monitoring and Observability
 
@@ -235,7 +235,7 @@ scrape_configs:
  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
  action: keep
  regex: true
-```bash
+```
 
 ### Log Management
 
@@ -263,7 +263,7 @@ data:
  port 9200
  index_name naas-logs
  </match>
-```bash
+```
 
 ## Update and Maintenance Procedures
 
@@ -316,7 +316,7 @@ gpg --symmetric --cipher-algo AES256 --compress-algo 2 "$BACKUP_DIR.tar.gz"
 
 # Store on secure media
 mv "$BACKUP_DIR.tar.gz.gpg" /secure-media/
-```bash
+```
 
 ## Security Hardening
 
@@ -352,7 +352,7 @@ LABEL security.read-only-root-filesystem=true
 
 EXPOSE 8000
 CMD ["python", "app.py"]
-```bash
+```
 
 ### Access Controls
 
@@ -385,7 +385,7 @@ roleRef:
  kind: Role
  name: naas-operator
  apiGroup: rbac.authorization.k8s.io
-```bash
+```
 
 ## Compliance and Auditing
 
@@ -409,7 +409,7 @@ rules:
 - level: Request
  namespaces: ["naas"]
  verbs: ["create", "update", "patch", "delete"]
-```bash
+```
 
 ### Compliance Reporting
 
@@ -442,7 +442,7 @@ def generate_compliance_report(start_date, end_date):
  report["access_logs"] = access_logs
 
  return report
-```bash
+```
 
 ## Troubleshooting Common Issues
 
@@ -463,7 +463,7 @@ docker logs ollama-service
 # Test model endpoint
 curl http://localhost:11434/api/generate \
  -d '{"model": "llama2:7b", "prompt": "test"}'
-```bash
+```
 
 ### Network Connectivity Issues
 
@@ -478,7 +478,7 @@ kubectl exec -it naas-worker-0 -- nc -zv naas-api 8000
 
 # Verify network policies
 kubectl describe networkpolicy naas-isolation
-```bash
+```
 
 ### Storage and Performance
 

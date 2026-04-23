@@ -139,4 +139,4 @@ make check               # Code quality checks
 | MCP server | http://localhost:8000 | Model Context Protocol |
 | Qdrant | http://localhost:6333 | Vector store admin |
 
-Next: [[getting-started/configuration|Configuration Reference]] or [[building/creating-a-module|Build your first module]].
+Next: [Configuration Reference](/get-started/configuration) or [Build your first module](/capabilities/modules/creating-a-module).

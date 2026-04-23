@@ -160,4 +160,4 @@ def test_list_items():
     assert len(result) == 1
 ```
 
-Next: [[building/creating-a-pipeline|Creating a Pipeline]] to ingest this data into the knowledge graph.
+Next: [Creating a Pipeline](/capabilities/knowledge-graph/creating-a-pipeline) to ingest this data into the knowledge graph.

@@ -54,4 +54,4 @@ ABI takes a different approach: convert raw data into a **structured knowledge g
 - Engineering teams building a private AI platform on their own infrastructure.
 - Data teams that need structured, queryable knowledge on top of SaaS data sources.
 - Organizations in regulated industries (finance, defense, healthcare) that cannot send data to third-party AI services.
-- Companies building products on top of ABI's infrastructure - see the [[apps/nexus|Nexus]] full-stack app.
+- Companies building products on top of ABI's infrastructure - see the [Nexus](/capabilities/applications/nexus) full-stack app.
