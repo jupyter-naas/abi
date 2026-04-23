@@ -3,7 +3,13 @@ import os
 from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import (
     CacheFSAdapter,
 )
-from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.cache.adapters.secondary.CacheObjectStorageAdapter import (
+    CacheObjectStorageAdapter,
+)
+from naas_abi_core.services.cache.CacheService import CacheService, TIER_COLD
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.utils.Storage import NoStorageFolderFound, find_storage_folder
 
 
@@ -16,16 +22,25 @@ class CacheFactory:
             subpath = os.path.join("cache", subpath)
 
         try:
-            return CacheService(
-                CacheFSAdapter(
-                    os.path.join(find_storage_folder(os.getcwd(), needle), subpath)
-                )
-            )
-        except NoStorageFolderFound as _:
-            # Create a "storage" folder for the cache
+            path = os.path.join(find_storage_folder(os.getcwd(), needle), subpath)
+        except NoStorageFolderFound:
             os.makedirs(os.path.join(os.getcwd(), "storage"), exist_ok=True)
-            return CacheService(
-                CacheFSAdapter(
-                    os.path.join(find_storage_folder(os.getcwd(), needle), subpath)
+            path = os.path.join(find_storage_folder(os.getcwd(), needle), subpath)
+
+        return CacheService(adapters=[(TIER_COLD, CacheFSAdapter(path))])
+
+    @staticmethod
+    def CacheObjectStorage(
+        object_storage: ObjectStorageService,
+        cache_prefix: str = "cache",
+    ) -> CacheService:
+        return CacheService(
+            adapters=[
+                (
+                    TIER_COLD,
+                    CacheObjectStorageAdapter(
+                        object_storage=object_storage, prefix=cache_prefix
+                    ),
                 )
-            )
+            ]
+        )

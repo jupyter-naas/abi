@@ -53,6 +53,7 @@ export interface Message {
   agent?: AgentType;
   images?: string[]; // Base64-encoded images for multimodal chat
   thinkingDuration?: number; // Duration in seconds the AI spent "thinking"
+  sources?: string[]; // filenames of RAG documents used to answer
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -176,7 +177,7 @@ interface WorkspaceState {
   createConversation: (projectId?: string) => string;
   setActiveConversation: (id: string | null) => void;
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
-  updateLastMessage: (conversationId: string, content: string, thinkingDuration?: number) => void;
+  updateLastMessage: (conversationId: string, content: string, thinkingDuration?: number, sources?: string[]) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
   renameConversation: (id: string, newTitle: string) => void;
@@ -351,7 +352,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }));
   },
 
-  updateLastMessage: (conversationId, content, thinkingDuration) => {
+  updateLastMessage: (conversationId, content, thinkingDuration, sources) => {
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
@@ -359,10 +360,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               ...conv,
               messages: conv.messages.map((msg, idx) =>
                 idx === conv.messages.length - 1
-                  ? { 
-                      ...msg, 
+                  ? {
+                      ...msg,
                       content,
                       ...(thinkingDuration !== undefined && { thinkingDuration }),
+                      ...(sources !== undefined && { sources }),
                     }
                   : msg
               ),

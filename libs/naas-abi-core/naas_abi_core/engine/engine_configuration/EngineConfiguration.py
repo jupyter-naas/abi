@@ -11,6 +11,14 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusAdapterPythonQueueConfiguration,
     BusServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_CacheService import (
+    CacheAdapterEntry,
+    CacheAdapterObjectStorageConfiguration,
+    CacheAdapterRedisConfiguration,
+    CacheServiceConfiguration,
+    TIER_COLD,
+    TIER_HOT,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
     EmailAdapterSMTPConfiguration,
@@ -118,6 +126,25 @@ class ServicesConfiguration(BaseModel):
                 timeout=10,
             ).model_dump(),
         )
+    )
+    cache: CacheServiceConfiguration = CacheServiceConfiguration(
+        adapters=[
+            CacheAdapterEntry(
+                adapter="redis",
+                tier=TIER_HOT,
+                config=CacheAdapterRedisConfiguration(
+                    redis_url="redis://localhost:6379/0",
+                    prefix="naas:cache",
+                ).model_dump(),
+            ),
+            CacheAdapterEntry(
+                adapter="object_storage",
+                tier=TIER_COLD,
+                config=CacheAdapterObjectStorageConfiguration(
+                    cache_prefix="cache",
+                ).model_dump(),
+            ),
+        ]
     )
 
 

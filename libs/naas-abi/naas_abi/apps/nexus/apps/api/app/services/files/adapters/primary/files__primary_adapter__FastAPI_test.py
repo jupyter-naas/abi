@@ -50,3 +50,28 @@ async def test_authorize_workspace_path_checks_workspace_access(monkeypatch) -> 
 
     assert scoped_path == "ws-1/docs/readme.md"
     require_access.assert_awaited_once_with("user-1", "ws-1")
+
+
+def test_resolve_my_drive_scoped_path() -> None:
+    scoped_path = files_api._resolve_my_drive_scoped_path(
+        path="uploads/readme.md",
+        user_id="user-1",
+    )
+
+    assert scoped_path == "my-drive/user-1/uploads/readme.md"
+
+
+@pytest.mark.asyncio
+async def test_authorize_path_my_drive_skips_workspace_check(monkeypatch) -> None:
+    require_access = AsyncMock()
+    monkeypatch.setattr(files_api, "require_workspace_access", require_access)
+
+    scoped_path = await files_api._authorize_path(
+        current_user=SimpleNamespace(id="user-1"),
+        path="uploads/readme.md",
+        workspace_id=None,
+        scope="my_drive",
+    )
+
+    assert scoped_path == "my-drive/user-1/uploads/readme.md"
+    require_access.assert_not_awaited()

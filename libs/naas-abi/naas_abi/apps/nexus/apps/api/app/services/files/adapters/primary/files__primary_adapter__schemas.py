@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+FileScope = str
+
 
 class FileInfo(BaseModel):
     name: str
@@ -23,6 +25,7 @@ class FileContent(BaseModel):
 class CreateFileRequest(BaseModel):
     path: str = Field(..., min_length=1, max_length=500)
     workspace_id: str | None = Field(default=None, min_length=1, max_length=100)
+    scope: str = Field(default="workspace", pattern="^(workspace|my_drive)$")
     content: str = Field(default="", max_length=10_000_000)
     content_type: str = Field(default="text/plain", max_length=100)
 
@@ -30,12 +33,14 @@ class CreateFileRequest(BaseModel):
 class CreateFolderRequest(BaseModel):
     path: str = Field(..., min_length=1, max_length=500)
     workspace_id: str | None = Field(default=None, min_length=1, max_length=100)
+    scope: str = Field(default="workspace", pattern="^(workspace|my_drive)$")
 
 
 class RenameRequest(BaseModel):
     old_path: str = Field(..., min_length=1, max_length=500)
     new_path: str = Field(..., min_length=1, max_length=500)
     workspace_id: str | None = Field(default=None, min_length=1, max_length=100)
+    scope: str = Field(default="workspace", pattern="^(workspace|my_drive)$")
 
 
 class FileListResponse(BaseModel):

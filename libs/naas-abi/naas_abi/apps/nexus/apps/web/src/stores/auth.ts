@@ -21,10 +21,11 @@ export interface AuthState {
   // State
   user: User | null;
   token: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  
+
   // Actions
   requestMagicLink: (email: string) => Promise<boolean>;
   verifyMagicLink: (token: string) => Promise<boolean>;
@@ -34,6 +35,7 @@ export interface AuthState {
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
   clearError: () => void;
+  refreshAccessToken: () => Promise<boolean>;
   checkAuth: () => Promise<boolean>;
 }
 
@@ -45,13 +47,14 @@ export const useAuthStore = create<AuthState>()(
       // Initial state
       user: null,
       token: null,
+      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
-      
+
   requestMagicLink: async (email: string): Promise<boolean> => {
         set({ isLoading: true, error: null });
-        
+
         try {
           const apiBase = getApiUrl();
           const response = await fetch(`${apiBase}/api/auth/magic-link/request`, {
@@ -60,14 +63,14 @@ export const useAuthStore = create<AuthState>()(
             credentials: 'include',
             body: JSON.stringify({ email }),
           });
-          
+
           if (!response.ok) {
             const data = await response.json();
             throw new Error(data.detail || 'Failed to send magic link');
           }
 
           set({ isLoading: false, error: null });
-          
+
           return true;
         } catch (error) {
           set({
@@ -103,11 +106,12 @@ export const useAuthStore = create<AuthState>()(
           set({
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
             token: data.access_token,
+            refreshToken: data.refresh_token ?? null,
             isAuthenticated: true,
             isLoading: false,
             error: null,
           });
-          
+
           return true;
         } catch (error) {
           set({
@@ -125,15 +129,16 @@ export const useAuthStore = create<AuthState>()(
       register: async (email: string, _password: string, _name: string): Promise<boolean> => {
         return get().requestMagicLink(email);
       },
-      
+
       // Logout - clears auth state and ALL persisted store data
       logout: () => {
         // Clear auth cookie
         document.cookie = 'nexus-auth-flag=; path=/; max-age=0';
-        
+
         set({
           user: null,
           token: null,
+          refreshToken: null,
           isAuthenticated: false,
           error: null,
         });
@@ -151,51 +156,110 @@ export const useAuthStore = create<AuthState>()(
           try { localStorage.removeItem(key); } catch { /* SSR safe */ }
         }
       },
-      
+
       // Set user manually
       setUser: (user: User | null) => {
         set({ user, isAuthenticated: !!user });
       },
-      
+
       // Set token manually
       setToken: (token: string | null) => {
         set({ token });
       },
-      
+
       // Clear error
       clearError: () => {
         set({ error: null });
       },
-      
-      // Check if current token is valid
-      checkAuth: async (): Promise<boolean> => {
-        const { token } = get();
-        
-        if (!token) {
-          set({ isAuthenticated: false, user: null });
-          return false;
-        }
-        
+
+      // Silently exchange the refresh token for a new access token.
+      // Returns true on success, false if the refresh token is missing or rejected.
+      refreshAccessToken: async (): Promise<boolean> => {
+        const { refreshToken } = get();
+        if (!refreshToken) return false;
+
         try {
           const apiBase = getApiUrl();
-          const response = await fetch(`${apiBase}/api/auth/me`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
+          const response = await fetch(`${apiBase}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken }),
           });
-          
+
           if (!response.ok) {
-            set({ isAuthenticated: false, user: null, token: null });
+            // Refresh token is expired or invalid — force full logout
+            set({ user: null, token: null, refreshToken: null, isAuthenticated: false });
             return false;
           }
-          
+
+          const data = await response.json();
+          set({
+            token: data.access_token,
+            refreshToken: data.refresh_token ?? null,
+          });
+          return true;
+        } catch {
+          // Network error — don't clear state, let the caller decide
+          return false;
+        }
+      },
+
+      // Check if current token is valid; silently refreshes if expired.
+      checkAuth: async (): Promise<boolean> => {
+        const { token } = get();
+
+        // No access token — try to recover via refresh token
+        if (!token) {
+          const refreshed = await get().refreshAccessToken();
+          if (!refreshed) {
+            set({ isAuthenticated: false, user: null });
+            return false;
+          }
+        }
+
+        try {
+          const apiBase = getApiUrl();
+          const currentToken = get().token;
+          const response = await fetch(`${apiBase}/api/auth/me`, {
+            headers: {
+              'Authorization': `Bearer ${currentToken}`,
+            },
+          });
+
+          if (response.status === 401) {
+            // Access token rejected — try refresh once
+            const refreshed = await get().refreshAccessToken();
+            if (!refreshed) {
+              set({ isAuthenticated: false, user: null, token: null });
+              return false;
+            }
+            // Retry /me with the new token
+            const newToken = get().token;
+            const retryResponse = await fetch(`${apiBase}/api/auth/me`, {
+              headers: { 'Authorization': `Bearer ${newToken}` },
+            });
+            if (!retryResponse.ok) {
+              set({ isAuthenticated: false, user: null, token: null, refreshToken: null });
+              return false;
+            }
+            const retryUser = await retryResponse.json();
+            const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
+            set({ user: { ...retryUser, avatar: normalizeAvatar(retryUser?.avatar) }, isAuthenticated: true });
+            return true;
+          }
+
+          if (!response.ok) {
+            // Non-auth server error — preserve existing auth state (e.g. server temporarily down)
+            return get().isAuthenticated;
+          }
+
           const user = await response.json();
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
           set({ user: { ...user, avatar: normalizeAvatar(user?.avatar) }, isAuthenticated: true });
           return true;
         } catch {
-          set({ isAuthenticated: false, user: null, token: null });
-          return false;
+          // Network error — preserve existing auth state for offline resilience
+          return get().isAuthenticated;
         }
       },
     }),
@@ -204,6 +268,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
+        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
     }
@@ -220,30 +285,38 @@ export function getAuthHeader(): Record<string, string> {
 }
 
 /**
- * Authenticated fetch wrapper
+ * Authenticated fetch wrapper.
+ * On 401, attempts a silent token refresh before giving up and logging out.
  */
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = useAuthStore.getState().token;
   const apiBase = getApiUrl();
-  
+
   // Prepend API_BASE if URL is relative
   const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`;
-  
-  const headers = new Headers(options.headers);
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  
-  const response = await fetch(fullUrl, { ...options, headers });
-  
-  // Auto-logout on 401 to prevent stale token issues
-    if (response.status === 401) {
-      console.warn('Auth token expired or invalid, logging out...');
-      useAuthStore.getState().logout();
-      if (typeof window !== 'undefined') {
-        window.location.href = '/auth/login';
-      }
+
+  const makeRequest = (tok: string | null) => {
+    const headers = new Headers(options.headers);
+    if (tok) headers.set('Authorization', `Bearer ${tok}`);
+    return fetch(fullUrl, { ...options, headers });
+  };
+
+  const response = await makeRequest(useAuthStore.getState().token);
+
+  if (response.status === 401) {
+    // Try a silent token refresh
+    const refreshed = await useAuthStore.getState().refreshAccessToken();
+    if (refreshed) {
+      // Retry the original request with the new token
+      return makeRequest(useAuthStore.getState().token);
     }
-  
+
+    // Refresh failed — full logout
+    console.warn('Auth token expired and refresh failed, logging out...');
+    useAuthStore.getState().logout();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/auth/login';
+    }
+  }
+
   return response;
 }
