@@ -61,6 +61,28 @@ class ExternalAppConfig(BaseModel):
     icon_emoji: str | None = None
 
 
+FeatureKey = Literal["chat", "files", "agents", "knowledge", "settings"]
+
+
+class FeatureFlagsConfig(BaseModel):
+    """Feature access policy exposed to Nexus frontend."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled_features: list[FeatureKey] = Field(
+        default_factory=lambda: ["chat", "files", "agents", "knowledge", "settings"]
+    )
+    role_baseline: dict[str, list[FeatureKey]] = Field(
+        default_factory=lambda: {
+            "owner": ["chat", "files", "agents", "knowledge", "settings"],
+            "admin": ["chat", "files", "agents", "knowledge", "settings"],
+            "member": ["chat", "files"],
+            "viewer": ["chat", "files"],
+        }
+    )
+    workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
+
+
 class UserSeedConfig(BaseModel):
     """User definition applied on startup (create by email if missing)."""
 
@@ -160,6 +182,9 @@ class Settings(BaseSettings):
     # Tenant branding (tab title, favicon)
     tenant: TenantConfig = Field(default_factory=TenantConfig)
 
+    # Feature access policy consumed by workspace bootstrap responses
+    feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
+
     # User seed configs (upserted by email on startup)
     users: list[UserSeedConfig] = Field(default_factory=list)
 
@@ -186,8 +211,36 @@ class Settings(BaseSettings):
 
     # Authentication
     secret_key: str = "change-me-in-production"
+    auth_password_enabled: bool = False
+    magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
+    magic_link_expire_minutes: int = 15
+    magic_link_max_active: int = 5
+    magic_link_path: str = "/auth/magic-link"
+    magic_link_email_app_name: str = "NEXUS"
+    magic_link_email_subject_template: str = "Your {app_name} magic sign-in link"
+    magic_link_email_text_template: str = (
+        "Use the link below to sign in to {app_name}:\n\n"
+        "{magic_link_url}\n\n"
+        "This link expires in {expire_minutes} minutes."
+    )
+    magic_link_email_html_template: str = (
+        "<p>Use the link below to sign in to {app_name}:</p>"
+        '<p><a href="{magic_link_url}">Sign in to {app_name}</a></p>'
+        "<p>This link expires in {expire_minutes} minutes.</p>"
+    )
+
+    # SMTP (magic link delivery)
+    smtp_enabled: bool = False
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = False
+    smtp_use_ssl: bool = False
+    smtp_from_email: EmailStr = "no-reply@nexus.example.com"
+    smtp_from_name: str = "NEXUS"
 
     # Rate Limiting
     rate_limit_enabled: bool = True

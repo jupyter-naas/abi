@@ -1,7 +1,8 @@
 'use client';
 
 import { Component, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
+import { isWorkspacePathAllowed } from '@/lib/feature-access';
 import { WorkspaceLayout } from '@/components/shell/workspace-layout';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
@@ -107,12 +108,14 @@ export default function WorkspaceIdLayout({
   children: React.ReactNode;
 }) {
   const params = useParams();
+  const pathname = usePathname();
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
   
   const { workspaces, currentWorkspaceId, setCurrentWorkspace, syncWorkspaceConversations } = useWorkspaceStore();
-  const { isAuthenticated, token } = useAuthStore();
+  const { token } = useAuthStore();
   const [authReady, setAuthReady] = useState(false);
+  const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
   // Wait for auth store to rehydrate from localStorage before doing anything
   useEffect(() => {
@@ -155,6 +158,27 @@ export default function WorkspaceIdLayout({
       void syncWorkspaceConversations(workspaceId);
     }
   }, [workspaceId, syncWorkspaceConversations]);
+
+  useEffect(() => {
+    if (!authReady || !token || !workspaceId || !pathname || !currentWorkspace) {
+      return;
+    }
+
+    const allowed = isWorkspacePathAllowed({
+      pathname,
+      role: currentWorkspace.currentUserRole,
+      workspaceFlags: currentWorkspace.featureFlags,
+    });
+    if (allowed) {
+      return;
+    }
+
+    const blockedPath = encodeURIComponent(pathname);
+    const notAvailablePath = `/workspace/${workspaceId}/not-available?from=${blockedPath}`;
+    if (notAvailablePath !== pathname) {
+      router.replace(notAvailablePath);
+    }
+  }, [authReady, token, workspaceId, pathname, currentWorkspace, router]);
 
   // Show nothing while checking auth
   if (!authReady || !token) {

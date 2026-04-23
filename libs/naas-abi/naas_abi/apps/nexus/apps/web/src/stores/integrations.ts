@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { authFetch } from './auth';
 
-export type ProviderType = 'anthropic' | 'ollama' | 'openai' | 'cloudflare' | 'custom';
+export type ProviderType = 'anthropic' | 'ollama' | 'openai' | 'cloudflare' | 'abi' | 'custom';
 
 export interface ProviderConfig {
   id: string;

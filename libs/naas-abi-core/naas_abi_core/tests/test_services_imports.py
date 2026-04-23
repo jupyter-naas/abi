@@ -5,6 +5,8 @@ def test_imports():
     from naas_abi_core.services.agent import Agent, IntentAgent
     from naas_abi_core.services.cache import CacheFactory, CachePort, CacheService
     from naas_abi_core.services.cache.adapters.secondary import CacheFSAdapter
+    from naas_abi_core.services.email import EmailFactory, EmailService, IEmailAdapter
+    from naas_abi_core.services.email.adapters.secondary import SMTPAdapter
     from naas_abi_core.services.object_storage import ObjectStorageService
     from naas_abi_core.services.object_storage.adapters.secondary import (
         ObjectStorageSecondaryAdapterFS,
@@ -40,6 +42,10 @@ def test_imports():
     CacheFactory
     CachePort
     CacheFSAdapter
+    EmailService
+    EmailFactory
+    IEmailAdapter
+    SMTPAdapter
     ObjectStorageService
     ObjectStorageSecondaryAdapterFS
     ObjectStorageSecondaryAdapterNaas

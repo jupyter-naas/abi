@@ -14,7 +14,7 @@ from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLo
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
 from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.pipeline.pipeline import Pipeline
-from naas_abi_core.services.agent.Agent import Agent
+from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.workflow.workflow import Workflow
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import Generic, Self, TypeVar
@@ -64,7 +64,7 @@ class BaseModule(Generic[TConfig]):
     dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
 
     __ontologies: List[str] = []
-    __agents: List[type[Agent]] = []
+    __agents: List[type[Expose]] = []
     __integrations: List[Integration] = []
     __workflows: List[Workflow] = []
     __pipelines: List[Pipeline] = []
@@ -120,7 +120,7 @@ class BaseModule(Generic[TConfig]):
         return self.__ontologies
 
     @property
-    def agents(self) -> List[type[Agent]]:
+    def agents(self) -> List[type[Expose]]:
         return self.__agents
 
     @property

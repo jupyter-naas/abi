@@ -115,7 +115,7 @@ export function SecretsPanel() {
       const currentToken = useAuthStore.getState().token;
       if (!currentToken) {
         alert('You need to log in first to import secrets.');
-        window.location.href = '/login';
+        window.location.href = '/auth/login';
         return;
       }
       

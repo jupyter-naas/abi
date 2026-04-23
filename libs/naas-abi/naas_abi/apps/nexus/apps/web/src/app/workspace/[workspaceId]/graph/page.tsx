@@ -2029,7 +2029,7 @@ export default function GraphPage() {
                         Make sure the API is running and the database is seeded.
                       </p>
                       <button
-                        onClick={loadFromApi}
+                        onClick={() => void loadFromApi()}
                         className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 mx-auto"
                       >
                         <RefreshCw size={16} />
@@ -2054,7 +2054,7 @@ export default function GraphPage() {
                       </code>
                       <div className="mt-4">
                         <button
-                          onClick={loadFromApi}
+                          onClick={() => void loadFromApi()}
                           className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 mx-auto"
                         >
                           <RefreshCw size={16} />

@@ -3,14 +3,14 @@ import os
 from typing import List
 
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
-from naas_abi_core.services.agent.Agent import Agent
+from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.utils.Logger import logger
 
 
 class ModuleAgentLoader:
     @classmethod
-    def load_agents(cls, class_: type) -> List[type[Agent]]:
-        agents: List[type[Agent]] = []
+    def load_agents(cls, class_: type) -> List[type[Expose]]:
+        agents: List[type[Expose]] = []
         module_root_path = find_class_module_root_path(class_)
 
         agents_path = module_root_path / "agents"
@@ -28,7 +28,7 @@ class ModuleAgentLoader:
                     for key, value in agent_module.__dict__.items():
                         if (
                             isinstance(value, type)
-                            and issubclass(value, Agent)
+                            and issubclass(value, Expose)
                             and value.__module__.split(".")[0]
                             == class_.__module__.split(".")[
                                 0

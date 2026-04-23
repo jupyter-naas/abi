@@ -1,10 +1,10 @@
 [project]
 name = "naas-abi-marketplace"
-version = "1.8.1"
+version = "1.10.2"
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10,<4"
+requires-python = ">=3.11,<4"
 dependencies = [
     "naas-abi-core>=1.4.0",
 ]
@@ -150,4 +150,8 @@ applications-yahoofinance = [
 domains-ontology-engineer = [
     "thefuzz==0.22.1",
     "fuzzywuzzy-stubs==0.0.1"
+]
+domains-document = [
+    "pymupdf>=1.27.2.2",
+    "pymupdf4llm>=1.27.2.2",
 ]

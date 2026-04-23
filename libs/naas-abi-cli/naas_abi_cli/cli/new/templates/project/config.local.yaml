@@ -13,6 +13,16 @@ api:
 global_config:
   ai_mode: "cloud"
 
+opencode:
+  auth_file_path: "~/.local/share/opencode/auth.json"
+  providers:
+    - id: "openrouter"
+      key: "{{ secret.OPENROUTER_API_KEY }}"
+      type: "api"
+    - id: "openai"
+      key: "{{ secret.OPENAI_API_KEY }}"
+      type: "api"
+
 modules:
   - module: naas_abi
     enabled: true
@@ -51,6 +61,11 @@ services:
       adapter: "apache_jena_tdb2"
       config:
         jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@fuseki:3030/ds"
+        key_value_service:
+          kv_adapter:
+            adapter: "redis"
+            config:
+              redis_url: "redis://redis:6379"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
