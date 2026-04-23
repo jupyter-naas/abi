@@ -1,0 +1,8 @@
+{
+  "label": "Libraries",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "description": "In-depth documentation for ABI's Python libraries: architecture, engine, module system, and services."
+  }
+}
