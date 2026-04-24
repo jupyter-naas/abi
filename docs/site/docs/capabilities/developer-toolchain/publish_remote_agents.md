@@ -27,7 +27,7 @@ ABI_API_KEY=your_abi_api_key_here
 
 # GitHub Configuration
 GITHUB_ACCESS_TOKEN=your_github_personal_access_token_here
-```bash
+```
 
 ### Configuration File
 
@@ -39,7 +39,7 @@ config:
  github_project_repository: "your_github_username/your_repository_name"
  space_name: "your_naas_space_name"
  # ... other configuration options
-```bash
+```
 
 ## How to Publish Remote Agents
 
@@ -49,7 +49,7 @@ The easiest way to publish remote agents is using the provided Make command:
 
 ```bash
 make publish-remote-agents
-```bash
+```
 This command performs the following actions:
 1. Reads configuration settings from your environment and config files
 2. Publishes a predefined set of agents:
@@ -69,7 +69,7 @@ You can also run the script directly with custom parameters:
 
 ```bash
 uv run python scripts/publish_remote_agents.py
-```bash
+```
 
 ### Method 3: Programmatic Usage
 
@@ -88,7 +88,7 @@ publish_remote_agent(
  default_agent="Abi",
 agents_to_publish=["Abi", "Ontology", "Naas"]
 )
-```bash
+```
 
 ## Configuration Parameters
 
@@ -158,7 +158,7 @@ Plugin 'Abi' updated in workspace 'your_workspace_id'
 ==> Publishing agent: Ontology
 Plugin 'Ontology' created in workspace 'your_workspace_id'
 ...
-```bash
+```
 
 ## Troubleshooting
 
@@ -167,7 +167,7 @@ Plugin 'Ontology' created in workspace 'your_workspace_id'
 1. **Missing Environment Variables**
  ```
  ValueError: NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID, GITHUB_ACCESS_TOKEN, and GITHUB_REPOSITORY must be set
- ```bash
+ ```
  **Solution**: Ensure all required environment variables are set in your `.env` file
 
 2. **Invalid Route Name**

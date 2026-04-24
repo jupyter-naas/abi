@@ -115,7 +115,7 @@ item_obj = MyItem(
 g += item_obj.to_graph()
 ```
 
-See [[building/creating-an-ontology|Creating an Ontology]] for onto2py setup.
+See [Creating an Ontology](/capabilities/knowledge-graph/creating-an-ontology) for onto2py setup.
 
 ---
 

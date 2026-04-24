@@ -53,7 +53,7 @@ At startup, the MCP server:
 
 Tool calls are routed directly to the corresponding agent's `run()` method. No additional configuration is needed when agents are added to or removed from the engine.
 
-See [[adr/20250730_mcp-server-dynamic-agent-discovery|ADR: MCP Dynamic Agent Discovery]].
+See [ADR: MCP Dynamic Agent Discovery](/updates/mcp-server-dynamic-agent-discovery).
 
 ---
 

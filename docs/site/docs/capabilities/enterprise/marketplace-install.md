@@ -15,13 +15,13 @@ To use a module from the Marketplace:
 
  # Enable a module (e.g., arxiv)
  mv arxiv.disabled arxiv
- ```bash
+ ```
 
 2. **Install dependencies**:
  ```bash
  # Check the module's README.md for dependency requirements
  make add dep="required_package1 required_package2"
- ```bash
+ ```
 
 3. **Configure if needed**:
  - Set any environment variables needed by the module
@@ -38,7 +38,7 @@ If you want to customize a marketplace module:
 1. **Copy the module to your custom modules directory**:
  ```bash
  cp -r src/marketplace/modules/module_name.disabled/ src/custom/modules/module_name/
- ```bash
+ ```
 
 2. **Follow steps 2-4 from Method 1**
 

@@ -120,7 +120,7 @@ SELECT ?label ?url WHERE {
 }
 ```
 
-See [[libs/naas-abi-core/Built-in-Module-Templatable-SPARQL|Templatable SPARQL module]].
+See [Templatable SPARQL module](/capabilities/knowledge-graph/sparql_query_template_system).
 
 ---
 

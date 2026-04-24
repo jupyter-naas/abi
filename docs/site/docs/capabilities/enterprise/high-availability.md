@@ -53,7 +53,7 @@ graph TD
 
  class A1,A2,A3,B1,B2,B3,C1,C2,C3 platform
  class LB infrastructure
-```bash
+```
 
 **Automatic Failover Configuration**:
 ```yaml
@@ -77,7 +77,7 @@ high_availability:
  algorithm: "least_connections"
  sticky_sessions: false
  health_check_grace_period: "60 seconds"
-```bash
+```
 
 ### Database High Availability
 
@@ -114,7 +114,7 @@ postgresql_ha:
  automatic: true
  timeout: "30 seconds"
  promotion_timeout: "60 seconds"
-```bash
+```
 
 **Redis High Availability**:
 - **Redis Sentinel**: Automatic failover for Redis instances
@@ -151,7 +151,7 @@ spec:
  http:
  http1MaxPendingRequests: 50
  maxRequestsPerConnection: 10
-```bash
+```
 
 **Retry and Timeout Policies**:
 ```yaml
@@ -167,7 +167,7 @@ spec:
  perTryTimeout: 10s
  retryOn: "5xx,reset,connect-failure,refused-stream"
  timeout: 30s
-```bash
+```
 
 ### Application-Level Resilience
 
@@ -244,7 +244,7 @@ async def health_check():
  "timestamp": time.time(),
  "checks": results
  }
-```bash
+```
 
 ## Disaster Recovery
 
@@ -277,7 +277,7 @@ sla_tiers:
  rpo: "5 minutes"
  availability: "99.99%"
  support: "24/7 with dedicated TAM"
-```bash
+```
 
 ### Backup Strategies
 
@@ -314,7 +314,7 @@ backup_strategy:
  schedule: "on every change"
  retention: "90 days"
  versioning: true
-```bash
+```
 
 **Cross-Region Backup Replication**:
 - **Primary Region**: us-east-1 (production and primary backups)
@@ -359,7 +359,7 @@ graph TD
 
  class P1,P2,P3,P4,D1,D2,D3,D4 platform
  class A1,A2 infrastructure
-```bash
+```
 
 **Cold Standby Site**:
 - **Backup Restoration**: Recovery from backups stored in secondary region
@@ -400,7 +400,7 @@ disaster_recovery:
  - internal_notification: "Notify internal stakeholders"
  - customer_communication: "Update status page and notify customers"
  - regulatory_reporting: "File required regulatory reports"
-```bash
+```
 
 **Recovery Validation**:
 - **Smoke Tests**: Basic functionality verification
@@ -436,7 +436,7 @@ continuity_strategies:
  - automated_failover: "Automatic system recovery"
  - manual_procedures: "Documented manual recovery steps"
  - communication_plans: "Stakeholder communication procedures"
-```bash
+```
 
 ### Crisis Communication
 
@@ -471,7 +471,7 @@ communication_templates:
  Resolution: [resolution_summary]
 
  We will conduct a post-incident review and share findings within 48 hours.
-```bash
+```
 
 ### Testing and Validation
 
@@ -502,7 +502,7 @@ dr_testing:
  scope: "complete system failover"
  validation: "business process continuity"
  stakeholders: "all business units"
-```bash
+```
 
 **Test Results Documentation**:
 - **Test Execution Logs**: Detailed logs of all test activities
@@ -555,7 +555,7 @@ monitoring:
  sampling_rate: "0.1%"
  retention: "7 days"
  storage: "elasticsearch"
-```bash
+```
 
 ### Intelligent Alerting
 

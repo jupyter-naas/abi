@@ -59,4 +59,4 @@ modules:
 
 No frontend rebuild required. Branding changes take effect on config update and service restart.
 
-See [[adr/20260219_config-driven-tenant-provisioning|ADR: Tenant Provisioning]].
+See [ADR: Tenant Provisioning](/updates/config-driven-tenant-provisioning).
