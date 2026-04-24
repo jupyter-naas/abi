@@ -1,0 +1,117 @@
+---
+sidebar_position: 2
+title: "The ABI Stack"
+---
+
+# The ABI Stack
+
+ABI is organized as three open-source Python packages that together constitute an enterprise AI operating system. The runtime layer (`naas-abi-core`) provides the Engine, all service port interfaces, and the infrastructure adapters. The application layer (`naas-abi`) adds the built-in agents, the Nexus platform, the base ontologies, and the core module library. The module layer (`naas-abi-marketplace`) extends the system with community-contributed domain modules, all disabled by default and opted in per deployment. A fourth package, `naas-abi-cli`, orchestrates the whole stack. All four are MIT-licensed Python packages you install and run on your own infrastructure.
+
+The atomic unit of that system is the **module**: a self-contained package that models a domain, ingests data about it, and exposes intelligent capabilities on top. This page walks through how modules are structured, how they fit into the five runtime layers, and what runs in production.
+
+import BrowserOnly from '@docusaurus/BrowserOnly';
+
+---
+
+## Module
+
+A module bundles everything needed to own a domain end-to-end: the ontology that models it, the pipelines and integrations that feed it, and the agents, workflows, and apps that act on it. Think of it as a semantic data and AI product you can enable or disable with a single line in `config.yaml`.
+
+A concrete example: the Account Executive module models sales relationships as OWL entities (Contacts, Accounts, Opportunities), ingests data from Salesforce and LinkedIn via its integrations, runs daily pipelines to keep the knowledge graph current, and exposes a sales agent grounded in your actual CRM data. Unlike a RAG system that retrieves text chunks, it reasons over typed relationships: the agent knows that a Contact works at an Account, that Account is in an Opportunity, and that Opportunity is owned by a specific rep.
+
+The data side defines the domain: `ontologies/` holds OWL/Turtle files that model the knowledge graph schema, `pipelines/` ingests raw data from external sources and converts it into RDF triples, and `integrations/` provides the connectors to those external APIs (GitHub, LinkedIn, Stripe, and others).
+
+The product side exposes capabilities on that data: `agents/` contains LLM-powered agents that reason over the knowledge graph, `workflows/` holds SPARQL-backed tools that agents and users invoke directly, `orchestrations/` defines scheduled tasks and event-driven sensors, and `apps/` can surface a CLI, a web interface, or an API specific to that module.
+
+Every module declares a `ModuleConfiguration` (Pydantic, merged with global config) and `ModuleDependencies` (the services and other modules it depends on). Nothing from `naas-abi-marketplace` loads by default; each module is opted in explicitly.
+
+<BrowserOnly fallback={<div style={{height:'400px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const ModuleDiagram = require('../../src/components/ModuleDiagram').default;
+    return <ModuleDiagram />;
+  }}
+</BrowserOnly>
+
+---
+
+## Architecture
+
+ABI follows a five-layer architecture. The **Interface** layer holds the entry points: the Nexus web app, the `abi` CLI, MCP clients, the SPARQL workbench, and the Dagster UI. The **Application** layer sits below it: four process boundaries (the Core API, the Nexus API, the MCP server, and Dagster) that translate incoming calls into a common internal format and hand them to the Engine.
+
+The **Intelligence** layer is where work happens. The Engine wires together services at startup, loads ontologies, and routes requests to the right agent based on intent. The AbiAgent acts as a supervisor: it reads the intent behind each request and dispatches to the right domain agent or marketplace agent. All LLM calls flow through OpenRouter (cloud providers) or Ollama (local, air-gapped), and the model can be swapped per request without rebuilding anything.
+
+The **Services** layer provides six port interfaces, each with pluggable adapters you can swap via `config.yaml`: a triple store for RDF/OWL knowledge graphs, a vector store for embeddings, object storage for files, a message bus for async work, a key-value cache, and a secret store. The **Infrastructure** layer backs each port with a concrete Docker service. In local dev most fall back to lightweight in-process alternatives.
+
+<BrowserOnly fallback={<div style={{height:'820px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const ArchitectureGraph = require('../../src/components/ArchitectureGraph').default;
+    return <ArchitectureGraph />;
+  }}
+</BrowserOnly>
+
+---
+
+## Packages
+
+The codebase is split into four Python packages. `naas-abi-core` is the foundation: the Engine, all service port interfaces, and their adapters. It has no agents and no business logic, making it publishable as a standalone library.
+
+`naas-abi` builds on top of it, adding the built-in agents, the Nexus full-stack web app, the Core REST API, the MCP server, and the base ontologies. `naas-abi-marketplace` holds community-contributed modules and agents, all disabled by default and enabled selectively via `config.yaml`. `naas-abi-cli` is the `abi` command-line tool that orchestrates the whole stack.
+
+<BrowserOnly fallback={<div style={{height:'380px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const PackageDiagram = require('../../src/components/PackageDiagram').default;
+    return <PackageDiagram />;
+  }}
+</BrowserOnly>
+
+---
+
+## Services
+
+`naas-abi-core` follows a ports-and-adapters (hexagonal) architecture for all infrastructure concerns. Each service is defined as an abstract port interface; concrete adapters implement it. The Engine resolves which adapter to use at startup based on `config.yaml`. Swapping the triple store from Fuseki to Oxigraph, or the message bus from RabbitMQ to the built-in Python queue, requires only a config change with no code edits.
+
+<BrowserOnly fallback={<div style={{height:'660px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const ServicesDiagram = require('../../src/components/ServicesDiagram').default;
+    return <ServicesDiagram />;
+  }}
+</BrowserOnly>
+
+---
+
+## Data flow
+
+Data enters ABI through integrations: connectors to external APIs such as GitHub, LinkedIn, and Salesforce. Pipelines consume that raw data and convert it into OWL/RDF triples stored in the triple store. Once knowledge is in the graph, it becomes queryable via SPARQL.
+
+When a user or system sends a request, an agent receives it. The agent selects the right workflows and integrations as tools, queries the knowledge graph for context, and executes the business logic. The result travels back through the app layer (REST API, MCP, or Nexus) to the caller.
+
+<BrowserOnly fallback={<div style={{height:'340px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const DataFlowGraph = require('../../src/components/DataFlowGraph').default;
+    return <DataFlowGraph />;
+  }}
+</BrowserOnly>
+
+---
+
+## Production
+
+Run `docker compose up` to start the full stack. Eleven services come up: five data stores and six application processes.
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| Fuseki (Jena TDB2) | 3030 | Primary triple store · SPARQL endpoint |
+| Qdrant | 6333 | Vector store |
+| PostgreSQL | 5432 | Agent memory + Nexus app data |
+| RabbitMQ | 5672 / 15672 | Message bus + management UI |
+| Redis | 6379 | Key-value store + cache |
+| MinIO | 9000 / 9001 | Object storage + console |
+| ABI Core API | 9879 | FastAPI REST API · agents · workflows · graph |
+| Nexus Web | 3042 | Next.js frontend |
+| Dagster | 3001 | Orchestration UI |
+| MCP Server | 8000 | Model Context Protocol |
+| Caddy | 80 / 443 | Reverse proxy · TLS termination |
+
+For local development, lightweight alternatives replace most production services: an in-process queue instead of RabbitMQ, in-memory key-value instead of Redis, Oxigraph instead of Fuseki, and an in-memory Qdrant instance.
+
+→ [The Ontology System](./knowledge-graph)

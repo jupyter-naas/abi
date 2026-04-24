@@ -1,11 +1,13 @@
 ---
-sidebar_position: 3
-title: "Ontology-Driven AI System"
+sidebar_position: 7
+title: "The Agent System"
 ---
 
-# Ontology-Driven AI System
+import BrowserOnly from '@docusaurus/BrowserOnly';
 
-ABI is an **AI Operating System**: build your own AI using ontologies as the unifying field connecting data, models, workflows, and systems.
+# The Agent System
+
+ABI's agent architecture is the capstone of the platform: the layer where the knowledge graph, data plane, and service infrastructure become directly accessible to humans and AI clients. The agent layer is open at every seam: agents are Python classes, tools are SPARQL queries or Python functions, routing is vector similarity over registered intent strings, and every agent is exposed via REST, MCP, and CLI simultaneously.
 
 ---
 
@@ -15,20 +17,12 @@ Most AI systems treat data, models, and workflows as separate concerns stitched 
 
 An ontology is a formal, machine-readable description of the world: what entities exist, how they relate, and what operations can be performed on them. When your data, agents, workflows, and integrations all speak the same ontological language, they become composable by design rather than by accident.
 
-```bash
-     Data sources          Knowledge Graph (RDF/OWL)
-     ─────────────  ──────────────────────────────────────
-     CRM, ERP,      Entities, relationships, facts, inferred
-     APIs, files    knowledge, queryable via SPARQL
-
-          ↕                         ↕
-
-     Agents                    Workflows & Pipelines
-     ──────────────────         ────────────────────────────
-     LLM-powered interfaces     Business logic operating on
-     that route intent and      the knowledge graph, triggered
-     invoke tools               by events or schedules
-```
+<BrowserOnly fallback={<div style={{height:'420px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const CoreIdeaGraph = require('../../src/components/CoreIdeaGraph').default;
+    return <CoreIdeaGraph />;
+  }}
+</BrowserOnly>
 
 Everything in ABI (agents, pipelines, workflows, integrations) operates on the same shared knowledge graph. There is no ETL to a vector store, no separate "AI layer". The ontology IS the integration layer.
 
@@ -78,14 +72,12 @@ Each agent declares a scope:
 
 Agents can use other agents as tools, enabling delegation hierarchies:
 
-```bash
-SupervisorAgent
-├── ContentAgent        → LinkedIn integration tools
-├── CRMAgent            → Salesforce + knowledge graph tools
-├── FinanceAgent        → QuickBooks + SPARQL workflows
-└── ResearchAgent       → web search + OntologyEngineerAgent
-    └── OntologyEngineerAgent  (scope: research)
-```
+<BrowserOnly fallback={<div style={{height:'460px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const AgentGraph = require('../../src/components/AgentGraph').default;
+    return <AgentGraph />;
+  }}
+</BrowserOnly>
 
 ### Built-in agents
 
@@ -129,7 +121,10 @@ Bearer token authentication is required for all REST endpoints.
 ## Further reading
 
 - [The ABI Stack](the-stack): the four packages and how they fit together
-- [Knowledge Graph](knowledge-graph): ontologies, RDF, and SPARQL in depth
 - [Creating an Agent](../capabilities/agents/creating-an-agent): step-by-step guide
 - [Agent.New() Pattern](/updates/agent-class-new-pattern): ADR
 - [Intent Scope Routing](/updates/intent-scope-agent-routing): ADR
+
+---
+
+→ [Overview](./what-is-abi)

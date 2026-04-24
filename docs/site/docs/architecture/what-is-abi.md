@@ -2,25 +2,19 @@
 sidebar_position: 1
 ---
 
-# What is ABI?
+# Overview
 
-ABI (Agentic Brain Infrastructure) is an open-source AI operating system that gives any organization its own private knowledge graph, a configurable fleet of AI agents, and the infrastructure to connect them to every tool and data source it uses.
+ABI is the open-source AI operating system for enterprise knowledge work. Its architecture mirrors the approach Palantir took with Foundry and AIP, but built entirely in the open: MIT-licensed, self-hosted, and grounded in the same formal ontology standards (BFO/OWL/SPARQL) used in defense, healthcare, and intelligence.
 
----
-
-## The problem it solves
-
-Most organizations have a data problem masquerading as an AI problem. Data lives in dozens of disconnected SaaS tools. Querying it means either hand-coding integrations for each source or feeding unstructured exports into an LLM and hoping it reasons correctly.
-
-ABI takes a different approach: convert raw data into a **structured knowledge graph** grounded in a formal ontology, then let AI agents query that graph with precision. Agents know the difference between a Person, a Role, and an Organization - because the ontology says so, not because an LLM guessed.
+This architecture center documents how the system is designed, how its components fit together, and what it takes to deploy it in production.
 
 ---
 
-## What it is not
+## What is ABI?
 
-- It is not a chatbot wrapper. The knowledge graph and the service infrastructure are the product; agents are the interface on top.
-- It is not a low-code platform. ABI is a Python framework for teams that want to own their AI stack in code.
-- It is not cloud-locked. The full stack runs locally with Docker, entirely air-gapped, or on your own infrastructure.
+ABI (Agentic Brain Infrastructure) gives any organization three things: a private knowledge graph grounded in formal ontology, a configurable fleet of AI agents, and the infrastructure to connect them to every tool and data source the organization uses.
+
+Most organizations have a data problem masquerading as an AI problem. Data lives in dozens of disconnected SaaS tools. Querying it requires either hand-coding integrations for each source or feeding unstructured exports into an LLM and hoping it reasons correctly. ABI solves this by converting raw data into a structured knowledge graph with a formal ontology (BFO/OWL), then letting AI agents query that graph with precision. Agents know the difference between a Person, a Role, and an Organization because the ontology says so, not because an LLM guessed.
 
 ---
 
@@ -38,20 +32,32 @@ ABI takes a different approach: convert raw data into a **structured knowledge g
 
 ---
 
-## Key capabilities
+## What it is not
 
-- **Knowledge graph**: All data is stored as RDF triples in an OWL-compliant triple store. Ontologies define the schema. SPARQL queries retrieve it with precision.
-- **Agent system**: Configurable AI agents with persistent memory, tool calling, and multi-agent delegation. Agents are exposed as REST API endpoints and MCP tools automatically.
-- **Module system**: Functionality is packaged in modules (core, custom, marketplace). Modules declare their dependencies and are loaded by the Engine in topological order.
-- **Platform services**: Triple store, vector store, object storage, secret manager, message bus, key-value store - all behind port interfaces with pluggable adapters.
-- **Full-stack deployment**: Nexus web frontend, FastAPI REST API, MCP server, Dagster orchestration, and the `abi` CLI ship together.
-- **Pluggable models**: OpenRouter provides a single API key for access to every major LLM (OpenAI, Anthropic, Google, Mistral, Meta, DeepSeek, Qwen). Local models via Ollama are also supported for air-gapped or privacy-constrained deployments.
+It is not a chatbot wrapper. The knowledge graph and the service infrastructure are the product; agents are the interface on top.
+
+It is not a low-code platform. ABI is a Python framework for teams that want to own their AI stack in code.
+
+It is not cloud-locked. The full stack runs locally with Docker, entirely air-gapped, or on your own infrastructure. MIT licensed: your data, your models, your infrastructure, permanently.
 
 ---
 
-## Who uses it
+## Guide to the Architecture
 
-- Engineering teams building a private AI platform on their own infrastructure.
-- Data teams that need structured, queryable knowledge on top of SaaS data sources.
-- Organizations in regulated industries (finance, defense, healthcare) that cannot send data to third-party AI services.
-- Companies building products on top of ABI's infrastructure - see the [Nexus](/capabilities/applications/nexus) full-stack app.
+This section is written for engineers, architects, and technical decision-makers evaluating or deploying ABI. Each page covers a distinct slice of the architecture:
+
+**[The ABI Stack](./the-stack)** covers how the three open-source packages constitute an enterprise AI operating system: the module as the atomic unit, the five runtime layers, the package structure, and what runs in production. Start here for a complete picture of the system.
+
+**[The Ontology System](./knowledge-graph)** explains how ABI models the operational world as typed entities and relationships using ISO open standards (BFO/OWL/SPARQL): the Language, Engine, and Toolchain that make the knowledge graph a first-class architectural component rather than a reporting layer.
+
+**[The Data Plane](./data-plane)** covers ABI's "any data, any compute, any model" architecture: the five purpose-built open-source stores, the three compute modes (batch, event-driven, interactive), and how models are selected per request without code changes.
+
+**[Interoperability](./interoperability)** documents every integration point: SPARQL endpoints, S3-compatible object storage, MCP tool registration, OpenAI-compatible model interfaces, standard JWT auth, and the Python SDK.
+
+**[The Runtime](./deployment-models)** covers how ABI is operated in practice: Docker Compose as the infrastructure substrate, the four deployment topologies (local, on-premises, air-gapped, managed), and how configuration drives environment differences.
+
+**[The Agent System](./agent-system)** explains how agents are structured as LangGraph state machines, how intent routing dispatches requests to the right domain agent, how agents compose into delegation hierarchies, and how they are exposed simultaneously via REST, MCP, and CLI.
+
+---
+
+→ [The ABI Stack](./the-stack)
