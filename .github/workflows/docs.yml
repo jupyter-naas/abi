@@ -29,37 +29,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Clone Quartz v4
-        run: git clone https://github.com/jackyzha0/quartz.git quartz-build --depth 1
-
-      - name: Install Quartz dependencies
-        working-directory: quartz-build
+      - name: Install dependencies
+        working-directory: docs/site
         run: npm ci
 
-      - name: Copy ABI docs into Quartz content
-        run: |
-          cp -r docs/. quartz-build/content/
-          rm -rf quartz-build/content/.quartz_conf
-          rm -f quartz-build/content/docker-compose.yaml
-
-      - name: Apply custom Quartz config and styles
-        run: |
-          cp docs/.quartz_conf/quartz.config.ts quartz-build/quartz.config.ts
-          cp docs/.quartz_conf/quartz.layout.ts quartz-build/quartz.layout.ts
-          cp docs/.quartz_conf/custom.scss quartz-build/quartz/styles/custom.scss
-          cp docs/.quartz_conf/favicon.ico quartz-build/quartz/static/favicon.ico
-
-      - name: Build Quartz
-        working-directory: quartz-build
-        env:
-          BASE_URL: "docs.naas.ai"
-          SITE_TITLE: "naas.ai Docs"
-          SITE_TITLE_SUFFIX: " | naas.ai"
-          DARK_SECONDARY: "#22c55e"
-          DARK_TERTIARY: "#22c55e"
-          DARK_GRAY: "#22c55e"
-          DEFAULT_THEME: "dark"
-        run: npx quartz build
+      - name: Build Docusaurus
+        working-directory: docs/site
+        run: npm run build
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
@@ -67,5 +43,5 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: abi-docs
-          directory: quartz-build/public
+          directory: docs/site/build
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
