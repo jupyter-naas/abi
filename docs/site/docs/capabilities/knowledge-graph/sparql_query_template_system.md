@@ -48,7 +48,7 @@ intentMapping:newQueryName a intentMapping:TemplatableSparqlQuery ;
  }
  """ ;
  intentMapping:hasArgument intentMapping:newQueryArgument .
-```bash
+```
 
 ### Step 2: Define Arguments
 ```turtle
@@ -57,7 +57,7 @@ intentMapping:newQueryArgument a intentMapping:QueryArgument ;
  intentMapping:argumentDescription "Description of the argument" ;
  intentMapping:validationPattern "^[regex-pattern]$" ;
  intentMapping:validationFormat "human_readable_format" .
-```bash
+```
 
 ### Step 3: Ensure Your TTL File is Loaded Into the Triple Store
 Your TTL file should be placed in the `ontologies` directory of your own module, not in the core intentmapping module. Make sure your TTL file is either:
@@ -72,7 +72,7 @@ The intentmapping module automatically makes tools available at runtime. Add the
 ```python
 from src.core.modules.intentmapping import get_tools
 tools.extend(get_tools())
-```bash
+```
 
 You can find the `Agent` class in `src/core/modules/ontology/agents/OntologyAgent.py`.
 
@@ -107,7 +107,7 @@ intentMapping:sparqlTemplate """
  {% endif %}
  }
 """
-```bash
+```
 
 ### Multiple Arguments
 Queries can accept multiple arguments by linking to multiple argument definitions:

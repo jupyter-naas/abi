@@ -62,7 +62,7 @@ api:
     - "https://myapp.example.com"
 ```
 
-`cors_origins` is the single source of truth for CORS - applies to both the core API and the embedded Nexus API. See [[adr/20260305_cors-single-source-of-truth|ADR: CORS single source]].
+`cors_origins` is the single source of truth for CORS - applies to both the core API and the embedded Nexus API. See [ADR: CORS single source](/updates/cors-single-source-of-truth).
 
 ---
 

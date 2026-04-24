@@ -10,7 +10,7 @@ There are multiple ways to run Python scripts in this project:
 
 ```bash
 uv run python src/custom/modules/your_module_name/pipelines/your_pipeline_name.py
-```bash
+```
 
 ### Running Specific Applications
 
@@ -28,7 +28,7 @@ make chat-naas-agent
 make chat-supervisor-agent
 make chat-ontology-agent
 make chat-support-agent
-```bash
+```
 
 ## Writing Runnable Python Scripts
 

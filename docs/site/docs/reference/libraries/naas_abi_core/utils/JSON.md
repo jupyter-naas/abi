@@ -25,7 +25,7 @@ from naas_abi_core.utils.JSON import extract_json_from_completion
 
 text = """
 Some preamble text.
-```json
+```
 {foo: "bar", "n": 1}
 ```
 """

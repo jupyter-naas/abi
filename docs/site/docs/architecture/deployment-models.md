@@ -1,10 +1,15 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
+title: "The Runtime"
 ---
 
-# Deployment Models
+# The Runtime
 
-ABI runs everywhere - from a developer laptop to an air-gapped enterprise datacenter.
+ABI runs on Docker. Every service in the stack is a standard container orchestrated by Docker Compose, with no proprietary Kubernetes substrate and no managed infrastructure required. You operate it with tools you already know.
+
+This is an intentional design choice. Abstracting infrastructure into a managed runtime delivers security and availability guarantees but removes operator visibility and control. ABI makes the opposite tradeoff: the infrastructure is yours to inspect, modify, extend, and replace. You own operations; in return, there are no accreditation dependencies, no vendor upgrade cycles, and no egress charges.
+
+The same Docker Compose manifest runs on a developer laptop and in a production data center. The only differences between environments are the `config.yaml` overrides that select service backends, the model provider, and the LLM routing configuration.
 
 ---
 
@@ -75,4 +80,8 @@ config.production.yaml   # Production overrides
 config.airgap.yaml       # Air-gapped overrides
 ```
 
-The active environment is selected via the `ABI_ENV` environment variable. See [[getting-started/configuration|Configuration Reference]].
+The active environment is selected via the `ABI_ENV` environment variable. See [Configuration Reference](/get-started/configuration).
+
+---
+
+→ [The Agent System](./agent-system)

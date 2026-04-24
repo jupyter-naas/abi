@@ -90,10 +90,10 @@ GET  /organizations
 
 ## CORS
 
-CORS origins are configured in `config.yaml` under `api.cors_origins`. This is the single source of truth - both the core API and the embedded Nexus API share the same origin list. See [[adr/20260305_cors-single-source-of-truth|ADR: CORS]].
+CORS origins are configured in `config.yaml` under `api.cors_origins`. This is the single source of truth - both the core API and the embedded Nexus API share the same origin list. See [ADR: CORS](/updates/cors-single-source-of-truth).
 
 ---
 
 ## Tenant configuration
 
-The `/api/tenant` endpoint returns branding configuration for the current deployment (logo, colors, title). This is consumed by the Nexus frontend. Configuration is set in `config.yaml`. See [[adr/20260219_config-driven-tenant-provisioning|ADR: Tenant Provisioning]].
+The `/api/tenant` endpoint returns branding configuration for the current deployment (logo, colors, title). This is consumed by the Nexus frontend. Configuration is set in `config.yaml`. See [ADR: Tenant Provisioning](/updates/config-driven-tenant-provisioning).

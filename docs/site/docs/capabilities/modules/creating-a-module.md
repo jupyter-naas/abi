@@ -98,7 +98,7 @@ When the Engine loads your module, it automatically discovers:
 
 ## Data storage path
 
-By code-data symmetry ([[adr/20250824_code-data-symmetry|ADR]]), your module's data lives at a path that mirrors its code path:
+By code-data symmetry ([ADR](/updates/code-data-symmetry)), your module's data lives at a path that mirrors its code path:
 
 ```yaml
 Code:  naas_abi/modules/custom/my_module/
@@ -150,4 +150,4 @@ def test_module_loads():
     assert "naas_abi.modules.custom.my_module" in engine.modules
 ```
 
-Next steps: [[building/creating-an-agent|Creating an Agent]], [[building/creating-an-integration|Creating an Integration]].
+Next steps: [Creating an Agent](/capabilities/agents/creating-an-agent), [Creating an Integration](/capabilities/agents/creating-an-integration).

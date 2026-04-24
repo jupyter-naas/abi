@@ -96,7 +96,6 @@ graph TD
 
 ### Specialized Deployments
 - **[Air-Gapped Deployment](./air-gapped)**: Complete offline deployment guide for secure environments
-- **[Performance & Scalability](./performance-scalability)**: Optimization strategies and scaling best practices
 
 ## Getting Started
 

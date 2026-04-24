@@ -1,0 +1,82 @@
+---
+sidebar_position: 4
+title: "The Data Plane"
+---
+
+import BrowserOnly from '@docusaurus/BrowserOnly';
+
+# The Data Plane
+
+ABI's data architecture follows a single philosophy: any data, any compute, any model, on any infrastructure you own. It assembles best-in-class open-source services, each accessible through open protocols, with no proprietary storage format and no cloud dependency. You retain full ownership of every byte, at every layer.
+
+<BrowserOnly fallback={<div style={{height:'520px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const DataPlaneGraph = require('../../src/components/DataPlaneGraph').default;
+    return <DataPlaneGraph />;
+  }}
+</BrowserOnly>
+
+---
+
+## Any data
+
+ABI stores five categories of data, each in a purpose-built open-source backend:
+
+**Semantic data** lives in a triple store as RDF/OWL triples, queryable via SPARQL 1.1. This is the primary store: everything agents know about your domain is modeled here as typed entities and relationships. The default backend is Apache Jena Fuseki (TDB2); Oxigraph is available as a lighter alternative for local development.
+
+**Vector data** lives in Qdrant as high-dimensional embeddings, used for semantic similarity search and agent memory retrieval. Pipelines that process unstructured content (documents, emails, transcripts) embed and store them here alongside their provenance in the knowledge graph.
+
+**Relational data** lives in PostgreSQL. Agent conversation history, workflow state, and application data (Nexus) all use Postgres as the system of record for structured, transactional data.
+
+**Object data** lives in MinIO, an S3-compatible object store. Raw files ingested from integrations (PDFs, CSVs, images, audio) are stored here before pipeline processing, and retained as source-of-truth artifacts.
+
+**Ephemeral data** lives in Redis as a key-value cache: real-time state, session data, and short-lived computation results that do not belong in any of the durable stores.
+
+All five backends are community-licensed (Apache 2.0 or MIT), expose standard interfaces (SPARQL, REST, S3, JDBC, Redis protocol), and can be replaced via a single config change with no code edits.
+
+---
+
+## Any compute
+
+ABI provides three compute modes for moving data through the system:
+
+**Batch compute** runs through Dagster pipelines. Integrations pull data from external APIs (GitHub, LinkedIn, Salesforce, Stripe, and others) on schedules or on demand. Pipelines transform raw API responses into RDF triples or embeddings and write them to the appropriate store. Pipeline code is plain Python with no proprietary DSL.
+
+**Event-driven compute** runs through the message bus (RabbitMQ in production, an in-process queue in local dev). Workflows can publish events that trigger downstream processing asynchronously: a new document arrives, a pipeline extracts entities, those entities update the knowledge graph, an agent is notified.
+
+**Interactive compute** runs inline within agents. When a user or system sends a request, the agent selects SPARQL queries, Python workflows, and external integrations as tools and executes them in the context of a single LLM call. Latency is bounded by the tool calls, not by a separate compute tier.
+
+The three modes are composable: a scheduled pipeline can publish an event, that event can trigger a workflow, and that workflow can invoke an agent.
+
+---
+
+## Any model
+
+Every agent in ABI accepts a `ChatModel` interface rather than a hardcoded provider. The model is selected per request from a central configuration, with no code changes required to switch between providers.
+
+**OpenRouter** provides access to 100+ models (OpenAI, Anthropic, Google, Meta, Mistral, and others) through a single API key and a unified endpoint. Model selection can be per-agent, per-request, or per-environment.
+
+**Ollama** serves models locally for air-gapped or privacy-sensitive deployments. Qwen3 8B, DeepSeek R1 8B, and Gemma3 4B are the tested configurations; any Ollama-compatible model works. No inference request leaves your network.
+
+**Custom endpoints** are supported by any service that implements the OpenAI-compatible chat completions API. Bring your own fine-tuned models, on-premises inference servers, or private endpoints — the agent layer does not care.
+
+Token budgets, model routing rules, and fallback behavior are configured in `config.yaml` and applied globally without modifying agent code.
+
+---
+
+## Anywhere
+
+The full stack runs in four topologies without code changes, controlled entirely by `config.yaml` and the `ABI_ENV` environment variable:
+
+| Topology | Infrastructure | Notes |
+|---|---|---|
+| Local development | Docker Compose on your machine | Lightweight adapters replace most production services |
+| On-premises | Your Kubernetes cluster or Docker hosts | Full production service set |
+| Air-gapped | Same as on-premises, Ollama for models | Zero external API calls |
+| Managed | naas.ai-hosted infrastructure | MIT core, managed operations tier |
+
+There are no proprietary runtimes, no cloud-specific storage formats, and no services that phone home. The data plane is yours.
+
+---
+
+→ [Interoperability](./interoperability)
