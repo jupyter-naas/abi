@@ -1,0 +1,194 @@
+---
+sidebar_position: 3
+title: "The Ontology System"
+---
+
+import BrowserOnly from '@docusaurus/BrowserOnly';
+
+# The Ontology System
+
+The Ontology is the structural core of ABI. It integrates an organization's data, logic, and action capabilities into a formal, machine-readable representation that both humans and AI agents can reason over with precision.
+
+Where conventional AI systems treat data as raw text fed into a context window, ABI models the operational world as typed entities and relationships. A sales motion is not a document to retrieve; it is a graph of Contacts, Accounts, Opportunities, and Acts of Partnership, with provenance, ownership, and time. An LLM operating on that graph does not guess at relationships; it reads them.
+
+ABI builds its ontology on ISO and W3C open standards (BFO, OWL, RDF, SPARQL) that are independently specified and used across defense, healthcare, and intelligence. Your ontology is portable: exportable as Turtle files, importable into any RDF-compatible system, and not contingent on a vendor relationship.
+
+---
+
+## The Ontology Language, Engine, and Toolchain
+
+The ontology system is not a thin semantic layer. It is a three-part architecture consisting of a Language, an Engine, and a Toolchain.
+
+The **Language** is the formal vocabulary for modeling the world: OWL/Turtle files that define entity classes, properties, and relationships following the BFO hierarchy. The Language models both nouns (entities that persist through time: organizations, persons, products) and verbs (occurrents that happen at a point in time: acts of employment, partnership, acquisition). This separation is not academic; it determines how agents query and reason about time-varying operational data.
+
+The **Engine** substantiates the Language at runtime. It provides the read architecture for high-precision SPARQL queries, OWL reasoning (inferring facts not explicitly stated), and real-time subscription to knowledge graph changes. It provides the write architecture for atomic triple insertions from pipelines, batch mutations from integrations, and streaming updates from event-driven sources.
+
+The **Toolchain** makes the Language and Engine accessible to developers. `onto2py` reads OWL Turtle files and emits typed Python dataclasses alongside them, providing a single source of truth with no schema drift. Parameterized SPARQL templates (`TemplatableSparqlQuery`) let agents invoke graph queries as tools without writing Python. Module scaffolding generates the directory structure, class stubs, and configuration blocks for a new ontology domain in one command.
+
+---
+
+## The BFO 7 Buckets
+
+BFO provides a practical mnemonic for building any domain ontology: the **7 Buckets**. Every entity in your knowledge graph belongs to one of seven categories. Learning to ask the right bucket question before modeling a concept is how experienced ontology engineers start.
+
+<BrowserOnly fallback={<div style={{height:'400px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const BFOGraph = require('../../src/components/BFOGraph').default;
+    return <BFOGraph />;
+  }}
+</BrowserOnly>
+
+| Bucket | BFO Category | Mnemonic question | Examples |
+|---|---|---|---|
+| **WHO** | Material Entity | Who is involved? | Organization, Person, Product, Physical asset |
+| **WHERE** | Site | Where does it happen? | Country, Region, Office, Location |
+| **WHAT** | Process | What happens? | Act of Partnership, Project, Task, Mission |
+| **WHEN** | Temporal Region | When does it happen? | Fiscal Year, Calendar Year, Quarter, Date range |
+| **HOW-WE-KNOW** | Information | How do we know? | Document, Report, LinkedIn page, Sector classification |
+| **HOW-IT-IS** | Quality | How is it characterized? | Revenue, Language, Skill, Rating |
+| **WHY** | Realizable Entity | What can it do or become? | Role, Service offering, Capability, Sales of product or service |
+
+The key distinction is between **Occurrents** (WHAT, WHEN: things that happen, have temporal extent) and **Continuants** (the rest: things that persist). A process connects to the entities it involves via `has participant`; the time at which it occurs via `occupies temporal region`; the place where it unfolds via `occurs in`.
+
+### Applying the 7 Buckets to a module
+
+When you build a domain module, the ontology folder maps directly to the 7 Buckets. A professional services module might look like:
+
+```
+modules/professional-services/ontologies/
+├── MaterialEntity/
+│   ├── Organization/       ← firms, clients, subsidiaries
+│   └── Person/             ← partners, staff, contacts
+├── Site/
+│   ├── Country/            ← jurisdiction
+│   ├── Region/             ← Asia Pacific, EMEA ...
+│   └── Location/           ← office addresses
+├── Process/
+│   ├── Mission/            ← strategic objectives
+│   ├── Project/            ← engagement work
+│   └── Task/               ← individual deliverables
+├── TemporalRegion/
+│   ├── FiscalYear/         ← firm financial year
+│   └── CalendarYear/
+├── Information/            ← Generically Dependent Continuant
+│   └── Sectors/            ← industry classification applied to clients
+│       ├── Consumer/
+│       ├── LifeSciences/
+│       └── Technology/
+├── Quality/
+│   ├── Languages/          ← spoken/written languages of staff
+│   └── Skills/             ← professional competencies
+└── Realizable/             ← what the firm can do or sell
+    ├── Audit/
+    ├── Tax/
+    ├── Consulting/
+    └── Legal/
+```
+
+The `onto2py` toolchain generates typed Python dataclasses from each `.ttl` file in this structure. Agents operating on this ontology can answer questions like "which partners in the Asia Pacific region speak Mandarin and have skills in Tax?" — not by searching documents, but by traversing typed relationships across the knowledge graph.
+
+---
+
+## What is the knowledge graph?
+
+The knowledge graph is a triple store: a database of subject-predicate-object statements (triples) stored in RDF format and queryable with SPARQL.
+
+Instead of a schema like `table: organizations (id, name, website)`, the knowledge graph uses:
+
+```bash
+<org/microsoft> rdf:type cco:CommercialOrganization .
+<org/microsoft> abi:legalName "Microsoft Corporation" .
+<org/microsoft> abi:hasLinkedInPage <page/microsoft-linkedin> .
+```
+
+This representation is:
+- **Schema-flexible**: add new properties without migrations.
+- **Relationship-native**: graph traversal is the default, not a join.
+- **Reasoner-compatible**: OWL reasoners can infer new facts from axioms.
+- **Interoperable**: RDF is an open standard; data can be exported, merged, or federated.
+
+---
+
+## The ontology hierarchy
+
+ABI uses a layered ontology stack following the **Basic Formal Ontology (BFO)** standard (ISO/IEC 21838-2:2021):
+
+<BrowserOnly fallback={<div style={{height:'500px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const OntologyGraph = require('../../src/components/OntologyGraph').default;
+    return <OntologyGraph />;
+  }}
+</BrowserOnly>
+
+Each layer extends the one above it. BFO provides universal categories (Continuant, Occurrent, Material Entity). CCO adds common mid-level concepts. ABI's built-in foundries add business concepts. Your module ontologies add what's specific to your domain.
+
+### Why BFO?
+
+BFO is an ISO standard used in defense, healthcare, finance, and intelligence. Grounding in BFO means:
+- Your ontology is compatible with external datasets and standards.
+- Reasoners behave predictably.
+- You are not inventing naming conventions from scratch.
+
+---
+
+## Continuants vs. Occurrents
+
+The most important BFO distinction:
+
+| Category | Meaning | Examples |
+|----------|---------|---------|
+| **Continuant** | Things that persist through time | Person, Organization, Product, Role |
+| **Occurrent** | Things that happen at a point in time | Act of Employment, Partnership, Acquisition |
+
+Within Continuants:
+- **Material entity**: has mass, physically exists (Person, Organization, Factory)
+- **Generically dependent continuant**: information that can be copied (Brand, Legal Name, LinkedIn Page, Website)
+- **Realizable entity**: capacities and roles (Skill, Capability, Role, Service)
+
+This isn't academic. It determines how agents query and reason about your data. An "Act of Partnership" is an occurrent that links two organizations (continuants) at a specific time. SPARQL queries that ask "who was a partner of X between 2023 and 2025" are straightforward when this structure is enforced.
+
+---
+
+## How ontologies become code: onto2py
+
+ABI includes `onto2py`, a code generation tool that reads OWL Turtle files and emits typed Python dataclasses alongside them.
+
+```bash
+# Your ontology file
+libs/naas-abi/naas_abi/modules/crm/ontologies/
+└── CRMOntology.ttl
+
+# onto2py generates next to it:
+└── CRMOntology.py   ← typed dataclasses, one per OWL class
+```
+
+This gives you a single source of truth: the `.ttl` file defines the RDF schema, and the generated `.py` file gives you type-checked Python access to ontology entities. No drift, no hand-written class definitions.
+
+See [Creating an Ontology](/capabilities/knowledge-graph/creating-an-ontology) for usage.
+
+---
+
+## How agents use the knowledge graph
+
+Agents interact with the knowledge graph in two ways:
+
+1. **SPARQL queries as tools**: The `TemplatableSparqlQuery` built-in module lets you define parameterized SPARQL templates that agents invoke as tools - no Python required, just `.sparql` template files.
+
+2. **Workflow queries**: Workflows call `engine.services.triple_store.query(sparql)` directly and process results as Python objects (via onto2py-generated classes).
+
+---
+
+## Supported triple store backends
+
+| Backend | Use case | ADR |
+|---------|---------|-----|
+| Apache Jena Fuseki (TDB2) | Default for production and local dev | [ADR-2026-02](/updates/apache-jena-fuseki-default-triplestore) |
+| Oxigraph | Alternative for lightweight local dev | [ADR-2025-08](/updates/oxigraph-local-triplestore) |
+| AWS Neptune | Cloud-managed production | - |
+| Filesystem | Dev/test without a running server | - |
+
+Configuration is done in `config.yaml` under `services.triple_store`.
+
+---
+
+→ [The Data Plane](./data-plane)
