@@ -3,9 +3,19 @@
 import { useState, useEffect, Fragment } from 'react';
 import { Bot, User, Cpu, Plus, Pencil, Trash2, Save, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Circle, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getApiUrl } from '@/lib/config';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useServersStore } from '@/stores/servers';
+
+const getApiBase = () => getApiUrl();
+
+const getLogoUrl = (url: string | null): string | undefined => {
+  if (!url) return undefined;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${getApiBase()}${url}`;
+};
+
 const iconMap = {
   bot: Bot,
   user: User,
@@ -18,6 +28,15 @@ const iconMap = {
 };
 
 const iconOptions: Agent['icon'][] = ['user', 'bot', 'cpu', 'brain', 'sparkles', 'zap', 'target', 'search'];
+
+function AgentAvatar({ agent, size = 18 }: { agent: Agent; size?: number }) {
+  if (agent.logoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={getLogoUrl(agent.logoUrl)} alt={agent.name} className="h-full w-full object-cover" />;
+  }
+  const Icon = iconMap[agent.icon] || Sparkles;
+  return <Icon size={size} />;
+}
 
 export default function AgentsPage() {
   const [mounted, setMounted] = useState(false);
@@ -344,7 +363,6 @@ export default function AgentsPage() {
                   </tr>
                 ) : (
                   filteredAgents.map((agent) => {
-                    const Icon = iconMap[agent.icon];
                     const assignedProvider = getAssignedProvider(agent.providerId);
                     const isExpanded = selectedAgent?.id === agent.id;
 
@@ -359,8 +377,11 @@ export default function AgentsPage() {
                         >
                           <td className="p-3 align-top">
                             <div className="flex items-center gap-3 min-h-[3.25rem]">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                                <Icon size={18} />
+                              <div className={cn(
+                                'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg overflow-hidden',
+                                agent.logoUrl ? 'bg-transparent' : 'bg-muted'
+                              )}>
+                                <AgentAvatar agent={agent} />
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="font-medium">{agent.name}</p>
