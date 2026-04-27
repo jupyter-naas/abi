@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.24.1 (2026-04-27)
+
+### Bug Fixes
+
+- **nexus**: Remove duplicate socket field in WebSocketContextType
+  ([`477898f`](https://github.com/jupyter-naas/abi/commit/477898fbc8494e4f64c52e2c35f9ee0a8c8893d9))
+
+
 ## v1.24.0 (2026-04-23)
 
 ### Bug Fixes
