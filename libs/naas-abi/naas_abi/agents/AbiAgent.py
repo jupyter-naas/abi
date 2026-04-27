@@ -108,30 +108,35 @@ Respond only based on what your available agents and tools can actually deliver.
 
     @staticmethod
     def get_agents(cls) -> tuple[list, AgentSharedState]:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from queue import Queue
 
         from naas_abi import ABIModule
 
-        # Define agents
-        agents: list = []
         agent_queue: Queue = Queue()
-
         agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=cls.name)
 
+        candidate_classes: list = []
         for module in ABIModule.get_instance().engine.modules.values():
             for agent_cls in module.agents:
                 if agent_cls is None:
                     continue
-                # Avoid recursion: do not add self (e.g. Abi) as a sub-agent
                 if agent_cls is cls:
                     continue
-
                 if issubclass(agent_cls, Agent):
-                    new_agent = agent_cls.New().duplicate(
-                        queue=agent_queue,
-                        agent_shared_state=agent_shared_state,
-                    )
-                    agents.append(new_agent)
+                    candidate_classes.append(agent_cls)
+
+        def _load_agent(agent_cls: type) -> Agent:
+            return agent_cls.New().duplicate(
+                queue=agent_queue,
+                agent_shared_state=agent_shared_state,
+            )
+
+        agents: list = []
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(_load_agent, c): c for c in candidate_classes}
+            for future in as_completed(futures):
+                agents.append(future.result())
 
         return agents, agent_shared_state
 
