@@ -23,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     get_service_registry,
 )
 from naas_abi_core import logger
+from naas_abi_core.services.agent.Agent import Agent
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -34,15 +35,16 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 # themselves never change at runtime, so we compute the mapping once and
 # reuse it for every subsequent request.
 # ---------------------------------------------------------------------------
-_agent_class_registry: dict[str, type[Agent]] | None = None  # noqa: F821
+_agent_class_registry: dict[str, type[Agent]] | None = None
 _agent_class_registry_lock = threading.Lock()
 
 
-def _get_agent_class_registry() -> dict[str, type[Agent]]:  # noqa: F821
+def _get_agent_class_registry() -> dict[str, type[Agent]]:
     """Return (and lazily build) the process-level agent class registry.
 
     Thread-safe double-checked locking ensures the expensive discovery runs
-    at most once even under concurrent first requests.
+    at most once even under concurrent first requests.  Agent classes are
+    resolved in parallel via a thread pool to minimise startup latency.
     """
     global _agent_class_registry
 
@@ -53,20 +55,20 @@ def _get_agent_class_registry() -> dict[str, type[Agent]]:  # noqa: F821
         if _agent_class_registry is not None:
             return _agent_class_registry
 
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         from naas_abi import ABIModule
-        from naas_abi_core.services.agent.Agent import Agent
 
         abi_module = ABIModule.get_instance()
-        all_agent_classes: list[type[Agent]] = list(abi_module.agents)
+        candidate_classes: list[type[Agent]] = list(abi_module.agents)
 
         for module in abi_module.engine.modules.values():
             for agent_cls in module.agents:
                 if agent_cls is None:
                     continue
-                all_agent_classes.append(agent_cls)
+                candidate_classes.append(agent_cls)
 
-        registry: dict[str, type[Agent]] = {}
-        for agent_cls in all_agent_classes:
+        def _resolve(agent_cls: type[Agent]) -> tuple[str, type[Agent]] | None:
             name = _get_agent_class_name(agent_cls)
             if not name:
                 logger.warning(
@@ -74,9 +76,18 @@ def _get_agent_class_registry() -> dict[str, type[Agent]]:  # noqa: F821
                     " (use class attribute 'name' or 'NAME')",
                     agent_cls,
                 )
-                continue
+                return None
             class_name = f"{agent_cls.__module__}/{agent_cls.__name__}"
-            registry[class_name] = agent_cls
+            return class_name, agent_cls
+
+        registry: dict[str, type[Agent]] = {}
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(_resolve, c): c for c in candidate_classes}
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    class_name, agent_cls = result
+                    registry[class_name] = agent_cls
 
         logger.info("Agent class registry built: %d agents indexed", len(registry))
         _agent_class_registry = registry
