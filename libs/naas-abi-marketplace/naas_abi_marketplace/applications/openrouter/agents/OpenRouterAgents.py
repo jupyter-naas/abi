@@ -15,7 +15,7 @@ from naas_abi_marketplace.applications.openrouter.models.OpenRouterModel import 
 )
 
 OPENROUTER_AGENT_MODULE = "naas_abi_marketplace.applications.openrouter.agents"
-ASSETS_DIR = Path(__file__).parent.parent / "assets"
+ASSETS_DIR = Path(__file__).parent.parent / "assets" / "public"
 
 
 class OpenRouterAgents:
