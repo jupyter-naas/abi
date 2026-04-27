@@ -99,6 +99,14 @@ const generateId = () => Math.random().toString(36).substring(2, 15);
 // Default tools for each agent type
 const DEFAULT_TOOLS = ['search_knowledge', 'search_files', 'read_ontology'];
 
+const normalizeIntentType = (value: unknown): IntentMappingType => {
+  if (typeof value !== 'string') return 'text';
+  const normalized = value.toLowerCase();
+  if (normalized === 'tool') return 'tool';
+  if (normalized === 'agent') return 'agent';
+  return 'text';
+};
+
 export const useAgentsStore = create<AgentsState>()(
   persist(
     (set, get) => ({
@@ -129,9 +137,9 @@ export const useAgentsStore = create<AgentsState>()(
               class_name: a.class_name ?? undefined,
               icon: 'sparkles' as Agent['icon'],
               systemPrompt: a.system_prompt || '',
-              providerId: a.model || null, // DEPRECATED: keep for backward compat
+              providerId: a.model_id || a.model || null, // DEPRECATED: keep for backward compat
               provider: a.provider || null, // Provider name (xai, openai, etc.)
-              modelId: a.model || null, // Model ID (grok-beta, gpt-4o, etc.)
+              modelId: a.model_id || a.model || null, // Model ID (grok-beta, gpt-4o, etc.)
               logoUrl: a.logo_url || null, // Logo URL from API
               enabled: a.enabled || false, // Whether agent is available for chat
               suggestions: Array.isArray(a.suggestions)
@@ -145,7 +153,18 @@ export const useAgentsStore = create<AgentsState>()(
                 : undefined,
               tools: [],
               capabilities: { memory: false, reasoning: false, vision: false },
-              intentMappings: [],
+              intentMappings: Array.isArray(a.intents)
+                ? a.intents
+                    .filter((intent: unknown): intent is Record<string, unknown> => (
+                      typeof intent === 'object' && intent !== null
+                    ))
+                    .map((intent: Record<string, unknown>, index: number): IntentMapping => ({
+                      id: `${a.id}-intent-${index}`,
+                      intent: typeof intent.intent_value === 'string' ? intent.intent_value : '',
+                      type: normalizeIntentType(intent.intent_type),
+                      target: typeof intent.intent_target === 'string' ? intent.intent_target : '',
+                    }))
+                : [],
               isDefault: false,
               createdAt: new Date(a.created_at),
               updatedAt: new Date(a.updated_at),
