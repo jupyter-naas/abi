@@ -10,6 +10,12 @@ class GraphInfo(BaseModel):
     id: str
     uri: str
     label: str
+    role_label: str = "unknown"
+
+
+class GraphPack(BaseModel):
+    role_label: str
+    graphs: list[GraphInfo]
 
 
 class GraphCreate(BaseModel):
