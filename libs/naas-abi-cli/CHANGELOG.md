@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.26.0 (2026-04-28)
+
+### Chores
+
+- **docs**: Rename web → site and add specs/ folder for engineering artifacts
+  ([`3192ca4`](https://github.com/jupyter-naas/abi/commit/3192ca483f2890e0e0e6d763d4a400b6c7e8b4ca))
+
+- **release**: Update naas-abi to version 1.24.0 and naas-abi-core to version 1.29.0
+  ([`d196d91`](https://github.com/jupyter-naas/abi/commit/d196d91e3faf84d900d70c1603baaec72a44f017))
+
+### Features
+
+- **openrouter**: Enable web search tool when supported
+  ([`2f2f808`](https://github.com/jupyter-naas/abi/commit/2f2f808f863fdf718fdce532145908b7eda6c36a))
+
+
 ## v1.25.2 (2026-04-21)
 
 
