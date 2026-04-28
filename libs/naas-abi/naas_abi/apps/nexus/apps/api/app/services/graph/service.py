@@ -10,6 +10,7 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphEdgeData,
     GraphInfoData,
+    GraphPackData,
     GraphNetworkData,
     GraphNodeData,
     GraphOverviewData,
@@ -300,28 +301,49 @@ class GraphService:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    async def list_graphs(self, workspace_id: str) -> list[GraphInfoData]:
+    async def list_graphs(self, workspace_id: str) -> list[GraphPackData]:
         store = self._get_triple_store()
         query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT DISTINCT ?uri ?label
+        PREFIX nexus: <http://ontology.naas.ai/nexus/>
+        SELECT DISTINCT ?uri ?label ?role_label
         WHERE {{
             GRAPH <{NEXUS_GRAPH_URI}> {{
                 ?uri rdf:type <{KnowledgeGraph._class_uri}> .
                 OPTIONAL {{ ?uri rdfs:label ?label . }}
+                OPTIONAL {{
+                    ?uri nexus:hasKnowledgeGraphRole ?role_uri .
+                    ?role_uri rdfs:label ?role_label .
+                }}
             }}
         }}
         """
-        graphs: list[GraphInfoData] = []
+        role_graphs: dict[str, list[GraphInfoData]] = {}
         for row in store.query(query):
             assert isinstance(row, ResultRow)
             graph_uri = str(row.uri)
             graph_id = graph_uri.split("/")[-1]
             graph_label = str(row.label) if row.label else graph_id
-            graphs.append(GraphInfoData(id=graph_id, uri=graph_uri, label=graph_label))
-        graphs.sort(key=lambda x: x.label)
-        return graphs
+            role_label = (
+                str(row.role_label).strip().lower()
+                if row.role_label is not None
+                else "unknown"
+            ) or "unknown"
+            role_graphs.setdefault(role_label, []).append(
+                GraphInfoData(
+                    id=graph_id,
+                    uri=graph_uri,
+                    label=graph_label,
+                    role_label=role_label,
+                )
+            )
+
+        packed_graphs: list[GraphPackData] = []
+        for role_label in sorted(role_graphs):
+            graphs = sorted(role_graphs[role_label], key=lambda graph: graph.label.lower())
+            packed_graphs.append(GraphPackData(role_label=role_label, graphs=graphs))
+        return packed_graphs
 
     async def create_graph(
         self,

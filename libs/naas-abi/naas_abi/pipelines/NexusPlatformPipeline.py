@@ -11,6 +11,7 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import (
     GraphFilter,
     GraphView,
     KnowledgeGraph,
+    KnowledgeGraphRole,
 )
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
@@ -118,12 +119,22 @@ class NexusPlatformPipeline(Pipeline):
     def create_graph_to_nexus_graph(
         self,
         uri: URIRef,
-    ) -> KnowledgeGraph:
+    ) -> tuple[KnowledgeGraph, KnowledgeGraphRole]:
+        role_label = (
+            "Admin"
+            if any(token in str(uri).lower() for token in {"schema", "nexus"})
+            else "unknown"
+        )
+        knowledge_graph_role = KnowledgeGraphRole(
+            label=role_label,
+            is_knowledge_graph_role_of=[uri],
+        )
         knowledge_graph = KnowledgeGraph(
             _uri=uri,
             label=uri.split("/")[-1].split("#")[-1].capitalize(),
+            has_knowledge_graph_role=[knowledge_graph_role],
         )
-        return knowledge_graph
+        return knowledge_graph, knowledge_graph_role
 
     def initialize_nexus_graphs(self) -> Graph:
         """Ensure the Nexus graph is populated with KnowledgeGraph instances."""
@@ -140,7 +151,10 @@ class NexusPlatformPipeline(Pipeline):
         for graph_uri in graph_uris:
             if str(graph_uri) not in nexus_graph_uris:
                 logger.debug(f"🟢 Graph {str(graph_uri)} added to nexus graph")
-                knowledge_graph = self.create_graph_to_nexus_graph(graph_uri)
+                knowledge_graph, knowledge_graph_role = self.create_graph_to_nexus_graph(
+                    graph_uri
+                )
+                inserted_graph += knowledge_graph_role.rdf()
                 inserted_graph += knowledge_graph.rdf()
 
         self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)

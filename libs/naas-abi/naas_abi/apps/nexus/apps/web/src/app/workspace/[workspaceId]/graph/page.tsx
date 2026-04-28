@@ -572,7 +572,17 @@ export default function GraphPage() {
           } else {
             const namesData = await namesRes.json();
             const graphs = Array.isArray(namesData)
-              ? namesData
+              ? namesData.flatMap((entry: unknown) => {
+                if (
+                  entry
+                  && typeof entry === 'object'
+                  && 'graphs' in entry
+                  && Array.isArray((entry as { graphs: unknown[] }).graphs)
+                ) {
+                  return (entry as { graphs: unknown[] }).graphs;
+                }
+                return [entry];
+              })
               : Array.isArray(namesData?.graphs)
                 ? namesData.graphs
                 : [];
