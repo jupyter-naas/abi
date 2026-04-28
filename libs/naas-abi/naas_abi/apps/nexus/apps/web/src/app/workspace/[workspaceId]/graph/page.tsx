@@ -89,8 +89,8 @@ interface GraphEdge {
 }
 
 const GRAPH_VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
-  { id: 'overview', label: 'Overview', icon: Eye },
   { id: 'entities', label: 'Network', icon: Network },
+  { id: 'overview', label: 'Metrics', icon: Eye },
   { id: 'table', label: 'Table', icon: Table },
 ];
 
@@ -1148,7 +1148,7 @@ export default function GraphPage() {
       setActiveSavedView(null);
       selectGraph(createdId);
       setVisibleGraphs([createdId]);
-      setActiveViewType('overview');
+      setActiveViewType('entities');
       closeCreateGraphForm();
       clearGraphPageCaches();
       await loadFromApi({ force: true });
@@ -1235,7 +1235,7 @@ export default function GraphPage() {
         setActiveSavedView(savedViewId);
       }
       setVisibleGraphs(graphIds);
-      setActiveViewType('overview');
+      setActiveViewType('entities');
       closeCreateViewForm();
     } catch (err) {
       console.error('Failed to save graph view:', err);
@@ -1917,7 +1917,7 @@ export default function GraphPage() {
             {pageMode === 'graph' && activeViewType === 'overview' && (
               <div className="flex-1 overflow-auto p-6">
                 <div className="mb-6 flex items-start justify-between gap-4">
-                  <h2 className="text-lg font-semibold">Overview</h2>
+                  <h2 className="text-lg font-semibold">Metrics</h2>
                   <button
                     type="button"
                     onClick={() => setPageMode('create-individual')}

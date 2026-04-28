@@ -62,7 +62,7 @@ const VisNetwork = dynamic(
 
 export default function OntologyPage() {
   const searchParams = useSearchParams();
-  const requestedInitialView = (searchParams?.get('view') as ViewMode) || 'overview';
+  const requestedInitialView = (searchParams?.get('view') as ViewMode) || 'network';
   const initialView: ViewMode = requestedInitialView === 'editor' ? 'classes' : requestedInitialView;
   
   const [viewMode, setViewMode] = useState<ViewMode>(initialView);
@@ -175,7 +175,7 @@ export default function OntologyPage() {
   // When on Export view but no ontology is selected, return to overview (Export not available)
   useEffect(() => {
     if (viewMode === 'export' && !selectedOntologyPath) {
-      setViewMode('overview');
+      setViewMode('network');
     }
   }, [viewMode, selectedOntologyPath]);
 
@@ -208,7 +208,7 @@ export default function OntologyPage() {
       const result = await importReferenceOntology(importPath.trim());
       if (result) {
         setImportPath('');
-        setViewMode('overview');
+        setViewMode('network');
       } else {
         setImportError('Failed to import ontology. Check the file path.');
       }
@@ -389,16 +389,6 @@ export default function OntologyPage() {
         <div className="flex h-10 shrink-0 items-center justify-between border-b bg-muted/30 px-4">
           <div className="flex gap-1">
             <button
-              onClick={() => setViewMode('overview')}
-              className={cn(
-                'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
-                viewMode === 'overview' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
-              )}
-            >
-              <Eye size={14} />
-              Overview
-            </button>
-            <button
               onClick={() => setViewMode('network')}
               className={cn(
                 'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
@@ -407,6 +397,16 @@ export default function OntologyPage() {
             >
               <Network size={14} />
               Network
+            </button>
+            <button
+              onClick={() => setViewMode('overview')}
+              className={cn(
+                'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
+                viewMode === 'overview' ? 'bg-background' : 'text-muted-foreground hover:bg-background'
+              )}
+            >
+              <Eye size={14} />
+              Metrics
             </button>
             <button
               onClick={() => {
@@ -454,7 +454,7 @@ export default function OntologyPage() {
                 viewMode === 'export' && 'text-foreground',
                 !selectedOntologyPath && 'cursor-not-allowed'
               )}
-              title={!selectedOntologyPath ? 'Select an ontology in Overview to export' : 'Export selected ontology'}
+              title={!selectedOntologyPath ? 'Select an ontology in Metrics to export' : 'Export selected ontology'}
             >
               <Download size={14} />
               Export
@@ -1294,7 +1294,7 @@ function OntologyOverviewView({
     <div className="flex min-h-full flex-col bg-card p-6">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">Overview</h2>
+          <h2 className="text-lg font-semibold">Metrics</h2>
           <p className="text-sm text-muted-foreground truncate" title={ontologyPath || 'All ontologies'}>
             {stats?.name || ontologyPath || 'All ontologies'}
           </p>
