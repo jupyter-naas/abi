@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Response, status
 from fastapi import File as FastAPIFile
 from fastapi import UploadFile as FastAPIUploadFile
+from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -256,6 +257,23 @@ async def preview_file_as_pdf(
         content=preview.content,
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{preview.filename}"'},
+    )
+
+
+@router.get("/archive/{path:path}")
+async def download_folder_archive(
+    path: str,
+    workspace_id: str | None = Query(default=None, max_length=100),
+    scope: str = Query(default="workspace", pattern="^(workspace|my_drive)$"),
+    current_user: User = Depends(get_current_user_required),
+    files_service: FilesService = Depends(get_files_service),
+):
+    scoped_path = await _authorize_path(current_user, path, workspace_id, scope)
+    filename, archive_iterator = files_service.stream_folder_archive(path=scoped_path)
+    return StreamingResponse(
+        archive_iterator,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
