@@ -3,11 +3,14 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import zipfile
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     AlreadyExistsError,
+    ArchiveTooLargeError,
     FileContentData,
     FileInfoData,
     FileListResponseData,
@@ -30,6 +33,8 @@ class FilesService:
     object_storage_prefix = ""
     folder_marker = ".nexus_folder"
     max_upload_size = 50 * 1024 * 1024
+    max_archive_files = 10_000
+    archive_chunk_size = 64 * 1024
 
     _content_types = {
         ".py": "text/x-python",
@@ -288,6 +293,48 @@ class FilesService:
                 raise PreviewConversionError("Failed to convert presentation to PDF preview.")
 
             return PdfPreviewData(content=output_path.read_bytes(), filename=output_name)
+
+    def stream_folder_archive(self, path: str) -> tuple[str, Iterator[bytes]]:
+        normalized_path = self.normalize_relative_path(path, allow_empty=True)
+        if not self._is_directory(normalized_path):
+            raise NotFoundError("Folder not found")
+
+        files, _dirs = self._collect_directory_tree(normalized_path)
+        if len(files) > self.max_archive_files:
+            raise ArchiveTooLargeError(
+                file_count=len(files), max_files=self.max_archive_files
+            )
+
+        folder_name = normalized_path.rsplit("/", 1)[-1] if normalized_path else "files"
+        archive_filename = f"{folder_name}.zip"
+        root_prefix = f"{normalized_path}/" if normalized_path else ""
+
+        def _iter_archive() -> Iterator[bytes]:
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+            tmp.close()
+            tmp_path = Path(tmp.name)
+            try:
+                with zipfile.ZipFile(
+                    tmp_path, mode="w", compression=zipfile.ZIP_DEFLATED
+                ) as zip_file:
+                    for file_path in files:
+                        if root_prefix and file_path.startswith(root_prefix):
+                            arcname = file_path[len(root_prefix) :]
+                        else:
+                            arcname = file_path
+                        if not arcname:
+                            continue
+                        zip_file.writestr(arcname, self._read_bytes(file_path))
+                with tmp_path.open("rb") as handle:
+                    while chunk := handle.read(self.archive_chunk_size):
+                        yield chunk
+            finally:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        return archive_filename, _iter_archive()
 
     def read_file_raw(self, path: str) -> RawFileData:
         normalized_path = self.normalize_relative_path(path)

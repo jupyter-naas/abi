@@ -596,6 +596,37 @@ export default function FilesPage() {
     }
   };
 
+  const downloadFolderToDesktop = async (folder: FileInfo) => {
+    if (folder.type !== 'folder') return;
+    try {
+      const encodedPath = folder.path.split('/').map(encodeURIComponent).join('/');
+      const response = await authFetch(
+        `/api/files/archive/${encodedPath}?${fileQueryParams}`
+      );
+      if (!response.ok) {
+        let detail = 'Failed to download folder';
+        try {
+          const data = await response.json();
+          if (data?.detail) detail = data.detail;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${folder.name}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to download folder');
+    }
+  };
+
   const handleRefresh = () => {
     if (isLocalFolder && activeSyncedFolder) {
       fetchLocalFiles(activeSyncedFolder.id, currentPath);
@@ -876,18 +907,20 @@ export default function FilesPage() {
                     </td>
                     <td className="py-2">
                       <div className="relative flex items-center justify-end gap-0.5">
-                        {file.type === 'file' && (
-                          <button
-                            title="Download"
-                            onClick={(e) => {
-                              e.stopPropagation();
+                        <button
+                          title={file.type === 'folder' ? 'Download as ZIP' : 'Download'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (file.type === 'folder') {
+                              downloadFolderToDesktop(file);
+                            } else {
                               downloadFileToDesktop(file);
-                            }}
-                            className="hidden h-6 w-6 items-center justify-center rounded text-muted-foreground/50 hover:bg-muted hover:text-foreground group-hover:flex"
-                          >
-                            <Download size={14} />
-                          </button>
-                        )}
+                            }
+                          }}
+                          className="hidden h-6 w-6 items-center justify-center rounded text-muted-foreground/50 hover:bg-muted hover:text-foreground group-hover:flex"
+                        >
+                          <Download size={14} />
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -977,6 +1010,19 @@ export default function FilesPage() {
                                 Download
                               </button>
                             )}
+                            {file.type === 'folder' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveContextMenu(null);
+                                  downloadFolderToDesktop(file);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
+                              >
+                                <Download size={12} />
+                                Download as ZIP
+                              </button>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1035,18 +1081,20 @@ export default function FilesPage() {
                     {getFileIcon(file, 40)}
                     <span className="w-full truncate text-center text-sm">{file.name}</span>
                   </button>
-                  {file.type === 'file' && (
-                    <button
-                      title="Download"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                  <button
+                    title={file.type === 'folder' ? 'Download as ZIP' : 'Download'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (file.type === 'folder') {
+                        downloadFolderToDesktop(file);
+                      } else {
                         downloadFileToDesktop(file);
-                      }}
-                      className="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded bg-background/80 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground group-hover:flex"
-                    >
-                      <Download size={13} />
-                    </button>
-                  )}
+                      }
+                    }}
+                    className="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded bg-background/80 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground group-hover:flex"
+                  >
+                    <Download size={13} />
+                  </button>
                 </div>
               ))}
             </div>
