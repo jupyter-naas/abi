@@ -2,6 +2,71 @@
 
 <!-- version list -->
 
+## v1.25.0 (2026-04-28)
+
+### Bug Fixes
+
+- Agent logos
+  ([`e199698`](https://github.com/jupyter-naas/abi/commit/e1996981452eb4ae37759053f608bc246ab4863d))
+
+- Default graph and ontology navigation to network tab
+  ([`5eda80f`](https://github.com/jupyter-naas/abi/commit/5eda80f5fee06ec0d194b019bfcaf0d5edf22b19))
+
+- Display tool name only
+  ([`cb03c23`](https://github.com/jupyter-naas/abi/commit/cb03c2364da49227754e238fc520a9f66663a8b0))
+
+- Display tool name only
+  ([`4e656fe`](https://github.com/jupyter-naas/abi/commit/4e656fea0704178ce09a8fce55f55e997c0999f5))
+
+- Load agents from naas-abi module
+  ([`be28c97`](https://github.com/jupyter-naas/abi/commit/be28c978714221138f408dabf34f901354bf25c7))
+
+### Features
+
+- Display logos in agent list
+  ([`400613a`](https://github.com/jupyter-naas/abi/commit/400613a5b2b5d35af49e9156e2c35607a8673159))
+
+- Pack graphs by roles
+  ([`72b3ab2`](https://github.com/jupyter-naas/abi/commit/72b3ab2752345cebd5f7e9f66407aafdfdd58087))
+
+- **AbiAgent**: Enrich routing intents and prompt context
+  ([`184f9d1`](https://github.com/jupyter-naas/abi/commit/184f9d122b53dec563bbb80818226fe70f9ccc42))
+
+- **agents-api**: Cache and persist resolved agent logos
+  ([`7293a22`](https://github.com/jupyter-naas/abi/commit/7293a227206bda8d8d7c90b19d064bc87b6cafdb))
+
+- **agents-assets**: Add public agent logos
+  ([`01362a6`](https://github.com/jupyter-naas/abi/commit/01362a623641ddac27f361e57b0668878c3ff9d9))
+
+- **agents-store**: Map model_id and normalize intent mappings
+  ([`91a5c6d`](https://github.com/jupyter-naas/abi/commit/91a5c6d638b6fe6e3c048dd5f5dd0d1c4293fedd))
+
+- **agents-web**: Add dedicated agent detail editor page
+  ([`70ac3da`](https://github.com/jupyter-naas/abi/commit/70ac3dae2ab110cf80ea26d8651a292f67d5ff8d))
+
+- **nexus-chat**: Show live activity line for tools and handoffs
+  ([`a5cf9d4`](https://github.com/jupyter-naas/abi/commit/a5cf9d4075dbdab3f6dff161106d2c03dee8ecca))
+
+### Performance Improvements
+
+- **AbiAgent**: Load subagents in parallel via ThreadPoolExecutor
+  ([`4230350`](https://github.com/jupyter-naas/abi/commit/423035099eef697f682df8e2d1ccc2a975d9e963))
+
+- **agents-adapter**: Resolve agent class registry in parallel via ThreadPoolExecutor
+  ([`9bea0f5`](https://github.com/jupyter-naas/abi/commit/9bea0f5db4af875332fb9f6d3fd6e47f675038ca))
+
+### Refactoring
+
+- Abi agents and models
+  ([`4d63040`](https://github.com/jupyter-naas/abi/commit/4d630407f5fc1454bbb9970ea1abd32634421a06))
+
+- Abi agents and models
+  ([`afc18ae`](https://github.com/jupyter-naas/abi/commit/afc18ae29b805202fa0027f4812c1a0b349a9bd3))
+
+- View endpoint to hexa
+  ([`3d26bdb`](https://github.com/jupyter-naas/abi/commit/3d26bdbed8f46921fb2bbf8bc4cb00753cbb54e2))
+
+
 ## v1.24.1 (2026-04-27)
 
 ### Bug Fixes
