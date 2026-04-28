@@ -300,8 +300,13 @@ class Store:
             # F_FULLFSYNC: "really really flush all buffers to disk" —
             # see Apple's fcntl(2). Required for true durability on
             # Apple platforms; a no-op concept on Linux/Windows where
-            # fsync already provides this guarantee.
-            fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+            # fsync already provides this guarantee. Looked up via
+            # ``getattr`` because the symbol is Darwin-only and would
+            # otherwise be a static attribute error on non-Apple
+            # type-checks. ``_use_full_fsync`` is only True on Apple,
+            # so we know it exists at runtime here.
+            f_fullfsync = getattr(fcntl, "F_FULLFSYNC")
+            fcntl.fcntl(fd, f_fullfsync)
         else:
             os.fsync(fd)
 
