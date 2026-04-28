@@ -1050,7 +1050,7 @@ async def stream_with_abi(
                         elif current_event == "tool_usage" and content.strip():
                             yield {"event": "tool_usage", "tool": content.strip()}
                         elif current_event == "tool_response" and content.strip():
-                            yield {"event": "tool_response", "content": content.strip()}
+                            yield {"event": "tool_response", "output": content.strip()}
 
     except httpx.HTTPStatusError as e:
         logger.error("ABI API error: status=%s endpoint=%s", e.response.status_code, endpoint)
@@ -1405,6 +1405,6 @@ async def stream_with_abi_inprocess(
             elif event_name == "tool_usage" and text.strip():
                 yield {"event": "tool_usage", "tool": text}
             elif event_name == "tool_response" and text.strip():
-                yield {"event": "tool_response", "content": text}
+                yield {"event": "tool_response", "output": text}
         elif isinstance(event, str) and event.strip():
             yield event
