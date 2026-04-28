@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.30.0 (2026-04-28)
+
+### Bug Fixes
+
+- Add cache method to validate name
+  ([`2926add`](https://github.com/jupyter-naas/abi/commit/2926add32c883753e6c142076e65e0f0d495f68f))
+
+### Features
+
+- Add workers poll
+  ([`a6648f0`](https://github.com/jupyter-naas/abi/commit/a6648f0f14655903a12779fcb014c3567da955b5))
+
+- **AbiAgent**: Enrich routing intents and prompt context
+  ([`184f9d1`](https://github.com/jupyter-naas/abi/commit/184f9d122b53dec563bbb80818226fe70f9ccc42))
+
+
 ## v1.29.0 (2026-04-23)
 
 ### Bug Fixes
