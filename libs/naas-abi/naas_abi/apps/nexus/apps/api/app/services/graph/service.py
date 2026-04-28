@@ -10,10 +10,10 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphEdgeData,
     GraphInfoData,
-    GraphPackData,
     GraphNetworkData,
     GraphNodeData,
     GraphOverviewData,
+    GraphPackData,
     GraphProtectedError,
     GraphServiceUnavailableError,
 )
@@ -138,9 +138,7 @@ def _list_individuals(
                 )
                 if class_type:
                     nodes[subject_uri]["type"] = class_type
-                    nodes[subject_uri]["type_label"] = _get_ontology_label(
-                        triple_store, class_type
-                    )
+                    nodes[subject_uri]["type_label"] = _get_ontology_label(triple_store, class_type)
             if isinstance(o, Literal):
                 nodes[subject_uri][_get_ontology_label(triple_store, str(p))] = str(o)
             elif isinstance(o, URIRef) and p != RDF.type:
@@ -326,9 +324,7 @@ class GraphService:
             graph_id = graph_uri.split("/")[-1]
             graph_label = str(row.label) if row.label else graph_id
             role_label = (
-                str(row.role_label).strip().lower()
-                if row.role_label is not None
-                else "unknown"
+                str(row.role_label).strip().lower() if row.role_label is not None else "unknown"
             ) or "unknown"
             role_graphs.setdefault(role_label, []).append(
                 GraphInfoData(
@@ -357,9 +353,7 @@ class GraphService:
         graph_id = _slugify(graph_label)
         new_graph_uri = GRAPH_BASE_URI + graph_id
         store.create_graph(new_graph_uri)
-        new_graph = KnowledgeGraph(
-            _uri=new_graph_uri, label=graph_label, creator=user_id
-        )
+        new_graph = KnowledgeGraph(_uri=new_graph_uri, label=graph_label, creator=user_id)
         if description:
             new_graph.description = _slugify(description)
         store.insert(new_graph.rdf(), graph_name=NEXUS_GRAPH_URI)
