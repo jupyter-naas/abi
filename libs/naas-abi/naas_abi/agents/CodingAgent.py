@@ -8,22 +8,19 @@ from naas_abi_core.services.agent.OpencodeAgent import (
     OpencodeAgentConfiguration,
 )
 
-NAME = "coding-agent"
-DESCRIPTION = "Coding agent backed by an opencode server for the naas_abi module."
-SYSTEM_PROMPT = """
+
+class CodingAgent(OpencodeAgent):
+    name: str = "OpenCode Coding"
+    description: str = (
+        "Coding agent backed by an opencode server for the naas_abi module."
+    )
+    system_prompt: str = """
 You are the coding agent for the naas_abi module.
 You must work only in the provided working directory.
 Always read existing files before changing code.
 Keep changes minimal and focused.
 """.strip()
-
-
-class CodingAgent(OpencodeAgent):
-    name: str = "CodingAgent"
-    description: str = (
-        "Coding agent backed by an opencode server for the naas_abi module."
-    )
-    system_prompt: str = SYSTEM_PROMPT
+    logo_url: str = "libs/naas-abi/naas_abi/assets/opencode.png"
 
     @classmethod
     def New(
@@ -45,10 +42,10 @@ class CodingAgent(OpencodeAgent):
             configuration=OpencodeAgentConfiguration(
                 workdir=str(module_root),
                 port=port,
-                name=NAME,
-                description=DESCRIPTION,
+                name=cls.name,
+                description=cls.description,
                 model=model,
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=cls.system_prompt,
             ),
             agent_shared_state=agent_shared_state,
         )
