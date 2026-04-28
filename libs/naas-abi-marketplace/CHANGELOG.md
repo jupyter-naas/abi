@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-04-28)
+
+### Bug Fixes
+
+- Add logo deepseek and mistralai
+  ([`af8be6d`](https://github.com/jupyter-naas/abi/commit/af8be6dc7a7ede2736d701dc0c1659a41c4aeb19))
+
+### Chores
+
+- **release**: Update naas-abi to version 1.24.0 and naas-abi-core to version 1.29.0
+  ([`d196d91`](https://github.com/jupyter-naas/abi/commit/d196d91e3faf84d900d70c1603baaec72a44f017))
+
+### Features
+
+- Add logos to public assets
+  ([`6334f62`](https://github.com/jupyter-naas/abi/commit/6334f627cee46be6e517e467120bdc1a5e6a0564))
+
+- Add logos to public assets
+  ([`9468a21`](https://github.com/jupyter-naas/abi/commit/9468a214361c1248845ab60aca4738e16a00f63a))
+
+- **agents-assets**: Add public agent logos
+  ([`01362a6`](https://github.com/jupyter-naas/abi/commit/01362a623641ddac27f361e57b0668878c3ff9d9))
+
+
 ## v1.10.2 (2026-04-21)
 
 ### Bug Fixes
