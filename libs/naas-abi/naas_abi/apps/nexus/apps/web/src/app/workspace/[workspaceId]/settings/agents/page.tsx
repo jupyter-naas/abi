@@ -1,11 +1,22 @@
 'use client';
 
-import { useState, useEffect, Fragment } from 'react';
-import { Bot, User, Cpu, Plus, Pencil, Trash2, Save, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Circle, Server } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Circle, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getApiUrl } from '@/lib/config';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useServersStore } from '@/stores/servers';
+import { useParams, useRouter } from 'next/navigation';
+
+const getApiBase = () => getApiUrl();
+
+const getLogoUrl = (url: string | null): string | undefined => {
+  if (!url) return undefined;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${getApiBase()}${url}`;
+};
+
 const iconMap = {
   bot: Bot,
   user: User,
@@ -19,14 +30,22 @@ const iconMap = {
 
 const iconOptions: Agent['icon'][] = ['user', 'bot', 'cpu', 'brain', 'sparkles', 'zap', 'target', 'search'];
 
+function AgentAvatar({ agent, size = 18 }: { agent: Agent; size?: number }) {
+  if (agent.logoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={getLogoUrl(agent.logoUrl)} alt={agent.name} className="h-full w-full object-cover" />;
+  }
+  const Icon = iconMap[agent.icon] || Sparkles;
+  return <Icon size={size} />;
+}
+
 export default function AgentsPage() {
+  const params = useParams();
+  const router = useRouter();
+  const workspaceId = params.workspaceId as string;
   const [mounted, setMounted] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [editedPrompt, setEditedPrompt] = useState('');
-  const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
   const [newAgent, setNewAgent] = useState({
     name: '',
     description: '',
@@ -36,29 +55,23 @@ export default function AgentsPage() {
   });
 
   const { providers } = useIntegrationsStore();
-  const { agents, addAgent, updateAgent, deleteAgent, toggleAgent, setAgentProvider, fetchAgents } = useAgentsStore();
+  const { agents, addAgent, deleteAgent, toggleAgent, fetchAgents } = useAgentsStore();
   const { fetchServers } = useServersStore();
 
   // Fetch agents from database
   useEffect(() => {
     const loadAgents = async () => {
       try {
-        const pathParts = window.location.pathname.split('/');
-        const workspaceId = pathParts[pathParts.indexOf('workspace') + 1];
-        
         if (!workspaceId) return;
-
         await fetchAgents(workspaceId);
         await fetchServers(workspaceId);
       } catch (error) {
         console.error('Failed to fetch agents:', error);
-      } finally {
-        setLoading(false);
       }
     };
 
     loadAgents();
-  }, [fetchAgents, fetchServers]);
+  }, [fetchAgents, fetchServers, workspaceId]);
 
   useEffect(() => {
     setMounted(true);
@@ -104,39 +117,14 @@ export default function AgentsPage() {
     setShowAddForm(false);
   };
 
-  const handleSelectAgent = (agent: Agent) => {
-    // Toggle: collapse if already selected, expand if different
-    if (selectedAgent?.id === agent.id) {
-      setSelectedAgent(null);
-      setIsEditingPrompt(false);
-    } else {
-      setSelectedAgent(agent);
-      setEditedPrompt(agent.systemPrompt);
-      setIsEditingPrompt(false);
-    }
-  };
-
-  const handleUpdatePrompt = () => {
-    if (selectedAgent) {
-      updateAgent(selectedAgent.id, { systemPrompt: editedPrompt });
-      setIsEditingPrompt(false);
-      setSelectedAgent({ ...selectedAgent, systemPrompt: editedPrompt });
-    }
+  const handleOpenAgentEditor = (agentId: string) => {
+    if (!workspaceId) return;
+    router.push(`/workspace/${workspaceId}/settings/agents/${agentId}`);
   };
 
   const handleDeleteAgent = (id: string) => {
     if (confirm('Are you sure you want to delete this agent?')) {
       deleteAgent(id);
-      if (selectedAgent?.id === id) {
-        setSelectedAgent(null);
-      }
-    }
-  };
-
-  const handleProviderChange = (agentId: string, providerId: string | null) => {
-    setAgentProvider(agentId, providerId);
-    if (selectedAgent?.id === agentId) {
-      setSelectedAgent({ ...selectedAgent, providerId });
     }
   };
 
@@ -332,7 +320,7 @@ export default function AgentsPage() {
                   <th className="p-3 font-medium">Model</th>
                   <th className="p-3 font-medium">Type</th>
                   <th className="p-3 font-medium w-24">Enabled</th>
-                  <th className="p-3 w-32"></th>
+                  <th className="p-3 font-medium w-32">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -344,101 +332,109 @@ export default function AgentsPage() {
                   </tr>
                 ) : (
                   filteredAgents.map((agent) => {
-                    const Icon = iconMap[agent.icon];
                     const assignedProvider = getAssignedProvider(agent.providerId);
-                    const isExpanded = selectedAgent?.id === agent.id;
-
                     return (
-                      <Fragment key={agent.id}>
-                        <tr
-                          onClick={() => handleSelectAgent(agent)}
-                          className={cn(
-                            'cursor-pointer border-b transition-colors',
-                            isExpanded ? 'bg-workspace-accent/10' : 'hover:bg-muted/30'
-                          )}
-                        >
-                          <td className="p-3 align-top">
-                            <div className="flex items-center gap-3 min-h-[3.25rem]">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                                <Icon size={18} />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium">{agent.name}</p>
-                                {agent.class_name ? (
-                                  <p className="text-[10px] text-muted-foreground italic pb-0.5">
-                                    {agent.class_name.split('/')[0]}
-                                  </p>
-                                ) : null}
-                                <p
-                                  className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]"
-                                  title={agent.description || undefined}
-                                >
-                                  {agent.description || '\u00A0'}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <span className="text-sm text-muted-foreground capitalize">
-                              {getAgentSource(agent)}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            {agent.provider === 'abi' ? (
-                              <div className="flex items-center gap-2">
-                                <Server size={14} className="text-muted-foreground" />
-                                <span className="text-sm text-muted-foreground italic">
-                                  {getModelDisplay(agent)}
-                                </span>
-                              </div>
-                            ) : assignedProvider ? (
-                              <div className="flex items-center gap-2">
-                                <CheckCircle size={14} className="text-green-500" />
-                                <span className="text-sm">{assignedProvider.model}</span>
-                              </div>
-                            ) : agent.providerId || agent.modelId ? (
-                              <div className="flex items-center gap-2">
-                                <Circle size={14} className="text-blue-500" />
-                                <span className="text-sm text-muted-foreground">{getModelDisplay(agent)}</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <XCircle size={14} className="text-muted-foreground" />
-                                <span className="text-sm text-muted-foreground">Not assigned</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-3">
-                            <span className={cn(
-                              "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                              agent.isDefault
-                                ? "bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
-                                : "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300"
+                      <tr
+                        key={agent.id}
+                        onClick={() => handleOpenAgentEditor(agent.id)}
+                        className="cursor-pointer border-b transition-colors hover:bg-muted/30"
+                      >
+                        <td className="p-3 align-top">
+                          <div className="flex items-center gap-3 min-h-[3.25rem]">
+                            <div className={cn(
+                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg overflow-hidden',
+                              agent.logoUrl ? 'bg-transparent' : 'bg-muted'
                             )}>
-                              {agent.isDefault ? 'Default' : 'Custom'}
-                            </span>
-                          </td>
-                          <td className="p-3">
+                              <AgentAvatar agent={agent} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium">{agent.name}</p>
+                              {agent.class_name ? (
+                                <p className="text-[10px] text-muted-foreground italic pb-0.5">
+                                  {agent.class_name.split('/')[0]}
+                                </p>
+                              ) : null}
+                              <p
+                                className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]"
+                                title={agent.description || undefined}
+                              >
+                                {agent.description || '\u00A0'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-sm text-muted-foreground capitalize">
+                            {getAgentSource(agent)}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {agent.provider === 'abi' ? (
+                            <div className="flex items-center gap-2">
+                              <Server size={14} className="text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground italic">
+                                {getModelDisplay(agent)}
+                              </span>
+                            </div>
+                          ) : assignedProvider ? (
+                            <div className="flex items-center gap-2">
+                              <CheckCircle size={14} className="text-green-500" />
+                              <span className="text-sm">{assignedProvider.model}</span>
+                            </div>
+                          ) : agent.providerId || agent.modelId ? (
+                            <div className="flex items-center gap-2">
+                              <Circle size={14} className="text-blue-500" />
+                              <span className="text-sm text-muted-foreground">{getModelDisplay(agent)}</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <XCircle size={14} className="text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">Not assigned</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <span className={cn(
+                            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
+                            agent.isDefault
+                              ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                              : 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
+                          )}>
+                            {agent.isDefault ? 'Default' : 'Custom'}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleAgent(agent.id);
+                            }}
+                            className={cn(
+                              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                              agent.enabled ? 'bg-primary' : 'bg-muted'
+                            )}
+                            title={agent.enabled ? 'Disable agent' : 'Enable agent'}
+                          >
+                            <span
+                              className={cn(
+                                'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                                agent.enabled ? 'translate-x-5' : 'translate-x-0.5'
+                              )}
+                            />
+                          </button>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-1">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleAgent(agent.id);
+                                handleOpenAgentEditor(agent.id);
                               }}
-                              className={cn(
-                                "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-                                agent.enabled ? "bg-primary" : "bg-muted"
-                              )}
-                              title={agent.enabled ? "Disable agent" : "Enable agent"}
+                              className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                              title="Edit"
                             >
-                              <span
-                                className={cn(
-                                  "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
-                                  agent.enabled ? "translate-x-5" : "translate-x-0.5"
-                                )}
-                              />
+                              <Pencil size={14} />
                             </button>
-                          </td>
-                          <td className="p-3">
                             {!agent.isDefault && (
                               <button
                                 onClick={(e) => {
@@ -451,98 +447,9 @@ export default function AgentsPage() {
                                 <Trash2 size={14} />
                               </button>
                             )}
-                          </td>
-                        </tr>
-                        
-                        {/* Expanded details row */}
-                        {isExpanded && (
-                          <tr key={`${agent.id}-details`}>
-                            <td colSpan={6} className="p-0 border-b bg-muted/20">
-                              <div className="p-4 space-y-4">
-                                {/* System Prompt */}
-                                <div>
-                                  <div className="mb-2 flex items-center justify-between">
-                                    <label className="text-sm font-medium">System Prompt</label>
-                                    {!isEditingPrompt ? (
-                                      <button
-                                        onClick={() => {
-                                          setIsEditingPrompt(true);
-                                          setEditedPrompt(agent.systemPrompt);
-                                        }}
-                                        className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-muted"
-                                      >
-                                        <Pencil size={12} />
-                                        Edit
-                                      </button>
-                                    ) : (
-                                      <div className="flex gap-2">
-                                        <button
-                                          onClick={() => {
-                                            updateAgent(agent.id, { systemPrompt: editedPrompt });
-                                            setIsEditingPrompt(false);
-                                          }}
-                                          className="flex items-center gap-1 rounded bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90"
-                                        >
-                                          <Save size={12} />
-                                          Save
-                                        </button>
-                                        <button
-                                          onClick={() => setIsEditingPrompt(false)}
-                                          className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-muted"
-                                        >
-                                          <X size={12} />
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {isEditingPrompt ? (
-                                    <textarea
-                                      value={editedPrompt}
-                                      onChange={(e) => setEditedPrompt(e.target.value)}
-                                      rows={6}
-                                      className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                                    />
-                                  ) : (
-                                    <div className="rounded-lg border bg-background p-3 text-sm text-muted-foreground whitespace-pre-wrap">
-                                      {agent.systemPrompt || 'No system prompt set'}
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Provider Assignment */}
-                                <div>
-                                  <label className="mb-2 block text-sm font-medium">Assigned Provider</label>
-                                  <select
-                                    value={agent.providerId || ''}
-                                    onChange={(e) => setAgentProvider(agent.id, e.target.value || null)}
-                                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                                  >
-                                    <option value="">No provider</option>
-                                    {enabledProviders.map((p) => (
-                                      <option key={p.id} value={p.id}>
-                                        {p.name} - {p.model}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-
-                                {/* Agent Metadata */}
-                                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">Created</p>
-                                    <p className="text-sm">{new Date(agent.createdAt).toLocaleDateString()}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">Updated</p>
-                                    <p className="text-sm">{new Date(agent.updatedAt).toLocaleDateString()}</p>
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
+                          </div>
+                        </td>
+                      </tr>
                     );
                   })
                 )}

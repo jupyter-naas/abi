@@ -168,7 +168,7 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
       icon={<BrainCircuit size={18} />}
       label="Ontology"
       description="Define classes, relationships, and schemas"
-      href={getWorkspacePath(currentWorkspaceId, '/ontology')}
+      href={getWorkspacePath(currentWorkspaceId, '/ontology?view=network')}
       collapsed={collapsed}
     >
       {/* Toolbar */}
@@ -260,7 +260,7 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
                           key={`${moduleName}:${ontologyFile.path}`}
                           onClick={() => {
                             const params = new URLSearchParams({
-                              view: 'overview',
+                              view: 'network',
                               ontology: ontologyFile.path,
                             });
                             router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
@@ -316,7 +316,7 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
                                     key={`${submoduleKey}:${ontologyFile.path}`}
                                     onClick={() => {
                                       const params = new URLSearchParams({
-                                        view: 'overview',
+                                        view: 'network',
                                         ontology: ontologyFile.path,
                                       });
                                       router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));

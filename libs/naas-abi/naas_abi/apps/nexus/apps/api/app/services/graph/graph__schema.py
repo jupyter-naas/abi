@@ -23,6 +23,13 @@ class GraphInfoData:
     id: str
     uri: str
     label: str
+    role_label: str = "unknown"
+
+
+@dataclass(frozen=True)
+class GraphPackData:
+    role_label: str
+    graphs: list[GraphInfoData]
 
 
 @dataclass(frozen=True)

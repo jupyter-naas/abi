@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 from naas_abi_core import logger
@@ -14,6 +15,7 @@ from naas_abi_marketplace.applications.openrouter.models.OpenRouterModel import 
 )
 
 OPENROUTER_AGENT_MODULE = "naas_abi_marketplace.applications.openrouter.agents"
+ASSETS_DIR = Path(__file__).parent.parent / "assets" / "public"
 
 
 class OpenRouterAgents:
@@ -25,12 +27,24 @@ class OpenRouterAgents:
         self.openrouter_integration = openrouter_integration
         self.openrouter_model = openrouter_model
 
+    def _get_provider_logo_path(self, model_id: str) -> Optional[str]:
+        """Return local asset path for the provider logo, or None if not found."""
+        provider = model_id.split("/")[0] if "/" in model_id else model_id
+        for ext in ("png", "jpg", "jpeg", "svg"):
+            filename = f"{provider}-logo-square.{ext}"
+            if (ASSETS_DIR / filename).exists():
+                return f"{ASSETS_DIR}/{filename}"
+        return None
+
     def _create_model_agent_class(self, model_data: dict) -> type[Agent]:
         """Dynamically create an agent class for a given model."""
         model_id = model_data.get("id", "")
         model_name = model_data.get("name", model_id)
         model_description = model_data.get(
             "description", f"An agent using {model_name}"
+        )
+        model_logo_url = self._get_provider_logo_path(model_id) or model_data.get(
+            "logo_url", None
         )
 
         # Create a safe class name from model_id
@@ -130,6 +144,7 @@ You excel at providing accurate, helpful, and contextually appropriate responses
             {
                 "name": model_name,
                 "description": model_description,
+                "logo_url": model_logo_url,
                 "New": classmethod(create_agent_func),
                 "__module__": OPENROUTER_AGENT_MODULE + "." + class_name,
             },

@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Tuple
@@ -5,9 +6,13 @@ from typing import Any, Optional, Tuple
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from naas_abi_core.services.cache.CacheFactory import CacheFactory
+from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.utils.Logger import logger
 
 from .VectorStore import VectorStore
+
+cache = CacheFactory.CacheFS_find_storage(subpath="intent_mapper")
 
 
 class IntentScope(Enum):
@@ -35,12 +40,14 @@ class IntentMapper:
     _embedding_model: Embeddings
     model: BaseChatModel
     system_prompt: str
+    embedding_workers: int
 
     def __init__(
         self,
         intents: list[Intent],
         embedding_model: Embeddings | None = None,
         model: BaseChatModel | None = None,
+        embedding_workers: int = 4,
     ):
         self.intents = intents
         self._embedding_model = embedding_model or OpenAIEmbeddings(
@@ -48,6 +55,7 @@ class IntentMapper:
         )
         self.model = model or ChatOpenAI(model="gpt-4.1-mini")
         self.vector_store = None
+        self.embedding_workers = max(1, int(embedding_workers))
 
         if embedding_model is None:
             logger.warning(
@@ -61,7 +69,30 @@ class IntentMapper:
 
         intents_values = [intent.intent_value for intent in intents]
         if len(intents_values) > 0:
-            vectors = self._embed_documents(intents_values)
+            if len(intents_values) <= 1 or self.embedding_workers <= 1:
+                vectors = self._embed_documents(intents_values)
+            else:
+                batch_count = min(self.embedding_workers, len(intents_values))
+                batch_size = (len(intents_values) + batch_count - 1) // batch_count
+                batches: list[tuple[int, list[str]]] = [
+                    (start, intents_values[start : start + batch_size])
+                    for start in range(0, len(intents_values), batch_size)
+                ]
+
+                vectors_by_start: dict[int, list[list[float]]] = {}
+                with ThreadPoolExecutor(max_workers=batch_count) as executor:
+                    future_to_start = {
+                        executor.submit(self._embed_documents, batch): start
+                        for start, batch in batches
+                    }
+                    for future in as_completed(future_to_start):
+                        start = future_to_start[future]
+                        vectors_by_start[start] = future.result()
+
+                vectors = []
+                for start, _batch in batches:
+                    vectors.extend(vectors_by_start[start])
+
             if len(vectors) == 0 or len(vectors[0]) == 0:
                 raise ValueError(
                     "Unable to build intent index: empty embedding vectors"
@@ -96,6 +127,10 @@ You: code a project
                 return intent
         return None
 
+    @cache(
+        lambda self, texts: f"embed_documents_{texts}",
+        cache_type=DataType.PICKLE,
+    )
     def _embed_documents(self, texts: list[str]) -> list[list[float]]:
         return self._embedding_model.embed_documents(texts)
 

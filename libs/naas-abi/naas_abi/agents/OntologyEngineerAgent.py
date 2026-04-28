@@ -1,104 +1,173 @@
+from pathlib import Path
 from typing import Optional
 
-from naas_abi_core.services.agent.Agent import (
-    Agent,
+from langchain_core.embeddings import Embeddings
+from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
+    IntentAgent,
 )
 
-NAME = "Ontology Engineer"
-DESCRIPTION = "A agent that helps users understand BFO Ontology and transform text into ontologies."
-SYSTEM_PROMPT = """
-# ROLE: 
-You are a BFO (Basic Formal Ontology) Expert and Ontology Engineering Specialist.
-Your role involves both educational guidance and practical implementation.
 
-# OBJECTIVE: 
-Your primary objective is to help users understand BFO Ontology and transform natural language text into structured, semantically accurate ontological representations. 
+class _NoopEmbeddings(Embeddings):
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] for _ in texts]
 
-# CONTEXT:
-You will receive messages from users or the supervisor agent ABI. 
+    def embed_query(self, text: str) -> list[float]:
+        del text
+        return [0.0]
 
-# TOOLS/AGENTS:
-- Entity_to_SPARQL: Extracts entities from text and generates SPARQL INSERT DATA statements with proper BFO mappings
-- Knowledge_Graph_Builder: Manages triplestore operations including data insertion, querying, updating, and validation
 
-# OPERATING GUIDELINES:
+class OntologyEngineerAgent(IntentAgent):
+    """
+    Ontology Engineer Agent.
 
-1. EDUCATIONAL QUERIES ABOUT ONTOLOGY
-When users ask about ontology engineering concepts, or theoretical questions, use your comprehensive internal knowledge of BFO 2.0.
-Provide an answer first with the BFO classes with its URI representing the answer of the user's question and then an clear and concise explanation of the answer.
-Answer expected for question 'What is a Person in BFO Ontology?' is:
-"
-The BFO class representing a Person is a material entity (bfo:BFO_0000040).
+    Run agent in terminal: LOG_LEVEL=DEBUG uv run abi chat ontology_engineer OntologyEngineerAgent
+    """
 
-A Person in BFO is modeled as a material entity - a physical object made of matter that occupies space and has mass. 
-This classification reflects that humans are physical, material beings composed of cells, tissues and organs that form an integrated whole. 
-As material entities, persons can bear physical qualities, participate in processes, and maintain their material nature while undergoing changes over time.
-"
+    name: str = "Ontology Engineer"
+    description: str = (
+        "Ontology specialist grounded on the BFO 7 Buckets framework to answer "
+        "ontology questions and propose ontology-compliant modeling."
+    )
+    logo_url: str = (
+        "https://triplydb.com/imgs/avatars/d/6000a72bcbf91b03347f4a93.png?v=1"
+    )
+    system_prompt: str = """<role>
+You are an ontology engineering specialist focused on BFO and the 7 Buckets framework.
+</role>
 
-2. TEXT-TO-ONTOLOGY TRANSFORMATION WORKFLOW
-If a user wants to transform text into ontological representation, use Entity_to_SPARQL agent.
-Before delegating to agent, try to resolve ambiguities about:
-- pronouns ("I", "you", "they") => must be a named entity. Example: "I" => "Florent Ravenel"
-- dates ("today", "yesterday", "tomorrow") => must be a named entity. Example: "today" => "2025-08-12"
-If there is no disambiguation, use the Entity_to_SPARQL agent to map the text to ontology.
+<objective>
+Help users understand ontologies by providing precise, practical, and ontology-grounded insights.
+</objective>
 
-3. SPARQL INSERT DATA TO TRIPESTORE
-If the user wants to insert data into the triplestore, use the Knowledge_Graph_Builder agent to insert the data into the triplestore.
-Before delegating to agent, validate the SPARQL statement that will be added to the triplestore like:
-"I am going to add the following SPARQL statement to the triplestore:
-```sparql
-{SPARQL_STATEMENT}
-```
-Are you sure you want to add this SPARQL statement to the triplestore?"
-If the user confirms, delegate to Knowledge_Graph_Builder agent.
+<context>
+Use the following ontology as the primary grounding source:
+[BFO_7_BUCKETS_ONTOLOGY]
+</context>
 
-# CONSTRAINTS:
-- Delegate all mapping to Entity_to_SPARQL agent, do not try to do it yourself.
+<tasks>
+1. Answer ontology questions using the grounded ontology first, then explain clearly in plain language.
+2. When users ask for ontology creation (new classes or properties), produce ontology snippets that follow the same style and standards as the grounding ontology.
+3. Keep answers operational: include relevant classes/properties, rationale, and valid Turtle snippets when modeling is requested.
+</tasks>
+
+<operating_guidelines>
+- Always use the BFO 7 Buckets framework as the conceptual basis.
+- For a new class:
+  - Declare it as `a owl:Class`.
+  - Provide `rdfs:label`.
+  - Provide `skos:definition`.
+  - Provide `skos:example`.
+  - Include relevant `rdfs:subClassOf` and OWL restrictions aligned with BFO modeling patterns.
+- For a new object property:
+  - Declare it as `a owl:ObjectProperty`.
+  - Always include `rdfs:label` and `skos:definition`.
+  - Add `rdfs:domain` and `rdfs:range` whenever they are known, implied, or needed for clarity and consistency.
+  - Include `owl:inverseOf` when a clear inverse relation exists.
+</operating_guidelines>
+
+<constraints>
+- Preserve the user language.
+- Be concise and precise.
+- If uncertainty remains, ask a focused clarification question before generating ontology artifacts.
+</constraints>
 """
+
+    @staticmethod
+    def get_model(
+        api_key: str,
+        model_name: str = "gpt-5.1",
+        base_url: str = "https://api.openai.com/v1",
+        provider: str = "openai",
+    ) -> ChatModel:
+        from langchain_openai import ChatOpenAI
+        from pydantic import SecretStr
+
+        return ChatModel(
+            model_id=model_name,
+            provider=provider,
+            model=ChatOpenAI(
+                model=model_name,
+                base_url=base_url,
+                api_key=SecretStr(api_key),
+            ),
+        )
+
+    @staticmethod
+    def get_bfo_7_buckets_ontology() -> str:
+        ontology_path = (
+            Path(__file__).resolve().parent.parent
+            / "ontologies"
+            / "imports"
+            / "domain-level"
+            / "BFO7BucketsProcessOntology.ttl"
+        )
+
+        if ontology_path.exists():
+            return ontology_path.read_text(encoding="utf-8")
+
+        return (
+            "Ontology file not found at "
+            "`naas_abi/ontologies/imports/domain-level/BFO7BucketsProcessOntology.ttl`."
+        )
+
+    @classmethod
+    def _build_agent(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "OntologyEngineerAgent":
+        from naas_abi import ABIModule
+
+        api_key = (
+            ABIModule.get_instance()
+            .engine.modules["naas_abi_marketplace.ai.chatgpt"]
+            .configuration.openai_api_key
+        )
+
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState()
+
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(
+                system_prompt=cls.system_prompt.replace(
+                    "[BFO_7_BUCKETS_ONTOLOGY]", cls.get_bfo_7_buckets_ontology()
+                )
+            )
+
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=cls.get_model(api_key=api_key),
+            tools=[],
+            agents=[],
+            intents=[],
+            memory=None,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            embedding_model=_NoopEmbeddings(),
+            enable_default_intents=False,
+        )
+
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "OntologyEngineerAgent":
+        return cls._build_agent(
+            agent_shared_state=agent_shared_state,
+            agent_configuration=agent_configuration,
+        )
 
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[Agent]:
-    # Set model
-    from naas_abi.models.default import get_model
-
-    model = get_model()
-
-    # Use provided configuration or create default one
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    tools: list = []
-
-    agents: list = []
-    from naas_abi.agents.EntitytoSPARQLAgent import (
-        create_agent as entity_to_sparql_agent,
+) -> OntologyEngineerAgent:
+    return OntologyEngineerAgent._build_agent(
+        agent_shared_state=agent_shared_state,
+        agent_configuration=agent_configuration,
     )
-    from naas_abi.agents.KnowledgeGraphBuilderAgent import (
-        create_agent as knowledge_graph_builder_agent,
-    )
-
-    agents += [entity_to_sparql_agent(), knowledge_graph_builder_agent()]
-
-    return OntologyEngineerAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        tools=tools,
-        agents=agents,
-        memory=None,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-    )
-
-
-class OntologyEngineerAgent(Agent):
-    pass

@@ -56,10 +56,14 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
+from naas_abi_core.services.cache.CacheFactory import CacheFactory
+from naas_abi_core.services.cache.CachePort import DataType
 from sse_starlette.sse import EventSourceResponse
 
 from .tools.default_tools import default_tools
 from .tools.utils import can_bind_tools
+
+cache = CacheFactory.CacheFS_find_storage(subpath="agent")
 
 _shared_checkpointer: BaseCheckpointSaver | None = None
 _shared_checkpointer_url: str | None = None
@@ -559,6 +563,7 @@ class Agent(Expose):
     def state(self) -> AgentSharedState:
         return self._state
 
+    @cache(lambda name: f"validate_name_{name}", cache_type=DataType.TEXT)
     @staticmethod
     def validate_name(name: str) -> str:
         # Only allow characters valid for graph node names (e.g. ':' is reserved and not allowed).
@@ -566,9 +571,9 @@ class Agent(Expose):
         if not re.match(pattern, name):
             # Replace invalid/reserved characters (including ':') with '_'
             valid_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
-            logger.debug(
-                f"Name '{name}' does not match pattern '{pattern}' (e.g. ':' is reserved). Renaming to '{valid_name}'."
-            )
+            # logger.debug(
+            #     f"Name '{name}' does not match pattern '{pattern}' (e.g. ':' is reserved). Renaming to '{valid_name}'."
+            # )
             return valid_name.replace("__", "_")
         return name
 
@@ -881,7 +886,7 @@ SUBAGENT SYSTEM PROMPT:
         state: ABIAgentState,
     ) -> Command[Literal["call_tools", "__end__"]]:
         self._state.set_current_active_agent(self.name)
-        logger.debug(f"🧠 Calling model on current active agent: {self.name}")
+        logger.debug(f"🧠 Calling model on current active agent: {self._name}")
 
         # Inserting system prompt before messages.
         messages = state["messages"]
@@ -889,7 +894,7 @@ SUBAGENT SYSTEM PROMPT:
             messages = [
                 SystemMessage(content=state["system_prompt"]),
             ] + messages
-        logger.debug(f"Messages before calling model: {messages}")
+        # logger.debug(f"Messages before calling model: {messages}")
 
         # Calling model
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
@@ -1530,7 +1535,7 @@ SUBAGENT SYSTEM PROMPT:
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
     """Create a tool that can return handoff via a Command"""
-    agent_name = agent.validate_name(agent.name)
+    agent_name = Agent.validate_name(agent.name)
     tool_name = f"transfer_to_{agent_name}"
 
     @tool(tool_name)
