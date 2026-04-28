@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.28.0 (2026-04-28)
+
+### Features
+
+- **nexus**: Remove Cloud and Sync Folder entries from files sidebar
+  ([`a28953f`](https://github.com/jupyter-naas/abi/commit/a28953f79e692383dfe5179a56f06a495d3ff8df))
+
+
 ## v1.27.0 (2026-04-28)
 
 ### Features
