@@ -375,3 +375,20 @@ class GraphService:
             limit=limit,
             depth=2,
         )
+
+    async def list_individuals(
+        self,
+        workspace_id: str,
+        graph_names: list[str],
+        graph_filters: list[dict[str, str | None]],
+        limit: int = 500,
+        depth: int = 2,
+    ) -> GraphNetworkData:
+        return _list_individuals(
+            triple_store=self._get_triple_store(),
+            workspace_id=workspace_id,
+            graph_names=graph_names,
+            graph_filters=graph_filters,
+            limit=limit,
+            depth=depth,
+        )
