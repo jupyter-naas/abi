@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.31.0 (2026-04-28)
+
+### Bug Fixes
+
+- **versionstore**: Look up F_FULLFSYNC via getattr for Linux mypy
+  ([`8a1e65a`](https://github.com/jupyter-naas/abi/commit/8a1e65adf511fb0fa8a39e1748228d49f78372b0))
+
+### Features
+
+- **naas-abi-core**: Vendor versionstore with branching and durability hardening
+  ([`74987e0`](https://github.com/jupyter-naas/abi/commit/74987e07955af388d0e8c31e8e79ec31cb60fae4))
+
+
 ## v1.30.0 (2026-04-28)
 
 ### Bug Fixes
