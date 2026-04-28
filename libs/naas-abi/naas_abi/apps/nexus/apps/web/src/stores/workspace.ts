@@ -51,6 +51,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   agent?: AgentType;
+  activityLine?: string; // Single-line live status (tool usage/response, processing)
   images?: string[]; // Base64-encoded images for multimodal chat
   thinkingDuration?: number; // Duration in seconds the AI spent "thinking"
   sources?: string[]; // filenames of RAG documents used to answer
@@ -177,7 +178,13 @@ interface WorkspaceState {
   createConversation: (projectId?: string) => string;
   setActiveConversation: (id: string | null) => void;
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
-  updateLastMessage: (conversationId: string, content: string, thinkingDuration?: number, sources?: string[]) => void;
+  updateLastMessage: (
+    conversationId: string,
+    content: string,
+    thinkingDuration?: number,
+    sources?: string[],
+    activityLine?: string | null,
+  ) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
   renameConversation: (id: string, newTitle: string) => void;
@@ -352,7 +359,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }));
   },
 
-  updateLastMessage: (conversationId, content, thinkingDuration, sources) => {
+  updateLastMessage: (conversationId, content, thinkingDuration, sources, activityLine) => {
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
@@ -365,6 +372,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                       content,
                       ...(thinkingDuration !== undefined && { thinkingDuration }),
                       ...(sources !== undefined && { sources }),
+                      ...(activityLine !== undefined && { activityLine: activityLine || undefined }),
                     }
                   : msg
               ),

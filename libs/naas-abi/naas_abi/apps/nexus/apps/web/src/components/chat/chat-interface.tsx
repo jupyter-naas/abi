@@ -995,6 +995,7 @@ export function ChatInterface() {
           role: 'assistant',
           content: searchEnabled ? '🌐 Searching the web...' : '▌',
           agent: effectiveAgent,
+          activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
         });
         // Capture placeholder message id for controls
         {
@@ -1013,47 +1014,92 @@ export function ChatInterface() {
         let thinkingContent = '';   // Accumulated thinking text
         let responseContent = '';   // Accumulated response text
         let streamSources: string[] = [];  // RAG source filenames
-        const streamEvents: string[] = [];
-        const appendStreamEvent = (eventText: string) => {
-          const previous = streamEvents[streamEvents.length - 1];
-          if (previous !== eventText) {
-            streamEvents.push(eventText);
+        let streamActivityLine: string | undefined = searchEnabled
+          ? 'Web search in progress'
+          : 'Processing...';
+        let hasDetailedActivity = false;
+
+        const singleLine = (value: string) => value.replace(/\s+/g, ' ').trim();
+        const truncateLine = (value: string, max = 140) =>
+          value.length > max ? `${value.slice(0, max - 1)}…` : value;
+        const formatToolName = (raw: string) =>
+          raw
+            .replace(/_/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .split(' ')
+            .filter(Boolean)
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+        const formatToolLabel = (raw: string): { prefix: string; name: string } => {
+          if (raw.startsWith('transfer_to_')) {
+            return { prefix: 'Agent', name: formatToolName(raw.slice('transfer_to_'.length)) };
           }
+          return { prefix: 'Tool', name: formatToolName(raw) };
+        };
+
+        const formatStreamActivity = (parsed: any): string | null => {
+          if (parsed?.search) return 'Web search in progress';
+
+          if (parsed?.event === 'tool') {
+            const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim() ? parsed.tool : '';
+            const { prefix, name } = rawTool ? formatToolLabel(rawTool) : { prefix: 'Tool', name: 'Tool' };
+            const status = typeof parsed.status === 'string' ? parsed.status : 'running';
+            const output = typeof parsed.output === 'string' ? singleLine(parsed.output) : '';
+            if (status === 'completed') {
+              return output ? `${prefix} ${name}: ${truncateLine(output)}` : `${prefix} ${name} completed`;
+            }
+            if (status === 'failed' || status === 'error') return `${prefix} ${name} failed`;
+            if (status === 'cancelled') return `${prefix} ${name} cancelled`;
+            if (status === 'pending') return `${prefix} ${name} queued`;
+            return `${prefix}: ${name}`;
+          }
+
+          if (parsed?.event === 'tool_usage') {
+            const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim()
+              ? parsed.tool
+              : typeof parsed.data === 'string' && parsed.data.trim()
+                ? parsed.data
+                : '';
+            const { prefix, name } = rawTool ? formatToolLabel(rawTool) : { prefix: 'Tool', name: 'Tool' };
+            return `${prefix}: ${name}`;
+          }
+
+          if (parsed?.event === 'tool_response') {
+            const text = typeof parsed.content === 'string'
+              ? parsed.content
+              : typeof parsed.data === 'string'
+                ? parsed.data
+                : '';
+            if (!text.trim()) return null;
+            return truncateLine(singleLine(text));
+          }
+
+          if (parsed?.event === 'agent.question' && typeof parsed.question === 'string') {
+            return `Question: ${truncateLine(singleLine(parsed.question), 110)}`;
+          }
+
+          return null;
         };
 
         const renderStreamingMessage = (withCaret: boolean) => {
-          const eventsSection = streamEvents.length > 0
-            ? `🛠️ Tool activity:\n${streamEvents.map((eventText) => `- ${eventText}`).join('\n')}\n\n`
-            : '';
-
           const body = thinkingContent
             ? `<think>${thinkingContent}</think>\n\n${responseContent}`
             : responseContent;
 
           const contentBody = body || '';
           const assembled = withCaret
-            ? `${eventsSection}${contentBody || '▌'}${contentBody ? '▌' : ''}`
-            : `${eventsSection}${contentBody}`;
+            ? `${contentBody || '▌'}${contentBody ? '▌' : ''}`
+            : `${contentBody}`;
 
-          updateLastMessage(conversationId!, assembled.trimEnd() || '▌');
-        };
-
-        const formatStreamEvent = (parsed: any): string | null => {
-          if (parsed?.event === 'tool') {
-            const toolName = typeof parsed.tool === 'string' ? parsed.tool : 'tool';
-            const status = typeof parsed.status === 'string' ? parsed.status : 'running';
-            if (status === 'completed') return `${toolName} completed`;
-            if (status === 'failed' || status === 'error') return `${toolName} failed`;
-            if (status === 'cancelled') return `${toolName} cancelled`;
-            if (status === 'pending') return `${toolName} queued`;
-            return `${toolName} running`;
-          }
-
-          if (parsed?.event === 'agent.question' && typeof parsed.question === 'string') {
-            return `Agent question: ${parsed.question}`;
-          }
-
-          return null;
+          updateLastMessage(
+            conversationId!,
+            assembled.trimEnd() || '▌',
+            undefined,
+            undefined,
+            streamActivityLine,
+          );
         };
 
         try {
@@ -1113,13 +1159,10 @@ export function ChatInterface() {
                   if (parsed.sources && Array.isArray(parsed.sources)) {
                     streamSources = parsed.sources as string[];
                   }
-                  if (parsed.search) {
-                    appendStreamEvent('Web search in progress');
-                    renderStreamingMessage(true);
-                  }
-                  const streamEvent = formatStreamEvent(parsed);
+                  const streamEvent = formatStreamActivity(parsed);
                   if (streamEvent) {
-                    appendStreamEvent(streamEvent);
+                    streamActivityLine = streamEvent;
+                    hasDetailedActivity = true;
                     renderStreamingMessage(true);
                   }
                   if (parsed.content) {
@@ -1174,25 +1217,33 @@ export function ChatInterface() {
         }
         // Final: store full content with thinking duration
         const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
-        const eventsSection = streamEvents.length > 0
-          ? `🛠️ Tool activity:\n${streamEvents.map((eventText) => `- ${eventText}`).join('\n')}\n\n`
-          : '';
         const finalBody = thinkingContent
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
-        const finalContent = `${eventsSection}${finalBody}`.trim();
-        updateLastMessage(conversationId!, finalContent, thinkingDuration, streamSources.length > 0 ? streamSources : undefined);
+        const finalContent = finalBody.trim();
+        updateLastMessage(
+          conversationId!,
+          finalContent,
+          thinkingDuration,
+          streamSources.length > 0 ? streamSources : undefined,
+          hasDetailedActivity ? streamActivityLine : null,
+        );
       } catch (streamError) {
         // Gracefully handle user-initiated aborts
         if ((streamError as any)?.name === 'AbortError') {
-          const eventsSection = streamEvents.length > 0
-            ? `🛠️ Tool activity:\n${streamEvents.map((eventText) => `- ${eventText}`).join('\n')}\n\n`
-            : '';
           const finalBody = thinkingContent
             ? `<think>${thinkingContent}</think>\n\n${responseContent}`
             : responseContent;
-          const finalContent = `${eventsSection}${finalBody}`.trim();
-          if (conversationId) updateLastMessage(conversationId, finalContent, undefined, streamSources.length > 0 ? streamSources : undefined);
+          const finalContent = finalBody.trim();
+          if (conversationId) {
+            updateLastMessage(
+              conversationId,
+              finalContent,
+              undefined,
+              streamSources.length > 0 ? streamSources : undefined,
+              hasDetailedActivity ? streamActivityLine : null,
+            );
+          }
         } else {
           // Streaming-specific error - throw to outer catch for modal handling
           throw streamError as any;
@@ -1387,6 +1438,7 @@ export function ChatInterface() {
               <MessageBubble 
                 key={message.id} 
                 message={message} 
+                currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
                 showStop={Boolean(streamingMessageId)}
                 onStop={() => {
@@ -1867,11 +1919,13 @@ function TypingDots() {
 
 const MessageBubble = React.memo(function MessageBubble({ 
   message,
+  currentSelectedAgent,
   showConnecting,
   showStop,
   onStop,
 }: { 
   message: Message; 
+  currentSelectedAgent: string;
   showConnecting: boolean; 
   showStop: boolean; 
   onStop: () => void; 
@@ -1886,6 +1940,7 @@ const MessageBubble = React.memo(function MessageBubble({
   const user = useAuthStore(state => state.user);
   const agents = useAgentsStore(state => state.agents);
   const agent = agents.find(a => a.id === message.agent);
+  const isFromDifferentAgent = !isUser && Boolean(message.agent) && message.agent !== currentSelectedAgent;
   
   // Determine sender name
   // BUGFIX: For user-authored messages, prefer the preserved authorName
@@ -1958,6 +2013,11 @@ const MessageBubble = React.memo(function MessageBubble({
 
   // Show thinking section if we have thinking content OR a finalized duration
   const hasThinkingSection = !isUser && (thinking || (message.thinkingDuration && message.thinkingDuration > 0));
+  const activityLine = !isUser
+    ? (message.activityLine?.trim()
+      || (isStillProcessing && showConnecting ? 'Processing...' : '')
+      || (isStillProcessing ? 'Processing...' : ''))
+    : '';
   const handleCopyCode = useCallback(async (code: string, key: string) => {
     try {
       await navigator.clipboard.writeText(code);
@@ -2116,7 +2176,7 @@ const MessageBubble = React.memo(function MessageBubble({
             'rounded-2xl px-4 py-3 text-sm',
             isUser ? 'bg-workspace-accent text-white' : 'bg-muted max-w-none',
             !isUser &&
-              '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'
+              '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-0.5 [&_h5]:text-sm [&_h5]:font-medium [&_h5]:mt-1.5 [&_h6]:text-sm [&_h6]:font-medium [&_h6]:mt-1 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'
           )}
         >
           {/* Sender name inside bubble (WhatsApp-style) */}
@@ -2126,34 +2186,50 @@ const MessageBubble = React.memo(function MessageBubble({
               ? 'text-right text-white border-b border-white/20' 
               : 'text-left text-workspace-accent border-b border-border'
           )}>
-            {senderName}
+            <div className="flex items-center gap-2">
+              <span>{senderName}</span>
+              {isFromDifferentAgent && (
+                <span className="rounded-full border border-amber-300/50 bg-amber-100/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/30 dark:text-amber-300">
+                  Not current agent
+                </span>
+              )}
+            </div>
           </div>
+
+          {!isUser && (activityLine || (isStillProcessing && showStop)) && (
+            <div className="mb-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+              {activityLine ? (
+                <span className="truncate">{activityLine}</span>
+              ) : (
+                <span className="truncate">Processing...</span>
+              )}
+              {isStillProcessing && (
+                <span className="inline-flex shrink-0">
+                  <TypingDots />
+                </span>
+              )}
+              {isStillProcessing && showStop && (
+                <button
+                  className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
+                  onClick={(e) => { e.preventDefault(); onStop(); }}
+                  title="Stop generation"
+                >
+                  Stop
+                </button>
+              )}
+            </div>
+          )}
           
           {isUser ? (
             <p className="whitespace-pre-wrap text-right">
               {(response as string).match(URL_REGEX) ? linkifyText(response as string, true) : response}
             </p>
           ) : isStillProcessing ? (
-            <div className="flex items-baseline gap-1">
+            <div className="max-w-full">
               {responseWithoutCaret && (
-                <div className="max-w-full [&>*]:m-0">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {responseWithoutCaret}
-                  </ReactMarkdown>
-                </div>
-              )}
-              <TypingDots />
-              {!responseWithoutCaret && showConnecting && (
-                <span className="ml-2 text-xs text-muted-foreground">Processing…</span>
-              )}
-              {showStop && (
-                <button
-                  className="ml-2 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
-                  onClick={(e) => { e.preventDefault(); onStop(); }}
-                  title="Stop generation"
-                >
-                  Stop
-                </button>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {responseWithoutCaret}
+                </ReactMarkdown>
               )}
             </div>
           ) : (

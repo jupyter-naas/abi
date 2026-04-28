@@ -948,7 +948,7 @@ async def stream_with_abi(
     messages: list[Message],
     config: ProviderConfig,
     system_prompt: str | None = None,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[str | dict[str, Any], None]:
     """Stream chat completion from ABI server (custom API).
 
     ABI uses a custom endpoint format:
@@ -1047,6 +1047,10 @@ async def stream_with_abi(
                             logger.debug(f"📨 ABI chunk ({current_event}): {content[:100]}...")
                             yield content
                             last_emitted_chunk = content
+                        elif current_event == "tool_usage" and content.strip():
+                            yield {"event": "tool_usage", "tool": content.strip()}
+                        elif current_event == "tool_response" and content.strip():
+                            yield {"event": "tool_response", "content": content.strip()}
 
     except httpx.HTTPStatusError as e:
         logger.error("ABI API error: status=%s endpoint=%s", e.response.status_code, endpoint)
@@ -1398,5 +1402,9 @@ async def stream_with_abi_inprocess(
             # state and would duplicate the content already streamed via ai_message.
             if event_name == "ai_message" and text.strip():
                 yield text
+            elif event_name == "tool_usage" and text.strip():
+                yield {"event": "tool_usage", "tool": text}
+            elif event_name == "tool_response" and text.strip():
+                yield {"event": "tool_response", "content": text}
         elif isinstance(event, str) and event.strip():
             yield event
