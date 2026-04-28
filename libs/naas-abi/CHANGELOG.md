@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.26.0 (2026-04-28)
+
+### Features
+
+- **nexus**: Expand file previews to office docs and plain-text formats
+  ([`8eecbf1`](https://github.com/jupyter-naas/abi/commit/8eecbf1dc7319b4626f79eb25978f562339b8b82))
+
+
 ## v1.25.0 (2026-04-28)
 
 ### Bug Fixes
