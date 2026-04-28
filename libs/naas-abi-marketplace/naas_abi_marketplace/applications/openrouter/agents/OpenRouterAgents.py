@@ -120,12 +120,6 @@ You excel at providing accurate, helpful, and contextually appropriate responses
                 tools: list = []
                 agents: list = []
 
-                # Add web search tool
-                if "web_search" in model_data.get("pricing", {}):
-                    chat_model.extra_body = {
-                        "tools": [{"type": "openrouter:web_search"}]
-                    }
-
                 return cls(
                     name=m_name,
                     description=m_desc,
