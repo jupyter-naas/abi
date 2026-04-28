@@ -21,6 +21,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     AlreadyExistsError,
+    ArchiveTooLargeError,
     InvalidPathError,
     IsDirectoryError,
     NotFoundError,
@@ -74,6 +75,7 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     IsDirectoryError: (400, _default_detail),
     NotTextError: (400, _default_detail),
     UploadTooLargeError: (413, _default_detail),
+    ArchiveTooLargeError: (413, _default_detail),
     UnsupportedPreviewError: (400, _default_detail),
     PreviewUnavailableError: (501, _default_detail),
     PreviewConversionError: (500, _default_detail),

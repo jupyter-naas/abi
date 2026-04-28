@@ -46,6 +46,15 @@ class UploadTooLargeError(FilesDomainError):
         super().__init__(f"File too large. Max size is {max_size_bytes // (1024 * 1024)}MB")
 
 
+class ArchiveTooLargeError(FilesDomainError):
+    def __init__(self, file_count: int, max_files: int):
+        self.file_count = file_count
+        self.max_files = max_files
+        super().__init__(
+            f"Folder is too large to archive: {file_count} files (limit {max_files})"
+        )
+
+
 @dataclass(frozen=True)
 class FileInfoData:
     name: str
