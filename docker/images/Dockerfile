@@ -1,8 +1,19 @@
 FROM python:3.11
 WORKDIR /app
 
-# Install CA certificates
-RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
+# Install CA certificates and LibreOffice (headless) for office-document
+# preview conversion (docx/xlsx/pptx -> PDF) used by the Nexus files API.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libreoffice-core \
+        libreoffice-writer \
+        libreoffice-calc \
+        libreoffice-impress \
+        fonts-dejavu \
+        fonts-liberation \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN pip install uv
 
