@@ -53,6 +53,7 @@ class AgentUpdateInput:
     description: str | None = None
     system_prompt: str | None = None
     model_id: str | None = None
+    logo_url: str | None = None
     enabled: bool | None = None
     model: str | None = None
 

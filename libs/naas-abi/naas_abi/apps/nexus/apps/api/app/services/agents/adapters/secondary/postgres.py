@@ -148,6 +148,8 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             agent_model.system_prompt = str(updates.system_prompt)
         if updates.model_id is not None:
             agent_model.model_id = str(updates.model_id)
+        if updates.logo_url is not None:
+            setattr(agent_model, "logo_url", str(updates.logo_url))
         if updates.enabled is not None:
             agent_model.enabled = bool(updates.enabled)
 

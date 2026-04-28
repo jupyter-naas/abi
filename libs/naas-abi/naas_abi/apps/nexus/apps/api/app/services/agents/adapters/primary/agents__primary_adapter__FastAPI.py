@@ -30,6 +30,7 @@ from naas_abi_core import logger
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import CacheNotFoundError
+from pydantic import BaseModel
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -233,6 +234,27 @@ def _fetch_logo_to_public(logo_url: str) -> str | None:
     return local_url
 
 
+def _normalize_to_public_logo_url(logo_url: str | None) -> str | None:
+    """Return a public static logo path (``/logos/...``) or ``None``."""
+    if logo_url is None:
+        return None
+
+    normalized = logo_url.strip()
+    if not normalized:
+        return None
+
+    if normalized.startswith("/logos/"):
+        return normalized
+    if normalized.startswith("logos/"):
+        return f"/{normalized}"
+    if normalized.startswith("/public/logos/"):
+        return normalized.removeprefix("/public")
+    if normalized.startswith("public/logos/"):
+        return f"/{normalized[7:]}"
+
+    return _fetch_logo_to_public(normalized)
+
+
 # ---------------------------------------------------------------------------
 # Process-level agent class registry cache
 #
@@ -387,6 +409,10 @@ def _extract_agent_intents(agent_cls: type) -> list[dict[str, str]] | None:
     return output if output else None
 
 
+class AgentLogoUpdateRequest(BaseModel):
+    logo_url: str
+
+
 @router.get("/")
 async def list_agents(
     workspace_id: str | None = None,
@@ -444,16 +470,19 @@ async def list_agents(
     enriched_agent_list: list[AgentRecord] = []
     for agent in agent_list:
         suggestions = None
-        logo_url = None
+        logo_url = _normalize_to_public_logo_url(agent.logo_url)
         intents = None
         if agent.class_name:
             resolved_cls = class_name_to_agent_class.get(agent.class_name)
             if resolved_cls is not None and isinstance(resolved_cls, type):
                 suggestions = _extract_agent_suggestions(resolved_cls)
-                raw_logo_url = getattr(resolved_cls, "logo_url", None)
-                logo_url = (
-                    (_fetch_logo_to_public(raw_logo_url) or raw_logo_url) if raw_logo_url else None
-                )
+                if logo_url is None:
+                    raw_logo_url = getattr(resolved_cls, "logo_url", None)
+                    logo_url = (
+                        _normalize_to_public_logo_url(raw_logo_url)
+                        if isinstance(raw_logo_url, str)
+                        else None
+                    )
                 intents = _extract_agent_intents(resolved_cls)
         enriched_agent_list.append(
             replace(agent, suggestions=suggestions, logo_url=logo_url, intents=intents)
@@ -469,12 +498,13 @@ async def create_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
     await require_workspace_access(current_user.id, agent.workspace_id)
+    normalized_logo_url = _normalize_to_public_logo_url(agent.logo_url)
     created_agent = await agent_service.create_agent(
         context=request_context(current_user),
-        data=agent,
+        data=replace(agent, logo_url=normalized_logo_url),
     )
     logger.debug("Agent created: %s", created_agent)
-    return created_agent
+    return replace(created_agent, logo_url=_normalize_to_public_logo_url(created_agent.logo_url))
 
 
 @router.patch("/{agent_id}")
@@ -501,12 +531,44 @@ async def update_agent(
             description=updates.description,
             system_prompt=updates.system_prompt,
             model_id=updates.model,
+            logo_url=_normalize_to_public_logo_url(updates.logo_url),
             enabled=updates.enabled,
         ),
     )
     if updated_agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    return updated_agent
+    return replace(updated_agent, logo_url=_normalize_to_public_logo_url(updated_agent.logo_url))
+
+
+@router.patch("/{agent_id}/logo")
+async def update_agent_logo(
+    agent_id: str,
+    payload: AgentLogoUpdateRequest,
+    current_user: User = Depends(get_current_user_required),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> AgentRecord:
+    existing_agent = await agent_service.get_agent(
+        context=request_context(current_user),
+        agent_id=agent_id,
+    )
+    if not existing_agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    await require_workspace_access(current_user.id, existing_agent.workspace_id)
+
+    logo_url = _normalize_to_public_logo_url(payload.logo_url)
+    if not logo_url:
+        raise HTTPException(status_code=400, detail="Unable to resolve logo to a public asset")
+
+    updated_agent = await agent_service.update_agent(
+        context=request_context(current_user),
+        agent_id=agent_id,
+        updates=AgentUpdateInput(logo_url=logo_url),
+    )
+    if updated_agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    return replace(updated_agent, logo_url=_normalize_to_public_logo_url(updated_agent.logo_url))
 
 
 @router.delete("/{agent_id}")
@@ -544,4 +606,4 @@ async def get_agent(
         raise HTTPException(status_code=404, detail="Agent not found")
 
     await require_workspace_access(current_user.id, agent.workspace_id)
-    return agent
+    return replace(agent, logo_url=_normalize_to_public_logo_url(agent.logo_url))
