@@ -1045,14 +1045,6 @@ export function ChatInterface() {
           if (parsed?.event === 'tool') {
             const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim() ? parsed.tool : '';
             const { prefix, name } = rawTool ? formatToolLabel(rawTool) : { prefix: 'Tool', name: 'Tool' };
-            const status = typeof parsed.status === 'string' ? parsed.status : 'running';
-            const output = typeof parsed.output === 'string' ? singleLine(parsed.output) : '';
-            if (status === 'completed') {
-              return output ? `${prefix} ${name}: ${truncateLine(output)}` : `${prefix} ${name} completed`;
-            }
-            if (status === 'failed' || status === 'error') return `${prefix} ${name} failed`;
-            if (status === 'cancelled') return `${prefix} ${name} cancelled`;
-            if (status === 'pending') return `${prefix} ${name} queued`;
             return `${prefix}: ${name}`;
           }
 
@@ -1066,15 +1058,15 @@ export function ChatInterface() {
             return `${prefix}: ${name}`;
           }
 
-          if (parsed?.event === 'tool_response') {
-            const text = typeof parsed.content === 'string'
-              ? parsed.content
-              : typeof parsed.data === 'string'
-                ? parsed.data
-                : '';
-            if (!text.trim()) return null;
-            return truncateLine(singleLine(text));
-          }
+          // if (parsed?.event === 'tool_response') {
+          //   const text = typeof parsed.content === 'string'
+          //     ? parsed.content
+          //     : typeof parsed.data === 'string'
+          //       ? parsed.data
+          //       : '';
+          //   if (!text.trim()) return null;
+          //   return truncateLine(singleLine(text));
+          // }
 
           if (parsed?.event === 'agent.question' && typeof parsed.question === 'string') {
             return `Question: ${truncateLine(singleLine(parsed.question), 110)}`;
@@ -1980,6 +1972,12 @@ const MessageBubble = React.memo(function MessageBubble({
   // Detect caret placeholder usage in streaming content and strip it for display
   const endsWithCaret = typeof response === 'string' && /▌$/.test(response);
   const responseWithoutCaret = endsWithCaret ? (response as string).slice(0, -1) : response;
+  const responseForDisplay = (() => {
+    if (isUser || typeof responseWithoutCaret !== 'string') return responseWithoutCaret;
+    const matches = [...responseWithoutCaret.matchAll(/(?:^|\n)\s*(Tool|Agent):\s*[^\n]+/g)];
+    if (matches.length === 0) return responseWithoutCaret;
+    return matches[matches.length - 1][0].trim();
+  })();
 
   // Still processing if:
   // - we have <think> content and either no visible response yet OR the response ends with the caret token, or
@@ -2226,15 +2224,15 @@ const MessageBubble = React.memo(function MessageBubble({
             </p>
           ) : isStillProcessing ? (
             <div className="max-w-full">
-              {responseWithoutCaret && (
+              {responseForDisplay && (
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {responseWithoutCaret}
+                  {responseForDisplay}
                 </ReactMarkdown>
               )}
             </div>
           ) : (
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {responseWithoutCaret}
+              {responseForDisplay}
             </ReactMarkdown>
           )}
         </div>
