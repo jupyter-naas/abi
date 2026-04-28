@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { useFilesStore, type FileInfo } from '@/stores/files';
 import { authFetch } from '@/stores/auth';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
+import { PdfViewer } from '@/components/files/pdf-viewer';
 
 export default function FilesPage() {
   const router = useRouter();
@@ -77,10 +78,11 @@ export default function FilesPage() {
   const [imageViewerUrl, setImageViewerUrl] = useState<string | null>(null);
   const [imageViewerLoading, setImageViewerLoading] = useState(false);
   const [imageViewerError, setImageViewerError] = useState<string | null>(null);
-  const [markdownViewerFileName, setMarkdownViewerFileName] = useState<string | null>(null);
-  const [markdownViewerContent, setMarkdownViewerContent] = useState<string>('');
-  const [markdownViewerLoading, setMarkdownViewerLoading] = useState(false);
-  const [markdownViewerError, setMarkdownViewerError] = useState<string | null>(null);
+  const [textViewerFileName, setTextViewerFileName] = useState<string | null>(null);
+  const [textViewerContent, setTextViewerContent] = useState<string>('');
+  const [textViewerMode, setTextViewerMode] = useState<'markdown' | 'code'>('code');
+  const [textViewerLoading, setTextViewerLoading] = useState(false);
+  const [textViewerError, setTextViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Helper to open file in Lab
@@ -117,6 +119,10 @@ export default function FilesPage() {
   // Check if we're viewing a synced local folder
   const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
   const isLocalFolder = !!activeSyncedFolder;
+  // Source-aware scope param to match how file ops are routed in the store.
+  const filesScope: 'workspace' | 'my_drive' =
+    activeSource === 'my-drive' ? 'my_drive' : 'workspace';
+  const fileQueryParams = `workspace_id=${encodeURIComponent(workspaceId)}&scope=${filesScope}`;
 
   useEffect(() => {
     // Clear any previous errors
@@ -340,14 +346,75 @@ export default function FilesPage() {
     return (
       lowerName.endsWith('.md') ||
       lowerName.endsWith('.markdown') ||
+      lowerName.endsWith('.mdx') ||
       file.content_type === 'text/markdown'
     );
   };
 
-  const isPresentationFile = (file: FileInfo) => {
+  // Extensions that are reliably plain text. Markdown is detected separately
+  // so it can be rendered with ReactMarkdown instead of as raw source.
+  const TEXT_EXTENSIONS = new Set([
+    'txt', 'log', 'rst', 'tex', 'csv', 'tsv',
+    'json', 'jsonc', 'json5', 'ndjson', 'geojson',
+    'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'properties', 'env',
+    'xml', 'plist', 'svg', 'gql', 'graphql', 'proto',
+    'html', 'htm', 'css', 'scss', 'sass', 'less', 'styl',
+    'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'vue', 'svelte', 'astro',
+    'py', 'pyi', 'rb', 'go', 'rs', 'java', 'kt', 'kts', 'swift',
+    'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'm', 'mm',
+    'php', 'lua', 'r', 'jl', 'dart', 'sql', 'pl', 'pm',
+    'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+    'patch', 'diff', 'gitignore', 'gitattributes', 'editorconfig',
+    'lock', 'in', 'mk',
+  ]);
+
+  // Filenames (no extension or special) that we know are text.
+  const TEXT_FILENAMES = new Set([
+    'dockerfile', 'makefile', 'rakefile', 'gemfile', 'procfile',
+    'license', 'readme', 'changelog', 'authors', 'contributors', 'notice',
+    '.gitignore', '.gitattributes', '.editorconfig', '.env', '.npmrc', '.nvmrc',
+  ]);
+
+  const isTextFile = (file: FileInfo) => {
     if (file.type !== 'file') return false;
+    if (isMarkdownFile(file)) return true;
+    const lowerName = file.name.toLowerCase();
+    if (TEXT_FILENAMES.has(lowerName)) return true;
     const ext = getFileExtension(file.name);
-    return ['ppt', 'pptx', 'key'].includes(ext);
+    if (ext && TEXT_EXTENSIONS.has(ext)) return true;
+    const ct = file.content_type?.toLowerCase() || '';
+    if (ct.startsWith('text/')) return true;
+    if (
+      ct === 'application/json' ||
+      ct === 'application/xml' ||
+      ct === 'application/javascript' ||
+      ct === 'application/x-yaml' ||
+      ct === 'application/x-sh' ||
+      ct.endsWith('+json') ||
+      ct.endsWith('+xml')
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  // Office formats we render via server-side LibreOffice → PDF conversion.
+  const OFFICE_PREVIEW_EXTENSIONS = new Set([
+    'ppt', 'pptx', 'odp', 'key',
+    'doc', 'docx', 'odt', 'rtf',
+    'xls', 'xlsx', 'xlsm', 'xlsb', 'ods',
+  ]);
+
+  const isOfficeFile = (file: FileInfo) => {
+    if (file.type !== 'file') return false;
+    return OFFICE_PREVIEW_EXTENSIONS.has(getFileExtension(file.name));
+  };
+
+  const officeKindLabel = (file: FileInfo): string => {
+    const ext = getFileExtension(file.name);
+    if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return 'Document';
+    if (['xls', 'xlsx', 'xlsm', 'xlsb', 'ods'].includes(ext)) return 'Spreadsheet';
+    return 'Presentation';
   };
 
   const openPdfViewer = async (file: FileInfo) => {
@@ -365,7 +432,7 @@ export default function FilesPage() {
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
       const response = await authFetch(
-        `/api/files/raw/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+        `/api/files/raw/${encodedPath}?${fileQueryParams}`
       );
       if (!response.ok) {
         throw new Error('Failed to load PDF preview');
@@ -393,8 +460,8 @@ export default function FilesPage() {
     setPdfViewerLoading(false);
   };
 
-  const openPresentationPreview = async (file: FileInfo) => {
-    if (!isPresentationFile(file)) return;
+  const openOfficePreview = async (file: FileInfo) => {
+    if (!isOfficeFile(file)) return;
     setPdfViewerError(null);
     setPdfViewerLoading(true);
     setPdfViewerFileName(`${file.name} (PDF preview)`);
@@ -408,10 +475,10 @@ export default function FilesPage() {
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
       const response = await authFetch(
-        `/api/files/preview/pdf/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+        `/api/files/preview/pdf/${encodedPath}?${fileQueryParams}`
       );
       if (!response.ok) {
-        throw new Error('PPTX preview unavailable right now');
+        throw new Error(`${officeKindLabel(file)} preview unavailable right now`);
       }
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(
@@ -444,7 +511,7 @@ export default function FilesPage() {
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
       const response = await authFetch(
-        `/api/files/raw/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+        `/api/files/raw/${encodedPath}?${fileQueryParams}`
       );
       if (!response.ok) {
         throw new Error('Failed to load image preview');
@@ -469,35 +536,40 @@ export default function FilesPage() {
     setImageViewerLoading(false);
   };
 
-  const openMarkdownViewer = async (file: FileInfo) => {
-    if (!isMarkdownFile(file)) return;
-    setMarkdownViewerError(null);
-    setMarkdownViewerLoading(true);
-    setMarkdownViewerFileName(file.name);
-    setMarkdownViewerContent('');
+  const openTextViewer = async (file: FileInfo) => {
+    if (!isTextFile(file)) return;
+    const mode: 'markdown' | 'code' = isMarkdownFile(file) ? 'markdown' : 'code';
+    setTextViewerError(null);
+    setTextViewerLoading(true);
+    setTextViewerFileName(file.name);
+    setTextViewerMode(mode);
+    setTextViewerContent('');
 
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
       const response = await authFetch(
-        `/api/files/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+        `/api/files/${encodedPath}?${fileQueryParams}`
       );
       if (!response.ok) {
-        throw new Error('Failed to load markdown preview');
+        if (response.status === 415 || response.status === 422) {
+          throw new Error('This file is not a UTF-8 text file.');
+        }
+        throw new Error('Failed to load preview');
       }
       const data = await response.json();
-      setMarkdownViewerContent(typeof data.content === 'string' ? data.content : '');
+      setTextViewerContent(typeof data.content === 'string' ? data.content : '');
     } catch (error) {
-      setMarkdownViewerError(error instanceof Error ? error.message : 'Failed to load markdown preview');
+      setTextViewerError(error instanceof Error ? error.message : 'Failed to load preview');
     } finally {
-      setMarkdownViewerLoading(false);
+      setTextViewerLoading(false);
     }
   };
 
-  const closeMarkdownViewer = () => {
-    setMarkdownViewerFileName(null);
-    setMarkdownViewerContent('');
-    setMarkdownViewerError(null);
-    setMarkdownViewerLoading(false);
+  const closeTextViewer = () => {
+    setTextViewerFileName(null);
+    setTextViewerContent('');
+    setTextViewerError(null);
+    setTextViewerLoading(false);
   };
 
   const downloadFileToDesktop = async (file: FileInfo) => {
@@ -505,7 +577,7 @@ export default function FilesPage() {
     try {
       const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
       const response = await authFetch(
-        `/api/files/raw/${encodedPath}?workspace_id=${encodeURIComponent(workspaceId)}`
+        `/api/files/raw/${encodedPath}?${fileQueryParams}`
       );
       if (!response.ok) {
         throw new Error('Failed to download file');
@@ -778,14 +850,14 @@ export default function FilesPage() {
                             } else {
                               fetchFiles(file.path);
                             }
-                          } else if (isPresentationFile(file)) {
-                            openPresentationPreview(file);
+                          } else if (isOfficeFile(file)) {
+                            openOfficePreview(file);
                           } else if (isImageFile(file)) {
                             openImageViewer(file);
-                          } else if (isMarkdownFile(file)) {
-                            openMarkdownViewer(file);
                           } else if (isPdfFile(file)) {
                             openPdfViewer(file);
+                          } else if (isTextFile(file)) {
+                            openTextViewer(file);
                           } else {
                             openFile(file.path);
                           }
@@ -840,17 +912,17 @@ export default function FilesPage() {
                                 Open in Lab
                               </button>
                             )}
-                            {isPresentationFile(file) && (
+                            {isOfficeFile(file) && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setActiveContextMenu(null);
-                                  openPresentationPreview(file);
+                                  openOfficePreview(file);
                                 }}
                                 className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
                               >
                                 <Eye size={12} />
-                                Preview PPTX
+                                Preview {officeKindLabel(file)}
                               </button>
                             )}
                             {isPdfFile(file) && (
@@ -879,17 +951,17 @@ export default function FilesPage() {
                                 View Image
                               </button>
                             )}
-                            {isMarkdownFile(file) && (
+                            {isTextFile(file) && !isPdfFile(file) && !isImageFile(file) && !isOfficeFile(file) && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setActiveContextMenu(null);
-                                  openMarkdownViewer(file);
+                                  openTextViewer(file);
                                 }}
                                 className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
                               >
                                 <Eye size={12} />
-                                View Markdown
+                                {isMarkdownFile(file) ? 'View Markdown' : 'Preview'}
                               </button>
                             )}
                             {file.type === 'file' && (
@@ -946,14 +1018,14 @@ export default function FilesPage() {
                         } else {
                           fetchFiles(file.path);
                         }
-                      } else if (isPresentationFile(file)) {
-                        openPresentationPreview(file);
+                      } else if (isOfficeFile(file)) {
+                        openOfficePreview(file);
                       } else if (isImageFile(file)) {
                         openImageViewer(file);
-                      } else if (isMarkdownFile(file)) {
-                        openMarkdownViewer(file);
                       } else if (isPdfFile(file)) {
                         openPdfViewer(file);
+                      } else if (isTextFile(file)) {
+                        openTextViewer(file);
                       } else {
                         openFile(file.path);
                       }
@@ -1019,11 +1091,7 @@ export default function FilesPage() {
                 </div>
               )}
               {pdfViewerUrl && !pdfViewerLoading && !pdfViewerError && (
-                <iframe
-                  src={pdfViewerUrl}
-                  title={pdfViewerFileName}
-                  className="h-full w-full border-0"
-                />
+                <PdfViewer src={pdfViewerUrl} className="h-full w-full" />
               )}
             </div>
           </div>
@@ -1066,36 +1134,41 @@ export default function FilesPage() {
           </div>
         </div>
       )}
-      {markdownViewerFileName && (
+      {textViewerFileName && (
         <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
-              <div className="truncate text-sm font-medium">{markdownViewerFileName}</div>
+              <div className="truncate text-sm font-medium">{textViewerFileName}</div>
               <button
-                onClick={closeMarkdownViewer}
+                onClick={closeTextViewer}
                 className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
-                aria-label="Close markdown viewer"
+                aria-label="Close text viewer"
               >
                 <X size={16} />
               </button>
             </div>
-            <div className="relative flex-1 overflow-auto bg-background p-6">
-              {markdownViewerLoading && (
+            <div className="relative flex-1 overflow-auto bg-background">
+              {textViewerLoading && (
                 <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                  Loading markdown preview...
+                  Loading preview...
                 </div>
               )}
-              {markdownViewerError && !markdownViewerLoading && (
+              {textViewerError && !textViewerLoading && (
                 <div className="absolute inset-0 flex items-center justify-center p-6 text-sm text-destructive">
-                  {markdownViewerError}
+                  {textViewerError}
                 </div>
               )}
-              {!markdownViewerLoading && !markdownViewerError && (
-                <div className="prose prose-sm max-w-none dark:prose-invert">
+              {!textViewerLoading && !textViewerError && textViewerMode === 'markdown' && (
+                <div className="prose prose-sm max-w-none p-6 dark:prose-invert">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {markdownViewerContent}
+                    {textViewerContent}
                   </ReactMarkdown>
                 </div>
+              )}
+              {!textViewerLoading && !textViewerError && textViewerMode === 'code' && (
+                <pre className="m-0 h-full overflow-auto whitespace-pre p-4 font-mono text-xs leading-relaxed text-foreground">
+                  {textViewerContent}
+                </pre>
               )}
             </div>
           </div>

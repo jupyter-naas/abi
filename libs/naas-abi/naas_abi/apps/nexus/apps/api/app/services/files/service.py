@@ -235,11 +235,20 @@ class FilesService:
             content_type=content_type or "application/octet-stream",
         )
 
+    # Office-style formats LibreOffice can render to PDF for preview.
+    PDF_PREVIEW_EXTENSIONS: frozenset[str] = frozenset({
+        ".ppt", ".pptx", ".odp",
+        ".doc", ".docx", ".odt", ".rtf",
+        ".xls", ".xlsx", ".xlsm", ".xlsb", ".ods",
+    })
+
     def preview_file_as_pdf(self, path: str) -> PdfPreviewData:
         normalized_path = self.normalize_relative_path(path)
         ext = PurePosixPath(normalized_path).suffix.lower()
-        if ext not in {".ppt", ".pptx"}:
-            raise UnsupportedPreviewError("Only PPT/PPTX preview is supported")
+        if ext not in self.PDF_PREVIEW_EXTENSIONS:
+            raise UnsupportedPreviewError(
+                "PDF preview is not supported for this file type"
+            )
         if self._is_directory(normalized_path):
             raise IsDirectoryError("Cannot preview a directory")
 
@@ -251,10 +260,10 @@ class FilesService:
         soffice = shutil.which("soffice") or shutil.which("libreoffice")
         if not soffice:
             raise PreviewUnavailableError(
-                "PPTX preview is unavailable: LibreOffice is not installed on the API service."
+                "Office preview is unavailable: LibreOffice is not installed on the API service."
             )
 
-        with tempfile.TemporaryDirectory(prefix="nexus-ppt-preview-") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="nexus-office-preview-") as tmp_dir:
             input_path = Path(tmp_dir) / PurePosixPath(normalized_path).name
             output_name = f"{PurePosixPath(normalized_path).stem}.pdf"
             output_path = Path(tmp_dir) / output_name
