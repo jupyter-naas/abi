@@ -201,6 +201,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
   const [graphsExpanded, setGraphsExpanded] = useState(true);
   const [viewsExpanded, setViewsExpanded] = useState(true);
   const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
+  const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
   const isGraphRoute = pathname.startsWith(graphPath);
   const requestedView = searchParams.get('view');
   const isCreateIndividualView = requestedView === 'create-individual';
@@ -209,8 +210,8 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
-    router.prefetch(graphPath);
-  }, [currentWorkspaceId, graphPath, router]);
+    router.prefetch(graphNetworkPath);
+  }, [currentWorkspaceId, graphNetworkPath, router]);
 
   const fetchGraphs = useCallback(async (options?: { force?: boolean }) => {
     if (!currentWorkspaceId) return;
@@ -350,7 +351,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       icon={<Waypoints size={18} />}
       label="Knowledge Graph"
       description="Visualize and explore your knowledge"
-      href={graphPath}
+      href={graphNetworkPath}
       collapsed={collapsed}
       onNavigate={selectKnowledgeGraphRoot}
     >
@@ -430,7 +431,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
                     setActiveSavedView(null);
                     selectGraph(graph.id);
                     setVisibleGraphs([graph.id]);
-                    router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
+                    router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=entities'));
                   }}
                   onClear={
                     isSchemaGraph(graph)
