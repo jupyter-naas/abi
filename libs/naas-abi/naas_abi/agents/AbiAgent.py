@@ -42,6 +42,14 @@ Respond only based on what your available agents and tools can actually deliver.
 3. If no match is found, tell the user you do not have the capibilities to handle its request and propose him alternatives based on your available agents and tools.
 </tasks>
 
+<tools>
+[TOOLS]
+</tools>
+
+<agents>
+[AGENTS]
+</agents>
+
 <operating_guidelines>
 - Maintain a clear, concise, and professional tone in all interactions.
 - Always include all relevant output and context from your tools and agents in your responses.
@@ -126,11 +134,12 @@ Respond only based on what your available agents and tools can actually deliver.
                 if issubclass(agent_cls, Agent):
                     candidate_classes.append(agent_cls)
 
-        def _load_agent(agent_cls: type) -> Agent:
-            return agent_cls.New().duplicate(
-                queue=agent_queue,
-                agent_shared_state=agent_shared_state,
-            )
+        def _load_agent(agent_cls: type) -> Agent | None:
+            if issubclass(agent_cls, IntentAgent) or issubclass(agent_cls, Agent):
+                return agent_cls.New().duplicate(
+                    queue=agent_queue, agent_shared_state=agent_shared_state
+                )
+            return None
 
         agents: list = []
         with ThreadPoolExecutor() as executor:
@@ -147,6 +156,7 @@ Respond only based on what your available agents and tools can actually deliver.
 
         # TODO: Create generic method in Agent.py to get agent intents + Use agent intents in supervisor agent
         for agent in agents:
+            # Primary routing intent using the agent name
             intents.append(
                 Intent(
                     intent_type=IntentType.AGENT,
@@ -155,6 +165,30 @@ Respond only based on what your available agents and tools can actually deliver.
                     intent_scope=IntentScope.DIRECT,
                 )
             )
+
+            # Additional routing intents to catch natural agent-name mentions
+            # (e.g. "search on grok", "use grok", "ask grok") without requiring an LLM call.
+            for verb in ("use", "ask", "search on", "talk to", "route to"):
+                intents.append(
+                    Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=f"{verb} {agent.name}",
+                        intent_target=agent.name,
+                        intent_scope=IntentScope.DIRECT,
+                    )
+                )
+
+            # Description-based intent for broader semantic coverage
+            if hasattr(agent, "description") and agent.description:
+                intents.append(
+                    Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=agent.description,
+                        intent_target=agent.name,
+                        intent_scope=IntentScope.DIRECT,
+                    )
+                )
+
             if hasattr(agent, "intents"):
                 for intent in agent.intents:
                     if (

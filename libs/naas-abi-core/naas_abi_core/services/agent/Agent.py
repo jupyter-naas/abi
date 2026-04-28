@@ -881,7 +881,7 @@ SUBAGENT SYSTEM PROMPT:
         state: ABIAgentState,
     ) -> Command[Literal["call_tools", "__end__"]]:
         self._state.set_current_active_agent(self.name)
-        logger.debug(f"🧠 Calling model on current active agent: {self.name}")
+        logger.debug(f"🧠 Calling model on current active agent: {self._name}")
 
         # Inserting system prompt before messages.
         messages = state["messages"]
@@ -889,7 +889,7 @@ SUBAGENT SYSTEM PROMPT:
             messages = [
                 SystemMessage(content=state["system_prompt"]),
             ] + messages
-        logger.debug(f"Messages before calling model: {messages}")
+        # logger.debug(f"Messages before calling model: {messages}")
 
         # Calling model
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
