@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.27.0 (2026-04-28)
+
+### Features
+
+- **nexus**: Allow downloading folders as ZIP archives
+  ([`308d257`](https://github.com/jupyter-naas/abi/commit/308d257c94b271c563947fbbfb96009ed30d05eb))
+
+
 ## v1.26.0 (2026-04-28)
 
 ### Features
