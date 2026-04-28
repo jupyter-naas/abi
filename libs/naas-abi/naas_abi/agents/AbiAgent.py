@@ -10,6 +10,7 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentScope,
     IntentType,
 )
+from naas_abi_core.services.agent.OpencodeAgent import OpencodeAgent
 
 
 class AbiAgent(IntentAgent):
@@ -94,7 +95,7 @@ Respond only based on what your available agents and tools can actually deliver.
     @staticmethod
     def get_model(
         api_key: str,
-        model_name: str = "gpt-5.1-mini",
+        model_name: str = "gpt-4.1-mini",
         base_url: str = "https://api.openai.com/v1",
         provider: str = "openai",
     ) -> ChatModel:
@@ -155,18 +156,39 @@ Respond only based on what your available agents and tools can actually deliver.
         agent_queue: Queue = Queue()
         agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=cls.name)
 
-        candidate_classes: list = []
-        for module in ABIModule.get_instance().engine.modules.values():
+        candidate_classes: list[type[Agent]] = []
+        seen_candidate_class_names: set[str] = set()
+
+        def _register_candidate(agent_cls: type[Agent]) -> None:
+            if agent_cls is cls:
+                return
+            candidate_name = f"{agent_cls.__module__}.{agent_cls.__name__}"
+            if candidate_name in seen_candidate_class_names:
+                return
+            seen_candidate_class_names.add(candidate_name)
+            candidate_classes.append(agent_cls)
+
+        abi_module = ABIModule.get_instance()
+
+        for agent_cls in abi_module.agents:
+            if agent_cls is None:
+                continue
+            if issubclass(agent_cls, Agent):
+                _register_candidate(agent_cls)
+
+        for module in abi_module.engine.modules.values():
             for agent_cls in module.agents:
                 if agent_cls is None:
                     continue
-                if agent_cls is cls:
-                    continue
                 if issubclass(agent_cls, Agent):
-                    candidate_classes.append(agent_cls)
+                    _register_candidate(agent_cls)
 
         def _load_agent(agent_cls: type) -> Agent | None:
-            if issubclass(agent_cls, IntentAgent) or issubclass(agent_cls, Agent):
+            if (
+                issubclass(agent_cls, IntentAgent)
+                or issubclass(agent_cls, Agent)
+                or issubclass(agent_cls, OpencodeAgent)
+            ):
                 return agent_cls.New().duplicate(
                     queue=agent_queue, agent_shared_state=agent_shared_state
                 )
@@ -176,7 +198,9 @@ Respond only based on what your available agents and tools can actually deliver.
         with ThreadPoolExecutor() as executor:
             futures = {executor.submit(_load_agent, c): c for c in candidate_classes}
             for future in as_completed(futures):
-                agents.append(future.result())
+                agent = future.result()
+                if agent is not None:
+                    agents.append(agent)
 
         return agents, agent_shared_state
 
