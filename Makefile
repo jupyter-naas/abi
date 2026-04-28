@@ -567,7 +567,7 @@ test-api-init-container: build
 		abi:latest uv run --no-dev python -m naas_abi_core.apps.api.test_init
 
 # TTL_FILES := $(wildcard src/*/*/ontologies/*.ttl src/marketplace/*/*/ontologies/*.ttl)
-TTL_FILES := $(shell find src -name '*.ttl')
+TTL_FILES := $(shell find src -name '*.ttl' 2>/dev/null)
 PY_FILES := $(patsubst %.ttl, %.py, $(TTL_FILES))
 
 onto2py-force: onto2py-clean $(PY_FILES) onto2py-ruff-fix
@@ -596,7 +596,7 @@ hello:
 # =============================================================================
 
 # Master check target - runs all code quality checks
-check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-marketplace
+check: deps check-core check-marketplace
 
 # Code quality checks for core modules
 check-core: deps
