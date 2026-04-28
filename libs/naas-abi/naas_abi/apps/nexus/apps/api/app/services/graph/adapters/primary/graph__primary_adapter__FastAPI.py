@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     GraphInfo,
     GraphNode,
     GraphOverview,
+    GraphPack,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
@@ -73,14 +74,23 @@ async def list_graphs(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
-) -> list[GraphInfo]:
+) -> list[GraphPack]:
     """List all graphs available in the triple store and nexus ontology graph."""
     await require_workspace_access(current_user.id, workspace_id)
     try:
         graphs = await graph_service.list_graphs(workspace_id=workspace_id)
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return [GraphInfo(id=g.id, uri=g.uri, label=g.label) for g in graphs]
+    return [
+        GraphPack(
+            role_label=pack.role_label,
+            graphs=[
+                GraphInfo(id=g.id, uri=g.uri, label=g.label, role_label=g.role_label)
+                for g in pack.graphs
+            ],
+        )
+        for pack in graphs
+    ]
 
 
 @router.post("/create")

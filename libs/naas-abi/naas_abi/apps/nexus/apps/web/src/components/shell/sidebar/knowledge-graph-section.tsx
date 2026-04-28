@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Waypoints, Plus, Filter, MoreVertical, Edit2, Trash2, Eraser,
   RefreshCw, Database, User, UserPlus, ChevronRight, Code,
@@ -19,6 +19,39 @@ interface GraphItem {
   id: string;
   name: string;
   type: 'workspace' | 'user';
+}
+
+interface GraphPackItem {
+  roleLabel: string;
+  graphs: GraphItem[];
+}
+
+interface GraphApiItem {
+  id: string;
+  label?: string;
+}
+
+interface GraphPackApiItem {
+  role_label?: string;
+  graphs: unknown[];
+}
+
+function isGraphApiItem(value: unknown): value is GraphApiItem {
+  return (
+    value != null
+    && typeof value === 'object'
+    && 'id' in value
+    && typeof (value as { id: unknown }).id === 'string'
+  );
+}
+
+function isGraphPackApiItem(value: unknown): value is GraphPackApiItem {
+  return (
+    value != null
+    && typeof value === 'object'
+    && 'graphs' in value
+    && Array.isArray((value as { graphs: unknown }).graphs)
+  );
 }
 
 function isSchemaGraph(graph: GraphItem): boolean {
@@ -197,10 +230,15 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
     setViews,
   } = useKnowledgeGraphStore();
 
-  const [availableGraphs, setAvailableGraphs] = useState<GraphItem[]>([]);
+  const [availableGraphPacks, setAvailableGraphPacks] = useState<GraphPackItem[]>([]);
   const [graphsExpanded, setGraphsExpanded] = useState(true);
   const [viewsExpanded, setViewsExpanded] = useState(true);
+  const availableGraphs = useMemo(
+    () => availableGraphPacks.flatMap((pack) => pack.graphs),
+    [availableGraphPacks]
+  );
   const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
+  const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
   const isGraphRoute = pathname.startsWith(graphPath);
   const requestedView = searchParams.get('view');
   const isCreateIndividualView = requestedView === 'create-individual';
@@ -209,14 +247,14 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
-    router.prefetch(graphPath);
-  }, [currentWorkspaceId, graphPath, router]);
+    router.prefetch(graphNetworkPath);
+  }, [currentWorkspaceId, graphNetworkPath, router]);
 
   const fetchGraphs = useCallback(async (options?: { force?: boolean }) => {
     if (!currentWorkspaceId) return;
     try {
       const apiUrl = getApiUrl();
-      let graphList: { id: string; label: string }[] = [];
+      let graphPacks: GraphPackItem[] = [];
       const listParams = new URLSearchParams({
         workspace_id: currentWorkspaceId,
       });
@@ -230,19 +268,41 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       if (namesRes.ok) {
         const namesData = await namesRes.json();
         const parsed = Array.isArray(namesData) ? namesData : [];
-        const normalized = parsed
-          .filter((g: unknown) => g && typeof g === 'object' && 'id' in g && typeof (g as { id: unknown }).id === 'string')
-          .map((g: { id: string; label?: string }) => ({ id: g.id, label: g.label ?? g.id }));
-        graphList = normalized;
+        const isPackedResponse = parsed.every(isGraphPackApiItem);
+        if (isPackedResponse) {
+          graphPacks = parsed
+            .map((pack) => {
+              const graphs = pack.graphs
+                .filter(isGraphApiItem)
+                .map((g) => ({
+                  id: g.id,
+                  name: g.label ?? g.id,
+                  type: 'workspace' as const,
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+              return {
+                roleLabel: (pack.role_label ?? 'unknown').toString(),
+                graphs,
+              };
+            })
+            .filter((pack) => pack.graphs.length > 0)
+            .sort((a, b) => a.roleLabel.localeCompare(b.roleLabel));
+        } else {
+          const graphs = parsed
+            .filter(isGraphApiItem)
+            .map((g) => ({
+              id: g.id,
+              name: g.label ?? g.id,
+              type: 'workspace' as const,
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          graphPacks = graphs.length > 0 ? [{ roleLabel: 'unknown', graphs }] : [];
+        }
       }
 
-      const graphs: GraphItem[] = graphList.map((graph) => ({
-        id: graph.id,
-        name: graph.label,
-        type: 'workspace' as const,
-      }));
+      const graphs = graphPacks.flatMap((pack) => pack.graphs);
 
-      setAvailableGraphs(graphs);
+      setAvailableGraphPacks(graphPacks);
 
       // Sanitize visible graphs: drop stale IDs from other workspaces
       const allowedIds = graphs.map((g) => g.id);
@@ -350,7 +410,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       icon={<Waypoints size={18} />}
       label="Knowledge Graph"
       description="Visualize and explore your knowledge"
-      href={graphPath}
+      href={graphNetworkPath}
       collapsed={collapsed}
       onNavigate={selectKnowledgeGraphRoot}
     >
@@ -421,121 +481,135 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
             {availableGraphs.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No named graphs</p>
             ) : (
-              availableGraphs.map((graph) => (
-                <GraphItemRow
-                  key={graph.id}
-                  graph={graph}
-                  isSelected={showGraphRowSelection && !activeSavedViewId && selectedGraphId === graph.id}
-                  onClick={() => {
-                    setActiveSavedView(null);
-                    selectGraph(graph.id);
-                    setVisibleGraphs([graph.id]);
-                    router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-                  }}
-                  onClear={
-                    isSchemaGraph(graph)
-                      ? undefined
-                      : async () => {
-                          const shouldClear = await confirm({
-                            title: `Clear graph "${graph.name}"?`,
-                            description:
-                              'This will remove all triples from this graph. The graph itself will remain. This action cannot be undone.',
-                            confirmLabel: 'Clear Graph',
-                            destructive: true,
-                          });
-                          if (!shouldClear) return;
-                          const run = async () => {
-                            try {
-                              const apiUrl = getApiUrl();
-                              const response = await authFetch(`${apiUrl}/api/graph/clear`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  workspace_id: currentWorkspaceId,
-                                  graph_uri: graph.id,
-                                }),
+              availableGraphPacks.map((pack, packIndex) => (
+                <React.Fragment key={pack.roleLabel}>
+                  {packIndex > 0 && <div className="my-1 h-px bg-border/50" />}
+                  <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                    {pack.roleLabel}
+                  </p>
+                  {pack.graphs.map((graph) => (
+                    <GraphItemRow
+                      key={graph.id}
+                      graph={graph}
+                      isSelected={showGraphRowSelection && !activeSavedViewId && selectedGraphId === graph.id}
+                      onClick={() => {
+                        setActiveSavedView(null);
+                        selectGraph(graph.id);
+                        setVisibleGraphs([graph.id]);
+                        router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=entities'));
+                      }}
+                      onClear={
+                        isSchemaGraph(graph)
+                          ? undefined
+                          : async () => {
+                              const shouldClear = await confirm({
+                                title: `Clear graph "${graph.name}"?`,
+                                description:
+                                  'This will remove all triples from this graph. The graph itself will remain. This action cannot be undone.',
+                                confirmLabel: 'Clear Graph',
+                                destructive: true,
                               });
-                              if (!response.ok) {
-                                const err = await response.json().catch(() => ({}));
-                                const message =
-                                  typeof err?.detail === 'string'
-                                    ? err.detail
-                                    : 'Failed to clear graph';
-                                console.error('Failed to clear graph:', message, err);
-                                return;
-                              }
-                              setActiveSavedView(null);
-                              selectGraph(graph.id);
-                              setVisibleGraphs([graph.id]);
-                              router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=overview'));
-                              window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
-                            } catch (err) {
-                              console.error('Failed to clear graph:', err);
-                            }
-                          };
-                          void run();
-                        }
-                  }
-                  onDelete={
-                    isSchemaGraph(graph)
-                      ? undefined
-                      : async () => {
-                          const shouldDelete = await confirm({
-                            title: `Delete graph "${graph.name}"?`,
-                            description:
-                              'This will remove the graph and all its triples. This action cannot be undone.',
-                            confirmLabel: 'Delete Graph',
-                            destructive: true,
-                          });
-                          if (!shouldDelete) return;
-                          const run = async () => {
-                            try {
-                              const apiUrl = getApiUrl();
-                              const response = await authFetch(`${apiUrl}/api/graph/delete`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  workspace_id: currentWorkspaceId,
-                                  graph_uri: graph.id,
-                                }),
-                              });
-                              if (!response.ok) {
-                                const err = await response.json().catch(() => ({}));
-                                const message =
-                                  typeof err?.detail === 'string'
-                                    ? err.detail
-                                    : 'Failed to delete graph';
-                                console.error('Failed to delete graph:', message, err);
-                                return;
-                              }
-                              // Force immediate UI refresh of graph list, then reconcile with backend.
-                              let remainingGraphsSnapshot: GraphItem[] = [];
-                              setAvailableGraphs((prev) => {
-                                remainingGraphsSnapshot = prev.filter((item) => item.id !== graph.id);
-                                return remainingGraphsSnapshot;
-                              });
-                              window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
-                              window.dispatchEvent(new CustomEvent('graph-list-update'));
-                              await fetchGraphs({ force: true });
-                              if (selectedGraphId === graph.id) {
-                                const nextGraphId = remainingGraphsSnapshot[0]?.id ?? null;
-                                setActiveSavedView(null);
-                                selectGraph(nextGraphId);
-                                if (nextGraphId) {
-                                  setVisibleGraphs([nextGraphId]);
-                                } else {
-                                  setVisibleGraphs([]);
+                              if (!shouldClear) return;
+                              const run = async () => {
+                                try {
+                                  const apiUrl = getApiUrl();
+                                  const response = await authFetch(`${apiUrl}/api/graph/clear`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      workspace_id: currentWorkspaceId,
+                                      graph_uri: graph.id,
+                                    }),
+                                  });
+                                  if (!response.ok) {
+                                    const err = await response.json().catch(() => ({}));
+                                    const message =
+                                      typeof err?.detail === 'string'
+                                        ? err.detail
+                                        : 'Failed to clear graph';
+                                    console.error('Failed to clear graph:', message, err);
+                                    return;
+                                  }
+                                  setActiveSavedView(null);
+                                  selectGraph(graph.id);
+                                  setVisibleGraphs([graph.id]);
+                                  router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=overview'));
+                                  window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
+                                } catch (err) {
+                                  console.error('Failed to clear graph:', err);
                                 }
-                                router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-                              }
-                            } catch (err) {
-                              console.error('Failed to delete graph:', err);
+                              };
+                              void run();
                             }
-                          };
-                          void run();
-                        }
-                  }
-                />
+                      }
+                      onDelete={
+                        isSchemaGraph(graph)
+                          ? undefined
+                          : async () => {
+                              const shouldDelete = await confirm({
+                                title: `Delete graph "${graph.name}"?`,
+                                description:
+                                  'This will remove the graph and all its triples. This action cannot be undone.',
+                                confirmLabel: 'Delete Graph',
+                                destructive: true,
+                              });
+                              if (!shouldDelete) return;
+                              const run = async () => {
+                                try {
+                                  const apiUrl = getApiUrl();
+                                  const response = await authFetch(`${apiUrl}/api/graph/delete`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      workspace_id: currentWorkspaceId,
+                                      graph_uri: graph.id,
+                                    }),
+                                  });
+                                  if (!response.ok) {
+                                    const err = await response.json().catch(() => ({}));
+                                    const message =
+                                      typeof err?.detail === 'string'
+                                        ? err.detail
+                                        : 'Failed to delete graph';
+                                    console.error('Failed to delete graph:', message, err);
+                                    return;
+                                  }
+                                  // Force immediate UI refresh of graph list, then reconcile with backend.
+                                  let remainingGraphsSnapshot: GraphItem[] = [];
+                                  setAvailableGraphPacks((prev) => {
+                                    const nextPacks = prev
+                                      .map((currentPack) => ({
+                                        ...currentPack,
+                                        graphs: currentPack.graphs.filter((item) => item.id !== graph.id),
+                                      }))
+                                      .filter((currentPack) => currentPack.graphs.length > 0);
+                                    remainingGraphsSnapshot = nextPacks.flatMap((currentPack) => currentPack.graphs);
+                                    return nextPacks;
+                                  });
+                                  window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
+                                  window.dispatchEvent(new CustomEvent('graph-list-update'));
+                                  await fetchGraphs({ force: true });
+                                  if (selectedGraphId === graph.id) {
+                                    const nextGraphId = remainingGraphsSnapshot[0]?.id ?? null;
+                                    setActiveSavedView(null);
+                                    selectGraph(nextGraphId);
+                                    if (nextGraphId) {
+                                      setVisibleGraphs([nextGraphId]);
+                                    } else {
+                                      setVisibleGraphs([]);
+                                    }
+                                    router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
+                                  }
+                                } catch (err) {
+                                  console.error('Failed to delete graph:', err);
+                                }
+                              };
+                              void run();
+                            }
+                      }
+                    />
+                  ))}
+                </React.Fragment>
               ))
             )}
           </div>

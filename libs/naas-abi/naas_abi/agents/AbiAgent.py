@@ -10,6 +10,7 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentScope,
     IntentType,
 )
+from naas_abi_core.services.agent.OpencodeAgent import OpencodeAgent
 
 
 class AbiAgent(IntentAgent):
@@ -42,6 +43,14 @@ Respond only based on what your available agents and tools can actually deliver.
 3. If no match is found, tell the user you do not have the capibilities to handle its request and propose him alternatives based on your available agents and tools.
 </tasks>
 
+<tools>
+[TOOLS]
+</tools>
+
+<agents>
+[AGENTS]
+</agents>
+
 <operating_guidelines>
 - Maintain a clear, concise, and professional tone in all interactions.
 - Always include all relevant output and context from your tools and agents in your responses.
@@ -57,20 +66,51 @@ Respond only based on what your available agents and tools can actually deliver.
 - Keep responses concise and factual.
 </constraints>
 """
-    suggestions: list[dict] = [
-        {
-            "label": "Abi Presentation",
-            "value": "Please present yourself and your capabilities.",
-        },
-    ]
+
+    # @staticmethod
+    # def build_suggestions(cls: type) -> list[dict[str, str]]:
+    #     from naas_abi import ABIModule
+
+    #     suggestions: list[dict[str, str]] = []
+    #     seen_agent_names: set[str] = set()
+    #     for module in ABIModule.get_instance().engine.modules.values():
+    #         for agent_cls in module.agents:
+    #             if agent_cls is None:
+    #                 continue
+    #             if issubclass(agent_cls, Agent):
+    #                 agent_name = str(agent_cls.name)
+    #                 if agent_name in seen_agent_names:
+    #                     continue
+    #                 seen_agent_names.add(agent_name)
+    #                 suggestions.append(
+    #                     {
+    #                         "label": agent_name,
+    #                         "value": f"Chat with {agent_name}",
+    #                     }
+    #                 )
+    #     return suggestions
+
+    # suggestions: list[dict[str, str]] = build_suggestions(cls=AbiAgent)
 
     @staticmethod
-    def get_model() -> ChatModel:
-        from naas_abi.models.default import get_model
+    def get_model(
+        api_key: str,
+        model_name: str = "gpt-4.1-mini",
+        base_url: str = "https://api.openai.com/v1",
+        provider: str = "openai",
+    ) -> ChatModel:
+        from langchain_openai import ChatOpenAI
+        from pydantic import SecretStr
 
-        return get_model()
-
-    model: ChatModel = get_model()
+        return ChatModel(
+            model_id=model_name,
+            provider=provider,
+            model=ChatOpenAI(
+                model=model_name,
+                base_url=base_url,
+                api_key=SecretStr(api_key),
+            ),
+        )
 
     @staticmethod
     def get_tools(cls) -> list:
@@ -108,30 +148,59 @@ Respond only based on what your available agents and tools can actually deliver.
 
     @staticmethod
     def get_agents(cls) -> tuple[list, AgentSharedState]:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from queue import Queue
 
         from naas_abi import ABIModule
 
-        # Define agents
-        agents: list = []
         agent_queue: Queue = Queue()
-
         agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=cls.name)
 
-        for module in ABIModule.get_instance().engine.modules.values():
+        candidate_classes: list[type[Agent]] = []
+        seen_candidate_class_names: set[str] = set()
+
+        def _register_candidate(agent_cls: type[Agent]) -> None:
+            if agent_cls is cls:
+                return
+            candidate_name = f"{agent_cls.__module__}.{agent_cls.__name__}"
+            if candidate_name in seen_candidate_class_names:
+                return
+            seen_candidate_class_names.add(candidate_name)
+            candidate_classes.append(agent_cls)
+
+        abi_module = ABIModule.get_instance()
+
+        for agent_cls in abi_module.agents:
+            if agent_cls is None:
+                continue
+            if issubclass(agent_cls, Agent):
+                _register_candidate(agent_cls)
+
+        for module in abi_module.engine.modules.values():
             for agent_cls in module.agents:
                 if agent_cls is None:
                     continue
-                # Avoid recursion: do not add self (e.g. Abi) as a sub-agent
-                if agent_cls is cls:
-                    continue
-
                 if issubclass(agent_cls, Agent):
-                    new_agent = agent_cls.New().duplicate(
-                        queue=agent_queue,
-                        agent_shared_state=agent_shared_state,
-                    )
-                    agents.append(new_agent)
+                    _register_candidate(agent_cls)
+
+        def _load_agent(agent_cls: type) -> Agent | None:
+            if (
+                issubclass(agent_cls, IntentAgent)
+                or issubclass(agent_cls, Agent)
+                or issubclass(agent_cls, OpencodeAgent)
+            ):
+                return agent_cls.New().duplicate(
+                    queue=agent_queue, agent_shared_state=agent_shared_state
+                )
+            return None
+
+        agents: list = []
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(_load_agent, c): c for c in candidate_classes}
+            for future in as_completed(futures):
+                agent = future.result()
+                if agent is not None:
+                    agents.append(agent)
 
         return agents, agent_shared_state
 
@@ -142,6 +211,7 @@ Respond only based on what your available agents and tools can actually deliver.
 
         # TODO: Create generic method in Agent.py to get agent intents + Use agent intents in supervisor agent
         for agent in agents:
+            # Primary routing intent using the agent name
             intents.append(
                 Intent(
                     intent_type=IntentType.AGENT,
@@ -150,6 +220,30 @@ Respond only based on what your available agents and tools can actually deliver.
                     intent_scope=IntentScope.DIRECT,
                 )
             )
+
+            # Additional routing intents to catch natural agent-name mentions
+            # (e.g. "search on grok", "use grok", "ask grok") without requiring an LLM call.
+            for verb in ("use", "ask", "search on", "talk to", "route to"):
+                intents.append(
+                    Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=f"{verb} {agent.name}",
+                        intent_target=agent.name,
+                        intent_scope=IntentScope.DIRECT,
+                    )
+                )
+
+            # Description-based intent for broader semantic coverage
+            if hasattr(agent, "description") and agent.description:
+                intents.append(
+                    Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=agent.description,
+                        intent_target=agent.name,
+                        intent_scope=IntentScope.DIRECT,
+                    )
+                )
+
             if hasattr(agent, "intents"):
                 for intent in agent.intents:
                     if (
@@ -171,7 +265,14 @@ Respond only based on what your available agents and tools can actually deliver.
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "AbiAgent":
+        from naas_abi import ABIModule
         from naas_abi_core import logger
+
+        api_key = (
+            ABIModule.get_instance()
+            .engine.modules["naas_abi_marketplace.ai.chatgpt"]
+            .configuration.openai_api_key
+        )
 
         tools = cls.get_tools(cls=cls)
 
@@ -199,7 +300,7 @@ Respond only based on what your available agents and tools can actually deliver.
         return cls(
             name=cls.name,
             description=cls.description,
-            chat_model=cls.get_model(),
+            chat_model=cls.get_model(api_key=api_key),
             tools=tools,
             agents=agents,
             intents=intents,
