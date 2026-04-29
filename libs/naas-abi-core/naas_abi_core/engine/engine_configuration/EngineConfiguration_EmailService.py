@@ -23,8 +23,14 @@ class EmailAdapterSMTPConfiguration(BaseModel):
     timeout: int = 10
 
 
+class EmailAdapterFilesystemConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    directory: str = "storage/email"
+
+
 class EmailAdapterConfiguration(GenericLoader):
-    adapter: Literal["smtp", "custom"]
+    adapter: Literal["smtp", "filesystem", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -40,6 +46,12 @@ class EmailAdapterConfiguration(GenericLoader):
                 self.config,
                 "Invalid configuration for services.email.email_adapter 'smtp' adapter",
             )
+        elif self.adapter == "filesystem":
+            pydantic_model_validator(
+                EmailAdapterFilesystemConfiguration,
+                self.config,
+                "Invalid configuration for services.email.email_adapter 'filesystem' adapter",
+            )
 
         return self
 
@@ -51,6 +63,15 @@ class EmailAdapterConfiguration(GenericLoader):
             )
 
             return SMTPAdapter(**self.config)
+        elif self.adapter == "filesystem":
+            assert self.config is not None, (
+                "config is required for filesystem adapter"
+            )
+            from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
+                FilesystemAdapter,
+            )
+
+            return FilesystemAdapter(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
+    FilesystemAdapter,
+)
 from naas_abi_core.services.email.adapters.secondary.SMTPAdapter import SMTPAdapter
 
 
@@ -27,3 +30,7 @@ class EmailFactory:
                 timeout=timeout,
             )
         )
+
+    @staticmethod
+    def EmailServiceFilesystem(*, directory: str) -> EmailService:
+        return EmailService(FilesystemAdapter(directory=directory))
