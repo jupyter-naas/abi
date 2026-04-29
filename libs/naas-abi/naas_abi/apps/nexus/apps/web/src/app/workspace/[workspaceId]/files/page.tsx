@@ -68,6 +68,7 @@ export default function FilesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
   const [activeContextMenu, setActiveContextMenu] = useState<string | null>(null);
   const [pdfViewerFileName, setPdfViewerFileName] = useState<string | null>(null);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
@@ -108,6 +109,19 @@ export default function FilesPage() {
     };
   }, [pdfViewerUrl]);
 
+  // Close any open preview viewer when the user presses Escape.
+  useEffect(() => {
+    if (!pdfViewerFileName && !imageViewerFileName && !textViewerFileName) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (pdfViewerFileName) closePdfViewer();
+      else if (imageViewerFileName) closeImageViewer();
+      else if (textViewerFileName) closeTextViewer();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [pdfViewerFileName, imageViewerFileName, textViewerFileName]);
+
   useEffect(() => {
     return () => {
       if (imageViewerUrl) {
@@ -127,29 +141,37 @@ export default function FilesPage() {
   useEffect(() => {
     // Clear any previous errors
     setError(null);
-    
+
     // Fetch files based on active source
     if (isLocalFolder && activeSyncedFolder) {
       fetchLocalFiles(activeSyncedFolder.id);
     } else {
       fetchFiles();
     }
-  }, [fetchFiles, fetchLocalFiles, isLocalFolder, activeSyncedFolder, setError]);
+  }, [fetchFiles, fetchLocalFiles, isLocalFolder, activeSyncedFolder, activeSource, setError]);
 
-  // Drag and drop handlers
+  const INTERNAL_DRAG_MIME = 'application/x-nexus-file';
+
+  const isInternalDrag = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes(INTERNAL_DRAG_MIME);
+
+  // Drag and drop handlers (external upload only — internal moves bubble up but are ignored here)
   const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (isInternalDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (isInternalDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
+    if (isInternalDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -159,6 +181,49 @@ export default function FilesPage() {
       await uploadFiles(droppedFiles);
     }
   }, [uploadFiles]);
+
+  // Internal move via drag onto a folder row.
+  const handleRowDragStart = (e: React.DragEvent, file: FileInfo) => {
+    e.dataTransfer.setData(INTERNAL_DRAG_MIME, file.path);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent, folder: FileInfo) => {
+    if (!isInternalDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTargetPath(folder.path);
+  };
+
+  const handleFolderDragLeave = (e: React.DragEvent, folder: FileInfo) => {
+    if (!isInternalDrag(e)) return;
+    e.stopPropagation();
+    setDropTargetPath((current) => (current === folder.path ? null : current));
+  };
+
+  const handleFolderDrop = async (e: React.DragEvent, folder: FileInfo) => {
+    if (!isInternalDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDropTargetPath(null);
+
+    const sourcePath = e.dataTransfer.getData(INTERNAL_DRAG_MIME);
+    if (!sourcePath) return;
+    // dataTransfer.getData isn't always available during dragover, so re-validate here
+    const sourceParent = sourcePath.includes('/') ? sourcePath.slice(0, sourcePath.lastIndexOf('/')) : '';
+    if (
+      sourcePath === folder.path ||
+      sourceParent === folder.path ||
+      folder.path === sourcePath ||
+      folder.path.startsWith(`${sourcePath}/`)
+    ) {
+      return;
+    }
+    const name = sourcePath.includes('/') ? sourcePath.slice(sourcePath.lastIndexOf('/') + 1) : sourcePath;
+    const newPath = `${folder.path}/${name}`;
+    await renameFile(sourcePath, newPath);
+  };
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
@@ -870,7 +935,15 @@ export default function FilesPage() {
                 {filteredFiles.map((file) => (
                   <tr
                     key={file.path}
-                    className="group border-b border-border/50 hover:bg-muted/50"
+                    draggable={!isLocalFolder}
+                    onDragStart={(e) => handleRowDragStart(e, file)}
+                    onDragOver={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragOver(e, file) : undefined}
+                    onDragLeave={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragLeave(e, file) : undefined}
+                    onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
+                    className={cn(
+                      "group border-b border-border/50 hover:bg-muted/50",
+                      dropTargetPath === file.path && "bg-primary/10 ring-1 ring-primary"
+                    )}
                   >
                     <td className="py-2">
                       <button
@@ -1055,7 +1128,18 @@ export default function FilesPage() {
             /* Grid view */
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
               {filteredFiles.map((file) => (
-                <div key={file.path} className="group relative">
+                <div
+                  key={file.path}
+                  draggable={!isLocalFolder}
+                  onDragStart={(e) => handleRowDragStart(e, file)}
+                  onDragOver={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragOver(e, file) : undefined}
+                  onDragLeave={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragLeave(e, file) : undefined}
+                  onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
+                  className={cn(
+                    "group relative rounded-lg",
+                    dropTargetPath === file.path && "ring-2 ring-primary"
+                  )}
+                >
                   <button
                     onClick={() => {
                       if (file.type === 'folder') {
