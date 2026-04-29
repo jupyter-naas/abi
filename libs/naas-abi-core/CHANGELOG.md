@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.32.0 (2026-04-29)
+
+### Features
+
+- **email**: Add filesystem adapter for local development
+  ([`b0982b3`](https://github.com/jupyter-naas/abi/commit/b0982b37c5c5c2a0691ce93b4d2dde8ada2ad649))
+
+
 ## v1.31.0 (2026-04-28)
 
 ### Bug Fixes
