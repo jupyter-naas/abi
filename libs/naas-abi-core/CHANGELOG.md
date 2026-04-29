@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.33.0 (2026-04-29)
+
+### Features
+
+- **api**: Auto-serve module assets/public directories
+  ([`b55db56`](https://github.com/jupyter-naas/abi/commit/b55db56c985695441d940dbb84194192eee829b6))
+
+
 ## v1.32.0 (2026-04-29)
 
 ### Features
