@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.29.0 (2026-04-29)
+
+### Features
+
+- **nexus/files**: Close preview on Escape, refresh on drive switch, drag-and-drop move
+  ([`6b11ccf`](https://github.com/jupyter-naas/abi/commit/6b11ccf6610e4d8641906e9adca2846b0bcbdffd))
+
+
 ## v1.28.0 (2026-04-28)
 
 ### Features
