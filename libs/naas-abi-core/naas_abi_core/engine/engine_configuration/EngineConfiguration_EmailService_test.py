@@ -3,6 +3,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService 
     EmailServiceConfiguration,
 )
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
+    FilesystemAdapter,
+)
 from naas_abi_core.services.email.adapters.secondary.SMTPAdapter import SMTPAdapter
 
 
@@ -22,4 +25,17 @@ def test_email_service_configuration_smtp_adapter():
 
     adapter = configuration.email_adapter.load()
     assert isinstance(adapter, SMTPAdapter)
+    assert isinstance(configuration.load(), EmailService)
+
+
+def test_email_service_configuration_filesystem_adapter(tmp_path):
+    configuration = EmailServiceConfiguration(
+        email_adapter=EmailAdapterConfiguration(
+            adapter="filesystem",
+            config={"directory": str(tmp_path)},
+        )
+    )
+
+    adapter = configuration.email_adapter.load()
+    assert isinstance(adapter, FilesystemAdapter)
     assert isinstance(configuration.load(), EmailService)

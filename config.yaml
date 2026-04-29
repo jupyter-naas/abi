@@ -125,3 +125,8 @@ services:
         persistence_path: "storage/kv/python.sqlite3"
         journal_mode: "WAL"
         busy_timeout_ms: 5000
+  email:
+    email_adapter:
+      adapter: "filesystem"
+      config:
+        directory: "storage/email"
