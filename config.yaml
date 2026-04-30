@@ -18,6 +18,7 @@ api:
 
 global_config:
   ai_mode: "cloud"
+  public_api_host: "{{ secret.NEXUS_API_URL }}"
 
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
