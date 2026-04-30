@@ -181,6 +181,38 @@ def _extract_agent_intents(agent_cls: type) -> list[dict[str, str]] | None:
     return output if output else None
 
 
+def _module_name_from_module_path(module_path: str | None) -> str | None:
+    if not module_path:
+        return None
+    # module_path is a Python module path, module "name" is the top-level package
+    # (e.g. naas_abi_marketplace from naas_abi_marketplace.applications.openrouter)
+    return module_path.split(".", 1)[0] or None
+
+
+def _normalize_logo_path_for_module(logo_url: str, module_name: str) -> str:
+    """
+    Convert absolute/container paths like:
+      /app/libs/.../naas_abi_marketplace/.../logo.png
+    into module-relative paths like:
+      naas_abi_marketplace/.../logo.png
+    """
+    if logo_url.startswith(f"{module_name}/"):
+        return logo_url
+    if logo_url.startswith(f"/{module_name}/"):
+        return logo_url.lstrip("/")
+    idx = logo_url.find(f"{module_name}/")
+    if idx >= 0:
+        return logo_url[idx:]
+    return logo_url.lstrip("/")
+
+
+def _public_modules_url(path: str) -> str:
+    from naas_abi import ABIModule
+
+    public_api_host = ABIModule.get_instance().configuration.global_config.public_api_host
+    return f"{public_api_host}/modules/{path.lstrip('/')}"
+
+
 @router.get("/")
 async def list_agents(
     workspace_id: str | None = None,
@@ -224,6 +256,7 @@ async def list_agents(
                 description=description or "",
                 workspace_id=workspace_id,
                 class_name=class_name,
+                module_path=getattr(agent_cls, "__module__", None),
                 provider="abi",
                 enabled=enabled,
                 system_prompt=system_prompt,
@@ -232,20 +265,54 @@ async def list_agents(
         agent_list.append(created_agent)
         existing_agents_by_class_name[class_name] = created_agent
 
-    # Enrich DB records with class-level metadata (suggestions, logo, intents)
     enriched_agent_list: list[AgentRecord] = []
     for agent in agent_list:
         suggestions = None
         logo_url = None
         intents = None
+        module_path = agent.module_path
         if agent.class_name:
             resolved_cls = class_name_to_agent_class.get(agent.class_name)
             if resolved_cls is not None and isinstance(resolved_cls, type):
                 suggestions = _extract_agent_suggestions(resolved_cls)
                 logo_url = getattr(resolved_cls, "logo_url", None)
                 intents = _extract_agent_intents(resolved_cls)
+
+                # Backfill module_path (persist) when missing on existing DB records.
+                if not module_path:
+                    module_path = getattr(resolved_cls, "__module__", None)
+                    if module_path:
+                        updated = await agent_service.update_agent(
+                            context=request_context(current_user),
+                            agent_id=agent.id,
+                            updates=AgentUpdateInput(module_path=module_path),
+                        )
+                        if updated is not None:
+                            agent = updated
+
+        # If module_path is still missing but class_name is available, derive it from class_name.
+        if not module_path and agent.class_name and "/" in agent.class_name:
+            module_path = agent.class_name.split("/", 1)[0] or None
+
+        # Normalize logo_url to be module-relative, then convert to public /modules URL.
+        if isinstance(logo_url, str) and logo_url:
+            module_name = _module_name_from_module_path(module_path)
+            if (
+                module_name
+                and module_name in logo_url
+                and not (logo_url.startswith("http://") or logo_url.startswith("https://"))
+            ):
+                normalized_path = _normalize_logo_path_for_module(logo_url, module_name)
+                logo_url = _public_modules_url(normalized_path)
+
         enriched_agent_list.append(
-            replace(agent, suggestions=suggestions, logo_url=logo_url, intents=intents)
+            replace(
+                agent,
+                module_path=module_path,
+                suggestions=suggestions,
+                logo_url=logo_url,
+                intents=intents,
+            )
         )
 
     return enriched_agent_list
