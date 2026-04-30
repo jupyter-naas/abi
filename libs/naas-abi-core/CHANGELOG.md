@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.34.0 (2026-04-30)
+
+### Bug Fixes
+
+- **api**: Use full module path for public assets mount
+  ([`13ee10c`](https://github.com/jupyter-naas/abi/commit/13ee10c5ca474ad68fc1703407cd087e062e5797))
+
+### Features
+
+- **config**: Expose public_api_host to modules via GlobalConfig
+  ([`52fbea3`](https://github.com/jupyter-naas/abi/commit/52fbea3c528d0f7aa9834cdf2442b4cd7202b007))
+
+
 ## v1.33.0 (2026-04-29)
 
 ### Features
