@@ -462,6 +462,8 @@ chat-zoho-agent: deps
 pull-request-description: deps
 	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git PullRequestDescriptionAgent
 
+commit:
+	@ echo "commit the changes please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitCommitAndPullRequestAgent
 # =============================================================================
 # CHAT WITH MARKETPLACE DOMAINS AGENTS
 # =============================================================================
