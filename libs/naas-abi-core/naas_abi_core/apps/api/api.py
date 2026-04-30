@@ -252,12 +252,13 @@ def _load_runtime_routes():
     for module in runtime_engine.modules.values():
         public_dir = os.path.join(module.module_root_path, "assets", "public")
         if os.path.isdir(public_dir):
-            mount_path = f"/modules/{module.module_path}/public"
+            module_url_path = module.__class__.__module__.replace(".", "/")
+            mount_path = f"/modules/{module_url_path}/assets/public"
             logger.debug(f"Mounting module public assets: {mount_path} -> {public_dir}")
             app.mount(
                 mount_path,
                 StaticFiles(directory=public_dir),
-                name=f"module-{module.module_path}-public",
+                name=f"module-{module_url_path.replace('/', '-')}-public",
             )
 
     for module in runtime_engine.modules.values():
