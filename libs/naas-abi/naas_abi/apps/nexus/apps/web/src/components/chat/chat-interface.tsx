@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, Globe, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2 } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -157,7 +157,8 @@ export function ChatInterface() {
   const [attachedImages, setAttachedImages] = useState<string[]>([]); // Base64 images
   const [imageError, setImageError] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
-  const [searchEnabled, setSearchEnabled] = useState(false); // Force web search
+  // Web search — UI/API disabled until the feature is ready
+  // const [searchEnabled, setSearchEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // My Drive picker state
   const [showMyDrivePicker, setShowMyDrivePicker] = useState(false);
@@ -931,7 +932,7 @@ export function ChatInterface() {
     }
     setAttachedImages([]); // Clear attached images after adding to message
     setImageError(null);
-    setSearchEnabled(false); // Reset search toggle after sending
+    // setSearchEnabled(false); // Reset search toggle after sending
     setIsLoading(true);
 
     try {
@@ -993,9 +994,11 @@ export function ChatInterface() {
         // Add placeholder for streaming response
         addMessage(conversationId, {
           role: 'assistant',
-          content: searchEnabled ? '🌐 Searching the web...' : '▌',
+          content: '▌',
+          // content: searchEnabled ? '🌐 Searching the web...' : '▌',
           agent: effectiveAgent,
-          activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
+          activityLine: 'Processing...',
+          // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
         });
         // Capture placeholder message id for controls
         {
@@ -1014,9 +1017,10 @@ export function ChatInterface() {
         let thinkingContent = '';   // Accumulated thinking text
         let responseContent = '';   // Accumulated response text
         let streamSources: string[] = [];  // RAG source filenames
-        let streamActivityLine: string | undefined = searchEnabled
-          ? 'Web search in progress'
-          : 'Processing...';
+        let streamActivityLine: string | undefined = 'Processing...';
+        // let streamActivityLine: string | undefined = searchEnabled
+        //   ? 'Web search in progress'
+        //   : 'Processing...';
         let hasDetailedActivity = false;
 
         const singleLine = (value: string) => value.replace(/\s+/g, ' ').trim();
@@ -1040,7 +1044,7 @@ export function ChatInterface() {
         };
 
         const formatStreamActivity = (parsed: any): string | null => {
-          if (parsed?.search) return 'Web search in progress';
+          // if (parsed?.search) return 'Web search in progress';
 
           if (parsed?.event === 'tool') {
             const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim() ? parsed.tool : '';
@@ -1113,7 +1117,8 @@ export function ChatInterface() {
             agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
-            search_enabled: searchEnabled,
+            search_enabled: false,
+            // search_enabled: searchEnabled,
           }),
         });
 
@@ -1654,7 +1659,10 @@ export function ChatInterface() {
                       handleSubmit(e);
                     }
                   }}
-                  placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
+                  placeholder={
+                    attachedImages.length > 0 ? 'Ask about the image...' : 'Send a message...'
+                  }
+                  // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="max-h-36 min-h-[24px] w-full resize-none bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
                   rows={1}
                 />
@@ -1768,7 +1776,7 @@ export function ChatInterface() {
                     )}
                   </div>
                   
-                  {/* Search the web (globe) */}
+                  {/* Search the web (globe) — disabled until feature is ready
                   <button
                     type="button"
                     onClick={() => setSearchEnabled(!searchEnabled)}
@@ -1782,6 +1790,7 @@ export function ChatInterface() {
                   >
                     <Globe size={18} />
                   </button>
+                  */}
                 </div>
                 
                 <div className="flex items-center gap-1">
