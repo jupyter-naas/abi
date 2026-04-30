@@ -465,12 +465,12 @@ pull-request-description: deps
 commit:
 	@ echo "commit the changes please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitCommitAndPullRequestAgent
 
-commit-and-push:
-	@ echo "commit the changes and push them please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitCommitAndPullRequestAgent
+push:
+	@ echo "commit the changes if there are any and push them please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitCommitAndPullRequestAgent
 
-open-pr:
-	@ echo "open the pull request please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitCommitAndPullRequestAgent
-	
+pr:
+	@ echo "open the pull request or update it if it already exists please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitCommitAndPullRequestAgent
+
 # =============================================================================
 # CHAT WITH MARKETPLACE DOMAINS AGENTS
 # =============================================================================
