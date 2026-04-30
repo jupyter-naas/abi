@@ -41,6 +41,7 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             workspace_id=str(model.workspace_id),
             name=str(model.name),
             class_name=str(model.class_name),
+            module_path=str(model.module_path) if model.module_path is not None else None,
             description=str(model.description),
             system_prompt=str(model.system_prompt),
             model_id=str(model.model_id),
@@ -91,6 +92,7 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             workspace_id=data.workspace_id,
             name=data.name,
             class_name=data.class_name,
+            module_path=data.module_path,
             description=data.description,
             system_prompt=data.system_prompt,
             model_id=data.model_id,
@@ -114,6 +116,7 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
                 workspace_id=data.workspace_id,
                 name=data.name,
                 class_name=data.class_name,
+                module_path=data.module_path,
                 description=data.description,
                 system_prompt=data.system_prompt,
                 model_id=data.model_id,
@@ -142,6 +145,8 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             agent_model.name = str(updates.name)
         if updates.class_name is not None:
             agent_model.class_name = str(updates.class_name)
+        if updates.module_path is not None:
+            agent_model.module_path = str(updates.module_path)
         if updates.description is not None:
             agent_model.description = str(updates.description)
         if updates.system_prompt is not None:

@@ -569,6 +569,9 @@ class AgentConfigModel(Base):
     class_name = Column(
         String, nullable=True, index=True
     )  # Fully-qualified in-process ABI class path
+    module_path = Column(
+        String, nullable=True, index=True
+    )  # Python module path of the agent class (e.g. naas_abi_marketplace.applications.foo)
     description = Column(Text, nullable=True)
     icon = Column(String, nullable=True)
     logo_url = Column(Text, nullable=True)  # URL to agent/provider logo
