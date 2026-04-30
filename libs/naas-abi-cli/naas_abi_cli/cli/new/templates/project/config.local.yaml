@@ -12,6 +12,7 @@ api:
 
 global_config:
   ai_mode: "cloud"
+  public_api_host: "{{ secret.PUBLIC_API_HOST }}"
 
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
