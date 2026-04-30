@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.12.0 (2026-04-30)
+
+### Bug Fixes
+
+- **git-agent**: Update commit and PR agent description and decision rules
+  ([`6ec66da`](https://github.com/jupyter-naas/abi/commit/6ec66da6cab06950bfbf5e851f9fa04e29681bbb))
+
+### Chores
+
+- **git-agent**: Enhance PR creation workflow
+  ([`7b3afd8`](https://github.com/jupyter-naas/abi/commit/7b3afd8a6a319c6fa5bed7369e0879905f803f0b))
+
+### Features
+
+- **git**: Add GitCommitAndPullRequestAgent to automate git commit and PR creation
+  ([`e344843`](https://github.com/jupyter-naas/abi/commit/e344843f39f17103c2702c56d4d425b267094fff))
+
+### Refactoring
+
+- **git-agent**: Rename GitCommitAndPullRequestAgent to GitAgent
+  ([`4aa22dd`](https://github.com/jupyter-naas/abi/commit/4aa22ddead7f06c2836e33611864c729692bd50f))
+
+
 ## v1.11.0 (2026-04-28)
 
 ### Bug Fixes

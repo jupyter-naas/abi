@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v1.30.1 (2026-04-30)
+
+### Bug Fixes
+
+- Remove debug logging for agents and intents
+  ([`8552aee`](https://github.com/jupyter-naas/abi/commit/8552aeedbc0af7edff86819070d9d6d6fa06537b))
+
+
+## v1.30.0 (2026-04-30)
+
+### Bug Fixes
+
+- **naas_abi**: Fix agent logo URL normalization and type safety
+  ([`18421b7`](https://github.com/jupyter-naas/abi/commit/18421b786084e141d472d6b3e2840679f2e22616))
+
+- **nexus/agents**: Stop normalizing agent logo URLs
+  ([`417ce56`](https://github.com/jupyter-naas/abi/commit/417ce56b24be2ffd9e724930c41cdb74e2b888c6))
+
+### Features
+
+- **agents**: Add module_path field and normalize agent logo URLs
+  ([`98d83ce`](https://github.com/jupyter-naas/abi/commit/98d83ceec388f992e8221e7b72442371aeefbd53))
+
+- **agents**: Update logo URL and add new light logo asset
+  ([`79735cb`](https://github.com/jupyter-naas/abi/commit/79735cb606c68bd83b3e28bb75b61f3a1bea14f1))
+
+
 ## v1.29.0 (2026-04-29)
 
 ### Features

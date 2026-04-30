@@ -122,7 +122,7 @@ def create_checkpointer() -> BaseCheckpointSaver:
                 _shared_checkpointer is not None
                 and _shared_checkpointer_url == postgres_url
             ):
-                logger.debug("Reusing shared PostgreSQL checkpointer")
+                # logger.debug("Reusing shared PostgreSQL checkpointer")
                 return _shared_checkpointer
 
             if (
@@ -142,9 +142,9 @@ def create_checkpointer() -> BaseCheckpointSaver:
                 from psycopg import Connection
                 from psycopg.rows import dict_row
 
-                logger.debug(
-                    f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}"
-                )
+                # logger.debug(
+                #     f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}"
+                # )
 
                 # Try connection with retries (PostgreSQL might still be starting)
                 max_retries = 3
@@ -161,7 +161,7 @@ def create_checkpointer() -> BaseCheckpointSaver:
 
                         # Setup tables if they don't exist
                         checkpointer.setup()
-                        logger.debug("PostgreSQL checkpointer tables initialized")
+                        # logger.debug("PostgreSQL checkpointer tables initialized")
 
                         _shared_checkpointer = checkpointer
                         _shared_checkpointer_url = postgres_url
@@ -198,9 +198,9 @@ def create_checkpointer() -> BaseCheckpointSaver:
         # Fallback to in-memory checkpointer
         return MemorySaver()
     else:
-        logger.debug(
-            "Using in-memory checkpointer (set POSTGRES_URL for persistent memory)"
-        )
+        # logger.debug(
+        #     "Using in-memory checkpointer (set POSTGRES_URL for persistent memory)"
+        # )
         return MemorySaver()
 
 
@@ -422,16 +422,21 @@ class Agent(Expose):
                 If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
         """
         self._name = Agent.validate_name(name)
-        logger.debug(f"Initializing agent: '{self._name}'")
+        logger.debug(f"'{self._name}' is being initialized")
         self._description = description
         self._state = state
         self._original_tools = tools
         self._original_agents = agents
 
         # We set the supervisor agent and current active agent before the default tools are injected.
-        if self._state.supervisor_agent is not None:
+        if (
+            self._state.supervisor_agent is not None
+            and self._name != self._state.supervisor_agent
+        ):
             self._state.set_supervisor_agent(self._state.supervisor_agent)
-        logger.debug(f"Supervisor agent: {self._state.supervisor_agent}")
+            logger.debug(
+                f"'{self._name}' has supervisor agent '{self._state.supervisor_agent}'"
+            )
 
         # Add tool request help if the agent has a supervisor agent.
         @tool(return_direct=True)
@@ -469,7 +474,9 @@ class Agent(Expose):
             and self._state.current_active_agent in agent_names
         ):
             self._state.set_current_active_agent(self._state.current_active_agent)
-        logger.debug(f"Current active agent: {self._state.current_active_agent}")
+            logger.debug(
+                f"'{self._name}' has current active agent '{self._state.current_active_agent}'"
+            )
 
         # We inject default tools
         self._enable_default_tools = enable_default_tools
@@ -655,7 +662,7 @@ class Agent(Expose):
 
         for agent in self._agents:
             agent = self.validate_agent_name(agent)
-            logger.debug(f"Adding agent to graph: '{agent._name}'")
+            logger.debug(f"Adding sub-agent '{agent._name}' to graph '{self._name}'")
             graph.add_node(agent._name, agent.graph)
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
@@ -886,7 +893,7 @@ SUBAGENT SYSTEM PROMPT:
         state: ABIAgentState,
     ) -> Command[Literal["call_tools", "__end__"]]:
         self._state.set_current_active_agent(self.name)
-        logger.debug(f"🧠 Calling model on current active agent: {self._name}")
+        logger.debug(f"🧠 Calling model for agent '{self._name}'")
 
         # Inserting system prompt before messages.
         messages = state["messages"]
