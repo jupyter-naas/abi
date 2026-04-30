@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.30.1 (2026-04-30)
+
+### Bug Fixes
+
+- Remove debug logging for agents and intents
+  ([`8552aee`](https://github.com/jupyter-naas/abi/commit/8552aeedbc0af7edff86819070d9d6d6fa06537b))
+
+
 ## v1.30.0 (2026-04-30)
 
 ### Bug Fixes
