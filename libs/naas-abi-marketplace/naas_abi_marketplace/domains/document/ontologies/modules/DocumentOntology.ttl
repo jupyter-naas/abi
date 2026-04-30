@@ -57,6 +57,12 @@ doc:Processor a owl:Class ;
     skos:definition "A Processor is a system that processes documents."@en ;
     skos:example "A processor that converts a PDF file to a Markdown file."@en .
 
+doc:Chunk a owl:Class ;
+    rdfs:label "Chunk"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A Chunk is a text segment derived from a Markdown file, used as a unit for embedding and vector retrieval."@en ;
+    skos:example "A paragraph extracted from a Markdown document, stored with an embedding for semantic search."@en .
+
 
 #################################################################
 #    Object Properties
@@ -87,6 +93,19 @@ doc:processedBy a owl:ObjectProperty ;
     rdfs:range doc:Processor ;
     skos:definition "A file is processed by a processor."@en ;
     skos:example "The file 'employment_contract.pdf' is processed by the processor 'PDF to Markdown Processor'."@en .
+
+doc:isChunkOf a owl:ObjectProperty ;
+    rdfs:domain doc:Chunk ;
+    rdfs:range doc:File ;
+    skos:definition "A chunk is derived from a source file."@en ;
+    skos:example "A text segment is a chunk of the file 'report.md'."@en .
+
+doc:hasChunk a owl:ObjectProperty ;
+    owl:inverseOf doc:isChunkOf ;
+    rdfs:domain doc:File ;
+    rdfs:range doc:Chunk ;
+    skos:definition "A file has one or more chunks."@en ;
+    skos:example "The file 'report.md' has chunks produced by the MarkdownToVectorProcessor."@en .
 
 #################################################################
 #    Data Properties
@@ -162,6 +181,41 @@ doc:sha256 a owl:DatatypeProperty ;
     skos:definition "The SHA-256 checksum (hex) of the document content."@en ;
     skos:example "The sha256 checksum of the document is '9dd332e7d9bb894763ffe97bc4f6d88d79fc44ed4ec317359dec8fc7fb755c6f'."@en .
 
+doc:content a owl:DatatypeProperty ;
+    rdfs:label "content"@en ;
+    rdfs:domain doc:Chunk ;
+    rdfs:range xsd:string ;
+    skos:definition "The text content of a chunk."@en ;
+    skos:example "The content of the chunk is 'This section describes the installation procedure.'."@en .
+
+doc:chunk_index a owl:DatatypeProperty ;
+    rdfs:label "chunk index"@en ;
+    rdfs:domain doc:Chunk ;
+    rdfs:range xsd:integer ;
+    skos:definition "The zero-based position of the chunk within its source document."@en ;
+    skos:example "The first chunk of a document has chunk_index 0."@en .
+
+doc:embedding_id a owl:DatatypeProperty ;
+    rdfs:label "embedding id"@en ;
+    rdfs:domain doc:Chunk ;
+    rdfs:range xsd:string ;
+    skos:definition "The identifier of the vector embedding stored in the vector store."@en ;
+    skos:example "The embedding_id of the chunk is 'abc123'."@en .
+
+doc:file_path a owl:DatatypeProperty ;
+    rdfs:label "chunk file path"@en ;
+    rdfs:domain doc:Chunk ;
+    rdfs:range xsd:string ;
+    skos:definition "The file path of the source document from which this chunk was derived."@en ;
+    skos:example "The file_path of the chunk is 'documents/report.md'."@en .
+
+doc:collection_name a owl:DatatypeProperty ;
+    rdfs:label "collection name"@en ;
+    rdfs:domain doc:Chunk ;
+    rdfs:range xsd:string ;
+    skos:definition "The name of the vector store collection in which this chunk's embedding is stored."@en ;
+    skos:example "The collection_name is 'documents'."@en .
+
 
 #################################################################
 #    Named Individuals (Processors)
@@ -184,3 +238,15 @@ doc:DocxToMarkdownProcessor a owl:NamedIndividual ;
     rdf:type doc:Processor ;
     skos:definition "A Docx to Markdown Processor is a processor that converts a Docx file to a Markdown file."@en ;
     skos:example "A processor that converts a Docx file to a Markdown file."@en .
+
+doc:PptxToMarkdownProcessor a owl:NamedIndividual ;
+    rdfs:label "Pptx to Markdown Processor"@en ;
+    rdf:type doc:Processor ;
+    skos:definition "A Pptx to Markdown Processor is a processor that converts a Pptx file to a Markdown file."@en ;
+    skos:example "A processor that converts a Pptx file to a Markdown file."@en .
+
+doc:MarkdownToVectorProcessor a owl:NamedIndividual ;
+    rdfs:label "Markdown to Vector Processor"@en ;
+    rdf:type doc:Processor ;
+    skos:definition "A Markdown to Vector Processor is a processor that chunks a Markdown file and stores embeddings in a vector store."@en ;
+    skos:example "A processor that reads a Markdown file, splits it into chunks, and embeds each chunk into a vector collection."@en .
