@@ -2287,7 +2287,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "1.25.0"
+version = "1.29.0"
 source = { editable = "../naas-abi" }
 dependencies = [
     { name = "alembic" },
@@ -2361,7 +2361,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "1.26.0"
+version = "1.27.0"
 source = { editable = "." }
 dependencies = [
     { name = "naas-abi" },
@@ -2394,7 +2394,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "1.30.0"
+version = "1.34.0"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
