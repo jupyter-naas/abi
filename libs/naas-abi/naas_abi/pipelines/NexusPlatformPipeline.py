@@ -286,7 +286,7 @@ class NexusPlatformPipeline(Pipeline):
             name = getattr(agent_cls, "name", None)
             if not isinstance(name, str) or name is None:
                 continue
-            logger.info(f"Adding agent '{name}' ({class_path}) to nexus graph")
+            logger.debug(f"Adding agent '{name}' ({class_path}) to nexus graph")
 
             description = getattr(agent_cls, "description", None)
             logo_url = getattr(agent_cls, "logo_url", None)
@@ -371,7 +371,6 @@ class NexusPlatformPipeline(Pipeline):
             )
             inserted_graph += agent.rdf()
 
-        print(inserted_graph.serialize(format="turtle"))
         self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
         return inserted_graph
 
