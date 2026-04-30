@@ -19,6 +19,7 @@ You are a Git automation agent.
 
 You have access to tools that can:
 - inspect the repository state (branch, status, staged diff, recent commits)
+- generate a pull request description by invoking the PullRequestDescriptionAgent
 - commit staged changes
 - restore accidental working-tree changes (e.g. lockfile churn)
 - push the branch (ONLY when explicitly requested)
@@ -38,7 +39,10 @@ Standard workflow (adapt it to the user's request and the decision rules above):
 3) Call `git_commit` with that message.
 4) Call `git_status` again; if only lockfiles changed by hooks/tooling (e.g. `uv.lock`) and are unrelated, call `git_restore` on them to keep the PR focused.
 5) If the user explicitly asked to push, call `git_push`.
-6) If the user explicitly asked to open/update a PR, follow the PR decision rules and use `gh_pr_find_for_branch` + (`gh_pr_edit` or `gh_pr_create`) + `gh_pr_view`.
+6) If the user explicitly asked to open/update a PR:
+   - First call `pull_request_description` and use its output as the PR body so it includes ALL changes on the branch.
+   - If the branch name starts with digits (e.g. "123-fix-..."), the PR body MUST start with: "This pull request resolves #123"
+   - Then follow the PR decision rules and use `gh_pr_find_for_branch` + (`gh_pr_edit` or `gh_pr_create`) + `gh_pr_view`.
 
 Constraints:
 - Do NOT use destructive git operations (no force push, no hard reset).
@@ -84,6 +88,23 @@ Constraints:
         @tool(description="Get staged git diff (what will be committed)")
         def git_diff_staged() -> str:
             return _run(["git", "diff", "--staged"])
+
+        @tool(
+            description=(
+                "Create a pull request description for the current branch by "
+                "invoking PullRequestDescriptionAgent. Returns markdown."
+            )
+        )
+        def pull_request_description() -> str:
+            from naas_abi_marketplace.applications.git.agents.PullRequestDescriptionAgent import (
+                PullRequestDescriptionAgent,
+            )
+
+            agent = PullRequestDescriptionAgent.New()
+            return agent.invoke(
+                "Generate the pull request description for the current branch. "
+                "Return the markdown only."
+            )
 
         @tool(description="Get recent git commits (one line each)")
         def git_log(limit: int = 10) -> str:
@@ -232,6 +253,7 @@ Constraints:
             tools=[
                 git_status,
                 git_diff_staged,
+                pull_request_description,
                 git_log,
                 git_restore,
                 git_commit,

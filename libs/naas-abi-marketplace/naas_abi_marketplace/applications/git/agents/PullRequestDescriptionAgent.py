@@ -58,7 +58,7 @@ Where <branch_name_number> is the number at the beginning of the branch name.
                 .strip()
             )
             diff = subprocess.check_output(
-                ["git", "diff", "origin/main", "--", ".", ":!uv.lock"]
+                ["git", "diff", "origin/main...HEAD", "--", ".", ":!uv.lock"]
             ).decode("utf-8")
             return f"Branch name: {branch_name}\n\n{diff}"
 
