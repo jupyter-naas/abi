@@ -487,7 +487,63 @@ class Processor(RDFEntity):
     ] = os.environ.get("USER")
 
 
+class Chunk(RDFEntity):
+    """
+    Chunk — a text segment derived from a Markdown file, used as a unit for embedding and vector retrieval.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Chunk"
+    _name: ClassVar[str] = "Chunk"
+    _property_uris: ClassVar[dict] = {
+        "chunk_index": "http://ontology.naas.ai/abi/document/chunk_index",
+        "collection_name": "http://ontology.naas.ai/abi/document/collection_name",
+        "content": "http://ontology.naas.ai/abi/document/content",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "embedding_id": "http://ontology.naas.ai/abi/document/embedding_id",
+        "file_path": "http://ontology.naas.ai/abi/document/file_path",
+        "isChunkOf": "http://ontology.naas.ai/abi/document/isChunkOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"isChunkOf"}
+
+    # Data properties
+    content: Optional[
+        Annotated[str, Field(description="The text content of the chunk.")]
+    ] = None
+    chunk_index: Optional[
+        Annotated[int, Field(description="Zero-based position of the chunk within its source document.")]
+    ] = None
+    embedding_id: Optional[
+        Annotated[str, Field(description="The identifier of the vector embedding stored in the vector store.")]
+    ] = None
+    file_path: Optional[
+        Annotated[str, Field(description="The file path of the source document from which this chunk was derived.")]
+    ] = None
+    collection_name: Optional[
+        Annotated[str, Field(description="The name of the vector store collection in which this chunk's embedding is stored.")]
+    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")]
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    isChunkOf: Optional[
+        Annotated[
+            List[Union[File, URIRef, str]],
+            Field(description="The source file this chunk was derived from."),
+        ]
+    ] = None
+
+
 # Rebuild models to resolve forward references
 File.model_rebuild()
 Document.model_rebuild()
 Processor.model_rebuild()
+Chunk.model_rebuild()

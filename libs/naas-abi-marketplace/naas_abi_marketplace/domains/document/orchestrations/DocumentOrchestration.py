@@ -2,7 +2,11 @@ import re
 
 import dagster as dg
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
-from naas_abi_marketplace.domains.document import ABIModule, FileIngestionConfiguration
+from naas_abi_marketplace.domains.document import (
+    ABIModule,
+    FileIngestionConfiguration,
+    MarkdownToVectorConfiguration,
+)
 
 
 # File Ingestion OP
@@ -155,6 +159,52 @@ def _build_pptxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
     return job, pptxtomarkdown_sensor
 
 
+def _build_markdowntovector_job_sensor(
+    config: MarkdownToVectorConfiguration,
+) -> tuple[dg.JobDefinition, dg.SensorDefinition]:
+    safe_name = re.sub(r"[^a-zA-Z0-9]", "_", config.collection_name)
+    if config.file_path:
+        safe_name += "_" + re.sub(r"[^a-zA-Z0-9]", "_", config.file_path)
+
+    @dg.op(name=f"markdowntovector_{safe_name}")
+    def markdowntovector_op():
+        from naas_abi_marketplace.domains.document.pipelines.MarkdownToVectorPipeline import (
+            MarkdownToVectorPipeline,
+            MarkdownToVectorPipelineConfiguration,
+            MarkdownToVectorPipelineParameters,
+        )
+
+        pipeline_config = MarkdownToVectorPipelineConfiguration(
+            collection_name=config.collection_name,
+            file_path=config.file_path,
+            model_id=config.model_id,
+            dimension=config.dimension,
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+        )
+        pipeline = MarkdownToVectorPipeline(pipeline_config)
+        pipeline.run(MarkdownToVectorPipelineParameters())
+
+    graph_name = f"markdowntovector_graph_{safe_name}"
+    graph = dg.GraphDefinition(name=graph_name, node_defs=[markdowntovector_op])
+    job = graph.to_job(name=graph_name)
+
+    @dg.sensor(
+        name=f"markdowntovector_sensor_{safe_name}",
+        description=(
+            f"Sensor to trigger MarkdownToVector pipeline for collection "
+            f"'{config.collection_name}'"
+            + (f" filtered by file_path '{config.file_path}'" if config.file_path else "")
+        ),
+        job=job,
+        minimum_interval_seconds=120,
+    )
+    def markdowntovector_sensor(context):
+        return [dg.RunRequest(run_key=None)]
+
+    return job, markdowntovector_sensor
+
+
 class DocumentOrchestration(DagsterOrchestration):
     @classmethod
     def New(cls) -> "DocumentOrchestration":
@@ -185,6 +235,11 @@ class DocumentOrchestration(DagsterOrchestration):
 
         if getattr(module.configuration, "pptxtomarkdown_enabled", True):
             job, sensor = _build_pptxtomarkdown_job_sensor()
+            jobs.append(job)
+            sensors.append(sensor)
+
+        for mtv_config in module.configuration.markdowntovector_pipelines:
+            job, sensor = _build_markdowntovector_job_sensor(mtv_config)
             jobs.append(job)
             sensors.append(sensor)
 
