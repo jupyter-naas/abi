@@ -8,7 +8,6 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
-from naas_abi_core.utils.Logger import logger
 
 from .VectorStore import VectorStore
 
@@ -57,15 +56,15 @@ class IntentMapper:
         self.vector_store = None
         self.embedding_workers = max(1, int(embedding_workers))
 
-        if embedding_model is None:
-            logger.warning(
-                "No embedding_model provided to IntentMapper; using default OpenAIEmbeddings "
-                "model='text-embedding-3-large'."
-            )
-        if model is None:
-            logger.warning(
-                "No model provided to IntentMapper; using default ChatOpenAI model='gpt-4.1-mini'."
-            )
+        # if embedding_model is None:
+        #     logger.warning(
+        #         "No embedding_model provided to IntentMapper; using default OpenAIEmbeddings "
+        #         "model='text-embedding-3-large'."
+        #     )
+        # if model is None:
+        #     logger.warning(
+        #         "No model provided to IntentMapper; using default ChatOpenAI model='gpt-4.1-mini'."
+        #     )
 
         intents_values = [intent.intent_value for intent in intents]
         if len(intents_values) > 0:

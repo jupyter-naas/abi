@@ -10,7 +10,6 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentScope,
     IntentType,
 )
-from naas_abi_core.services.agent.OpencodeAgent import OpencodeAgent
 
 
 class AbiAgent(IntentAgent):
@@ -184,11 +183,7 @@ Respond only based on what your available agents and tools can actually deliver.
                     _register_candidate(agent_cls)
 
         def _load_agent(agent_cls: type) -> Agent | None:
-            if (
-                issubclass(agent_cls, IntentAgent)
-                or issubclass(agent_cls, Agent)
-                or issubclass(agent_cls, OpencodeAgent)
-            ):
+            if issubclass(agent_cls, Agent):
                 return agent_cls.New().duplicate(
                     queue=agent_queue, agent_shared_state=agent_shared_state
                 )
