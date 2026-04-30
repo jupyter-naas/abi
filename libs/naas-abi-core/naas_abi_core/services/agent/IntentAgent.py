@@ -237,7 +237,7 @@ class IntentAgent(Agent):
 
         for agent in self._agents:
             agent = self.validate_agent_name(agent)
-            logger.debug(f"Adding agent to graph: '{agent._name}'")
+            logger.debug(f"Adding sub-agent '{agent._name}' to graph '{self._name}'")
             graph.add_node(agent._name, agent.graph)
 
         if patcher is not None:
@@ -376,19 +376,19 @@ class IntentAgent(Agent):
             update={"intent_mapping": {"intents": final_intents}},
         )
 
-    def should_filter(self, intents: list) -> Command:
+    def should_filter(self, intents: list) -> str:
         """Determine if intent mapping should be filtered.
 
         Checks if the intent mapping should be filtered based on the threshold
         and neighbor values.
         """
         if len(intents) == 1 and intents[0]["score"] > self._direct_intent_score:
-            return Command(goto="intent_mapping_router")
+            return "intent_mapping_router"
         if len(intents) == 0:
             logger.debug("❌ No intents found, going to call_model")
-            return Command(goto="call_model")
+            return "call_model"
 
-        return Command(goto="filter_out_intents")
+        return "filter_out_intents"
 
     def filter_out_intents(self, state: IntentState) -> Command:
         """Filter out logically irrelevant intents using LLM analysis.
