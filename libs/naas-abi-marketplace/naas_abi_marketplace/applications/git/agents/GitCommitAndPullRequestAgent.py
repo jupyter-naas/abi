@@ -14,25 +14,33 @@ from naas_abi_core.services.agent.Agent import (
 class GitCommitAndPullRequestAgent(Agent):
     name: str = "Git Commit & Pull Request Agent"
     description: str = (
-        "An agent to commit staged changes and create a GitHub pull request"
+        "An agent to commit staged changes and manage GitHub pull requests"
     )
     system_prompt: str = """
-You are a Git automation agent. Your goal is to create a clean, reviewable PR for the current branch.
+You are a Git automation agent.
 
 You have access to tools that can:
 - inspect the repository state (branch, status, staged diff, recent commits)
 - commit staged changes
 - restore accidental working-tree changes (e.g. lockfile churn)
-- push the branch
-- create and view a GitHub pull request via `gh`
+- push the branch (ONLY when explicitly requested)
+- find/create/update/view a GitHub pull request via `gh`
 
-Workflow you MUST follow:
+Decision rules (STRICT):
+- If the user asks to **commit** but does NOT explicitly ask to open/update a PR: you MUST stop after a successful commit (no PR actions).
+- If the user asks to **open/update a PR**: you MUST first check if a PR already exists for the current branch using `gh_pr_find_for_branch`.
+  - If it exists: update it with `gh_pr_edit`, then show the PR via `gh_pr_view`.
+  - If it does not exist: create it with `gh_pr_create`, then show it via `gh_pr_view`.
+- If the user asks to open/update a PR but does NOT explicitly ask to push: you MUST NOT push.
+  - If a PR cannot be created/updated without pushing (e.g., branch not on origin), explain that pushing is required and stop.
+
+Standard workflow (adapt it to the user's request and the decision rules above):
 1) Call `git_status` and `git_diff_staged`. If nothing is staged, stop and explain what is missing.
 2) Draft a Conventional Commit message (type/scope/subject) based on the staged diff.
 3) Call `git_commit` with that message.
 4) Call `git_status` again; if only lockfiles changed by hooks/tooling (e.g. `uv.lock`) and are unrelated, call `git_restore` on them to keep the PR focused.
-5) Call `git_push`.
-6) Create the PR with `gh_pr_create` (base: main) and then call `gh_pr_view` to return the final PR URL and metadata.
+5) If the user explicitly asked to push, call `git_push`.
+6) If the user explicitly asked to open/update a PR, follow the PR decision rules and use `gh_pr_find_for_branch` + (`gh_pr_edit` or `gh_pr_create`) + `gh_pr_view`.
 
 Constraints:
 - Do NOT use destructive git operations (no force push, no hard reset).
@@ -46,6 +54,7 @@ Constraints:
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "GitCommitAndPullRequestAgent":
+
         from naas_abi_marketplace.applications.git import ABIModule
         from pydantic import SecretStr
 
@@ -124,6 +133,19 @@ Constraints:
                 return output2
             return output
 
+        @tool(
+            description=(
+                "Check whether the current branch exists on origin "
+                "(returns 'true' or 'false')."
+            )
+        )
+        def git_remote_branch_exists() -> str:
+            branch = _run(["git", "branch", "--show-current"])
+            code, _output = _run_allow_fail(
+                ["git", "ls-remote", "--exit-code", "--heads", "origin", branch]
+            )
+            return "true" if code == 0 else "false"
+
         @tool(description="Create a GitHub PR using gh (returns URL)")
         def gh_pr_create(title: str, body: str, base: str = "main") -> str:
             if not title.strip():
@@ -140,6 +162,47 @@ Constraints:
                     base,
                     "--head",
                     branch,
+                    "--title",
+                    title,
+                    "--body",
+                    body,
+                ]
+            )
+
+        @tool(
+            description=(
+                "Find an existing PR for the current branch. "
+                "Returns JSON list (possibly empty) with url/number/title."
+            )
+        )
+        def gh_pr_find_for_branch() -> str:
+            branch = _run(["git", "branch", "--show-current"])
+            return _run(
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "--head",
+                    branch,
+                    "--json",
+                    "url,number,title,baseRefName,headRefName",
+                ]
+            )
+
+        @tool(description="Edit an existing PR title/body by number")
+        def gh_pr_edit(number: int, title: str, body: str) -> str:
+            if number <= 0:
+                raise ValueError("PR number must be positive.")
+            if not title.strip():
+                raise ValueError("PR title is required.")
+            if not body.strip():
+                raise ValueError("PR body is required.")
+            return _run(
+                [
+                    "gh",
+                    "pr",
+                    "edit",
+                    str(number),
                     "--title",
                     title,
                     "--body",
@@ -176,6 +239,8 @@ Constraints:
                 git_commit,
                 git_push,
                 gh_pr_create,
+                gh_pr_find_for_branch,
+                gh_pr_edit,
                 gh_pr_view,
             ],
             agents=[],
