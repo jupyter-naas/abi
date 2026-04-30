@@ -266,7 +266,6 @@ Respond only based on what your available agents and tools can actually deliver.
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "AbiAgent":
         from naas_abi import ABIModule
-        from naas_abi_core import logger
 
         api_key = (
             ABIModule.get_instance()
@@ -277,10 +276,8 @@ Respond only based on what your available agents and tools can actually deliver.
         tools = cls.get_tools(cls=cls)
 
         agents, agent_shared_state = cls.get_agents(cls=cls)
-        logger.debug(f"Agents: {agents}")
 
         intents = cls.get_intents(agents=agents)
-        logger.debug(f"Intents: {intents}")
 
         if agent_configuration is None:
             tools_section = (
