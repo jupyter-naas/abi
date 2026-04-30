@@ -6,12 +6,13 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from naas_abi_core.services.secret.Secret import Secret
 
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=["naas_abi_marketplace.ai.chatgpt"],
-        services=[ObjectStorageService],
+        services=[ObjectStorageService, Secret],
     )
 
     class Configuration(ModuleConfiguration):

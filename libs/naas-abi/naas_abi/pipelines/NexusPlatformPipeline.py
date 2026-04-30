@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, List, cast
 
 from langchain_core.tools import BaseTool
 from naas_abi.ontologies.modules.NexusPlatformOntology import (
@@ -19,6 +19,27 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.SPARQL import SPARQLUtils
 from rdflib import RDF, Graph, Namespace, URIRef
+
+
+def _module_name_from_module_path(module_path: str | None) -> str | None:
+    if not module_path:
+        return None
+    return module_path.split(".", 1)[0] or None
+
+
+def _normalize_logo_path_for_module(logo_url: str, module_name: str) -> str:
+    if logo_url.startswith(f"{module_name}/"):
+        return logo_url
+    if logo_url.startswith(f"/{module_name}/"):
+        return logo_url.lstrip("/")
+    idx = logo_url.find(f"{module_name}/")
+    if idx >= 0:
+        return logo_url[idx:]
+    return logo_url.lstrip("/")
+
+
+def _public_modules_url(public_api_host: str, path: str) -> str:
+    return f"{public_api_host}/modules/{path.lstrip('/')}"
 
 
 @dataclass
@@ -151,8 +172,8 @@ class NexusPlatformPipeline(Pipeline):
         for graph_uri in graph_uris:
             if str(graph_uri) not in nexus_graph_uris:
                 logger.debug(f"🟢 Graph {str(graph_uri)} added to nexus graph")
-                knowledge_graph, knowledge_graph_role = self.create_graph_to_nexus_graph(
-                    graph_uri
+                knowledge_graph, knowledge_graph_role = (
+                    self.create_graph_to_nexus_graph(graph_uri)
                 )
                 inserted_graph += knowledge_graph_role.rdf()
                 inserted_graph += knowledge_graph.rdf()
@@ -234,7 +255,11 @@ class NexusPlatformPipeline(Pipeline):
 
         # Get all agents from engine modules
         abi_module = ABIModule.get_instance()
-        module_agents = list(abi_module.agents)
+        module_agents = [
+            cast(type[RuntimeAgent], agent_cls)
+            for agent_cls in abi_module.agents
+            if isinstance(agent_cls, type) and issubclass(agent_cls, RuntimeAgent)
+        ]
         agents: list[type[RuntimeAgent]] = []
         agents.extend(module_agents)
 
@@ -242,7 +267,8 @@ class NexusPlatformPipeline(Pipeline):
             for agent_cls in module.agents:
                 if agent_cls is None:
                     continue
-                agents.append(agent_cls)
+                if isinstance(agent_cls, type) and issubclass(agent_cls, RuntimeAgent):
+                    agents.append(cast(type[RuntimeAgent], agent_cls))
 
         # create agents in nexus graph
         nexus_agents = self.list_nexus_agents(
@@ -265,6 +291,26 @@ class NexusPlatformPipeline(Pipeline):
             description = getattr(agent_cls, "description", None)
             logo_url = getattr(agent_cls, "logo_url", None)
             system_prompt = getattr(agent_cls, "system_prompt", None)
+
+            if (
+                isinstance(logo_url, str)
+                and logo_url
+                and not (
+                    logo_url.startswith("http://") or logo_url.startswith("https://")
+                )
+            ):
+                top_level_module = _module_name_from_module_path(module_name)
+                if top_level_module and top_level_module in logo_url:
+                    normalized_path = _normalize_logo_path_for_module(
+                        logo_url, top_level_module
+                    )
+                    logo_url = _public_modules_url(
+                        public_api_host=str(
+                            abi_module.configuration.global_config.public_api_host
+                        ),
+                        path=normalized_path,
+                    )
+
             if system_prompt is None and hasattr(agent_cls, "get_system_prompt"):
                 system_prompt = agent_cls.get_system_prompt(cls=agent_cls)
             tools = getattr(agent_cls, "tools", None)
