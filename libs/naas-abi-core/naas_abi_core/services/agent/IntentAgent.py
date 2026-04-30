@@ -237,7 +237,7 @@ class IntentAgent(Agent):
 
         for agent in self._agents:
             agent = self.validate_agent_name(agent)
-            logger.debug(f"Adding agent to graph: '{agent._name}'")
+            logger.debug(f"Adding sub-agent '{agent._name}' to graph '{self._name}'")
             graph.add_node(agent._name, agent.graph)
 
         if patcher is not None:

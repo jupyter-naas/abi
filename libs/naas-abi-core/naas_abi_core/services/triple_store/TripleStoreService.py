@@ -260,7 +260,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             self.load_schema(filepath, schema_cache)
 
     def load_schema(self, filepath: str, schema_cache: Graph | None = None):
-        logger.debug(f"Loading schema: {filepath}")
+        # logger.debug(f"Loading schema: {filepath}")
         if schema_cache is not None:
 
             def _read_query_func(query: str):
@@ -383,10 +383,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                         for duplicate_subject in duplicate_subjects:
                             _remove_schema_subject(duplicate_subject)
 
-                    logger.debug("Schema is up to date, no need to update.")
+                    # logger.debug("Schema is up to date, no need to update.")
                     return
 
-                logger.debug("Schema is not up to date, updating.")
+                logger.debug(f"Loading schema: '{filepath}'")
 
                 # Decode old content
                 old_content = base64.b64decode(schema_dict["content"]).decode("utf-8")
