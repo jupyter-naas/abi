@@ -4,14 +4,14 @@ import pytest
 @pytest.fixture
 def agent():
     from naas_abi_core.engine.Engine import Engine
-    from naas_abi_marketplace.applications.git.agents.GitCommitAndPullRequestAgent import (
-        GitCommitAndPullRequestAgent,
+    from naas_abi_marketplace.applications.git.agents.GitAgent import (
+        GitAgent,
     )
 
     engine = Engine()
     engine.load(module_names=["naas_abi_marketplace.applications.git"])
 
-    return GitCommitAndPullRequestAgent.New()
+    return GitAgent.New()
 
 
 def test_agent_name(agent):

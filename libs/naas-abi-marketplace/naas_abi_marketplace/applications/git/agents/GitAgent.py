@@ -11,11 +11,9 @@ from naas_abi_core.services.agent.Agent import (
 )
 
 
-class GitCommitAndPullRequestAgent(Agent):
-    name: str = "Git Commit & Pull Request Agent"
-    description: str = (
-        "An agent to commit staged changes and manage GitHub pull requests"
-    )
+class GitAgent(Agent):
+    name: str = "Git Agent"
+    description: str = "An agent to manage Git repositories"
     system_prompt: str = """
 You are a Git automation agent.
 
@@ -53,7 +51,7 @@ Constraints:
         cls,
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "GitCommitAndPullRequestAgent":
+    ) -> "GitAgent":
 
         from naas_abi_marketplace.applications.git import ABIModule
         from pydantic import SecretStr
@@ -227,7 +225,7 @@ Constraints:
         if agent_shared_state is None:
             agent_shared_state = AgentSharedState(thread_id="0")
 
-        return GitCommitAndPullRequestAgent(
+        return GitAgent(
             name=cls.name,
             description=cls.description,
             chat_model=model,
