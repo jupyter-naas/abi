@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Archive, Edit2, Trash2 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -271,6 +271,18 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
     router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
   }, [setActiveConversation, router, currentWorkspaceId]);
 
+  useEffect(() => {
+    if (!currentWorkspaceId) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'm') return;
+      if (e.altKey || e.shiftKey) return;
+      e.preventDefault();
+      handleNewChat();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentWorkspaceId, handleNewChat]);
+
   return (
     <CollapsibleSection
       id="chat"
@@ -283,7 +295,9 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
     >
       {/* New Chat button */}
       <button
+        type="button"
         onClick={handleNewChat}
+        title="New chat (Ctrl+M)"
         className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
       >
         <Plus size={12} />
