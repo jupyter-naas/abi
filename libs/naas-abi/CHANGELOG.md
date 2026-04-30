@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.30.2 (2026-04-30)
+
+### Bug Fixes
+
+- **agents**: Remove unused OpencodeAgent import in AbiAgent
+  ([`1804a6b`](https://github.com/jupyter-naas/abi/commit/1804a6b31f2602fe0c1acd3209d49d97712c4403))
+
+### Chores
+
+- **agent**: Improve logging clarity and comment out debug logs
+  ([`6a31f86`](https://github.com/jupyter-naas/abi/commit/6a31f86c65ab45a6b0ceb288d0a6392eff673506))
+
+
 ## v1.30.1 (2026-04-30)
 
 ### Bug Fixes
