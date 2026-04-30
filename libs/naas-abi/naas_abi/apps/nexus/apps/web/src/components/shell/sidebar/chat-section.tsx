@@ -274,7 +274,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
   useEffect(() => {
     if (!currentWorkspaceId) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'm') return;
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'i') return;
       if (e.altKey || e.shiftKey) return;
       e.preventDefault();
       handleNewChat();
@@ -297,7 +297,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
       <button
         type="button"
         onClick={handleNewChat}
-        title="New chat (Ctrl+M)"
+        title="New chat (Ctrl+I)"
         className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
       >
         <Plus size={12} />

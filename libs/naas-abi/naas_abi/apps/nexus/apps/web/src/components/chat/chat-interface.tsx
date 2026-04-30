@@ -669,7 +669,10 @@ export function ChatInterface() {
     analyserRef.current = null;
   }, []);
 
-  const startVoiceRecording = async () => {
+  const startVoiceRecording = useCallback(async () => {
+    if (isLoading) {
+      return;
+    }
     setVoiceError(null);
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setVoiceError('Microphone is not supported in this browser.');
@@ -743,7 +746,7 @@ export function ChatInterface() {
       stopVoiceStream();
       setVoiceMode('idle');
     }
-  };
+  }, [isLoading, stopVoiceStream]);
 
   const cancelVoiceRecording = useCallback(() => {
     stopVoiceStream();
@@ -869,21 +872,36 @@ export function ChatInterface() {
     }
   }, [cancelVoiceRecording]);
 
-  // Keyboard shortcut: Ctrl+M validates the current voice recording
+  // Keyboard shortcuts:
+  // - Ctrl/Cmd + K: start recording, or stop + send when already recording
+  // - Ctrl/Cmd + L (or Escape): cancel current recording
   useEffect(() => {
-    if (voiceMode !== 'recording') return;
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') {
+      const hasCommandModifier = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      const hasNoExtraModifiers = !e.altKey && !e.shiftKey;
+
+      if (hasCommandModifier && hasNoExtraModifiers && key === 'm') {
         e.preventDefault();
-        void confirmVoiceRecording();
-      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        if (voiceMode === 'recording') {
+          void confirmVoiceRecording();
+        } else if (voiceMode === 'idle') {
+          void startVoiceRecording();
+        }
+      } else if (
+        (hasCommandModifier && hasNoExtraModifiers && key === 'm') ||
+        e.key === 'Escape'
+      ) {
+        if (voiceMode !== 'recording') return;
         e.preventDefault();
+        e.stopPropagation();
         cancelVoiceRecording();
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [voiceMode, confirmVoiceRecording, cancelVoiceRecording]);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [voiceMode, confirmVoiceRecording, cancelVoiceRecording, startVoiceRecording]);
 
   // Cleanup mic resources if the component unmounts while recording
   useEffect(() => {
@@ -1804,8 +1822,8 @@ export function ChatInterface() {
                       'text-muted-foreground hover:bg-muted hover:text-foreground',
                       isLoading && 'cursor-not-allowed opacity-50'
                     )}
-                    title="Record voice message"
-                    aria-label="Record voice message"
+                    title="Record voice message (Ctrl+M)"
+                    aria-label="Record voice message (Ctrl+M)"
                   >
                     <Mic size={18} />
                   </button>
