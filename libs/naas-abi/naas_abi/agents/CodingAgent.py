@@ -20,7 +20,7 @@ You must work only in the provided working directory.
 Always read existing files before changing code.
 Keep changes minimal and focused.
 """.strip()
-    logo_url: str = "libs/naas-abi/naas_abi/assets/opencode.png"
+    logo_url: str = "libs/naas-abi/naas_abi/assets/public/opencode.png"
 
     @classmethod
     def New(
