@@ -324,13 +324,6 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
             <Bot size={12} />
             <span>Agents</span>
           </Link>
-          <Link
-            href={getWorkspacePath(currentWorkspaceId, '/chat/agents/new')}
-            className="rounded p-0.5 hover:bg-muted hover:text-foreground"
-            title="Create Agent"
-          >
-            <Plus size={12} />
-          </Link>
         </div>
 
         {agentsExpanded && (
