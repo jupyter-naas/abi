@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v1.31.0 (2026-05-01)
+
+### Bug Fixes
+
+- **nexus-chat-interface**: Disable web search feature until ready
+  ([`10fb8fd`](https://github.com/jupyter-naas/abi/commit/10fb8fd9a22d7bade2ecad11f893c34dcd381838))
+
+### Chores
+
+- Comment out ensure_seed_data function in seed.py
+  ([`40f17d7`](https://github.com/jupyter-naas/abi/commit/40f17d7e3f8517e66c090ab9b0b45eafba3a3b64))
+
+### Features
+
+- **chat-interface**: Add voice recording keyboard shortcuts and improve controls
+  ([`e8d8634`](https://github.com/jupyter-naas/abi/commit/e8d86340d5b0bdc3eb83a30da0c7be6e99bf4999))
+
+- **web**: Add keyboard shortcut Ctrl+M for new chat creation
+  ([`5b2a4c4`](https://github.com/jupyter-naas/abi/commit/5b2a4c4105f09b04bb96b002175c7c2ed5150bb9))
+
+### Refactoring
+
+- **knowledge-graph-section**: Comment out pack label above graph list
+  ([`031b1c4`](https://github.com/jupyter-naas/abi/commit/031b1c4d2dad6c85883f0176e78e97bb5158f7c5))
+
+- **sidebar/chat-section**: Remove create agent link
+  ([`5c8fff0`](https://github.com/jupyter-naas/abi/commit/5c8fff02e48302e209bbe4ba36d1f769d8abdba3))
+
+
 ## v1.30.2 (2026-04-30)
 
 ### Bug Fixes
