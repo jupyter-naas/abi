@@ -484,9 +484,11 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
               availableGraphPacks.map((pack, packIndex) => (
                 <React.Fragment key={pack.roleLabel}>
                   {packIndex > 0 && <div className="my-1 h-px bg-border/50" />}
+                  {/* Pack label above graph list — hidden for now
                   <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
                     {pack.roleLabel}
                   </p>
+                  */}
                   {pack.graphs.map((graph) => (
                     <GraphItemRow
                       key={graph.id}
