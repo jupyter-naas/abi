@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-05-01)
+
+### Bug Fixes
+
+- Update decision rules for PR and commit workflows in GitAgent
+  ([`fb50104`](https://github.com/jupyter-naas/abi/commit/fb5010476aef934d24ddd830ddc7b2d1b7a00fc4))
+
+
 ## v1.13.0 (2026-05-01)
 
 ### Chores
