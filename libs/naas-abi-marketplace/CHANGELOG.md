@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.13.0 (2026-05-01)
+
+### Chores
+
+- Comment out ensure_seed_data function in seed.py
+  ([`40f17d7`](https://github.com/jupyter-naas/abi/commit/40f17d7e3f8517e66c090ab9b0b45eafba3a3b64))
+
+### Features
+
+- **support**: Enhance SupportAgent with richer GitHub issue handling capabilities
+  ([`547823f`](https://github.com/jupyter-naas/abi/commit/547823fe772b530d4ba442fde999c859b40012a8))
+
+
 ## v1.12.0 (2026-04-30)
 
 ### Bug Fixes
