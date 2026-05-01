@@ -1,0 +1,7 @@
+[
+  {
+    "intent_type": "TOOL",
+    "intent_value": "Who are the contributors of the repository?",
+    "intent_target": "github_list_repository_contributors"
+  }
+]

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, Globe, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2 } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -157,7 +157,8 @@ export function ChatInterface() {
   const [attachedImages, setAttachedImages] = useState<string[]>([]); // Base64 images
   const [imageError, setImageError] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
-  const [searchEnabled, setSearchEnabled] = useState(false); // Force web search
+  // Web search — UI/API disabled until the feature is ready
+  // const [searchEnabled, setSearchEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // My Drive picker state
   const [showMyDrivePicker, setShowMyDrivePicker] = useState(false);
@@ -668,7 +669,10 @@ export function ChatInterface() {
     analyserRef.current = null;
   }, []);
 
-  const startVoiceRecording = async () => {
+  const startVoiceRecording = useCallback(async () => {
+    if (isLoading) {
+      return;
+    }
     setVoiceError(null);
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setVoiceError('Microphone is not supported in this browser.');
@@ -742,7 +746,7 @@ export function ChatInterface() {
       stopVoiceStream();
       setVoiceMode('idle');
     }
-  };
+  }, [isLoading, stopVoiceStream]);
 
   const cancelVoiceRecording = useCallback(() => {
     stopVoiceStream();
@@ -868,21 +872,36 @@ export function ChatInterface() {
     }
   }, [cancelVoiceRecording]);
 
-  // Keyboard shortcut: Ctrl+M validates the current voice recording
+  // Keyboard shortcuts:
+  // - Ctrl/Cmd + K: start recording, or stop + send when already recording
+  // - Ctrl/Cmd + L (or Escape): cancel current recording
   useEffect(() => {
-    if (voiceMode !== 'recording') return;
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') {
+      const hasCommandModifier = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      const hasNoExtraModifiers = !e.altKey && !e.shiftKey;
+
+      if (hasCommandModifier && hasNoExtraModifiers && key === 'm') {
         e.preventDefault();
-        void confirmVoiceRecording();
-      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        if (voiceMode === 'recording') {
+          void confirmVoiceRecording();
+        } else if (voiceMode === 'idle') {
+          void startVoiceRecording();
+        }
+      } else if (
+        (hasCommandModifier && hasNoExtraModifiers && key === 'm') ||
+        e.key === 'Escape'
+      ) {
+        if (voiceMode !== 'recording') return;
         e.preventDefault();
+        e.stopPropagation();
         cancelVoiceRecording();
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [voiceMode, confirmVoiceRecording, cancelVoiceRecording]);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [voiceMode, confirmVoiceRecording, cancelVoiceRecording, startVoiceRecording]);
 
   // Cleanup mic resources if the component unmounts while recording
   useEffect(() => {
@@ -931,7 +950,7 @@ export function ChatInterface() {
     }
     setAttachedImages([]); // Clear attached images after adding to message
     setImageError(null);
-    setSearchEnabled(false); // Reset search toggle after sending
+    // setSearchEnabled(false); // Reset search toggle after sending
     setIsLoading(true);
 
     try {
@@ -993,9 +1012,11 @@ export function ChatInterface() {
         // Add placeholder for streaming response
         addMessage(conversationId, {
           role: 'assistant',
-          content: searchEnabled ? '🌐 Searching the web...' : '▌',
+          content: '▌',
+          // content: searchEnabled ? '🌐 Searching the web...' : '▌',
           agent: effectiveAgent,
-          activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
+          activityLine: 'Processing...',
+          // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
         });
         // Capture placeholder message id for controls
         {
@@ -1014,9 +1035,10 @@ export function ChatInterface() {
         let thinkingContent = '';   // Accumulated thinking text
         let responseContent = '';   // Accumulated response text
         let streamSources: string[] = [];  // RAG source filenames
-        let streamActivityLine: string | undefined = searchEnabled
-          ? 'Web search in progress'
-          : 'Processing...';
+        let streamActivityLine: string | undefined = 'Processing...';
+        // let streamActivityLine: string | undefined = searchEnabled
+        //   ? 'Web search in progress'
+        //   : 'Processing...';
         let hasDetailedActivity = false;
 
         const singleLine = (value: string) => value.replace(/\s+/g, ' ').trim();
@@ -1040,7 +1062,7 @@ export function ChatInterface() {
         };
 
         const formatStreamActivity = (parsed: any): string | null => {
-          if (parsed?.search) return 'Web search in progress';
+          // if (parsed?.search) return 'Web search in progress';
 
           if (parsed?.event === 'tool') {
             const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim() ? parsed.tool : '';
@@ -1113,7 +1135,8 @@ export function ChatInterface() {
             agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
-            search_enabled: searchEnabled,
+            search_enabled: false,
+            // search_enabled: searchEnabled,
           }),
         });
 
@@ -1654,7 +1677,10 @@ export function ChatInterface() {
                       handleSubmit(e);
                     }
                   }}
-                  placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
+                  placeholder={
+                    attachedImages.length > 0 ? 'Ask about the image...' : 'Send a message...'
+                  }
+                  // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="max-h-36 min-h-[24px] w-full resize-none bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
                   rows={1}
                 />
@@ -1768,7 +1794,7 @@ export function ChatInterface() {
                     )}
                   </div>
                   
-                  {/* Search the web (globe) */}
+                  {/* Search the web (globe) — disabled until feature is ready
                   <button
                     type="button"
                     onClick={() => setSearchEnabled(!searchEnabled)}
@@ -1782,6 +1808,7 @@ export function ChatInterface() {
                   >
                     <Globe size={18} />
                   </button>
+                  */}
                 </div>
                 
                 <div className="flex items-center gap-1">
@@ -1795,8 +1822,8 @@ export function ChatInterface() {
                       'text-muted-foreground hover:bg-muted hover:text-foreground',
                       isLoading && 'cursor-not-allowed opacity-50'
                     )}
-                    title="Record voice message"
-                    aria-label="Record voice message"
+                    title="Record voice message (Ctrl+M)"
+                    aria-label="Record voice message (Ctrl+M)"
                   >
                     <Mic size={18} />
                   </button>
