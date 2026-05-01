@@ -6,6 +6,7 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 
 
@@ -15,7 +16,7 @@ class ABIModule(BaseModule):
             "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_marketplace.applications.github",
         ],
-        services=[ObjectStorageService, TripleStoreService],
+        services=[ObjectStorageService, TripleStoreService, Secret],
     )
 
     class Configuration(ModuleConfiguration):
@@ -34,6 +35,7 @@ class ABIModule(BaseModule):
             priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
             priority_option_id: "4fb76f2d"
         """
+
         default_repository: str
         github_project_id: int
         project_node_id: str
