@@ -614,7 +614,9 @@ function PaneMessage({ message }: { message: Message }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const wasProcessingRef = useRef(false);
+  const processingStartRef = useRef<number | null>(null);
 
   // Parse <think> tags
   const parseThinking = (content: string) => {
@@ -632,6 +634,22 @@ function PaneMessage({ message }: { message: Message }) {
     : parseThinking(message.content);
 
   const isStillProcessing = !isUser && thinking && (!response || response === '▌');
+
+  // Live elapsed timer while processing
+  useEffect(() => {
+    if (isStillProcessing) {
+      if (processingStartRef.current === null) {
+        processingStartRef.current = Date.now();
+        setElapsedSeconds(0);
+      }
+      const interval = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - (processingStartRef.current ?? Date.now())) / 1000));
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      processingStartRef.current = null;
+    }
+  }, [isStillProcessing]);
 
   // Auto-close thinking 3s after processing finishes
   useEffect(() => {
@@ -673,21 +691,21 @@ function PaneMessage({ message }: { message: Message }) {
             onClick={() => thinking && setShowThinking(!showThinking)}
             className={cn(
               'flex items-center gap-1 text-[10px] text-muted-foreground transition-colors',
-              thinking && 'hover:text-foreground cursor-pointer'
+              thinking && !isStillProcessing && 'hover:text-foreground cursor-pointer'
             )}
-            disabled={!thinking}
+            disabled={!thinking || isStillProcessing}
           >
             {isStillProcessing ? (
-              <span className="font-medium animate-pulse">Processing...</span>
+              <span className="font-medium tabular-nums">{formatDuration(elapsedSeconds)}</span>
             ) : (
               <span className="font-medium">
                 Processed in {formatDuration(message.thinkingDuration || 0)}
               </span>
             )}
-            {thinking && (
+            {thinking && !isStillProcessing && (
               <ChevronDown
                 size={10}
-                className={cn('transition-transform', (showThinking || (isStillProcessing && !autoCollapsed)) && 'rotate-180')}
+                className={cn('transition-transform', showThinking && 'rotate-180')}
               />
             )}
           </button>
