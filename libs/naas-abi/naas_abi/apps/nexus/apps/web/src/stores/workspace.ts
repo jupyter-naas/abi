@@ -45,13 +45,24 @@ export type NavigationItem =
 // AgentType is now a string to support dynamic agents
 export type AgentType = string;
 
+export interface ToolCall {
+  id: string;
+  toolName: string;
+  prefix: 'Tool' | 'Agent';
+  rawName: string;
+  status: 'running' | 'done';
+  input?: string;
+  output?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
   agent?: AgentType;
-  activityLine?: string; // Single-line live status (tool usage/response, processing)
+  activityLine?: string; // Single-line live status (legacy, kept for backward compat)
+  toolCalls?: ToolCall[]; // Ordered list of tool invocations for this message
   images?: string[]; // Base64-encoded images for multimodal chat
   thinkingDuration?: number; // Duration in seconds the AI spent "thinking"
   sources?: string[]; // filenames of RAG documents used to answer
@@ -184,6 +195,7 @@ interface WorkspaceState {
     thinkingDuration?: number,
     sources?: string[],
     activityLine?: string | null,
+    toolCalls?: ToolCall[] | null,
   ) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
@@ -359,7 +371,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }));
   },
 
-  updateLastMessage: (conversationId, content, thinkingDuration, sources, activityLine) => {
+  updateLastMessage: (conversationId, content, thinkingDuration, sources, activityLine, toolCalls) => {
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
@@ -373,6 +385,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                       ...(thinkingDuration !== undefined && { thinkingDuration }),
                       ...(sources !== undefined && { sources }),
                       ...(activityLine !== undefined && { activityLine: activityLine || undefined }),
+                      ...(toolCalls !== undefined && { toolCalls: toolCalls || undefined }),
                     }
                   : msg
               ),

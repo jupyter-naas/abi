@@ -35,6 +35,9 @@ from rdflib.term import URIRef
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/ontology")
 
+# In-memory cache for graphs loaded with owl:imports resolved (avoids re-fetching remote ontologies)
+_graph_with_imports_cache: dict[str, Graph] = {}
+
 
 # ── Pure utility functions ────────────────────────────────────────────────────
 
@@ -74,13 +77,91 @@ def _load_ontology_graph(ontology_path: str, add_imports: bool = False) -> Graph
     return graph
 
 
+# Known remote import URIs → relative paths under the ontologies/imports/ directory
+_IMPORT_URI_TO_LOCAL: dict[str, str] = {
+    "http://purl.obolibrary.org/obo/bfo.owl": "top-level/bfo-core.ttl",
+    "https://www.commoncoreontologies.org/AgentOntology": "mid-level/AgentOntology.ttl",
+    "https://www.commoncoreontologies.org/InformationEntityOntology": "mid-level/InformationEntityOntology.ttl",
+    "https://www.commoncoreontologies.org/EventOntology": "mid-level/EventOntology.ttl",
+    "https://www.commoncoreontologies.org/ExtendedRelationOntology": "mid-level/ExtendedRelationOntology.ttl",
+    "https://www.commoncoreontologies.org/ArtifactOntology": "mid-level/ArtifactOntology.ttl",
+    "https://www.commoncoreontologies.org/GeospatialOntology": "mid-level/GeospatialOntology.ttl",
+    "https://www.commoncoreontologies.org/QualityOntology": "mid-level/QualityOntology.ttl",
+    "https://www.commoncoreontologies.org/TimeOntology": "mid-level/TimeOntology.ttl",
+    "https://www.commoncoreontologies.org/FacilityOntology": "mid-level/FacilityOntology.ttl",
+    "https://www.commoncoreontologies.org/UnitsOfMeasureOntology": "mid-level/UnitsOfMeasureOntology.ttl",
+}
+
+
+def _load_ontology_graph_with_imports_cached(path: str) -> Graph:
+    """Load ontology + all owl:imports using local files first; result is in-memory cached."""
+    if path in _graph_with_imports_cache:
+        return _graph_with_imports_cache[path]
+
+    # Derive imports/ directory from the ontology path (e.g. …/ontologies/modules/ → …/ontologies/imports/)
+    imports_dir = Path(path).parent.parent / "imports"
+    seen: set[str] = set()
+
+    def _load_recursive(file_path: str) -> Graph:
+        g = _load_ontology_graph(file_path)
+        for import_uri in list(g.objects(None, OWL.imports)):
+            uri_str = str(import_uri)
+            if uri_str in seen:
+                continue
+            seen.add(uri_str)
+            relative = _IMPORT_URI_TO_LOCAL.get(uri_str)
+            local_path = imports_dir / relative if relative else None
+            if local_path and local_path.exists():
+                g += _load_recursive(str(local_path))
+            else:
+                try:
+                    sub = Graph()
+                    sub.parse(uri_str)
+                    g += sub
+                except Exception as e:
+                    logger.error(f"Error loading import {uri_str}: {e}")
+        return g
+
+    _graph_with_imports_cache[path] = _load_recursive(path)
+    return _graph_with_imports_cache[path]
+
+
+_BFO_BUCKET_ROOTS = " ".join(
+    f"<http://purl.obolibrary.org/obo/{bfo_id}>"
+    for bfo_id in (
+        "BFO_0000040",  # Material Entity (WHO)
+        "BFO_0000015",  # Process (WHAT)
+        "BFO_0000008",  # Temporal Region (WHEN)
+        "BFO_0000029",  # Site (WHERE)
+        "BFO_0000031",  # Generically Dependent Continuant (HOW WE KNOW)
+        "BFO_0000019",  # Quality (HOW IT IS)
+        "BFO_0000017",  # Realizable (WHY)
+    )
+)
+
+
+def _find_bfo_ancestor(graph: Graph, class_iri: str) -> str | None:
+    """Walk rdfs:subClassOf+ to find the nearest BFO bucket-root ancestor, or None."""
+    query = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?ancestor WHERE {{
+            VALUES ?ancestor {{ {_BFO_BUCKET_ROOTS} }}
+            <{class_iri}> rdfs:subClassOf+ ?ancestor .
+        }}
+        LIMIT 1
+    """
+    for row in graph.query(query):
+        assert isinstance(row, ResultRow)
+        val = getattr(row, "ancestor", None)
+        return str(val) if val else None
+    return None
+
+
 def _compute_ontology_stats_for_graph(graph: Graph) -> tuple[int, int, int, int, int]:
     """Return (classes, object_properties, data_properties, named_individuals, imports)."""
 
     def _count_iri_subjects(rdf_type: URIRef) -> int:
-        return len(
-            {s for s in graph.subjects(RDF.type, rdf_type) if isinstance(s, URIRef)}
-        )
+        return len({s for s in graph.subjects(RDF.type, rdf_type) if isinstance(s, URIRef)})
 
     return (
         _count_iri_subjects(OWL.Class),
@@ -106,7 +187,9 @@ def _parse_ttl(content: str, file_path: str) -> ReferenceOntologyData:
         definition = def_match.group(1) if def_match else None
         example_match = re.search(r'skos:example\s+"([^"]+)"', body)
         examples = example_match.group(1) if example_match else None
-        classes.append(ReferenceClassData(iri=iri, label=label, definition=definition, examples=examples))
+        classes.append(
+            ReferenceClassData(iri=iri, label=label, definition=definition, examples=examples)
+        )
 
     prop_pattern = r"<([^>]+)>\s+rdf:type\s+owl:ObjectProperty\s*;?([^.]*)\."
     for match in re.finditer(prop_pattern, content, re.DOTALL):
@@ -200,15 +283,17 @@ def _get_ontology_metadata(triple_store: TripleStoreService, ontology_iri: str) 
     result: dict = {}
     for row in triple_store.query(query):
         assert isinstance(row, ResultRow)
-        result.update({
-            "label": str(row.label) if getattr(row, "label", None) else None,
-            "comment": str(row.comment) if getattr(row, "comment", None) else None,
-            "versionInfo": str(row.versionInfo) if getattr(row, "versionInfo", None) else None,
-            "title": str(row.title) if getattr(row, "title", None) else None,
-            "description": str(row.description) if getattr(row, "description", None) else None,
-            "license": str(row.license) if getattr(row, "license", None) else None,
-            "date": str(row.date) if getattr(row, "date", None) else None,
-        })
+        result.update(
+            {
+                "label": str(row.label) if getattr(row, "label", None) else None,
+                "comment": str(row.comment) if getattr(row, "comment", None) else None,
+                "versionInfo": str(row.versionInfo) if getattr(row, "versionInfo", None) else None,
+                "title": str(row.title) if getattr(row, "title", None) else None,
+                "description": str(row.description) if getattr(row, "description", None) else None,
+                "license": str(row.license) if getattr(row, "license", None) else None,
+                "date": str(row.date) if getattr(row, "date", None) else None,
+            }
+        )
     return result
 
 
@@ -233,6 +318,7 @@ class OntologyService:
             return self._triple_store_getter()
         try:
             from naas_abi import ABIModule
+
             return ABIModule.get_instance().engine.services.triple_store
         except Exception as exc:
             raise OntologyServiceUnavailableError(
@@ -244,11 +330,10 @@ class OntologyService:
             return self._abi_module_getter()
         try:
             from naas_abi import ABIModule
+
             return ABIModule.get_instance()
         except Exception as exc:
-            raise OntologyServiceUnavailableError(
-                "ABIModule is not initialized."
-            ) from exc
+            raise OntologyServiceUnavailableError("ABIModule is not initialized.") from exc
 
     def _resolve_ontology_paths(
         self, ontology_path: str | None, ontologies: list[OntologyFileItemData]
@@ -380,7 +465,9 @@ class OntologyService:
                 label = ontology_graph.value(URIRef(str(ontology_uri)), RDFS.label)
                 description = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.description)
                 license_val = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.license)
-                contributors = list(ontology_graph.objects(URIRef(str(ontology_uri)), DCTERMS.contributor))
+                contributors = list(
+                    ontology_graph.objects(URIRef(str(ontology_uri)), DCTERMS.contributor)
+                )
                 date = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.date)
                 imports = list(ontology_graph.objects(URIRef(str(ontology_uri)), OWL.imports))
 
@@ -416,7 +503,9 @@ class OntologyService:
         """Return element counts for a specific ontology file."""
         try:
             graph = _load_ontology_graph(ontology_path)
-            classes, obj_props, data_props, named_ind, imports = _compute_ontology_stats_for_graph(graph)
+            classes, obj_props, data_props, named_ind, imports = _compute_ontology_stats_for_graph(
+                graph
+            )
             return OntologyOverviewStatsData(
                 name=Path(ontology_path).name,
                 path=ontology_path,
@@ -428,7 +517,9 @@ class OntologyService:
                 imports=imports,
             )
         except Exception as exc:
-            raise OntologyServiceUnavailableError("Failed to compute ontology overview stats") from exc
+            raise OntologyServiceUnavailableError(
+                "Failed to compute ontology overview stats"
+            ) from exc
 
     async def get_all_overview_stats(self) -> OntologyOverviewAggregateStatsData:
         """Return consolidated stats across all registered ontology files."""
@@ -457,7 +548,9 @@ class OntologyService:
         except OntologyServiceUnavailableError:
             raise
         except Exception as exc:
-            raise OntologyServiceUnavailableError("Failed to compute aggregate ontology stats") from exc
+            raise OntologyServiceUnavailableError(
+                "Failed to compute aggregate ontology stats"
+            ) from exc
 
     async def get_type_counts(self, ontology_path: str | None) -> OntologyTypeCountsData:
         """Return NamedIndividual and DatatypeProperty counts."""
@@ -528,7 +621,10 @@ class OntologyService:
                 """
 
                 for path in target_paths:
+                    # module-only graph: used for all queries (classes, properties, restrictions)
                     graph = _load_ontology_graph(path)
+                    # imports graph: used only for BFO ancestor resolution — not for queries
+                    ancestor_graph = _load_ontology_graph_with_imports_cached(path)
 
                     for row in graph.query(class_query):
                         assert isinstance(row, ResultRow)
@@ -542,6 +638,7 @@ class OntologyService:
                         parent_iri = data.get("subClassOf", "Unknown")
                         parent_data = _get_uri_metadata(store, parent_iri) if parent_iri else None
                         parent_label = parent_data.get("label", "Unknown") if parent_data else None
+                        bfo_ancestor = _find_bfo_ancestor(ancestor_graph, class_iri)
                         classes_by_iri[class_iri] = OntologyOverviewGraphNodeData(
                             id=class_iri,
                             label=class_label,
@@ -552,6 +649,55 @@ class OntologyService:
                                 "comment": str(comment),
                                 "parent_iri": str(parent_iri),
                                 "parent_label": str(parent_label),
+                                "bfo_parent_iri": bfo_ancestor or "",
+                                "is_primary": True,
+                            },
+                        )
+
+                    restriction_query = """
+                        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                        PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+                        SELECT DISTINCT ?classIri ?propertyIri ?propertyLabel ?targetIri WHERE {
+                            ?classIri rdfs:subClassOf ?restriction .
+                            ?restriction a owl:Restriction ;
+                                         owl:onProperty ?propertyIri .
+                            { ?restriction owl:someValuesFrom ?targetIri . }
+                            UNION
+                            { ?restriction owl:allValuesFrom ?targetIri . }
+                            UNION
+                            { ?restriction owl:hasValue ?targetIri . }
+                            OPTIONAL { ?propertyIri rdfs:label ?propertyLabel . }
+                            FILTER(isIRI(?classIri))
+                            FILTER(isIRI(?propertyIri))
+                            FILTER(isIRI(?targetIri))
+                        }
+                    """
+
+                    def _make_node(
+                        iri: str, _ag: Graph = ancestor_graph
+                    ) -> OntologyOverviewGraphNodeData:
+                        d = _get_uri_metadata(store, iri)
+                        lbl = d.get("label", "Unknown")
+                        typ = d.get("subClassOf")
+                        typ_lbl = (
+                            _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
+                        )
+                        defn = d.get("definition")
+                        cmnt = d.get("comment")
+                        bfo_ancestor = _find_bfo_ancestor(_ag, iri)
+                        return OntologyOverviewGraphNodeData(
+                            id=iri,
+                            label=str(lbl),
+                            type=typ_lbl,
+                            properties={
+                                "iri": iri,
+                                "definition": str(defn) if defn else str(cmnt),
+                                "parent_iri": str(typ),
+                                "parent_label": str(typ_lbl),
+                                "bfo_parent_iri": bfo_ancestor or "",
+                                "is_primary": False,
                             },
                         )
 
@@ -564,25 +710,6 @@ class OntologyService:
                         target_iri = str(row.get("range")) if row.get("range") else None
                         if not source_iri or not target_iri:
                             continue
-
-                        def _make_node(iri: str) -> OntologyOverviewGraphNodeData:
-                            d = _get_uri_metadata(store, iri)
-                            lbl = d.get("label", "Unknown")
-                            typ = d.get("subClassOf")
-                            typ_lbl = _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
-                            defn = d.get("definition")
-                            cmnt = d.get("comment")
-                            return OntologyOverviewGraphNodeData(
-                                id=iri,
-                                label=str(lbl),
-                                type=typ_lbl,
-                                properties={
-                                    "iri": iri,
-                                    "definition": str(defn) if defn else str(cmnt),
-                                    "parent_iri": str(typ),
-                                    "parent_label": str(typ_lbl),
-                                },
-                            )
 
                         if source_iri not in classes_by_iri:
                             classes_by_iri[source_iri] = _make_node(source_iri)
@@ -598,10 +725,14 @@ class OntologyService:
                         if edge_id in edges_by_id:
                             continue
                         property_definition = (
-                            str(row.get("propertyDefinition")) if row.get("propertyDefinition") else ""
+                            str(row.get("propertyDefinition"))
+                            if row.get("propertyDefinition")
+                            else ""
                         )
                         parent_property_iri = (
-                            str(row.get("parentPropertyIri")) if row.get("parentPropertyIri") else ""
+                            str(row.get("parentPropertyIri"))
+                            if row.get("parentPropertyIri")
+                            else ""
                         )
                         edges_by_id[edge_id] = OntologyOverviewGraphEdgeData(
                             id=edge_id,
@@ -614,6 +745,45 @@ class OntologyService:
                                 "iri": property_iri,
                                 "definition": property_definition,
                                 "parent_property_iri": parent_property_iri,
+                            },
+                        )
+
+                    for row in graph.query(restriction_query):
+                        assert isinstance(row, ResultRow)
+                        class_iri = str(row.get("classIri")) if row.get("classIri") else None
+                        property_iri = (
+                            str(row.get("propertyIri")) if row.get("propertyIri") else None
+                        )
+                        target_iri = str(row.get("targetIri")) if row.get("targetIri") else None
+                        if not class_iri or not property_iri or not target_iri:
+                            continue
+
+                        if class_iri not in classes_by_iri:
+                            classes_by_iri[class_iri] = _make_node(class_iri)
+                        if target_iri not in classes_by_iri:
+                            classes_by_iri[target_iri] = _make_node(target_iri)
+
+                        property_label = (
+                            str(row.get("propertyLabel"))
+                            if row.get("propertyLabel")
+                            else property_iri.split("/")[-1]
+                        )
+                        edge_id = f"{class_iri}|restriction|{property_iri}|{target_iri}"
+                        if edge_id in edges_by_id:
+                            continue
+                        prop_data = _get_uri_metadata(store, property_iri)
+                        prop_definition = prop_data.get("definition", "")
+                        edges_by_id[edge_id] = OntologyOverviewGraphEdgeData(
+                            id=edge_id,
+                            source=class_iri,
+                            target=target_iri,
+                            type="Restriction",
+                            label=property_label,
+                            properties={
+                                "relation_kind": "restriction",
+                                "iri": property_iri,
+                                "definition": str(prop_definition) if prop_definition else "",
+                                "parent_property_iri": "",
                             },
                         )
 
@@ -712,6 +882,86 @@ class OntologyService:
                 f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
             ) from exc
 
+    async def get_class_parents(
+        self,
+        class_iris: list[str],
+        ontology_path: str,
+    ) -> OntologyOverviewGraphData:
+        """Return direct rdfs:subClassOf parents for the given class IRIs.
+
+        Uses the imports-resolved graph so parents from BFO/CCO layers are
+        reachable at every level of progressive expansion.
+        """
+        store = self._get_triple_store()
+        if not class_iris:
+            return OntologyOverviewGraphData(nodes=[], edges=[])
+
+        ancestor_graph = _load_ontology_graph_with_imports_cached(ontology_path)
+
+        new_nodes: dict[str, OntologyOverviewGraphNodeData] = {}
+        new_edges: dict[str, OntologyOverviewGraphEdgeData] = {}
+
+        iris_values = " ".join(f"<{iri}>" for iri in class_iris)
+        query = f"""
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            SELECT DISTINCT ?subClass ?superClass WHERE {{
+                VALUES ?subClass {{ {iris_values} }}
+                ?subClass rdfs:subClassOf ?superClass .
+                FILTER(isIRI(?superClass))
+            }}
+        """
+
+        for row in ancestor_graph.query(query):
+            assert isinstance(row, ResultRow)
+            sub_iri = str(row.get("subClass")) if row.get("subClass") else None
+            super_iri = str(row.get("superClass")) if row.get("superClass") else None
+            if not sub_iri or not super_iri:
+                continue
+
+            if super_iri not in new_nodes:
+                d = _get_uri_metadata(store, super_iri)
+                raw_lbl = d.get("label")
+                lbl = raw_lbl or super_iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+                typ = d.get("subClassOf")
+                typ_lbl = (
+                    _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
+                )
+                bfo_anc = _find_bfo_ancestor(ancestor_graph, super_iri)
+                new_nodes[super_iri] = OntologyOverviewGraphNodeData(
+                    id=super_iri,
+                    label=str(lbl),
+                    type=typ_lbl,
+                    properties={
+                        "iri": super_iri,
+                        "definition": str(d.get("definition", "")),
+                        "parent_iri": str(typ) if typ else "",
+                        "parent_label": str(typ_lbl) if typ_lbl else "",
+                        "bfo_parent_iri": bfo_anc or "",
+                        "is_primary": False,
+                    },
+                )
+
+            edge_id = f"{sub_iri}|is_a|{super_iri}"
+            if edge_id not in new_edges:
+                new_edges[edge_id] = OntologyOverviewGraphEdgeData(
+                    id=edge_id,
+                    source=sub_iri,
+                    target=super_iri,
+                    type="is a",
+                    label="is a",
+                    properties={
+                        "relation_kind": "is_a",
+                        "iri": str(RDFS.subClassOf),
+                        "definition": "",
+                        "parent_property_iri": "",
+                    },
+                )
+
+        return OntologyOverviewGraphData(
+            nodes=list(new_nodes.values()),
+            edges=list(new_edges.values()),
+        )
+
     async def create_entity(
         self,
         name: str,
@@ -759,5 +1009,6 @@ class OntologyService:
             from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
                 OntologyFileNotFoundError,
             )
+
             raise OntologyFileNotFoundError("Ontology file does not exist")
         return path

@@ -904,7 +904,14 @@ SUBAGENT SYSTEM PROMPT:
         # logger.debug(f"Messages before calling model: {messages}")
 
         # Calling model
-        response: BaseMessage = self._chat_model_with_tools.invoke(messages)
+        try:
+            response: BaseMessage = self._chat_model_with_tools.invoke(messages)
+        except Exception as e:
+            logger.error(f"Model invocation failed for agent '{self._name}': {e}")
+            return Command(
+                goto="__end__",
+                update={"messages": [AIMessage(content=f"I'm sorry, I encountered an error while processing your request: {e}")]},
+            )
         logger.debug(f"Model response: {response}")
         logger.debug(
             f"Model response content: {response.content if hasattr(response, 'content') else response}"

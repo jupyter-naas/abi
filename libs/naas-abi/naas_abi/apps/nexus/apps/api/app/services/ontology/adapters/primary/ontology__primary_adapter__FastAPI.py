@@ -239,6 +239,28 @@ async def get_ontology_overview_graph(
     )
 
 
+@router.get("/overview/parents")
+async def get_class_parents(
+    ontology_path: str = Query(..., alias="ontology_path"),
+    class_iris: list[str] = Query(..., alias="class_iris"),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+) -> OntologyOverviewGraph:
+    """Return direct rdfs:subClassOf parents for the given class IRIs."""
+    try:
+        result = await ontology_service.get_class_parents(
+            class_iris=class_iris,
+            ontology_path=ontology_path,
+        )
+    except OntologyPathNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OntologyServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return OntologyOverviewGraph(
+        nodes=[_node_to_schema(n) for n in result.nodes],
+        edges=[_edge_to_schema(e) for e in result.edges],
+    )
+
+
 @router.post("/entity")
 async def create_entity(
     data: EntityCreate,
