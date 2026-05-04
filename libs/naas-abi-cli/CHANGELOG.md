@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.28.1 (2026-05-04)
+
+### Bug Fixes
+
+- **deps**: Update versions in uv.lock files
+  ([`abeb223`](https://github.com/jupyter-naas/abi/commit/abeb2235da34298ba26602452a8658b1f93a1d20))
+
+### Chores
+
+- Update lockfile version hashes
+  ([`3ddb806`](https://github.com/jupyter-naas/abi/commit/3ddb806f6da905f33c448e2112a0bb8944ca4b7c))
+
+
 ## v1.28.0 (2026-05-04)
 
 ### Chores
