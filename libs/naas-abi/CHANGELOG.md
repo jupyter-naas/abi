@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.32.1 (2026-05-04)
+
+### Bug Fixes
+
+- IsStillProcessing to use Boolean constructor
+  ([`3599d3c`](https://github.com/jupyter-naas/abi/commit/3599d3c649ecce7560a5fdffaf81a58650223a29))
+
+
 ## v1.32.0 (2026-05-04)
 
 ### Features
