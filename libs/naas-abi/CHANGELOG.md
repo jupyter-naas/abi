@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.33.0 (2026-05-04)
+
+### Bug Fixes
+
+- **graph**: Remove unused hierarchy filter in ontology graph page
+  ([`6e4cd57`](https://github.com/jupyter-naas/abi/commit/6e4cd5742f623d8818b5a7c7158a97541d77e244))
+
+- **ontology**: Properly key OntologyNetworkView with selectedOntologyPath
+  ([`0d531f4`](https://github.com/jupyter-naas/abi/commit/0d531f4066f90a71f2cd1fd17acd54f02608d1b1))
+
+
 ## v1.32.1 (2026-05-04)
 
 ### Bug Fixes
