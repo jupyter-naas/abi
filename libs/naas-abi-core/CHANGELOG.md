@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.34.3 (2026-05-04)
+
+### Bug Fixes
+
+- **agent**: Add error handling for model invocation failures
+  ([`3ea70ec`](https://github.com/jupyter-naas/abi/commit/3ea70ec45659e725db8a65b4ecdcd4987e420ef8))
+
+
 ## v1.34.2 (2026-05-04)
 
 ### Bug Fixes
