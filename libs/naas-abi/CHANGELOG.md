@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.32.0 (2026-05-04)
+
+### Features
+
+- **chat**: Add live elapsed timer during processing in chat interface and AI pane
+  ([`42da16b`](https://github.com/jupyter-naas/abi/commit/42da16bff256283c70271498351f5443241f3c56))
+
+
 ## v1.31.0 (2026-05-01)
 
 ### Bug Fixes
