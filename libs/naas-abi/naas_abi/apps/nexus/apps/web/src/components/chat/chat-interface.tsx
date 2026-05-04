@@ -1953,7 +1953,9 @@ const MessageBubble = React.memo(function MessageBubble({
   const [showThinking, setShowThinking] = useState(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const wasProcessingRef = useRef(false);
+  const processingStartRef = useRef<number | null>(null);
   
   // Get user name and agent info for display
   const user = useAuthStore(state => state.user);
@@ -2013,6 +2015,22 @@ const MessageBubble = React.memo(function MessageBubble({
     (thinking !== null ? (!response || endsWithCaret) : (response === '▌'))
   );
   
+  // Live elapsed timer while processing
+  useEffect(() => {
+    if (isStillProcessing) {
+      if (processingStartRef.current === null) {
+        processingStartRef.current = Date.now();
+        setElapsedSeconds(0);
+      }
+      const interval = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - (processingStartRef.current ?? Date.now())) / 1000));
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      processingStartRef.current = null;
+    }
+  }, [isStillProcessing]);
+
   // Auto-close thinking 3s after processing finishes
   useEffect(() => {
     if (isStillProcessing) {
@@ -2163,25 +2181,27 @@ const MessageBubble = React.memo(function MessageBubble({
         )}
         
         {/* Processing / Processed indicator */}
-        {hasThinkingSection && (!isStillProcessing || showThinking) && (
+        {hasThinkingSection && (
           <div className="w-full">
             <button
               onClick={() => thinking && setShowThinking(!showThinking)}
               className={cn(
                 'flex items-center gap-1.5 text-xs text-muted-foreground transition-colors',
-                thinking && 'hover:text-foreground cursor-pointer'
+                thinking && !isStillProcessing && 'hover:text-foreground cursor-pointer'
               )}
-              disabled={!thinking}
+              disabled={!thinking || isStillProcessing}
             >
-              {isStillProcessing ? null : (
+              {isStillProcessing ? (
+                <span className="font-medium tabular-nums">{formatDuration(elapsedSeconds)}</span>
+              ) : (
                 <span className="font-medium">
                   Processed in {formatDuration(message.thinkingDuration || 0)}
                 </span>
               )}
-              {thinking && (
-                <ChevronDown 
-                  size={12} 
-                  className={cn('transition-transform', showThinking && 'rotate-180')} 
+              {thinking && !isStillProcessing && (
+                <ChevronDown
+                  size={12}
+                  className={cn('transition-transform', showThinking && 'rotate-180')}
                 />
               )}
             </button>
