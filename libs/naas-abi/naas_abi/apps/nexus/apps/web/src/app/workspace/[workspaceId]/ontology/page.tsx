@@ -607,6 +607,7 @@ export default function OntologyPage() {
 
           {viewMode === 'network' && (
             <OntologyNetworkView
+              key={selectedOntologyPath ?? 'all'}
               ontologyPath={selectedOntologyPath}
               graphNodes={overviewGraphNodes}
               graphEdges={overviewGraphEdges}
