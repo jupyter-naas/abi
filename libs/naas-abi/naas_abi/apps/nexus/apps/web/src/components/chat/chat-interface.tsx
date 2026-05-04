@@ -2,12 +2,12 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2 } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
@@ -1036,9 +1036,7 @@ export function ChatInterface() {
         let responseContent = '';   // Accumulated response text
         let streamSources: string[] = [];  // RAG source filenames
         let streamActivityLine: string | undefined = 'Processing...';
-        // let streamActivityLine: string | undefined = searchEnabled
-        //   ? 'Web search in progress'
-        //   : 'Processing...';
+        let streamToolCalls: ToolCall[] = [];
         let hasDetailedActivity = false;
 
         const singleLine = (value: string) => value.replace(/\s+/g, ' ').trim();
@@ -1054,47 +1052,41 @@ export function ChatInterface() {
             .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
 
-        const formatToolLabel = (raw: string): { prefix: string; name: string } => {
+        const formatToolLabel = (raw: string): { prefix: 'Tool' | 'Agent'; name: string } => {
           if (raw.startsWith('transfer_to_')) {
             return { prefix: 'Agent', name: formatToolName(raw.slice('transfer_to_'.length)) };
           }
           return { prefix: 'Tool', name: formatToolName(raw) };
         };
 
-        const formatStreamActivity = (parsed: any): string | null => {
-          // if (parsed?.search) return 'Web search in progress';
-
-          if (parsed?.event === 'tool') {
-            const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim() ? parsed.tool : '';
-            const { prefix, name } = rawTool ? formatToolLabel(rawTool) : { prefix: 'Tool', name: 'Tool' };
-            return `${prefix}: ${name}`;
+        const handleToolStartEvent = (rawTool: string, input?: string) => {
+          const { prefix, name } = rawTool ? formatToolLabel(rawTool) : { prefix: 'Tool' as const, name: 'Tool' };
+          const last = streamToolCalls[streamToolCalls.length - 1];
+          if (last && last.status === 'running' && last.rawName === rawTool) {
+            // Same tool still running — update input if provided
+            if (input && !last.input) last.input = input;
+            return;
           }
+          // Mark previous running tool done
+          if (last && last.status === 'running') last.status = 'done';
+          streamToolCalls.push({
+            id: `tc-${Date.now()}-${streamToolCalls.length}`,
+            toolName: name,
+            prefix,
+            rawName: rawTool,
+            status: 'running',
+            ...(input ? { input } : {}),
+          });
+          streamActivityLine = `${prefix}: ${name}`;
+          hasDetailedActivity = true;
+        };
 
-          if (parsed?.event === 'tool_usage') {
-            const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim()
-              ? parsed.tool
-              : typeof parsed.data === 'string' && parsed.data.trim()
-                ? parsed.data
-                : '';
-            const { prefix, name } = rawTool ? formatToolLabel(rawTool) : { prefix: 'Tool', name: 'Tool' };
-            return `${prefix}: ${name}`;
+        const handleToolResponseEvent = (output: string) => {
+          const last = streamToolCalls[streamToolCalls.length - 1];
+          if (last && last.status === 'running') {
+            last.status = 'done';
+            if (output.trim()) last.output = output.slice(0, 2000);
           }
-
-          // if (parsed?.event === 'tool_response') {
-          //   const text = typeof parsed.content === 'string'
-          //     ? parsed.content
-          //     : typeof parsed.data === 'string'
-          //       ? parsed.data
-          //       : '';
-          //   if (!text.trim()) return null;
-          //   return truncateLine(singleLine(text));
-          // }
-
-          if (parsed?.event === 'agent.question' && typeof parsed.question === 'string') {
-            return `Question: ${truncateLine(singleLine(parsed.question), 110)}`;
-          }
-
-          return null;
         };
 
         const renderStreamingMessage = (withCaret: boolean) => {
@@ -1113,6 +1105,7 @@ export function ChatInterface() {
             undefined,
             undefined,
             streamActivityLine,
+            streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
           );
         };
 
@@ -1174,9 +1167,34 @@ export function ChatInterface() {
                   if (parsed.sources && Array.isArray(parsed.sources)) {
                     streamSources = parsed.sources as string[];
                   }
-                  const streamEvent = formatStreamActivity(parsed);
-                  if (streamEvent) {
-                    streamActivityLine = streamEvent;
+
+                  if (parsed?.event === 'tool') {
+                    const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim() ? parsed.tool : '';
+                    handleToolStartEvent(rawTool);
+                    renderStreamingMessage(true);
+                  } else if (parsed?.event === 'tool_usage') {
+                    const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim()
+                      ? parsed.tool
+                      : typeof parsed.data === 'string' && parsed.data.trim()
+                        ? parsed.data
+                        : '';
+                    const input = typeof parsed.input === 'string' && parsed.input.trim()
+                      ? parsed.input
+                      : typeof parsed.data === 'string' && parsed.data.trim()
+                        ? parsed.data
+                        : undefined;
+                    handleToolStartEvent(rawTool, input);
+                    renderStreamingMessage(true);
+                  } else if (parsed?.event === 'tool_response') {
+                    const output = typeof parsed.content === 'string'
+                      ? parsed.content
+                      : typeof parsed.data === 'string'
+                        ? parsed.data
+                        : '';
+                    handleToolResponseEvent(output);
+                    renderStreamingMessage(true);
+                  } else if (parsed?.event === 'agent.question' && typeof parsed.question === 'string') {
+                    streamActivityLine = `Question: ${truncateLine(singleLine(parsed.question), 110)}`;
                     hasDetailedActivity = true;
                     renderStreamingMessage(true);
                   }
@@ -1236,12 +1254,15 @@ export function ChatInterface() {
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
         const finalContent = finalBody.trim();
+        // Mark any still-running tool as done
+        streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
         updateLastMessage(
           conversationId!,
           finalContent,
           thinkingDuration,
           streamSources.length > 0 ? streamSources : undefined,
           hasDetailedActivity ? streamActivityLine : null,
+          streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
         );
       } catch (streamError) {
         // Gracefully handle user-initiated aborts
@@ -1250,6 +1271,7 @@ export function ChatInterface() {
             ? `<think>${thinkingContent}</think>\n\n${responseContent}`
             : responseContent;
           const finalContent = finalBody.trim();
+          streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
           if (conversationId) {
             updateLastMessage(
               conversationId,
@@ -1257,6 +1279,7 @@ export function ChatInterface() {
               undefined,
               streamSources.length > 0 ? streamSources : undefined,
               hasDetailedActivity ? streamActivityLine : null,
+              streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
             );
           }
         } else {
@@ -1936,7 +1959,134 @@ function TypingDots() {
   );
 }
 
-const MessageBubble = React.memo(function MessageBubble({ 
+function ToolCallsDropdown({
+  toolCalls,
+  isProcessing,
+  showStop,
+  onStop,
+}: {
+  toolCalls: ToolCall[];
+  isProcessing: boolean;
+  showStop: boolean;
+  onStop: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(true);
+  const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const wasProcessingRef = useRef(false);
+
+  useEffect(() => {
+    if (isProcessing) {
+      wasProcessingRef.current = true;
+      if (autoCollapsed) {
+        setIsOpen(true);
+        setAutoCollapsed(false);
+      }
+    } else if (wasProcessingRef.current && !autoCollapsed) {
+      const timer = setTimeout(() => {
+        setIsOpen(false);
+        setAutoCollapsed(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isProcessing, autoCollapsed]);
+
+  const lastRunning = toolCalls.find((t) => t.status === 'running');
+  const headerLabel = isProcessing && lastRunning
+    ? `${lastRunning.prefix}: ${lastRunning.toolName}`
+    : `${toolCalls.length} tool${toolCalls.length !== 1 ? 's' : ''} used`;
+
+  return (
+    <div className="mb-2 w-full">
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Wrench size={11} className="shrink-0" />
+        <span className="flex-1 truncate text-left">{headerLabel}</span>
+        {isProcessing && (
+          <span className="inline-flex shrink-0">
+            <TypingDots />
+          </span>
+        )}
+        {isProcessing && showStop && (
+          <button
+            type="button"
+            className="ml-1 shrink-0 rounded px-1.5 py-0.5 text-xs hover:bg-muted"
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStop(); }}
+            title="Stop generation"
+          >
+            Stop
+          </button>
+        )}
+        <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
+      </button>
+
+      {isOpen && (
+        <div className="mt-1.5 overflow-hidden rounded-lg border border-border/50 bg-background/50 divide-y divide-border/30">
+          {toolCalls.map((tool) => (
+            <ToolCallRow key={tool.id} tool={tool} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolCallRow({ tool }: { tool: ToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDetails = Boolean(tool.input || tool.output);
+
+  return (
+    <div className="px-3 py-2">
+      <button
+        type="button"
+        disabled={!hasDetails}
+        onClick={() => hasDetails && setExpanded((v) => !v)}
+        className={cn(
+          'flex w-full items-center gap-1.5 text-[11px]',
+          hasDetails ? 'cursor-pointer hover:text-foreground' : 'cursor-default',
+          'text-muted-foreground transition-colors',
+        )}
+      >
+        {tool.status === 'running' ? (
+          <Loader2 size={11} className="shrink-0 animate-spin text-workspace-accent" />
+        ) : (
+          <Check size={11} className="shrink-0 text-green-500 dark:text-green-400" />
+        )}
+        <span className="flex-1 text-left font-medium text-foreground/80">
+          {tool.prefix}: {tool.toolName}
+        </span>
+        {hasDetails && (
+          <ChevronDown size={10} className={cn('shrink-0 transition-transform', expanded && 'rotate-180')} />
+        )}
+      </button>
+
+      {expanded && hasDetails && (
+        <div className="mt-2 space-y-2 pl-4">
+          {tool.input && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">Input</p>
+              <pre className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-muted-foreground">
+                {tool.input}
+              </pre>
+            </div>
+          )}
+          {tool.output && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">Output</p>
+              <pre className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-muted-foreground">
+                {tool.output}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MessageBubble = React.memo(function MessageBubble({
   message,
   currentSelectedAgent,
   showConnecting,
@@ -2241,7 +2391,15 @@ const MessageBubble = React.memo(function MessageBubble({
             </div>
           </div>
 
-          {!isUser && (activityLine || (isStillProcessing && showStop)) && (
+          {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
+            <ToolCallsDropdown
+              toolCalls={message.toolCalls}
+              isProcessing={isStillProcessing}
+              showStop={showStop}
+              onStop={onStop}
+            />
+          )}
+          {!isUser && !message.toolCalls && (activityLine || (isStillProcessing && showStop)) && (
             <div className="mb-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
               {activityLine ? (
                 <span className="truncate">{activityLine}</span>
