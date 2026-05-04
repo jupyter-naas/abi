@@ -17,3 +17,21 @@
     }
 }
 {% endif %}
+
+graph-explorer.{$PUBLIC_WEB_HOST:localhost} {
+    @allowed remote_ip 127.0.0.1/32 ::1/128 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 fd7a:115c:a1e0::/48
+    handle @allowed {
+        @root path /
+        redir @root /explorer 308
+
+        reverse_proxy https://graph-explorer:443 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    handle {
+        respond "Forbidden" 403
+    }
+}
