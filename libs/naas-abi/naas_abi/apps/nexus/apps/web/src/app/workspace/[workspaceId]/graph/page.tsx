@@ -25,6 +25,7 @@ import {
   Loader2,
   UserPlus,
   ChevronDown,
+  GitBranch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -474,6 +475,7 @@ export default function GraphPage() {
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [showHierarchy, setShowHierarchy] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const {
@@ -1360,12 +1362,13 @@ export default function GraphPage() {
   
   // Filter edges to only include edges where both source and target are in filtered nodes (memoized)
   const filteredEdges = useMemo(() => {
-    if (!searchQuery.trim()) return edges;
+    const baseEdges = showHierarchy ? edges : edges.filter((e) => e.properties?.relation_kind !== 'is_a');
+    if (!searchQuery.trim()) return baseEdges;
     const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
-    return edges.filter((edge) =>
+    return baseEdges.filter((edge) =>
       filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
     );
-  }, [edges, filteredNodes, searchQuery]);
+  }, [edges, filteredNodes, searchQuery, showHierarchy]);
   
   // Calculate statistics (memoized)
   const stats = useMemo(() => ({
@@ -1996,6 +1999,19 @@ export default function GraphPage() {
                   >
                     <Filter size={14} />
                     Filter
+                  </button>
+                  <button
+                    onClick={() => setShowHierarchy((v) => !v)}
+                    title="Toggle 'is a' hierarchy edges"
+                    className={cn(
+                      'flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm shadow-sm',
+                      showHierarchy
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'hover:bg-accent'
+                    )}
+                  >
+                    <GitBranch size={14} />
+                    Hierarchy
                   </button>
                   {searchQuery && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">

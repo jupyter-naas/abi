@@ -33,6 +33,7 @@ import {
   ToggleLeft,
   List,
   HelpCircle,
+  GitBranch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
@@ -58,6 +59,11 @@ type OntologyOverviewGraphEdge = {
 const VisNetwork = dynamic(
   () => import('@/components/graph/vis-network').then((mod) => mod.VisNetwork),
   { ssr: false, loading: () => <div className="flex h-full items-center justify-center text-muted-foreground">Loading graph...</div> }
+);
+
+const BFOLegend = dynamic(
+  () => import('@/components/graph/vis-network').then((mod) => mod.BFOLegend),
+  { ssr: false }
 );
 
 export default function OntologyPage() {
@@ -1499,6 +1505,7 @@ function OntologyNetworkView({
   const [graphSearchQuery, setGraphSearchQuery] = useState('');
   const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(null);
+  const [showHierarchy, setShowHierarchy] = useState(false);
   const isAllOntologiesOverview = !ontologyPath;
 
   const filteredGraphNodes = useMemo(() => {
@@ -1513,10 +1520,13 @@ function OntologyNetworkView({
   }, [graphNodes, graphSearchQuery]);
 
   const filteredGraphEdges = useMemo(() => {
-    if (!graphSearchQuery.trim()) return graphEdges;
+    const baseEdges = showHierarchy
+      ? graphEdges
+      : graphEdges.filter((e) => e.properties?.relation_kind !== 'is_a');
+    if (!graphSearchQuery.trim()) return baseEdges;
     const visibleNodeIds = new Set(filteredGraphNodes.map((node) => node.id));
-    return graphEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
-  }, [graphEdges, filteredGraphNodes, graphSearchQuery]);
+    return baseEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
+  }, [graphEdges, filteredGraphNodes, graphSearchQuery, showHierarchy]);
 
   const graphNodesById = useMemo(
     () => new Map(graphNodes.map((node) => [node.id, node])),
@@ -1555,6 +1565,21 @@ function OntologyNetworkView({
                 </button>
               )}
             </div>
+            {!isAllOntologiesOverview && (
+              <button
+                onClick={() => setShowHierarchy((v) => !v)}
+                title="Toggle 'is a' hierarchy edges"
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
+                  showHierarchy
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <GitBranch size={12} />
+                Hierarchy
+              </button>
+            )}
             {graphSearchQuery && (
               <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
                 Showing {filteredGraphNodes.length} of {graphNodes.length}{' '}
@@ -1562,6 +1587,8 @@ function OntologyNetworkView({
               </span>
             )}
           </div>
+
+          {!isAllOntologiesOverview && <BFOLegend />}
 
           {loadingGraph ? (
             <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
