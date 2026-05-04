@@ -155,7 +155,7 @@ class BaseModule(Generic[TConfig]):
         Use this method to perform post-initialization steps that require other modules,
         services, or ontologies to be available and loaded.
         """
-        logger.debug(f"on_initialized for module {self.__module__.split('.')[0]}")
+        logger.debug(f"on_initialized for module {self.__module__}")
 
     def on_unloaded(self):
         pass

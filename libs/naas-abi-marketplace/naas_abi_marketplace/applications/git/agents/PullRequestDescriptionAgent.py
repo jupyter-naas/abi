@@ -1,14 +1,18 @@
 from typing import Optional
 
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
 
-NAME = "Pull_Request_Description_Agent"
-DESCRIPTION = "A agent to generate a description for a pull request"
-SYSTEM_PROMPT = """
+
+class PullRequestDescriptionAgent(Agent):
+    name: str = "Pull Request Description Agent"
+    description: str = "A agent to generate a description for a pull request"
+    system_prompt: str = """
 You are a Github Pull Request Description Agent. You have access to three tools:
 - `git_diff`: Get the git diff
 - `store_pull_request_description`: Store the pull request description in a file `pull_request_description.md`
@@ -23,98 +27,75 @@ This pull request resolves #<branch_name_number>
 
 Where <branch_name_number> is the number at the beginning of the branch name.
 """
+    model = "gpt-4.1-mini"
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "PullRequestDescriptionAgent":
+        from naas_abi_marketplace.applications.git import ABIModule
+        from pydantic import SecretStr
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[Agent]:
-    # Set model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
-
-    # Define tools
-    def git_diff() -> str:
-        """
-        Get the git diff and the branch name
-        """
-        import subprocess
-
-        branch_name = (
-            subprocess.check_output(["git", "branch", "--show-current"])
-            .decode("utf-8")
-            .strip()
+        module = ABIModule.get_instance()
+        secret = module.engine.services.secret
+        object_storage = module.engine.services.object_storage
+        model = ChatOpenAI(
+            model=cls.model, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
         )
-        diff = subprocess.check_output(
-            ["git", "diff", "origin/main", "--", ".", ":!uv.lock"]
-        ).decode("utf-8")
-        return f"Branch name: {branch_name}\n\n{diff}"
 
-    def store_pull_request_description(description: str) -> str:
-        """
-        Store the pull request description in a file `pull_request_description.md`
-        """
-        import os
-        import shutil
-        from datetime import datetime
+        @tool(description="Get the git diff and the branch name")
+        def git_diff() -> str:
+            """
+            Get the git diff and the branch name
+            """
+            import subprocess
 
-        file_path = os.path.join(
-            "storage", "datastore", "git", "pull_request_description.md"
+            branch_name = (
+                subprocess.check_output(["git", "branch", "--show-current"])
+                .decode("utf-8")
+                .strip()
+            )
+            diff = subprocess.check_output(
+                ["git", "diff", "origin/main...HEAD", "--", ".", ":!uv.lock"]
+            ).decode("utf-8")
+            return f"Branch name: {branch_name}\n\n{diff}"
+
+        @tool(
+            description="Store the pull request description in a file `pull_request_description.md`"
         )
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "w") as f:
-            f.write(description)
-        shutil.copy(
-            file_path,
-            os.path.join(
-                os.path.dirname(file_path),
-                datetime.now().isoformat() + "_" + os.path.basename(file_path),
-            ),
+        def store_pull_request_description(description: str) -> str:
+            """
+            Store the pull request description in a file `pull_request_description.md`
+            """
+            if object_storage is None:
+                return "Object storage is not available (module not initialized)."
+
+            object_storage.put_object(
+                prefix="git",
+                key="pull_request_description.md",
+                content=description.encode("utf-8"),
+            )
+            return (
+                "Pull request description stored in `git/pull_request_description.md`"
+            )
+
+        # Set configuration
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(
+                system_prompt=cls.system_prompt,
+            )
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
+
+        return PullRequestDescriptionAgent(
+            name=cls.name,
+            description=cls.description,
+            chat_model=model,
+            tools=[git_diff, store_pull_request_description],
+            agents=[],
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
         )
-        return "Pull request description stored in `pull_request_description.md`"
-
-    from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel, Field
-
-    class PullRequestDescriptionSchema(BaseModel):
-        description: str = Field(..., description="The pull request description")
-
-    class EmptySchema(BaseModel):
-        pass
-
-    tools: list = [
-        StructuredTool(
-            name="git_diff",
-            description="Get the git diff and the branch name",
-            func=lambda: git_diff(),
-            args_schema=EmptySchema,
-        ),
-        StructuredTool(
-            name="store_pull_request_description",
-            description="Store the pull request description in a file `pull_request_description.md`",
-            func=lambda description: store_pull_request_description(description),
-            args_schema=PullRequestDescriptionSchema,
-        ),
-    ]
-
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
-        )
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
-
-    return PullRequestDescriptionAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        tools=tools,
-        agents=[],
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class PullRequestDescriptionAgent(Agent):
-    pass

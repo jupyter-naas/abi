@@ -13,6 +13,7 @@ class AgentRecord:
     description: str
     enabled: bool
     class_name: str | None
+    module_path: str | None
     system_prompt: str | None
     model_id: str | None
     provider: str | None
@@ -38,6 +39,7 @@ class AgentCreateInput:
     workspace_id: str
     name: str
     class_name: str | None = None
+    module_path: str | None = None
     description: str | None = None
     system_prompt: str | None = None
     model_id: str | None = None
@@ -50,6 +52,7 @@ class AgentCreateInput:
 class AgentUpdateInput:
     name: str | None = None
     class_name: str | None = None
+    module_path: str | None = None
     description: str | None = None
     system_prompt: str | None = None
     model_id: str | None = None

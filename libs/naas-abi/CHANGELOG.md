@@ -2,6 +2,75 @@
 
 <!-- version list -->
 
+## v1.31.0 (2026-05-01)
+
+### Bug Fixes
+
+- **nexus-chat-interface**: Disable web search feature until ready
+  ([`10fb8fd`](https://github.com/jupyter-naas/abi/commit/10fb8fd9a22d7bade2ecad11f893c34dcd381838))
+
+### Chores
+
+- Comment out ensure_seed_data function in seed.py
+  ([`40f17d7`](https://github.com/jupyter-naas/abi/commit/40f17d7e3f8517e66c090ab9b0b45eafba3a3b64))
+
+### Features
+
+- **chat-interface**: Add voice recording keyboard shortcuts and improve controls
+  ([`e8d8634`](https://github.com/jupyter-naas/abi/commit/e8d86340d5b0bdc3eb83a30da0c7be6e99bf4999))
+
+- **web**: Add keyboard shortcut Ctrl+M for new chat creation
+  ([`5b2a4c4`](https://github.com/jupyter-naas/abi/commit/5b2a4c4105f09b04bb96b002175c7c2ed5150bb9))
+
+### Refactoring
+
+- **knowledge-graph-section**: Comment out pack label above graph list
+  ([`031b1c4`](https://github.com/jupyter-naas/abi/commit/031b1c4d2dad6c85883f0176e78e97bb5158f7c5))
+
+- **sidebar/chat-section**: Remove create agent link
+  ([`5c8fff0`](https://github.com/jupyter-naas/abi/commit/5c8fff02e48302e209bbe4ba36d1f769d8abdba3))
+
+
+## v1.30.2 (2026-04-30)
+
+### Bug Fixes
+
+- **agents**: Remove unused OpencodeAgent import in AbiAgent
+  ([`1804a6b`](https://github.com/jupyter-naas/abi/commit/1804a6b31f2602fe0c1acd3209d49d97712c4403))
+
+### Chores
+
+- **agent**: Improve logging clarity and comment out debug logs
+  ([`6a31f86`](https://github.com/jupyter-naas/abi/commit/6a31f86c65ab45a6b0ceb288d0a6392eff673506))
+
+
+## v1.30.1 (2026-04-30)
+
+### Bug Fixes
+
+- Remove debug logging for agents and intents
+  ([`8552aee`](https://github.com/jupyter-naas/abi/commit/8552aeedbc0af7edff86819070d9d6d6fa06537b))
+
+
+## v1.30.0 (2026-04-30)
+
+### Bug Fixes
+
+- **naas_abi**: Fix agent logo URL normalization and type safety
+  ([`18421b7`](https://github.com/jupyter-naas/abi/commit/18421b786084e141d472d6b3e2840679f2e22616))
+
+- **nexus/agents**: Stop normalizing agent logo URLs
+  ([`417ce56`](https://github.com/jupyter-naas/abi/commit/417ce56b24be2ffd9e724930c41cdb74e2b888c6))
+
+### Features
+
+- **agents**: Add module_path field and normalize agent logo URLs
+  ([`98d83ce`](https://github.com/jupyter-naas/abi/commit/98d83ceec388f992e8221e7b72442371aeefbd53))
+
+- **agents**: Update logo URL and add new light logo asset
+  ([`79735cb`](https://github.com/jupyter-naas/abi/commit/79735cb606c68bd83b3e28bb75b61f3a1bea14f1))
+
+
 ## v1.29.0 (2026-04-29)
 
 ### Features

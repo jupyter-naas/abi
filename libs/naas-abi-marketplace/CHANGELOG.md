@@ -2,6 +2,50 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-05-01)
+
+### Bug Fixes
+
+- Update decision rules for PR and commit workflows in GitAgent
+  ([`fb50104`](https://github.com/jupyter-naas/abi/commit/fb5010476aef934d24ddd830ddc7b2d1b7a00fc4))
+
+
+## v1.13.0 (2026-05-01)
+
+### Chores
+
+- Comment out ensure_seed_data function in seed.py
+  ([`40f17d7`](https://github.com/jupyter-naas/abi/commit/40f17d7e3f8517e66c090ab9b0b45eafba3a3b64))
+
+### Features
+
+- **support**: Enhance SupportAgent with richer GitHub issue handling capabilities
+  ([`547823f`](https://github.com/jupyter-naas/abi/commit/547823fe772b530d4ba442fde999c859b40012a8))
+
+
+## v1.12.0 (2026-04-30)
+
+### Bug Fixes
+
+- **git-agent**: Update commit and PR agent description and decision rules
+  ([`6ec66da`](https://github.com/jupyter-naas/abi/commit/6ec66da6cab06950bfbf5e851f9fa04e29681bbb))
+
+### Chores
+
+- **git-agent**: Enhance PR creation workflow
+  ([`7b3afd8`](https://github.com/jupyter-naas/abi/commit/7b3afd8a6a319c6fa5bed7369e0879905f803f0b))
+
+### Features
+
+- **git**: Add GitCommitAndPullRequestAgent to automate git commit and PR creation
+  ([`e344843`](https://github.com/jupyter-naas/abi/commit/e344843f39f17103c2702c56d4d425b267094fff))
+
+### Refactoring
+
+- **git-agent**: Rename GitCommitAndPullRequestAgent to GitAgent
+  ([`4aa22dd`](https://github.com/jupyter-naas/abi/commit/4aa22ddead7f06c2836e33611864c729692bd50f))
+
+
 ## v1.11.0 (2026-04-28)
 
 ### Bug Fixes
