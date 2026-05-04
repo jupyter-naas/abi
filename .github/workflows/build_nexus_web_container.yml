@@ -47,7 +47,7 @@ jobs:
           context: libs/naas-abi/naas_abi/apps/nexus
           file: libs/naas-abi/naas_abi/apps/nexus/Dockerfile.release
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64, linux/arm64
           tags: |
             ${{ steps.tags.outputs.image }}:latest
             ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version_tag }}
