@@ -34,6 +34,8 @@ import {
   List,
   HelpCircle,
   GitBranch,
+  AlertCircle,
+  ArrowRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
@@ -1505,32 +1507,113 @@ function OntologyNetworkView({
   const [graphSearchQuery, setGraphSearchQuery] = useState('');
   const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(null);
-  const [showHierarchy, setShowHierarchy] = useState(false);
+  const [subclassOfLevels, setSubclassOfLevels] = useState(0);
+  const [loadingNextLevel, setLoadingNextLevel] = useState(false);
+  // Cached levels: index 0 = direct parents of primary nodes, index 1 = their parents, etc.
+  const [hierarchyByLevel, setHierarchyByLevel] = useState<Array<{
+    nodes: OntologyOverviewGraphNode[];
+    edges: OntologyOverviewGraphEdge[];
+  }>>([]);
+  const [showRestrictions, setShowRestrictions] = useState(false);
+  const [showObjectProperties, setShowObjectProperties] = useState(false);
   const isAllOntologiesOverview = !ontologyPath;
 
+  // Combined nodes: initial + all loaded hierarchy levels up to subclassOfLevels
+  const allVisibleNodes = useMemo(() => {
+    if (subclassOfLevels === 0) return graphNodes;
+    const result = [...graphNodes];
+    const seen = new Set(result.map((n) => n.id));
+    for (let i = 0; i < subclassOfLevels && i < hierarchyByLevel.length; i++) {
+      for (const node of hierarchyByLevel[i].nodes) {
+        if (!seen.has(node.id)) {
+          result.push(node);
+          seen.add(node.id);
+        }
+      }
+    }
+    return result;
+  }, [graphNodes, hierarchyByLevel, subclassOfLevels]);
+
   const filteredGraphNodes = useMemo(() => {
-    if (!graphSearchQuery.trim()) return graphNodes;
+    if (!graphSearchQuery.trim()) return allVisibleNodes;
     const query = graphSearchQuery.toLowerCase();
-    return graphNodes.filter(
+    return allVisibleNodes.filter(
       (node) =>
         node.label.toLowerCase().includes(query) ||
         node.id.toLowerCase().includes(query) ||
         node.type.toLowerCase().includes(query)
     );
-  }, [graphNodes, graphSearchQuery]);
+  }, [allVisibleNodes, graphSearchQuery]);
 
   const filteredGraphEdges = useMemo(() => {
-    const baseEdges = showHierarchy
-      ? graphEdges
-      : graphEdges.filter((e) => e.properties?.relation_kind !== 'is_a');
+    const restrictionEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'restriction');
+    const objectPropEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'object_property');
+
+    let baseEdges: OntologyOverviewGraphEdge[] = [];
+
+    // Add is_a edges from loaded hierarchy levels up to subclassOfLevels
+    for (let i = 0; i < subclassOfLevels && i < hierarchyByLevel.length; i++) {
+      baseEdges = [...baseEdges, ...hierarchyByLevel[i].edges];
+    }
+
+    if (showRestrictions) baseEdges = [...baseEdges, ...restrictionEdges];
+    if (showObjectProperties) baseEdges = [...baseEdges, ...objectPropEdges];
+
     if (!graphSearchQuery.trim()) return baseEdges;
     const visibleNodeIds = new Set(filteredGraphNodes.map((node) => node.id));
     return baseEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
-  }, [graphEdges, filteredGraphNodes, graphSearchQuery, showHierarchy]);
+  }, [graphEdges, filteredGraphNodes, graphSearchQuery, subclassOfLevels, hierarchyByLevel, showRestrictions, showObjectProperties]);
+
+  const handleExpandSubclassOf = async () => {
+    const nextLevel = subclassOfLevels + 1;
+    // Use cached data if already fetched
+    if (hierarchyByLevel[nextLevel - 1]) {
+      setSubclassOfLevels(nextLevel);
+      return;
+    }
+    if (!ontologyPath || loadingNextLevel) return;
+    setLoadingNextLevel(true);
+    try {
+      // Frontier: primary nodes for level 1, previous level's nodes for deeper levels
+      const frontierNodes =
+        subclassOfLevels === 0
+          ? graphNodes.filter((n) => n.properties?.is_primary === true)
+          : (hierarchyByLevel[subclassOfLevels - 1]?.nodes ?? []);
+      if (frontierNodes.length === 0) {
+        setSubclassOfLevels(nextLevel);
+        return;
+      }
+      const baseUrl = getApiUrl();
+      const params = new URLSearchParams({ ontology_path: ontologyPath });
+      frontierNodes.forEach((n) => params.append('class_iris', n.id));
+      const response = await authFetch(`${baseUrl}/api/ontology/overview/parents?${params.toString()}`);
+      if (!response.ok) throw new Error(`parents fetch failed: ${response.status}`);
+      const data = await response.json() as { nodes?: OntologyOverviewGraphNode[]; edges?: OntologyOverviewGraphEdge[] };
+      setHierarchyByLevel((prev) => {
+        const updated = [...prev];
+        updated[nextLevel - 1] = {
+          nodes: Array.isArray(data.nodes) ? data.nodes : [],
+          edges: Array.isArray(data.edges) ? data.edges : [],
+        };
+        return updated;
+      });
+      setSubclassOfLevels(nextLevel);
+    } catch (err) {
+      console.error('Failed to fetch parent classes:', err);
+    } finally {
+      setLoadingNextLevel(false);
+    }
+  };
+
+  // "+" is hidden once the latest fetched level returned 0 nodes (no more parents exist).
+  // Stays visible when the user has collapsed below a cached non-empty level.
+  const canExpandMore =
+    subclassOfLevels < hierarchyByLevel.length ||
+    (hierarchyByLevel[subclassOfLevels - 1]?.nodes.length ?? 1) > 0;
 
   const graphNodesById = useMemo(
-    () => new Map(graphNodes.map((node) => [node.id, node])),
-    [graphNodes]
+    () => new Map(allVisibleNodes.map((node) => [node.id, node])),
+    [allVisibleNodes]
   );
   const selectedGraphNode = selectedGraphNodeId ? graphNodesById.get(selectedGraphNodeId) : null;
   const selectedGraphNodeIsOntology = selectedGraphNode?.type === 'Ontology';
@@ -1566,23 +1649,75 @@ function OntologyNetworkView({
               )}
             </div>
             {!isAllOntologiesOverview && (
-              <button
-                onClick={() => setShowHierarchy((v) => !v)}
-                title="Toggle 'is a' hierarchy edges"
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
-                  showHierarchy
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <GitBranch size={12} />
-                Hierarchy
-              </button>
+              <>
+                <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
+                  <button
+                    onClick={() => subclassOfLevels === 0 ? handleExpandSubclassOf() : setSubclassOfLevels(0)}
+                    title={subclassOfLevels === 0 ? "Show SubclassOf parents (rdfs:subClassOf)" : "Hide SubclassOf hierarchy"}
+                    disabled={loadingNextLevel}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 text-xs',
+                      subclassOfLevels > 0
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:text-foreground',
+                      loadingNextLevel && 'opacity-60 cursor-not-allowed'
+                    )}
+                  >
+                    {loadingNextLevel ? <Loader2 size={12} className="animate-spin" /> : <GitBranch size={12} />}
+                    SubclassOf{subclassOfLevels > 0 && ` (${subclassOfLevels})`}
+                  </button>
+                  {subclassOfLevels > 0 && (
+                    <button
+                      onClick={() => setSubclassOfLevels((v) => Math.max(0, v - 1))}
+                      title="Show fewer parent levels"
+                      disabled={loadingNextLevel}
+                      className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                    >
+                      −
+                    </button>
+                  )}
+                  {canExpandMore && (
+                    <button
+                      onClick={handleExpandSubclassOf}
+                      title="Show more parent levels"
+                      disabled={loadingNextLevel}
+                      className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowRestrictions((v) => !v)}
+                  title="Toggle OWL Restrictions (owl:Restriction)"
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
+                    showRestrictions
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <AlertCircle size={12} />
+                  Restrictions
+                </button>
+                <button
+                  onClick={() => setShowObjectProperties((v) => !v)}
+                  title="Toggle Object Properties (rdfs:domain / rdfs:range)"
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
+                    showObjectProperties
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <ArrowRight size={12} />
+                  Object Properties
+                </button>
+              </>
             )}
             {graphSearchQuery && (
               <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                Showing {filteredGraphNodes.length} of {graphNodes.length}{' '}
+                Showing {filteredGraphNodes.length} of {allVisibleNodes.length}{' '}
                 {isAllOntologiesOverview ? 'ontologies' : 'classes'}
               </span>
             )}
