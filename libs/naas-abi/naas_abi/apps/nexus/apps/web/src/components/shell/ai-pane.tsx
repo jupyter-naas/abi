@@ -633,7 +633,9 @@ function PaneMessage({ message }: { message: Message }) {
     ? { thinking: null, response: message.content }
     : parseThinking(message.content);
 
-  const isStillProcessing = !isUser && thinking && (!response || response === '▌');
+  const isStillProcessing = Boolean(
+    !isUser && thinking && (!response || response === '▌')
+  );
 
   // Live elapsed timer while processing
   useEffect(() => {
