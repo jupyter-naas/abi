@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.28.0 (2026-05-04)
+
+### Chores
+
+- Comment out ensure_seed_data function in seed.py
+  ([`40f17d7`](https://github.com/jupyter-naas/abi/commit/40f17d7e3f8517e66c090ab9b0b45eafba3a3b64))
+
+- **agent**: Improve logging clarity and comment out debug logs
+  ([`6a31f86`](https://github.com/jupyter-naas/abi/commit/6a31f86c65ab45a6b0ceb288d0a6392eff673506))
+
+### Features
+
+- Add graph-explorer to the stack
+  ([`b8819a9`](https://github.com/jupyter-naas/abi/commit/b8819a9fa65f77557806fcaa4e6c07f856d7be9f))
+
+
 ## v1.27.0 (2026-04-30)
 
 ### Features

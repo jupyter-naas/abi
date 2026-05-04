@@ -782,12 +782,31 @@ def get_property_range(
 ) -> Dict[str, Optional[int]]:
     """Get the range classes with cardinalities for an object property"""
     RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
+    OWL = rdflib.Namespace("http://www.w3.org/2002/07/owl#")
+
+    # OWL/RDFS meta-classes are not user-defined Python classes. A range of
+    # `owl:Class` means "the value is a class IRI" — model as URIRef|str.
+    # Mapping to "URIRef" is a no-op in the emitted union (already seeded
+    # with {"str", "URIRef"}) but preserves the cardinality entry that
+    # drives list-vs-scalar emission.
+    meta_classes = {
+        str(OWL.Class),
+        str(OWL.Thing),
+        str(RDFS.Class),
+        str(RDFS.Resource),
+    }
+
     range_classes: Dict[str, Optional[int]] = {}
 
     for range_cls in g.objects(prop, RDFS.range):
+        range_uri = str(range_cls)
+        if range_uri in meta_classes:
+            range_classes["URIRef"] = None
+            continue
+
         cls_name: Optional[str] = None
-        if str(range_cls) in classes:
-            cls_name = classes[str(range_cls)].name
+        if range_uri in classes:
+            cls_name = classes[range_uri].name
             # No cardinality specified in rdfs:range, so use None
             if cls_name:
                 range_classes[cls_name] = None
@@ -998,7 +1017,7 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
                 property_type="data",
                 datatype="str",
                 description="Label of the resource.",
-                required=True,  # Mandatory property
+                required=False,  # Mandatory property
             )
             class_info.properties.append(label_prop)
             class_info.property_uris[label_prop_name] = label_prop_uri
@@ -1011,7 +1030,7 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
                 datatype="datetime.datetime",
                 description="Date of creation of the resource.",
                 default_value="datetime.datetime.now()",
-                required=True,  # Mandatory property with default
+                required=False,  # Mandatory property with default
             )
             class_info.properties.append(created_prop)
             class_info.property_uris[created_prop_name] = created_prop_uri
@@ -1024,7 +1043,7 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
                 range_classes={"str": 1},
                 description="An entity responsible for making the resource.",
                 default_value='os.environ.get("USER")',
-                required=True,  # Mandatory property with default
+                required=False,  # Mandatory property with default
             )
             class_info.properties.append(creator_prop)
             class_info.property_uris[creator_prop_name] = creator_prop_uri
