@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.34.2 (2026-05-04)
+
+### Bug Fixes
+
+- Update onto2py
+  ([`2102c79`](https://github.com/jupyter-naas/abi/commit/2102c79688a0af961218425e9ef6e5344ad7f99a))
+
+
 ## v1.34.1 (2026-04-30)
 
 ### Bug Fixes
