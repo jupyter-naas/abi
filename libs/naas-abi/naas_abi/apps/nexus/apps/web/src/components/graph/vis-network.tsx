@@ -13,12 +13,76 @@ const BFO_COLORS = {
   'Site': { background: '#f97316', border: '#ea580c', highlight: '#fb923c' },
   'Quality': { background: '#ec4899', border: '#db2777', highlight: '#f472b6' },
   'Realizable': { background: '#eab308', border: '#ca8a04', highlight: '#facc15' },
-  // Role and Disposition are both Realizables - map to same color
-  'Role': { background: '#eab308', border: '#ca8a04', highlight: '#facc15' },
-  'Disposition': { background: '#eab308', border: '#ca8a04', highlight: '#facc15' },
   'GDC': { background: '#06b6d4', border: '#0891b2', highlight: '#22d3ee' },
   'Entity': { background: '#6b7280', border: '#4b5563', highlight: '#9ca3af' },
 };
+
+// BFO URI → color bucket (full URI and short ID forms)
+const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
+  'http://purl.obolibrary.org/obo/BFO_0000040': 'Material Entity',
+  'http://purl.obolibrary.org/obo/BFO_0000015': 'Process',
+  'http://purl.obolibrary.org/obo/BFO_0000008': 'Temporal Region',
+  'http://purl.obolibrary.org/obo/BFO_0000029': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000031': 'GDC',
+  'http://purl.obolibrary.org/obo/BFO_0000019': 'Quality',
+  'http://purl.obolibrary.org/obo/BFO_0000017': 'Realizable',
+  'BFO_0000040': 'Material Entity',
+  'BFO_0000015': 'Process',
+  'BFO_0000008': 'Temporal Region',
+  'BFO_0000029': 'Site',
+  'BFO_0000031': 'GDC',
+  'BFO_0000019': 'Quality',
+  'BFO_0000017': 'Realizable',
+};
+
+// Lowercase label → color bucket (covers common BFO/CCO labels)
+const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
+  'material entity': 'Material Entity',
+  'object': 'Material Entity',
+  'object aggregate': 'Material Entity',
+  'fiat object part': 'Material Entity',
+  'independent continuant': 'Material Entity',
+  'process': 'Process',
+  'occurrent': 'Process',
+  'process boundary': 'Process',
+  'temporal region': 'Temporal Region',
+  'temporal interval': 'Temporal Region',
+  'zero-dimensional temporal region': 'Temporal Region',
+  'one-dimensional temporal region': 'Temporal Region',
+  'site': 'Site',
+  'immaterial entity': 'Site',
+  'spatial region': 'Site',
+  'continuant fiat boundary': 'Site',
+  'quality': 'Quality',
+  'specifically dependent continuant': 'Quality',
+  'role': 'Realizable',
+  'disposition': 'Realizable',
+  'realizable entity': 'Realizable',
+  'generically dependent continuant': 'GDC',
+  'entity': 'Entity',
+};
+
+function resolveBFOColor(node: GraphNode) {
+  // Direct BFO_COLORS key match (e.g. KG nodes already tagged with bucket name)
+  if (node.type in BFO_COLORS) return BFO_COLORS[node.type as keyof typeof BFO_COLORS];
+
+  // Lowercase label match
+  const lowerType = node.type?.toLowerCase?.() ?? '';
+  if (lowerType in LABEL_TO_BUCKET) return BFO_COLORS[LABEL_TO_BUCKET[lowerType]];
+
+  // Full/short BFO URI in node.type (KG nodes where type IS the BFO URI)
+  if (node.type in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[node.type]];
+
+  // bfo_parent_iri: transitive BFO ancestor resolved by the service (most reliable)
+  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[bfoParentIri]];
+
+  // parent_iri: direct parent (may be CCO, not a BFO root)
+  const parentIri = node.properties?.parent_iri as string | undefined;
+  if (parentIri && parentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[parentIri]];
+
+  return null;
+}
 
 const EDGE_COLORS: Record<string, string> = {
   'participates in': '#22c55e',
@@ -80,7 +144,7 @@ export function VisNetwork({
   }, []);
 
   const toVisNode = useCallback((node: GraphNode): Node => {
-    const colors = BFO_COLORS[node.type as keyof typeof BFO_COLORS] || BFO_COLORS['Entity'];
+    const colors = resolveBFOColor(node) ?? BFO_COLORS['Entity'];
     const logoUrl = getNodeLogoUrl(node);
     const hasLogo = Boolean(logoUrl);
     const shape = hasLogo ? 'circularImage' : (node.properties?.shape as string) || 'dot';
@@ -110,7 +174,8 @@ export function VisNetwork({
   }, [getNodeLogoUrl]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
-    const color = EDGE_COLORS[edge.type] || '#94a3b8';
+    const isHierarchical = edge.properties?.relation_kind === 'is_a';
+    const color = isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
     return {
       id: edge.id,
       from: edge.source,
@@ -119,9 +184,10 @@ export function VisNetwork({
       title: edge.type,
       color: { color, highlight: color, hover: color },
       arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-      font: { size: 10, color: '#64748b', face: 'Inter, sans-serif', align: 'middle' },
+      font: { size: 10, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle' },
       smooth: { enabled: true, type: 'curvedCW', roundness: 0.2 },
-      width: edge.weight || 2,
+      width: edge.weight || (isHierarchical ? 1 : 2),
+      dashes: isHierarchical,
     };
   }, []);
 
@@ -261,9 +327,9 @@ export function VisNetwork({
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
 
-  // Handle selected node
+  // Handle selected node — guard against stale IDs from a previous graph
   useEffect(() => {
-    if (networkRef.current && selectedNodeId) {
+    if (networkRef.current && selectedNodeId && nodesDataRef.current.get(selectedNodeId)) {
       networkRef.current.selectNodes([selectedNodeId]);
     }
   }, [selectedNodeId]);
