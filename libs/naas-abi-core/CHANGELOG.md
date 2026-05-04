@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.34.1 (2026-04-30)
+
+### Bug Fixes
+
+- **agent**: Improve debug log for adding agents to graph
+  ([`66f1dbc`](https://github.com/jupyter-naas/abi/commit/66f1dbc91830772e67ee136a0a7f652a90012e6e))
+
+- **agent**: Update IntentAgent to return Command type instead of strings
+  ([`1f779cc`](https://github.com/jupyter-naas/abi/commit/1f779cc85976305ac3c041002fab7c27b36a526d))
+
+### Chores
+
+- **agent**: Improve logging clarity and comment out debug logs
+  ([`6a31f86`](https://github.com/jupyter-naas/abi/commit/6a31f86c65ab45a6b0ceb288d0a6392eff673506))
+
+
 ## v1.34.0 (2026-04-30)
 
 ### Bug Fixes

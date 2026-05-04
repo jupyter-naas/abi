@@ -601,27 +601,27 @@ def print_access_matrix() -> None:
     print("└──────────────────────────────────────────────────────────────────────────────────┘")
 
 
-async def ensure_seed_data() -> bool:
-    """
-    Ensure demo seed data exists.
+# async def ensure_seed_data() -> bool:
+#     """
+#     Ensure demo seed data exists.
 
-    Returns:
-        True if seeding was executed, False if data already existed.
-    """
-    if not await table_exists("users"):
-        await init_db()
+#     Returns:
+#         True if seeding was executed, False if data already existed.
+#     """
+#     if not await table_exists("users"):
+#         await init_db()
 
-    async with async_engine.begin() as conn:
-        result = await conn.execute(text("SELECT COUNT(*) FROM users"))
-        user_count = int(result.scalar_one() or 0)
+#     async with async_engine.begin() as conn:
+#         result = await conn.execute(text("SELECT COUNT(*) FROM users"))
+#         user_count = int(result.scalar_one() or 0)
 
-    if user_count > 0:
-        print(f"✓ Demo seed check: users already present ({user_count}), skipping seed")
-        return False
+#     if user_count > 0:
+#         print(f"✓ Demo seed check: users already present ({user_count}), skipping seed")
+#         return False
 
-    print("No users found, running initial demo seed...")
-    await seed_all()
-    return True
+#     print("No users found, running initial demo seed...")
+#     await seed_all()
+#     return True
 
 
 async def main():
