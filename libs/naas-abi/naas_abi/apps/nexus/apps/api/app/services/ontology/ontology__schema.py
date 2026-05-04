@@ -116,7 +116,7 @@ class OntologyTypeCountsData:
 class OntologyOverviewGraphNodeData:
     id: str
     label: str
-    properties: dict[str, str]
+    properties: dict[str, str | bool]
     type: str | None = None
 
 
@@ -127,7 +127,7 @@ class OntologyOverviewGraphEdgeData:
     target: str
     type: str
     label: str
-    properties: dict[str, str]
+    properties: dict[str, str | bool]
 
 
 @dataclass(frozen=True)
