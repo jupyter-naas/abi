@@ -315,3 +315,37 @@ ex:john rdf:type ex:Person ;
     assert person.name == "John Doe"
     assert person.age == 42
     assert person.label == "John Doe"
+
+
+def test_object_property_range_owl_class():
+    """An object property with rdfs:range owl:Class must not emit a
+    forward reference to an undefined `Class` Python class. The value is
+    a class IRI, modeled as URIRef|str."""
+    ttl = """@prefix ex: <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:Mention rdf:type owl:Class ;
+    rdfs:label "Mention" .
+
+ex:mentionOf rdf:type owl:ObjectProperty ;
+    rdfs:domain ex:Mention ;
+    rdfs:range owl:Class ;
+    rdfs:label "mention of" .
+"""
+
+    python_code = onto2py(StringIO(ttl))
+
+    # The generated annotation must not reference an undefined `Class`
+    # Python type. owl:Class collapses into URIRef|str.
+    assert "Union[URIRef, str]" in python_code
+    assert "Class" not in python_code.replace("ClassVar", "").replace(
+        "owl:Class", ""
+    ).replace("RDFEntity class", "")
+
+    module = ttl_to_module(StringIO(ttl), "owl_class_range")
+
+    # Model builds without NameError; the value is a URI string.
+    instance = module.Mention(mention_of=["http://example.org/SomeClass"])
+    assert instance.mention_of == ["http://example.org/SomeClass"]
