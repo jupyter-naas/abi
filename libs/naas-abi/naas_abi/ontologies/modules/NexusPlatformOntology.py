@@ -324,7 +324,9 @@ class Tenant(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_tenant_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -361,7 +363,9 @@ class Server(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"located_in_deployment_site"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -397,7 +401,9 @@ class DeploymentSite(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -423,7 +429,9 @@ class User(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -452,7 +460,9 @@ class Organization(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_tenant", "has_user", "has_workspace"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -522,7 +532,9 @@ class Workspace(RDFEntity):
             ),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -591,7 +603,9 @@ class Search(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_search_role"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -634,7 +648,9 @@ class Conversation(RDFEntity):
     }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -686,7 +702,9 @@ class Message(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_message_role", "is_message_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -776,7 +794,9 @@ class Agent(RDFEntity):
             ),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -834,7 +854,9 @@ class AgentTool(RDFEntity):
             ),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -894,7 +916,9 @@ class AgentIntent(RDFEntity):
     intent_scope: Optional[
         Annotated[str, Field(description="The scope of the intent.")]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -937,7 +961,9 @@ class Ontology(RDFEntity):
     }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -998,7 +1024,9 @@ class OntologyModule(RDFEntity):
     }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1043,7 +1071,9 @@ class OntologyClass(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_ontology_class_role"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1080,7 +1110,9 @@ class OntologyObjectProperty(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_ontology_object_property_role"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1130,7 +1162,9 @@ class KnowledgeGraph(RDFEntity):
             ),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1190,7 +1224,9 @@ class GraphView(RDFEntity):
             ),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1262,7 +1298,9 @@ class GraphFilter(RDFEntity):
             ),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1299,7 +1337,9 @@ class Files(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_file_role"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1337,7 +1377,9 @@ class FileSystem(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_file_system_role", "has_files"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1380,7 +1422,9 @@ class MarketplaceApps(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_marketplace_app_role"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1417,7 +1461,9 @@ class WorkspaceRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_workspace_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1454,7 +1500,9 @@ class SearchRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_search_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1491,7 +1539,9 @@ class ConversationRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_conversation_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1528,7 +1578,9 @@ class MessageRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_message_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1574,7 +1626,9 @@ class AgentRole(RDFEntity):
             ),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1611,7 +1665,9 @@ class OntologyRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_ontology_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1648,7 +1704,9 @@ class OntologyModuleRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_ontology_module_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1685,7 +1743,9 @@ class OntologyClassRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_ontology_class_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1724,7 +1784,9 @@ class OntologyObjectPropertyRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_ontology_object_property_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1761,7 +1823,9 @@ class KnowledgeGraphRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_knowledge_graph_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1798,7 +1862,9 @@ class GraphViewRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_graph_view_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1835,7 +1901,9 @@ class GraphFilterRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_graph_filter_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1872,7 +1940,9 @@ class FileRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_file_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1909,7 +1979,9 @@ class FileSystemRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_file_system_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1946,7 +2018,9 @@ class MarketplaceAppRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_marketplace_app_role_of"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
