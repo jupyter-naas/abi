@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Network, DataSet, type Options, type Node, type Edge } from 'vis-network/standalone';
 import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
@@ -401,6 +402,13 @@ export function BFOBucketFilters({
   activeBuckets: Set<string>;
   onToggle: (bucketType: string) => void;
 }) {
+  const [tooltip, setTooltip] = useState<{
+    label: string;
+    type: string;
+    description: string;
+    position: { top: number; left: number };
+  } | null>(null);
+
   return (
     <div className="absolute top-4 right-4 z-10 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -414,7 +422,16 @@ export function BFOBucketFilters({
             <button
               key={bucket.type}
               onClick={() => onToggle(bucket.type)}
-              title={bucket.description}
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setTooltip({
+                  label: bucket.label,
+                  type: bucket.type,
+                  description: bucket.description,
+                  position: { top: rect.top, left: rect.left - 8 },
+                });
+              }}
+              onMouseLeave={() => setTooltip(null)}
               className={cn(
                 'flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-all hover:bg-muted',
                 isActive ? 'opacity-100' : 'opacity-30'
@@ -429,6 +446,16 @@ export function BFOBucketFilters({
           );
         })}
       </div>
+      {tooltip && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[100] whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-lg animate-in fade-in-0 zoom-in-95 duration-100"
+          style={{ top: tooltip.position.top, left: tooltip.position.left, transform: 'translateX(-100%)' }}
+        >
+          <p className="font-medium">{tooltip.label} <span className="font-normal text-muted-foreground">({tooltip.type})</span></p>
+          <p className="text-xs text-muted-foreground">{tooltip.description}</p>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
