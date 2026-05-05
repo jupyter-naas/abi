@@ -25,6 +25,11 @@ import {
   Loader2,
   UserPlus,
   ChevronDown,
+  GitBranch,
+  ArrowRight,
+  Users,
+  Hash,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -42,8 +47,8 @@ const VisNetwork = dynamic(
   { ssr: false, loading: () => <div className="flex h-full items-center justify-center"><span className="text-muted-foreground">Loading graph...</span></div> }
 );
 
-const BFOLegend = dynamic(
-  () => import('@/components/graph/vis-network').then((mod) => mod.BFOLegend),
+const BFOBucketFilters = dynamic(
+  () => import('@/components/graph/vis-network').then((mod) => mod.BFOBucketFilters),
   { ssr: false }
 );
 
@@ -88,9 +93,35 @@ interface GraphEdge {
   properties?: Record<string, unknown>;
 }
 
+// BFO bucket resolution helpers (mirrors ontology page logic)
+const BFO_BUCKET_KEYS_GRAPH = new Set([
+  'Material Entity', 'Process', 'Temporal Region', 'Site', 'Quality', 'Realizable', 'GDC',
+]);
+const ALL_BFO_BUCKETS_GRAPH = new Set([...BFO_BUCKET_KEYS_GRAPH, 'Unknown']);
+
+const BFO_URI_TO_BUCKET_GRAPH: Record<string, string> = {
+  'http://purl.obolibrary.org/obo/BFO_0000040': 'Material Entity',
+  'http://purl.obolibrary.org/obo/BFO_0000015': 'Process',
+  'http://purl.obolibrary.org/obo/BFO_0000008': 'Temporal Region',
+  'http://purl.obolibrary.org/obo/BFO_0000029': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000031': 'GDC',
+  'http://purl.obolibrary.org/obo/BFO_0000019': 'Quality',
+  'http://purl.obolibrary.org/obo/BFO_0000017': 'Realizable',
+};
+
+function resolveGraphNodeBucket(node: GraphNode): string {
+  if (BFO_BUCKET_KEYS_GRAPH.has(node.type)) return node.type;
+  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET_GRAPH) return BFO_URI_TO_BUCKET_GRAPH[bfoParentIri];
+  const parentIri = node.properties?.parent_iri as string | undefined;
+  if (parentIri && parentIri in BFO_URI_TO_BUCKET_GRAPH) return BFO_URI_TO_BUCKET_GRAPH[parentIri];
+  return 'Unknown';
+}
+
 const GRAPH_VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
   { id: 'entities', label: 'Network', icon: Network },
   { id: 'overview', label: 'Metrics', icon: Eye },
+  { id: 'individuals', label: 'Individuals', icon: Users },
   { id: 'table', label: 'Table', icon: Table },
 ];
 
@@ -473,9 +504,33 @@ export default function GraphPage() {
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+  // BFO bucket filters — empty = no filter (show all)
+  const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
+  const handleBucketToggle = useCallback((bucketType: string) => {
+    setActiveBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(bucketType)) { next.delete(bucketType); } else { next.add(bucketType); }
+      return next;
+    });
+    setStabilizeKey((k) => k + 1);
+  }, []);
+
+  // Parents hierarchy filter (like SubclassOf in ontology page)
+  const [parentsLevels, setParentsLevels] = useState(0);
+  const [loadingNextParentLevel, setLoadingNextParentLevel] = useState(false);
+  const [hierarchyByLevel, setHierarchyByLevel] = useState<Array<{
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+  }>>([]);
+
+  // Relations filter — off by default
+  const [showRelations, setShowRelations] = useState(false);
+
+  // Increment to trigger physics re-layout in VisNetwork
+  const [stabilizeKey, setStabilizeKey] = useState(0);
   const {
     activeViewType,
     setActiveViewType,
@@ -816,6 +871,15 @@ export default function GraphPage() {
     }));
     setViews(normalizedViews);
   }, [workspaceId, setViews]);
+
+  // Reset selection and filters when the active graph identity changes
+  useEffect(() => {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setParentsLevels(0);
+    setHierarchyByLevel([]);
+    setShowRelations(false);
+  }, [selectedGraphId, activeSavedViewId]);
 
   // Load on mount and when workspace or visible graphs change
   useEffect(() => {
@@ -1346,26 +1410,118 @@ export default function GraphPage() {
   };
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-  
-  // Filter nodes based on search query (memoized)
+
+  // Parents: expand one level — detect individuals or classes and fetch their parents
+  const handleExpandParents = useCallback(async () => {
+    const nextLevel = parentsLevels + 1;
+    if (hierarchyByLevel[nextLevel - 1]) {
+      setParentsLevels(nextLevel);
+      return;
+    }
+    if (loadingNextParentLevel) return;
+    setLoadingNextParentLevel(true);
+    try {
+      const baseUrl = getApiUrl();
+      // Frontier: original nodes for level 1, previous level's class nodes for deeper levels
+      const frontier: GraphNode[] =
+        parentsLevels === 0
+          ? nodes
+          : (hierarchyByLevel[parentsLevels - 1]?.nodes ?? []);
+      if (frontier.length === 0) { setParentsLevels(nextLevel); return; }
+
+      const graphIdsForParents = selectedGraphId
+        ? [selectedGraphId]
+        : visibleGraphIds.filter((id) => !id.includes('#layer='));
+      const graphNamesForParents = graphIdsForParents.map((id) => `http://ontology.naas.ai/graph/${id}`);
+      const params = new URLSearchParams({ workspace_id: workspaceId! });
+      graphNamesForParents.forEach((n) => params.append('graph_names', n));
+      frontier.forEach((n) => params.append('node_iris', n.id));
+
+      const response = await authFetch(`${baseUrl}/api/graph/network/parents?${params.toString()}`);
+      if (!response.ok) throw new Error(`parents fetch failed: ${response.status}`);
+      const data = await response.json() as { nodes?: ApiNode[]; edges?: ApiEdge[] };
+
+      const newNodes: GraphNode[] = (Array.isArray(data.nodes) ? data.nodes : []).map((n) => ({
+        id: n.id, label: n.label, type: n.type, properties: n.properties,
+      }));
+      const newEdges: GraphEdge[] = (Array.isArray(data.edges) ? data.edges : []).map((e) => ({
+        id: e.id, source: e.source_id, target: e.target_id,
+        sourceLabel: e.source_label, targetLabel: e.target_label,
+        type: e.type, label: 'is a',
+        properties: { ...(e.properties ?? {}), relation_kind: 'is_a' },
+      }));
+
+      setHierarchyByLevel((prev) => {
+        const updated = [...prev];
+        updated[nextLevel - 1] = { nodes: newNodes, edges: newEdges };
+        return updated;
+      });
+      setParentsLevels(nextLevel);
+      setStabilizeKey((k) => k + 1);
+    } catch (err) {
+      console.error('Failed to fetch parent nodes:', err);
+    } finally {
+      setLoadingNextParentLevel(false);
+    }
+  }, [parentsLevels, hierarchyByLevel, loadingNextParentLevel, nodes, selectedGraphId, visibleGraphIds, workspaceId]);
+
+  const canExpandParentsMore =
+    parentsLevels < hierarchyByLevel.length ||
+    (hierarchyByLevel[parentsLevels - 1]?.nodes.length ?? 1) > 0;
+
+  // Combined visible nodes: base + all loaded parent levels up to parentsLevels
+  const allVisibleNodes = useMemo(() => {
+    if (parentsLevels === 0) return nodes;
+    const result = [...nodes];
+    const seen = new Set(result.map((n) => n.id));
+    for (let i = 0; i < parentsLevels && i < hierarchyByLevel.length; i++) {
+      for (const node of hierarchyByLevel[i].nodes) {
+        if (!seen.has(node.id)) { result.push(node); seen.add(node.id); }
+      }
+    }
+    return result;
+  }, [nodes, hierarchyByLevel, parentsLevels]);
+
+  // Filter nodes: search + bucket
   const filteredNodes = useMemo(() => {
-    if (!searchQuery.trim()) return nodes;
-    const q = searchQuery.toLowerCase();
-    return nodes.filter((node) =>
-      node.label.toLowerCase().includes(q) ||
-      node.type.toLowerCase().includes(q) ||
-      node.id.toLowerCase().includes(q)
-    );
-  }, [nodes, searchQuery]);
-  
-  // Filter edges to only include edges where both source and target are in filtered nodes (memoized)
+    let result = allVisibleNodes;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((node) =>
+        node.label.toLowerCase().includes(q) ||
+        node.type.toLowerCase().includes(q) ||
+        node.id.toLowerCase().includes(q)
+      );
+    }
+    if (activeBuckets.size > 0) {
+      result = result.filter((node) => activeBuckets.has(resolveGraphNodeBucket(node)));
+    }
+    return result;
+  }, [allVisibleNodes, searchQuery, activeBuckets]);
+
+  // Filter edges: relations toggle + parents levels + constrain to visible nodes
   const filteredEdges = useMemo(() => {
-    if (!searchQuery.trim()) return edges;
-    const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
-    return edges.filter((edge) =>
-      filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
-    );
-  }, [edges, filteredNodes, searchQuery]);
+    const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
+    let result: GraphEdge[] = [];
+
+    // Regular relation edges
+    if (showRelations) {
+      result = edges.filter((e) =>
+        visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
+      );
+    }
+
+    // is_a edges from loaded parent levels
+    for (let i = 0; i < parentsLevels && i < hierarchyByLevel.length; i++) {
+      for (const edge of hierarchyByLevel[i].edges) {
+        if (visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)) {
+          result.push(edge);
+        }
+      }
+    }
+
+    return result;
+  }, [edges, filteredNodes, showRelations, parentsLevels, hierarchyByLevel]);
   
   // Calculate statistics (memoized)
   const stats = useMemo(() => ({
@@ -1965,9 +2121,19 @@ export default function GraphPage() {
               </div>
             )}
 
+            {pageMode === 'graph' && activeViewType === 'individuals' && (
+              <IndividualsSplitView
+                nodes={nodes}
+                edges={edges}
+                loading={loading}
+                error={error}
+                onCreateIndividual={() => setPageMode('create-individual')}
+              />
+            )}
+
             {pageMode === 'graph' && activeViewType === 'entities' && (
               <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
-                {/* Search overlay - left */}
+                {/* Search + relation filters — left */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
                   <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
                     <Search size={14} className="text-muted-foreground" />
@@ -1987,35 +2153,59 @@ export default function GraphPage() {
                       </button>
                     )}
                   </div>
+                  {/* Parents filter — like SubclassOf in ontology page */}
+                  <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
+                    <button
+                      onClick={() => parentsLevels === 0 ? handleExpandParents() : setParentsLevels(0)}
+                      title={parentsLevels === 0 ? 'Show parent classes (rdf:type → rdfs:subClassOf)' : 'Hide parent hierarchy'}
+                      disabled={loadingNextParentLevel}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 text-xs',
+                        parentsLevels > 0 ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground',
+                        loadingNextParentLevel && 'opacity-60 cursor-not-allowed'
+                      )}
+                    >
+                      {loadingNextParentLevel ? <Loader2 size={12} className="animate-spin" /> : <GitBranch size={12} />}
+                      Parents{parentsLevels > 0 && ` (${parentsLevels})`}
+                    </button>
+                    {parentsLevels > 0 && (
+                      <button
+                        onClick={() => setParentsLevels((v) => Math.max(0, v - 1))}
+                        title="Show fewer parent levels"
+                        disabled={loadingNextParentLevel}
+                        className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                      >−</button>
+                    )}
+                    {canExpandParentsMore && (
+                      <button
+                        onClick={handleExpandParents}
+                        title="Show more parent levels"
+                        disabled={loadingNextParentLevel}
+                        className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                      >+</button>
+                    )}
+                  </div>
+                  {/* Relations toggle */}
                   <button
-                    onClick={() => setShowFilters(!showFilters)}
+                    onClick={() => { setShowRelations((v) => !v); setStabilizeKey((k) => k + 1); }}
+                    title="Toggle relation edges (URIRef objects, excl. rdf:type)"
                     className={cn(
-                      'flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm shadow-sm hover:bg-accent',
-                      showFilters && 'bg-accent'
+                      'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
+                      showRelations
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border bg-card text-muted-foreground hover:text-foreground'
                     )}
                   >
-                    <Filter size={14} />
-                    Filter
+                    <ArrowRight size={12} />
+                    Relations
                   </button>
                   {searchQuery && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                      Showing {filteredNodes.length} of {nodes.length} nodes
+                      Showing {filteredNodes.length} of {allVisibleNodes.length} nodes
                     </span>
                   )}
                 </div>
-                {/* Create Individual - top right inside page */}
-                <div className="absolute right-4 top-4 z-10">
-                  <button
-                    type="button"
-                    onClick={() => setPageMode('create-individual')}
-                    className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-muted"
-                  >
-                    <UserPlus size={14} className="text-orange-500 dark:text-orange-400" />
-                    Create Individual
-                  </button>
-                </div>
-
-                {/* Zoom controls - using vis-network's built-in navigation buttons */}
+                <BFOBucketFilters activeBuckets={activeBuckets} onToggle={handleBucketToggle} />
 
                 {/* Graph Canvas */}
                 {loading ? (
@@ -2074,16 +2264,15 @@ export default function GraphPage() {
                     </div>
                   </div>
                 ) : (
-                  <>
-                    <VisNetwork
-                      nodes={filteredNodes}
-                      edges={filteredEdges}
-                      selectedNodeId={selectedNodeId}
-                      onNodeSelect={setSelectedNodeId}
-                      onEdgeSelect={setSelectedEdgeId}
-                    />
-                    <BFOLegend />
-                  </>
+                  <VisNetwork
+                    key={activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}
+                    nodes={filteredNodes}
+                    edges={filteredEdges}
+                    selectedNodeId={selectedNodeId}
+                    onNodeSelect={setSelectedNodeId}
+                    onEdgeSelect={setSelectedEdgeId}
+                    stabilizeKey={stabilizeKey}
+                  />
                 )}
 
               </div>
@@ -2500,6 +2689,350 @@ function StatCard({
         <span className="text-sm">{title}</span>
       </div>
       <p className="text-2xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+// ── Individuals Split View ──────────────────────────────────────────────────
+
+function IndividualDetailPanel({
+  node,
+  dataProperties,
+  objectProperties,
+}: {
+  node: GraphNode;
+  dataProperties: { predicate: string; value: string }[];
+  objectProperties: { predicate: string; targetId: string; targetLabel: string }[];
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      {/* Header */}
+      <div className="mb-6">
+        <div className="mb-2 flex items-start gap-3">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30">
+            <Circle size={20} className="text-orange-500" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold">{node.label}</h2>
+            <p
+              className="truncate font-mono text-xs text-muted-foreground"
+              title={node.id}
+            >
+              {node.id}
+            </p>
+          </div>
+        </div>
+        <div className="ml-13 flex items-center gap-2">
+          <Box size={14} className="text-blue-500" />
+          <span className="text-sm text-muted-foreground">{node.type}</span>
+        </div>
+      </div>
+
+      {/* Data Properties */}
+      <div className="mb-6">
+        <h3 className="mb-3 flex items-center gap-2 font-medium">
+          <Hash size={16} className="text-purple-500" />
+          Data Properties
+          <span className="text-xs text-muted-foreground">({dataProperties.length})</span>
+        </h3>
+        {dataProperties.length === 0 ? (
+          <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+            No data properties.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40">
+                <tr>
+                  <th className="w-2/5 px-4 py-2 text-left font-medium text-muted-foreground">
+                    Property
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">
+                    Value
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {dataProperties.map(({ predicate, value }, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="px-4 py-2 font-medium text-purple-600 dark:text-purple-400">
+                      {predicate}
+                    </td>
+                    <td className="break-all px-4 py-2 text-muted-foreground">{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Object Properties */}
+      <div>
+        <h3 className="mb-3 flex items-center gap-2 font-medium">
+          <Link2 size={16} className="text-green-500" />
+          Object Properties
+          <span className="text-xs text-muted-foreground">({objectProperties.length})</span>
+        </h3>
+        {objectProperties.length === 0 ? (
+          <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+            No object properties.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40">
+                <tr>
+                  <th className="w-2/5 px-4 py-2 text-left font-medium text-muted-foreground">
+                    Property
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">
+                    Value
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {objectProperties.map(({ predicate, targetId, targetLabel }, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="px-4 py-2 font-medium text-green-600 dark:text-green-400">
+                      {predicate}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="font-medium">{targetLabel}</span>
+                      {targetLabel !== targetId && (
+                        <span
+                          className="mt-0.5 block truncate font-mono text-xs text-muted-foreground"
+                          title={targetId}
+                        >
+                          {targetId}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IndividualsSplitView({
+  nodes,
+  edges,
+  loading,
+  error,
+  onCreateIndividual,
+}: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  loading: boolean;
+  error: string | null;
+  onCreateIndividual: () => void;
+}) {
+  const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
+  const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
+  const [didInitExpanded, setDidInitExpanded] = useState(false);
+  const [search, setSearch] = useState('');
+
+  // Group nodes by rdf:type (node.type = class label)
+  const nodesByClass = useMemo(() => {
+    const grouped = new Map<string, GraphNode[]>();
+    for (const node of nodes) {
+      const type = node.type || 'Unknown';
+      if (!grouped.has(type)) grouped.set(type, []);
+      grouped.get(type)!.push(node);
+    }
+    return new Map([...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+  }, [nodes]);
+
+  // Expand all classes on first load
+  useEffect(() => {
+    if (!didInitExpanded && nodesByClass.size > 0) {
+      setExpandedClasses(new Set(nodesByClass.keys()));
+      setDidInitExpanded(true);
+    }
+  }, [didInitExpanded, nodesByClass]);
+
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedIndividualId) ?? null,
+    [nodes, selectedIndividualId]
+  );
+
+  const dataProperties = useMemo(() => {
+    if (!selectedNode) return [];
+    const INTERNAL_KEYS = new Set(['bfo_parent_iri', 'is_class', 'x', 'y']);
+    return Object.entries(selectedNode.properties)
+      .filter(([k]) => !INTERNAL_KEYS.has(k))
+      .map(([k, v]) => ({ predicate: k, value: String(v) }));
+  }, [selectedNode]);
+
+  const objectProperties = useMemo(() => {
+    if (!selectedNode) return [];
+    return edges
+      .filter((e) => e.source === selectedNode.id)
+      .map((e) => ({
+        predicate: e.type,
+        targetId: e.target,
+        targetLabel: e.targetLabel ?? e.target,
+      }));
+  }, [selectedNode, edges]);
+
+  // Filter classes and individuals by search query
+  const filteredNodesByClass = useMemo(() => {
+    if (!search.trim()) return nodesByClass;
+    const q = search.toLowerCase();
+    const result = new Map<string, GraphNode[]>();
+    for (const [cls, individuals] of nodesByClass) {
+      const classMatches = cls.toLowerCase().includes(q);
+      const matchingIndividuals = individuals.filter(
+        (n) => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q)
+      );
+      if (classMatches || matchingIndividuals.length > 0) {
+        result.set(cls, classMatches ? individuals : matchingIndividuals);
+      }
+    }
+    return result;
+  }, [nodesByClass, search]);
+
+  const toggleClass = useCallback((cls: string) => {
+    setExpandedClasses((prev) => {
+      const next = new Set(prev);
+      if (next.has(cls)) next.delete(cls);
+      else next.add(cls);
+      return next;
+    });
+  }, []);
+
+  return (
+    <div className="flex flex-1 overflow-hidden bg-card">
+      {/* Left panel — class groups + individual list */}
+      <div className="flex w-80 flex-shrink-0 flex-col border-r bg-muted/20">
+        <div className="border-b p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users size={18} className="text-orange-500 dark:text-orange-400" />
+              <h2 className="font-semibold">Individuals</h2>
+              <span className="text-xs text-muted-foreground">({nodes.length})</span>
+            </div>
+            <button
+              type="button"
+              onClick={onCreateIndividual}
+              className="flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium hover:bg-muted"
+            >
+              <UserPlus size={12} className="text-orange-500 dark:text-orange-400" />
+              New
+            </button>
+          </div>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search individuals..."
+              className="w-full rounded-md border bg-background py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-sm">Loading…</span>
+            </div>
+          ) : error ? (
+            <p className="px-2 py-4 text-center text-sm text-red-500">{error}</p>
+          ) : filteredNodesByClass.size === 0 ? (
+            <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+              No individuals found.
+            </p>
+          ) : (
+            Array.from(filteredNodesByClass.entries()).map(([cls, individuals]) => {
+              const isExpanded = expandedClasses.has(cls);
+              const sorted = [...individuals].sort((a, b) =>
+                a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+              );
+              return (
+                <div key={cls}>
+                  {/* Class row */}
+                  <button
+                    type="button"
+                    onClick={() => toggleClass(cls)}
+                    className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-background"
+                  >
+                    <ChevronRight
+                      size={14}
+                      className={cn(
+                        'flex-shrink-0 text-muted-foreground transition-transform',
+                        isExpanded && 'rotate-90'
+                      )}
+                    />
+                    <Box size={14} className="flex-shrink-0 text-blue-500" />
+                    <span className="flex-1 truncate font-medium">{cls}</span>
+                    <span className="text-xs text-muted-foreground">{individuals.length}</span>
+                  </button>
+
+                  {/* Individuals under this class */}
+                  {isExpanded &&
+                    sorted.map((ind) => (
+                      <button
+                        key={ind.id}
+                        type="button"
+                        onClick={() => setSelectedIndividualId(ind.id)}
+                        title={ind.id}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-md py-1 pl-8 pr-2 text-left text-sm transition-colors',
+                          selectedIndividualId === ind.id
+                            ? 'bg-workspace-accent-10 text-workspace-accent'
+                            : 'hover:bg-background'
+                        )}
+                      >
+                        <Circle size={10} className="flex-shrink-0 text-orange-500 dark:text-orange-400" />
+                        <span className="truncate">{ind.label}</span>
+                      </button>
+                    ))}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Right panel — individual detail or empty state */}
+      <div className="flex flex-1 overflow-hidden">
+        {selectedNode ? (
+          <IndividualDetailPanel
+            node={selectedNode}
+            dataProperties={dataProperties}
+            objectProperties={objectProperties}
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                  <Users size={32} className="text-orange-500 dark:text-orange-400" />
+                </div>
+              </div>
+              <h2 className="mb-2 text-lg font-semibold">Individuals</h2>
+              <p className="mb-6 max-w-md text-muted-foreground">
+                Select an individual from the left panel to view its data and object
+                properties, or create a new one.
+              </p>
+              <button
+                onClick={onCreateIndividual}
+                className="mx-auto flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                <UserPlus size={16} />
+                Create Individual
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
