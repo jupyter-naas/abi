@@ -40,7 +40,7 @@ export interface NamedGraph {
 }
 
 // View types for exploring the graph
-export type GraphViewType = 'overview' | 'entities' | 'table' | 'sparql';
+export type GraphViewType = 'overview' | 'entities' | 'table' | 'sparql' | 'individuals';
 
 export interface GraphTripleFilter {
   subject_uri: string;

@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Network, DataSet, type Options, type Node, type Edge } from 'vis-network/standalone';
 import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
+import { cn } from '@/lib/utils';
 
 // BFO 7 Buckets color scheme (simplified)
 const BFO_COLORS = {
@@ -15,6 +17,7 @@ const BFO_COLORS = {
   'Realizable': { background: '#eab308', border: '#ca8a04', highlight: '#facc15' },
   'GDC': { background: '#06b6d4', border: '#0891b2', highlight: '#22d3ee' },
   'Entity': { background: '#6b7280', border: '#4b5563', highlight: '#9ca3af' },
+  'Unknown': { background: '#9ca3af', border: '#6b7280', highlight: '#d1d5db' },
 };
 
 // BFO URI → color bucket (full URI and short ID forms)
@@ -62,7 +65,7 @@ const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'entity': 'Entity',
 };
 
-function resolveBFOColor(node: GraphNode) {
+function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, visited: Set<string> = new Set()) {
   // Direct BFO_COLORS key match (e.g. KG nodes already tagged with bucket name)
   if (node.type in BFO_COLORS) return BFO_COLORS[node.type as keyof typeof BFO_COLORS];
 
@@ -77,9 +80,15 @@ function resolveBFOColor(node: GraphNode) {
   const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
   if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[bfoParentIri]];
 
-  // parent_iri: direct parent (may be CCO, not a BFO root)
+  // parent_iri: direct parent — check BFO first, then walk the loaded graph recursively
   const parentIri = node.properties?.parent_iri as string | undefined;
   if (parentIri && parentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[parentIri]];
+
+  if (nodesById && parentIri && !visited.has(node.id)) {
+    visited.add(node.id);
+    const parentNode = nodesById.get(parentIri);
+    if (parentNode) return resolveBFOColor(parentNode, nodesById, visited);
+  }
 
   return null;
 }
@@ -107,6 +116,7 @@ interface VisNetworkProps {
   selectedNodeId: string | null;
   onNodeSelect: (nodeId: string | null) => void;
   onEdgeSelect: (edgeId: string | null) => void;
+  stabilizeKey?: number;
 }
 
 export function VisNetwork({
@@ -115,11 +125,18 @@ export function VisNetwork({
   selectedNodeId,
   onNodeSelect,
   onEdgeSelect,
+  stabilizeKey,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
+
+  const nodesByIri = useMemo(() => {
+    const map = new Map<string, GraphNode>();
+    for (const n of nodes) map.set(n.id, n);
+    return map;
+  }, [nodes]);
 
   const getNodeLogoUrl = useCallback((node: GraphNode): string | undefined => {
     const properties = node.properties ?? {};
@@ -144,7 +161,7 @@ export function VisNetwork({
   }, []);
 
   const toVisNode = useCallback((node: GraphNode): Node => {
-    const colors = resolveBFOColor(node) ?? BFO_COLORS['Entity'];
+    const colors = resolveBFOColor(node, nodesByIri) ?? BFO_COLORS['Entity'];
     const logoUrl = getNodeLogoUrl(node);
     const hasLogo = Boolean(logoUrl);
     const shape = hasLogo ? 'circularImage' : (node.properties?.shape as string) || 'dot';
@@ -171,7 +188,7 @@ export function VisNetwork({
       x: node.x,
       y: node.y,
     };
-  }, [getNodeLogoUrl]);
+  }, [getNodeLogoUrl, nodesByIri]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
@@ -327,6 +344,25 @@ export function VisNetwork({
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
 
+  // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled)
+  useEffect(() => {
+    if (stabilizeKey === undefined || stabilizeKey === 0) return;
+    if (!networkRef.current) return;
+    isStabilizedRef.current = false;
+    networkRef.current.setOptions({ physics: { enabled: true } });
+    networkRef.current.once('stabilizationIterationsDone', () => {
+      if (!networkRef.current) return;
+      const positions = networkRef.current.getPositions();
+      Object.entries(positions).forEach(([id, pos]) => {
+        nodePositionsRef.current.set(id, pos as { x: number; y: number });
+      });
+      isStabilizedRef.current = true;
+      networkRef.current.setOptions({ physics: { enabled: false } });
+      // No fit() here — preserve the user's current zoom/pan position
+    });
+    networkRef.current.stabilize(200);
+  }, [stabilizeKey]);
+
   // Handle selected node — guard against stale IDs from a previous graph
   useEffect(() => {
     if (networkRef.current && selectedNodeId && nodesDataRef.current.get(selectedNodeId)) {
@@ -383,25 +419,92 @@ export function VisNetwork({
   );
 }
 
-// Legend component
-export function BFOLegend() {
-  const buckets = [
-    { type: 'Material Entity', label: 'WHO', description: 'Objects, people, organizations' },
-    { type: 'Process', label: 'WHAT', description: 'Events, activities, changes' },
-    { type: 'Temporal Region', label: 'WHEN', description: 'Time periods, instants' },
-    { type: 'Site', label: 'WHERE', description: 'Locations, places' },
-    { type: 'Quality', label: 'HOW IT IS', description: 'Properties, attributes' },
-    { type: 'Realizable', label: 'WHY', description: 'Roles & dispositions (realizables)' },
-    { type: 'GDC', label: 'HOW WE KNOW', description: 'Documents, data, plans' },
-  ];
+export const BFO_BUCKET_DEFS = [
+  { type: 'Material Entity', label: 'Who', description: 'Objects, people, organizations' },
+  { type: 'Process', label: 'What', description: 'Events, activities, changes' },
+  { type: 'Temporal Region', label: 'When', description: 'Time periods, instants' },
+  { type: 'Site', label: 'Where', description: 'Locations, places' },
+  { type: 'Quality', label: 'How it is', description: 'Properties, attributes' },
+  { type: 'Realizable', label: 'Why', description: 'Roles & dispositions' },
+  { type: 'GDC', label: 'How we know', description: 'Documents, data, plans' },
+  { type: 'Unknown', label: 'Unknown', description: 'Unclassified or unresolved bucket' },
+];
+
+export function BFOBucketFilters({
+  activeBuckets,
+  onToggle,
+}: {
+  activeBuckets: Set<string>;
+  onToggle: (bucketType: string) => void;
+}) {
+  const [tooltip, setTooltip] = useState<{
+    label: string;
+    type: string;
+    description: string;
+    position: { top: number; left: number };
+  } | null>(null);
 
   return (
     <div className="absolute top-4 right-4 z-10 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         BFO 7 Buckets
       </h4>
+      <div className="flex flex-col gap-0.5">
+        {BFO_BUCKET_DEFS.map((bucket) => {
+          const colors = BFO_COLORS[bucket.type as keyof typeof BFO_COLORS];
+          const anySelected = activeBuckets.size > 0;
+          const isActive = activeBuckets.has(bucket.type);
+          return (
+            <button
+              key={bucket.type}
+              onClick={() => onToggle(bucket.type)}
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setTooltip({
+                  label: bucket.label,
+                  type: bucket.type,
+                  description: bucket.description,
+                  position: { top: rect.top, left: rect.left - 8 },
+                });
+              }}
+              onMouseLeave={() => setTooltip(null)}
+              className={cn(
+                'flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-all hover:bg-muted',
+                anySelected && !isActive ? 'opacity-30' : 'opacity-100'
+              )}
+            >
+              <div
+                className="h-3 w-3 flex-shrink-0 rounded-full"
+                style={{ backgroundColor: colors.background }}
+              />
+              <strong>{bucket.label}</strong>
+            </button>
+          );
+        })}
+      </div>
+      {tooltip && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[100] whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-lg animate-in fade-in-0 zoom-in-95 duration-100"
+          style={{ top: tooltip.position.top, left: tooltip.position.left, transform: 'translateX(-100%)' }}
+        >
+          <p className="font-medium">{tooltip.label} <span className="font-normal text-muted-foreground">({tooltip.type})</span></p>
+          <p className="text-xs text-muted-foreground">{tooltip.description}</p>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// Static legend for pages that don't need interactive bucket filtering
+export function BFOLegend() {
+  return (
+    <div className="absolute top-4 right-4 z-10 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        BFO 7 Buckets
+      </h4>
       <div className="grid grid-cols-2 gap-2">
-        {buckets.map((bucket) => {
+        {BFO_BUCKET_DEFS.map((bucket) => {
           const colors = BFO_COLORS[bucket.type as keyof typeof BFO_COLORS];
           return (
             <div key={bucket.type} className="flex items-center gap-2">
