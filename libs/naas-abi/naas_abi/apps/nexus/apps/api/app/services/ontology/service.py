@@ -436,16 +436,16 @@ class OntologyService:
                 parent_data = _get_uri_metadata(store, parent_id) if parent_id else None
                 parent_label = parent_data.get("label", "Unknown") if parent_data else None
                 if _is_bfo_entity_iri(iri):
-                    parent_id = iri
-                    parent_label = "entity"
+                    parent_id = None
+                    parent_label = None
                 by_iri[iri] = OntologyItemData(
                     id=iri,
                     name=label,
                     type="Class",
                     description=str(definition) if definition else str(comment),
                     example=str(example),
-                    parent_id=str(parent_id),
-                    parent_name=str(parent_label),
+                    parent_id=str(parent_id) if parent_id is not None else None,
+                    parent_name=str(parent_label) if parent_label is not None else None,
                 )
         return sorted(by_iri.values(), key=lambda item: item.name.lower())
 
