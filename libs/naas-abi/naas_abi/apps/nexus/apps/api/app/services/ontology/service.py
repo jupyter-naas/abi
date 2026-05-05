@@ -174,6 +174,11 @@ _BFO_BUCKET_ROOTS = " ".join(
 
 def _find_bfo_ancestor(graph: Graph, class_iri: str) -> str | None:
     """Walk rdfs:subClassOf+ to find the nearest BFO bucket-root ancestor, or None."""
+    # If the class itself is a bucket root (e.g. BFO_0000031 = GDC), treat it as its own ancestor.
+    # Otherwise, the transitive `rdfs:subClassOf+` path would never match and the frontend won't bucket-color it.
+    if f"<{class_iri}>" in _BFO_BUCKET_ROOTS:
+        return class_iri
+
     query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT ?ancestor WHERE {{
