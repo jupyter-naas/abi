@@ -2378,7 +2378,7 @@ const MessageBubble = React.memo(function MessageBubble({
           <div className={cn(
             'text-xs font-bold mb-1.5 pb-1',
             isUser 
-              ? 'text-right text-white border-b border-white/20' 
+              ? 'text-left text-white border-b border-white/20' 
               : 'text-left text-workspace-accent border-b border-border'
           )}>
             <div className="flex items-center gap-2">
@@ -2424,7 +2424,7 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
           
           {isUser ? (
-            <p className="whitespace-pre-wrap text-right">
+            <p className="whitespace-pre-wrap text-left">
               {(response as string).match(URL_REGEX) ? linkifyText(response as string, true) : response}
             </p>
           ) : isStillProcessing ? (
