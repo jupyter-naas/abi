@@ -1597,6 +1597,7 @@ function OntologyNetworkView({
   }>>([]);
   const [showRestrictions, setShowRestrictions] = useState(false);
   const [showObjectProperties, setShowObjectProperties] = useState(false);
+  const [layoutDirection, setLayoutDirection] = useState<'LR' | 'TD'>('LR');
   // BFO bucket filters — empty = no filter (show all)
   const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
   /** When set, graph shows only this node (still respects search + bucket + relation toggles). */
@@ -2040,6 +2041,34 @@ function OntologyNetworkView({
                     </button>
                   )}
                 </div>
+                {subclassOfLevels > 0 && (
+                  <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
+                    <button
+                      onClick={() => setLayoutDirection('LR')}
+                      title="Left-to-right hierarchy (entity on left)"
+                      className={cn(
+                        'px-3 py-1.5 text-xs',
+                        layoutDirection === 'LR'
+                          ? 'bg-foreground text-background'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      LR
+                    </button>
+                    <button
+                      onClick={() => setLayoutDirection('TD')}
+                      title="Top-down hierarchy (entity on top)"
+                      className={cn(
+                        'border-l px-3 py-1.5 text-xs',
+                        layoutDirection === 'TD'
+                          ? 'bg-foreground text-background'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      TD
+                    </button>
+                  </div>
+                )}
                 <button
                   onClick={() => setShowRestrictions((v) => !v)}
                   title="Toggle OWL Restrictions (owl:Restriction)"
@@ -2118,6 +2147,7 @@ function OntologyNetworkView({
                 setSelectedGraphEdgeId(edgeId);
                 if (edgeId) setSelectedGraphNodeId(null);
               }}
+              layoutDirection={subclassOfLevels > 0 ? layoutDirection : undefined}
             />
           )}
         </div>
