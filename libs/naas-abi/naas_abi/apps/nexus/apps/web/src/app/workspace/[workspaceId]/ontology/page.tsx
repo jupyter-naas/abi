@@ -1928,6 +1928,23 @@ function OntologyNetworkView({
     }
   };
 
+  // Auto-expand the first subclassOf level once the graph finishes loading (loadingGraph: true → false).
+  const didAutoExpandRef = useRef(false);
+  const wasLoadingRef = useRef(false);
+  useEffect(() => {
+    if (loadingGraph) {
+      wasLoadingRef.current = true;
+      return;
+    }
+    if (!wasLoadingRef.current) return;
+    wasLoadingRef.current = false;
+    if (didAutoExpandRef.current) return;
+    if (!ontologyPath || graphNodes.length === 0) return;
+    didAutoExpandRef.current = true;
+    handleExpandSubclassOf();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ontologyPath, loadingGraph, graphNodes.length]);
+
   // "+" is hidden once the latest fetched level returned 0 nodes (no more parents exist).
   // Stays visible when the user has collapsed below a cached non-empty level.
   const canExpandMore = useMemo(() => {
