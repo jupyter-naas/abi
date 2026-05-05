@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Network, DataSet, type Options, type Node, type Edge } from 'vis-network/standalone';
 import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
+import { cn } from '@/lib/utils';
 
 // BFO 7 Buckets color scheme (simplified)
 const BFO_COLORS = {
@@ -383,25 +384,64 @@ export function VisNetwork({
   );
 }
 
-// Legend component
-export function BFOLegend() {
-  const buckets = [
-    { type: 'Material Entity', label: 'WHO', description: 'Objects, people, organizations' },
-    { type: 'Process', label: 'WHAT', description: 'Events, activities, changes' },
-    { type: 'Temporal Region', label: 'WHEN', description: 'Time periods, instants' },
-    { type: 'Site', label: 'WHERE', description: 'Locations, places' },
-    { type: 'Quality', label: 'HOW IT IS', description: 'Properties, attributes' },
-    { type: 'Realizable', label: 'WHY', description: 'Roles & dispositions (realizables)' },
-    { type: 'GDC', label: 'HOW WE KNOW', description: 'Documents, data, plans' },
-  ];
+export const BFO_BUCKET_DEFS = [
+  { type: 'Material Entity', label: 'Who', description: 'Objects, people, organizations' },
+  { type: 'Process', label: 'What', description: 'Events, activities, changes' },
+  { type: 'Temporal Region', label: 'When', description: 'Time periods, instants' },
+  { type: 'Site', label: 'Where', description: 'Locations, places' },
+  { type: 'Quality', label: 'How it is', description: 'Properties, attributes' },
+  { type: 'Realizable', label: 'Why', description: 'Roles & dispositions' },
+  { type: 'GDC', label: 'How we know', description: 'Documents, data, plans' },
+];
 
+export function BFOBucketFilters({
+  activeBuckets,
+  onToggle,
+}: {
+  activeBuckets: Set<string>;
+  onToggle: (bucketType: string) => void;
+}) {
+  return (
+    <div className="absolute top-4 right-4 z-10 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        BFO 7 Buckets
+      </h4>
+      <div className="flex flex-col gap-0.5">
+        {BFO_BUCKET_DEFS.map((bucket) => {
+          const colors = BFO_COLORS[bucket.type as keyof typeof BFO_COLORS];
+          const isActive = activeBuckets.has(bucket.type);
+          return (
+            <button
+              key={bucket.type}
+              onClick={() => onToggle(bucket.type)}
+              title={bucket.description}
+              className={cn(
+                'flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-all hover:bg-muted',
+                isActive ? 'opacity-100' : 'opacity-30'
+              )}
+            >
+              <div
+                className="h-3 w-3 flex-shrink-0 rounded-full"
+                style={{ backgroundColor: colors.background }}
+              />
+              <strong>{bucket.label}</strong>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Static legend for pages that don't need interactive bucket filtering
+export function BFOLegend() {
   return (
     <div className="absolute top-4 right-4 z-10 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         BFO 7 Buckets
       </h4>
       <div className="grid grid-cols-2 gap-2">
-        {buckets.map((bucket) => {
+        {BFO_BUCKET_DEFS.map((bucket) => {
           const colors = BFO_COLORS[bucket.type as keyof typeof BFO_COLORS];
           return (
             <div key={bucket.type} className="flex items-center gap-2">
