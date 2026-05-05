@@ -500,7 +500,6 @@ export default function GraphPage() {
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
@@ -512,6 +511,7 @@ export default function GraphPage() {
       if (next.has(bucketType)) { next.delete(bucketType); } else { next.add(bucketType); }
       return next;
     });
+    setStabilizeKey((k) => k + 1);
   }, []);
 
   // Parents hierarchy filter (like SubclassOf in ontology page)
@@ -867,6 +867,15 @@ export default function GraphPage() {
     }));
     setViews(normalizedViews);
   }, [workspaceId, setViews]);
+
+  // Reset selection and filters when the active graph identity changes
+  useEffect(() => {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setParentsLevels(0);
+    setHierarchyByLevel([]);
+    setShowRelations(false);
+  }, [selectedGraphId, activeSavedViewId]);
 
   // Load on mount and when workspace or visible graphs change
   useEffect(() => {
@@ -2130,16 +2139,6 @@ export default function GraphPage() {
                       </button>
                     )}
                   </div>
-                  <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={cn(
-                      'flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm shadow-sm hover:bg-accent',
-                      showFilters && 'bg-accent'
-                    )}
-                  >
-                    <Filter size={14} />
-                    Filter
-                  </button>
                   {/* Parents filter — like SubclassOf in ontology page */}
                   <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
                     <button
@@ -2263,6 +2262,7 @@ export default function GraphPage() {
                   </div>
                 ) : (
                   <VisNetwork
+                    key={activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}
                     nodes={filteredNodes}
                     edges={filteredEdges}
                     selectedNodeId={selectedNodeId}
