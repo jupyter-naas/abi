@@ -50,7 +50,6 @@ const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'fiat object part': 'Material Entity',
   'independent continuant': 'Material Entity',
   'process': 'Process',
-  'occurrent': 'Process',
   'process boundary': 'Process',
   'temporal region': 'Temporal Region',
   'temporal interval': 'Temporal Region',
@@ -113,6 +112,47 @@ const EDGE_COLORS: Record<string, string> = {
   // 'generically depends on': '#06b6d4',
 };
 
+const DEFAULT_NODE_BOX_WIDTH = 96;
+const DEFAULT_NODE_BOX_HEIGHT = 64;
+const DEFAULT_MAX_CHARS_PER_LINE = 14;
+
+function wrapLabelTwoLines(label: string, maxCharsPerLine = DEFAULT_MAX_CHARS_PER_LINE): string {
+  const normalized = (label ?? '').trim().replace(/\s+/g, ' ');
+  if (!normalized) return '';
+  if (normalized.length <= maxCharsPerLine) return normalized;
+
+  const words = normalized.split(' ');
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharsPerLine) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) lines.push(current);
+    current = word;
+    if (lines.length === 2) break;
+  }
+  if (lines.length < 2 && current) lines.push(current);
+
+  const line1 = lines[0] ?? '';
+  let line2 = lines[1] ?? '';
+
+  if (!line2 && words.length > 1) {
+    // Hard split if we couldn't build a second line from words.
+    line2 = normalized.slice(line1.length).trim();
+  }
+
+  if (line2.length > maxCharsPerLine) {
+    line2 = `${line2.slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`;
+  }
+
+  return line2 ? `${line1}\n${line2}` : line1;
+}
+
 interface VisNetworkProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -167,11 +207,11 @@ export function VisNetwork({
     const colors = resolveBFOColor(node, nodesByIri) ?? BFO_COLORS['Entity'];
     const logoUrl = getNodeLogoUrl(node);
     const hasLogo = Boolean(logoUrl);
-    const shape = hasLogo ? 'circularImage' : (node.properties?.shape as string) || 'dot';
+    const shape = hasLogo ? 'image' : (node.properties?.shape as string) || 'box';
 
     return {
       id: node.id,
-      label: node.label,
+      label: wrapLabelTwoLines(node.label),
       title: `${node.type}\n${node.label}`,
       color: {
         background: colors.background,
@@ -179,15 +219,20 @@ export function VisNetwork({
         highlight: { background: colors.highlight, border: colors.border },
       },
       font: { 
-        color: '#1f2937', 
+        color: '#ffffff', 
         size: 14, 
         face: 'Inter, sans-serif',
-        strokeWidth: 3,
-        strokeColor: '#ffffff',
+        strokeWidth: 0,
       },
       shape,
+      ...(!hasLogo && shape === 'box'
+        ? {
+            margin: { top: 8, right: 10, bottom: 8, left: 10 },
+            widthConstraint: { minimum: DEFAULT_NODE_BOX_WIDTH, maximum: DEFAULT_NODE_BOX_WIDTH },
+            heightConstraint: { minimum: DEFAULT_NODE_BOX_HEIGHT, maximum: DEFAULT_NODE_BOX_HEIGHT },
+          }
+        : {}),
       ...(hasLogo ? { image: logoUrl } : {}),
-      size: (node.properties?.size as number) || node.size || 25,
       x: node.x,
       y: node.y,
     };
@@ -217,7 +262,9 @@ export function VisNetwork({
     height: '100%',
     width: '100%',
     nodes: {
+      shape: 'box',
       borderWidth: 2,
+      margin: { top: 8, right: 10, bottom: 8, left: 10 },
       shadow: { enabled: true, color: 'rgba(0,0,0,0.2)', size: 5, x: 2, y: 2 },
     },
     edges: {
