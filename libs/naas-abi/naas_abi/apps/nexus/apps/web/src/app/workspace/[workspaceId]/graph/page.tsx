@@ -2205,10 +2205,7 @@ export default function GraphPage() {
                     </span>
                   )}
                 </div>
-                {/* BFO bucket filters — right */}
-                <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-2">
-                  <BFOBucketFilters activeBuckets={activeBuckets} onToggle={handleBucketToggle} />
-                </div>
+                <BFOBucketFilters activeBuckets={activeBuckets} onToggle={handleBucketToggle} />
 
                 {/* Graph Canvas */}
                 {loading ? (
