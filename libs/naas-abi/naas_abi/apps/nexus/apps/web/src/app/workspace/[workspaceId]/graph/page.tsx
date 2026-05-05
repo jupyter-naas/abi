@@ -524,6 +524,9 @@ export default function GraphPage() {
 
   // Relations filter — off by default
   const [showRelations, setShowRelations] = useState(false);
+
+  // Increment to trigger physics re-layout in VisNetwork
+  const [stabilizeKey, setStabilizeKey] = useState(0);
   const {
     activeViewType,
     setActiveViewType,
@@ -1431,7 +1434,7 @@ export default function GraphPage() {
       const newEdges: GraphEdge[] = (Array.isArray(data.edges) ? data.edges : []).map((e) => ({
         id: e.id, source: e.source_id, target: e.target_id,
         sourceLabel: e.source_label, targetLabel: e.target_label,
-        type: e.type, label: e.type,
+        type: e.type, label: 'is a',
         properties: { ...(e.properties ?? {}), relation_kind: 'is_a' },
       }));
 
@@ -1441,12 +1444,13 @@ export default function GraphPage() {
         return updated;
       });
       setParentsLevels(nextLevel);
+      setStabilizeKey((k) => k + 1);
     } catch (err) {
       console.error('Failed to fetch parent nodes:', err);
     } finally {
       setLoadingNextParentLevel(false);
     }
-  }, [parentsLevels, hierarchyByLevel, loadingNextParentLevel, nodes, visibleGraphIds, workspaceId]);
+  }, [parentsLevels, hierarchyByLevel, loadingNextParentLevel, nodes, selectedGraphId, visibleGraphIds, workspaceId]);
 
   const canExpandParentsMore =
     parentsLevels < hierarchyByLevel.length ||
@@ -2170,7 +2174,7 @@ export default function GraphPage() {
                   </div>
                   {/* Relations toggle */}
                   <button
-                    onClick={() => setShowRelations((v) => !v)}
+                    onClick={() => { setShowRelations((v) => !v); setStabilizeKey((k) => k + 1); }}
                     title="Toggle relation edges (URIRef objects, excl. rdf:type)"
                     className={cn(
                       'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
@@ -2264,6 +2268,7 @@ export default function GraphPage() {
                     selectedNodeId={selectedNodeId}
                     onNodeSelect={setSelectedNodeId}
                     onEdgeSelect={setSelectedEdgeId}
+                    stabilizeKey={stabilizeKey}
                   />
                 )}
 
