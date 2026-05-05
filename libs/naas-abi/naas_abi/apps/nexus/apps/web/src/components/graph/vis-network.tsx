@@ -332,7 +332,7 @@ export function VisNetwork({
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
 
-  // Re-run physics when stabilizeKey changes (e.g. parents or relations toggled)
+  // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled)
   useEffect(() => {
     if (stabilizeKey === undefined || stabilizeKey === 0) return;
     if (!networkRef.current) return;
@@ -346,7 +346,7 @@ export function VisNetwork({
       });
       isStabilizedRef.current = true;
       networkRef.current.setOptions({ physics: { enabled: false } });
-      networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+      // No fit() here — preserve the user's current zoom/pan position
     });
     networkRef.current.stabilize(200);
   }, [stabilizeKey]);
