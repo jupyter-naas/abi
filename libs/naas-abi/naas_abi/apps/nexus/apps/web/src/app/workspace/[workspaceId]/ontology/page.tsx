@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
@@ -1792,6 +1792,62 @@ function OntologyNetworkView({
     showObjectProperties,
   ]);
 
+  // Level-1 frontier: the nodes from which SubclassOf parents are fetched.
+  // When focused, uses nodesByIri so the lookup works for both primary and hierarchy-added nodes.
+  // When filtered, uses graphNodes filtered by search/buckets.
+  // Changes when focus, search, or bucket filters change → triggers a cache reset below.
+  const subclassOfFrontierForLevel1 = useMemo(() => {
+    if (focusedNodeId) {
+      // nodesByIri covers all currently visible nodes (graphNodes + hierarchy levels)
+      const node = nodesByIri.get(focusedNodeId);
+      return node ? [node] : [];
+    }
+
+    if (!graphSearchQuery.trim() && activeBuckets.size === 0) {
+      return graphNodes.filter((n) => n.properties?.is_primary === true);
+    }
+
+    const baseMap = new Map(graphNodes.map((n) => [n.id, n]));
+    let nodes = graphNodes;
+    if (graphSearchQuery.trim()) {
+      const q = graphSearchQuery.toLowerCase();
+      nodes = nodes.filter(
+        (n) =>
+          n.label.toLowerCase().includes(q) ||
+          n.id.toLowerCase().includes(q) ||
+          n.type.toLowerCase().includes(q)
+      );
+    }
+    if (activeBuckets.size > 0) {
+      nodes = nodes.filter((n) => {
+        const bucket = resolveNodeBucket(n, baseMap);
+        return bucket !== null ? activeBuckets.has(bucket) : activeBuckets.has('Unknown');
+      });
+    }
+    return nodes;
+  }, [focusedNodeId, graphSearchQuery, activeBuckets, graphNodes, nodesByIri]);
+
+  const subclassOfFrontierKey = useMemo(
+    () => subclassOfFrontierForLevel1.map((n) => n.id).sort().join(','),
+    [subclassOfFrontierForLevel1]
+  );
+
+  // When the frontier changes, discard the cached hierarchy so "+"/"-" start fresh.
+  const prevFrontierKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevFrontierKeyRef.current === null) {
+      prevFrontierKeyRef.current = subclassOfFrontierKey;
+      return;
+    }
+    if (prevFrontierKeyRef.current !== subclassOfFrontierKey) {
+      prevFrontierKeyRef.current = subclassOfFrontierKey;
+      // Use functional updates to skip the set when already at the target value,
+      // preventing unnecessary re-renders from the nodesByIri → hierarchy dependency chain.
+      setSubclassOfLevels((prev) => (prev === 0 ? prev : 0));
+      setHierarchyByLevel((prev) => (prev.length === 0 ? prev : []));
+    }
+  }, [subclassOfFrontierKey]);
+
   const handleExpandSubclassOf = async () => {
     const nextLevel = subclassOfLevels + 1;
     // Use cached data if already fetched
@@ -1802,12 +1858,17 @@ function OntologyNetworkView({
     if (!ontologyPath || loadingNextLevel) return;
     setLoadingNextLevel(true);
     try {
-      // Frontier: primary nodes for level 1, previous level's nodes for deeper levels
+      // Level-1 frontier depends on current focus/filter; deeper levels use the previous level's result.
       const frontierNodes =
         subclassOfLevels === 0
-          ? graphNodes.filter((n) => n.properties?.is_primary === true)
+          ? subclassOfFrontierForLevel1
           : (hierarchyByLevel[subclassOfLevels - 1]?.frontier ?? []);
       if (frontierNodes.length === 0) {
+        setHierarchyByLevel((prev) => {
+          const updated = [...prev];
+          updated[nextLevel - 1] = { frontier: [], nodes: [], edges: [], introducedNewNodes: false };
+          return updated;
+        });
         setSubclassOfLevels(nextLevel);
         return;
       }
