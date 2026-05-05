@@ -1587,8 +1587,13 @@ function OntologyNetworkView({
   const [loadingNextLevel, setLoadingNextLevel] = useState(false);
   // Cached levels: index 0 = direct parents of primary nodes, index 1 = their parents, etc.
   const [hierarchyByLevel, setHierarchyByLevel] = useState<Array<{
+    /** Nodes to use as the frontier when fetching the next level (may already exist in the graph). */
+    frontier: OntologyOverviewGraphNode[];
+    /** Nodes that are new to the graph for this level (deduped against existing graph + previous levels). */
     nodes: OntologyOverviewGraphNode[];
     edges: OntologyOverviewGraphEdge[];
+    /** Whether this fetch introduced at least one new node into the graph. */
+    introducedNewNodes: boolean;
   }>>([]);
   const [showRestrictions, setShowRestrictions] = useState(false);
   const [showObjectProperties, setShowObjectProperties] = useState(false);
@@ -1801,22 +1806,56 @@ function OntologyNetworkView({
       const frontierNodes =
         subclassOfLevels === 0
           ? graphNodes.filter((n) => n.properties?.is_primary === true)
-          : (hierarchyByLevel[subclassOfLevels - 1]?.nodes ?? []);
+          : (hierarchyByLevel[subclassOfLevels - 1]?.frontier ?? []);
       if (frontierNodes.length === 0) {
         setSubclassOfLevels(nextLevel);
         return;
       }
+
+      // Avoid re-creating nodes/edges that are already present (graphNodes or previously fetched levels).
+      const existingNodeIds = new Set<string>();
+      for (const n of graphNodes) existingNodeIds.add(n.id);
+      for (const level of hierarchyByLevel) {
+        for (const n of level.nodes) existingNodeIds.add(n.id);
+      }
+      const existingEdgeIds = new Set<string>();
+      for (const level of hierarchyByLevel) {
+        for (const e of level.edges) existingEdgeIds.add(e.id);
+      }
+
       const baseUrl = getApiUrl();
       const params = new URLSearchParams({ ontology_path: ontologyPath });
       frontierNodes.forEach((n) => params.append('class_iris', n.id));
       const response = await authFetch(`${baseUrl}/api/ontology/overview/parents?${params.toString()}`);
       if (!response.ok) throw new Error(`parents fetch failed: ${response.status}`);
       const data = await response.json() as { nodes?: OntologyOverviewGraphNode[]; edges?: OntologyOverviewGraphEdge[] };
+
+      const fetchedNodes = Array.isArray(data.nodes) ? data.nodes : [];
+      const fetchedEdges = Array.isArray(data.edges) ? data.edges : [];
+
+      // Keep the fetched nodes as the *frontier* for deeper levels, even if they already exist in the graph.
+      const fetchedUniqueNodesById = new Map<string, OntologyOverviewGraphNode>();
+      for (const n of fetchedNodes) fetchedUniqueNodesById.set(n.id, n);
+      const frontierNodesForNextLevel = Array.from(fetchedUniqueNodesById.values());
+
+      const nextExistingNodeIds = new Set(existingNodeIds);
+      for (const n of frontierNodesForNextLevel) nextExistingNodeIds.add(n.id);
+
+      // Only create nodes that are not already present in the graph.
+      const newNodes = frontierNodesForNextLevel.filter((n) => !existingNodeIds.has(n.id));
+
+      const newEdges = fetchedEdges
+        .filter((e) => !existingEdgeIds.has(e.id))
+        // Only keep edges whose endpoints exist (either already present or newly added in this level)
+        .filter((e) => nextExistingNodeIds.has(e.source) && nextExistingNodeIds.has(e.target));
+
       setHierarchyByLevel((prev) => {
         const updated = [...prev];
         updated[nextLevel - 1] = {
-          nodes: Array.isArray(data.nodes) ? data.nodes : [],
-          edges: Array.isArray(data.edges) ? data.edges : [],
+          frontier: frontierNodesForNextLevel,
+          nodes: newNodes,
+          edges: newEdges,
+          introducedNewNodes: newNodes.length > 0,
         };
         return updated;
       });
@@ -1830,9 +1869,22 @@ function OntologyNetworkView({
 
   // "+" is hidden once the latest fetched level returned 0 nodes (no more parents exist).
   // Stays visible when the user has collapsed below a cached non-empty level.
-  const canExpandMore =
-    subclassOfLevels < hierarchyByLevel.length ||
-    (hierarchyByLevel[subclassOfLevels - 1]?.nodes.length ?? 1) > 0;
+  const canExpandMore = useMemo(() => {
+    // No attempt yet: allow first expansion.
+    if (hierarchyByLevel.length === 0) return true;
+
+    // Collapsed: allow showing "+" only if the first level actually returned something.
+    if (subclassOfLevels === 0) {
+      return (hierarchyByLevel[0]?.nodes.length ?? 0) > 0 || (hierarchyByLevel[0]?.edges.length ?? 0) > 0;
+    }
+
+    // If there are cached levels beyond the currently visible ones, user can always expand into them.
+    if (subclassOfLevels < hierarchyByLevel.length) return true;
+
+    // Otherwise, allow fetching one more level only if the last visible fetched level introduced new nodes.
+    // This prevents repeatedly "expanding" when everything is already in the graph (e.g. BFO).
+    return hierarchyByLevel[subclassOfLevels - 1]?.introducedNewNodes ?? false;
+  }, [hierarchyByLevel, subclassOfLevels]);
 
   const graphNodesById = useMemo(
     () => new Map(allVisibleNodes.map((node) => [node.id, node])),
@@ -1903,7 +1955,7 @@ function OntologyNetworkView({
                     <button
                       onClick={handleExpandSubclassOf}
                       title="Show more parent levels"
-                      disabled={loadingNextLevel}
+                      disabled={loadingNextLevel || !canExpandMore}
                       className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
                     >
                       +
