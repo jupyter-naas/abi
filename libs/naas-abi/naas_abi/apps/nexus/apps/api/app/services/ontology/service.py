@@ -771,11 +771,10 @@ class OntologyService:
                         target_iri = str(row.get("range")) if row.get("range") else None
                         if not source_iri or not target_iri:
                             continue
-
-                        if source_iri not in classes_by_iri:
-                            classes_by_iri[source_iri] = _make_node(source_iri)
-                        if target_iri not in classes_by_iri:
-                            classes_by_iri[target_iri] = _make_node(target_iri)
+                        # Do not create nodes coming from rdfs:domain / rdfs:range.
+                        # Only keep object-property edges when both endpoints already exist.
+                        if source_iri not in classes_by_iri or target_iri not in classes_by_iri:
+                            continue
 
                         property_label = (
                             str(row.get("propertyLabel"))
