@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.34.1 (2026-05-05)
+
+### Bug Fixes
+
+- **naas-abi**: Add mpymupdf4llm
+  ([`30bd827`](https://github.com/jupyter-naas/abi/commit/30bd8270aaa9ad0c251c196852725a9a4f1629c8))
+
+
 ## v1.34.0 (2026-05-05)
 
 ### Features
