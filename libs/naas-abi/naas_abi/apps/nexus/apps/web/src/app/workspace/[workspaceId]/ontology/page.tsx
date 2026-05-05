@@ -1670,25 +1670,38 @@ function OntologyNetworkView({
     return nodes;
   }, [allVisibleNodes, nodesByIri, graphSearchQuery, activeBuckets]);
 
-  // When relations are active, expand the visible set with nodes connected via those relation edges.
-  // In focus mode this means: focused node + its relation neighbors.
-  // Outside focus mode: all filtered nodes + their relation neighbors.
+  // When any relation filter is active, expand the visible set with neighbor nodes reachable via
+  // those relation edges. In focus mode: focused node + its neighbors. Outside focus: all filtered
+  // nodes + their neighbors. Covers SubclassOf, Restrictions, and Object Properties.
   const expandedNodes = useMemo(() => {
     const baseNodes = focusedNodeId
       ? nodesMatchingSearchAndBuckets.filter((n) => n.id === focusedNodeId)
       : nodesMatchingSearchAndBuckets;
 
-    if (!showRestrictions && !showObjectProperties) return baseNodes;
+    // Collect every edge that is currently active across all three relation toggles.
+    const activeRelEdges: OntologyOverviewGraphEdge[] = [];
 
-    const relEdges = graphEdges.filter(
-      (e) =>
-        (showRestrictions && e.properties?.relation_kind === 'restriction') ||
-        (showObjectProperties && e.properties?.relation_kind === 'object_property')
-    );
+    if (showRestrictions) {
+      for (const e of graphEdges) {
+        if (e.properties?.relation_kind === 'restriction') activeRelEdges.push(e);
+      }
+    }
+    if (showObjectProperties) {
+      for (const e of graphEdges) {
+        if (e.properties?.relation_kind === 'object_property') activeRelEdges.push(e);
+      }
+    }
+    if (subclassOfLevels > 0) {
+      for (let i = 0; i < subclassOfLevels && i < hierarchyByLevel.length; i++) {
+        for (const e of hierarchyByLevel[i].edges) activeRelEdges.push(e);
+      }
+    }
+
+    if (activeRelEdges.length === 0) return baseNodes;
 
     const baseIds = new Set(baseNodes.map((n) => n.id));
     const toAdd = new Set<string>();
-    for (const edge of relEdges) {
+    for (const edge of activeRelEdges) {
       if (baseIds.has(edge.source) && !baseIds.has(edge.target)) toAdd.add(edge.target);
       if (baseIds.has(edge.target) && !baseIds.has(edge.source)) toAdd.add(edge.source);
     }
@@ -1700,7 +1713,7 @@ function OntologyNetworkView({
       .filter((n): n is OntologyOverviewGraphNode => n !== undefined);
 
     return [...baseNodes, ...extras];
-  }, [nodesMatchingSearchAndBuckets, focusedNodeId, showRestrictions, showObjectProperties, graphEdges, nodesByIri]);
+  }, [nodesMatchingSearchAndBuckets, focusedNodeId, showRestrictions, showObjectProperties, subclassOfLevels, hierarchyByLevel, graphEdges, nodesByIri]);
 
   // Effective active buckets: user-selected + auto-activated buckets for relation-expanded nodes.
   const effectiveActiveBuckets = useMemo(() => {
@@ -1987,6 +2000,7 @@ function OntologyNetworkView({
                 onClick={() => {
                   setSelectedGraphNodeId(null);
                   setSelectedGraphEdgeId(null);
+                  setFocusedNodeId(null);
                 }}
                 className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                 title="Close inspector"
