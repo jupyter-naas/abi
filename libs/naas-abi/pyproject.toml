@@ -34,8 +34,11 @@ dependencies = [
     "tenacity>=8.2.0",
     "PyYAML",
     "python-socketio>=5.16.1",
-    "thefuzz>=0.22.1"
+    "thefuzz>=0.22.1",
+    "pymupdf>=1.27.2.2",
+    "pymupdf4llm>=1.27.2.2"
 ]
+
 license = { text = "MIT License" }
 
 [project.urls]
