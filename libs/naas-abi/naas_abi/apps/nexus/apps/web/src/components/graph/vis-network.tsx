@@ -48,7 +48,6 @@ const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'object': 'Material Entity',
   'object aggregate': 'Material Entity',
   'fiat object part': 'Material Entity',
-  'independent continuant': 'Material Entity',
   'process': 'Process',
   'process boundary': 'Process',
   'temporal region': 'Temporal Region',
@@ -115,6 +114,163 @@ const EDGE_COLORS: Record<string, string> = {
 const DEFAULT_NODE_BOX_WIDTH = 128;
 const DEFAULT_NODE_BOX_HEIGHT = 88;
 const DEFAULT_MAX_CHARS_PER_LINE = 14;
+
+// Spacing constants for hierarchical layout
+const LR_LEVEL_GAP   = 260; // px between depth levels  (main axis = x)
+const LR_NODE_SLOT   = 110; // px per leaf slot in cross-axis (y)
+const TD_LEVEL_GAP   = 180; // px between depth levels  (main axis = y)
+const TD_NODE_SLOT   = 168; // px per leaf slot in cross-axis (x)
+
+// Resolve a stable bucket key for a node (used to sort / group siblings)
+function resolveNodeBucketKey(
+  node: GraphNode,
+  nodesById: Map<string, GraphNode>,
+  visited = new Set<string>(),
+): string {
+  if (node.type in BFO_COLORS) return node.type;
+  const lower = node.type?.toLowerCase?.() ?? '';
+  if (lower in LABEL_TO_BUCKET) return LABEL_TO_BUCKET[lower];
+  if (node.type in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[node.type];
+  const bfoIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoIri && bfoIri in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[bfoIri];
+  const parentIri = node.properties?.parent_iri as string | undefined;
+  if (parentIri && parentIri in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[parentIri];
+  if (parentIri && !visited.has(node.id)) {
+    visited.add(node.id);
+    const parent = nodesById.get(parentIri);
+    if (parent) return resolveNodeBucketKey(parent, nodesById, visited);
+  }
+  return 'Unknown';
+}
+
+/**
+ * Subtree-based hierarchical layout (Reingold-Tilford style).
+ *
+ * Algorithm:
+ *  1. Build parent→children tree from `is_a` edges (source=child, target=parent).
+ *  2. Sort each node's children by BFO bucket so same-bucket siblings are adjacent.
+ *  3. DFS: leaves consume one slot in the cross-axis; internal nodes are centred
+ *     over their children's range.  A small extra gap is injected when the bucket
+ *     changes within a sibling list, visually packing same-bucket nodes together.
+ *  4. Centre the whole layout at cross-axis = 0.
+ *
+ * Collision-free by construction: every subtree occupies a contiguous, non-
+ * overlapping range of the cross-axis cursor.
+ */
+function computeHierarchicalPositions(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  direction: 'LR' | 'TD',
+): Map<string, { x: number; y: number }> {
+  if (nodes.length === 0) return new Map();
+
+  const nodesById  = new Map(nodes.map((n) => [n.id, n]));
+  const nodeIds    = new Set(nodes.map((n) => n.id));
+  const isaEdges   = edges.filter((e) => e.properties?.relation_kind === 'is_a');
+
+  // ── 1. Build tree ──────────────────────────────────────────────────────────
+  const childrenOf = new Map<string, string[]>();
+  const parentOf   = new Map<string, string>();
+
+  for (const edge of isaEdges) {
+    const child = edge.source, parent = edge.target;
+    if (!nodeIds.has(child) || !nodeIds.has(parent)) continue;
+    if (!childrenOf.has(parent)) childrenOf.set(parent, []);
+    childrenOf.get(parent)!.push(child);
+    if (!parentOf.has(child)) parentOf.set(child, parent);
+  }
+
+  // ── 2. Bucket key per node (pre-computed for sorting) ─────────────────────
+  const bucketOf = new Map<string, string>();
+  for (const node of nodes) bucketOf.set(node.id, resolveNodeBucketKey(node, nodesById));
+
+  // Sort children: group by bucket, then alphabetically by label within bucket
+  for (const [, children] of childrenOf) {
+    children.sort((a, b) => {
+      const ba = bucketOf.get(a) ?? 'Unknown';
+      const bb = bucketOf.get(b) ?? 'Unknown';
+      if (ba !== bb) return ba.localeCompare(bb);
+      return (nodesById.get(a)?.label ?? a).localeCompare(nodesById.get(b)?.label ?? b);
+    });
+  }
+
+  // ── 3. Roots — prefer BFO entity (BFO_0000001) first ─────────────────────
+  const roots = nodes
+    .map((n) => n.id)
+    .filter((id) => !parentOf.has(id))
+    .sort((a, b) => {
+      if (a.includes('BFO_0000001')) return -1;
+      if (b.includes('BFO_0000001')) return 1;
+      return (nodesById.get(a)?.label ?? a).localeCompare(nodesById.get(b)?.label ?? b);
+    });
+
+  // ── 4. DFS placement ───────────────────────────────────────────────────────
+  const SLOT        = direction === 'LR' ? LR_NODE_SLOT  : TD_NODE_SLOT;
+  const LEVEL       = direction === 'LR' ? LR_LEVEL_GAP  : TD_LEVEL_GAP;
+  const BUCKET_XTRA = Math.round(SLOT * 0.55); // extra gap between bucket groups
+
+  const positions = new Map<string, { x: number; y: number }>();
+  let cursor = 0; // running cross-axis cursor (y for LR, x for TD)
+
+  const setPos = (id: string, depth: number, cross: number) =>
+    positions.set(id, direction === 'LR'
+      ? { x: depth * LEVEL, y: cross }
+      : { x: cross,         y: depth * LEVEL });
+
+  const place = (id: string, depth: number): number => {
+    const children = childrenOf.get(id) ?? [];
+
+    if (children.length === 0) {
+      // Leaf: occupy one slot
+      const pos = cursor + SLOT / 2;
+      cursor += SLOT;
+      setPos(id, depth, pos);
+      return pos;
+    }
+
+    // Internal node: place children left-to-right / top-to-bottom,
+    // injecting extra gap when the bucket changes.
+    let prevBucket = '';
+    const centers: number[] = [];
+
+    for (const child of children) {
+      const b = bucketOf.get(child) ?? 'Unknown';
+      if (prevBucket && prevBucket !== b) cursor += BUCKET_XTRA;
+      prevBucket = b;
+      centers.push(place(child, depth + 1));
+    }
+
+    // Centre the parent over its children's span
+    const mid = (centers[0] + centers[centers.length - 1]) / 2;
+    setPos(id, depth, mid);
+    return mid;
+  };
+
+  for (let i = 0; i < roots.length; i++) {
+    if (i > 0) cursor += SLOT; // gap between independent root subtrees
+    place(roots[i], 0);
+  }
+
+  // Nodes unreachable from any root (shouldn't occur, but guard anyway)
+  for (const node of nodes) {
+    if (!positions.has(node.id)) {
+      cursor += SLOT;
+      setPos(node.id, 0, cursor + SLOT / 2);
+      cursor += SLOT;
+    }
+  }
+
+  // ── 5. Centre layout at cross-axis 0 ──────────────────────────────────────
+  const crossVals = Array.from(positions.values()).map((p) => direction === 'LR' ? p.y : p.x);
+  const mid = (Math.min(...crossVals) + Math.max(...crossVals)) / 2;
+  for (const [id, pos] of positions) {
+    positions.set(id, direction === 'LR'
+      ? { x: pos.x, y: pos.y - mid }
+      : { x: pos.x - mid, y: pos.y });
+  }
+
+  return positions;
+}
 
 function wrapLabelTwoLines(label: string, maxCharsPerLine = DEFAULT_MAX_CHARS_PER_LINE): string {
   const normalized = (label ?? '').trim().replace(/\s+/g, ' ');
@@ -212,6 +368,7 @@ interface VisNetworkProps {
   onNodeSelect: (nodeId: string | null) => void;
   onEdgeSelect: (edgeId: string | null) => void;
   stabilizeKey?: number;
+  layoutDirection?: 'LR' | 'TD';
 }
 
 export function VisNetwork({
@@ -221,6 +378,7 @@ export function VisNetwork({
   onNodeSelect,
   onEdgeSelect,
   stabilizeKey,
+  layoutDirection,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -233,6 +391,11 @@ export function VisNetwork({
     for (const n of nodes) map.set(n.id, n);
     return map;
   }, [nodes]);
+
+  const hierarchicalPositions = useMemo(
+    () => (layoutDirection ? computeHierarchicalPositions(nodes, edges, layoutDirection) : null),
+    [layoutDirection, nodes, edges],
+  );
 
   const getNodeLogoUrl = useCallback((node: GraphNode): string | undefined => {
     const properties = node.properties ?? {};
@@ -309,18 +472,18 @@ export function VisNetwork({
       logoDataUri,
     });
 
+    const hierPos = hierarchicalPositions?.get(node.id);
     return {
       id: node.id,
-      // Render everything inside the SVG so all nodes share the same shape.
       label: '',
       title: `${node.type}\n${node.label}`,
       shape: 'image',
       image,
       shapeProperties: { useImageSize: true, interpolation: true, coordinateOrigin: 'center' },
-      x: node.x,
-      y: node.y,
+      x: hierPos?.x ?? node.x,
+      y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
@@ -426,7 +589,20 @@ export function VisNetwork({
       return true;
     });
 
-    // If already stabilized, save current positions before updating
+    if (layoutDirection) {
+      // Hierarchical layout: positions are baked into toVisNode via hierarchicalPositions.
+      // Disable physics and fit the view to the positioned graph.
+      nodesDataRef.current.clear();
+      nodesDataRef.current.add(uniqueNodes.map(toVisNode));
+      if (networkRef.current && uniqueNodes.length > 0) {
+        networkRef.current.setOptions({ physics: { enabled: false } });
+        networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+      }
+      isStabilizedRef.current = true;
+      return;
+    }
+
+    // Physics layout: save positions before updating so existing nodes don't jump
     if (isStabilizedRef.current && networkRef.current) {
       const positions = networkRef.current.getPositions();
       Object.entries(positions).forEach(([id, pos]) => {
@@ -434,7 +610,6 @@ export function VisNetwork({
       });
     }
 
-    // Map nodes with preserved positions
     const visNodes = uniqueNodes.map((node) => {
       const baseNode = toVisNode(node);
       const savedPos = nodePositionsRef.current.get(node.id);
@@ -443,15 +618,13 @@ export function VisNetwork({
       }
       return baseNode;
     });
-    
+
     nodesDataRef.current.clear();
     nodesDataRef.current.add(visNodes);
 
-    // Initial load only: run physics then disable and fit once
     if (!isStabilizedRef.current && networkRef.current && visNodes.length > 0) {
       networkRef.current.once('stabilizationIterationsDone', () => {
         if (networkRef.current) {
-          // Save positions after stabilization
           const positions = networkRef.current.getPositions();
           Object.entries(positions).forEach(([id, pos]) => {
             nodePositionsRef.current.set(id, pos as { x: number; y: number });
@@ -462,8 +635,7 @@ export function VisNetwork({
         }
       });
     }
-    // When already stabilized, only update node data; do not fit() so the view is not re-centered on selection
-  }, [nodes, toVisNode]);
+  }, [nodes, toVisNode, layoutDirection]);
 
   // Update edges
   useEffect(() => {
@@ -477,10 +649,11 @@ export function VisNetwork({
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
 
-  // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled)
+  // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled).
+  // Skip when in hierarchical layout — positions are already fixed.
   useEffect(() => {
     if (stabilizeKey === undefined || stabilizeKey === 0) return;
-    if (!networkRef.current) return;
+    if (!networkRef.current || layoutDirection) return;
     isStabilizedRef.current = false;
     networkRef.current.setOptions({ physics: { enabled: true } });
     networkRef.current.once('stabilizationIterationsDone', () => {
@@ -491,10 +664,9 @@ export function VisNetwork({
       });
       isStabilizedRef.current = true;
       networkRef.current.setOptions({ physics: { enabled: false } });
-      // No fit() here — preserve the user's current zoom/pan position
     });
     networkRef.current.stabilize(200);
-  }, [stabilizeKey]);
+  }, [stabilizeKey, layoutDirection]);
 
   // Handle selected node — guard against stale IDs from a previous graph
   useEffect(() => {
