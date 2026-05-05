@@ -33,6 +33,19 @@ SCHEMA_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/schema")
 
 _PROTECTED_URIS = {SCHEMA_GRAPH_URI, NEXUS_GRAPH_URI}
 
+_BFO_BUCKET_ROOTS_VALUES = " ".join(
+    f"<http://purl.obolibrary.org/obo/{bfo_id}>"
+    for bfo_id in (
+        "BFO_0000040",  # Material Entity (WHO)
+        "BFO_0000015",  # Process (WHAT)
+        "BFO_0000008",  # Temporal Region (WHEN)
+        "BFO_0000029",  # Site (WHERE)
+        "BFO_0000031",  # Generically Dependent Continuant (HOW WE KNOW)
+        "BFO_0000019",  # Quality (HOW IT IS)
+        "BFO_0000017",  # Realizable (WHY)
+    )
+)
+
 
 def _slugify(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
@@ -55,6 +68,30 @@ def _get_ontology_label(triple_store: TripleStoreService, uri: str) -> str:
         assert isinstance(row, ResultRow)
         return str(row.label) if row.label else uri
     return uri
+
+
+@_cache(
+    lambda triple_store, class_uri: f"bfo_parent_{class_uri}",
+    DataType.JSON,
+    ttl=timedelta(days=1),
+)
+def _get_bfo_parent_for_class(triple_store: TripleStoreService, class_uri: str) -> str | None:
+    """Walk rdfs:subClassOf+ in the schema graph to find the nearest BFO bucket-root ancestor."""
+    query = f"""
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?ancestor WHERE {{
+        GRAPH <http://ontology.naas.ai/graph/schema> {{
+            VALUES ?ancestor {{ {_BFO_BUCKET_ROOTS_VALUES} }}
+            <{class_uri}> rdfs:subClassOf+ ?ancestor .
+        }}
+    }}
+    LIMIT 1
+    """
+    for row in triple_store.query(query):
+        assert isinstance(row, ResultRow)
+        val = getattr(row, "ancestor", None)
+        return str(val) if val else None
+    return None
 
 
 @_cache(
@@ -139,6 +176,8 @@ def _list_individuals(
                 if class_type:
                     nodes[subject_uri]["type"] = class_type
                     nodes[subject_uri]["type_label"] = _get_ontology_label(triple_store, class_type)
+                    bfo_parent = _get_bfo_parent_for_class(triple_store, class_type)
+                    nodes[subject_uri]["bfo_parent_iri"] = bfo_parent or ""
             if isinstance(o, Literal):
                 nodes[subject_uri][_get_ontology_label(triple_store, str(p))] = str(o)
             elif isinstance(o, URIRef) and p != RDF.type:
@@ -168,6 +207,7 @@ def _list_individuals(
         node_id = str(node_data.get("uri", "") or "").strip()
         if not node_id:
             continue
+        _excluded = {"uri", "label", "type", "type_label"}
         graph_nodes.append(
             GraphNodeData(
                 id=node_id,
@@ -177,7 +217,7 @@ def _list_individuals(
                 properties={
                     key.split("/")[-1]: value
                     for key, value in node_data.items()
-                    if key not in {"uri", "label", "type", "type_label"} and value != "unknown"
+                    if key not in _excluded and (value != "unknown" or key == "bfo_parent_iri")
                 },
             )
         )
@@ -408,3 +448,123 @@ class GraphService:
             limit=limit,
             depth=depth,
         )
+
+    async def get_network_parents(
+        self,
+        workspace_id: str,
+        graph_names: list[str],
+        node_iris: list[str],
+    ) -> GraphNetworkData:
+        """Return parent class nodes for the given frontier node IRIs.
+
+        For each IRI the endpoint detects whether it is an individual or a class:
+        - Individual (owl:NamedIndividual in data graph) → returns its rdf:type class + rdf:type edge.
+        - Class (owl:Class in schema graph) → returns its rdfs:subClassOf parents + edges.
+
+        One call per progressive level; the frontend advances the frontier.
+        """
+        store = self._get_triple_store()
+        if not node_iris:
+            return GraphNetworkData(nodes=[], edges=[])
+
+        iris_values = " ".join(f"<{iri}>" for iri in node_iris)
+        graph_values = " ".join(f"<{name}>" for name in graph_names)
+
+        new_nodes: dict[str, GraphNodeData] = {}
+        new_edges: dict[str, GraphEdgeData] = {}
+
+        # ── Case 1: individuals → fetch rdf:type from data graphs ────────────
+        if graph_values:
+            type_query = f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            SELECT DISTINCT ?individual ?classType WHERE {{
+                VALUES ?individual {{ {iris_values} }}
+                VALUES ?g {{ {graph_values} }}
+                GRAPH ?g {{
+                    ?individual rdf:type ?classType .
+                    FILTER(?classType != owl:NamedIndividual)
+                    FILTER(isIRI(?classType))
+                }}
+            }}
+            """
+            individual_label_cache: dict[str, str] = {}
+            for row in store.query(type_query):
+                assert isinstance(row, ResultRow)
+                ind_iri = str(row.individual)
+                cls_iri = str(row.classType)
+
+                # Class node
+                if cls_iri not in new_nodes:
+                    cls_label = _get_ontology_label(store, cls_iri)
+                    bfo_parent = _get_bfo_parent_for_class(store, cls_iri)
+                    new_nodes[cls_iri] = GraphNodeData(
+                        id=cls_iri,
+                        workspace_id=workspace_id,
+                        type="Class",
+                        label=cls_label,
+                        properties={"bfo_parent_iri": bfo_parent or "", "is_class": True},
+                    )
+
+                # rdf:type edge: individual → class
+                edge_id = f"{ind_iri}|rdf_type|{cls_iri}"
+                if edge_id not in new_edges:
+                    ind_label = individual_label_cache.get(ind_iri)
+                    if ind_label is None:
+                        ind_label = _get_ontology_label(store, ind_iri)
+                        individual_label_cache[ind_iri] = ind_label
+                    new_edges[edge_id] = GraphEdgeData(
+                        id=edge_id,
+                        workspace_id=workspace_id,
+                        source_id=ind_iri,
+                        target_id=cls_iri,
+                        source_label=ind_label,
+                        target_label=new_nodes[cls_iri].label,
+                        type="rdf:type",
+                        properties={"relation_kind": "is_a"},
+                    )
+
+        # ── Case 2: classes → fetch rdfs:subClassOf from schema graph ─────────
+        parent_query = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT DISTINCT ?subClass ?superClass WHERE {{
+            GRAPH <{SCHEMA_GRAPH_URI}> {{
+                VALUES ?subClass {{ {iris_values} }}
+                ?subClass rdfs:subClassOf ?superClass .
+                FILTER(isIRI(?superClass))
+            }}
+        }}
+        """
+        for row in store.query(parent_query):
+            assert isinstance(row, ResultRow)
+            sub_iri = str(row.subClass) if row.subClass else None
+            super_iri = str(row.superClass) if row.superClass else None
+            if not sub_iri or not super_iri:
+                continue
+
+            for iri in (sub_iri, super_iri):
+                if iri not in new_nodes:
+                    lbl = _get_ontology_label(store, iri)
+                    bfo_parent = _get_bfo_parent_for_class(store, iri)
+                    new_nodes[iri] = GraphNodeData(
+                        id=iri,
+                        workspace_id=workspace_id,
+                        type="Class",
+                        label=lbl,
+                        properties={"bfo_parent_iri": bfo_parent or "", "is_class": True},
+                    )
+
+            edge_id = f"{sub_iri}|is_a|{super_iri}"
+            if edge_id not in new_edges:
+                new_edges[edge_id] = GraphEdgeData(
+                    id=edge_id,
+                    workspace_id=workspace_id,
+                    source_id=sub_iri,
+                    target_id=super_iri,
+                    source_label=new_nodes[sub_iri].label,
+                    target_label=new_nodes[super_iri].label,
+                    type="is a",
+                    properties={"relation_kind": "is_a"},
+                )
+
+        return GraphNetworkData(nodes=list(new_nodes.values()), edges=list(new_edges.values()))

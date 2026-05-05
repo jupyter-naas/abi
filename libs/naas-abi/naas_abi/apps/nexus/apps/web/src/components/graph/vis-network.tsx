@@ -17,6 +17,7 @@ const BFO_COLORS = {
   'Realizable': { background: '#eab308', border: '#ca8a04', highlight: '#facc15' },
   'GDC': { background: '#06b6d4', border: '#0891b2', highlight: '#22d3ee' },
   'Entity': { background: '#6b7280', border: '#4b5563', highlight: '#9ca3af' },
+  'Unknown': { background: '#9ca3af', border: '#6b7280', highlight: '#d1d5db' },
 };
 
 // BFO URI → color bucket (full URI and short ID forms)
@@ -393,6 +394,7 @@ export const BFO_BUCKET_DEFS = [
   { type: 'Quality', label: 'How it is', description: 'Properties, attributes' },
   { type: 'Realizable', label: 'Why', description: 'Roles & dispositions' },
   { type: 'GDC', label: 'How we know', description: 'Documents, data, plans' },
+  { type: 'Unknown', label: 'Unknown', description: 'Unclassified or unresolved bucket' },
 ];
 
 export function BFOBucketFilters({
@@ -417,6 +419,7 @@ export function BFOBucketFilters({
       <div className="flex flex-col gap-0.5">
         {BFO_BUCKET_DEFS.map((bucket) => {
           const colors = BFO_COLORS[bucket.type as keyof typeof BFO_COLORS];
+          const anySelected = activeBuckets.size > 0;
           const isActive = activeBuckets.has(bucket.type);
           return (
             <button
@@ -434,7 +437,7 @@ export function BFOBucketFilters({
               onMouseLeave={() => setTooltip(null)}
               className={cn(
                 'flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-all hover:bg-muted',
-                isActive ? 'opacity-100' : 'opacity-30'
+                anySelected && !isActive ? 'opacity-30' : 'opacity-100'
               )}
             >
               <div

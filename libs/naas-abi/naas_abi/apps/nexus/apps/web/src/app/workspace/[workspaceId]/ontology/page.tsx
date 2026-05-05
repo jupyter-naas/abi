@@ -1576,7 +1576,8 @@ function OntologyNetworkView({
   }>>([]);
   const [showRestrictions, setShowRestrictions] = useState(false);
   const [showObjectProperties, setShowObjectProperties] = useState(false);
-  const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set(BFO_BUCKET_KEYS));
+  // BFO bucket filters — empty = no filter (show all)
+  const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
   const isAllOntologiesOverview = !ontologyPath;
 
   const handleBucketToggle = useCallback((bucketType: string) => {
@@ -1620,7 +1621,7 @@ function OntologyNetworkView({
       );
     }
 
-    if (activeBuckets.size < BFO_BUCKET_KEYS.size) {
+    if (activeBuckets.size > 0) {
       nodes = nodes.filter((node) => {
         const bucket = resolveNodeBucket(node);
         return bucket === null || activeBuckets.has(bucket);

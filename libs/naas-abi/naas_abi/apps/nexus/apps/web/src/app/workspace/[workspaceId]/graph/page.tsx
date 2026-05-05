@@ -25,6 +25,8 @@ import {
   Loader2,
   UserPlus,
   ChevronDown,
+  GitBranch,
+  ArrowRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -42,8 +44,8 @@ const VisNetwork = dynamic(
   { ssr: false, loading: () => <div className="flex h-full items-center justify-center"><span className="text-muted-foreground">Loading graph...</span></div> }
 );
 
-const BFOLegend = dynamic(
-  () => import('@/components/graph/vis-network').then((mod) => mod.BFOLegend),
+const BFOBucketFilters = dynamic(
+  () => import('@/components/graph/vis-network').then((mod) => mod.BFOBucketFilters),
   { ssr: false }
 );
 
@@ -86,6 +88,31 @@ interface GraphEdge {
   type: string;
   label?: string;
   properties?: Record<string, unknown>;
+}
+
+// BFO bucket resolution helpers (mirrors ontology page logic)
+const BFO_BUCKET_KEYS_GRAPH = new Set([
+  'Material Entity', 'Process', 'Temporal Region', 'Site', 'Quality', 'Realizable', 'GDC',
+]);
+const ALL_BFO_BUCKETS_GRAPH = new Set([...BFO_BUCKET_KEYS_GRAPH, 'Unknown']);
+
+const BFO_URI_TO_BUCKET_GRAPH: Record<string, string> = {
+  'http://purl.obolibrary.org/obo/BFO_0000040': 'Material Entity',
+  'http://purl.obolibrary.org/obo/BFO_0000015': 'Process',
+  'http://purl.obolibrary.org/obo/BFO_0000008': 'Temporal Region',
+  'http://purl.obolibrary.org/obo/BFO_0000029': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000031': 'GDC',
+  'http://purl.obolibrary.org/obo/BFO_0000019': 'Quality',
+  'http://purl.obolibrary.org/obo/BFO_0000017': 'Realizable',
+};
+
+function resolveGraphNodeBucket(node: GraphNode): string {
+  if (BFO_BUCKET_KEYS_GRAPH.has(node.type)) return node.type;
+  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET_GRAPH) return BFO_URI_TO_BUCKET_GRAPH[bfoParentIri];
+  const parentIri = node.properties?.parent_iri as string | undefined;
+  if (parentIri && parentIri in BFO_URI_TO_BUCKET_GRAPH) return BFO_URI_TO_BUCKET_GRAPH[parentIri];
+  return 'Unknown';
 }
 
 const GRAPH_VIEW_TYPES: { id: GraphViewType; label: string; icon: React.ElementType }[] = [
@@ -476,6 +503,27 @@ export default function GraphPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+  // BFO bucket filters — empty = no filter (show all)
+  const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
+  const handleBucketToggle = useCallback((bucketType: string) => {
+    setActiveBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(bucketType)) { next.delete(bucketType); } else { next.add(bucketType); }
+      return next;
+    });
+  }, []);
+
+  // Parents hierarchy filter (like SubclassOf in ontology page)
+  const [parentsLevels, setParentsLevels] = useState(0);
+  const [loadingNextParentLevel, setLoadingNextParentLevel] = useState(false);
+  const [hierarchyByLevel, setHierarchyByLevel] = useState<Array<{
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+  }>>([]);
+
+  // Relations filter — off by default
+  const [showRelations, setShowRelations] = useState(false);
   const {
     activeViewType,
     setActiveViewType,
@@ -1346,26 +1394,117 @@ export default function GraphPage() {
   };
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-  
-  // Filter nodes based on search query (memoized)
+
+  // Parents: expand one level — detect individuals or classes and fetch their parents
+  const handleExpandParents = useCallback(async () => {
+    const nextLevel = parentsLevels + 1;
+    if (hierarchyByLevel[nextLevel - 1]) {
+      setParentsLevels(nextLevel);
+      return;
+    }
+    if (loadingNextParentLevel) return;
+    setLoadingNextParentLevel(true);
+    try {
+      const baseUrl = getApiUrl();
+      // Frontier: original nodes for level 1, previous level's class nodes for deeper levels
+      const frontier: GraphNode[] =
+        parentsLevels === 0
+          ? nodes
+          : (hierarchyByLevel[parentsLevels - 1]?.nodes ?? []);
+      if (frontier.length === 0) { setParentsLevels(nextLevel); return; }
+
+      const graphIdsForParents = selectedGraphId
+        ? [selectedGraphId]
+        : visibleGraphIds.filter((id) => !id.includes('#layer='));
+      const graphNamesForParents = graphIdsForParents.map((id) => `http://ontology.naas.ai/graph/${id}`);
+      const params = new URLSearchParams({ workspace_id: workspaceId! });
+      graphNamesForParents.forEach((n) => params.append('graph_names', n));
+      frontier.forEach((n) => params.append('node_iris', n.id));
+
+      const response = await authFetch(`${baseUrl}/api/graph/network/parents?${params.toString()}`);
+      if (!response.ok) throw new Error(`parents fetch failed: ${response.status}`);
+      const data = await response.json() as { nodes?: ApiNode[]; edges?: ApiEdge[] };
+
+      const newNodes: GraphNode[] = (Array.isArray(data.nodes) ? data.nodes : []).map((n) => ({
+        id: n.id, label: n.label, type: n.type, properties: n.properties,
+      }));
+      const newEdges: GraphEdge[] = (Array.isArray(data.edges) ? data.edges : []).map((e) => ({
+        id: e.id, source: e.source_id, target: e.target_id,
+        sourceLabel: e.source_label, targetLabel: e.target_label,
+        type: e.type, label: e.type,
+        properties: { ...(e.properties ?? {}), relation_kind: 'is_a' },
+      }));
+
+      setHierarchyByLevel((prev) => {
+        const updated = [...prev];
+        updated[nextLevel - 1] = { nodes: newNodes, edges: newEdges };
+        return updated;
+      });
+      setParentsLevels(nextLevel);
+    } catch (err) {
+      console.error('Failed to fetch parent nodes:', err);
+    } finally {
+      setLoadingNextParentLevel(false);
+    }
+  }, [parentsLevels, hierarchyByLevel, loadingNextParentLevel, nodes, visibleGraphIds, workspaceId]);
+
+  const canExpandParentsMore =
+    parentsLevels < hierarchyByLevel.length ||
+    (hierarchyByLevel[parentsLevels - 1]?.nodes.length ?? 1) > 0;
+
+  // Combined visible nodes: base + all loaded parent levels up to parentsLevels
+  const allVisibleNodes = useMemo(() => {
+    if (parentsLevels === 0) return nodes;
+    const result = [...nodes];
+    const seen = new Set(result.map((n) => n.id));
+    for (let i = 0; i < parentsLevels && i < hierarchyByLevel.length; i++) {
+      for (const node of hierarchyByLevel[i].nodes) {
+        if (!seen.has(node.id)) { result.push(node); seen.add(node.id); }
+      }
+    }
+    return result;
+  }, [nodes, hierarchyByLevel, parentsLevels]);
+
+  // Filter nodes: search + bucket
   const filteredNodes = useMemo(() => {
-    if (!searchQuery.trim()) return nodes;
-    const q = searchQuery.toLowerCase();
-    return nodes.filter((node) =>
-      node.label.toLowerCase().includes(q) ||
-      node.type.toLowerCase().includes(q) ||
-      node.id.toLowerCase().includes(q)
-    );
-  }, [nodes, searchQuery]);
-  
-  // Filter edges to only include edges where both source and target are in filtered nodes (memoized)
+    let result = allVisibleNodes;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((node) =>
+        node.label.toLowerCase().includes(q) ||
+        node.type.toLowerCase().includes(q) ||
+        node.id.toLowerCase().includes(q)
+      );
+    }
+    if (activeBuckets.size > 0) {
+      result = result.filter((node) => activeBuckets.has(resolveGraphNodeBucket(node)));
+    }
+    return result;
+  }, [allVisibleNodes, searchQuery, activeBuckets]);
+
+  // Filter edges: relations toggle + parents levels + constrain to visible nodes
   const filteredEdges = useMemo(() => {
-    if (!searchQuery.trim()) return edges;
-    const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
-    return edges.filter((edge) =>
-      filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
-    );
-  }, [edges, filteredNodes, searchQuery]);
+    const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
+    let result: GraphEdge[] = [];
+
+    // Regular relation edges
+    if (showRelations) {
+      result = edges.filter((e) =>
+        visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
+      );
+    }
+
+    // is_a edges from loaded parent levels
+    for (let i = 0; i < parentsLevels && i < hierarchyByLevel.length; i++) {
+      for (const edge of hierarchyByLevel[i].edges) {
+        if (visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)) {
+          result.push(edge);
+        }
+      }
+    }
+
+    return result;
+  }, [edges, filteredNodes, showRelations, parentsLevels, hierarchyByLevel]);
   
   // Calculate statistics (memoized)
   const stats = useMemo(() => ({
@@ -1967,7 +2106,7 @@ export default function GraphPage() {
 
             {pageMode === 'graph' && activeViewType === 'entities' && (
               <div className="relative flex-1 bg-zinc-50 dark:bg-zinc-900">
-                {/* Search overlay - left */}
+                {/* Search + relation filters — left */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
                   <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
                     <Search size={14} className="text-muted-foreground" />
@@ -1997,14 +2136,60 @@ export default function GraphPage() {
                     <Filter size={14} />
                     Filter
                   </button>
+                  {/* Parents filter — like SubclassOf in ontology page */}
+                  <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
+                    <button
+                      onClick={() => parentsLevels === 0 ? handleExpandParents() : setParentsLevels(0)}
+                      title={parentsLevels === 0 ? 'Show parent classes (rdf:type → rdfs:subClassOf)' : 'Hide parent hierarchy'}
+                      disabled={loadingNextParentLevel}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 text-xs',
+                        parentsLevels > 0 ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground',
+                        loadingNextParentLevel && 'opacity-60 cursor-not-allowed'
+                      )}
+                    >
+                      {loadingNextParentLevel ? <Loader2 size={12} className="animate-spin" /> : <GitBranch size={12} />}
+                      Parents{parentsLevels > 0 && ` (${parentsLevels})`}
+                    </button>
+                    {parentsLevels > 0 && (
+                      <button
+                        onClick={() => setParentsLevels((v) => Math.max(0, v - 1))}
+                        title="Show fewer parent levels"
+                        disabled={loadingNextParentLevel}
+                        className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                      >−</button>
+                    )}
+                    {canExpandParentsMore && (
+                      <button
+                        onClick={handleExpandParents}
+                        title="Show more parent levels"
+                        disabled={loadingNextParentLevel}
+                        className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                      >+</button>
+                    )}
+                  </div>
+                  {/* Relations toggle */}
+                  <button
+                    onClick={() => setShowRelations((v) => !v)}
+                    title="Toggle relation edges (URIRef objects, excl. rdf:type)"
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
+                      showRelations
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <ArrowRight size={12} />
+                    Relations
+                  </button>
                   {searchQuery && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                      Showing {filteredNodes.length} of {nodes.length} nodes
+                      Showing {filteredNodes.length} of {allVisibleNodes.length} nodes
                     </span>
                   )}
                 </div>
-                {/* Create Individual - top right inside page */}
-                <div className="absolute right-4 top-4 z-10">
+                {/* Create Individual + BFO bucket filters — right */}
+                <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-2">
                   <button
                     type="button"
                     onClick={() => setPageMode('create-individual')}
@@ -2013,9 +2198,8 @@ export default function GraphPage() {
                     <UserPlus size={14} className="text-orange-500 dark:text-orange-400" />
                     Create Individual
                   </button>
+                  <BFOBucketFilters activeBuckets={activeBuckets} onToggle={handleBucketToggle} />
                 </div>
-
-                {/* Zoom controls - using vis-network's built-in navigation buttons */}
 
                 {/* Graph Canvas */}
                 {loading ? (
@@ -2074,16 +2258,13 @@ export default function GraphPage() {
                     </div>
                   </div>
                 ) : (
-                  <>
-                    <VisNetwork
-                      nodes={filteredNodes}
-                      edges={filteredEdges}
-                      selectedNodeId={selectedNodeId}
-                      onNodeSelect={setSelectedNodeId}
-                      onEdgeSelect={setSelectedEdgeId}
-                    />
-                    <BFOLegend />
-                  </>
+                  <VisNetwork
+                    nodes={filteredNodes}
+                    edges={filteredEdges}
+                    selectedNodeId={selectedNodeId}
+                    onNodeSelect={setSelectedNodeId}
+                    onEdgeSelect={setSelectedEdgeId}
+                  />
                 )}
 
               </div>

@@ -187,3 +187,32 @@ async def get_graph_network(
         nodes=[_node_to_schema(n) for n in network.nodes],
         edges=[_edge_to_schema(e) for e in network.edges],
     )
+
+
+@router.get("/network/parents")
+async def get_network_parents(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_names: list[str] = Query(default=[], alias="graph_names"),
+    node_iris: list[str] = Query(default=[], alias="node_iris"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphData:
+    """Return parent class nodes for given frontier node IRIs.
+
+    Handles both individuals (returns rdf:type class + edge) and
+    classes (returns rdfs:subClassOf parents from schema graph + edges).
+    Call once per progressive expansion level.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        result = await graph_service.get_network_parents(
+            workspace_id=workspace_id,
+            graph_names=graph_names,
+            node_iris=node_iris,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphData(
+        nodes=[_node_to_schema(n) for n in result.nodes],
+        edges=[_edge_to_schema(e) for e in result.edges],
+    )
