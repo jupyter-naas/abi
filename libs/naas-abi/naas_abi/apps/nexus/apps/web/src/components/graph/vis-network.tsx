@@ -110,6 +110,7 @@ interface VisNetworkProps {
   selectedNodeId: string | null;
   onNodeSelect: (nodeId: string | null) => void;
   onEdgeSelect: (edgeId: string | null) => void;
+  stabilizeKey?: number;
 }
 
 export function VisNetwork({
@@ -118,6 +119,7 @@ export function VisNetwork({
   selectedNodeId,
   onNodeSelect,
   onEdgeSelect,
+  stabilizeKey,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -329,6 +331,25 @@ export function VisNetwork({
     edgesDataRef.current.clear();
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
+
+  // Re-run physics when stabilizeKey changes (e.g. parents or relations toggled)
+  useEffect(() => {
+    if (stabilizeKey === undefined || stabilizeKey === 0) return;
+    if (!networkRef.current) return;
+    isStabilizedRef.current = false;
+    networkRef.current.setOptions({ physics: { enabled: true } });
+    networkRef.current.once('stabilizationIterationsDone', () => {
+      if (!networkRef.current) return;
+      const positions = networkRef.current.getPositions();
+      Object.entries(positions).forEach(([id, pos]) => {
+        nodePositionsRef.current.set(id, pos as { x: number; y: number });
+      });
+      isStabilizedRef.current = true;
+      networkRef.current.setOptions({ physics: { enabled: false } });
+      networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+    });
+    networkRef.current.stabilize(200);
+  }, [stabilizeKey]);
 
   // Handle selected node — guard against stale IDs from a previous graph
   useEffect(() => {
