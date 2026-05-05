@@ -92,6 +92,21 @@ _IMPORT_URI_TO_LOCAL: dict[str, str] = {
     "https://www.commoncoreontologies.org/UnitsOfMeasureOntology": "mid-level/UnitsOfMeasureOntology.ttl",
 }
 
+# Public raw tree for bundled imports when the local `imports/` checkout is missing (e.g. minimal deploy).
+_IMPORTS_GITHUB_RAW_BASE = (
+    "https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/"
+    "libs/naas-abi/naas_abi/ontologies/imports/"
+)
+
+
+def _parse_format_for_suffix(suffix: str) -> str | None:
+    return {
+        ".ttl": "turtle",
+        ".owl": "xml",
+        ".rdf": "xml",
+        ".nt": "nt",
+    }.get(suffix.lower())
+
 
 def _load_ontology_graph_with_imports_cached(path: str) -> Graph:
     """Load ontology + all owl:imports using local files first; result is in-memory cached."""
@@ -102,27 +117,44 @@ def _load_ontology_graph_with_imports_cached(path: str) -> Graph:
     imports_dir = Path(path).parent.parent / "imports"
     seen: set[str] = set()
 
-    def _load_recursive(file_path: str) -> Graph:
-        g = _load_ontology_graph(file_path)
-        for import_uri in list(g.objects(None, OWL.imports)):
+    def _resolve_imports_into(target: Graph, source: Graph) -> None:
+        for import_uri in list(source.objects(None, OWL.imports)):
             uri_str = str(import_uri)
             if uri_str in seen:
                 continue
             seen.add(uri_str)
             relative = _IMPORT_URI_TO_LOCAL.get(uri_str)
             local_path = imports_dir / relative if relative else None
+            nested = Graph()
             if local_path and local_path.exists():
-                g += _load_recursive(str(local_path))
+                nested = _load_ontology_graph(str(local_path))
+                target += nested
+                _resolve_imports_into(target, nested)
+            elif relative:
+                github_url = f"{_IMPORTS_GITHUB_RAW_BASE}{relative}"
+                parse_format = _parse_format_for_suffix(Path(relative).suffix)
+                try:
+                    nested.parse(github_url, format=parse_format)
+                    target += nested
+                    _resolve_imports_into(target, nested)
+                except Exception as e:
+                    logger.error(f"Error loading import {uri_str} from {github_url}: {e}")
+                    try:
+                        nested = Graph()
+                        nested.parse(uri_str)
+                        target += nested
+                    except Exception as e2:
+                        logger.error(f"Error loading import {uri_str}: {e2}")
             else:
                 try:
-                    sub = Graph()
-                    sub.parse(uri_str)
-                    g += sub
+                    nested.parse(uri_str)
+                    target += nested
                 except Exception as e:
                     logger.error(f"Error loading import {uri_str}: {e}")
-        return g
 
-    _graph_with_imports_cache[path] = _load_recursive(path)
+    g = _load_ontology_graph(path)
+    _resolve_imports_into(g, g)
+    _graph_with_imports_cache[path] = g
     return _graph_with_imports_cache[path]
 
 
@@ -923,9 +955,7 @@ class OntologyService:
                 raw_lbl = d.get("label")
                 lbl = raw_lbl or super_iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
                 typ = d.get("subClassOf")
-                typ_lbl = (
-                    _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
-                )
+                typ_lbl = _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
                 bfo_anc = _find_bfo_ancestor(ancestor_graph, super_iri)
                 new_nodes[super_iri] = OntologyOverviewGraphNodeData(
                     id=super_iri,
