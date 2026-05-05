@@ -112,8 +112,8 @@ const EDGE_COLORS: Record<string, string> = {
   // 'generically depends on': '#06b6d4',
 };
 
-const DEFAULT_NODE_BOX_WIDTH = 96;
-const DEFAULT_NODE_BOX_HEIGHT = 64;
+const DEFAULT_NODE_BOX_WIDTH = 128;
+const DEFAULT_NODE_BOX_HEIGHT = 88;
 const DEFAULT_MAX_CHARS_PER_LINE = 14;
 
 function wrapLabelTwoLines(label: string, maxCharsPerLine = DEFAULT_MAX_CHARS_PER_LINE): string {
@@ -153,6 +153,58 @@ function wrapLabelTwoLines(label: string, maxCharsPerLine = DEFAULT_MAX_CHARS_PE
   return line2 ? `${line1}\n${line2}` : line1;
 }
 
+function escapeXml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+function nodeCardSvgDataUri(args: {
+  width: number;
+  height: number;
+  background: string;
+  border: string;
+  label: string;
+  logoDataUri?: string;
+}): string {
+  const { width, height, background, border, label, logoDataUri } = args;
+  const [line1, line2] = label.split('\n');
+
+  // Layout
+  const pad = 10;
+  const logoSize = 32;
+  const hasLogo = Boolean(logoDataUri);
+  const logoX = Math.round((width - logoSize) / 2);
+  const logoY = pad;
+
+  // Text below the logo (or centered if no logo)
+  const textStartY = hasLogo ? logoY + logoSize + 20 : Math.round(height / 2) + 6;
+  const lineHeight = 16;
+  const textY1 = line2 ? textStartY - 6 : textStartY;
+  const textY2 = textY1 + lineHeight;
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="0" ry="0" fill="${background}" stroke="${border}" stroke-width="2"/>
+  ${
+    hasLogo
+      ? `<image href="${escapeXml(logoDataUri!)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet" />`
+      : ''
+  }
+  <text x="${Math.round(width / 2)}" y="${textY1}" text-anchor="middle"
+        font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif"
+        font-size="13" font-weight="600" fill="#ffffff">
+    <tspan x="${Math.round(width / 2)}" dy="0">${escapeXml(line1 ?? '')}</tspan>
+    ${line2 ? `<tspan x="${Math.round(width / 2)}" dy="${lineHeight}">${escapeXml(line2)}</tspan>` : ''}
+  </text>
+</svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 interface VisNetworkProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -174,6 +226,7 @@ export function VisNetwork({
   const networkRef = useRef<Network | null>(null);
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
+  const [logoDataByUrl, setLogoDataByUrl] = useState<Record<string, string>>({});
 
   const nodesByIri = useMemo(() => {
     const map = new Map<string, GraphNode>();
@@ -203,40 +256,71 @@ export function VisNetwork({
     return typeof found === 'string' ? found.trim() : undefined;
   }, []);
 
+  // Fetch and cache logo images as data URIs so they can be embedded in SVG.
+  useEffect(() => {
+    const urls = Array.from(
+      new Set(
+        nodes
+          .map((n) => getNodeLogoUrl(n))
+          .filter((u): u is string => Boolean(u))
+      )
+    );
+
+    const missing = urls.filter((u) => !logoDataByUrl[u]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const updates: Record<string, string> = {};
+      await Promise.all(
+        missing.map(async (url) => {
+          try {
+            const res = await fetch(`/api/image-data?url=${encodeURIComponent(url)}`);
+            if (!res.ok) return;
+            const json = (await res.json()) as { dataUri?: string };
+            if (json.dataUri) updates[url] = json.dataUri;
+          } catch {
+            // Ignore broken/missing logos; nodes will render without them.
+          }
+        })
+      );
+      if (cancelled) return;
+      if (Object.keys(updates).length > 0) {
+        setLogoDataByUrl((prev) => ({ ...prev, ...updates }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getNodeLogoUrl, logoDataByUrl, nodes]);
+
   const toVisNode = useCallback((node: GraphNode): Node => {
     const colors = resolveBFOColor(node, nodesByIri) ?? BFO_COLORS['Entity'];
     const logoUrl = getNodeLogoUrl(node);
-    const hasLogo = Boolean(logoUrl);
-    const shape = hasLogo ? 'image' : (node.properties?.shape as string) || 'box';
+    const wrapped = wrapLabelTwoLines(node.label);
+    const logoDataUri = logoUrl ? logoDataByUrl[logoUrl] : undefined;
+    const image = nodeCardSvgDataUri({
+      width: DEFAULT_NODE_BOX_WIDTH,
+      height: DEFAULT_NODE_BOX_HEIGHT,
+      background: colors.background,
+      border: colors.border,
+      label: wrapped,
+      logoDataUri,
+    });
 
     return {
       id: node.id,
-      label: wrapLabelTwoLines(node.label),
+      // Render everything inside the SVG so all nodes share the same shape.
+      label: '',
       title: `${node.type}\n${node.label}`,
-      color: {
-        background: colors.background,
-        border: colors.border,
-        highlight: { background: colors.highlight, border: colors.border },
-      },
-      font: { 
-        color: '#ffffff', 
-        size: 14, 
-        face: 'Inter, sans-serif',
-        strokeWidth: 0,
-      },
-      shape,
-      ...(!hasLogo && shape === 'box'
-        ? {
-            margin: { top: 8, right: 10, bottom: 8, left: 10 },
-            widthConstraint: { minimum: DEFAULT_NODE_BOX_WIDTH, maximum: DEFAULT_NODE_BOX_WIDTH },
-            heightConstraint: { minimum: DEFAULT_NODE_BOX_HEIGHT, maximum: DEFAULT_NODE_BOX_HEIGHT },
-          }
-        : {}),
-      ...(hasLogo ? { image: logoUrl } : {}),
+      shape: 'image',
+      image,
+      shapeProperties: { useImageSize: true, interpolation: true, coordinateOrigin: 'center' },
       x: node.x,
       y: node.y,
     };
-  }, [getNodeLogoUrl, nodesByIri]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
@@ -249,7 +333,7 @@ export function VisNetwork({
       title: edge.type,
       color: { color, highlight: color, hover: color },
       arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-      font: { size: 10, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle', background: '#ffffff' },
+      font: { size: 9, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle', background: '#ffffff' },
       smooth: { enabled: false, type: 'continuous', roundness: 0 },
       width: edge.weight || (isHierarchical ? 1 : 2),
       dashes: isHierarchical,
@@ -262,9 +346,8 @@ export function VisNetwork({
     height: '100%',
     width: '100%',
     nodes: {
-      shape: 'box',
+      shape: 'image',
       borderWidth: 2,
-      margin: { top: 8, right: 10, bottom: 8, left: 10 },
       shadow: { enabled: true, color: 'rgba(0,0,0,0.2)', size: 5, x: 2, y: 2 },
     },
     edges: {
