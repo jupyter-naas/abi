@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v1.34.0 (2026-05-05)
+
+### Features
+
+- **chat-interface**: Fix message bubble text alignment for user messages
+  ([`828e2f5`](https://github.com/jupyter-naas/abi/commit/828e2f5b7bd4663bf907a72be455d3e06f3bbb86))
+
+- **graph**: Add bucket filtering and auto-reset selection on graph identity change
+  ([`e0440d3`](https://github.com/jupyter-naas/abi/commit/e0440d35660e70c0cdaab21fc8404a5009950ba5))
+
+- **graph**: Add Individuals view with split panel and detailed properties
+  ([`7a5b649`](https://github.com/jupyter-naas/abi/commit/7a5b64924295e9a72094f6c1f65463e40166c01f))
+
+- **graph**: Add parent class nodes fetching and BFO bucket filtering
+  ([`f90d263`](https://github.com/jupyter-naas/abi/commit/f90d2639b1b4c0e848c3ac0667de1d2920e90c69))
+
+- **graph**: Add stabilizeKey trigger for physics re-layout in VisNetwork
+  ([`826a695`](https://github.com/jupyter-naas/abi/commit/826a695179a116d19ea5040ffd994cf435203f70))
+
+- **ontology**: Add BFO bucket filtering to ontology network view
+  ([`f25a0c0`](https://github.com/jupyter-naas/abi/commit/f25a0c05b2a58e87451c1596051aba331d8e1369))
+
+- **ontology**: Add recursive bucket resolution for nodes
+  ([`70a3199`](https://github.com/jupyter-naas/abi/commit/70a31998bc46ee7222a2f57e453c98cfb2e820fa))
+
+- **web/graph**: Add hover tooltip for bucket filters
+  ([`5905e51`](https://github.com/jupyter-naas/abi/commit/5905e517608e9c50a6508b548179441285691aeb))
+
+- **workspace-graph**: Simplify BFO bucket filters UI
+  ([`f10c59d`](https://github.com/jupyter-naas/abi/commit/f10c59d373dee19271f7ea569dd3cbeb151b552b))
+
+
 ## v1.33.0 (2026-05-04)
 
 ### Bug Fixes
