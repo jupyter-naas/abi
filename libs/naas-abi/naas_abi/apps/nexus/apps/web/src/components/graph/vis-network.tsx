@@ -95,20 +95,20 @@ function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, vi
 }
 
 const EDGE_COLORS: Record<string, string> = {
-  'participates in': '#22c55e',
-  'has participant': '#22c55e',
-  'occurs in': '#f97316',
-  'located in': '#f97316',
-  'bearer of': '#ec4899',
-  'inheres in': '#ec4899',
-  'has role': '#eab308',
-  'has disposition': '#f59e0b',
-  'realizes': '#a855f7',
-  'precedes': '#8b5cf6',
-  'preceded by': '#8b5cf6',
-  'concretizes': '#06b6d4',
-  'is carrier of': '#06b6d4',
-  'generically depends on': '#06b6d4',
+  // 'participates in': '#22c55e',
+  // 'has participant': '#22c55e',
+  // 'occurs in': '#f97316',
+  // 'located in': '#f97316',
+  // 'bearer of': '#ec4899',
+  // 'inheres in': '#ec4899',
+  // 'has role': '#eab308',
+  // 'has disposition': '#f59e0b',
+  // 'realizes': '#a855f7',
+  // 'precedes': '#8b5cf6',
+  // 'preceded by': '#8b5cf6',
+  // 'concretizes': '#06b6d4',
+  // 'is carrier of': '#06b6d4',
+  // 'generically depends on': '#06b6d4',
 };
 
 interface VisNetworkProps {
