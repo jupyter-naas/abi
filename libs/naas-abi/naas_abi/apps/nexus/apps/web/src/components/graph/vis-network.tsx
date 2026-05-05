@@ -249,8 +249,8 @@ export function VisNetwork({
       title: edge.type,
       color: { color, highlight: color, hover: color },
       arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-      font: { size: 10, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle' },
-      smooth: { enabled: true, type: 'curvedCW', roundness: 0.2 },
+      font: { size: 10, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle', background: '#ffffff' },
+      smooth: { enabled: false, type: 'continuous', roundness: 0 },
       width: edge.weight || (isHierarchical ? 1 : 2),
       dashes: isHierarchical,
     };
