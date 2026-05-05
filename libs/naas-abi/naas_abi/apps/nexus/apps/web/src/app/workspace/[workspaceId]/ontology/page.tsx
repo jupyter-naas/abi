@@ -1494,7 +1494,14 @@ function OntologyOverviewView({
 
 // BFO bucket resolution helpers (mirrors vis-network.tsx, no browser deps)
 const BFO_BUCKET_KEYS = new Set([
-  'Material Entity', 'Process', 'Temporal Region', 'Site', 'Quality', 'Realizable', 'GDC',
+  'Material Entity',
+  'Process',
+  'Temporal Region',
+  'Site',
+  'Quality',
+  'Realizable',
+  'GDC',
+  'Entity',
 ]);
 
 const BFO_URI_TO_BUCKET_LOCAL: Record<string, string> = {
@@ -1537,9 +1544,10 @@ const LABEL_TO_BUCKET_LOCAL: Record<string, string> = {
   'disposition': 'Realizable',
   'realizable entity': 'Realizable',
   'generically dependent continuant': 'GDC',
+  'entity': 'Entity',
 };
 
-function resolveNodeBucket(node: OntologyOverviewGraphNode): string | null {
+function resolveNodeBucket(node: OntologyOverviewGraphNode, nodesById?: Map<string, OntologyOverviewGraphNode>, visited: Set<string> = new Set()): string | null {
   if (BFO_BUCKET_KEYS.has(node.type)) return node.type;
   const lowerType = node.type?.toLowerCase?.() ?? '';
   if (lowerType in LABEL_TO_BUCKET_LOCAL) return LABEL_TO_BUCKET_LOCAL[lowerType];
@@ -1548,6 +1556,13 @@ function resolveNodeBucket(node: OntologyOverviewGraphNode): string | null {
   if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[bfoParentIri];
   const parentIri = node.properties?.parent_iri as string | undefined;
   if (parentIri && parentIri in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[parentIri];
+
+  if (nodesById && parentIri && !visited.has(node.id)) {
+    visited.add(node.id);
+    const parentNode = nodesById.get(parentIri);
+    if (parentNode) return resolveNodeBucket(parentNode, nodesById, visited);
+  }
+
   return null;
 }
 
@@ -1608,6 +1623,12 @@ function OntologyNetworkView({
     return result;
   }, [graphNodes, hierarchyByLevel, subclassOfLevels]);
 
+  const nodesByIri = useMemo(() => {
+    const map = new Map<string, OntologyOverviewGraphNode>();
+    for (const n of allVisibleNodes) map.set(n.id, n);
+    return map;
+  }, [allVisibleNodes]);
+
   const filteredGraphNodes = useMemo(() => {
     let nodes = allVisibleNodes;
 
@@ -1623,13 +1644,14 @@ function OntologyNetworkView({
 
     if (activeBuckets.size > 0) {
       nodes = nodes.filter((node) => {
-        const bucket = resolveNodeBucket(node);
-        return bucket === null || activeBuckets.has(bucket);
+        const bucket = resolveNodeBucket(node, nodesByIri);
+        if (bucket === null) return activeBuckets.has('Unknown');
+        return activeBuckets.has(bucket);
       });
     }
 
     return nodes;
-  }, [allVisibleNodes, graphSearchQuery, activeBuckets]);
+  }, [allVisibleNodes, nodesByIri, graphSearchQuery, activeBuckets]);
 
   const filteredGraphEdges = useMemo(() => {
     const restrictionEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'restriction');
@@ -1645,10 +1667,10 @@ function OntologyNetworkView({
     if (showRestrictions) baseEdges = [...baseEdges, ...restrictionEdges];
     if (showObjectProperties) baseEdges = [...baseEdges, ...objectPropEdges];
 
-    if (!graphSearchQuery.trim()) return baseEdges;
+    if (!graphSearchQuery.trim() && activeBuckets.size === 0) return baseEdges;
     const visibleNodeIds = new Set(filteredGraphNodes.map((node) => node.id));
     return baseEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
-  }, [graphEdges, filteredGraphNodes, graphSearchQuery, subclassOfLevels, hierarchyByLevel, showRestrictions, showObjectProperties]);
+  }, [graphEdges, filteredGraphNodes, graphSearchQuery, activeBuckets, subclassOfLevels, hierarchyByLevel, showRestrictions, showObjectProperties]);
 
   const handleExpandSubclassOf = async () => {
     const nextLevel = subclassOfLevels + 1;

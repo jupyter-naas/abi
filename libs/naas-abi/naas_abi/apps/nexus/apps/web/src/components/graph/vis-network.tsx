@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Network, DataSet, type Options, type Node, type Edge } from 'vis-network/standalone';
 import 'vis-network/styles/vis-network.css';
@@ -65,7 +65,7 @@ const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'entity': 'Entity',
 };
 
-function resolveBFOColor(node: GraphNode) {
+function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, visited: Set<string> = new Set()) {
   // Direct BFO_COLORS key match (e.g. KG nodes already tagged with bucket name)
   if (node.type in BFO_COLORS) return BFO_COLORS[node.type as keyof typeof BFO_COLORS];
 
@@ -80,9 +80,15 @@ function resolveBFOColor(node: GraphNode) {
   const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
   if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[bfoParentIri]];
 
-  // parent_iri: direct parent (may be CCO, not a BFO root)
+  // parent_iri: direct parent — check BFO first, then walk the loaded graph recursively
   const parentIri = node.properties?.parent_iri as string | undefined;
   if (parentIri && parentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[parentIri]];
+
+  if (nodesById && parentIri && !visited.has(node.id)) {
+    visited.add(node.id);
+    const parentNode = nodesById.get(parentIri);
+    if (parentNode) return resolveBFOColor(parentNode, nodesById, visited);
+  }
 
   return null;
 }
@@ -126,6 +132,12 @@ export function VisNetwork({
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
 
+  const nodesByIri = useMemo(() => {
+    const map = new Map<string, GraphNode>();
+    for (const n of nodes) map.set(n.id, n);
+    return map;
+  }, [nodes]);
+
   const getNodeLogoUrl = useCallback((node: GraphNode): string | undefined => {
     const properties = node.properties ?? {};
     const candidates: unknown[] = [
@@ -149,7 +161,7 @@ export function VisNetwork({
   }, []);
 
   const toVisNode = useCallback((node: GraphNode): Node => {
-    const colors = resolveBFOColor(node) ?? BFO_COLORS['Entity'];
+    const colors = resolveBFOColor(node, nodesByIri) ?? BFO_COLORS['Entity'];
     const logoUrl = getNodeLogoUrl(node);
     const hasLogo = Boolean(logoUrl);
     const shape = hasLogo ? 'circularImage' : (node.properties?.shape as string) || 'dot';
@@ -176,7 +188,7 @@ export function VisNetwork({
       x: node.x,
       y: node.y,
     };
-  }, [getNodeLogoUrl]);
+  }, [getNodeLogoUrl, nodesByIri]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
