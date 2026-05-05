@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
@@ -63,8 +63,8 @@ const VisNetwork = dynamic(
   { ssr: false, loading: () => <div className="flex h-full items-center justify-center text-muted-foreground">Loading graph...</div> }
 );
 
-const BFOLegend = dynamic(
-  () => import('@/components/graph/vis-network').then((mod) => mod.BFOLegend),
+const BFOBucketFilters = dynamic(
+  () => import('@/components/graph/vis-network').then((mod) => mod.BFOBucketFilters),
   { ssr: false }
 );
 
@@ -1492,6 +1492,65 @@ function OntologyOverviewView({
   );
 }
 
+// BFO bucket resolution helpers (mirrors vis-network.tsx, no browser deps)
+const BFO_BUCKET_KEYS = new Set([
+  'Material Entity', 'Process', 'Temporal Region', 'Site', 'Quality', 'Realizable', 'GDC',
+]);
+
+const BFO_URI_TO_BUCKET_LOCAL: Record<string, string> = {
+  'http://purl.obolibrary.org/obo/BFO_0000040': 'Material Entity',
+  'http://purl.obolibrary.org/obo/BFO_0000015': 'Process',
+  'http://purl.obolibrary.org/obo/BFO_0000008': 'Temporal Region',
+  'http://purl.obolibrary.org/obo/BFO_0000029': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000031': 'GDC',
+  'http://purl.obolibrary.org/obo/BFO_0000019': 'Quality',
+  'http://purl.obolibrary.org/obo/BFO_0000017': 'Realizable',
+  'BFO_0000040': 'Material Entity',
+  'BFO_0000015': 'Process',
+  'BFO_0000008': 'Temporal Region',
+  'BFO_0000029': 'Site',
+  'BFO_0000031': 'GDC',
+  'BFO_0000019': 'Quality',
+  'BFO_0000017': 'Realizable',
+};
+
+const LABEL_TO_BUCKET_LOCAL: Record<string, string> = {
+  'material entity': 'Material Entity',
+  'object': 'Material Entity',
+  'object aggregate': 'Material Entity',
+  'fiat object part': 'Material Entity',
+  'independent continuant': 'Material Entity',
+  'process': 'Process',
+  'occurrent': 'Process',
+  'process boundary': 'Process',
+  'temporal region': 'Temporal Region',
+  'temporal interval': 'Temporal Region',
+  'zero-dimensional temporal region': 'Temporal Region',
+  'one-dimensional temporal region': 'Temporal Region',
+  'site': 'Site',
+  'immaterial entity': 'Site',
+  'spatial region': 'Site',
+  'continuant fiat boundary': 'Site',
+  'quality': 'Quality',
+  'specifically dependent continuant': 'Quality',
+  'role': 'Realizable',
+  'disposition': 'Realizable',
+  'realizable entity': 'Realizable',
+  'generically dependent continuant': 'GDC',
+};
+
+function resolveNodeBucket(node: OntologyOverviewGraphNode): string | null {
+  if (BFO_BUCKET_KEYS.has(node.type)) return node.type;
+  const lowerType = node.type?.toLowerCase?.() ?? '';
+  if (lowerType in LABEL_TO_BUCKET_LOCAL) return LABEL_TO_BUCKET_LOCAL[lowerType];
+  if (node.type in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[node.type];
+  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[bfoParentIri];
+  const parentIri = node.properties?.parent_iri as string | undefined;
+  if (parentIri && parentIri in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[parentIri];
+  return null;
+}
+
 function OntologyNetworkView({
   ontologyPath,
   graphNodes,
@@ -1517,7 +1576,20 @@ function OntologyNetworkView({
   }>>([]);
   const [showRestrictions, setShowRestrictions] = useState(false);
   const [showObjectProperties, setShowObjectProperties] = useState(false);
+  const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set(BFO_BUCKET_KEYS));
   const isAllOntologiesOverview = !ontologyPath;
+
+  const handleBucketToggle = useCallback((bucketType: string) => {
+    setActiveBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(bucketType)) {
+        next.delete(bucketType);
+      } else {
+        next.add(bucketType);
+      }
+      return next;
+    });
+  }, []);
 
   // Combined nodes: initial + all loaded hierarchy levels up to subclassOfLevels
   const allVisibleNodes = useMemo(() => {
@@ -1536,15 +1608,27 @@ function OntologyNetworkView({
   }, [graphNodes, hierarchyByLevel, subclassOfLevels]);
 
   const filteredGraphNodes = useMemo(() => {
-    if (!graphSearchQuery.trim()) return allVisibleNodes;
-    const query = graphSearchQuery.toLowerCase();
-    return allVisibleNodes.filter(
-      (node) =>
-        node.label.toLowerCase().includes(query) ||
-        node.id.toLowerCase().includes(query) ||
-        node.type.toLowerCase().includes(query)
-    );
-  }, [allVisibleNodes, graphSearchQuery]);
+    let nodes = allVisibleNodes;
+
+    if (graphSearchQuery.trim()) {
+      const query = graphSearchQuery.toLowerCase();
+      nodes = nodes.filter(
+        (node) =>
+          node.label.toLowerCase().includes(query) ||
+          node.id.toLowerCase().includes(query) ||
+          node.type.toLowerCase().includes(query)
+      );
+    }
+
+    if (activeBuckets.size < BFO_BUCKET_KEYS.size) {
+      nodes = nodes.filter((node) => {
+        const bucket = resolveNodeBucket(node);
+        return bucket === null || activeBuckets.has(bucket);
+      });
+    }
+
+    return nodes;
+  }, [allVisibleNodes, graphSearchQuery, activeBuckets]);
 
   const filteredGraphEdges = useMemo(() => {
     const restrictionEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'restriction');
@@ -1724,7 +1808,9 @@ function OntologyNetworkView({
             )}
           </div>
 
-          {!isAllOntologiesOverview && <BFOLegend />}
+          {!isAllOntologiesOverview && (
+            <BFOBucketFilters activeBuckets={activeBuckets} onToggle={handleBucketToggle} />
+          )}
 
           {loadingGraph ? (
             <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
