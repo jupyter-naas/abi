@@ -172,6 +172,21 @@ _BFO_BUCKET_ROOTS = " ".join(
 )
 
 
+_BFO_ENTITY_IRIS = {
+    "BFO_0000001",
+    "http://purl.obolibrary.org/obo/BFO_0000001",
+}
+
+
+def _is_bfo_entity_iri(iri: str | None) -> bool:
+    """True when iri is BFO:entity (BFO_0000001)."""
+    if not iri:
+        return False
+    if iri in _BFO_ENTITY_IRIS:
+        return True
+    return iri.rstrip("/") in _BFO_ENTITY_IRIS
+
+
 def _find_bfo_ancestor(graph: Graph, class_iri: str) -> str | None:
     """Walk rdfs:subClassOf+ to find the nearest BFO bucket-root ancestor, or None."""
     # If the class itself is a bucket root (e.g. BFO_0000031 = GDC), treat it as its own ancestor.
@@ -420,6 +435,9 @@ class OntologyService:
                 parent_id = data.get("subClassOf", "Unknown")
                 parent_data = _get_uri_metadata(store, parent_id) if parent_id else None
                 parent_label = parent_data.get("label", "Unknown") if parent_data else None
+                if _is_bfo_entity_iri(iri):
+                    parent_id = iri
+                    parent_label = "entity"
                 by_iri[iri] = OntologyItemData(
                     id=iri,
                     name=label,
@@ -675,6 +693,9 @@ class OntologyService:
                         parent_iri = data.get("subClassOf", "Unknown")
                         parent_data = _get_uri_metadata(store, parent_iri) if parent_iri else None
                         parent_label = parent_data.get("label", "Unknown") if parent_data else None
+                        if _is_bfo_entity_iri(class_iri):
+                            parent_iri = class_iri
+                            parent_label = "entity"
                         bfo_ancestor = _find_bfo_ancestor(ancestor_graph, class_iri)
                         classes_by_iri[class_iri] = OntologyOverviewGraphNodeData(
                             id=class_iri,
@@ -721,6 +742,9 @@ class OntologyService:
                         typ_lbl = (
                             _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
                         )
+                        if _is_bfo_entity_iri(iri):
+                            typ = iri
+                            typ_lbl = "entity"
                         defn = d.get("definition")
                         cmnt = d.get("comment")
                         bfo_ancestor = _find_bfo_ancestor(_ag, iri)
@@ -961,6 +985,9 @@ class OntologyService:
                 lbl = raw_lbl or super_iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
                 typ = d.get("subClassOf")
                 typ_lbl = _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
+                if _is_bfo_entity_iri(super_iri):
+                    typ = super_iri
+                    typ_lbl = "entity"
                 bfo_anc = _find_bfo_ancestor(ancestor_graph, super_iri)
                 new_nodes[super_iri] = OntologyOverviewGraphNodeData(
                     id=super_iri,
