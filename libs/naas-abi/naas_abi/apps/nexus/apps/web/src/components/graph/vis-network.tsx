@@ -23,6 +23,7 @@ const BFO_COLORS = {
 
 // BFO URI → color bucket (full URI and short ID forms)
 const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
+  'http://purl.obolibrary.org/obo/BFO_0000001': 'Entity',
   'http://purl.obolibrary.org/obo/BFO_0000040': 'Material Entity',
   'http://purl.obolibrary.org/obo/BFO_0000015': 'Process',
   'http://purl.obolibrary.org/obo/BFO_0000008': 'Temporal Region',
@@ -30,6 +31,7 @@ const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'http://purl.obolibrary.org/obo/BFO_0000031': 'GDC',
   'http://purl.obolibrary.org/obo/BFO_0000019': 'Quality',
   'http://purl.obolibrary.org/obo/BFO_0000017': 'Realizable',
+  'BFO_0000001': 'Entity',
   'BFO_0000040': 'Material Entity',
   'BFO_0000015': 'Process',
   'BFO_0000008': 'Temporal Region',
@@ -41,6 +43,7 @@ const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
 
 // Lowercase label → color bucket (covers common BFO/CCO labels)
 const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
+  'entity': 'Entity',
   'material entity': 'Material Entity',
   'object': 'Material Entity',
   'object aggregate': 'Material Entity',
@@ -63,7 +66,6 @@ const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'disposition': 'Realizable',
   'realizable entity': 'Realizable',
   'generically dependent continuant': 'GDC',
-  'entity': 'Entity',
 };
 
 function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, visited: Set<string> = new Set()) {
@@ -428,6 +430,7 @@ export const BFO_BUCKET_DEFS = [
   { type: 'Quality', label: 'How it is', description: 'Properties, attributes' },
   { type: 'Realizable', label: 'Why', description: 'Roles & dispositions' },
   { type: 'GDC', label: 'How we know', description: 'Documents, data, plans' },
+  { type: 'Entity', label: 'Entity', description: 'Entity' },
   { type: 'Unknown', label: 'Unknown', description: 'Unclassified or unresolved bucket' },
 ];
 
