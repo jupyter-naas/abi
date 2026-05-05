@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Network, DataSet, type Options, type Node, type Edge } from 'vis-network/standalone';
 import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // BFO 7 Buckets color scheme (simplified)
@@ -432,10 +433,18 @@ export const BFO_BUCKET_DEFS = [
 
 export function BFOBucketFilters({
   activeBuckets,
+  effectiveActiveBuckets,
   onToggle,
+  nodesPerBucket,
+  hiddenNodeIds,
+  onNodeToggle,
 }: {
   activeBuckets: Set<string>;
+  effectiveActiveBuckets?: Set<string>;
   onToggle: (bucketType: string) => void;
+  nodesPerBucket?: Map<string, Array<{ id: string; label: string }>>;
+  hiddenNodeIds?: Set<string>;
+  onNodeToggle?: (nodeId: string) => void;
 }) {
   const [tooltip, setTooltip] = useState<{
     label: string;
@@ -443,42 +452,90 @@ export function BFOBucketFilters({
     description: string;
     position: { top: number; left: number };
   } | null>(null);
+  const [expandedBuckets, setExpandedBuckets] = useState<Set<string>>(new Set());
+
+  const displayActive = effectiveActiveBuckets ?? activeBuckets;
 
   return (
-    <div className="absolute top-4 right-4 z-10 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
+    <div className="absolute top-4 right-4 z-10 max-h-[calc(100vh-8rem)] w-44 overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         BFO 7 Buckets
       </h4>
       <div className="flex flex-col gap-0.5">
         {BFO_BUCKET_DEFS.map((bucket) => {
           const colors = BFO_COLORS[bucket.type as keyof typeof BFO_COLORS];
-          const anySelected = activeBuckets.size > 0;
-          const isActive = activeBuckets.has(bucket.type);
+          const anySelected = displayActive.size > 0;
+          const isActive = displayActive.has(bucket.type);
+          const bucketNodes = nodesPerBucket?.get(bucket.type) ?? [];
+          const isExpanded = expandedBuckets.has(bucket.type);
+
           return (
-            <button
+            <div
               key={bucket.type}
-              onClick={() => onToggle(bucket.type)}
-              onMouseEnter={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setTooltip({
-                  label: bucket.label,
-                  type: bucket.type,
-                  description: bucket.description,
-                  position: { top: rect.top, left: rect.left - 8 },
-                });
-              }}
-              onMouseLeave={() => setTooltip(null)}
-              className={cn(
-                'flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-all hover:bg-muted',
-                anySelected && !isActive ? 'opacity-30' : 'opacity-100'
-              )}
+              className={cn('rounded-md transition-all', anySelected && !isActive ? 'opacity-30' : 'opacity-100')}
             >
-              <div
-                className="h-3 w-3 flex-shrink-0 rounded-full"
-                style={{ backgroundColor: colors.background }}
-              />
-              <strong>{bucket.label}</strong>
-            </button>
+              <div className="flex items-center">
+                <button
+                  onClick={() => onToggle(bucket.type)}
+                  onMouseEnter={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setTooltip({
+                      label: bucket.label,
+                      type: bucket.type,
+                      description: bucket.description,
+                      position: { top: rect.top, left: rect.left - 8 },
+                    });
+                  }}
+                  onMouseLeave={() => setTooltip(null)}
+                  className="flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-muted"
+                >
+                  <div
+                    className="h-3 w-3 flex-shrink-0 rounded-full"
+                    style={{ backgroundColor: colors.background }}
+                  />
+                  <strong className="flex-1">{bucket.label}</strong>
+                  {bucketNodes.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground">{bucketNodes.length}</span>
+                  )}
+                </button>
+                {bucketNodes.length > 0 && (
+                  <button
+                    onClick={() =>
+                      setExpandedBuckets((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(bucket.type)) next.delete(bucket.type);
+                        else next.add(bucket.type);
+                        return next;
+                      })
+                    }
+                    className="px-1 py-1 text-muted-foreground hover:text-foreground"
+                  >
+                    <ChevronRight size={10} className={cn('transition-transform', isExpanded && 'rotate-90')} />
+                  </button>
+                )}
+              </div>
+              {isExpanded && bucketNodes.length > 0 && (
+                <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border pl-2">
+                  {bucketNodes.map((node) => {
+                    const isHidden = hiddenNodeIds?.has(node.id) ?? false;
+                    return (
+                      <label
+                        key={node.id}
+                        className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!isHidden}
+                          onChange={() => onNodeToggle?.(node.id)}
+                          className="h-3 w-3 cursor-pointer"
+                        />
+                        <span className="max-w-[100px] truncate text-[11px]">{node.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

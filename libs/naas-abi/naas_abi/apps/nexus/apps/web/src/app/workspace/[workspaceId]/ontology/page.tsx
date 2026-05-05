@@ -36,6 +36,7 @@ import {
   GitBranch,
   AlertCircle,
   ArrowRight,
+  Focus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
@@ -1593,6 +1594,10 @@ function OntologyNetworkView({
   const [showObjectProperties, setShowObjectProperties] = useState(false);
   // BFO bucket filters — empty = no filter (show all)
   const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
+  /** When set, graph shows only this node (still respects search + bucket + relation toggles). */
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  /** Per-node visibility overrides — nodes in this set are hidden from the graph. */
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
   const isAllOntologiesOverview = !ontologyPath;
 
   const handleBucketToggle = useCallback((bucketType: string) => {
@@ -1602,6 +1607,18 @@ function OntologyNetworkView({
         next.delete(bucketType);
       } else {
         next.add(bucketType);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleNodeToggle = useCallback((nodeId: string) => {
+    setHiddenNodeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
       }
       return next;
     });
@@ -1629,7 +1646,7 @@ function OntologyNetworkView({
     return map;
   }, [allVisibleNodes]);
 
-  const filteredGraphNodes = useMemo(() => {
+  const nodesMatchingSearchAndBuckets = useMemo(() => {
     let nodes = allVisibleNodes;
 
     if (graphSearchQuery.trim()) {
@@ -1653,6 +1670,78 @@ function OntologyNetworkView({
     return nodes;
   }, [allVisibleNodes, nodesByIri, graphSearchQuery, activeBuckets]);
 
+  // When relations are active, expand the visible set with nodes connected via those relation edges.
+  // In focus mode this means: focused node + its relation neighbors.
+  // Outside focus mode: all filtered nodes + their relation neighbors.
+  const expandedNodes = useMemo(() => {
+    const baseNodes = focusedNodeId
+      ? nodesMatchingSearchAndBuckets.filter((n) => n.id === focusedNodeId)
+      : nodesMatchingSearchAndBuckets;
+
+    if (!showRestrictions && !showObjectProperties) return baseNodes;
+
+    const relEdges = graphEdges.filter(
+      (e) =>
+        (showRestrictions && e.properties?.relation_kind === 'restriction') ||
+        (showObjectProperties && e.properties?.relation_kind === 'object_property')
+    );
+
+    const baseIds = new Set(baseNodes.map((n) => n.id));
+    const toAdd = new Set<string>();
+    for (const edge of relEdges) {
+      if (baseIds.has(edge.source) && !baseIds.has(edge.target)) toAdd.add(edge.target);
+      if (baseIds.has(edge.target) && !baseIds.has(edge.source)) toAdd.add(edge.source);
+    }
+
+    if (toAdd.size === 0) return baseNodes;
+
+    const extras = Array.from(toAdd)
+      .map((id) => nodesByIri.get(id))
+      .filter((n): n is OntologyOverviewGraphNode => n !== undefined);
+
+    return [...baseNodes, ...extras];
+  }, [nodesMatchingSearchAndBuckets, focusedNodeId, showRestrictions, showObjectProperties, graphEdges, nodesByIri]);
+
+  // Effective active buckets: user-selected + auto-activated buckets for relation-expanded nodes.
+  const effectiveActiveBuckets = useMemo(() => {
+    if (activeBuckets.size === 0) return activeBuckets;
+    const result = new Set(activeBuckets);
+    for (const node of expandedNodes) {
+      const b = resolveNodeBucket(node, nodesByIri);
+      if (b) result.add(b);
+    }
+    return result;
+  }, [activeBuckets, expandedNodes, nodesByIri]);
+
+  // Nodes grouped by bucket for the BFO panel checkboxes.
+  const nodesPerBucketForPanel = useMemo(() => {
+    const map = new Map<string, Array<{ id: string; label: string }>>();
+    for (const node of expandedNodes) {
+      const bucket = resolveNodeBucket(node, nodesByIri) ?? 'Unknown';
+      const existing = map.get(bucket) ?? [];
+      existing.push({ id: node.id, label: node.label });
+      map.set(bucket, existing);
+    }
+    for (const [, nodes] of map) {
+      nodes.sort((a, b) => a.label.localeCompare(b.label));
+    }
+    return map;
+  }, [expandedNodes, nodesByIri]);
+
+  const filteredGraphNodes = useMemo(() => {
+    return expandedNodes.filter((n) => !hiddenNodeIds.has(n.id));
+  }, [expandedNodes, hiddenNodeIds]);
+
+  useEffect(() => {
+    if (!focusedNodeId) return;
+    if (
+      !nodesMatchingSearchAndBuckets.some((n) => n.id === focusedNodeId) ||
+      hiddenNodeIds.has(focusedNodeId)
+    ) {
+      setFocusedNodeId(null);
+    }
+  }, [focusedNodeId, nodesMatchingSearchAndBuckets, hiddenNodeIds]);
+
   const filteredGraphEdges = useMemo(() => {
     const restrictionEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'restriction');
     const objectPropEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'object_property');
@@ -1667,10 +1756,23 @@ function OntologyNetworkView({
     if (showRestrictions) baseEdges = [...baseEdges, ...restrictionEdges];
     if (showObjectProperties) baseEdges = [...baseEdges, ...objectPropEdges];
 
-    if (!graphSearchQuery.trim() && activeBuckets.size === 0) return baseEdges;
+    const needsNodeMask =
+      Boolean(graphSearchQuery.trim()) || activeBuckets.size > 0 || Boolean(focusedNodeId) || hiddenNodeIds.size > 0 || showRestrictions || showObjectProperties;
+    if (!needsNodeMask) return baseEdges;
     const visibleNodeIds = new Set(filteredGraphNodes.map((node) => node.id));
     return baseEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
-  }, [graphEdges, filteredGraphNodes, graphSearchQuery, activeBuckets, subclassOfLevels, hierarchyByLevel, showRestrictions, showObjectProperties]);
+  }, [
+    graphEdges,
+    filteredGraphNodes,
+    graphSearchQuery,
+    activeBuckets,
+    focusedNodeId,
+    hiddenNodeIds,
+    subclassOfLevels,
+    hierarchyByLevel,
+    showRestrictions,
+    showObjectProperties,
+  ]);
 
   const handleExpandSubclassOf = async () => {
     const nextLevel = subclassOfLevels + 1;
@@ -1823,16 +1925,26 @@ function OntologyNetworkView({
                 </button>
               </>
             )}
-            {graphSearchQuery && (
+            {(graphSearchQuery.trim() || activeBuckets.size > 0 || focusedNodeId || hiddenNodeIds.size > 0) && (
               <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                Showing {filteredGraphNodes.length} of {allVisibleNodes.length}{' '}
+                Showing {filteredGraphNodes.length} of{' '}
+                {expandedNodes.length}{' '}
                 {isAllOntologiesOverview ? 'ontologies' : 'classes'}
+                {focusedNodeId ? ' (focused)' : ''}
+                {hiddenNodeIds.size > 0 ? ` · ${hiddenNodeIds.size} hidden` : ''}
               </span>
             )}
           </div>
 
           {!isAllOntologiesOverview && (
-            <BFOBucketFilters activeBuckets={activeBuckets} onToggle={handleBucketToggle} />
+            <BFOBucketFilters
+              activeBuckets={activeBuckets}
+              effectiveActiveBuckets={effectiveActiveBuckets}
+              onToggle={handleBucketToggle}
+              nodesPerBucket={nodesPerBucketForPanel}
+              hiddenNodeIds={hiddenNodeIds}
+              onNodeToggle={handleNodeToggle}
+            />
           )}
 
           {loadingGraph ? (
@@ -1927,6 +2039,37 @@ function OntologyNetworkView({
                       )}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    disabled={
+                      !nodesMatchingSearchAndBuckets.some((n) => n.id === selectedGraphNode.id)
+                    }
+                    onClick={() => {
+                      if (focusedNodeId === selectedGraphNode.id) {
+                        setFocusedNodeId(null);
+                        return;
+                      }
+                      setFocusedNodeId(selectedGraphNode.id);
+                    }}
+                    className={cn(
+                      'flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                      focusedNodeId === selectedGraphNode.id
+                        ? 'border-workspace-accent bg-workspace-accent-10 text-workspace-accent'
+                        : 'border-border bg-muted/40 hover:bg-muted',
+                      !nodesMatchingSearchAndBuckets.some((n) => n.id === selectedGraphNode.id) &&
+                        'cursor-not-allowed opacity-50'
+                    )}
+                    title={
+                      !nodesMatchingSearchAndBuckets.some((n) => n.id === selectedGraphNode.id)
+                        ? 'This node is hidden by the current search or BFO filters'
+                        : focusedNodeId === selectedGraphNode.id
+                          ? 'Show all nodes matching the current filters'
+                          : 'Show only this node (same relation toggles and filters)'
+                    }
+                  >
+                    <Focus size={16} />
+                    {focusedNodeId === selectedGraphNode.id ? 'Show all nodes' : 'Focus'}
+                  </button>
                 </>
               )}
               {selectedGraphEdge && (
