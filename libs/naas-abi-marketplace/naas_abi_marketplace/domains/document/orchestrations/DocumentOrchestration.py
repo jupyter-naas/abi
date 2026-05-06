@@ -181,6 +181,7 @@ def _build_markdowntovector_job_sensor(
             dimension=config.dimension,
             chunk_size=config.chunk_size,
             chunk_overlap=config.chunk_overlap,
+            api_key=config.api_key,
         )
         pipeline = MarkdownToVectorPipeline(pipeline_config)
         pipeline.run(MarkdownToVectorPipelineParameters())
@@ -194,7 +195,11 @@ def _build_markdowntovector_job_sensor(
         description=(
             f"Sensor to trigger MarkdownToVector pipeline for collection "
             f"'{config.collection_name}'"
-            + (f" filtered by file_path '{config.file_path}'" if config.file_path else "")
+            + (
+                f" filtered by file_path '{config.file_path}'"
+                if config.file_path
+                else ""
+            )
         ),
         job=job,
         minimum_interval_seconds=120,
