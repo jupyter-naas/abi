@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.14.0 (2026-05-06)
+
+### Features
+
+- **document**: Add MarkdownToVector pipeline and DocumentAgent
+  ([`cbd1af8`](https://github.com/jupyter-naas/abi/commit/cbd1af8441a3b5df15de13b5d958dd4dd075ff68))
+
+
 ## v1.13.2 (2026-05-04)
 
 ### Bug Fixes
