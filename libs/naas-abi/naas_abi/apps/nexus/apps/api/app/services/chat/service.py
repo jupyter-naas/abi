@@ -36,7 +36,6 @@ from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message a
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     check_ollama_status,
-    execute_tool,
 )
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     complete_chat as complete_with_provider,
@@ -986,42 +985,42 @@ class ChatService:
             )
         return messages
 
-    async def run_search_if_needed(self, message: str, search_enabled: bool) -> str | None:
-        search_keywords = [
-            "search for",
-            "search about",
-            "look up",
-            "find info",
-            "what's the latest",
-            "news about",
-            "search the web",
-        ]
-        implicit_search = any(kw in message.lower() for kw in search_keywords)
-        if not search_enabled and not implicit_search:
-            return None
-
-        search_results: list[str] = []
-        try:
-            wiki_results = await execute_tool(
-                "search_web", {"query": message, "engine": "wikipedia"}
-            )
-            search_results.append(f"**Wikipedia:**\n{wiki_results}")
-        except Exception:
-            pass
-        try:
-            ddg_results = await execute_tool(
-                "search_web", {"query": message, "engine": "duckduckgo"}
-            )
-            search_results.append(f"**DuckDuckGo:**\n{ddg_results}")
-        except Exception:
-            pass
-
-        if search_results:
-            return (
-                f'Web search results for "{message}":\n\n'
-                f"{chr(10).join(search_results)}\n\n"
-                "Use these search results to provide an accurate, well-sourced answer. "
-                "Cite sources with URLs when available. If the results don't fully answer "
-                "the question, supplement with your knowledge."
-            )
-        return "Web search was attempted but returned no results. Answer based on your knowledge."
+    # async def run_search_if_needed(self, message: str, search_enabled: bool) -> str | None:
+    #     search_keywords = [
+    #         "search for",
+    #         "search about",
+    #         "look up",
+    #         "find info",
+    #         "what's the latest",
+    #         "news about",
+    #         "search the web",
+    #     ]
+    #     implicit_search = any(kw in message.lower() for kw in search_keywords)
+    #     if not search_enabled and not implicit_search:
+    #         return None
+    #
+    #     search_results: list[str] = []
+    #     try:
+    #         wiki_results = await execute_tool(
+    #             "search_web", {"query": message, "engine": "wikipedia"}
+    #         )
+    #         search_results.append(f"**Wikipedia:**\n{wiki_results}")
+    #     except Exception:
+    #         pass
+    #     try:
+    #         ddg_results = await execute_tool(
+    #             "search_web", {"query": message, "engine": "duckduckgo"}
+    #         )
+    #         search_results.append(f"**DuckDuckGo:**\n{ddg_results}")
+    #     except Exception:
+    #         pass
+    #
+    #     if search_results:
+    #         return (
+    #             f'Web search results for "{message}":\n\n'
+    #             f"{chr(10).join(search_results)}\n\n"
+    #             "Use these search results to provide an accurate, well-sourced answer. "
+    #             "Cite sources with URLs when available. If the results don't fully answer "
+    #             "the question, supplement with your knowledge."
+    #         )
+    #     return "Web search was attempted but returned no results. Answer based on your knowledge."
