@@ -67,7 +67,7 @@ nexus:User a owl:Class ;
     rdfs:subClassOf cco:ont00001262 .
 
 nexus:Organization a owl:Class ;
-    rdfs:label "Organization"@en ;
+    rdfs:label "Nexus Organization"@en ;
     skos:definition "An organization that uses, manages, or is represented within the Nexus platform."@en ;
     skos:example "Naas.ai", "Customer X", "Research Team"@en ;
     rdfs:subClassOf cco:ont00001180 ,
@@ -204,6 +204,14 @@ nexus:Agent a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty nexus:hasAgentRole ;
           owl:allValuesFrom nexus:AgentRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasSubAgent ;
+          owl:allValuesFrom nexus:Agent
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isSubAgentOf ;
+          owl:allValuesFrom nexus:Agent
         ] .
 
 nexus:AgentTool a owl:Class ;
@@ -867,6 +875,22 @@ nexus:isAgentRoleOf a owl:ObjectProperty ;
     rdfs:label "is agent role of"@en ;
     skos:definition "Relates an agent role to the agent of which it is the role-side concretization."@en ;
     rdfs:domain nexus:AgentRole ;
+    rdfs:range nexus:Agent .
+
+nexus:hasSubAgent a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isSubAgentOf ;
+    rdfs:label "has sub-agent"@en ;
+    skos:definition "Relates a supervisor agent to a sub-agent it orchestrates within the Nexus platform."@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range nexus:Agent .
+
+nexus:isSubAgentOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasSubAgent ;
+    rdfs:label "is sub-agent of"@en ;
+    skos:definition "Relates a sub-agent to the supervisor agent that orchestrates it within the Nexus platform."@en ;
+    rdfs:domain nexus:Agent ;
     rdfs:range nexus:Agent .
 
 nexus:hasOntologyRole a owl:ObjectProperty ;
