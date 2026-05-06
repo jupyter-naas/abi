@@ -16,9 +16,9 @@ from pydantic import BaseModel
 
 
 class FileIngestionConfiguration(BaseModel):
-    input_path: str
-    output_path: str
-    graph_name: str
+    input_path: str = "documents/input"
+    output_path: str = "documents/output"
+    graph_name: str = "http://ontology.naas.ai/graph/document"
     recursive: bool = True
     delete_from_input: bool = False
 
