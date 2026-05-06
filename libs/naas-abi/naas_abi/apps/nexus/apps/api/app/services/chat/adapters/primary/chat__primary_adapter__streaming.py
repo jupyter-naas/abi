@@ -15,13 +15,12 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     persist_stream_content,
     request_context,
     resolve_provider,
-    run_search_if_needed,
+    # run_search_if_needed,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import AGENT_SYSTEM_PROMPTS
-from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     stream_with_abi_inprocess,
@@ -127,16 +126,16 @@ async def stream_chat_response(
     if request.messages and any(m.role == "assistant" for m in request.messages):
         system_prompt += MULTI_AGENT_NOTICE
 
-    search_context = await run_search_if_needed(request)
-    if search_context:
-        for i in range(len(provider_messages) - 1, -1, -1):
-            if provider_messages[i].role == "user":
-                provider_messages[i] = ProviderMessage(
-                    role="user",
-                    content=f"{provider_messages[i].content}\n\n---\n{search_context}",
-                    images=provider_messages[i].images,
-                )
-                break
+    # search_context = await run_search_if_needed(request)
+    # if search_context:
+    #     for i in range(len(provider_messages) - 1, -1, -1):
+    #         if provider_messages[i].role == "user":
+    #             provider_messages[i] = ProviderMessage(
+    #                 role="user",
+    #                 content=f"{provider_messages[i].content}\n\n---\n{search_context}",
+    #                 images=provider_messages[i].images,
+    #             )
+    #             break
 
     provider_config = ProviderConfig(
         id=provider.id,
@@ -216,8 +215,8 @@ async def stream_chat_response(
             yield f'data: {{"conversation_id": "{conversation_id}"}}\n\n'
             if context_sources:
                 yield f"data: {json.dumps({'sources': context_sources})}\n\n"
-            if search_context:
-                yield 'data: {"search": true}\n\n'
+            # if search_context:
+            #     yield 'data: {"search": true}\n\n'
 
             if provider.type == "ollama":
                 async for output in emit_stream(
