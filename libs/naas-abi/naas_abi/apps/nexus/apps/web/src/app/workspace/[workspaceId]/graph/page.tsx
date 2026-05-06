@@ -518,6 +518,16 @@ export default function GraphPage() {
     setStabilizeKey((k) => k + 1);
   }, []);
 
+  // Per-node visibility overrides — nodes in this set are hidden from the graph
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
+  const handleNodeToggle = useCallback((nodeId: string) => {
+    setHiddenNodeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) { next.delete(nodeId); } else { next.add(nodeId); }
+      return next;
+    });
+  }, []);
+
   // Parents hierarchy filter (like SubclassOf in ontology page)
   const [parentsLevels, setParentsLevels] = useState(0);
   const [loadingNextParentLevel, setLoadingNextParentLevel] = useState(false);
@@ -879,6 +889,7 @@ export default function GraphPage() {
     setParentsLevels(0);
     setHierarchyByLevel([]);
     setShowRelations(true);
+    setHiddenNodeIds(new Set());
   }, [selectedGraphId, activeSavedViewId]);
 
   // Load on mount and when workspace or visible graphs change
@@ -1482,7 +1493,22 @@ export default function GraphPage() {
     return result;
   }, [nodes, hierarchyByLevel, parentsLevels]);
 
-  // Filter nodes: search + bucket
+  // Nodes grouped by bucket for the BFO panel checkboxes
+  const nodesPerBucketForPanel = useMemo(() => {
+    const map = new Map<string, Array<{ id: string; label: string }>>();
+    for (const node of allVisibleNodes) {
+      const bucket = resolveGraphNodeBucket(node);
+      const existing = map.get(bucket) ?? [];
+      existing.push({ id: node.id, label: node.label });
+      map.set(bucket, existing);
+    }
+    for (const [, bucketNodes] of map) {
+      bucketNodes.sort((a, b) => a.label.localeCompare(b.label));
+    }
+    return map;
+  }, [allVisibleNodes]);
+
+  // Filter nodes: search + bucket + hidden
   const filteredNodes = useMemo(() => {
     let result = allVisibleNodes;
     if (searchQuery.trim()) {
@@ -1496,8 +1522,11 @@ export default function GraphPage() {
     if (activeBuckets.size > 0) {
       result = result.filter((node) => activeBuckets.has(resolveGraphNodeBucket(node)));
     }
+    if (hiddenNodeIds.size > 0) {
+      result = result.filter((node) => !hiddenNodeIds.has(node.id));
+    }
     return result;
-  }, [allVisibleNodes, searchQuery, activeBuckets]);
+  }, [allVisibleNodes, searchQuery, activeBuckets, hiddenNodeIds]);
 
   // Filter edges: relations toggle + parents levels + constrain to visible nodes
   const filteredEdges = useMemo(() => {
@@ -2205,7 +2234,13 @@ export default function GraphPage() {
                     </span>
                   )}
                 </div>
-                <BFOBucketFilters activeBuckets={activeBuckets} onToggle={handleBucketToggle} />
+                <BFOBucketFilters
+                  activeBuckets={activeBuckets}
+                  onToggle={handleBucketToggle}
+                  nodesPerBucket={nodesPerBucketForPanel}
+                  hiddenNodeIds={hiddenNodeIds}
+                  onNodeToggle={handleNodeToggle}
+                />
 
                 {/* Graph Canvas */}
                 {loading ? (
