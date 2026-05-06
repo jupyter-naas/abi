@@ -339,7 +339,7 @@ class Tenant(RDFEntity):
     # Object properties
     is_tenant_of: Optional[
         Annotated[
-            List[Union[Organization, URIRef, str]],
+            List[Union[NexusOrganization, URIRef, str]],
             Field(
                 description="Relates a tenant role to the organization in which it inheres."
             ),
@@ -442,13 +442,13 @@ class User(RDFEntity):
     ] = os.environ.get("USER")
 
 
-class Organization(RDFEntity):
+class NexusOrganization(RDFEntity):
     """
-    Organization
+    Nexus Organization
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Organization"
-    _name: ClassVar[str] = "Organization"
+    _name: ClassVar[str] = "Nexus Organization"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -579,7 +579,7 @@ class Workspace(RDFEntity):
     ] = ["http://ontology.naas.ai/abi/unknown"]
     is_workspace_of: Optional[
         Annotated[
-            List[Union[Organization, URIRef, str]],
+            List[Union[NexusOrganization, URIRef, str]],
             Field(
                 description="Relates a workspace to the organization on which it generically depends."
             ),
@@ -748,7 +748,9 @@ class Agent(RDFEntity):
         "description": "http://ontology.naas.ai/nexus/description",
         "has_agent_role": "http://ontology.naas.ai/nexus/hasAgentRole",
         "has_intent": "http://ontology.naas.ai/nexus/hasAgentIntent",
+        "has_subagent": "http://ontology.naas.ai/nexus/hasSubAgent",
         "has_tool": "http://ontology.naas.ai/nexus/hasAgentTool",
+        "is_subagent_of": "http://ontology.naas.ai/nexus/isSubAgentOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "logo_url": "http://ontology.naas.ai/nexus/logo_url",
         "module_path": "http://ontology.naas.ai/nexus/module_path",
@@ -757,7 +759,9 @@ class Agent(RDFEntity):
     _object_properties: ClassVar[set[str]] = {
         "has_agent_role",
         "has_intent",
+        "has_subagent",
         "has_tool",
+        "is_subagent_of",
     }
 
     # Data properties
@@ -821,10 +825,26 @@ class Agent(RDFEntity):
             Field(description="Relates an agent to an intent available to it."),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
+    has_subagent: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(
+                description="Relates a supervisor agent to a sub-agent it orchestrates within the Nexus platform."
+            ),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
     has_tool: Optional[
         Annotated[
             List[Union[AgentTool, URIRef, str]],
             Field(description="Relates an agent to a tool available to it."),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
+    is_subagent_of: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(
+                description="Relates a sub-agent to the supervisor agent that orchestrates it within the Nexus platform."
+            ),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
 
@@ -2046,7 +2066,7 @@ Tenant.model_rebuild()
 Server.model_rebuild()
 DeploymentSite.model_rebuild()
 User.model_rebuild()
-Organization.model_rebuild()
+NexusOrganization.model_rebuild()
 Workspace.model_rebuild()
 Search.model_rebuild()
 Conversation.model_rebuild()

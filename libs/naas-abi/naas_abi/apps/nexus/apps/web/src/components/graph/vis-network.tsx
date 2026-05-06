@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Network, DataSet, type Options, type Node, type Edge } from 'vis-network/standalone';
 import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // BFO 7 Buckets color scheme (simplified)
@@ -22,6 +23,7 @@ const BFO_COLORS = {
 
 // BFO URI → color bucket (full URI and short ID forms)
 const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
+  'http://purl.obolibrary.org/obo/BFO_0000001': 'Entity',
   'http://purl.obolibrary.org/obo/BFO_0000040': 'Material Entity',
   'http://purl.obolibrary.org/obo/BFO_0000015': 'Process',
   'http://purl.obolibrary.org/obo/BFO_0000008': 'Temporal Region',
@@ -29,6 +31,7 @@ const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'http://purl.obolibrary.org/obo/BFO_0000031': 'GDC',
   'http://purl.obolibrary.org/obo/BFO_0000019': 'Quality',
   'http://purl.obolibrary.org/obo/BFO_0000017': 'Realizable',
+  'BFO_0000001': 'Entity',
   'BFO_0000040': 'Material Entity',
   'BFO_0000015': 'Process',
   'BFO_0000008': 'Temporal Region',
@@ -40,32 +43,34 @@ const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
 
 // Lowercase label → color bucket (covers common BFO/CCO labels)
 const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
-  'material entity': 'Material Entity',
-  'object': 'Material Entity',
-  'object aggregate': 'Material Entity',
-  'fiat object part': 'Material Entity',
-  'independent continuant': 'Material Entity',
+  'entity': 'Entity',
   'process': 'Process',
-  'occurrent': 'Process',
   'process boundary': 'Process',
   'temporal region': 'Temporal Region',
   'temporal interval': 'Temporal Region',
   'zero-dimensional temporal region': 'Temporal Region',
   'one-dimensional temporal region': 'Temporal Region',
+  'material entity': 'Material Entity',
+  'object': 'Material Entity',
+  'object aggregate': 'Material Entity',
+  'fiat object part': 'Material Entity',
   'site': 'Site',
   'immaterial entity': 'Site',
   'spatial region': 'Site',
   'continuant fiat boundary': 'Site',
+  'generically dependent continuant': 'GDC',
   'quality': 'Quality',
   'specifically dependent continuant': 'Quality',
   'role': 'Realizable',
   'disposition': 'Realizable',
   'realizable entity': 'Realizable',
-  'generically dependent continuant': 'GDC',
-  'entity': 'Entity',
 };
 
 function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, visited: Set<string> = new Set()) {
+  // bfo_parent_iri: authoritative BFO ancestor from backend SPARQL — check first
+  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[bfoParentIri]];
+
   // Direct BFO_COLORS key match (e.g. KG nodes already tagged with bucket name)
   if (node.type in BFO_COLORS) return BFO_COLORS[node.type as keyof typeof BFO_COLORS];
 
@@ -75,10 +80,6 @@ function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, vi
 
   // Full/short BFO URI in node.type (KG nodes where type IS the BFO URI)
   if (node.type in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[node.type]];
-
-  // bfo_parent_iri: transitive BFO ancestor resolved by the service (most reliable)
-  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
-  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[bfoParentIri]];
 
   // parent_iri: direct parent — check BFO first, then walk the loaded graph recursively
   const parentIri = node.properties?.parent_iri as string | undefined;
@@ -94,21 +95,271 @@ function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, vi
 }
 
 const EDGE_COLORS: Record<string, string> = {
-  'participates in': '#22c55e',
-  'has participant': '#22c55e',
-  'occurs in': '#f97316',
-  'located in': '#f97316',
-  'bearer of': '#ec4899',
-  'inheres in': '#ec4899',
-  'has role': '#eab308',
-  'has disposition': '#f59e0b',
-  'realizes': '#a855f7',
-  'precedes': '#8b5cf6',
-  'preceded by': '#8b5cf6',
-  'concretizes': '#06b6d4',
-  'is carrier of': '#06b6d4',
-  'generically depends on': '#06b6d4',
+  // 'participates in': '#22c55e',
+  // 'has participant': '#22c55e',
+  // 'occurs in': '#f97316',
+  // 'located in': '#f97316',
+  // 'bearer of': '#ec4899',
+  // 'inheres in': '#ec4899',
+  // 'has role': '#eab308',
+  // 'has disposition': '#f59e0b',
+  // 'realizes': '#a855f7',
+  // 'precedes': '#8b5cf6',
+  // 'preceded by': '#8b5cf6',
+  // 'concretizes': '#06b6d4',
+  // 'is carrier of': '#06b6d4',
+  // 'generically depends on': '#06b6d4',
 };
+
+const DEFAULT_NODE_BOX_WIDTH = 128;
+const DEFAULT_NODE_BOX_HEIGHT = 88;
+const DEFAULT_MAX_CHARS_PER_LINE = 14;
+
+// Spacing constants for hierarchical layout
+const LR_LEVEL_GAP   = 260; // px between depth levels  (main axis = x)
+const LR_NODE_SLOT   = 110; // px per leaf slot in cross-axis (y)
+const TD_LEVEL_GAP   = 180; // px between depth levels  (main axis = y)
+const TD_NODE_SLOT   = 168; // px per leaf slot in cross-axis (x)
+
+// Resolve a stable bucket key for a node (used to sort / group siblings)
+function resolveNodeBucketKey(
+  node: GraphNode,
+  nodesById: Map<string, GraphNode>,
+  visited = new Set<string>(),
+): string {
+  const bfoIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoIri && bfoIri in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[bfoIri];
+  if (node.type in BFO_COLORS) return node.type;
+  const lower = node.type?.toLowerCase?.() ?? '';
+  if (lower in LABEL_TO_BUCKET) return LABEL_TO_BUCKET[lower];
+  if (node.type in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[node.type];
+  const parentIri = node.properties?.parent_iri as string | undefined;
+  if (parentIri && parentIri in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[parentIri];
+  if (parentIri && !visited.has(node.id)) {
+    visited.add(node.id);
+    const parent = nodesById.get(parentIri);
+    if (parent) return resolveNodeBucketKey(parent, nodesById, visited);
+  }
+  return 'Unknown';
+}
+
+/**
+ * Subtree-based hierarchical layout (Reingold-Tilford style).
+ *
+ * Algorithm:
+ *  1. Build parent→children tree from `is_a` edges (source=child, target=parent).
+ *  2. Sort each node's children by BFO bucket so same-bucket siblings are adjacent.
+ *  3. DFS: leaves consume one slot in the cross-axis; internal nodes are centred
+ *     over their children's range.  A small extra gap is injected when the bucket
+ *     changes within a sibling list, visually packing same-bucket nodes together.
+ *  4. Centre the whole layout at cross-axis = 0.
+ *
+ * Collision-free by construction: every subtree occupies a contiguous, non-
+ * overlapping range of the cross-axis cursor.
+ */
+function computeHierarchicalPositions(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  direction: 'LR' | 'TD',
+): Map<string, { x: number; y: number }> {
+  if (nodes.length === 0) return new Map();
+
+  const nodesById  = new Map(nodes.map((n) => [n.id, n]));
+  const nodeIds    = new Set(nodes.map((n) => n.id));
+  const isaEdges   = edges.filter((e) => e.properties?.relation_kind === 'is_a');
+
+  // ── 1. Build tree ──────────────────────────────────────────────────────────
+  const childrenOf = new Map<string, string[]>();
+  const parentOf   = new Map<string, string>();
+
+  for (const edge of isaEdges) {
+    const child = edge.source, parent = edge.target;
+    if (!nodeIds.has(child) || !nodeIds.has(parent)) continue;
+    if (!childrenOf.has(parent)) childrenOf.set(parent, []);
+    childrenOf.get(parent)!.push(child);
+    if (!parentOf.has(child)) parentOf.set(child, parent);
+  }
+
+  // ── 2. Bucket key per node (pre-computed for sorting) ─────────────────────
+  const bucketOf = new Map<string, string>();
+  for (const node of nodes) bucketOf.set(node.id, resolveNodeBucketKey(node, nodesById));
+
+  // Sort children: group by bucket, then alphabetically by label within bucket
+  for (const [, children] of childrenOf) {
+    children.sort((a, b) => {
+      const ba = bucketOf.get(a) ?? 'Unknown';
+      const bb = bucketOf.get(b) ?? 'Unknown';
+      if (ba !== bb) return ba.localeCompare(bb);
+      return (nodesById.get(a)?.label ?? a).localeCompare(nodesById.get(b)?.label ?? b);
+    });
+  }
+
+  // ── 3. Roots — prefer BFO entity (BFO_0000001) first ─────────────────────
+  const roots = nodes
+    .map((n) => n.id)
+    .filter((id) => !parentOf.has(id))
+    .sort((a, b) => {
+      if (a.includes('BFO_0000001')) return -1;
+      if (b.includes('BFO_0000001')) return 1;
+      return (nodesById.get(a)?.label ?? a).localeCompare(nodesById.get(b)?.label ?? b);
+    });
+
+  // ── 4. DFS placement ───────────────────────────────────────────────────────
+  const SLOT        = direction === 'LR' ? LR_NODE_SLOT  : TD_NODE_SLOT;
+  const LEVEL       = direction === 'LR' ? LR_LEVEL_GAP  : TD_LEVEL_GAP;
+  const BUCKET_XTRA = Math.round(SLOT * 0.55); // extra gap between bucket groups
+
+  const positions = new Map<string, { x: number; y: number }>();
+  let cursor = 0; // running cross-axis cursor (y for LR, x for TD)
+
+  const setPos = (id: string, depth: number, cross: number) =>
+    positions.set(id, direction === 'LR'
+      ? { x: depth * LEVEL, y: cross }
+      : { x: cross,         y: depth * LEVEL });
+
+  const place = (id: string, depth: number): number => {
+    const children = childrenOf.get(id) ?? [];
+
+    if (children.length === 0) {
+      // Leaf: occupy one slot
+      const pos = cursor + SLOT / 2;
+      cursor += SLOT;
+      setPos(id, depth, pos);
+      return pos;
+    }
+
+    // Internal node: place children left-to-right / top-to-bottom,
+    // injecting extra gap when the bucket changes.
+    let prevBucket = '';
+    const centers: number[] = [];
+
+    for (const child of children) {
+      const b = bucketOf.get(child) ?? 'Unknown';
+      if (prevBucket && prevBucket !== b) cursor += BUCKET_XTRA;
+      prevBucket = b;
+      centers.push(place(child, depth + 1));
+    }
+
+    // Centre the parent over its children's span
+    const mid = (centers[0] + centers[centers.length - 1]) / 2;
+    setPos(id, depth, mid);
+    return mid;
+  };
+
+  for (let i = 0; i < roots.length; i++) {
+    if (i > 0) cursor += SLOT; // gap between independent root subtrees
+    place(roots[i], 0);
+  }
+
+  // Nodes unreachable from any root (shouldn't occur, but guard anyway)
+  for (const node of nodes) {
+    if (!positions.has(node.id)) {
+      cursor += SLOT;
+      setPos(node.id, 0, cursor + SLOT / 2);
+      cursor += SLOT;
+    }
+  }
+
+  // ── 5. Centre layout at cross-axis 0 ──────────────────────────────────────
+  const crossVals = Array.from(positions.values()).map((p) => direction === 'LR' ? p.y : p.x);
+  const mid = (Math.min(...crossVals) + Math.max(...crossVals)) / 2;
+  for (const [id, pos] of positions) {
+    positions.set(id, direction === 'LR'
+      ? { x: pos.x, y: pos.y - mid }
+      : { x: pos.x - mid, y: pos.y });
+  }
+
+  return positions;
+}
+
+function wrapLabelTwoLines(label: string, maxCharsPerLine = DEFAULT_MAX_CHARS_PER_LINE): string {
+  const normalized = (label ?? '').trim().replace(/\s+/g, ' ');
+  if (!normalized) return '';
+  if (normalized.length <= maxCharsPerLine) return normalized;
+
+  const words = normalized.split(' ');
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharsPerLine) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) lines.push(current);
+    current = word;
+    if (lines.length === 2) break;
+  }
+  if (lines.length < 2 && current) lines.push(current);
+
+  const line1 = lines[0] ?? '';
+  let line2 = lines[1] ?? '';
+
+  if (!line2 && words.length > 1) {
+    // Hard split if we couldn't build a second line from words.
+    line2 = normalized.slice(line1.length).trim();
+  }
+
+  if (line2.length > maxCharsPerLine) {
+    line2 = `${line2.slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`;
+  }
+
+  return line2 ? `${line1}\n${line2}` : line1;
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+function nodeCardSvgDataUri(args: {
+  width: number;
+  height: number;
+  background: string;
+  border: string;
+  label: string;
+  logoDataUri?: string;
+}): string {
+  const { width, height, background, border, label, logoDataUri } = args;
+  const [line1, line2] = label.split('\n');
+
+  // Layout
+  const pad = 10;
+  const logoSize = 32;
+  const hasLogo = Boolean(logoDataUri);
+  const logoX = Math.round((width - logoSize) / 2);
+  const logoY = pad;
+
+  // Text below the logo (or centered if no logo)
+  const textStartY = hasLogo ? logoY + logoSize + 20 : Math.round(height / 2) + 6;
+  const lineHeight = 16;
+  const textY1 = line2 ? textStartY - 6 : textStartY;
+  const textY2 = textY1 + lineHeight;
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="0" ry="0" fill="${background}" stroke="${border}" stroke-width="2"/>
+  ${
+    hasLogo
+      ? `<image href="${escapeXml(logoDataUri!)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet" />`
+      : ''
+  }
+  <text x="${Math.round(width / 2)}" y="${textY1}" text-anchor="middle"
+        font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif"
+        font-size="13" font-weight="600" fill="#ffffff">
+    <tspan x="${Math.round(width / 2)}" dy="0">${escapeXml(line1 ?? '')}</tspan>
+    ${line2 ? `<tspan x="${Math.round(width / 2)}" dy="${lineHeight}">${escapeXml(line2)}</tspan>` : ''}
+  </text>
+</svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
 interface VisNetworkProps {
   nodes: GraphNode[];
@@ -117,6 +368,7 @@ interface VisNetworkProps {
   onNodeSelect: (nodeId: string | null) => void;
   onEdgeSelect: (edgeId: string | null) => void;
   stabilizeKey?: number;
+  layoutDirection?: 'LR' | 'TD';
 }
 
 export function VisNetwork({
@@ -126,17 +378,24 @@ export function VisNetwork({
   onNodeSelect,
   onEdgeSelect,
   stabilizeKey,
+  layoutDirection,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
+  const [logoDataByUrl, setLogoDataByUrl] = useState<Record<string, string>>({});
 
   const nodesByIri = useMemo(() => {
     const map = new Map<string, GraphNode>();
     for (const n of nodes) map.set(n.id, n);
     return map;
   }, [nodes]);
+
+  const hierarchicalPositions = useMemo(
+    () => (layoutDirection ? computeHierarchicalPositions(nodes, edges, layoutDirection) : null),
+    [layoutDirection, nodes, edges],
+  );
 
   const getNodeLogoUrl = useCallback((node: GraphNode): string | undefined => {
     const properties = node.properties ?? {};
@@ -160,35 +419,71 @@ export function VisNetwork({
     return typeof found === 'string' ? found.trim() : undefined;
   }, []);
 
+  // Fetch and cache logo images as data URIs so they can be embedded in SVG.
+  useEffect(() => {
+    const urls = Array.from(
+      new Set(
+        nodes
+          .map((n) => getNodeLogoUrl(n))
+          .filter((u): u is string => Boolean(u))
+      )
+    );
+
+    const missing = urls.filter((u) => !logoDataByUrl[u]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const updates: Record<string, string> = {};
+      await Promise.all(
+        missing.map(async (url) => {
+          try {
+            const res = await fetch(`/api/image-data?url=${encodeURIComponent(url)}`);
+            if (!res.ok) return;
+            const json = (await res.json()) as { dataUri?: string };
+            if (json.dataUri) updates[url] = json.dataUri;
+          } catch {
+            // Ignore broken/missing logos; nodes will render without them.
+          }
+        })
+      );
+      if (cancelled) return;
+      if (Object.keys(updates).length > 0) {
+        setLogoDataByUrl((prev) => ({ ...prev, ...updates }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getNodeLogoUrl, logoDataByUrl, nodes]);
+
   const toVisNode = useCallback((node: GraphNode): Node => {
     const colors = resolveBFOColor(node, nodesByIri) ?? BFO_COLORS['Entity'];
     const logoUrl = getNodeLogoUrl(node);
-    const hasLogo = Boolean(logoUrl);
-    const shape = hasLogo ? 'circularImage' : (node.properties?.shape as string) || 'dot';
+    const wrapped = wrapLabelTwoLines(node.label);
+    const logoDataUri = logoUrl ? logoDataByUrl[logoUrl] : undefined;
+    const image = nodeCardSvgDataUri({
+      width: DEFAULT_NODE_BOX_WIDTH,
+      height: DEFAULT_NODE_BOX_HEIGHT,
+      background: colors.background,
+      border: colors.border,
+      label: wrapped,
+      logoDataUri,
+    });
 
+    const hierPos = hierarchicalPositions?.get(node.id);
     return {
       id: node.id,
-      label: node.label,
+      label: '',
       title: `${node.type}\n${node.label}`,
-      color: {
-        background: colors.background,
-        border: colors.border,
-        highlight: { background: colors.highlight, border: colors.border },
-      },
-      font: { 
-        color: '#1f2937', 
-        size: 14, 
-        face: 'Inter, sans-serif',
-        strokeWidth: 3,
-        strokeColor: '#ffffff',
-      },
-      shape,
-      ...(hasLogo ? { image: logoUrl } : {}),
-      size: (node.properties?.size as number) || node.size || 25,
-      x: node.x,
-      y: node.y,
+      shape: 'image',
+      image,
+      shapeProperties: { useImageSize: true, interpolation: true, coordinateOrigin: 'center' },
+      x: hierPos?.x ?? node.x,
+      y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, nodesByIri]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
@@ -197,12 +492,12 @@ export function VisNetwork({
       id: edge.id,
       from: edge.source,
       to: edge.target,
-      label: edge.label || edge.type,
+      label: isHierarchical ? undefined : (edge.label || edge.type),
       title: edge.type,
       color: { color, highlight: color, hover: color },
       arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-      font: { size: 10, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle' },
-      smooth: { enabled: true, type: 'curvedCW', roundness: 0.2 },
+      font: { size: 9, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle', background: '#ffffff' },
+      smooth: { enabled: false, type: 'continuous', roundness: 0 },
       width: edge.weight || (isHierarchical ? 1 : 2),
       dashes: isHierarchical,
     };
@@ -214,6 +509,7 @@ export function VisNetwork({
     height: '100%',
     width: '100%',
     nodes: {
+      shape: 'image',
       borderWidth: 2,
       shadow: { enabled: true, color: 'rgba(0,0,0,0.2)', size: 5, x: 2, y: 2 },
     },
@@ -293,7 +589,20 @@ export function VisNetwork({
       return true;
     });
 
-    // If already stabilized, save current positions before updating
+    if (layoutDirection) {
+      // Hierarchical layout: positions are baked into toVisNode via hierarchicalPositions.
+      // Disable physics and fit the view to the positioned graph.
+      nodesDataRef.current.clear();
+      nodesDataRef.current.add(uniqueNodes.map(toVisNode));
+      if (networkRef.current && uniqueNodes.length > 0) {
+        networkRef.current.setOptions({ physics: { enabled: false } });
+        networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+      }
+      isStabilizedRef.current = true;
+      return;
+    }
+
+    // Physics layout: save positions before updating so existing nodes don't jump
     if (isStabilizedRef.current && networkRef.current) {
       const positions = networkRef.current.getPositions();
       Object.entries(positions).forEach(([id, pos]) => {
@@ -301,7 +610,6 @@ export function VisNetwork({
       });
     }
 
-    // Map nodes with preserved positions
     const visNodes = uniqueNodes.map((node) => {
       const baseNode = toVisNode(node);
       const savedPos = nodePositionsRef.current.get(node.id);
@@ -310,15 +618,13 @@ export function VisNetwork({
       }
       return baseNode;
     });
-    
+
     nodesDataRef.current.clear();
     nodesDataRef.current.add(visNodes);
 
-    // Initial load only: run physics then disable and fit once
     if (!isStabilizedRef.current && networkRef.current && visNodes.length > 0) {
       networkRef.current.once('stabilizationIterationsDone', () => {
         if (networkRef.current) {
-          // Save positions after stabilization
           const positions = networkRef.current.getPositions();
           Object.entries(positions).forEach(([id, pos]) => {
             nodePositionsRef.current.set(id, pos as { x: number; y: number });
@@ -329,8 +635,7 @@ export function VisNetwork({
         }
       });
     }
-    // When already stabilized, only update node data; do not fit() so the view is not re-centered on selection
-  }, [nodes, toVisNode]);
+  }, [nodes, toVisNode, layoutDirection]);
 
   // Update edges
   useEffect(() => {
@@ -344,10 +649,11 @@ export function VisNetwork({
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
 
-  // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled)
+  // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled).
+  // Skip when in hierarchical layout — positions are already fixed.
   useEffect(() => {
     if (stabilizeKey === undefined || stabilizeKey === 0) return;
-    if (!networkRef.current) return;
+    if (!networkRef.current || layoutDirection) return;
     isStabilizedRef.current = false;
     networkRef.current.setOptions({ physics: { enabled: true } });
     networkRef.current.once('stabilizationIterationsDone', () => {
@@ -358,10 +664,9 @@ export function VisNetwork({
       });
       isStabilizedRef.current = true;
       networkRef.current.setOptions({ physics: { enabled: false } });
-      // No fit() here — preserve the user's current zoom/pan position
     });
     networkRef.current.stabilize(200);
-  }, [stabilizeKey]);
+  }, [stabilizeKey, layoutDirection]);
 
   // Handle selected node — guard against stale IDs from a previous graph
   useEffect(() => {
@@ -427,15 +732,24 @@ export const BFO_BUCKET_DEFS = [
   { type: 'Quality', label: 'How it is', description: 'Properties, attributes' },
   { type: 'Realizable', label: 'Why', description: 'Roles & dispositions' },
   { type: 'GDC', label: 'How we know', description: 'Documents, data, plans' },
+  { type: 'Entity', label: 'Entity', description: 'Entity' },
   { type: 'Unknown', label: 'Unknown', description: 'Unclassified or unresolved bucket' },
 ];
 
 export function BFOBucketFilters({
   activeBuckets,
+  effectiveActiveBuckets,
   onToggle,
+  nodesPerBucket,
+  hiddenNodeIds,
+  onNodeToggle,
 }: {
   activeBuckets: Set<string>;
+  effectiveActiveBuckets?: Set<string>;
   onToggle: (bucketType: string) => void;
+  nodesPerBucket?: Map<string, Array<{ id: string; label: string }>>;
+  hiddenNodeIds?: Set<string>;
+  onNodeToggle?: (nodeId: string) => void;
 }) {
   const [tooltip, setTooltip] = useState<{
     label: string;
@@ -443,42 +757,90 @@ export function BFOBucketFilters({
     description: string;
     position: { top: number; left: number };
   } | null>(null);
+  const [expandedBuckets, setExpandedBuckets] = useState<Set<string>>(new Set());
+
+  const displayActive = effectiveActiveBuckets ?? activeBuckets;
 
   return (
-    <div className="absolute top-4 right-4 z-10 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
+    <div className="absolute top-4 right-4 z-10 max-h-[calc(100vh-8rem)] w-44 overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur-sm">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         BFO 7 Buckets
       </h4>
       <div className="flex flex-col gap-0.5">
         {BFO_BUCKET_DEFS.map((bucket) => {
           const colors = BFO_COLORS[bucket.type as keyof typeof BFO_COLORS];
-          const anySelected = activeBuckets.size > 0;
-          const isActive = activeBuckets.has(bucket.type);
+          const anySelected = displayActive.size > 0;
+          const isActive = displayActive.has(bucket.type);
+          const bucketNodes = nodesPerBucket?.get(bucket.type) ?? [];
+          const isExpanded = expandedBuckets.has(bucket.type);
+
           return (
-            <button
+            <div
               key={bucket.type}
-              onClick={() => onToggle(bucket.type)}
-              onMouseEnter={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setTooltip({
-                  label: bucket.label,
-                  type: bucket.type,
-                  description: bucket.description,
-                  position: { top: rect.top, left: rect.left - 8 },
-                });
-              }}
-              onMouseLeave={() => setTooltip(null)}
-              className={cn(
-                'flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-all hover:bg-muted',
-                anySelected && !isActive ? 'opacity-30' : 'opacity-100'
-              )}
+              className={cn('rounded-md transition-all', anySelected && !isActive ? 'opacity-30' : 'opacity-100')}
             >
-              <div
-                className="h-3 w-3 flex-shrink-0 rounded-full"
-                style={{ backgroundColor: colors.background }}
-              />
-              <strong>{bucket.label}</strong>
-            </button>
+              <div className="flex items-center">
+                <button
+                  onClick={() => onToggle(bucket.type)}
+                  onMouseEnter={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setTooltip({
+                      label: bucket.label,
+                      type: bucket.type,
+                      description: bucket.description,
+                      position: { top: rect.top, left: rect.left - 8 },
+                    });
+                  }}
+                  onMouseLeave={() => setTooltip(null)}
+                  className="flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-muted"
+                >
+                  <div
+                    className="h-3 w-3 flex-shrink-0 rounded-full"
+                    style={{ backgroundColor: colors.background }}
+                  />
+                  <strong className="flex-1">{bucket.label}</strong>
+                  {bucketNodes.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground">{bucketNodes.length}</span>
+                  )}
+                </button>
+                {bucketNodes.length > 0 && (
+                  <button
+                    onClick={() =>
+                      setExpandedBuckets((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(bucket.type)) next.delete(bucket.type);
+                        else next.add(bucket.type);
+                        return next;
+                      })
+                    }
+                    className="px-1 py-1 text-muted-foreground hover:text-foreground"
+                  >
+                    <ChevronRight size={10} className={cn('transition-transform', isExpanded && 'rotate-90')} />
+                  </button>
+                )}
+              </div>
+              {isExpanded && bucketNodes.length > 0 && (
+                <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border pl-2">
+                  {bucketNodes.map((node) => {
+                    const isHidden = hiddenNodeIds?.has(node.id) ?? false;
+                    return (
+                      <label
+                        key={node.id}
+                        className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!isHidden}
+                          onChange={() => onNodeToggle?.(node.id)}
+                          className="h-3 w-3 cursor-pointer"
+                        />
+                        <span className="max-w-[100px] truncate text-[11px]">{node.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
