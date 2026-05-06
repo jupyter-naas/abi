@@ -196,6 +196,7 @@ class NexusPlatformPipeline(Pipeline):
         has_intent: list[AgentIntent | URIRef | str] | None = None,
         has_tool: list[AgentTool | URIRef | str] | None = None,
         has_agent_role: list[AgentRole | URIRef | str] | None = None,
+        has_subagent: list[Agent | URIRef | str] | None = None,
     ) -> Agent:
         agent = Agent(label=label)
         if description is not None:
@@ -216,6 +217,8 @@ class NexusPlatformPipeline(Pipeline):
             agent.has_tool = has_tool
         if has_agent_role is not None:
             agent.has_agent_role = has_agent_role
+        if has_subagent is not None:
+            agent.has_subagent = has_subagent
         return agent
 
     def initialize_nexus_agents(self) -> Graph:
@@ -276,6 +279,10 @@ class NexusPlatformPipeline(Pipeline):
         )
         logger.debug(f"Nexus agents: {nexus_agents}")
         nexus_agent_class_paths = {agent["class_path"] for agent in nexus_agents}
+
+        abi_agent_object: Agent | None = None
+        sub_nexus_agents: list[Agent] = []
+
         for agent_cls in agents:
             module_name = str(agent_cls.__module__)
             class_name = str(agent_cls.__name__)
@@ -345,17 +352,18 @@ class NexusPlatformPipeline(Pipeline):
                     inserted_graph += agent_intent.rdf()
                     agent_intents.append(agent_intent)
 
+            is_abi_agent = class_name == "AbiAgent"
+
             agent_roles: list = []
-            if "naas_abi." in module_name:
-                agent_roles.append(supervisor_role)
-            elif "naas_abi_core." in module_name:
-                agent_roles.append(core_role)
-            elif "naas_abi_marketplace.ai." in module_name:
-                agent_roles.append(ai_role)
-            elif "naas_abi_marketplace.applications." in module_name:
-                agent_roles.append(application_role)
-            elif "naas_abi_marketplace.domains." in module_name:
-                agent_roles.append(domain_role)
+            if not is_abi_agent:
+                if "naas_abi_core." in module_name:
+                    agent_roles.append(core_role)
+                elif "naas_abi_marketplace.ai." in module_name:
+                    agent_roles.append(ai_role)
+                elif "naas_abi_marketplace.applications." in module_name:
+                    agent_roles.append(application_role)
+                elif "naas_abi_marketplace.domains." in module_name:
+                    agent_roles.append(domain_role)
 
             agent = self.create_agent_to_nexus_graph(
                 label=name,
@@ -367,8 +375,26 @@ class NexusPlatformPipeline(Pipeline):
                 class_path=class_path,
                 has_intent=agent_intents,
                 has_tool=agent_tools,
-                has_agent_role=agent_roles,
+                has_agent_role=agent_roles or None,
             )
+
+            if is_abi_agent:
+                abi_agent_object = agent
+            else:
+                sub_nexus_agents.append(agent)
+
+        # Assign supervisor role and subagent links to AbiAgent only if it has subagents
+        all_nexus_agents: list[Agent] = []
+        if abi_agent_object is not None:
+            if sub_nexus_agents:
+                abi_agent_object.has_agent_role = [supervisor_role]
+                abi_agent_object.has_subagent = [
+                    URIRef(sub._uri) for sub in sub_nexus_agents
+                ]
+            all_nexus_agents.append(abi_agent_object)
+        all_nexus_agents.extend(sub_nexus_agents)
+
+        for agent in all_nexus_agents:
             inserted_graph += agent.rdf()
 
         self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
