@@ -92,6 +92,21 @@ _IMPORT_URI_TO_LOCAL: dict[str, str] = {
     "https://www.commoncoreontologies.org/UnitsOfMeasureOntology": "mid-level/UnitsOfMeasureOntology.ttl",
 }
 
+# Public raw tree for bundled imports when the local `imports/` checkout is missing (e.g. minimal deploy).
+_IMPORTS_GITHUB_RAW_BASE = (
+    "https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/"
+    "libs/naas-abi/naas_abi/ontologies/imports/"
+)
+
+
+def _parse_format_for_suffix(suffix: str) -> str | None:
+    return {
+        ".ttl": "turtle",
+        ".owl": "xml",
+        ".rdf": "xml",
+        ".nt": "nt",
+    }.get(suffix.lower())
+
 
 def _load_ontology_graph_with_imports_cached(path: str) -> Graph:
     """Load ontology + all owl:imports using local files first; result is in-memory cached."""
@@ -102,27 +117,44 @@ def _load_ontology_graph_with_imports_cached(path: str) -> Graph:
     imports_dir = Path(path).parent.parent / "imports"
     seen: set[str] = set()
 
-    def _load_recursive(file_path: str) -> Graph:
-        g = _load_ontology_graph(file_path)
-        for import_uri in list(g.objects(None, OWL.imports)):
+    def _resolve_imports_into(target: Graph, source: Graph) -> None:
+        for import_uri in list(source.objects(None, OWL.imports)):
             uri_str = str(import_uri)
             if uri_str in seen:
                 continue
             seen.add(uri_str)
             relative = _IMPORT_URI_TO_LOCAL.get(uri_str)
             local_path = imports_dir / relative if relative else None
+            nested = Graph()
             if local_path and local_path.exists():
-                g += _load_recursive(str(local_path))
+                nested = _load_ontology_graph(str(local_path))
+                target += nested
+                _resolve_imports_into(target, nested)
+            elif relative:
+                github_url = f"{_IMPORTS_GITHUB_RAW_BASE}{relative}"
+                parse_format = _parse_format_for_suffix(Path(relative).suffix)
+                try:
+                    nested.parse(github_url, format=parse_format)
+                    target += nested
+                    _resolve_imports_into(target, nested)
+                except Exception as e:
+                    logger.error(f"Error loading import {uri_str} from {github_url}: {e}")
+                    try:
+                        nested = Graph()
+                        nested.parse(uri_str)
+                        target += nested
+                    except Exception as e2:
+                        logger.error(f"Error loading import {uri_str}: {e2}")
             else:
                 try:
-                    sub = Graph()
-                    sub.parse(uri_str)
-                    g += sub
+                    nested.parse(uri_str)
+                    target += nested
                 except Exception as e:
                     logger.error(f"Error loading import {uri_str}: {e}")
-        return g
 
-    _graph_with_imports_cache[path] = _load_recursive(path)
+    g = _load_ontology_graph(path)
+    _resolve_imports_into(g, g)
+    _graph_with_imports_cache[path] = g
     return _graph_with_imports_cache[path]
 
 
@@ -140,8 +172,28 @@ _BFO_BUCKET_ROOTS = " ".join(
 )
 
 
+_BFO_ENTITY_IRIS = {
+    "BFO_0000001",
+    "http://purl.obolibrary.org/obo/BFO_0000001",
+}
+
+
+def _is_bfo_entity_iri(iri: str | None) -> bool:
+    """True when iri is BFO:entity (BFO_0000001)."""
+    if not iri:
+        return False
+    if iri in _BFO_ENTITY_IRIS:
+        return True
+    return iri.rstrip("/") in _BFO_ENTITY_IRIS
+
+
 def _find_bfo_ancestor(graph: Graph, class_iri: str) -> str | None:
     """Walk rdfs:subClassOf+ to find the nearest BFO bucket-root ancestor, or None."""
+    # If the class itself is a bucket root (e.g. BFO_0000031 = GDC), treat it as its own ancestor.
+    # Otherwise, the transitive `rdfs:subClassOf+` path would never match and the frontend won't bucket-color it.
+    if f"<{class_iri}>" in _BFO_BUCKET_ROOTS:
+        return class_iri
+
     query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT ?ancestor WHERE {{
@@ -383,14 +435,17 @@ class OntologyService:
                 parent_id = data.get("subClassOf", "Unknown")
                 parent_data = _get_uri_metadata(store, parent_id) if parent_id else None
                 parent_label = parent_data.get("label", "Unknown") if parent_data else None
+                if _is_bfo_entity_iri(iri):
+                    parent_id = None
+                    parent_label = None
                 by_iri[iri] = OntologyItemData(
                     id=iri,
                     name=label,
                     type="Class",
                     description=str(definition) if definition else str(comment),
                     example=str(example),
-                    parent_id=str(parent_id),
-                    parent_name=str(parent_label),
+                    parent_id=str(parent_id) if parent_id is not None else None,
+                    parent_name=str(parent_label) if parent_label is not None else None,
                 )
         return sorted(by_iri.values(), key=lambda item: item.name.lower())
 
@@ -638,6 +693,9 @@ class OntologyService:
                         parent_iri = data.get("subClassOf", "Unknown")
                         parent_data = _get_uri_metadata(store, parent_iri) if parent_iri else None
                         parent_label = parent_data.get("label", "Unknown") if parent_data else None
+                        if _is_bfo_entity_iri(class_iri):
+                            parent_iri = class_iri
+                            parent_label = "entity"
                         bfo_ancestor = _find_bfo_ancestor(ancestor_graph, class_iri)
                         classes_by_iri[class_iri] = OntologyOverviewGraphNodeData(
                             id=class_iri,
@@ -684,6 +742,9 @@ class OntologyService:
                         typ_lbl = (
                             _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
                         )
+                        if _is_bfo_entity_iri(iri):
+                            typ = iri
+                            typ_lbl = "entity"
                         defn = d.get("definition")
                         cmnt = d.get("comment")
                         bfo_ancestor = _find_bfo_ancestor(_ag, iri)
@@ -710,11 +771,10 @@ class OntologyService:
                         target_iri = str(row.get("range")) if row.get("range") else None
                         if not source_iri or not target_iri:
                             continue
-
-                        if source_iri not in classes_by_iri:
-                            classes_by_iri[source_iri] = _make_node(source_iri)
-                        if target_iri not in classes_by_iri:
-                            classes_by_iri[target_iri] = _make_node(target_iri)
+                        # Do not create nodes coming from rdfs:domain / rdfs:range.
+                        # Only keep object-property edges when both endpoints already exist.
+                        if source_iri not in classes_by_iri or target_iri not in classes_by_iri:
+                            continue
 
                         property_label = (
                             str(row.get("propertyLabel"))
@@ -923,9 +983,10 @@ class OntologyService:
                 raw_lbl = d.get("label")
                 lbl = raw_lbl or super_iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
                 typ = d.get("subClassOf")
-                typ_lbl = (
-                    _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
-                )
+                typ_lbl = _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
+                if _is_bfo_entity_iri(super_iri):
+                    typ = super_iri
+                    typ_lbl = "entity"
                 bfo_anc = _find_bfo_ancestor(ancestor_graph, super_iri)
                 new_nodes[super_iri] = OntologyOverviewGraphNodeData(
                     id=super_iri,
