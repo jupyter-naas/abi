@@ -528,6 +528,9 @@ export default function GraphPage() {
     });
   }, []);
 
+  // Node display limit — how many nodes to render in the graph canvas
+  const [nodeDisplayLimit, setNodeDisplayLimit] = useState(200);
+
   // Parents hierarchy filter (like SubclassOf in ontology page)
   const [parentsLevels, setParentsLevels] = useState(0);
   const [loadingNextParentLevel, setLoadingNextParentLevel] = useState(false);
@@ -890,6 +893,7 @@ export default function GraphPage() {
     setHierarchyByLevel([]);
     setShowRelations(true);
     setHiddenNodeIds(new Set());
+    setNodeDisplayLimit(200);
   }, [selectedGraphId, activeSavedViewId]);
 
   // Load on mount and when workspace or visible graphs change
@@ -1468,7 +1472,6 @@ export default function GraphPage() {
         return updated;
       });
       setParentsLevels(nextLevel);
-      setStabilizeKey((k) => k + 1);
     } catch (err) {
       console.error('Failed to fetch parent nodes:', err);
     } finally {
@@ -1551,7 +1554,18 @@ export default function GraphPage() {
 
     return result;
   }, [edges, filteredNodes, showRelations, parentsLevels, hierarchyByLevel]);
-  
+
+  // Apply display limit — slice filteredNodes and constrain edges to those nodes
+  const displayedNodes = useMemo(
+    () => filteredNodes.slice(0, nodeDisplayLimit),
+    [filteredNodes, nodeDisplayLimit]
+  );
+
+  const displayedEdges = useMemo(() => {
+    const visibleIds = new Set(displayedNodes.map((n) => n.id));
+    return filteredEdges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
+  }, [filteredEdges, displayedNodes]);
+
   // Calculate statistics (memoized)
   const stats = useMemo(() => ({
     totalNodes: nodes.length,
@@ -2228,9 +2242,9 @@ export default function GraphPage() {
                       >+</button>
                     )}
                   </div>
-                  {searchQuery && (
+                  {(searchQuery || filteredNodes.length < allVisibleNodes.length || nodeDisplayLimit < filteredNodes.length) && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                      Showing {filteredNodes.length} of {allVisibleNodes.length} nodes
+                      Showing {Math.min(nodeDisplayLimit, filteredNodes.length)} of {allVisibleNodes.length} nodes
                     </span>
                   )}
                 </div>
@@ -2299,15 +2313,35 @@ export default function GraphPage() {
                     </div>
                   </div>
                 ) : (
-                  <VisNetwork
-                    key={activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}
-                    nodes={filteredNodes}
-                    edges={filteredEdges}
-                    selectedNodeId={selectedNodeId}
-                    onNodeSelect={setSelectedNodeId}
-                    onEdgeSelect={setSelectedEdgeId}
-                    stabilizeKey={stabilizeKey}
-                  />
+                  <>
+                    <VisNetwork
+                      key={activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}
+                      nodes={displayedNodes}
+                      edges={displayedEdges}
+                      selectedNodeId={selectedNodeId}
+                      onNodeSelect={setSelectedNodeId}
+                      onEdgeSelect={setSelectedEdgeId}
+                      stabilizeKey={stabilizeKey}
+                    />
+                    {filteredNodes.length > 0 && (
+                      <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-1.5 rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm w-52">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Nodes displayed</span>
+                          <span className="font-medium tabular-nums">
+                            {Math.min(nodeDisplayLimit, filteredNodes.length)}&nbsp;/&nbsp;{filteredNodes.length}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={1}
+                          max={filteredNodes.length}
+                          value={Math.min(nodeDisplayLimit, filteredNodes.length)}
+                          onChange={(e) => setNodeDisplayLimit(Number(e.target.value))}
+                          className="h-1.5 w-full cursor-pointer accent-foreground"
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
 
               </div>
