@@ -221,13 +221,13 @@ async def build_provider_messages_with_agents(
         )
 
 
-async def run_search_if_needed(request: ChatRequest) -> str | None:
-    async with AsyncSessionLocal() as db:
-        with bind_registry(db) as registry:
-            return await registry.chat.run_search_if_needed(
-                message=request.message,
-                search_enabled=request.search_enabled,
-            )
+# async def run_search_if_needed(request: ChatRequest) -> str | None:
+#     async with AsyncSessionLocal() as db:
+#         with bind_registry(db) as registry:
+#             return await registry.chat.run_search_if_needed(
+#                 message=request.message,
+#                 search_enabled=request.search_enabled,
+#             )
 
 
 async def persist_stream_content(

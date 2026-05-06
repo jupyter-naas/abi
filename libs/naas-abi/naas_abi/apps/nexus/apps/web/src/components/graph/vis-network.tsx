@@ -602,27 +602,64 @@ export function VisNetwork({
       return;
     }
 
-    // Physics layout: save positions before updating so existing nodes don't jump
     if (isStabilizedRef.current && networkRef.current) {
-      const positions = networkRef.current.getPositions();
-      Object.entries(positions).forEach(([id, pos]) => {
+      // Save the latest positions for all currently displayed nodes.
+      const livePositions = networkRef.current.getPositions();
+      Object.entries(livePositions).forEach(([id, pos]) => {
         nodePositionsRef.current.set(id, pos as { x: number; y: number });
       });
+
+      // Compute bounding box so new nodes (parents) appear above the existing layout.
+      const yValues = Array.from(nodePositionsRef.current.values()).map((p) => p.y);
+      const xValues = Array.from(nodePositionsRef.current.values()).map((p) => p.x);
+      const minY = yValues.length > 0 ? Math.min(...yValues) : 0;
+      const avgX = xValues.length > 0 ? xValues.reduce((s, v) => s + v, 0) / xValues.length : 0;
+      const xSpread = xValues.length > 0 ? Math.max(...xValues) - Math.min(...xValues) : 600;
+
+      const existingIds = new Set(nodesDataRef.current.getIds() as string[]);
+      const incomingIds = new Set(uniqueNodes.map((n) => n.id));
+
+      // Remove nodes that are no longer in the visible set.
+      const removedIds = [...existingIds].filter((id) => !incomingIds.has(id));
+      if (removedIds.length > 0) nodesDataRef.current.remove(removedIds);
+
+      // Update existing nodes (preserving their current position) and add new ones.
+      const toUpdate: Node[] = [];
+      const toAdd: Node[] = [];
+      let newIdx = 0;
+      for (const node of uniqueNodes) {
+        const base = toVisNode(node);
+        const saved = nodePositionsRef.current.get(node.id);
+        if (existingIds.has(node.id)) {
+          // Keep current position — overwrite with saved coords to prevent vis-network drift.
+          toUpdate.push({ ...base, x: saved?.x, y: saved?.y });
+        } else {
+          // New node (e.g. a loaded parent): place it in a row above existing nodes.
+          const col = newIdx % 5;
+          const row = Math.floor(newIdx / 5);
+          const newX = avgX + (col - 2) * (xSpread / 4 + 150);
+          const newY = minY - 350 - row * 180;
+          toAdd.push({ ...base, x: newX, y: newY });
+          newIdx++;
+        }
+      }
+      if (toUpdate.length > 0) nodesDataRef.current.update(toUpdate);
+      if (toAdd.length > 0) nodesDataRef.current.add(toAdd);
+      return;
     }
 
+    // Initial load — full clear + add, then let physics stabilize.
     const visNodes = uniqueNodes.map((node) => {
       const baseNode = toVisNode(node);
       const savedPos = nodePositionsRef.current.get(node.id);
-      if (savedPos && isStabilizedRef.current) {
-        return { ...baseNode, x: savedPos.x, y: savedPos.y };
-      }
+      if (savedPos) return { ...baseNode, x: savedPos.x, y: savedPos.y };
       return baseNode;
     });
 
     nodesDataRef.current.clear();
     nodesDataRef.current.add(visNodes);
 
-    if (!isStabilizedRef.current && networkRef.current && visNodes.length > 0) {
+    if (networkRef.current && visNodes.length > 0) {
       networkRef.current.once('stabilizationIterationsDone', () => {
         if (networkRef.current) {
           const positions = networkRef.current.getPositions();
@@ -668,11 +705,14 @@ export function VisNetwork({
     networkRef.current.stabilize(200);
   }, [stabilizeKey, layoutDirection]);
 
-  // Handle selected node — guard against stale IDs from a previous graph
+  // Handle selected node — select visually and pan to center on it without changing zoom.
   useEffect(() => {
-    if (networkRef.current && selectedNodeId && nodesDataRef.current.get(selectedNodeId)) {
-      networkRef.current.selectNodes([selectedNodeId]);
-    }
+    if (!networkRef.current || !selectedNodeId || !nodesDataRef.current.get(selectedNodeId)) return;
+    networkRef.current.selectNodes([selectedNodeId]);
+    networkRef.current.focus(selectedNodeId, {
+      scale: networkRef.current.getScale(),
+      animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+    });
   }, [selectedNodeId]);
 
   return (

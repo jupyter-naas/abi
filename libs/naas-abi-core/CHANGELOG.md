@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.35.0 (2026-05-06)
+
+### Features
+
+- **agent**: Support multiple active agents by thread in AgentSharedState
+  ([`7b021b4`](https://github.com/jupyter-naas/abi/commit/7b021b499740b09b229473f3a05fe27418c4f3e9))
+
+
 ## v1.34.3 (2026-05-04)
 
 ### Bug Fixes

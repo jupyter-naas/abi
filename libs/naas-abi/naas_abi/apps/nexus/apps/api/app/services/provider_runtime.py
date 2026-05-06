@@ -1298,14 +1298,15 @@ def _extract_opencode_ui_event(event: dict[str, Any]) -> dict[str, Any] | None:
 async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
-    thread_id: str | None = None,
+    thread_id: str,
 ) -> AsyncGenerator[str | dict[str, Any], None]:
     """Stream chat by invoking ABI agent directly in-process."""
     import asyncio
     import json
-    import logging
 
-    logger = logging.getLogger(__name__)
+    from naas_abi_core import logger
+
+    logger.debug(f"Streaming with ABI in-process: {thread_id}")
 
     latest_user_message = None
     for msg in reversed(messages):
@@ -1330,11 +1331,14 @@ async def stream_with_abi_inprocess(
         return
 
     # Keep ABI memory continuity aligned with Nexus conversation.
+    assert thread_id is not None, "thread_id is required"
     if thread_id and hasattr(agent, "state") and hasattr(agent.state, "set_thread_id"):
         try:
             agent.state.set_thread_id(str(thread_id))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error(f"Failed to set thread_id: {str(exc)}")
+
+    logger.debug(f"Agent.state.thread_id: {agent.state.thread_id}")
 
     # New OpencodeAgent path: async event stream method.
     if hasattr(agent, "astream"):
