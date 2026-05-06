@@ -8,6 +8,29 @@ from naas_abi_marketplace.domains.document import (
     MarkdownToVectorConfiguration,
 )
 
+DEFAULT_GRAPH_NAME = "http://ontology.naas.ai/graph/document"
+
+PDF_MIME_TYPE = "application/pdf"
+PDF_PROCESSOR_IRI = "http://ontology.naas.ai/abi/document/PDFToMarkdownProcessor"
+
+DOCX_MIME_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
+DOCX_PROCESSOR_IRI = "http://ontology.naas.ai/abi/document/DocxToMarkdownProcessor"
+
+PPTX_MIME_TYPE = (
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+)
+PPTX_PROCESSOR_IRI = "http://ontology.naas.ai/abi/document/PptxToMarkdownProcessor"
+
+
+def _has_unprocessed_files(mime_type: str, processor_iri: str) -> bool:
+    from naas_abi_marketplace.domains.document.pipelines.common import (
+        get_files_to_process,
+    )
+
+    return len(get_files_to_process(DEFAULT_GRAPH_NAME, mime_type, processor_iri)) > 0
+
 
 # File Ingestion OP
 def _build_file_ingestion_job_sensor(
@@ -41,14 +64,22 @@ def _build_file_ingestion_job_sensor(
         name=f"file_ingestion_sensor_{re.sub(r'[^a-zA-Z0-9]', '_', config.input_path.replace('/', '_'))}",
         description=f"Sensor to trigger file ingestion job for {config.input_path}",
         job=job,
-        minimum_interval_seconds=60,  # Check for new files every 60 seconds
+        minimum_interval_seconds=60,
     )
     def file_ingestion_sensor(context):
-        # Implement logic to check for new files in the specified location.
-        # If new files are found, return a RunRequest to trigger the job.
-        # For example:
-        # if new_files_found(location):
-        #     return [dg.RunRequest(run_key=None, run_config={})]
+        from naas_abi_marketplace.domains.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
+            FilesIngestionPipeline,
+            FilesIngestionPipelineConfiguration,
+        )
+
+        pipeline = FilesIngestionPipeline(FilesIngestionPipelineConfiguration())
+        object_keys = pipeline._get_files_from_path(
+            config.input_path, recursive=config.recursive
+        )
+        if not object_keys:
+            return dg.SkipReason(
+                f"No files found under '{config.input_path}'."
+            )
         return [dg.RunRequest(run_key=None)]
 
     return job, file_ingestion_sensor
@@ -76,14 +107,11 @@ def _build_pdftomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefini
         name="pdftomarkdown_sensor",
         description="Sensor to trigger pdftomarkdown job",
         job=job,
-        minimum_interval_seconds=60,  # Check for new files every 60 seconds
+        minimum_interval_seconds=60,
     )
     def pdftomarkdown_sensor(context):
-        # Implement logic to check for new files in the specified location.
-        # If new files are found, return a RunRequest to trigger the job.
-        # For example:
-        # if new_files_found(location):
-        #     return [dg.RunRequest(run_key=None, run_config={})]
+        if not _has_unprocessed_files(PDF_MIME_TYPE, PDF_PROCESSOR_IRI):
+            return dg.SkipReason("No unprocessed PDF files to convert.")
         return [dg.RunRequest(run_key=None)]
 
     return job, pdftomarkdown_sensor
@@ -111,14 +139,11 @@ def _build_docxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
         name="docxtomarkdown_sensor",
         description="Sensor to trigger docxtomarkdown job",
         job=job,
-        minimum_interval_seconds=60,  # Check for new files every 60 seconds
+        minimum_interval_seconds=60,
     )
     def docxtomarkdown_sensor(context):
-        # Implement logic to check for new files in the specified location.
-        # If new files are found, return a RunRequest to trigger the job.
-        # For example:
-        # if new_files_found(location):
-        #     return [dg.RunRequest(run_key=None, run_config={})]
+        if not _has_unprocessed_files(DOCX_MIME_TYPE, DOCX_PROCESSOR_IRI):
+            return dg.SkipReason("No unprocessed DOCX files to convert.")
         return [dg.RunRequest(run_key=None)]
 
     return job, docxtomarkdown_sensor
@@ -146,14 +171,11 @@ def _build_pptxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
         name="pptxtomarkdown_sensor",
         description="Sensor to trigger pptxtomarkdown job",
         job=job,
-        minimum_interval_seconds=60,  # Check for new files every 60 seconds
+        minimum_interval_seconds=60,
     )
     def pptxtomarkdown_sensor(context):
-        # Implement logic to check for new files in the specified location.
-        # If new files are found, return a RunRequest to trigger the job.
-        # For example:
-        # if new_files_found(location):
-        #     return [dg.RunRequest(run_key=None, run_config={})]
+        if not _has_unprocessed_files(PPTX_MIME_TYPE, PPTX_PROCESSOR_IRI):
+            return dg.SkipReason("No unprocessed PPTX files to convert.")
         return [dg.RunRequest(run_key=None)]
 
     return job, pptxtomarkdown_sensor
@@ -205,7 +227,31 @@ def _build_markdowntovector_job_sensor(
         minimum_interval_seconds=120,
     )
     def markdowntovector_sensor(context):
-        return [dg.RunRequest(run_key=None)]
+        from naas_abi_marketplace.domains.document.pipelines.MarkdownToVectorPipeline import (
+            MarkdownToVectorPipeline,
+            MarkdownToVectorPipelineConfiguration,
+        )
+
+        pipeline = MarkdownToVectorPipeline(
+            MarkdownToVectorPipelineConfiguration(
+                collection_name=config.collection_name,
+                file_path=config.file_path,
+                model_id=config.model_id,
+                dimension=config.dimension,
+                chunk_size=config.chunk_size,
+                chunk_overlap=config.chunk_overlap,
+                api_key=config.api_key,
+            )
+        )
+        markdown_files = pipeline._get_markdown_files(DEFAULT_GRAPH_NAME)
+        for file_info in markdown_files:
+            if not pipeline._chunk_already_vectorized(
+                file_info["iri"], DEFAULT_GRAPH_NAME
+            ):
+                return [dg.RunRequest(run_key=None)]
+        return dg.SkipReason(
+            f"No unvectorized markdown files for collection '{config.collection_name}'."
+        )
 
     return job, markdowntovector_sensor
 
