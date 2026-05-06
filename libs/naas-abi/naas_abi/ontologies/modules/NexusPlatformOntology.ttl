@@ -12,7 +12,7 @@
 
 <http://ontology.naas.ai/abi/nexus/NexusPlatformOntology> a owl:Ontology ;
   owl:imports
-    <http://purl.obolibrary.org/obo/bfo.owl> ,
+    <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ,
     <https://www.commoncoreontologies.org/AgentOntology> ,
     <https://www.commoncoreontologies.org/InformationEntityOntology> ,
     <https://www.commoncoreontologies.org/EventOntology> ;
