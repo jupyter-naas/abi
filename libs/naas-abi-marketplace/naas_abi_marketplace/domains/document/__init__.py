@@ -32,6 +32,7 @@ class MarkdownToVectorConfiguration(BaseModel):
     dimension: int = 1536
     chunk_size: int = 1000
     chunk_overlap: int = 200
+    api_key: str  # API Key to authenticate the model_id calls. Not optional
 
 
 class ABIModule(BaseModule):
@@ -54,9 +55,7 @@ class ABIModule(BaseModule):
         pdftomarkdown_enabled: bool = True
         docxtomarkdown_enabled: bool = True
         pptxtomarkdown_enabled: bool = True
-        markdowntovector_pipelines: list[MarkdownToVectorConfiguration] = [
-            MarkdownToVectorConfiguration()
-        ]
+        markdowntovector_pipelines: list[MarkdownToVectorConfiguration] = []
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

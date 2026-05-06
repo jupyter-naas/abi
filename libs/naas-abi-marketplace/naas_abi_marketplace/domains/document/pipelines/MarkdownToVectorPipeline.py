@@ -19,13 +19,12 @@ from langchain_openai import OpenAIEmbeddings
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.utils.Expose import APIRouter
-from pydantic import Field
-from rdflib import Graph, URIRef
-
 from naas_abi_marketplace.domains.document import ABIModule
 from naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology import (
     Chunk,
 )
+from pydantic import Field, SecretStr
+from rdflib import Graph, URIRef
 
 MARKDOWN_PROCESSOR_IRI = (
     "http://ontology.naas.ai/abi/document/MarkdownToVectorProcessor"
@@ -40,6 +39,7 @@ DEFAULT_CHUNK_OVERLAP = 200
 # ---------------------------------------------------------------------------
 # Simple Markdown text splitter (no external langchain_text_splitters needed)
 # ---------------------------------------------------------------------------
+
 
 def _split_markdown(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     """Split *text* into overlapping chunks of at most *chunk_size* characters.
@@ -113,6 +113,7 @@ class MarkdownToVectorPipelineConfiguration(PipelineConfiguration):
     dimension: int = field(default=DEFAULT_DIMENSION)
     chunk_size: int = field(default=DEFAULT_CHUNK_SIZE)
     chunk_overlap: int = field(default=DEFAULT_CHUNK_OVERLAP)
+    api_key: str
 
 
 class MarkdownToVectorPipelineParameters(PipelineParameters):
@@ -275,7 +276,7 @@ class MarkdownToVectorPipeline(Pipeline):
         )
 
         embeddings_model = OpenAIEmbeddings(
-            model=cfg.model_id, dimensions=cfg.dimension
+            model=cfg.model_id, dimensions=cfg.dimension, api_key=SecretStr(cfg.api_key)
         )
 
         markdown_files = self._get_markdown_files(graph_name)
@@ -309,9 +310,7 @@ class MarkdownToVectorPipeline(Pipeline):
                 logger.debug("No chunks produced for %s", file_path_val)
                 continue
 
-            logger.info(
-                "Embedding %d chunk(s) for %s …", len(chunks), file_path_val
-            )
+            logger.info("Embedding %d chunk(s) for %s …", len(chunks), file_path_val)
 
             vectors = self._embed(chunks, embeddings_model)
             if len(vectors) != len(chunks):

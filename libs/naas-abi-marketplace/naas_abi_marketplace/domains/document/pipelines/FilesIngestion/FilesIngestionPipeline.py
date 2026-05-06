@@ -190,13 +190,50 @@ class FilesIngestionPipeline(Pipeline):
                 if Path(entry_norm).name == "":
                     continue
 
+                if Path(entry_norm).name == ".keep":
+                    continue
+
                 files.append(entry_norm)
 
         return files
 
+    def _ensure_prefix_marker(self, prefix: str) -> None:
+        """Write a `.keep` marker under `prefix` when it has no objects yet, so
+        the directory is visible in the object store for users dropping files."""
+        normalized = self._normalize_object_prefix(prefix)
+        if not normalized:
+            return
+
+        try:
+            entries = self.module.engine.services.object_storage.list_objects(
+                prefix=normalized
+            )
+        except Exceptions.ObjectNotFound:
+            entries = []
+        except Exception as e:
+            logger.warning(f"Object storage list_objects failed for {normalized}: {e}")
+            return
+
+        if entries:
+            return
+
+        marker_key = f"{normalized}/.keep"
+        try:
+            self.module.engine.services.object_storage.put_object(
+                prefix="", key=marker_key, content=b""
+            )
+            logger.info(f"Created placeholder marker at {marker_key}")
+        except Exception as e:
+            logger.warning(f"Failed to create placeholder marker {marker_key}: {e}")
+
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, FilesIngestionPipelineParameters):
             raise ValueError("Parameters must be FilesIngestionPipelineParameters")
+
+        # Ensure input/output prefixes are visible in the object store so users
+        # know where to drop files even before any ingestion has happened.
+        self._ensure_prefix_marker(parameters.input_path)
+        self._ensure_prefix_marker(parameters.output_path)
 
         # Get files from input directory
         object_keys = self._get_files_from_path(

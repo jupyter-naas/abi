@@ -326,6 +326,7 @@ class File(RDFEntity):
         "file_name": "http://ontology.naas.ai/abi/document/name",
         "file_path": "http://ontology.naas.ai/abi/document/path",
         "file_size_bytes": "http://ontology.naas.ai/abi/document/file_size_bytes",
+        "hasChunk": "http://ontology.naas.ai/abi/document/hasChunk",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "mime_type": "http://ontology.naas.ai/abi/document/mime_type",
         "modified_time": "http://ontology.naas.ai/abi/document/modified_time",
@@ -333,7 +334,12 @@ class File(RDFEntity):
         "processedBy": "http://ontology.naas.ai/abi/document/processedBy",
         "sha256": "http://ontology.naas.ai/abi/document/sha256",
     }
-    _object_properties: ClassVar[set[str]] = {"derivedFrom", "embodies", "processedBy"}
+    _object_properties: ClassVar[set[str]] = {
+        "derivedFrom",
+        "embodies",
+        "hasChunk",
+        "processedBy",
+    }
 
     # Data properties
     file_path: Optional[
@@ -388,7 +394,9 @@ class File(RDFEntity):
             Field(description="The SHA-256 checksum (hex) of the document content."),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -409,6 +417,12 @@ class File(RDFEntity):
         Annotated[
             List[Union[Document, URIRef, str]],
             Field(description="A file embodies a document."),
+        ]
+    ] = ["http://ontology.naas.ai/abi/unknown"]
+    hasChunk: Optional[
+        Annotated[
+            List[Union[Chunk, URIRef, str]],
+            Field(description="A file has one or more chunks."),
         ]
     ] = ["http://ontology.naas.ai/abi/unknown"]
     processedBy: Optional[
@@ -442,7 +456,9 @@ class Document(RDFEntity):
             Field(description="The SHA-256 checksum (hex) of the document content."),
         ]
     ] = "unknown"
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -476,7 +492,9 @@ class Processor(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")]
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -489,19 +507,19 @@ class Processor(RDFEntity):
 
 class Chunk(RDFEntity):
     """
-    Chunk — a text segment derived from a Markdown file, used as a unit for embedding and vector retrieval.
+    Chunk
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Chunk"
     _name: ClassVar[str] = "Chunk"
     _property_uris: ClassVar[dict] = {
+        "chunk_file_path": "http://ontology.naas.ai/abi/document/file_path",
         "chunk_index": "http://ontology.naas.ai/abi/document/chunk_index",
         "collection_name": "http://ontology.naas.ai/abi/document/collection_name",
         "content": "http://ontology.naas.ai/abi/document/content",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "embedding_id": "http://ontology.naas.ai/abi/document/embedding_id",
-        "file_path": "http://ontology.naas.ai/abi/document/file_path",
         "isChunkOf": "http://ontology.naas.ai/abi/document/isChunkOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
@@ -509,21 +527,43 @@ class Chunk(RDFEntity):
 
     # Data properties
     content: Optional[
-        Annotated[str, Field(description="The text content of the chunk.")]
-    ] = None
+        Annotated[str, Field(description="The text content of a chunk.")]
+    ] = "unknown"
     chunk_index: Optional[
-        Annotated[int, Field(description="Zero-based position of the chunk within its source document.")]
-    ] = None
+        Annotated[
+            int,
+            Field(
+                description="The zero-based position of the chunk within its source document."
+            ),
+        ]
+    ]
     embedding_id: Optional[
-        Annotated[str, Field(description="The identifier of the vector embedding stored in the vector store.")]
-    ] = None
-    file_path: Optional[
-        Annotated[str, Field(description="The file path of the source document from which this chunk was derived.")]
-    ] = None
+        Annotated[
+            str,
+            Field(
+                description="The identifier of the vector embedding stored in the vector store."
+            ),
+        ]
+    ] = "unknown"
+    chunk_file_path: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The file path of the source document from which this chunk was derived."
+            ),
+        ]
+    ] = "unknown"
     collection_name: Optional[
-        Annotated[str, Field(description="The name of the vector store collection in which this chunk's embedding is stored.")]
-    ] = None
-    label: Annotated[str, Field(description="Label of the resource.")]
+        Annotated[
+            str,
+            Field(
+                description="The name of the vector store collection in which this chunk's embedding is stored."
+            ),
+        ]
+    ] = "unknown"
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
+        "unknown"
+    )
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -537,9 +577,9 @@ class Chunk(RDFEntity):
     isChunkOf: Optional[
         Annotated[
             List[Union[File, URIRef, str]],
-            Field(description="The source file this chunk was derived from."),
+            Field(description="A chunk is derived from a source file."),
         ]
-    ] = None
+    ] = ["http://ontology.naas.ai/abi/unknown"]
 
 
 # Rebuild models to resolve forward references
