@@ -44,29 +44,33 @@ const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
 // Lowercase label → color bucket (covers common BFO/CCO labels)
 const LABEL_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'entity': 'Entity',
-  'material entity': 'Material Entity',
-  'object': 'Material Entity',
-  'object aggregate': 'Material Entity',
-  'fiat object part': 'Material Entity',
   'process': 'Process',
   'process boundary': 'Process',
   'temporal region': 'Temporal Region',
   'temporal interval': 'Temporal Region',
   'zero-dimensional temporal region': 'Temporal Region',
   'one-dimensional temporal region': 'Temporal Region',
+  'material entity': 'Material Entity',
+  'object': 'Material Entity',
+  'object aggregate': 'Material Entity',
+  'fiat object part': 'Material Entity',
   'site': 'Site',
   'immaterial entity': 'Site',
   'spatial region': 'Site',
   'continuant fiat boundary': 'Site',
+  'generically dependent continuant': 'GDC',
   'quality': 'Quality',
   'specifically dependent continuant': 'Quality',
   'role': 'Realizable',
   'disposition': 'Realizable',
   'realizable entity': 'Realizable',
-  'generically dependent continuant': 'GDC',
 };
 
 function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, visited: Set<string> = new Set()) {
+  // bfo_parent_iri: authoritative BFO ancestor from backend SPARQL — check first
+  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[bfoParentIri]];
+
   // Direct BFO_COLORS key match (e.g. KG nodes already tagged with bucket name)
   if (node.type in BFO_COLORS) return BFO_COLORS[node.type as keyof typeof BFO_COLORS];
 
@@ -76,10 +80,6 @@ function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, vi
 
   // Full/short BFO URI in node.type (KG nodes where type IS the BFO URI)
   if (node.type in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[node.type]];
-
-  // bfo_parent_iri: transitive BFO ancestor resolved by the service (most reliable)
-  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
-  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET) return BFO_COLORS[BFO_URI_TO_BUCKET[bfoParentIri]];
 
   // parent_iri: direct parent — check BFO first, then walk the loaded graph recursively
   const parentIri = node.properties?.parent_iri as string | undefined;
@@ -127,12 +127,12 @@ function resolveNodeBucketKey(
   nodesById: Map<string, GraphNode>,
   visited = new Set<string>(),
 ): string {
+  const bfoIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoIri && bfoIri in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[bfoIri];
   if (node.type in BFO_COLORS) return node.type;
   const lower = node.type?.toLowerCase?.() ?? '';
   if (lower in LABEL_TO_BUCKET) return LABEL_TO_BUCKET[lower];
   if (node.type in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[node.type];
-  const bfoIri = node.properties?.bfo_parent_iri as string | undefined;
-  if (bfoIri && bfoIri in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[bfoIri];
   const parentIri = node.properties?.parent_iri as string | undefined;
   if (parentIri && parentIri in BFO_URI_TO_BUCKET) return BFO_URI_TO_BUCKET[parentIri];
   if (parentIri && !visited.has(node.id)) {
