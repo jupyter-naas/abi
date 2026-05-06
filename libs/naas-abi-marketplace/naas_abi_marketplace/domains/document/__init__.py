@@ -4,16 +4,14 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.bus.BusService import BusService
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-
-# from naas_abi_core.services.secret.Secret import Secret
+from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-
-# from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
-# from naas_abi_core.services.bus.BusService import BusService
-# from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from pydantic import BaseModel
 
 
@@ -25,16 +23,27 @@ class FileIngestionConfiguration(BaseModel):
     delete_from_input: bool = False
 
 
+class MarkdownToVectorConfiguration(BaseModel):
+    """Configuration for a single MarkdownToVector pipeline instance."""
+
+    collection_name: str = "documents"
+    file_path: str = ""
+    model_id: str = "text-embedding-3-small"
+    dimension: int = 1536
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+
+
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[
-            # Secret,
+            Secret,
             TripleStoreService,
             ObjectStorageService,
-            # VectorStoreService,
-            # BusService,
-            # KeyValueService,
+            VectorStoreService,
+            BusService,
+            KeyValueService,
         ],
     )
 
@@ -43,6 +52,9 @@ class ABIModule(BaseModule):
         pdftomarkdown_enabled: bool = True
         docxtomarkdown_enabled: bool = True
         pptxtomarkdown_enabled: bool = True
+        markdowntovector_pipelines: list[MarkdownToVectorConfiguration] = [
+            MarkdownToVectorConfiguration()
+        ]
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
