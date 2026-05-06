@@ -215,7 +215,7 @@ async def stream_chat_response(
         try:
             yield f'data: {{"conversation_id": "{conversation_id}"}}\n\n'
             if context_sources:
-                yield f'data: {json.dumps({"sources": context_sources})}\n\n'
+                yield f"data: {json.dumps({'sources': context_sources})}\n\n"
             if search_context:
                 yield 'data: {"search": true}\n\n'
 
