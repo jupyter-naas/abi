@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.35.1 (2026-05-06)
+
+### Bug Fixes
+
+- **naas_abi**: Remove unused logger imports and debug logs
+  ([`3a2c948`](https://github.com/jupyter-naas/abi/commit/3a2c948ae5158326f1a6ba0fd2469ebd9df1b4f2))
+
+
 ## v1.35.0 (2026-05-06)
 
 ### Bug Fixes
