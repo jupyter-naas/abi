@@ -2383,11 +2383,11 @@ const MessageBubble = React.memo(function MessageBubble({
           )}>
             <div className="flex items-center gap-2">
               <span>{senderName}</span>
-              {isFromDifferentAgent && (
+              {/* {isFromDifferentAgent && (
                 <span className="rounded-full border border-amber-300/50 bg-amber-100/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/30 dark:text-amber-300">
                   Not current agent
                 </span>
-              )}
+              )} */}
             </div>
           </div>
 
