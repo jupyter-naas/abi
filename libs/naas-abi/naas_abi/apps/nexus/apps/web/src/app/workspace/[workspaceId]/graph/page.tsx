@@ -526,8 +526,8 @@ export default function GraphPage() {
     edges: GraphEdge[];
   }>>([]);
 
-  // Relations filter — off by default
-  const [showRelations, setShowRelations] = useState(false);
+  // Relations filter — on by default
+  const [showRelations, setShowRelations] = useState(true);
 
   // Increment to trigger physics re-layout in VisNetwork
   const [stabilizeKey, setStabilizeKey] = useState(0);
@@ -878,7 +878,7 @@ export default function GraphPage() {
     setSelectedEdgeId(null);
     setParentsLevels(0);
     setHierarchyByLevel([]);
-    setShowRelations(false);
+    setShowRelations(true);
   }, [selectedGraphId, activeSavedViewId]);
 
   // Load on mount and when workspace or visible graphs change
@@ -2153,6 +2153,20 @@ export default function GraphPage() {
                       </button>
                     )}
                   </div>
+                  {/* Relations toggle */}
+                  <button
+                    onClick={() => { setShowRelations((v) => !v); setStabilizeKey((k) => k + 1); }}
+                    title="Toggle relation edges (URIRef objects, excl. rdf:type)"
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
+                      showRelations
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <ArrowRight size={12} />
+                    Relations
+                  </button>
                   {/* Parents filter — like SubclassOf in ontology page */}
                   <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
                     <button
@@ -2185,20 +2199,6 @@ export default function GraphPage() {
                       >+</button>
                     )}
                   </div>
-                  {/* Relations toggle */}
-                  <button
-                    onClick={() => { setShowRelations((v) => !v); setStabilizeKey((k) => k + 1); }}
-                    title="Toggle relation edges (URIRef objects, excl. rdf:type)"
-                    className={cn(
-                      'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
-                      showRelations
-                        ? 'border-foreground bg-foreground text-background'
-                        : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    <ArrowRight size={12} />
-                    Relations
-                  </button>
                   {searchQuery && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
                       Showing {filteredNodes.length} of {allVisibleNodes.length} nodes
