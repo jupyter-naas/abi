@@ -48,7 +48,9 @@ class ABIModule(BaseModule):
     )
 
     class Configuration(ModuleConfiguration):
-        file_ingestion_pipelines: list[FileIngestionConfiguration] = []
+        file_ingestion_pipelines: list[FileIngestionConfiguration] = [
+            FileIngestionConfiguration()
+        ]
         pdftomarkdown_enabled: bool = True
         docxtomarkdown_enabled: bool = True
         pptxtomarkdown_enabled: bool = True
