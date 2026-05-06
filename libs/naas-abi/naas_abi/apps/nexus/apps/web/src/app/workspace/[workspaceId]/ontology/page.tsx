@@ -1549,12 +1549,12 @@ const LABEL_TO_BUCKET_LOCAL: Record<string, string> = {
 };
 
 function resolveNodeBucket(node: OntologyOverviewGraphNode, nodesById?: Map<string, OntologyOverviewGraphNode>, visited: Set<string> = new Set()): string | null {
+  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[bfoParentIri];
   if (BFO_BUCKET_KEYS.has(node.type)) return node.type;
   const lowerType = node.type?.toLowerCase?.() ?? '';
   if (lowerType in LABEL_TO_BUCKET_LOCAL) return LABEL_TO_BUCKET_LOCAL[lowerType];
   if (node.type in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[node.type];
-  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
-  if (bfoParentIri && bfoParentIri in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[bfoParentIri];
   const parentIri = node.properties?.parent_iri as string | undefined;
   if (parentIri && parentIri in BFO_URI_TO_BUCKET_LOCAL) return BFO_URI_TO_BUCKET_LOCAL[parentIri];
 
@@ -2203,16 +2203,20 @@ function OntologyNetworkView({
                       )}
                     </p>
                   </div>
+                  {isAllOntologiesOverview && (
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      {isAllOntologiesOverview ? 'Source Path' : 'Node Type'}
-                    </p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Source Path</p>
                     <p className="break-all font-mono text-xs">
-                      {String(
-                        isAllOntologiesOverview ? selectedGraphNode.properties?.source_path || 'N/A' : selectedGraphNode.type || 'Entity'
-                      )}
+                      {String(selectedGraphNode.properties?.source_path || 'N/A')}
                     </p>
                   </div>
+                  )}
+                  {!isAllOntologiesOverview && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">BFO Bucket</p>
+                      <p>{resolveNodeBucket(selectedGraphNode, nodesByIri) ?? 'Unknown'}</p>
+                    </div>
+                  )}
                   <button
                     type="button"
                     disabled={
