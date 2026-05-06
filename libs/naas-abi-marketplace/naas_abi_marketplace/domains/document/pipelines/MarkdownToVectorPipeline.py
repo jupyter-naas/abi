@@ -107,13 +107,13 @@ def _split_markdown(text: str, chunk_size: int, chunk_overlap: int) -> list[str]
 class MarkdownToVectorPipelineConfiguration(PipelineConfiguration):
     """Static configuration for the MarkdownToVector pipeline."""
 
+    api_key: str
     collection_name: str = field(default=DEFAULT_COLLECTION)
     file_path: str = field(default="")
     model_id: str = field(default=DEFAULT_MODEL_ID)
     dimension: int = field(default=DEFAULT_DIMENSION)
     chunk_size: int = field(default=DEFAULT_CHUNK_SIZE)
     chunk_overlap: int = field(default=DEFAULT_CHUNK_OVERLAP)
-    api_key: str
 
 
 class MarkdownToVectorPipelineParameters(PipelineParameters):
