@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v1.35.0 (2026-05-06)
+
+### Bug Fixes
+
+- **ontologies**: Update BFO ontology import to a more specific core version
+  ([`54521f1`](https://github.com/jupyter-naas/abi/commit/54521f15efdfeff7d7f3cf4fcb75a251eb072582))
+
+### Features
+
+- **nexus-organization**: Rename Organization to NexusOrganization and update ontology
+  ([`e371bb5`](https://github.com/jupyter-naas/abi/commit/e371bb559c748ca79ab1217a8ddf3e9ed53304ef))
+
+- **ontology**: Filter import edges in graph edges
+  ([`23336ef`](https://github.com/jupyter-naas/abi/commit/23336efb9728121eebf48de6427bcc9a6b96ac24))
+
+- **workspace-graph**: Add per-node visibility toggle with hidden node filter
+  ([`a30632f`](https://github.com/jupyter-naas/abi/commit/a30632fd5194e59a438e9c0a84cdd7fa2c2a2882))
+
+- **workspace-graph**: Enable relations filter toggle and default on
+  ([`230a5fa`](https://github.com/jupyter-naas/abi/commit/230a5fa1c7bd7de30cf539d5315164578aa9d79d))
+
+
 ## v1.34.1 (2026-05-05)
 
 ### Bug Fixes
