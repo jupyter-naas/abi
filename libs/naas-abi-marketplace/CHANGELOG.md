@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.2 (2026-05-06)
+
+### Bug Fixes
+
+- **document**: Skip sensor runs when no work is pending
+  ([`8863912`](https://github.com/jupyter-naas/abi/commit/8863912cc5f6074d7d3aa3a801e2f4dfc8c0be13))
+
+
 ## v1.16.1 (2026-05-06)
 
 ### Bug Fixes
