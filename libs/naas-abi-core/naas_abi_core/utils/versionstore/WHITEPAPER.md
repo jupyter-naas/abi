@@ -210,16 +210,118 @@ projection layer. The store itself answers it.
 ```
 BEGIN IMMEDIATE
     DELETE FROM revisions
-    for each uid_dir in data/:
+    DELETE FROM merges
+    for each uid_dir in data/ (skipping data/__branches__/):
         for each file in uid_dir:
-            if file ends with .tmp: delete (orphan)
+            if file ends with .tmp:    delete (orphan)
+            elif file ends with .merge: stash as candidate sidecar
             else: parse filename → INSERT revision
+        for each accepted revision with a paired sidecar:
+            INSERT into merges(branch, uid, ts_ns, other_parent)
+        delete any unpaired sidecars (orphans)
+    DELETE FROM branches WHERE name != 'main'
+    for each branch sidecar in data/__branches__/:
+        INSERT OR REPLACE into branches (parent, fork_ts_ns, created_at)
+    for each branch discovered in filenames but not in sidecars:
+        INSERT with parent='main', fork_ts_ns=0   (legacy fallback)
 COMMIT
 ```
 
-The index is defined entirely by what is on disk. If a file was deleted, its
-row disappears. If a row was orphaned (e.g. by external index corruption), it
-is recreated from the filename.
+The index is defined entirely by what is on disk. Three artifact classes
+participate:
+
+1. **Revision files** (`{ts}.{prev}.{content}[.{branch}]`) — primary state.
+2. **Merge sidecars** (`{revision_filename}.merge`, 64-char hex content) —
+   second-parent pointer for multi-parent revisions.
+3. **Branch sidecars** (`data/__branches__/{name}.json`) — branch DAG identity.
+
+If a file was deleted, its row disappears. If a row was orphaned (e.g. by
+external index corruption), it is recreated from the filename. If a branch
+sidecar is missing for a branch discovered in revision filenames, the
+branch is reseeded with `parent='main', fork_ts_ns=0` — preserving
+backward compatibility with stores written before the sidecar grammar
+shipped.
+
+### 3.5 The branching DAG
+
+A branch is a named, mutable pointer scoped to a `Store`. Branches form a
+DAG rooted at `main`: each non-root branch records its `parent`, the
+nanosecond timestamp at which it was forked (`fork_ts_ns`), and its
+creation time (`created_at`). The DAG is encoded twice — authoritatively
+on disk under `data/__branches__/{name}.json`, and as a cache in the
+`branches` SQLite table — so total index loss is recoverable.
+
+Three operations exercise the DAG:
+
+#### 3.5.1 Fall-through reads
+
+A read on branch `B` for uid `U`:
+
+```
+function resolve(uid, branch, ts_limit):
+    own = latest revision of (branch, uid) with ts_ns <= ts_limit
+    if own exists: return own
+    if branch has no parent: return None
+    return resolve(uid, parent(branch), min(ts_limit, fork_ts_ns(branch)))
+```
+
+The recursive cap on `ts_limit` is the key invariant: a child branch sees
+its parent's state *as of the fork moment*, never any later writes the
+parent made after the branch existed. This makes branches durable
+snapshots without copying any bytes.
+
+The write path stays per-branch: own chains start at `GENESIS` and never
+chain off an inherited tip. This keeps `verify` per-branch and lets
+branches be deleted without affecting any other branch's chain validity.
+
+#### 3.5.2 Merge — multi-parent revisions
+
+`Store.merge(source, target, *, resolver, strategy)` reconciles two
+branches per uid, using the target's view at `source.fork_ts_ns` as the
+base:
+
+| `source_tip` | `target_tip` | `base` | Outcome |
+|--------------|--------------|--------|---------|
+| `=` target   | `=` source   | any    | `no_op` |
+| changed      | unchanged    | base   | `fast_forwarded` (apply source bytes on target) |
+| unchanged    | changed      | base   | `no_op` (target's work wins) |
+| changed      | changed      | base   | `three_way_merged` (resolver) or `conflicts` |
+| present      | absent       | absent | `fast_forwarded` (uid added on source) |
+
+Each `fast_forwarded` / `three_way_merged` uid produces one new revision
+on `target` *plus* a `.merge` sidecar containing `source_tip.content_hash`
+(the second parent). The new revision's `prev_hash` is the prior
+own-target tip (its first parent), so the per-branch chain stays linear
+and `verify` requires no special case for merges.
+
+The `merges` SQLite table is a (branch, uid, ts_ns) → other_parent index,
+rebuildable from the on-disk sidecars.
+
+`MergeStrategy.FAST_FORWARD` raises `MergeConflict` on the first uid that
+needs three-way reconciliation (all-or-nothing semantics). `THREE_WAY`
+collects conflicts (resolver returned `None`) and raises `MergeConflict`
+at the end with the partial `MergeResult` attached, so callers can
+inspect what was applied before the conflict surfaced. Merges are
+non-atomic across uids by design — each uid's write is independently
+durable, and re-running `merge` after a partial run picks up where it
+left off (already-applied uids fall into `no_op`).
+
+V1 limitation: `merge` requires `source.parent == target`. Transitive
+merges (a grandchild back to a grandparent) need a real common-ancestor
+walk, deferred to a follow-up issue.
+
+#### 3.5.3 `delete_branch` and reachability
+
+`delete_branch(name)` removes the branch's own revision files, their
+`.merge` sidecars, the metadata sidecar, and the corresponding
+`revisions` / `merges` / `branches` rows. It refuses `main` and refuses
+when any branch's `parent` points at the target — the caller must
+delete or re-parent children first.
+
+This works because fall-through walks *up* the DAG (child → parent),
+never down, so removing a leaf branch can never invalidate an ancestor's
+reads. After `delete_branch` + `rebuild_index`, no orphaned references
+remain — that is the reachability-GC contract.
 
 ## 4. Integrity Model
 
@@ -236,6 +338,23 @@ The filesystem alone is sufficient to:
 
 `Store.verify(uid)` performs the full chain walk in one pass. It does not
 consult the SQLite index; it reads from disk only.
+
+### 4.1 Multi-parent revisions
+
+A merge revision is a normal revision file (its `content_hash` is the
+SHA-256 of its bytes; its `prev_hash` is the prior own-branch tip's
+`content_hash`) accompanied by a `.merge` sidecar containing the second
+parent's `content_hash`. The single-line per-branch chain is therefore
+unchanged — `verify(uid, branch=B)` walks `B`'s revisions chronologically
+and validates `prev_hash` equals the prior revision's `content_hash`,
+exactly as for non-merge revisions.
+
+The second parent is informational, not load-bearing for integrity: it
+records which cross-branch state was incorporated, useful for tooling
+(merge graphs, blame) and for reconstructing the DAG. A missing or
+malformed sidecar does not invalidate the revision; it only loses the
+cross-branch ancestry hint, which `rebuild_index` cleans up by deleting
+the sidecar.
 
 The threat model this covers is **local integrity**. It does not cover
 adversaries who can rewrite the entire `data/` directory, including the

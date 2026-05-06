@@ -18,10 +18,29 @@ This is the ABI-vendored copy of versionstore. It adds, on top of upstream:
   ``commit_window_ms > 0`` to the constructor; defaults to off. See
   ``WHITEPAPER.md §11`` for the durability model.
 
-* **Minimal branching scaffold.** A ``branches`` table tracks branch metadata;
-  every revision records its ``branch``; ``put / latest / history / get / verify``
-  accept an optional ``branch=`` argument (default ``"main"``). ``"main"`` is
-  seeded automatically and behaves byte-for-byte like the upstream store.
+* **Branching DAG.** A ``branches`` table tracks branch identities (parent,
+  fork timestamp), mirrored on disk as JSON sidecars under
+  ``data/__branches__/`` so ``rebuild_index`` reconstructs the full DAG
+  from the filesystem alone. Every revision records its ``branch``;
+  ``put / latest / history / get / verify`` accept an optional
+  ``branch=`` argument (default ``"main"``). ``"main"`` is seeded
+  automatically and behaves byte-for-byte like the upstream store.
+
+* **Fall-through reads.** ``latest`` / ``get`` / ``uids`` / ``uids_at`` on a
+  child branch transparently inherit revisions from the parent branch as
+  they existed at the fork timestamp, recursively up the DAG. The write
+  path stays per-branch (own chains start at ``GENESIS``).
+
+* **``merge`` and ``diff``.** ``Store.diff(a, b)`` returns a per-uid
+  snapshot diff that automatically cancels inherited state. ``Store.merge``
+  drives a per-uid three-way merge with a caller-supplied resolver and
+  produces multi-parent revisions: a normal revision file plus a
+  ``.merge`` sidecar holding the second parent's content_hash, indexed
+  in a ``merges`` table.
+
+* **``delete_branch``.** Removes the branch's own files, ``.merge``
+  sidecars, metadata sidecar, and table rows. Refuses ``main`` and
+  refuses if any branch points at the target as parent.
 
 * **Optimistic concurrency.** ``put`` accepts an optional
   ``expected_prev_hash``; if the actual tip has moved, ``ConcurrencyConflict``
@@ -29,15 +48,15 @@ This is the ABI-vendored copy of versionstore. It adds, on top of upstream:
 
 What is **not** here yet (deferred to follow-up):
 
-* ``delete_branch / merge / diff`` operations, branch metadata on the
-  filesystem (``data/__branches__/``), multi-parent merge revisions and their
-  sidecars, fall-through reads to a parent branch.
 * The ``IVersionedStorePort`` (lives in naas-abi-core, not in this library).
+* Transitive merges (a grandchild merging back into a grandparent in
+  one call). ``merge`` v1 requires ``source.parent == target``.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import sqlite3
 import sys
@@ -45,10 +64,19 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
-from .revision import DEFAULT_BRANCH, HASH_LEN, Revision
+from .revision import (
+    BRANCHES_DIRNAME,
+    DEFAULT_BRANCH,
+    HASH_LEN,
+    MERGE_SIDECAR_SUFFIX,
+    Revision,
+    is_merge_sidecar,
+    revision_filename_for_sidecar,
+)
 
 
 GENESIS = "0" * HASH_LEN
@@ -140,6 +168,99 @@ class BranchNotFoundError(Exception):
     """Raised when an operation targets a branch that does not exist."""
 
 
+class MergeConflict(Exception):
+    """Raised when ``merge`` cannot proceed: ``fast-forward`` strategy was
+    requested but a uid required three-way reconciliation, or the resolver
+    returned ``None`` for at least one uid under ``three-way``.
+
+    The ``conflicts`` mapping is uid → human-readable reason. ``result``
+    is the partial ``MergeResult`` describing what was applied before the
+    conflict surfaced (merge is non-atomic per uid by design — fall-through
+    reads on the target branch see partial progress, which is fine because
+    each uid's revision chain stays valid)."""
+
+    def __init__(self, conflicts: dict[str, str], result: "MergeResult"):
+        self.conflicts = conflicts
+        self.result = result
+        super().__init__(
+            f"Merge produced {len(conflicts)} conflict(s): "
+            + ", ".join(sorted(conflicts.keys())[:5])
+            + ("…" if len(conflicts) > 5 else "")
+        )
+
+
+class MergeStrategy(str, Enum):
+    """How ``Store.merge`` reconciles divergent uids.
+
+    * ``FAST_FORWARD`` — only succeeds when every diverging uid has not
+      changed on ``target`` since the fork point. Any uid that needs
+      three-way reconciliation raises ``MergeConflict`` and the merge
+      stops at that uid.
+    * ``THREE_WAY`` — calls the caller-provided resolver for every uid
+      that diverges on both sides. The resolver returns ``bytes`` to
+      apply or ``None`` to flag the uid as conflicted.
+    """
+
+    FAST_FORWARD = "fast-forward"
+    THREE_WAY = "three-way"
+
+
+@dataclass(frozen=True)
+class BranchDiff:
+    """Per-uid divergence between two branches' visible state.
+
+    All three sets are over uids:
+
+    * ``added`` — present on ``a`` (after fall-through), absent on ``b``.
+    * ``removed`` — present on ``b`` (after fall-through), absent on ``a``.
+    * ``changed`` — present on both with different visible content_hash.
+
+    Inherited state shared via fall-through automatically drops out (both
+    sides see the same hash). The result is a snapshot diff, not a
+    revision-by-revision diff.
+    """
+
+    added: frozenset[str]
+    removed: frozenset[str]
+    changed: frozenset[str]
+
+    def is_empty(self) -> bool:
+        return not (self.added or self.removed or self.changed)
+
+
+@dataclass
+class MergeResult:
+    """Outcome of a ``Store.merge`` call.
+
+    All four sets are over uids:
+
+    * ``no_op`` — source and target tips were already identical.
+    * ``fast_forwarded`` — target hadn't moved since fork; source's tip
+      was applied on target as a new revision (with a ``.merge`` sidecar
+      pointing at the source tip).
+    * ``three_way_merged`` — the resolver returned bytes that were
+      applied on target as a new revision (with a ``.merge`` sidecar).
+    * ``conflicts`` — uid → reason. Resolver returned ``None`` (under
+      ``three-way``) or a uid required three-way reconciliation under
+      ``fast-forward``. The corresponding uids were not modified on target.
+    """
+
+    no_op: set[str] = field(default_factory=set)
+    fast_forwarded: set[str] = field(default_factory=set)
+    three_way_merged: set[str] = field(default_factory=set)
+    conflicts: dict[str, str] = field(default_factory=dict)
+
+
+ConflictResolver = Callable[[str, bytes | None, bytes, bytes], "bytes | None"]
+"""Signature: ``resolver(uid, base, source, target) -> bytes | None``.
+
+* ``base`` may be ``None`` if the uid did not exist at the fork point
+  (i.e. it was added on both sides after fork).
+* Returning ``bytes`` produces a new revision on target.
+* Returning ``None`` flags the uid as conflicted; target is unchanged.
+"""
+
+
 class Store:
     """Append-only versioned blob store with branches.
 
@@ -152,15 +273,24 @@ class Store:
                     {ts_ns:020d}.{prev_hash}.{content_hash}            ← main
                     {ts_ns:020d}.{prev_hash}.{content_hash}.{branch}   ← other
 
-    The filesystem is the source of truth for revisions. The SQLite index can
-    be nuked and rebuilt from the filesystem at any time via ``rebuild_index``.
+    Merge revisions add a paired sidecar at ``{filename}.merge`` whose
+    content is the second parent's content_hash (64-char hex). The first
+    parent is encoded in ``prev_hash`` exactly like a non-merge revision,
+    so the per-branch chain stays linear and ``verify`` is unchanged.
 
-    Branch metadata (parent, fork timestamp) currently lives in SQLite only;
-    a follow-up will mirror it onto the filesystem under ``data/__branches__/``
-    so ``rebuild_index`` can fully reconstruct branch identities. Until then,
-    ``rebuild_index`` reconstructs the *set* of branches (from filenames) but
-    parent / fork-timestamp metadata is recreated as ``("main", 0)`` for
-    discovered branches that aren't already in the index.
+    Branch metadata lives in two places:
+
+    * Authoritative on disk under ``data/__branches__/{name}.json``
+      (parent, fork_ts_ns, created_at). Written tmp+rename + fsync on
+      every ``create_branch`` so a crash leaves either the previous or
+      the new content, never partial JSON.
+    * Cached in the ``branches`` SQLite table for query speed.
+
+    The filesystem is the source of truth: ``rebuild_index`` nukes the
+    SQLite index (revisions, merges, branches) and rebuilds the full
+    branch DAG from sidecars + revision filenames. Stores written before
+    sidecars existed still rebuild correctly — branches discovered only
+    from filenames default to ``parent='main', fork_ts_ns=0``.
     """
 
     def __init__(
@@ -361,16 +491,100 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_revisions_ts ON revisions(ts_ns);
                 CREATE INDEX IF NOT EXISTS idx_revisions_branch_uid
                     ON revisions(branch, uid, ts_ns);
+
+                CREATE TABLE IF NOT EXISTS merges (
+                    branch        TEXT    NOT NULL,
+                    uid           TEXT    NOT NULL,
+                    ts_ns         INTEGER NOT NULL,
+                    other_parent  TEXT    NOT NULL,
+                    PRIMARY KEY (branch, uid, ts_ns)
+                );
                 """
             )
 
     def _seed_main_branch(self) -> None:
+        now_ns = time.time_ns()
         with self._db_lock:
             self._conn.execute(
                 "INSERT OR IGNORE INTO branches(name, parent, fork_ts_ns, created_at) "
                 "VALUES (?, NULL, 0, ?)",
-                (DEFAULT_BRANCH, time.time_ns()),
+                (DEFAULT_BRANCH, now_ns),
             )
+        # Pull the actual created_at back so the on-disk sidecar matches
+        # the row that won the INSERT OR IGNORE race.
+        with self._db_lock:
+            row = self._conn.execute(
+                "SELECT created_at FROM branches WHERE name = ?",
+                (DEFAULT_BRANCH,),
+            ).fetchone()
+        created_at = row[0] if row is not None else now_ns
+        self._write_branch_sidecar(
+            DEFAULT_BRANCH, parent=None, fork_ts_ns=0, created_at=created_at
+        )
+
+    # --------------------------------------------------------- branch sidecars
+
+    def _branches_dir(self) -> Path:
+        return self.data_dir / BRANCHES_DIRNAME
+
+    def _branch_sidecar_path(self, name: str) -> Path:
+        return self._branches_dir() / f"{name}.json"
+
+    def _write_branch_sidecar(
+        self,
+        name: str,
+        *,
+        parent: str | None,
+        fork_ts_ns: int,
+        created_at: int,
+    ) -> None:
+        """Atomically write the on-disk metadata sidecar for a branch.
+
+        ``rebuild_index`` reads these to reconstruct the branch DAG without
+        consulting SQLite. The write is tmp+rename so a crash mid-write
+        leaves either the previous content or nothing — never a partial
+        JSON document."""
+        branches_dir = self._branches_dir()
+        branches_dir.mkdir(exist_ok=True)
+        path = self._branch_sidecar_path(name)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        payload = {
+            "parent": parent,
+            "fork_ts_ns": fork_ts_ns,
+            "created_at": created_at,
+        }
+        try:
+            with open(tmp, "w") as f:
+                f.write(json.dumps(payload, sort_keys=True))
+                f.flush()
+                self._sync_fd(f.fileno())
+            os.rename(tmp, path)
+            self._sync_dir(branches_dir)
+        except Exception:
+            _best_effort_unlink(tmp)
+            raise
+
+    def _read_branch_sidecar(
+        self, name: str
+    ) -> tuple[str | None, int, int] | None:
+        """Read ``(parent, fork_ts_ns, created_at)`` for ``name``, or ``None``
+        if the sidecar is missing or unparseable."""
+        path = self._branch_sidecar_path(name)
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text())
+            parent = data.get("parent")
+            fork_ts_ns = int(data["fork_ts_ns"])
+            created_at = int(data["created_at"])
+            if parent is not None and not isinstance(parent, str):
+                return None
+            return (parent, fork_ts_ns, created_at)
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+
+    def _delete_branch_sidecar(self, name: str) -> None:
+        _best_effort_unlink(self._branch_sidecar_path(name))
 
     def close(self) -> None:
         with self._db_lock:
@@ -387,12 +601,12 @@ class Store:
     def create_branch(
         self, name: str, *, parent: str = DEFAULT_BRANCH
     ) -> None:
-        """Register a branch. No data is copied; tips fall through at read time
-        (fall-through reads are deferred to the follow-up; for now reads only
-        return revisions explicitly written on the requested branch).
+        """Register a branch. No data is copied; reads on the new branch fall
+        through to ``parent`` at the fork timestamp (so every uid that
+        existed on ``parent`` at fork time is visible on the child).
 
-        Parent must exist. Branch name must be valid (alphanumeric + ``-``/``_``,
-        non-empty, no path separators, no ``.``).
+        Parent must exist. Branch name must be valid (no ``.``, no path
+        separators, not ``main``-reserved-words, etc — see ``_validate_branch``).
         """
         _validate_branch(name)
         if not self._branch_exists(parent):
@@ -403,6 +617,17 @@ class Store:
                 "INSERT OR IGNORE INTO branches(name, parent, fork_ts_ns, created_at) "
                 "VALUES (?, ?, ?, ?)",
                 (name, parent, now_ns, now_ns),
+            )
+        # If a row already existed (re-create is a no-op), keep its
+        # fork_ts_ns so the on-disk sidecar reflects the persisted truth.
+        meta = self._branch_meta(name)
+        if meta is not None:
+            actual_parent, fork_ts_ns, created_at = meta
+            self._write_branch_sidecar(
+                name,
+                parent=actual_parent,
+                fork_ts_ns=fork_ts_ns,
+                created_at=created_at,
             )
 
     def list_branches(self) -> list[str]:
@@ -418,6 +643,41 @@ class Store:
                 "SELECT 1 FROM branches WHERE name = ?", (name,)
             ).fetchone()
         return row is not None
+
+    def _branch_meta(self, name: str) -> tuple[str | None, int, int] | None:
+        """Return ``(parent, fork_ts_ns, created_at)`` for ``name``, or
+        ``None`` if unknown."""
+        with self._db_lock:
+            row = self._conn.execute(
+                "SELECT parent, fork_ts_ns, created_at FROM branches "
+                "WHERE name = ?",
+                (name,),
+            ).fetchone()
+        if row is None:
+            return None
+        return (row[0], int(row[1]), int(row[2]))
+
+    def _ancestor_chain(self, name: str) -> list[str]:
+        """Return ``[name, parent, grandparent, …]`` walking up the branch DAG.
+
+        Stops at the first branch with ``parent IS NULL`` (typically ``main``)
+        or at an unknown parent. Cycles are guarded by a seen-set.
+        """
+        chain: list[str] = []
+        seen: set[str] = set()
+        cursor: str | None = name
+        while cursor is not None and cursor not in seen:
+            chain.append(cursor)
+            seen.add(cursor)
+            meta = self._branch_meta(cursor)
+            if meta is None:
+                break
+            cursor = meta[0]
+        return chain
+
+    # The fall-through "now" cap. Sentinel "no upper bound" used internally
+    # so the recursive resolver can keep narrowing the timestamp ceiling.
+    _TS_FOREVER = (1 << 63) - 1
 
     # ------------------------------------------------------------------ write
 
@@ -771,32 +1031,67 @@ class Store:
         *,
         branch: str = DEFAULT_BRANCH,
     ) -> Revision | None:
-        """Return the latest ``Revision`` for ``uid`` on ``branch`` at time
-        ``at``, or ``None``."""
+        """Return the latest visible ``Revision`` for ``uid`` on ``branch`` at
+        ``at``, or ``None``.
+
+        "Visible" means: own-branch revisions are checked first; if none
+        match, fall through to the parent branch capped at the fork
+        timestamp, recursively up the branch DAG. This mirrors how reads
+        on a fresh feature branch see whatever existed on its parent at
+        the moment the branch was created."""
         _validate_uid(uid)
         _validate_branch(branch)
-        if at is None:
-            with self._db_lock:
-                row = self._conn.execute(
-                    "SELECT ts_ns, prev_hash, content_hash FROM revisions "
-                    "WHERE branch = ? AND uid = ? ORDER BY ts_ns DESC LIMIT 1",
-                    (branch, uid),
-                ).fetchone()
-        else:
-            ts_limit = _dt_to_ns(at)
-            with self._db_lock:
-                row = self._conn.execute(
-                    "SELECT ts_ns, prev_hash, content_hash FROM revisions "
-                    "WHERE branch = ? AND uid = ? AND ts_ns <= ? "
-                    "ORDER BY ts_ns DESC LIMIT 1",
-                    (branch, uid, ts_limit),
-                ).fetchone()
+        ts_limit = self._TS_FOREVER if at is None else _dt_to_ns(at)
+        return self._resolve_latest_walking(uid, branch, ts_limit)
+
+    def _resolve_latest_walking(
+        self, uid: str, branch: str, ts_limit: int
+    ) -> Revision | None:
+        """Walk ``branch`` and its ancestors looking for the most recent
+        revision of ``uid`` at or before ``ts_limit``."""
+        seen: set[str] = set()
+        cursor: str | None = branch
+        cap = ts_limit
+        while cursor is not None and cursor not in seen:
+            seen.add(cursor)
+            rev = self._latest_own(uid, cursor, cap)
+            if rev is not None:
+                return rev
+            meta = self._branch_meta(cursor)
+            if meta is None:
+                return None
+            parent, fork_ts_ns, _ = meta
+            if parent is None:
+                return None
+            # Looking up the parent: only revisions that existed at
+            # fork-time are inherited.
+            cap = min(cap, fork_ts_ns)
+            cursor = parent
+        return None
+
+    def _latest_own(
+        self, uid: str, branch: str, ts_limit: int
+    ) -> Revision | None:
+        """Latest revision of ``uid`` written *on* ``branch`` (no fall-through),
+        capped at ``ts_limit`` (inclusive)."""
+        with self._db_lock:
+            row = self._conn.execute(
+                "SELECT ts_ns, prev_hash, content_hash FROM revisions "
+                "WHERE branch = ? AND uid = ? AND ts_ns <= ? "
+                "ORDER BY ts_ns DESC LIMIT 1",
+                (branch, uid, ts_limit),
+            ).fetchone()
         if row is None:
             return None
         return self._build_revision(uid, *row, branch=branch)
 
     def _latest_on_branch(self, uid: str, branch: str) -> Revision | None:
-        """Internal hot-path: latest tip on a branch, validation skipped."""
+        """Internal hot-path: latest *own-branch* tip, validation skipped.
+
+        Used by the write path: ``put`` chains a new revision off the
+        previous own write on the same branch, never off an inherited tip.
+        Inheritance is a read-time concern (see ``_resolve_latest_walking``).
+        """
         with self._db_lock:
             row = self._conn.execute(
                 "SELECT ts_ns, prev_hash, content_hash FROM revisions "
@@ -806,6 +1101,309 @@ class Store:
         if row is None:
             return None
         return self._build_revision(uid, *row, branch=branch)
+
+    # ----------------------------------------------------------- diff / merge
+
+    def diff(self, a: str, b: str) -> BranchDiff:
+        """Snapshot diff between two branches' visible state.
+
+        Compares ``_resolve_latest_walking`` for every uid visible on
+        either branch. Inherited state shared via fall-through automatically
+        cancels out (both sides resolve to the same content_hash). See
+        ``BranchDiff``."""
+        _validate_branch(a)
+        _validate_branch(b)
+        if not self._branch_exists(a):
+            raise BranchNotFoundError(f"Branch does not exist: {a!r}")
+        if not self._branch_exists(b):
+            raise BranchNotFoundError(f"Branch does not exist: {b!r}")
+        a_uids = self._visible_uids(a, self._TS_FOREVER)
+        b_uids = self._visible_uids(b, self._TS_FOREVER)
+        added: set[str] = set()
+        removed: set[str] = set()
+        changed: set[str] = set()
+        for uid in a_uids | b_uids:
+            ra = self._resolve_latest_walking(uid, a, self._TS_FOREVER)
+            rb = self._resolve_latest_walking(uid, b, self._TS_FOREVER)
+            if ra is None and rb is not None:
+                removed.add(uid)
+            elif rb is None and ra is not None:
+                added.add(uid)
+            elif (
+                ra is not None
+                and rb is not None
+                and ra.content_hash != rb.content_hash
+            ):
+                changed.add(uid)
+        return BranchDiff(
+            added=frozenset(added),
+            removed=frozenset(removed),
+            changed=frozenset(changed),
+        )
+
+    def merge(
+        self,
+        source: str,
+        target: str,
+        *,
+        resolver: ConflictResolver | None = None,
+        strategy: MergeStrategy = MergeStrategy.THREE_WAY,
+    ) -> MergeResult:
+        """Merge ``source`` into ``target``, writing multi-parent revisions.
+
+        Preconditions:
+
+        * Both branches exist.
+        * ``source != target``.
+        * ``source.parent == target``. (V1 limitation: only single-hop
+          merges. Transitive merges — merging a grandchild into a
+          grandparent — are a follow-up that requires a real common-ancestor
+          walk. Raises ``ValueError`` otherwise.)
+
+        Per-uid algorithm with ``base = target's view of uid at source.fork_ts_ns``:
+
+        * ``source_tip == target_tip`` → ``no_op``.
+        * Source added a uid that target lacks → ``fast_forwarded``.
+        * ``source_tip == base`` → target changed alone, ``no_op``.
+        * ``target_tip == base`` → source changed alone, ``fast_forwarded``.
+        * Both diverged from base → ``three_way_merged`` (resolver) or
+          ``conflicts`` (resolver returned ``None``, or ``FAST_FORWARD``
+          strategy).
+
+        Each ``fast_forwarded`` / ``three_way_merged`` uid produces one new
+        revision on ``target`` (chained off the last own-target tip via the
+        regular write path) plus a ``.merge`` sidecar pointing at
+        ``source_tip.content_hash``. The sidecar is also recorded in the
+        ``merges`` index table.
+
+        Merge is non-atomic across uids by design: each uid's write is
+        independently durable. A crash mid-merge leaves a valid prefix on
+        target (every applied uid is fully written before the next is
+        attempted). Resume by re-running ``merge`` — already-applied uids
+        will fall into the ``no_op`` bucket.
+        """
+        _validate_branch(source)
+        _validate_branch(target)
+        if source == target:
+            raise ValueError("source and target must differ")
+        for b in (source, target):
+            if not self._branch_exists(b):
+                raise BranchNotFoundError(f"Branch does not exist: {b!r}")
+        source_meta = self._branch_meta(source)
+        if source_meta is None or source_meta[0] != target:
+            raise ValueError(
+                f"merge v1 requires source.parent == target; "
+                f"{source!r}.parent = {source_meta[0] if source_meta else None!r}"
+            )
+        fork_ts_ns = source_meta[1]
+
+        # Union of uids visible on either side. Order is sorted so merge
+        # progress is deterministic across runs (helps reasoning about
+        # crash recovery).
+        all_uids = sorted(
+            self._visible_uids(source, self._TS_FOREVER)
+            | self._visible_uids(target, self._TS_FOREVER)
+        )
+        result = MergeResult()
+        for uid in all_uids:
+            source_tip = self._resolve_latest_walking(
+                uid, source, self._TS_FOREVER
+            )
+            target_tip = self._resolve_latest_walking(
+                uid, target, self._TS_FOREVER
+            )
+            base_tip = self._resolve_latest_walking(uid, target, fork_ts_ns)
+
+            if source_tip is None:
+                # Nothing to merge from source for this uid (it only
+                # exists on target post-fork, or doesn't exist at all).
+                continue
+
+            if (
+                target_tip is not None
+                and source_tip.content_hash == target_tip.content_hash
+            ):
+                result.no_op.add(uid)
+                continue
+
+            base_hash = base_tip.content_hash if base_tip is not None else None
+            target_hash = target_tip.content_hash if target_tip is not None else None
+
+            if target_hash == base_hash:
+                # Target hasn't moved since fork — fast-forward apply
+                # source's bytes on target.
+                source_payload = source_tip.read()
+                self._apply_merge(
+                    uid, target, source_payload, source_tip.content_hash
+                )
+                result.fast_forwarded.add(uid)
+                continue
+
+            if source_tip.content_hash == base_hash:
+                # Source hasn't moved since fork — target's own work wins.
+                result.no_op.add(uid)
+                continue
+
+            # Both sides moved. Three-way territory.
+            if strategy is MergeStrategy.FAST_FORWARD:
+                reason = (
+                    f"uid {uid!r} requires three-way merge but strategy "
+                    f"is fast-forward (base={base_hash!r}, "
+                    f"source={source_tip.content_hash!r}, "
+                    f"target={target_hash!r})"
+                )
+                result.conflicts[uid] = reason
+                # Stop on first ff failure — semantics of fast-forward are
+                # all-or-nothing per the strategy contract.
+                raise MergeConflict({uid: reason}, result)
+
+            if resolver is None:
+                reason = "three-way merge needed but no resolver provided"
+                result.conflicts[uid] = reason
+                continue
+
+            base_payload = base_tip.read() if base_tip is not None else None
+            assert target_tip is not None  # target_hash != base_hash → tip exists
+            target_payload = target_tip.read()
+            source_payload = source_tip.read()
+
+            resolved = resolver(uid, base_payload, source_payload, target_payload)
+            if resolved is None:
+                result.conflicts[uid] = "resolver returned None"
+                continue
+            if resolved == target_payload:
+                # Resolver said "keep target as-is" — no new revision.
+                result.no_op.add(uid)
+                continue
+
+            self._apply_merge(uid, target, resolved, source_tip.content_hash)
+            result.three_way_merged.add(uid)
+
+        if result.conflicts:
+            raise MergeConflict(dict(result.conflicts), result)
+        return result
+
+    def _apply_merge(
+        self,
+        uid: str,
+        target: str,
+        payload: bytes,
+        other_parent: str,
+    ) -> None:
+        """Write a new revision on ``target`` plus its ``.merge`` sidecar.
+
+        The revision is written through the regular ``put`` path so it
+        participates in the same concurrency, durability, and idempotency
+        rules. The sidecar is then written and the ``merges`` index row
+        inserted; both are durable before this returns.
+
+        If ``put`` returns ``None`` (the resolved payload exactly matches
+        target's own latest tip), no sidecar is written — there is no
+        new revision to attach it to."""
+        rev = self.put(uid, payload, branch=target)
+        if rev is None:
+            return
+        self._write_merge_sidecar(rev, other_parent)
+
+    def _write_merge_sidecar(self, rev: Revision, other_parent: str) -> None:
+        if len(other_parent) != HASH_LEN:
+            raise ValueError(
+                f"other_parent must be a {HASH_LEN}-char hex hash, got "
+                f"{len(other_parent)} chars"
+            )
+        sidecar = rev.merge_sidecar_path
+        tmp = sidecar.parent / (sidecar.name + ".tmp")
+        try:
+            with open(tmp, "w") as f:
+                f.write(other_parent)
+                f.flush()
+                self._sync_fd(f.fileno())
+            os.rename(tmp, sidecar)
+            self._sync_dir(rev.path.parent)
+        except Exception:
+            _best_effort_unlink(tmp)
+            raise
+        with self._db_lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO merges"
+                "(branch, uid, ts_ns, other_parent) VALUES (?, ?, ?, ?)",
+                (rev.branch, rev.uid, rev.ts_ns, other_parent),
+            )
+
+    # --------------------------------------------------------- delete branch
+
+    def delete_branch(self, name: str) -> None:
+        """Remove ``name`` and every artifact it owns.
+
+        Refuses to delete ``main``. Refuses if any branch's ``parent``
+        points at ``name`` — delete the children first, or rebase them.
+
+        Removes:
+
+        * Every revision file written on this branch (``data/{uid}/…{branch}``).
+        * Every ``.merge`` sidecar on those revisions.
+        * The branch's metadata sidecar (``data/__branches__/{name}.json``).
+        * The corresponding rows in ``revisions``, ``merges``, ``branches``.
+
+        Other branches' inherited views are unaffected: fall-through walks
+        from child to parent, never the other way, so deleting a leaf
+        branch can never strand an ancestor's reads. After ``delete_branch``,
+        ``rebuild_index`` produces no orphaned references — that is the
+        reachability-GC contract (issue #876)."""
+        _validate_branch(name)
+        if name == DEFAULT_BRANCH:
+            raise ValueError("Cannot delete the main branch")
+        if not self._branch_exists(name):
+            raise BranchNotFoundError(f"Branch does not exist: {name!r}")
+        with self._db_lock:
+            children = self._conn.execute(
+                "SELECT name FROM branches WHERE parent = ?", (name,)
+            ).fetchall()
+        if children:
+            child_names = ", ".join(repr(c[0]) for c in children)
+            raise ValueError(
+                f"Branch {name!r} has child branches: {child_names}. "
+                "Delete or re-parent them first."
+            )
+
+        # Collect every (uid, ts_ns, prev_hash, content_hash) on the branch
+        # so we can remove the underlying files. Done before the SQL
+        # delete so the rows are still available.
+        with self._db_lock:
+            rows = self._conn.execute(
+                "SELECT uid, ts_ns, prev_hash, content_hash FROM revisions "
+                "WHERE branch = ?",
+                (name,),
+            ).fetchall()
+        for uid, ts_ns, prev_hash, content_hash in rows:
+            rev = self._build_revision(
+                uid, ts_ns, prev_hash, content_hash, branch=name
+            )
+            _best_effort_unlink(rev.merge_sidecar_path)
+            _best_effort_unlink(rev.path)
+
+        with self._db_lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._conn.execute(
+                    "DELETE FROM merges WHERE branch = ?", (name,)
+                )
+                self._conn.execute(
+                    "DELETE FROM revisions WHERE branch = ?", (name,)
+                )
+                self._conn.execute(
+                    "DELETE FROM branches WHERE name = ?", (name,)
+                )
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+        self._delete_branch_sidecar(name)
+        # Drop the per-(branch, uid) locks for the dead branch so they
+        # don't accumulate forever on long-lived stores.
+        with self._uid_locks_guard:
+            for key in [k for k in self._uid_locks if k[0] == name]:
+                self._uid_locks.pop(key, None)
 
     def history(
         self, uid: str, *, branch: str = DEFAULT_BRANCH
@@ -824,13 +1422,10 @@ class Store:
             yield self._build_revision(uid, *row, branch=branch)
 
     def uids(self, *, branch: str = DEFAULT_BRANCH) -> Iterator[str]:
-        """Yield every uid that has at least one revision on ``branch``."""
+        """Yield every uid visible on ``branch`` (own writes plus inherited
+        uids from ancestors at their respective fork timestamps)."""
         _validate_branch(branch)
-        with self._db_lock:
-            rows = self._conn.execute(
-                "SELECT DISTINCT uid FROM revisions WHERE branch = ?", (branch,)
-            ).fetchall()
-        for (uid,) in rows:
+        for uid in sorted(self._visible_uids(branch, self._TS_FOREVER)):
             yield uid
 
     def uids_at(
@@ -839,42 +1434,41 @@ class Store:
         *,
         branch: str = DEFAULT_BRANCH,
     ) -> Iterator[tuple[str, Revision]]:
-        """Yield ``(uid, latest_revision)`` for every uid on ``branch`` that
-        has a revision at or before ``at``."""
+        """Yield ``(uid, latest_revision)`` for every uid visible on
+        ``branch`` at or before ``at`` (own writes plus inherited)."""
         _validate_branch(branch)
-        if at is None:
+        ts_limit = self._TS_FOREVER if at is None else _dt_to_ns(at)
+        for uid in sorted(self._visible_uids(branch, ts_limit)):
+            rev = self._resolve_latest_walking(uid, branch, ts_limit)
+            if rev is not None:
+                yield uid, rev
+
+    def _visible_uids(self, branch: str, ts_limit: int) -> set[str]:
+        """Set of uids reachable on ``branch`` at or before ``ts_limit``,
+        walking the parent chain at each fork timestamp."""
+        visible: set[str] = set()
+        seen: set[str] = set()
+        cursor: str | None = branch
+        cap = ts_limit
+        while cursor is not None and cursor not in seen:
+            seen.add(cursor)
             with self._db_lock:
                 rows = self._conn.execute(
-                    """
-                    SELECT uid, ts_ns, prev_hash, content_hash
-                    FROM revisions
-                    WHERE branch = ?
-                      AND (uid, ts_ns) IN (
-                        SELECT uid, MAX(ts_ns) FROM revisions
-                        WHERE branch = ? GROUP BY uid
-                      )
-                    """,
-                    (branch, branch),
+                    "SELECT DISTINCT uid FROM revisions "
+                    "WHERE branch = ? AND ts_ns <= ?",
+                    (cursor, cap),
                 ).fetchall()
-        else:
-            ts_limit = _dt_to_ns(at)
-            with self._db_lock:
-                rows = self._conn.execute(
-                    """
-                    SELECT uid, ts_ns, prev_hash, content_hash
-                    FROM revisions
-                    WHERE branch = ?
-                      AND (uid, ts_ns) IN (
-                        SELECT uid, MAX(ts_ns) FROM revisions
-                        WHERE branch = ? AND ts_ns <= ? GROUP BY uid
-                      )
-                    """,
-                    (branch, branch, ts_limit),
-                ).fetchall()
-        for uid, ts_ns, prev_hash, content_hash in rows:
-            yield uid, self._build_revision(
-                uid, ts_ns, prev_hash, content_hash, branch=branch
-            )
+            for (uid,) in rows:
+                visible.add(uid)
+            meta = self._branch_meta(cursor)
+            if meta is None:
+                break
+            parent, fork_ts_ns, _ = meta
+            if parent is None:
+                break
+            cap = min(cap, fork_ts_ns)
+            cursor = parent
+        return visible
 
     # ---------------------------------------------------------- integrity ops
 
@@ -907,6 +1501,8 @@ class Store:
         for f in uid_dir.iterdir():
             if not f.is_file() or f.name.endswith(".tmp"):
                 continue
+            if is_merge_sidecar(f.name):
+                continue
             try:
                 rev = Revision.parse_filename(uid, f.name, uid_dir)
             except ValueError:
@@ -919,15 +1515,25 @@ class Store:
         """Drop and repopulate the SQLite index from the filesystem.
 
         Orphan ``.tmp`` files are deleted. Unparseable filenames are skipped
-        silently. Branch metadata not already in ``branches`` is recreated as
-        ``parent='main', fork_ts_ns=0`` for any branch discovered in
-        filenames (the spec follow-up will store branch metadata on disk so
-        parent / fork timestamps are also rebuildable).
+        silently. Branch metadata is reconstructed in two stages:
+
+        1. ``data/__branches__/{name}.json`` sidecars are read first — they
+           carry the authoritative ``(parent, fork_ts_ns, created_at)`` so
+           the branch DAG fully rebuilds without SQLite.
+        2. Any branch present in revision filenames but missing a sidecar
+           falls back to ``parent='main', fork_ts_ns=0`` (legacy behavior,
+           preserved for stores written before the sidecar grammar shipped).
+
+        Merge revisions: a revision file accompanied by a ``.merge`` sidecar
+        gets a row in the ``merges`` table whose ``other_parent`` is the
+        sidecar's content. Sidecar files without a paired revision are
+        deleted as orphans.
         """
         with self._db_lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
                 self._conn.execute("DELETE FROM revisions")
+                self._conn.execute("DELETE FROM merges")
                 discovered_branches: set[str] = {DEFAULT_BRANCH}
                 # (branch, uid, prev_hash)
                 seen_keys: set[tuple[str, str, str]] = set()
@@ -936,13 +1542,20 @@ class Store:
                     for uid_dir in self.data_dir.iterdir():
                         if not uid_dir.is_dir():
                             continue
+                        if uid_dir.name == BRANCHES_DIRNAME:
+                            continue
                         uid = uid_dir.name
                         revs: list[Revision] = []
+                        sidecars: dict[str, Path] = {}
                         for f in uid_dir.iterdir():
                             if not f.is_file():
                                 continue
                             if f.name.endswith(".tmp"):
                                 _best_effort_unlink(f)
+                                continue
+                            if is_merge_sidecar(f.name):
+                                rev_filename = revision_filename_for_sidecar(f.name)
+                                sidecars[rev_filename] = f
                                 continue
                             try:
                                 revs.append(
@@ -951,16 +1564,22 @@ class Store:
                             except ValueError:
                                 continue
                         revs.sort(key=lambda r: r.ts_ns)
+                        rev_filenames: set[str] = set()
                         for rev in revs:
                             discovered_branches.add(rev.branch)
                             key = (rev.branch, rev.uid, rev.prev_hash)
                             if key in seen_keys:
                                 # Two files share (branch, uid, prev_hash).
                                 # Keep the earliest (already inserted), drop
-                                # the rest.
+                                # the rest along with any sidecar.
+                                _best_effort_unlink(
+                                    rev.path.parent
+                                    / (rev.path.name + MERGE_SIDECAR_SUFFIX)
+                                )
                                 _best_effort_unlink(rev.path)
                                 continue
                             seen_keys.add(key)
+                            rev_filenames.add(rev.path.name)
                             self._conn.execute(
                                 "INSERT INTO revisions"
                                 "(branch, uid, ts_ns, prev_hash, content_hash) "
@@ -973,21 +1592,88 @@ class Store:
                                     rev.content_hash,
                                 ),
                             )
+                            sidecar_path = sidecars.pop(rev.path.name, None)
+                            if sidecar_path is not None:
+                                other_parent = _read_sidecar_hash(sidecar_path)
+                                if other_parent is not None:
+                                    self._conn.execute(
+                                        "INSERT INTO merges"
+                                        "(branch, uid, ts_ns, other_parent) "
+                                        "VALUES (?, ?, ?, ?)",
+                                        (
+                                            rev.branch,
+                                            rev.uid,
+                                            rev.ts_ns,
+                                            other_parent,
+                                        ),
+                                    )
+                                else:
+                                    # Unreadable / malformed sidecar — drop it.
+                                    _best_effort_unlink(sidecar_path)
+                        # Any sidecar whose paired revision was dropped
+                        # (or never existed) is an orphan — clean it up.
+                        for orphan in sidecars.values():
+                            _best_effort_unlink(orphan)
 
-                # Re-seed any branch we saw on disk that isn't in `branches`.
-                now_ns = time.time_ns()
-                for b in discovered_branches:
+                # Stage 1: read on-disk branch sidecars (authoritative).
+                branches_dir = self._branches_dir()
+                sidecar_branches: dict[str, tuple[str | None, int, int]] = {}
+                if branches_dir.is_dir():
+                    for f in branches_dir.iterdir():
+                        if not f.is_file() or not f.name.endswith(".json"):
+                            continue
+                        if f.name.endswith(".json.tmp"):
+                            _best_effort_unlink(f)
+                            continue
+                        name = f.name[: -len(".json")]
+                        try:
+                            _validate_branch(name)
+                        except ValueError:
+                            continue
+                        meta = self._read_branch_sidecar(name)
+                        if meta is not None:
+                            sidecar_branches[name] = meta
+                            discovered_branches.add(name)
+
+                # Wipe and re-seed branches table from sidecars + filenames.
+                self._conn.execute(
+                    "DELETE FROM branches WHERE name != ?", (DEFAULT_BRANCH,)
+                )
+                # Ensure main exists (sidecar-or-default).
+                if DEFAULT_BRANCH in sidecar_branches:
+                    parent, fork_ts_ns, created_at = sidecar_branches[DEFAULT_BRANCH]
+                    self._conn.execute(
+                        "INSERT OR REPLACE INTO branches"
+                        "(name, parent, fork_ts_ns, created_at) "
+                        "VALUES (?, ?, ?, ?)",
+                        (DEFAULT_BRANCH, parent, fork_ts_ns, created_at),
+                    )
+                else:
                     self._conn.execute(
                         "INSERT OR IGNORE INTO branches"
                         "(name, parent, fork_ts_ns, created_at) "
-                        "VALUES (?, ?, ?, ?)",
-                        (
-                            b,
-                            None if b == DEFAULT_BRANCH else DEFAULT_BRANCH,
-                            0,
-                            now_ns,
-                        ),
+                        "VALUES (?, NULL, 0, ?)",
+                        (DEFAULT_BRANCH, time.time_ns()),
                     )
+                now_ns = time.time_ns()
+                for b in discovered_branches:
+                    if b == DEFAULT_BRANCH:
+                        continue
+                    if b in sidecar_branches:
+                        parent, fork_ts_ns, created_at = sidecar_branches[b]
+                        self._conn.execute(
+                            "INSERT OR REPLACE INTO branches"
+                            "(name, parent, fork_ts_ns, created_at) "
+                            "VALUES (?, ?, ?, ?)",
+                            (b, parent, fork_ts_ns, created_at),
+                        )
+                    else:
+                        self._conn.execute(
+                            "INSERT OR IGNORE INTO branches"
+                            "(name, parent, fork_ts_ns, created_at) "
+                            "VALUES (?, ?, 0, ?)",
+                            (b, DEFAULT_BRANCH, now_ns),
+                        )
                 self._conn.execute("COMMIT")
             except Exception:
                 self._conn.execute("ROLLBACK")
@@ -1026,11 +1712,25 @@ class Store:
 # ------------------------------------------------------------------ utilities
 
 
+_RESERVED_BRANCH_NAMES = frozenset({"merge"})
+"""Branch names that would collide with the merge-sidecar grammar.
+
+A merge sidecar on the main branch is named ``{ts}.{prev}.{content}.merge``
+— four dot-separated parts, indistinguishable from a non-main revision on
+a branch named ``merge``. Reserving the literal ``"merge"`` keeps the
+filename grammar a function of the file alone."""
+
+_RESERVED_UID_NAMES = frozenset({BRANCHES_DIRNAME})
+"""UIDs that would collide with reserved subdirectories under ``data/``."""
+
+
 def _validate_uid(uid: str) -> None:
     if not isinstance(uid, str) or not uid:
         raise ValueError("uid must be a non-empty string")
     if "/" in uid or "\\" in uid or "\0" in uid or uid in (".", ".."):
         raise ValueError(f"Invalid uid: {uid!r}")
+    if uid in _RESERVED_UID_NAMES:
+        raise ValueError(f"Reserved uid: {uid!r}")
 
 
 def _validate_branch(name: str) -> None:
@@ -1043,6 +1743,10 @@ def _validate_branch(name: str) -> None:
     for ch in (".", "/", "\\", "\0"):
         if ch in name:
             raise ValueError(f"Invalid character {ch!r} in branch name: {name!r}")
+    if name in _RESERVED_BRANCH_NAMES:
+        raise ValueError(
+            f"Reserved branch name: {name!r} (collides with merge-sidecar grammar)"
+        )
 
 
 def _dt_to_ns(dt: datetime) -> int:
@@ -1056,3 +1760,21 @@ def _best_effort_unlink(path: Path) -> None:
             path.unlink()
     except OSError:
         pass
+
+
+def _read_sidecar_hash(path: Path) -> str | None:
+    """Read a ``.merge`` sidecar's content_hash, validating shape.
+
+    Returns the 64-char hex string, or ``None`` if the file is missing,
+    malformed, or has the wrong length."""
+    try:
+        text = path.read_text().strip()
+    except OSError:
+        return None
+    if len(text) != HASH_LEN:
+        return None
+    try:
+        int(text, 16)
+    except ValueError:
+        return None
+    return text
