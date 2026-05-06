@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi"
-version = "1.33.0"
+version = "1.34.1"
 description = "Multi-agent orchestrator and knowledge graph management system for AI orchestration, providing comprehensive coordination of specialized AI agents and semantic data management capabilities"
 readme = "README.md"
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
@@ -34,8 +34,11 @@ dependencies = [
     "tenacity>=8.2.0",
     "PyYAML",
     "python-socketio>=5.16.1",
-    "thefuzz>=0.22.1"
+    "thefuzz>=0.22.1",
+    "pymupdf>=1.27.2.2",
+    "pymupdf4llm>=1.27.2.2"
 ]
+
 license = { text = "MIT License" }
 
 [project.urls]
