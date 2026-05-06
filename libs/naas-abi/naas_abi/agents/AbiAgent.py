@@ -271,7 +271,6 @@ Respond only based on what your available agents and tools can actually deliver.
         tools = cls.get_tools(cls=cls)
 
         agents, agent_shared_state = cls.get_agents(cls=cls)
-
         intents = cls.get_intents(agents=agents)
 
         if agent_configuration is None:
