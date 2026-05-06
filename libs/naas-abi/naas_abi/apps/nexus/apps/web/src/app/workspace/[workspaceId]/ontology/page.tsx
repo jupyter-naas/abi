@@ -1762,10 +1762,11 @@ function OntologyNetworkView({
   }, [focusedNodeId, nodesMatchingSearchAndBuckets, hiddenNodeIds]);
 
   const filteredGraphEdges = useMemo(() => {
+    const importEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'imports');
     const restrictionEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'restriction');
     const objectPropEdges = graphEdges.filter((e) => e.properties?.relation_kind === 'object_property');
 
-    let baseEdges: OntologyOverviewGraphEdge[] = [];
+    let baseEdges: OntologyOverviewGraphEdge[] = [...importEdges];
 
     // Add is_a edges from loaded hierarchy levels up to subclassOfLevels
     for (let i = 0; i < subclassOfLevels && i < hierarchyByLevel.length; i++) {
