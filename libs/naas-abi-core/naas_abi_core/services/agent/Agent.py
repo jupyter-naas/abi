@@ -209,6 +209,7 @@ class AgentSharedState:
     _current_active_agent: Optional[str]
     _supervisor_agent: Optional[str]
     _requesting_help: bool
+    _active_agent_by_thread: dict[str, Optional[str]]
 
     def __init__(
         self,
@@ -222,13 +223,20 @@ class AgentSharedState:
         self._current_active_agent = current_active_agent
         self._supervisor_agent = supervisor_agent
         self._requesting_help = False
+        self._active_agent_by_thread = {thread_id: current_active_agent}
 
     @property
     def thread_id(self) -> str:
         return self._thread_id
 
     def set_thread_id(self, thread_id: str):
+        if thread_id == self._thread_id:
+            return
+        # Persist current routing for the outgoing thread.
+        self._active_agent_by_thread[self._thread_id] = self._current_active_agent
         self._thread_id = thread_id
+        # Restore routing for the incoming thread (None if never seen).
+        self._current_active_agent = self._active_agent_by_thread.get(thread_id)
 
     @property
     def current_active_agent(self) -> Optional[str]:
@@ -239,6 +247,7 @@ class AgentSharedState:
             self._current_active_agent = None
         else:
             self._current_active_agent = Agent.validate_name(agent_name)
+        self._active_agent_by_thread[self._thread_id] = self._current_active_agent
 
     @property
     def supervisor_agent(self) -> Optional[str]:

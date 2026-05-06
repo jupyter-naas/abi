@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v1.36.0 (2026-05-06)
+
+### Bug Fixes
+
+- **chat**: Standardize JSON string formatting in stream_chat_response
+  ([`7feafbc`](https://github.com/jupyter-naas/abi/commit/7feafbcea68d520558a17e3ff6fae2b41648ee7f))
+
+- **provider_runtime**: Refine ABI in-process streaming with required thread_id and enhanced logging
+  ([`7b5115a`](https://github.com/jupyter-naas/abi/commit/7b5115ad38aab03c8a1cafcaaf7174a2dc26c98e))
+
+### Chores
+
+- **chat**: Comment out search-related code and functions
+  ([`4eb79dd`](https://github.com/jupyter-naas/abi/commit/4eb79dd074fdad5cd1ec82d5a9a4579b72a979ab))
+
+### Features
+
+- **graph**: Add node display limit slider to graph page
+  ([`4d853fb`](https://github.com/jupyter-naas/abi/commit/4d853fb5a0439360dd468a646d5c7071e994a05f))
+
+
 ## v1.35.1 (2026-05-06)
 
 ### Bug Fixes
