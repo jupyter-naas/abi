@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.15.0 (2026-05-06)
+
+### Features
+
+- **naas_abi_marketplace.domains.document**: Add default values to document module
+  ([`3cb5c13`](https://github.com/jupyter-naas/abi/commit/3cb5c137aa9c10feeb4176144da8fa5cd4d5a21e))
+
+
 ## v1.14.0 (2026-05-06)
 
 ### Features
