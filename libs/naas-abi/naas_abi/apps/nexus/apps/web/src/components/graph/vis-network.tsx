@@ -492,7 +492,7 @@ export function VisNetwork({
       id: edge.id,
       from: edge.source,
       to: edge.target,
-      label: edge.label || edge.type,
+      label: isHierarchical ? undefined : (edge.label || edge.type),
       title: edge.type,
       color: { color, highlight: color, hover: color },
       arrows: { to: { enabled: true, scaleFactor: 0.8 } },

@@ -1929,6 +1929,60 @@ function OntologyNetworkView({
     }
   };
 
+  const handleExpandAll = async () => {
+    if (!ontologyPath || loadingNextLevel) return;
+    setLoadingNextLevel(true);
+    let currentLevels = subclassOfLevels;
+    let currentHierarchy = [...hierarchyByLevel];
+    try {
+      while (true) {
+        const nextLevel = currentLevels + 1;
+        if (currentHierarchy[nextLevel - 1]) {
+          currentLevels = nextLevel;
+          if (!currentHierarchy[nextLevel - 1].introducedNewNodes) break;
+          continue;
+        }
+        const frontierNodes =
+          currentLevels === 0
+            ? subclassOfFrontierForLevel1
+            : (currentHierarchy[currentLevels - 1]?.frontier ?? []);
+        if (frontierNodes.length === 0) break;
+        const existingNodeIds = new Set<string>();
+        for (const n of graphNodes) existingNodeIds.add(n.id);
+        for (const level of currentHierarchy) for (const n of level.nodes) existingNodeIds.add(n.id);
+        const existingEdgeIds = new Set<string>();
+        for (const level of currentHierarchy) for (const e of level.edges) existingEdgeIds.add(e.id);
+        const baseUrl = getApiUrl();
+        const params = new URLSearchParams({ ontology_path: ontologyPath });
+        frontierNodes.forEach((n) => params.append('class_iris', n.id));
+        const response = await authFetch(`${baseUrl}/api/ontology/overview/parents?${params.toString()}`);
+        if (!response.ok) break;
+        const data = await response.json() as { nodes?: OntologyOverviewGraphNode[]; edges?: OntologyOverviewGraphEdge[] };
+        const fetchedNodes = Array.isArray(data.nodes) ? data.nodes : [];
+        const fetchedEdges = Array.isArray(data.edges) ? data.edges : [];
+        const fetchedUniqueNodesById = new Map<string, OntologyOverviewGraphNode>();
+        for (const n of fetchedNodes) fetchedUniqueNodesById.set(n.id, n);
+        const frontierForNext = Array.from(fetchedUniqueNodesById.values());
+        const nextExistingIds = new Set(existingNodeIds);
+        for (const n of frontierForNext) nextExistingIds.add(n.id);
+        const newNodes = frontierForNext.filter((n) => !existingNodeIds.has(n.id));
+        const newEdges = fetchedEdges
+          .filter((e) => !existingEdgeIds.has(e.id))
+          .filter((e) => nextExistingIds.has(e.source) && nextExistingIds.has(e.target));
+        const levelData = { frontier: frontierForNext, nodes: newNodes, edges: newEdges, introducedNewNodes: newNodes.length > 0 };
+        currentHierarchy = [...currentHierarchy];
+        currentHierarchy[nextLevel - 1] = levelData;
+        currentLevels = nextLevel;
+        if (!levelData.introducedNewNodes) break;
+      }
+    } catch (err) {
+      console.error('Failed to fetch all parent levels:', err);
+    }
+    setHierarchyByLevel(currentHierarchy);
+    setSubclassOfLevels(currentLevels);
+    setLoadingNextLevel(false);
+  };
+
   // Auto-expand the first subclassOf level once the graph finishes loading (loadingGraph: true → false).
   const didAutoExpandRef = useRef(false);
   const wasLoadingRef = useRef(false);
@@ -1942,7 +1996,7 @@ function OntologyNetworkView({
     if (didAutoExpandRef.current) return;
     if (!ontologyPath || graphNodes.length === 0) return;
     didAutoExpandRef.current = true;
-    handleExpandSubclassOf();
+    handleExpandAll();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ontologyPath, loadingGraph, graphNodes.length]);
 
@@ -1970,6 +2024,14 @@ function OntologyNetworkView({
     [allVisibleNodes]
   );
   const selectedGraphNode = selectedGraphNodeId ? graphNodesById.get(selectedGraphNodeId) : null;
+  const selectedGraphNodeLevel = useMemo(() => {
+    if (!selectedGraphNode) return null;
+    if (graphNodes.some((n) => n.id === selectedGraphNode.id)) return 0;
+    for (let i = 0; i < hierarchyByLevel.length; i++) {
+      if (hierarchyByLevel[i].nodes.some((n) => n.id === selectedGraphNode.id)) return i + 1;
+    }
+    return null;
+  }, [selectedGraphNode, graphNodes, hierarchyByLevel]);
   const selectedGraphNodeIsOntology = selectedGraphNode?.type === 'Ontology';
   const selectedGraphNodeDescription =
     selectedGraphNode?.properties?.comment ||
@@ -2006,8 +2068,8 @@ function OntologyNetworkView({
               <>
                 <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
                   <button
-                    onClick={() => subclassOfLevels === 0 ? handleExpandSubclassOf() : setSubclassOfLevels(0)}
-                    title={subclassOfLevels === 0 ? "Show SubclassOf parents (rdfs:subClassOf)" : "Hide SubclassOf hierarchy"}
+                    onClick={() => subclassOfLevels === 0 ? handleExpandAll() : setSubclassOfLevels(0)}
+                    title={subclassOfLevels === 0 ? "Show all SubclassOf levels (rdfs:subClassOf)" : "Hide SubclassOf hierarchy"}
                     disabled={loadingNextLevel}
                     className={cn(
                       'flex items-center gap-1.5 px-3 py-1.5 text-xs',
@@ -2023,19 +2085,19 @@ function OntologyNetworkView({
                   {subclassOfLevels > 0 && (
                     <button
                       onClick={() => setSubclassOfLevels((v) => Math.max(0, v - 1))}
-                      title="Show fewer parent levels"
+                      title="Go down one level"
                       disabled={loadingNextLevel}
                       className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
                     >
                       −
                     </button>
                   )}
-                  {canExpandMore && (
+                  {subclassOfLevels > 0 && (
                     <button
                       onClick={handleExpandSubclassOf}
-                      title="Show more parent levels"
+                      title="Go up one level"
                       disabled={loadingNextLevel || !canExpandMore}
-                      className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                      className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       +
                     </button>
@@ -2215,6 +2277,12 @@ function OntologyNetworkView({
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">BFO Bucket</p>
                       <p>{resolveNodeBucket(selectedGraphNode, nodesByIri) ?? 'Unknown'}</p>
+                    </div>
+                  )}
+                  {!isAllOntologiesOverview && selectedGraphNodeLevel !== null && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Level</p>
+                      <p>{selectedGraphNodeLevel === 0 ? '0 (primary)' : selectedGraphNodeLevel}</p>
                     </div>
                   )}
                   <button
