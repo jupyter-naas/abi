@@ -32,6 +32,26 @@ def _has_unprocessed_files(mime_type: str, processor_iri: str) -> bool:
     return len(get_files_to_process(DEFAULT_GRAPH_NAME, mime_type, processor_iri)) > 0
 
 
+IN_PROGRESS_RUN_STATUSES = [
+    dg.DagsterRunStatus.QUEUED,
+    dg.DagsterRunStatus.NOT_STARTED,
+    dg.DagsterRunStatus.STARTING,
+    dg.DagsterRunStatus.STARTED,
+]
+
+
+def _has_in_progress_run(context: dg.SensorEvaluationContext, job_name: str) -> bool:
+    """Return True if a run for `job_name` is queued, starting, or running."""
+    runs = context.instance.get_runs(
+        filters=dg.RunsFilter(
+            job_name=job_name,
+            statuses=IN_PROGRESS_RUN_STATUSES,
+        ),
+        limit=1,
+    )
+    return len(runs) > 0
+
+
 # File Ingestion OP
 def _build_file_ingestion_job_sensor(
     config: FileIngestionConfiguration,
@@ -72,6 +92,9 @@ def _build_file_ingestion_job_sensor(
             FilesIngestionPipelineConfiguration,
         )
 
+        if _has_in_progress_run(context, graph_name):
+            return dg.SkipReason(f"Job '{graph_name}' is already running.")
+
         pipeline = FilesIngestionPipeline(FilesIngestionPipelineConfiguration())
         object_keys = pipeline._get_files_from_path(
             config.input_path, recursive=config.recursive
@@ -110,6 +133,8 @@ def _build_pdftomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefini
         minimum_interval_seconds=60,
     )
     def pdftomarkdown_sensor(context):
+        if _has_in_progress_run(context, graph_name):
+            return dg.SkipReason(f"Job '{graph_name}' is already running.")
         if not _has_unprocessed_files(PDF_MIME_TYPE, PDF_PROCESSOR_IRI):
             return dg.SkipReason("No unprocessed PDF files to convert.")
         return [dg.RunRequest(run_key=None)]
@@ -142,6 +167,8 @@ def _build_docxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
         minimum_interval_seconds=60,
     )
     def docxtomarkdown_sensor(context):
+        if _has_in_progress_run(context, graph_name):
+            return dg.SkipReason(f"Job '{graph_name}' is already running.")
         if not _has_unprocessed_files(DOCX_MIME_TYPE, DOCX_PROCESSOR_IRI):
             return dg.SkipReason("No unprocessed DOCX files to convert.")
         return [dg.RunRequest(run_key=None)]
@@ -174,6 +201,8 @@ def _build_pptxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
         minimum_interval_seconds=60,
     )
     def pptxtomarkdown_sensor(context):
+        if _has_in_progress_run(context, graph_name):
+            return dg.SkipReason(f"Job '{graph_name}' is already running.")
         if not _has_unprocessed_files(PPTX_MIME_TYPE, PPTX_PROCESSOR_IRI):
             return dg.SkipReason("No unprocessed PPTX files to convert.")
         return [dg.RunRequest(run_key=None)]
@@ -231,6 +260,9 @@ def _build_markdowntovector_job_sensor(
             MarkdownToVectorPipeline,
             MarkdownToVectorPipelineConfiguration,
         )
+
+        if _has_in_progress_run(context, graph_name):
+            return dg.SkipReason(f"Job '{graph_name}' is already running.")
 
         pipeline = MarkdownToVectorPipeline(
             MarkdownToVectorPipelineConfiguration(
