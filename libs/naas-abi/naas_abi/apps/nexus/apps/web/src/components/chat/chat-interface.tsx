@@ -175,6 +175,23 @@ export function ChatInterface() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const focusChatInput = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    // Ensure the textarea is in the tree and laid out (new conversation switches
+    // can re-render the composer).
+    requestAnimationFrame(() => {
+      el.focus({ preventScroll: true });
+      const end = el.value.length;
+      try {
+        el.setSelectionRange(end, end);
+      } catch {
+        // Some browsers can throw if the element isn't focusable yet; ignore.
+      }
+    });
+  }, []);
+
   // Voice capture state
   const [voiceMode, setVoiceMode] = useState<'idle' | 'recording' | 'transcribing'>('idle');
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -231,6 +248,14 @@ export function ChatInterface() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // When switching/creating a conversation (including via keyboard shortcut in the sidebar),
+  // keep the typing cursor in the chat bar.
+  useEffect(() => {
+    if (!mounted) return;
+    if (!activeConversationId) return;
+    focusChatInput();
+  }, [activeConversationId, mounted, focusChatInput]);
 
   // Listen for new messages from WebSocket
   useEffect(() => {
