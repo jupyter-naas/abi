@@ -1260,6 +1260,11 @@ export function ChatInterface() {
                   renderStreamingMessage(true);
                 }
                 if (parsed.content) {
+                  // Once content starts streaming, any prior execution step has completed.
+                  const runningStep = streamToolCalls[streamToolCalls.length - 1];
+                  if (runningStep && runningStep.status === 'running') {
+                    runningStep.status = 'done';
+                  }
                   const token = parsed.content as string;
                   fullContent += token;
                   if (!gotFirstTokenRef.current) {
@@ -2039,11 +2044,26 @@ function ToolCallsDropdown({
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [lastDurationSeconds, setLastDurationSeconds] = useState<number | null>(null);
   const wasProcessingRef = useRef(false);
+  const processingStartRef = useRef<number | null>(null);
+
+  const formatDuration = (seconds: number) => {
+    if (seconds < 1) return '<1s';
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}m ${secs}s`;
+  };
 
   useEffect(() => {
     if (isProcessing) {
       wasProcessingRef.current = true;
+      if (processingStartRef.current === null) {
+        processingStartRef.current = Date.now();
+        setElapsedSeconds(0);
+      }
       if (autoCollapsed) {
         setIsOpen(true);
         setAutoCollapsed(false);
@@ -2057,10 +2077,36 @@ function ToolCallsDropdown({
     }
   }, [isProcessing, autoCollapsed]);
 
-  const lastRunning = toolCalls.find((t) => t.status === 'running');
-  const headerLabel = isProcessing && lastRunning
-    ? formatToolCallLabel(lastRunning.prefix, lastRunning.toolName)
-    : `${toolCalls.length} step${toolCalls.length !== 1 ? 's' : ''}`;
+  useEffect(() => {
+    if (!isProcessing) {
+      if (processingStartRef.current !== null) {
+        const finalSeconds = Math.max(
+          0,
+          Math.floor((Date.now() - processingStartRef.current) / 1000),
+        );
+        setElapsedSeconds(finalSeconds);
+        setLastDurationSeconds(finalSeconds);
+        processingStartRef.current = null;
+      }
+      return;
+    }
+
+    const interval = setInterval(() => {
+      if (processingStartRef.current === null) return;
+      setElapsedSeconds(
+        Math.max(0, Math.floor((Date.now() - processingStartRef.current) / 1000)),
+      );
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isProcessing]);
+
+  const stepsLabel = `${toolCalls.length} step${toolCalls.length !== 1 ? 's' : ''}`;
+  const headerLabel = isProcessing
+    ? `Processing ${formatDuration(elapsedSeconds)}`
+    : lastDurationSeconds !== null
+      ? `Processed in ${formatDuration(lastDurationSeconds)} · ${stepsLabel}`
+      : stepsLabel;
 
   return (
     <div className="mb-2 w-full">
@@ -2271,8 +2317,8 @@ const MessageBubble = React.memo(function MessageBubble({
     return `${mins}m ${secs}s`;
   };
 
-  // Show thinking section if we have thinking content OR a finalized duration
-  const hasThinkingSection = !isUser && (thinking || (message.thinkingDuration && message.thinkingDuration > 0));
+  // Show thinking section only when explicit reasoning content exists.
+  const hasThinkingSection = !isUser && Boolean(thinking);
   const activityLine = !isUser
     ? (message.activityLine?.trim()
       || (isStillProcessing && showConnecting ? 'Processing...' : '')
@@ -2412,7 +2458,7 @@ const MessageBubble = React.memo(function MessageBubble({
                 <span className="font-medium tabular-nums">{formatDuration(elapsedSeconds)}</span>
               ) : (
                 <span className="font-medium">
-                  Processed in {formatDuration(message.thinkingDuration || 0)}
+                  Reasoning
                 </span>
               )}
               {thinking && !isStillProcessing && (
