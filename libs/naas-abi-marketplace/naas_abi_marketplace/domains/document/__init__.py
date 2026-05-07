@@ -35,6 +35,14 @@ class MarkdownToVectorConfiguration(BaseModel):
     api_key: str  # API Key to authenticate the model_id calls. Not optional
 
 
+class DocumentAgentConfiguration(BaseModel):
+    """Configuration for the DocumentAgent."""
+
+    model_id: str = "text-embedding-3-small"
+    dimension: int = 1536
+    api_key: str  # API Key to authenticate the embeddings calls. Not optional
+
+
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
@@ -56,6 +64,7 @@ class ABIModule(BaseModule):
         docxtomarkdown_enabled: bool = True
         pptxtomarkdown_enabled: bool = True
         markdowntovector_pipelines: list[MarkdownToVectorConfiguration] = []
+        document_agent: DocumentAgentConfiguration
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
