@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.17.0 (2026-05-07)
+
+### Features
+
+- **document**: Add DocumentAgent configuration with required api_key
+  ([`6a7a6ff`](https://github.com/jupyter-naas/abi/commit/6a7a6ff69b6c5792e7b67dd7429e7b270b1015a6))
+
+- **document**: Skip sensor runs when job is already in progress
+  ([`e636b7e`](https://github.com/jupyter-naas/abi/commit/e636b7e00d61b0b993d5be2a2f01a7d964741686))
+
+
 ## v1.16.3 (2026-05-06)
 
 
