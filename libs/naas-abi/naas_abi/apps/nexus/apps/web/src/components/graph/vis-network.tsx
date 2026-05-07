@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Network, DataSet, type Options, type Node, type Edge } from 'vis-network/standalone';
 import 'vis-network/styles/vis-network.css';
@@ -369,6 +369,12 @@ interface VisNetworkProps {
   onEdgeSelect: (edgeId: string | null) => void;
   stabilizeKey?: number;
   layoutDirection?: 'LR' | 'TD';
+  /**
+   * Stable id for the current graph “mode” (e.g. ontology relation toggles).
+   * When this changes before the canvas updates, the previous zoom/pan is stored
+   * and reapplied when returning to that mode.
+   */
+  viewStateKey?: string;
 }
 
 export function VisNetwork({
@@ -379,6 +385,7 @@ export function VisNetwork({
   onEdgeSelect,
   stabilizeKey,
   layoutDirection,
+  viewStateKey,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -388,6 +395,55 @@ export function VisNetwork({
   const onEdgeSelectRef = useRef(onEdgeSelect);
   const prevSelectedNodeIdRef = useRef<string | null>(null);
   const [logoDataByUrl, setLogoDataByUrl] = useState<Record<string, string>>({});
+
+  const savedFilterViewsRef = useRef(
+    new Map<string, { scale: number; position: { x: number; y: number } }>()
+  );
+  const prevFilterViewKeyRef = useRef<string | undefined>(undefined);
+  const currentFilterViewKeyRef = useRef<string>('__default');
+  /** True after filter key changed: next graph update should restore or fit for the new key. */
+  const pendingFilterViewportApplyRef = useRef(false);
+
+  /** Restore saved zoom/pan for `currentFilterViewKeyRef`, or fit if unseen. */
+  const applySavedViewportOrFit = useCallback((opts?: { fitDurationMs?: number }) => {
+    const net = networkRef.current;
+    if (!net || nodesDataRef.current.length === 0) return;
+    const key = currentFilterViewKeyRef.current;
+    const saved = savedFilterViewsRef.current.get(key);
+    const fitDurationMs = opts?.fitDurationMs ?? 300;
+    if (saved) {
+      try {
+        net.moveTo({
+          scale: saved.scale,
+          position: saved.position,
+          animation: { duration: 0, easingFunction: 'linear' },
+        });
+        return;
+      } catch {
+        // fallthrough to fit
+      }
+    }
+    net.fit({ animation: { duration: fitDurationMs, easingFunction: 'easeInOutQuad' } });
+  }, []);
+
+  useLayoutEffect(() => {
+    const key = viewStateKey ?? '__default';
+    const net = networkRef.current;
+    const prevKey = prevFilterViewKeyRef.current;
+    if (net && prevKey !== undefined && prevKey !== key) {
+      try {
+        savedFilterViewsRef.current.set(prevKey, {
+          scale: net.getScale(),
+          position: net.getViewPosition(),
+        });
+      } catch {
+        // Ignore read errors during teardown / empty graph.
+      }
+      pendingFilterViewportApplyRef.current = true;
+    }
+    prevFilterViewKeyRef.current = key;
+    currentFilterViewKeyRef.current = key;
+  }, [viewStateKey]);
 
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
@@ -587,9 +643,14 @@ export function VisNetwork({
   // Track if initial stabilization is done
   const isStabilizedRef = useRef(false);
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  /** Last `layoutDirection` from the nodes effect — used to detect leaving hierarchical layout. */
+  const prevLayoutDirectionRef = useRef<'LR' | 'TD' | undefined>(undefined);
 
   // Update nodes
   useEffect(() => {
+    const prevLayoutDir = prevLayoutDirectionRef.current;
+    const exitedHierarchicalLayout = prevLayoutDir !== undefined && layoutDirection === undefined;
+
     const seenIds = new Set<string>();
     const uniqueNodes = nodes.filter((node) => {
       if (seenIds.has(node.id)) return false;
@@ -597,6 +658,7 @@ export function VisNetwork({
       return true;
     });
 
+    try {
     if (layoutDirection) {
       // Hierarchical layout: positions are baked into toVisNode via hierarchicalPositions.
       // Disable physics and fit the view to the positioned graph.
@@ -604,10 +666,23 @@ export function VisNetwork({
       nodesDataRef.current.add(uniqueNodes.map(toVisNode));
       if (networkRef.current && uniqueNodes.length > 0) {
         networkRef.current.setOptions({ physics: { enabled: false } });
-        networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+        if (pendingFilterViewportApplyRef.current) {
+          pendingFilterViewportApplyRef.current = false;
+          applySavedViewportOrFit({ fitDurationMs: 500 });
+        } else {
+          networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+        }
       }
       isStabilizedRef.current = true;
       return;
+    }
+
+    // SubclassOf / hierarchy layout turned off: force a fresh force-directed pass (physics was disabled above).
+    if (exitedHierarchicalLayout && networkRef.current) {
+      isStabilizedRef.current = false;
+      // Drop baked coordinates so ForceAtlas2 can lay out from scratch, not the hierarchy positions.
+      nodePositionsRef.current.clear();
+      networkRef.current.setOptions({ physics: { enabled: true } });
     }
 
     if (isStabilizedRef.current && networkRef.current) {
@@ -653,6 +728,10 @@ export function VisNetwork({
       }
       if (toUpdate.length > 0) nodesDataRef.current.update(toUpdate);
       if (toAdd.length > 0) nodesDataRef.current.add(toAdd);
+      if (pendingFilterViewportApplyRef.current && networkRef.current) {
+        pendingFilterViewportApplyRef.current = false;
+        requestAnimationFrame(() => applySavedViewportOrFit({ fitDurationMs: 300 }));
+      }
       return;
     }
 
@@ -676,11 +755,48 @@ export function VisNetwork({
           });
           isStabilizedRef.current = true;
           networkRef.current.setOptions({ physics: { enabled: false } });
-          networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+          if (pendingFilterViewportApplyRef.current) {
+            pendingFilterViewportApplyRef.current = false;
+            applySavedViewportOrFit({ fitDurationMs: 500 });
+          } else {
+            networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+          }
         }
       });
+      if (exitedHierarchicalLayout) {
+        networkRef.current.stabilize(200);
+      }
     }
-  }, [nodes, toVisNode, layoutDirection]);
+    } finally {
+      prevLayoutDirectionRef.current = layoutDirection;
+    }
+  }, [nodes, toVisNode, layoutDirection, applySavedViewportOrFit]);
+
+  /**
+   * If no code path consumes `pendingFilterViewportApplyRef` this frame (e.g. edges-only refresh),
+   * still restore viewport after the graph settles.
+   */
+  useEffect(() => {
+    if (!pendingFilterViewportApplyRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (
+        !pendingFilterViewportApplyRef.current ||
+        !networkRef.current ||
+        nodesDataRef.current.length === 0
+      ) {
+        return;
+      }
+      pendingFilterViewportApplyRef.current = false;
+      applySavedViewportOrFit({ fitDurationMs: 300 });
+    }, 420);
+    return () => clearTimeout(timer);
+  }, [
+    viewStateKey,
+    nodes.length,
+    edges.length,
+    layoutDirection,
+    applySavedViewportOrFit,
+  ]);
 
   // Update edges
   useEffect(() => {
