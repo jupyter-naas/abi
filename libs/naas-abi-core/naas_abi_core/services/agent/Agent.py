@@ -901,6 +901,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         try:
             formatted_response = self._chat_model.invoke(prompt)
+            logger.debug(f"Markdown pretty display response: {formatted_response}")
             if not isinstance(formatted_response.content, str):
                 return response
 
