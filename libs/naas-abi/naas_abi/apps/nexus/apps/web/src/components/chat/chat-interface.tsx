@@ -1052,15 +1052,13 @@ export function ChatInterface() {
             .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
 
-        const formatToolLabel = (raw: string): { prefix: 'Tool' | 'Agent'; name: string } => {
-          if (raw.startsWith('transfer_to_')) {
-            return { prefix: 'Agent', name: formatToolName(raw.slice('transfer_to_'.length)) };
-          }
-          return { prefix: 'Tool', name: formatToolName(raw) };
-        };
+        const formatToolLabel = (raw: string): { prefix: 'Tool'; name: string } => ({
+          prefix: 'Tool',
+          name: formatToolName(raw),
+        });
 
         const handleToolStartEvent = (rawTool: string, input?: string) => {
-          const { prefix, name } = rawTool ? formatToolLabel(rawTool) : { prefix: 'Tool' as const, name: 'Tool' };
+          const { prefix, name } = formatToolLabel(rawTool);
           const last = streamToolCalls[streamToolCalls.length - 1];
           if (last && last.status === 'running' && last.rawName === rawTool) {
             // Same tool still running — update input if provided
@@ -1086,6 +1084,94 @@ export function ChatInterface() {
           if (last && last.status === 'running') {
             last.status = 'done';
             if (output.trim()) last.output = output.slice(0, 2000);
+          }
+        };
+
+        const handleAgentStepEvent = (
+          stepType: 'agent_routing' | 'call_model',
+          rawAgent: string,
+        ) => {
+          const stepName = formatToolName(rawAgent);
+          if (!stepName) return;
+
+          const label = stepType === 'call_model'
+            ? `Calling ${stepName}`
+            : `Routing to ${stepName}`;
+
+          const last = streamToolCalls[streamToolCalls.length - 1];
+          if (last && last.status === 'running') {
+            last.status = 'done';
+          }
+
+          streamToolCalls.push({
+            id: `tc-${Date.now()}-${streamToolCalls.length}`,
+            toolName: label,
+            prefix: 'Agent',
+            rawName: `${stepType}:${rawAgent}`,
+            status: 'running',
+          });
+          hasDetailedActivity = true;
+        };
+
+        const getStringValue = (...values: unknown[]): string => {
+          for (const value of values) {
+            if (typeof value === 'string') {
+              const trimmed = value.trim();
+              if (trimmed) return trimmed;
+            }
+          }
+          return '';
+        };
+
+        const parseEvent = (payload: Record<string, unknown>) => {
+          const event = getStringValue(payload.event);
+
+          switch (event) {
+            case 'tool':
+            case 'tool_usage': {
+              const rawTool = getStringValue(payload.tool, payload.data);
+              if (!rawTool) return false;
+              const input = getStringValue(payload.input, payload.data) || undefined;
+              handleToolStartEvent(rawTool, input);
+              streamActivityLine = `Tool: ${formatToolName(rawTool)}`;
+              hasDetailedActivity = true;
+              return true;
+            }
+            case 'tool_response': {
+              const output = getStringValue(payload.content, payload.data);
+              handleToolResponseEvent(output);
+              return true;
+            }
+            case 'agent.question': {
+              const question = getStringValue(payload.question);
+              if (!question) return false;
+              streamActivityLine = `Question: ${truncateLine(singleLine(question), 110)}`;
+              hasDetailedActivity = true;
+              return true;
+            }
+            case 'call_model':
+            case 'agent_calling': {
+              const rawAgent = getStringValue(payload.agent, payload.data);
+              if (!rawAgent) return false;
+              const agentName = formatToolName(rawAgent);
+              if (!agentName) return false;
+              handleAgentStepEvent('call_model', rawAgent);
+              streamActivityLine = `Calling ${agentName}`;
+              hasDetailedActivity = true;
+              return true;
+            }
+            case 'agent_routing': {
+              const rawAgent = getStringValue(payload.agent, payload.data);
+              if (!rawAgent) return false;
+              const agentName = formatToolName(rawAgent);
+              if (!agentName) return false;
+              handleAgentStepEvent('agent_routing', rawAgent);
+              streamActivityLine = `Routing to ${agentName}`;
+              hasDetailedActivity = true;
+              return true;
+            }
+            default:
+              return false;
           }
         };
 
@@ -1148,104 +1234,80 @@ export function ChatInterface() {
         const decoder = new TextDecoder();
         let fullContent = '';       // Full raw content (including <think> tags)
         let isInThinking = false;
+        let sseBuffer = '';
 
         if (reader) {
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            sseBuffer += decoder.decode(value || new Uint8Array(), { stream: !done });
 
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
+            const lines = sseBuffer.split('\n');
+            sseBuffer = done ? '' : lines.pop() ?? '';
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') continue;
-                
-                try {
-                  const parsed = JSON.parse(data);
-                  if (parsed.sources && Array.isArray(parsed.sources)) {
-                    streamSources = parsed.sources as string[];
-                  }
+            for (const rawLine of lines) {
+              const line = rawLine.trimEnd();
+              if (!line.startsWith('data: ')) continue;
+              const data = line.slice(6).trim();
+              if (!data || data === '[DONE]') continue;
 
-                  if (parsed?.event === 'tool') {
-                    const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim() ? parsed.tool : '';
-                    handleToolStartEvent(rawTool);
-                    renderStreamingMessage(true);
-                  } else if (parsed?.event === 'tool_usage') {
-                    const rawTool = typeof parsed.tool === 'string' && parsed.tool.trim()
-                      ? parsed.tool
-                      : typeof parsed.data === 'string' && parsed.data.trim()
-                        ? parsed.data
-                        : '';
-                    const input = typeof parsed.input === 'string' && parsed.input.trim()
-                      ? parsed.input
-                      : typeof parsed.data === 'string' && parsed.data.trim()
-                        ? parsed.data
-                        : undefined;
-                    handleToolStartEvent(rawTool, input);
-                    renderStreamingMessage(true);
-                  } else if (parsed?.event === 'tool_response') {
-                    const output = typeof parsed.content === 'string'
-                      ? parsed.content
-                      : typeof parsed.data === 'string'
-                        ? parsed.data
-                        : '';
-                    handleToolResponseEvent(output);
-                    renderStreamingMessage(true);
-                  } else if (parsed?.event === 'agent.question' && typeof parsed.question === 'string') {
-                    streamActivityLine = `Question: ${truncateLine(singleLine(parsed.question), 110)}`;
-                    hasDetailedActivity = true;
-                    renderStreamingMessage(true);
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.sources && Array.isArray(parsed.sources)) {
+                  streamSources = parsed.sources as string[];
+                }
+
+                if (parseEvent(parsed as Record<string, unknown>)) {
+                  renderStreamingMessage(true);
+                }
+                if (parsed.content) {
+                  const token = parsed.content as string;
+                  fullContent += token;
+                  if (!gotFirstTokenRef.current) {
+                    gotFirstTokenRef.current = true;
+                    if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
+                    setShowConnecting(false);
                   }
-                  if (parsed.content) {
-                    const token = parsed.content as string;
-                    fullContent += token;
-                    if (!gotFirstTokenRef.current) {
-                      gotFirstTokenRef.current = true;
-                      if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
-                      setShowConnecting(false);
-                    }
-                    
-                    // Track <think> tags
-                    if (token.includes('<think>')) {
-                      isInThinking = true;
-                      renderStreamingMessage(false);
-                      continue;
-                    }
-                    
-                    if (token.includes('</think>')) {
-                      isInThinking = false;
-                      renderStreamingMessage(true);
-                      continue;
-                    }
-                    
-                    if (isInThinking) {
-                      // Stream thinking content live
-                      thinkingContent += token;
-                      renderStreamingMessage(false);
-                      continue;
-                    }
-                    
-                    // Regular response content
-                    responseContent += token;
+                  
+                  // Track <think> tags
+                  if (token.includes('<think>')) {
+                    isInThinking = true;
+                    renderStreamingMessage(false);
+                    continue;
+                  }
+                  
+                  if (token.includes('</think>')) {
+                    isInThinking = false;
                     renderStreamingMessage(true);
+                    continue;
                   }
-                  if (parsed.error) {
-                    // Show error in current message and throw to trigger modal
-                    fullContent = `Error: ${parsed.error}`;
-                    updateLastMessage(conversationId!, fullContent);
-                    throw new Error(parsed.error);
+                  
+                  if (isInThinking) {
+                    // Stream thinking content live
+                    thinkingContent += token;
+                    renderStreamingMessage(false);
+                    continue;
                   }
-                } catch (parseError) {
-                  // Re-throw non-JSON errors (e.g. provider error payloads).
-                  // Only swallow JSON parsing failures for partial SSE chunks.
-                  if (!(parseError instanceof SyntaxError)) {
-                    throw parseError;
-                  }
+                  
+                  // Regular response content
+                  responseContent += token;
+                  renderStreamingMessage(true);
+                }
+                if (parsed.error) {
+                  // Show error in current message and throw to trigger modal
+                  fullContent = `Error: ${parsed.error}`;
+                  updateLastMessage(conversationId!, fullContent);
+                  throw new Error(parsed.error);
+                }
+              } catch (parseError) {
+                // Re-throw non-JSON errors.
+                // JSON parse failures are ignored for malformed lines and won't drop buffered partial lines.
+                if (!(parseError instanceof SyntaxError)) {
+                  throw parseError;
                 }
               }
             }
+
+            if (done) break;
           }
         }
         // Final: store full content with thinking duration
@@ -1959,6 +2021,11 @@ function TypingDots() {
   );
 }
 
+function formatToolCallLabel(prefix: string, name: string): string {
+  if (prefix === 'Agent') return name;
+  return prefix === 'Handoff to' ? `${prefix} ${name}` : `${prefix}: ${name}`;
+}
+
 function ToolCallsDropdown({
   toolCalls,
   isProcessing,
@@ -1992,8 +2059,8 @@ function ToolCallsDropdown({
 
   const lastRunning = toolCalls.find((t) => t.status === 'running');
   const headerLabel = isProcessing && lastRunning
-    ? `${lastRunning.prefix}: ${lastRunning.toolName}`
-    : `${toolCalls.length} tool${toolCalls.length !== 1 ? 's' : ''} used`;
+    ? formatToolCallLabel(lastRunning.prefix, lastRunning.toolName)
+    : `${toolCalls.length} step${toolCalls.length !== 1 ? 's' : ''}`;
 
   return (
     <div className="mb-2 w-full">
@@ -2055,7 +2122,7 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
           <Check size={11} className="shrink-0 text-green-500 dark:text-green-400" />
         )}
         <span className="flex-1 text-left font-medium text-foreground/80">
-          {tool.prefix}: {tool.toolName}
+          {formatToolCallLabel(tool.prefix, tool.toolName)}
         </span>
         {hasDetails && (
           <ChevronDown size={10} className={cn('shrink-0 transition-transform', expanded && 'rotate-180')} />

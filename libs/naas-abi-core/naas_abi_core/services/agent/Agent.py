@@ -297,6 +297,16 @@ class FinalStateEvent(Event):
 
 
 @dataclass
+class AgentCallingEvent(Event):
+    pass
+
+
+@dataclass
+class AgentRoutingEvent(Event):
+    pass
+
+
+@dataclass
 class AgentConfiguration:
     on_tool_usage: Callable[[AnyMessage], None] = field(
         default_factory=lambda: lambda _: None
@@ -306,6 +316,12 @@ class AgentConfiguration:
     )
     on_ai_message: Callable[[AnyMessage, str], None] = field(
         default_factory=lambda: lambda _, __: None
+    )
+    on_agent_calling: Callable[[str], None] = field(
+        default_factory=lambda: lambda _: None
+    )
+    on_agent_routing: Callable[[str], None] = field(
+        default_factory=lambda: lambda _: None
     )
     system_prompt: str | Callable[[list[AnyMessage]], str] = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
@@ -561,6 +577,8 @@ class Agent(Expose):
         self._on_tool_usage = configuration.on_tool_usage
         self._on_tool_response = configuration.on_tool_response
         self._on_ai_message = configuration.on_ai_message
+        self._on_call_model = configuration.on_agent_calling
+        self._on_agent_routing = configuration.on_agent_routing
 
         # Initialize the event queue.
         if event_queue is None:
@@ -760,6 +778,7 @@ class Agent(Expose):
             if agent is not None:
                 agent_name = Agent.validate_name(agent.name)
                 self._state.set_current_active_agent(agent_name)
+                self._notify_agent_routing(agent_name)
                 return Command(
                     goto=agent_name,
                     update={"messages": state["messages"]},
@@ -774,6 +793,7 @@ class Agent(Expose):
             logger.debug(
                 f"⏩ Continuing conversation with: '{self._state.current_active_agent}'"
             )
+            self._notify_agent_routing(self._state.current_active_agent)
             return Command(goto=self._state.current_active_agent)
 
         # self._state.set_current_active_agent(self.name)
@@ -903,6 +923,7 @@ SUBAGENT SYSTEM PROMPT:
     ) -> Command[Literal["call_tools", "__end__"]]:
         self._state.set_current_active_agent(self.name)
         logger.debug(f"🧠 Calling model for agent '{self._name}'")
+        self._notify_call_model(self._name)
 
         # Inserting system prompt before messages.
         messages = state["messages"]
@@ -919,7 +940,13 @@ SUBAGENT SYSTEM PROMPT:
             logger.error(f"Model invocation failed for agent '{self._name}': {e}")
             return Command(
                 goto="__end__",
-                update={"messages": [AIMessage(content=f"I'm sorry, I encountered an error while processing your request: {e}")]},
+                update={
+                    "messages": [
+                        AIMessage(
+                            content=f"I'm sorry, I encountered an error while processing your request: {e}"
+                        )
+                    ]
+                },
             )
         logger.debug(f"Model response: {response}")
         logger.debug(
@@ -1123,6 +1150,14 @@ SUBAGENT SYSTEM PROMPT:
         self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
         self._on_ai_message(message, agent_name)
 
+    def _notify_call_model(self, agent_name: str):
+        self._event_queue.put(AgentCallingEvent(payload=agent_name))
+        self._on_call_model(agent_name)
+
+    def _notify_agent_routing(self, agent_name: str):
+        self._event_queue.put(AgentRoutingEvent(payload=agent_name))
+        self._on_agent_routing(agent_name)
+
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
 
@@ -1276,7 +1311,8 @@ SUBAGENT SYSTEM PROMPT:
             if isinstance(chunk, tuple):
                 chunk = chunk[1]
 
-            assert isinstance(chunk, dict)
+            if not isinstance(chunk, dict):
+                continue
 
             chunks.append(chunk)
 
@@ -1440,7 +1476,15 @@ SUBAGENT SYSTEM PROMPT:
 
         # Start a thread to run the invoke and put results in queue
         def run_invoke():
-            final_state = self.invoke(prompt)
+            try:
+                final_state = self.invoke(prompt)
+            except Exception as e:
+                logger.error(
+                    f"Agent invoke thread error for '{self._name}': {e}", exc_info=True
+                )
+                final_state = (
+                    f"I encountered an error while processing your request: {e}"
+                )
             self._event_queue.put(FinalStateEvent(payload=final_state))
 
         from threading import Thread
@@ -1466,6 +1510,16 @@ SUBAGENT SYSTEM PROMPT:
                     yield {
                         "event": "ai_message",
                         "data": str(message.payload.content),
+                    }
+                elif isinstance(message, AgentCallingEvent):
+                    yield {
+                        "event": "call_model",
+                        "data": str(message.payload),
+                    }
+                elif isinstance(message, AgentRoutingEvent):
+                    yield {
+                        "event": "agent_routing",
+                        "data": str(message.payload),
                     }
                 elif isinstance(message, FinalStateEvent):
                     final_state = message.payload

@@ -2,70 +2,96 @@ from typing import Optional
 
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import Agent
-from naas_abi_core.services.agent.CoordinatorAgent import (
-    BorderlineBehavior,
-    CoordinatorAgent,
-)
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
     Intent,
+    IntentAgent,
     IntentScope,
     IntentType,
 )
 
 
-class AbiAgent(CoordinatorAgent):
+class AbiAgent(IntentAgent):
     """
-    Abi Coordinator Agent.
-
-    Strict supervisor: only delegates to registered agents, never answers
-    directly. The "never answer directly" rule is enforced structurally by
-    CoordinatorAgent's graph topology — the LLM is not invoked on no-match
-    paths, so it cannot hallucinate fake agents, fake routing, or fake
-    confirmations.
+    Abi Supervisor Agent.
 
     Run agent in terminal: LOG_LEVEL=DEBUG uv run abi chat abi AbiAgent
     """
 
     name: str = "Abi"
-    description: str = "Abi is a coordinator Agent developed by NaasAI."
+    description: str = "Abi is a orchestrator Agent developed by NaasAI."
     logo_url: str = (
         "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
     )
-
-    # Lean prompt — the "never invent" / "never claim actions" rules used to
-    # live here as prose. They are now enforced by the graph itself, so the
-    # prompt can focus on tone and on listing capabilities for the rare path
-    # where the LLM is actually invoked (TOOL intents if allow_tool_intents
-    # is True, or sub-agent active-context paths).
-    system_prompt: str = """<role>
-You are Abi, the coordinator Agent developed by NaasAI.
+    system_prompt: str = """<role>You are Abi, the orchestrator Agent developed by NaasAI.
 </role>
 
 <objective>
-Route user requests to the correct specialised agent. You do not answer
-domain questions yourself — your sole job is delegation.
+Handle user requests by delegating to the available agents or tools.
 </objective>
 
-<available_agents>
-[AGENTS]
-</available_agents>
+<context>
+You will receive messages from users or from agents you supervise. 
+Respond only based on what your available agents and tools can actually deliver.
+</context>
 
-<available_tools>
+<tasks>
+1. Match the user request to the best available agent or tool.
+2. If a match is found, delegate to that agent or tool with full context and report the result back verbatim.
+3. If no match is found, tell the user you do not have the capibilities to handle its request and propose him alternatives based on your available agents and tools.
+</tasks>
+
+<tools>
 [TOOLS]
-</available_tools>
+</tools>
 
-<style>
-- Match the language of the user's message.
-- Be concise.
-</style>
+<agents>
+[AGENTS]
+</agents>
+
+<operating_guidelines>
+- Maintain a clear, concise, and professional tone in all interactions.
+- Format all responses as clean, well-structured Markdown (use headings, bullet lists, lines breaks and code blocks when helpful).
+- Always include all relevant output and context from your tools and agents in your responses.
+- Confirm actions and provide next steps when appropriate.
+</operating_guidelines>
+
+<constraints>
+- Preserve the language of the user's message in your response.
+- If you need to ask the user a question, display the question after two markdown line breaks: "\\n\\n".
+- Never invent, suggest, or imply the existence of any other agent, tool, module, or capability.
+- Never claim to have performed an action (routing, provisioning, activation, notification) unless a real tool or agent call was made and returned a result.
+- Never fabricate timelines, confirmations, or follow-up steps.
+- Do not simulate conversations with imaginary sub-agents or services.
+- Keep responses concise and factual.
+</constraints>
 """
 
-    # Coordinator policy: refuse cleanly when nothing matches; suggest when
-    # there are borderline candidates. Do not let the LLM phrase tool outputs.
-    allow_tool_intents: bool = False
-    borderline_behavior: BorderlineBehavior = "suggest"
+    # @staticmethod
+    # def build_suggestions(cls: type) -> list[dict[str, str]]:
+    #     from naas_abi import ABIModule
+
+    #     suggestions: list[dict[str, str]] = []
+    #     seen_agent_names: set[str] = set()
+    #     for module in ABIModule.get_instance().engine.modules.values():
+    #         for agent_cls in module.agents:
+    #             if agent_cls is None:
+    #                 continue
+    #             if issubclass(agent_cls, Agent):
+    #                 agent_name = str(agent_cls.name)
+    #                 if agent_name in seen_agent_names:
+    #                     continue
+    #                 seen_agent_names.add(agent_name)
+    #                 suggestions.append(
+    #                     {
+    #                         "label": agent_name,
+    #                         "value": f"Chat with {agent_name}",
+    #                     }
+    #                 )
+    #     return suggestions
+
+    # suggestions: list[dict[str, str]] = build_suggestions(cls=AbiAgent)
 
     @staticmethod
     def get_model(
@@ -104,7 +130,7 @@ domain questions yourself — your sole job is delegation.
         )
         assert isinstance(
             templatable_sparql_query_module, TemplatableSparqlQueryABIModule
-        ), "TemplatableSparqlQueryABIModule must be a subclass of BaseModule"
+        ), "TemplatableSparqlQueryABIModuleModule must be a subclass of BaseModule"
 
         agent_recommendation_tools = [
             "find_business_proposal_agents",
@@ -118,6 +144,7 @@ domain questions yourself — your sole job is delegation.
             agent_recommendation_tools
         )
         tools += sparql_query_tools_list
+
         return tools
 
     @staticmethod
@@ -143,6 +170,7 @@ domain questions yourself — your sole job is delegation.
             candidate_classes.append(agent_cls)
 
         abi_module = ABIModule.get_instance()
+
         for agent_cls in abi_module.agents:
             if agent_cls is None:
                 continue
@@ -175,9 +203,12 @@ domain questions yourself — your sole job is delegation.
 
     @staticmethod
     def get_intents(agents: list) -> list:
+        # Define intents
         intents: list = []
+
+        # TODO: Create generic method in Agent.py to get agent intents + Use agent intents in supervisor agent
         for agent in agents:
-            # Primary routing intent
+            # Primary routing intent using the agent name
             intents.append(
                 Intent(
                     intent_type=IntentType.AGENT,
@@ -186,7 +217,9 @@ domain questions yourself — your sole job is delegation.
                     intent_scope=IntentScope.DIRECT,
                 )
             )
-            # Verb variants — caught without LLM call
+
+            # Additional routing intents to catch natural agent-name mentions
+            # (e.g. "search on grok", "use grok", "ask grok") without requiring an LLM call.
             for verb in ("use", "ask", "search on", "talk to", "route to"):
                 intents.append(
                     Intent(
@@ -196,7 +229,8 @@ domain questions yourself — your sole job is delegation.
                         intent_scope=IntentScope.DIRECT,
                     )
                 )
-            # Description-based intent for semantic coverage
+
+            # Description-based intent for broader semantic coverage
             if hasattr(agent, "description") and agent.description:
                 intents.append(
                     Intent(
@@ -206,7 +240,7 @@ domain questions yourself — your sole job is delegation.
                         intent_scope=IntentScope.DIRECT,
                     )
                 )
-            # Forward each sub-agent's non-DIRECT intents
+
             if hasattr(agent, "intents"):
                 for intent in agent.intents:
                     if (
@@ -214,13 +248,12 @@ domain questions yourself — your sole job is delegation.
                         and intent.intent_scope == IntentScope.DIRECT
                     ):
                         continue
-                    intents.append(
-                        Intent(
-                            intent_type=IntentType.AGENT,
-                            intent_value=intent.intent_value,
-                            intent_target=agent.name,
-                        )
+                    new_intent = Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=intent.intent_value,
+                        intent_target=agent.name,
                     )
+                    intents.append(new_intent)
         return intents
 
     @classmethod
@@ -238,27 +271,18 @@ domain questions yourself — your sole job is delegation.
         )
 
         tools = cls.get_tools(cls=cls)
+
         agents, agent_shared_state = cls.get_agents(cls=cls)
         intents = cls.get_intents(agents=agents)
 
         if agent_configuration is None:
             tools_section = (
-                "\n".join(
-                    [
-                        f"- {tool.name}: {tool.description}"
-                        for tool in sorted(tools, key=lambda x: x.name)
-                    ]
-                )
-                or "(none)"
+                "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+                or ""
             )
             agents_section = (
-                "\n".join(
-                    [
-                        f"- {agent.name}: {agent.description}"
-                        for agent in sorted(agents, key=lambda x: x.name)
-                    ]
-                )
-                or "(none)"
+                "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])
+                or ""
             )
             agent_configuration = AgentConfiguration(
                 system_prompt=cls.system_prompt.replace(
