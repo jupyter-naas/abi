@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1105,11 +1105,24 @@ export function ChatInterface() {
         };
 
         const handleToolResponseEvent = (output: string) => {
-          const last = streamToolCalls[streamToolCalls.length - 1];
-          if (last && last.status === 'running') {
-            last.status = 'done';
-            if (output.trim()) last.output = output.slice(0, 2000);
-          }
+          if (!output.trim()) return;
+
+          // Prefer the most recent running tool call, otherwise attach to the
+          // latest tool call entry. This supports streams where tool_response
+          // arrives right after tool_usage but the status was already flipped.
+          const reversed = [...streamToolCalls].reverse();
+          const runningReverseIndex = reversed.findIndex(
+            (call) => call.prefix === 'Tool' && call.status === 'running',
+          );
+          const recentToolReverseIndex = reversed.findIndex((call) => call.prefix === 'Tool');
+          const selectedReverseIndex =
+            runningReverseIndex !== -1 ? runningReverseIndex : recentToolReverseIndex;
+          if (selectedReverseIndex === -1) return;
+
+          const targetIndex = streamToolCalls.length - 1 - selectedReverseIndex;
+          const target = streamToolCalls[targetIndex];
+          target.status = 'done';
+          target.output = output;
         };
 
         const handleAgentStepEvent = (
@@ -1163,7 +1176,7 @@ export function ChatInterface() {
               return true;
             }
             case 'tool_response': {
-              const output = getStringValue(payload.content, payload.data);
+              const output = getStringValue(payload.output, payload.content, payload.data);
               handleToolResponseEvent(output);
               return true;
             }
@@ -2171,12 +2184,61 @@ function ToolCallsDropdown({
   );
 }
 
+/** Pretty-print JSON (pprint-like indent); return original string if not JSON. */
+function pprintLikeString(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return text;
+  }
+  try {
+    return `${JSON.stringify(JSON.parse(trimmed), null, 4)}\n`;
+  } catch {
+    return text;
+  }
+}
+
+/** Fixed-height viewport; `overflow-auto` scrolls vertically and horizontally when content overflows. */
+const TOOL_DETAIL_PRE =
+  'mt-0.5 max-h-48 w-full min-h-0 min-w-0 max-w-full overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-muted-foreground';
+
+function formatToolUsageForClipboard(tool: ToolCall): string {
+  const lines: string[] = [formatToolCallLabel(tool.prefix, tool.toolName)];
+  if (tool.input?.trim()) {
+    lines.push('', 'Input:', tool.input.trim());
+  }
+  if (tool.output?.trim()) {
+    const out =
+      tool.prefix === 'Tool' ? pprintLikeString(tool.output) : tool.output.trim();
+    lines.push('', 'Output:', out.trimEnd());
+  }
+  return lines.join('\n');
+}
+
 function ToolCallRow({ tool }: { tool: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
-  const hasDetails = Boolean(tool.input || tool.output);
+  const [usageCopied, setUsageCopied] = useState(false);
+  const isToolCall = tool.prefix === 'Tool';
+  const hasToolResponse = Boolean(tool.output?.trim());
+  const hasDetails = isToolCall ? hasToolResponse : Boolean(tool.input || tool.output);
+  const prettyPrintedOutput = useMemo(
+    () => (tool.output ? pprintLikeString(tool.output) : ''),
+    [tool.output],
+  );
+
+  const clipboardText = useMemo(() => formatToolUsageForClipboard(tool), [tool]);
+
+  const handleCopyToolUsage = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(clipboardText);
+      setUsageCopied(true);
+      window.setTimeout(() => setUsageCopied(false), 1600);
+    } catch (e) {
+      console.error('Failed to copy tool usage:', e);
+    }
+  }, [clipboardText]);
 
   return (
-    <div className="px-3 py-2">
+    <div className="min-w-0 px-3 py-2">
       <button
         type="button"
         disabled={!hasDetails}
@@ -2201,21 +2263,35 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
       </button>
 
       {expanded && hasDetails && (
-        <div className="mt-2 space-y-2 pl-4">
-          {tool.input && (
+        <div className="mt-2 min-w-0 space-y-2 pl-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              aria-label={usageCopied ? 'Copied to clipboard' : 'Copy tool step to clipboard'}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleCopyToolUsage();
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border/70 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Copy this step (name, input, output)"
+            >
+              <Copy size={10} className="shrink-0" aria-hidden />
+              {usageCopied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          {!isToolCall && tool.input && (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">Input</p>
-              <pre className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-muted-foreground">
-                {tool.input}
-              </pre>
+              <pre className={TOOL_DETAIL_PRE}>{tool.input}</pre>
             </div>
           )}
-          {tool.output && (
+          {isToolCall && tool.output && (
+            <pre className={TOOL_DETAIL_PRE}>{prettyPrintedOutput}</pre>
+          )}
+          {!isToolCall && tool.output && (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">Output</p>
-              <pre className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-muted-foreground">
-                {tool.output}
-              </pre>
+              <pre className={TOOL_DETAIL_PRE}>{tool.output}</pre>
             </div>
           )}
         </div>
