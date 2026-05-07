@@ -138,11 +138,13 @@ def create_agent(
 
     module = ABIModule.get_instance()
 
-    embeddings_config = module.configuration.markdowntovector_pipelines[0] if module.configuration.markdowntovector_pipelines else None
-    model_id = embeddings_config.model_id if embeddings_config else "text-embedding-3-small"
-    dimension = embeddings_config.dimension if embeddings_config else 1536
+    agent_config = module.configuration.document_agent
 
-    embeddings_model = OpenAIEmbeddings(model=model_id, dimensions=dimension)
+    embeddings_model = OpenAIEmbeddings(
+        model=agent_config.model_id,
+        dimensions=agent_config.dimension,
+        api_key=agent_config.api_key,
+    )
     vector_store_service = module.engine.services.vector_store
 
     search_tool = _build_search_tool(embeddings_model, vector_store_service)
