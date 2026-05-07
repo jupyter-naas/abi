@@ -1951,13 +1951,8 @@ def generate_property_code(
     # Determine default value string (use double quotes)
     if prop.default_value:
         default_str = prop.default_value.replace("'USER'", '"USER"')
-    elif not prop.required and prop.property_type == "object":
-        if base_type.startswith("List["):
-            default_str = '["http://ontology.naas.ai/abi/unknown"]'
-        else:
-            default_str = '"http://ontology.naas.ai/abi/unknown"'
-    elif not prop.required and prop.property_type == "data" and base_type == "str":
-        default_str = '"unknown"'
+    elif not prop.required:
+        default_str = "None"
     else:
         default_str = None
 
