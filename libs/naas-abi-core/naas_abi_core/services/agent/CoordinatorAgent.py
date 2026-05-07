@@ -104,6 +104,7 @@ class CoordinatorAgent(IntentAgent):
         direct_intent_score: float = 0.90,
         enable_default_intents: bool = True,
         enable_default_tools: bool = True,
+        markdown_pretty_display: bool = True,
         # Coordinator-specific knobs (overridable per instance)
         allow_tool_intents: Optional[bool] = None,
         borderline_behavior: Optional[BorderlineBehavior] = None,
@@ -133,6 +134,7 @@ class CoordinatorAgent(IntentAgent):
             direct_intent_score=direct_intent_score,
             enable_default_intents=enable_default_intents,
             enable_default_tools=enable_default_tools,
+            markdown_pretty_display=markdown_pretty_display,
         )
 
     # ------------------------------------------------------------------ #
@@ -306,14 +308,14 @@ class CoordinatorAgent(IntentAgent):
         """
         logger.debug("🛑 Coordinator refusal node")
 
-        # Fall back to support agent when available and not already tried this turn.
-        support_agent = self._find_support_agent()
-        if support_agent and not self._state.tried_support_fallback:
-            logger.debug(f"🆘 Falling back to support agent '{support_agent.name}'")
-            self._state.set_tried_support_fallback(True)
-            self._notify_agent_routing(support_agent.name)
-            self.state.set_current_active_agent(support_agent.name)
-            return Command(goto=support_agent.name)
+        # # Fall back to support agent when available and not already tried this turn.
+        # support_agent = self._find_support_agent()
+        # if support_agent and not self._state.tried_support_fallback:
+        #     logger.debug(f"🆘 Falling back to support agent '{support_agent.name}'")
+        #     self._state.set_tried_support_fallback(True)
+        #     self._notify_agent_routing(support_agent.name)
+        #     self.state.set_current_active_agent(support_agent.name)
+        #     return Command(goto=support_agent.name)
 
         candidates: list[dict] = []
         if "intent_mapping" in state:
@@ -612,6 +614,7 @@ class CoordinatorAgent(IntentAgent):
             direct_intent_score=self._direct_intent_score,
             enable_default_intents=self._enable_default_intents,
             enable_default_tools=self._enable_default_tools,
+            markdown_pretty_display=self._markdown_pretty_display,
             allow_tool_intents=self.allow_tool_intents,
             borderline_behavior=self.borderline_behavior,
             borderline_floor=self.borderline_floor,
