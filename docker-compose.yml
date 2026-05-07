@@ -27,11 +27,12 @@
 #     runtime_flags:
 #       - --memory=12g
 #       - --cpus=4
-
+ 
 x-abi-template: &abi_template
   build:
     context: .
-    dockerfile: docker/images/Dockerfile
+    dockerfile: ./.deploy/docker/images/Dockerfile
+  restart: unless-stopped
   ports:
     - 9879:9879  # REST API endpoint - http://localhost:9879
     - 8501:8501  # Streamlit web interface - http://localhost:8501
@@ -50,7 +51,6 @@ x-abi-template: &abi_template
     # - ./.env:/app/.env
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
-    - dagster_home:/app/.dagster  # Dagster metadata/cache isolated from host
   environment:
     - ENV=local
     - LOG_LEVEL=DEBUG
@@ -85,44 +85,47 @@ x-abi-template: &abi_template
 
 services:
   nexus-web:
-    build:
-      context: libs/naas-abi/naas_abi/apps/nexus/
-      dockerfile: Dockerfile
+    image: ${NEXUS_WEB_IMAGE}:${NEXUS_WEB_TAG}
+    pull_policy: always
+    restart: unless-stopped
     ports:
-      - 3042:3000
-    volumes:
-      - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
-      # Keep container build/runtime artifacts isolated from host workspace
-      # to avoid stale `.next` and dependency resolution issues.
-      - nexus_web_node_modules:/app/apps/web/node_modules
-      - nexus_web_next:/app/apps/web/.next
+      - ${NEXUS_WEB_PORT}:3000
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
-      - NEXUS_API_URL=http://abi:9879
-      - NEXT_PUBLIC_API_URL=http://127.0.0.1:9879
+      - NEXUS_API_URL=${NEXUS_API_URL}
+      - NEXT_PUBLIC_API_URL=${NEXUS_API_URL}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     networks:
       - abi-network
 
   caddy:
     image: caddy:2-alpine
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 80:80
       - 443:443
     environment:
       - PUBLIC_WEB_HOST=${PUBLIC_WEB_HOST:-localhost}
       - PUBLIC_API_HOST=${PUBLIC_API_HOST:-api.localhost}
+
+      - HEADSCALE_SERVER_URL=${HEADSCALE_SERVER_URL:-headscale.localhost}
+
     volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - nexus-web
       - abi
+
+      - headscale
+
     networks:
       - abi-network
+
   # -----------------------------------------------------------------------------
   # ABI Main Service - AI Agent Coordinator
   # -----------------------------------------------------------------------------
@@ -139,10 +142,13 @@ services:
   mcp-server:
     build:
       context: .
-      dockerfile: libs/naas-abi-core/naas_abi_core/apps/mcp/Dockerfile.mcp
+      dockerfile: ./.deploy/docker/images/Dockerfile
+    restart: unless-stopped
     depends_on:
       abi:
         condition: service_healthy
+    command:
+      ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
     environment:
       - ABI_API_BASE=http://abi:9879
       - ABI_API_KEY=abi
@@ -159,6 +165,8 @@ services:
   # Used by LangGraph for agent state management and memory retrieval
   postgres:
     image: postgres:17-alpine  # Latest stable PostgreSQL
+    pull_policy: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -167,7 +175,7 @@ services:
       - ${POSTGRES_PORT}:${POSTGRES_PORT}  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:${POSTGRES_PORT}/abi_memory
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent data storage
-      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro  # Bootstrap additional databases
+      - ./.deploy/docker/postgres/initdb:/docker-entrypoint-initdb.d:ro  # Bootstrap additional databases
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -183,13 +191,45 @@ services:
   # TDB2 provides transactional storage with SPARQL query/update endpoints
   fuseki:
     image: stain/jena-fuseki:latest
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 3030:3030
     volumes:
       - fuseki_data:/fuseki
     environment:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
-      - FUSEKI_DATASET_1=ds
+    command: >-
+      bash -c '
+      mkdir -p /fuseki/configuration /fuseki/databases/ds &&
+      printf "@prefix :        <#> .
+      @prefix fuseki:  <http://jena.apache.org/fuseki#> .
+      @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+      @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
+      @prefix tdb2:    <http://jena.apache.org/2016/tdb#> .
+
+      :service rdf:type fuseki:Service ;
+          fuseki:name \"ds\" ;
+          fuseki:endpoint [ fuseki:operation fuseki:query ;
+                            fuseki:name \"sparql\" ;
+                            ja:context [ ja:cxtName \"tdb:unionDefaultGraph\" ;
+                                         ja:cxtValue true ] ] ;
+          fuseki:endpoint [ fuseki:operation fuseki:query ;
+                            fuseki:name \"query\" ;
+                            ja:context [ ja:cxtName \"tdb:unionDefaultGraph\" ;
+                                         ja:cxtValue true ] ] ;
+          fuseki:endpoint [ fuseki:operation fuseki:update ;
+                            fuseki:name \"update\" ] ;
+          fuseki:endpoint [ fuseki:operation fuseki:gsp-r ;
+                            fuseki:name \"get\" ] ;
+          fuseki:endpoint [ fuseki:operation fuseki:gsp-rw ;
+                            fuseki:name \"data\" ] ;
+          fuseki:dataset :dataset .
+
+      :dataset rdf:type tdb2:DatasetTDB2 ;
+          tdb2:location \"/fuseki/databases/ds\" .
+      " > /fuseki/configuration/ds.ttl &&
+      /jena-fuseki/fuseki-server'
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:3030/ >/dev/null || exit 1"]
       interval: 10s
@@ -205,11 +245,13 @@ services:
   # Allows interactive exploration of the knowledge graph
   yasgui:
     image: erikap/yasgui:latest
+    pull_policy: always
+    restart: unless-stopped
     platform: linux/amd64  # Force x86_64 for compatibility with Apple Silicon
     ports:
       - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
     environment:
-      - DEFAULT_SPARQL_ENDPOINT=http://fuseki:3030/ds/query
+      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:3030/ds/query
     depends_on:
       - fuseki
     networks:
@@ -223,23 +265,23 @@ services:
   dagster:
     build:
       context: .
-      dockerfile: docker/images/Dockerfile
+      dockerfile: ./.deploy/docker/images/Dockerfile
+    restart: unless-stopped
     ports:
       - 3001:3001  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
     volumes:
-      #- ./scripts:/app/scripts
-        # - ./uv.lock:/app/uv.lock
-      #- ./pyproject.toml:/app/pyproject.toml
-      #- ./src:/app/src
-      #- ./lib:/app/lib
-      #- ./libs:/app/libs
-      #- ./README.md:/app/README.md
-      #- ./storage:/app/storage
-      #- .env:/app/.env
-      - .:/app/
+      # - ./scripts:/app/scripts
+      # - ./uv.lock:/app/uv.lock
+      # - ./config.local.yaml:/app/config.yaml # We mount the config.local.yaml as it's configured to run from within the containers network.
+      # - ./pyproject.toml:/app/pyproject.toml
+      # - ./src:/app/src
+      # - ./README.md:/app/README.md
+      # - ./storage:/app/storage
+      # - .env:/app/.env
+      - .:/app
       - venv_cache:/app/.venv
       - dagster_home:/app/.dagster  # Dagster metadata and run history
-      - ./docker/dagster/dagster.yaml:/app/.dagster/dagster.yaml:ro
+      - ./.deploy/docker/dagster/dagster.yaml:/app/.dagster/dagster.yaml:ro
     environment:
       - ENV=local
       - PYTHONPATH=/app
@@ -265,6 +307,8 @@ services:
   # -----------------------------------------------------------------------------
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    pull_policy: always
+    restart: unless-stopped
     command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -285,6 +329,7 @@ services:
   # mc container to initialize the bucket on startup
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    pull_policy: always
     depends_on:
       minio:
         condition: service_healthy
@@ -302,6 +347,8 @@ services:
   # -----------------------------------------------------------------------------
   rabbitmq:
     image: rabbitmq:3-management
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 5672:5672   # AMQP
       - 15672:15672 # Management UI - http://localhost:15672
@@ -324,6 +371,8 @@ services:
   # -----------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
+    pull_policy: always
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - 6379:6379
@@ -342,6 +391,8 @@ services:
   # -----------------------------------------------------------------------------
   redis-commander:
     image: rediscommander/redis-commander:latest
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 8082:8081  # Redis Commander UI - http://localhost:8082
     environment:
@@ -356,6 +407,8 @@ services:
   # -----------------------------------------------------------------------------
   matrix:
     image: matrixdotorg/synapse:latest
+    pull_policy: always
+    restart: unless-stopped
     environment:
       SYNAPSE_SERVER_NAME: localhost
       SYNAPSE_REPORT_STATS: "no"
@@ -364,7 +417,7 @@ services:
       - 8448:8448  # Matrix federation API
     volumes:
       - synapse_data:/data
-      - ./docker/synapse/bootstrap.sh:/bootstrap.sh:ro
+      - ./.deploy/docker/synapse/bootstrap.sh:/bootstrap.sh:ro
     entrypoint: ["/bin/sh", "/bootstrap.sh"]
     networks:
       - abi-network
@@ -374,10 +427,12 @@ services:
   # -----------------------------------------------------------------------------
   element-web:
     image: vectorim/element-web:latest
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 8081:80  # Element web client - http://localhost:8081
     volumes:
-      - ./docker/element-config.json:/app/config.json:ro
+      - ./.deploy/docker/element-config.json:/app/config.json:ro
     depends_on:
       - matrix
     networks:
@@ -388,6 +443,8 @@ services:
   # -----------------------------------------------------------------------------
   service-portal:
     image: nginx:alpine
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 8080:80  # Service portal - http://localhost:8080
     environment:
@@ -397,9 +454,48 @@ services:
       - NGINX_ENVSUBST_TEMPLATE_SUFFIX=.template
       - NGINX_ENVSUBST_OUTPUT_DIR=/usr/share/nginx/html
     volumes:
-      - ./docker/service-portal:/usr/share/nginx/templates:ro
+      - ./.deploy/docker/service-portal:/usr/share/nginx/templates:ro
     networks:
       - abi-network
+
+  # -----------------------------------------------------------------------------
+  # Neptune Graph Explorer
+  # -----------------------------------------------------------------------------
+  graph-explorer:
+    image: public.ecr.aws/neptune/graph-explorer
+    restart: unless-stopped
+    environment:
+      - HOST=graph-explorer.${PUBLIC_WEB_HOST:-localhost}
+    networks:
+      - abi-network
+
+
+  # -----------------------------------------------------------------------------
+  # Headscale - Self-hosted Tailscale control server
+  # -----------------------------------------------------------------------------
+  headscale:
+    image: docker.io/headscale/headscale:stable
+    pull_policy: always
+    restart: unless-stopped
+    command: ["serve"]
+    ports:
+      - ${HEADSCALE_SERVER_PORT}:8080
+      - ${HEADSCALE_METRICS_PORT}:9090
+      - ${HEADSCALE_GRPC_PORT}:50443
+    volumes:
+      - ./.deploy/docker/headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - ./.deploy/docker/headscale/extra-records.json:/var/lib/headscale/extra-records.json:ro
+      - headscale_data:/var/lib/headscale
+      - headscale_run:/var/run/headscale
+    healthcheck:
+      test: ["CMD", "headscale", "health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - abi-network
+
 
 # =============================================================================
 # PERSISTENT VOLUMES
@@ -408,6 +504,8 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
+    pull_policy: always
+    restart: unless-stopped
     ports:
       - 6333:6333
       - 6334:6334
@@ -430,14 +528,16 @@ volumes:
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
+
+  headscale_data: # Headscale state and sqlite database
+  headscale_run:  # Headscale unix socket runtime data
+
   minio_data:     # MinIO object storage data
   rabbitmq_data:  # RabbitMQ message bus data
   redis_data:     # Redis persistence data
   synapse_data:   # Matrix Synapse data
   caddy_data:     # Caddy certificates and ACME data
   caddy_config:   # Caddy runtime configuration
-  nexus_web_node_modules: # Isolated web dependencies
-  nexus_web_next:         # Isolated Next.js build cache
 
 # =============================================================================
 # NETWORK CONFIGURATION

@@ -24,7 +24,7 @@ class File(_File):
         )
 
     @classmethod
-    def GetFromSha256(cls, sha256: str, graph_name: str) -> Self:
+    def FindBySha256(cls, sha256: str, graph_name: str) -> Self | None:
         module: ABIModule = ABIModule.get_instance()
 
         query = f"""
@@ -37,12 +37,19 @@ class File(_File):
         """
 
         result = list(module.engine.services.triple_store.query(query))
-        assert len(result) == 1
+        if not result:
+            return None
         return cls.from_iri(
             result[0]["fileIRI"],
             graph_name=graph_name,
             query_executor=module.engine.services.triple_store.query,
         )
+
+    @classmethod
+    def GetFromSha256(cls, sha256: str, graph_name: str) -> Self:
+        existing = cls.FindBySha256(sha256, graph_name)
+        assert existing is not None, f"No File found with sha256 {sha256}"
+        return existing
 
     @staticmethod
     def key_from_filename(filename: str) -> str:
@@ -58,11 +65,16 @@ class File(_File):
         graph_name: str,
         destination_path: str = "",
         metadata: ObjectMetaData = None,
+        mime_type: str = None,
         kwargs: dict = {},
     ) -> Self:
         module: ABIModule = ABIModule.get_instance()
 
         sha256 = hashlib.sha256(content).hexdigest()
+
+        existing = cls.FindBySha256(sha256, graph_name)
+        if existing is not None:
+            return existing
 
         key = cls.key_from_filename(filename)
 
@@ -86,7 +98,7 @@ class File(_File):
             created_time=metadata.created_time,
             modified_time=metadata.modified_time,
             accessed_time=metadata.accessed_time,
-            mime_type=metadata.mime_type,
+            mime_type=mime_type or metadata.mime_type,
             encoding=metadata.encoding,
             sha256=sha256,
             **kwargs,

@@ -334,9 +334,7 @@ class Process(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -354,13 +352,13 @@ class Process(RDFEntity):
                 description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_participant: Optional[
         Annotated[
             List[Union[MaterialEntity, Quality, URIRef, str]],
             Field(description="p has participant c =Def c participates in p"),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     occupies_temporal_region: Optional[
         Annotated[
             List[Union[TemporalRegion, URIRef, str]],
@@ -368,7 +366,7 @@ class Process(RDFEntity):
                 description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     occurs_in: Optional[
         Annotated[
             List[Union[Site, URIRef, str]],
@@ -376,7 +374,7 @@ class Process(RDFEntity):
                 description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     realizes: Optional[
         Annotated[
             List[Union[Disposition, Role, URIRef, str]],
@@ -384,7 +382,7 @@ class Process(RDFEntity):
                 description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class TemporalRegion(RDFEntity):
@@ -402,9 +400,7 @@ class TemporalRegion(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -443,9 +439,7 @@ class MaterialEntity(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -461,13 +455,13 @@ class MaterialEntity(RDFEntity):
             List[Union[Disposition, Quality, Role, URIRef, str]],
             Field(description="b bearer of c =Def c inheres in b"),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_member_part: Optional[
         Annotated[
             List[Union[MaterialEntity, URIRef, str]],
             Field(description="b has member part c =Def c member part of b"),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     is_carrier_of: Optional[
         Annotated[
             List[Union[GenericallyDependentContinuant, URIRef, str]],
@@ -475,7 +469,7 @@ class MaterialEntity(RDFEntity):
                 description="b is carrier of c =Def there is some time t such that c generically depends on b at t"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     located_in: Optional[
         Annotated[
             List[Union[Site, URIRef, str]],
@@ -483,13 +477,13 @@ class MaterialEntity(RDFEntity):
                 description="b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     material_basis_of: Optional[
         Annotated[
             List[Union[Disposition, URIRef, str]],
             Field(description="b material basis of c =Def c has material basis b"),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     participates_in: Optional[
         Annotated[
             List[Union[Process, URIRef, str]],
@@ -497,7 +491,7 @@ class MaterialEntity(RDFEntity):
                 description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Site(RDFEntity):
@@ -515,9 +509,7 @@ class Site(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -548,9 +540,7 @@ class GenericallyDependentContinuant(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -568,13 +558,13 @@ class GenericallyDependentContinuant(RDFEntity):
                 description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     is_concretized_by: Optional[
         Annotated[
             List[Union[Disposition, Process, Quality, Role, URIRef, str]],
             Field(description="c is concretized by b =Def b concretizes c"),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Quality(RDFEntity):
@@ -599,9 +589,7 @@ class Quality(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -619,7 +607,7 @@ class Quality(RDFEntity):
                 description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     inheres_in: Optional[
         Annotated[
             List[Union[MaterialEntity, URIRef, str]],
@@ -627,7 +615,7 @@ class Quality(RDFEntity):
                 description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     participates_in: Optional[
         Annotated[
             List[Union[Process, URIRef, str]],
@@ -635,7 +623,7 @@ class Quality(RDFEntity):
                 description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Role(RDFEntity):
@@ -660,9 +648,7 @@ class Role(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -680,13 +666,13 @@ class Role(RDFEntity):
                 description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_realization: Optional[
         Annotated[
             List[Union[Process, URIRef, str]],
             Field(description="b has realization c =Def c realizes b"),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     inheres_in: Optional[
         Annotated[
             List[Union[MaterialEntity, URIRef, str]],
@@ -694,7 +680,7 @@ class Role(RDFEntity):
                 description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Disposition(RDFEntity):
@@ -719,9 +705,7 @@ class Disposition(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -739,7 +723,7 @@ class Disposition(RDFEntity):
                 description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_material_basis: Optional[
         Annotated[
             List[Union[MaterialEntity, URIRef, str]],
@@ -747,13 +731,13 @@ class Disposition(RDFEntity):
                 description="b has material basis c =Def b is a disposition & c is a material entity & there is some d bearer of b & there is some time t such that c is a continuant part of d at t & d has disposition b because c is a continuant part of d at t"
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_realization: Optional[
         Annotated[
             List[Union[Process, URIRef, str]],
             Field(description="b has realization c =Def c realizes b"),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 # Rebuild models to resolve forward references
