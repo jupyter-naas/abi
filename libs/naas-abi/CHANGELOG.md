@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.36.1 (2026-05-07)
+
+### Bug Fixes
+
+- Update document module
+  ([`dc94322`](https://github.com/jupyter-naas/abi/commit/dc94322fc3e299fbf99a94c539e6713e760881fa))
+
+
 ## v1.36.0 (2026-05-06)
 
 ### Bug Fixes
