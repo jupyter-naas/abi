@@ -384,7 +384,15 @@ export function VisNetwork({
   const networkRef = useRef<Network | null>(null);
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
+  const onNodeSelectRef = useRef(onNodeSelect);
+  const onEdgeSelectRef = useRef(onEdgeSelect);
+  const prevSelectedNodeIdRef = useRef<string | null>(null);
   const [logoDataByUrl, setLogoDataByUrl] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    onNodeSelectRef.current = onNodeSelect;
+    onEdgeSelectRef.current = onEdgeSelect;
+  }, [onNodeSelect, onEdgeSelect]);
 
   const nodesByIri = useMemo(() => {
     const map = new Map<string, GraphNode>();
@@ -559,12 +567,12 @@ export function VisNetwork({
 
     networkRef.current.on('click', (params) => {
       if (params.nodes.length > 0) {
-        onNodeSelect(params.nodes[0] as string);
+        onNodeSelectRef.current(params.nodes[0] as string);
       } else if (params.edges.length > 0) {
-        onEdgeSelect(params.edges[0] as string);
+        onEdgeSelectRef.current(params.edges[0] as string);
       } else {
-        onNodeSelect(null);
-        onEdgeSelect(null);
+        onNodeSelectRef.current(null);
+        onEdgeSelectRef.current(null);
       }
     });
 
@@ -574,7 +582,7 @@ export function VisNetwork({
         networkRef.current = null;
       }
     };
-  }, [onNodeSelect, onEdgeSelect]);
+  }, []);
 
   // Track if initial stabilization is done
   const isStabilizedRef = useRef(false);
@@ -706,13 +714,46 @@ export function VisNetwork({
   }, [stabilizeKey, layoutDirection]);
 
   // Handle selected node — select visually and pan to center on it without changing zoom.
+  // Double-RAF delay lets the canvas finish resizing (inspector open/close) before we pan.
   useEffect(() => {
-    if (!networkRef.current || !selectedNodeId || !nodesDataRef.current.get(selectedNodeId)) return;
+    if (!networkRef.current) return;
+
+    const hadSelected = prevSelectedNodeIdRef.current !== null;
+    prevSelectedNodeIdRef.current = selectedNodeId;
+
+    let cancelled = false;
+
+    if (!selectedNodeId) {
+      // Inspector closing: re-fit the graph into the now-wider canvas.
+      if (!hadSelected) return;
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        requestAnimationFrame(() => {
+          if (cancelled || !networkRef.current || nodesDataRef.current.length === 0) return;
+          networkRef.current.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
+        });
+      });
+      return () => { cancelled = true; };
+    }
+
+    if (!nodesDataRef.current.get(selectedNodeId)) return;
     networkRef.current.selectNodes([selectedNodeId]);
-    networkRef.current.focus(selectedNodeId, {
-      scale: networkRef.current.getScale(),
-      animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+
+    // Wait for the canvas to finish resizing (inspector open shrinks it) before centering.
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        if (cancelled || !networkRef.current) return;
+        const currentScale = networkRef.current.getScale();
+        const targetScale = Math.max(currentScale, 1.35);
+        networkRef.current.focus(selectedNodeId, {
+          scale: targetScale,
+          animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+        });
+      });
     });
+
+    return () => { cancelled = true; };
   }, [selectedNodeId]);
 
   return (
