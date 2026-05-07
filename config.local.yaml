@@ -151,6 +151,10 @@ modules:
   - module: naas_abi_marketplace.domains.document
     enabled: true
     config:
+      document_agent:
+        model_id: "text-embedding-3-small"
+        dimension: 1536
+        api_key: "{{ secret.OPENAI_API_KEY }}"
       markdowntovector_pipelines:
         - api_key: "{{ secret.OPENAI_API_KEY }}"
 
