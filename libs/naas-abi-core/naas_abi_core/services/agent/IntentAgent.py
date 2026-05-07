@@ -728,6 +728,7 @@ Last user message: "{last_human_message.content}"
                     )
                     if intent.intent_target != "call_model":
                         self.state.set_current_active_agent(intent.intent_target)
+                        self._notify_agent_routing(intent.intent_target)
                     return Command(goto=intent.intent_target)
                 else:
                     logger.debug(
