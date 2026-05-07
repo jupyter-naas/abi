@@ -297,13 +297,13 @@ class FinalStateEvent(Event):
 
 
 @dataclass
-class AgentCallingEvent(Event):
-    pass
+class CallModelEvent(Event):
+    agent_name: str
 
 
 @dataclass
 class AgentRoutingEvent(Event):
-    pass
+    agent_name: str
 
 
 @dataclass
@@ -585,6 +585,7 @@ class Agent(Expose):
             self._event_queue = Queue()
         else:
             self._event_queue = event_queue
+        self._sync_event_queue_with_subagents()
 
         # We build the graph.
         self.build_graph()
@@ -793,7 +794,7 @@ class Agent(Expose):
             logger.debug(
                 f"⏩ Continuing conversation with: '{self._state.current_active_agent}'"
             )
-            self._notify_agent_routing(self._state.current_active_agent)
+            # self._notify_agent_routing(self._state.current_active_agent)
             return Command(goto=self._state.current_active_agent)
 
         # self._state.set_current_active_agent(self.name)
@@ -1151,12 +1152,20 @@ SUBAGENT SYSTEM PROMPT:
         self._on_ai_message(message, agent_name)
 
     def _notify_call_model(self, agent_name: str):
-        self._event_queue.put(AgentCallingEvent(payload=agent_name))
+        self._event_queue.put(CallModelEvent(payload=agent_name, agent_name=agent_name))
         self._on_call_model(agent_name)
 
     def _notify_agent_routing(self, agent_name: str):
-        self._event_queue.put(AgentRoutingEvent(payload=agent_name))
+        self._event_queue.put(
+            AgentRoutingEvent(payload=agent_name, agent_name=agent_name)
+        )
         self._on_agent_routing(agent_name)
+
+    def _sync_event_queue_with_subagents(self):
+        """Ensure all nested sub-agents publish runtime events to the same queue."""
+        for agent in self._agents:
+            agent._event_queue = self._event_queue
+            agent._sync_event_queue_with_subagents()
 
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
@@ -1511,7 +1520,7 @@ SUBAGENT SYSTEM PROMPT:
                         "event": "ai_message",
                         "data": str(message.payload.content),
                     }
-                elif isinstance(message, AgentCallingEvent):
+                elif isinstance(message, CallModelEvent):
                     yield {
                         "event": "call_model",
                         "data": str(message.payload),
