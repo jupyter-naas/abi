@@ -1583,17 +1583,15 @@ function OntologyNetworkView({
   const [graphSearchQuery, setGraphSearchQuery] = useState('');
   const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(null);
-  const [subclassOfLevels, setSubclassOfLevels] = useState(0);
-  const [loadingNextLevel, setLoadingNextLevel] = useState(false);
-  // Cached levels: index 0 = direct parents of primary nodes, index 1 = their parents, etc.
+  const [subclassOfEnabled, setSubclassOfEnabled] = useState(false);
+  // Number of *top* levels hidden (top-down filter). 0 = show everything.
+  const [subclassOfHiddenTopLevels, setSubclassOfHiddenTopLevels] = useState(0);
+  const [loadingSubclassOfHierarchy, setLoadingSubclassOfHierarchy] = useState(false);
+  // Full hierarchy, grouped by computed "level" (BFO entity = level 1, otherwise highest parent = level 1).
   const [hierarchyByLevel, setHierarchyByLevel] = useState<Array<{
-    /** Nodes to use as the frontier when fetching the next level (may already exist in the graph). */
-    frontier: OntologyOverviewGraphNode[];
-    /** Nodes that are new to the graph for this level (deduped against existing graph + previous levels). */
+    level: number;
     nodes: OntologyOverviewGraphNode[];
     edges: OntologyOverviewGraphEdge[];
-    /** Whether this fetch introduced at least one new node into the graph. */
-    introducedNewNodes: boolean;
   }>>([]);
   const [showRestrictions, setShowRestrictions] = useState(false);
   const [showObjectProperties, setShowObjectProperties] = useState(false);
@@ -1605,6 +1603,22 @@ function OntologyNetworkView({
   /** Per-node visibility overrides — nodes in this set are hidden from the graph. */
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
   const isAllOntologiesOverview = !ontologyPath;
+
+  /** Persist vis-network zoom/pan per relation / SubclassOf mode. */
+  const ontologyGraphViewStateKey = useMemo(() => {
+    if (isAllOntologiesOverview) return 'ontology:imports-overview';
+    const subPart = subclassOfEnabled
+      ? `sub:on:${layoutDirection}:hide${subclassOfHiddenTopLevels}`
+      : 'sub:off';
+    return `ontology:class|${subPart}|r:${showRestrictions}|op:${showObjectProperties}`;
+  }, [
+    isAllOntologiesOverview,
+    subclassOfEnabled,
+    layoutDirection,
+    subclassOfHiddenTopLevels,
+    showRestrictions,
+    showObjectProperties,
+  ]);
 
   const handleBucketToggle = useCallback((bucketType: string) => {
     setActiveBuckets((prev) => {
@@ -1630,13 +1644,24 @@ function OntologyNetworkView({
     });
   }, []);
 
-  // Combined nodes: initial + all loaded hierarchy levels up to subclassOfLevels
+  const totalSubclassOfLevels = useMemo(() => hierarchyByLevel.length, [hierarchyByLevel.length]);
+  const visibleSubclassOfMinLevel = useMemo(
+    () => 1 + Math.min(subclassOfHiddenTopLevels, Math.max(0, totalSubclassOfLevels - 1)),
+    [subclassOfHiddenTopLevels, totalSubclassOfLevels]
+  );
+
+  const visibleHierarchyLevels = useMemo(() => {
+    if (!subclassOfEnabled) return [];
+    return hierarchyByLevel.filter((lvl) => lvl.level >= visibleSubclassOfMinLevel);
+  }, [hierarchyByLevel, subclassOfEnabled, visibleSubclassOfMinLevel]);
+
+  // Combined nodes: initial + full hierarchy (filtered top-down)
   const allVisibleNodes = useMemo(() => {
-    if (subclassOfLevels === 0) return graphNodes;
+    if (!subclassOfEnabled) return graphNodes;
     const result = [...graphNodes];
     const seen = new Set(result.map((n) => n.id));
-    for (let i = 0; i < subclassOfLevels && i < hierarchyByLevel.length; i++) {
-      for (const node of hierarchyByLevel[i].nodes) {
+    for (const level of visibleHierarchyLevels) {
+      for (const node of level.nodes) {
         if (!seen.has(node.id)) {
           result.push(node);
           seen.add(node.id);
@@ -1644,13 +1669,21 @@ function OntologyNetworkView({
       }
     }
     return result;
-  }, [graphNodes, hierarchyByLevel, subclassOfLevels]);
+  }, [graphNodes, subclassOfEnabled, visibleHierarchyLevels]);
 
   const nodesByIri = useMemo(() => {
     const map = new Map<string, OntologyOverviewGraphNode>();
     for (const n of allVisibleNodes) map.set(n.id, n);
     return map;
   }, [allVisibleNodes]);
+
+  const nodeLevelById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const lvl of hierarchyByLevel) {
+      for (const n of lvl.nodes) map.set(n.id, lvl.level);
+    }
+    return map;
+  }, [hierarchyByLevel]);
 
   const nodesMatchingSearchAndBuckets = useMemo(() => {
     let nodes = allVisibleNodes;
@@ -1697,9 +1730,9 @@ function OntologyNetworkView({
         if (e.properties?.relation_kind === 'object_property') activeRelEdges.push(e);
       }
     }
-    if (subclassOfLevels > 0) {
-      for (let i = 0; i < subclassOfLevels && i < hierarchyByLevel.length; i++) {
-        for (const e of hierarchyByLevel[i].edges) activeRelEdges.push(e);
+    if (subclassOfEnabled) {
+      for (const level of visibleHierarchyLevels) {
+        for (const e of level.edges) activeRelEdges.push(e);
       }
     }
 
@@ -1719,23 +1752,33 @@ function OntologyNetworkView({
       .filter((n): n is OntologyOverviewGraphNode => n !== undefined);
 
     return [...baseNodes, ...extras];
-  }, [nodesMatchingSearchAndBuckets, focusedNodeId, showRestrictions, showObjectProperties, subclassOfLevels, hierarchyByLevel, graphEdges, nodesByIri]);
+  }, [nodesMatchingSearchAndBuckets, focusedNodeId, showRestrictions, showObjectProperties, subclassOfEnabled, visibleHierarchyLevels, graphEdges, nodesByIri]);
+
+  const nodesAfterLevelFilter = useMemo(() => {
+    if (!subclassOfEnabled) return expandedNodes;
+    return expandedNodes.filter((n) => {
+      const lvl = nodeLevelById.get(n.id);
+      // If we can't compute a level (missing edges), keep the node visible.
+      if (lvl === undefined) return true;
+      return lvl >= visibleSubclassOfMinLevel;
+    });
+  }, [expandedNodes, nodeLevelById, subclassOfEnabled, visibleSubclassOfMinLevel]);
 
   // Effective active buckets: user-selected + auto-activated buckets for relation-expanded nodes.
   const effectiveActiveBuckets = useMemo(() => {
     if (activeBuckets.size === 0) return activeBuckets;
     const result = new Set(activeBuckets);
-    for (const node of expandedNodes) {
+    for (const node of nodesAfterLevelFilter) {
       const b = resolveNodeBucket(node, nodesByIri);
       if (b) result.add(b);
     }
     return result;
-  }, [activeBuckets, expandedNodes, nodesByIri]);
+  }, [activeBuckets, nodesAfterLevelFilter, nodesByIri]);
 
   // Nodes grouped by bucket for the BFO panel checkboxes.
   const nodesPerBucketForPanel = useMemo(() => {
     const map = new Map<string, Array<{ id: string; label: string }>>();
-    for (const node of expandedNodes) {
+    for (const node of nodesAfterLevelFilter) {
       const bucket = resolveNodeBucket(node, nodesByIri) ?? 'Unknown';
       const existing = map.get(bucket) ?? [];
       existing.push({ id: node.id, label: node.label });
@@ -1745,11 +1788,11 @@ function OntologyNetworkView({
       nodes.sort((a, b) => a.label.localeCompare(b.label));
     }
     return map;
-  }, [expandedNodes, nodesByIri]);
+  }, [nodesAfterLevelFilter, nodesByIri]);
 
   const filteredGraphNodes = useMemo(() => {
-    return expandedNodes.filter((n) => !hiddenNodeIds.has(n.id));
-  }, [expandedNodes, hiddenNodeIds]);
+    return nodesAfterLevelFilter.filter((n) => !hiddenNodeIds.has(n.id));
+  }, [nodesAfterLevelFilter, hiddenNodeIds]);
 
   useEffect(() => {
     if (!focusedNodeId) return;
@@ -1768,9 +1811,10 @@ function OntologyNetworkView({
 
     let baseEdges: OntologyOverviewGraphEdge[] = [...importEdges];
 
-    // Add is_a edges from loaded hierarchy levels up to subclassOfLevels
-    for (let i = 0; i < subclassOfLevels && i < hierarchyByLevel.length; i++) {
-      baseEdges = [...baseEdges, ...hierarchyByLevel[i].edges];
+    if (subclassOfEnabled) {
+      for (const level of visibleHierarchyLevels) {
+        baseEdges = [...baseEdges, ...level.edges];
+      }
     }
 
     if (showRestrictions) baseEdges = [...baseEdges, ...restrictionEdges];
@@ -1788,19 +1832,14 @@ function OntologyNetworkView({
     activeBuckets,
     focusedNodeId,
     hiddenNodeIds,
-    subclassOfLevels,
-    hierarchyByLevel,
+    subclassOfEnabled,
+    visibleHierarchyLevels,
     showRestrictions,
     showObjectProperties,
   ]);
 
-  // Level-1 frontier: the nodes from which SubclassOf parents are fetched.
-  // When focused, uses nodesByIri so the lookup works for both primary and hierarchy-added nodes.
-  // When filtered, uses graphNodes filtered by search/buckets.
-  // Changes when focus, search, or bucket filters change → triggers a cache reset below.
-  const subclassOfFrontierForLevel1 = useMemo(() => {
+  const subclassOfFrontierForHierarchy = useMemo(() => {
     if (focusedNodeId) {
-      // nodesByIri covers all currently visible nodes (graphNodes + hierarchy levels)
       const node = nodesByIri.get(focusedNodeId);
       return node ? [node] : [];
     }
@@ -1830,11 +1869,11 @@ function OntologyNetworkView({
   }, [focusedNodeId, graphSearchQuery, activeBuckets, graphNodes, nodesByIri]);
 
   const subclassOfFrontierKey = useMemo(
-    () => subclassOfFrontierForLevel1.map((n) => n.id).sort().join(','),
-    [subclassOfFrontierForLevel1]
+    () => subclassOfFrontierForHierarchy.map((n) => n.id).sort().join(','),
+    [subclassOfFrontierForHierarchy]
   );
 
-  // When the frontier changes, discard the cached hierarchy so "+"/"-" start fresh.
+  // When the frontier changes, discard the computed hierarchy.
   const prevFrontierKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (prevFrontierKeyRef.current === null) {
@@ -1843,150 +1882,105 @@ function OntologyNetworkView({
     }
     if (prevFrontierKeyRef.current !== subclassOfFrontierKey) {
       prevFrontierKeyRef.current = subclassOfFrontierKey;
-      // Use functional updates to skip the set when already at the target value,
-      // preventing unnecessary re-renders from the nodesByIri → hierarchy dependency chain.
-      setSubclassOfLevels((prev) => (prev === 0 ? prev : 0));
-      setHierarchyByLevel((prev) => (prev.length === 0 ? prev : []));
+      setSubclassOfEnabled(false);
+      setSubclassOfHiddenTopLevels(0);
+      setHierarchyByLevel([]);
     }
   }, [subclassOfFrontierKey]);
 
-  const handleExpandSubclassOf = async () => {
-    const nextLevel = subclassOfLevels + 1;
-    // Use cached data if already fetched
-    if (hierarchyByLevel[nextLevel - 1]) {
-      setSubclassOfLevels(nextLevel);
+  const fetchAndComputeFullSubclassOfHierarchy = useCallback(async () => {
+    if (!ontologyPath || loadingSubclassOfHierarchy) return;
+    if (subclassOfFrontierForHierarchy.length === 0) {
+      setHierarchyByLevel([]);
+      setSubclassOfHiddenTopLevels(0);
+      setSubclassOfEnabled(true);
       return;
     }
-    if (!ontologyPath || loadingNextLevel) return;
-    setLoadingNextLevel(true);
+    setLoadingSubclassOfHierarchy(true);
     try {
-      // Level-1 frontier depends on current focus/filter; deeper levels use the previous level's result.
-      const frontierNodes =
-        subclassOfLevels === 0
-          ? subclassOfFrontierForLevel1
-          : (hierarchyByLevel[subclassOfLevels - 1]?.frontier ?? []);
-      if (frontierNodes.length === 0) {
-        setHierarchyByLevel((prev) => {
-          const updated = [...prev];
-          updated[nextLevel - 1] = { frontier: [], nodes: [], edges: [], introducedNewNodes: false };
-          return updated;
-        });
-        setSubclassOfLevels(nextLevel);
-        return;
-      }
-
-      // Avoid re-creating nodes/edges that are already present (graphNodes or previously fetched levels).
-      const existingNodeIds = new Set<string>();
-      for (const n of graphNodes) existingNodeIds.add(n.id);
-      for (const level of hierarchyByLevel) {
-        for (const n of level.nodes) existingNodeIds.add(n.id);
-      }
-      const existingEdgeIds = new Set<string>();
-      for (const level of hierarchyByLevel) {
-        for (const e of level.edges) existingEdgeIds.add(e.id);
-      }
-
       const baseUrl = getApiUrl();
       const params = new URLSearchParams({ ontology_path: ontologyPath });
-      frontierNodes.forEach((n) => params.append('class_iris', n.id));
-      const response = await authFetch(`${baseUrl}/api/ontology/overview/parents?${params.toString()}`);
-      if (!response.ok) throw new Error(`parents fetch failed: ${response.status}`);
-      const data = await response.json() as { nodes?: OntologyOverviewGraphNode[]; edges?: OntologyOverviewGraphEdge[] };
+      subclassOfFrontierForHierarchy.forEach((n) => params.append('class_iris', n.id));
 
-      const fetchedNodes = Array.isArray(data.nodes) ? data.nodes : [];
-      const fetchedEdges = Array.isArray(data.edges) ? data.edges : [];
+      const response = await authFetch(`${baseUrl}/api/ontology/overview/hierarchy?${params.toString()}`);
+      if (!response.ok) return;
 
-      // Keep the fetched nodes as the *frontier* for deeper levels, even if they already exist in the graph.
-      const fetchedUniqueNodesById = new Map<string, OntologyOverviewGraphNode>();
-      for (const n of fetchedNodes) fetchedUniqueNodesById.set(n.id, n);
-      const frontierNodesForNextLevel = Array.from(fetchedUniqueNodesById.values());
+      const data = (await response.json()) as {
+        nodes?: OntologyOverviewGraphNode[];
+        edges?: OntologyOverviewGraphEdge[];
+      };
+      const nodes = Array.isArray(data.nodes) ? data.nodes : [];
+      const edges = Array.isArray(data.edges) ? data.edges : [];
 
-      const nextExistingNodeIds = new Set(existingNodeIds);
-      for (const n of frontierNodesForNextLevel) nextExistingNodeIds.add(n.id);
-
-      // Only create nodes that are not already present in the graph.
-      const newNodes = frontierNodesForNextLevel.filter((n) => !existingNodeIds.has(n.id));
-
-      const newEdges = fetchedEdges
-        .filter((e) => !existingEdgeIds.has(e.id))
-        // Only keep edges whose endpoints exist (either already present or newly added in this level)
-        .filter((e) => nextExistingNodeIds.has(e.source) && nextExistingNodeIds.has(e.target));
-
-      setHierarchyByLevel((prev) => {
-        const updated = [...prev];
-        updated[nextLevel - 1] = {
-          frontier: frontierNodesForNextLevel,
-          nodes: newNodes,
-          edges: newEdges,
-          introducedNewNodes: newNodes.length > 0,
-        };
-        return updated;
-      });
-      setSubclassOfLevels(nextLevel);
-    } catch (err) {
-      console.error('Failed to fetch parent classes:', err);
-    } finally {
-      setLoadingNextLevel(false);
-    }
-  };
-
-  const handleExpandAll = async () => {
-    if (!ontologyPath || loadingNextLevel) return;
-    setLoadingNextLevel(true);
-    let currentLevels = subclassOfLevels;
-    let currentHierarchy = [...hierarchyByLevel];
-    try {
-      while (true) {
-        const nextLevel = currentLevels + 1;
-        if (currentHierarchy[nextLevel - 1]) {
-          currentLevels = nextLevel;
-          if (!currentHierarchy[nextLevel - 1].introducedNewNodes) break;
-          continue;
-        }
-        const frontierNodes =
-          currentLevels === 0
-            ? subclassOfFrontierForLevel1
-            : (currentHierarchy[currentLevels - 1]?.frontier ?? []);
-        if (frontierNodes.length === 0) break;
-        const existingNodeIds = new Set<string>();
-        for (const n of graphNodes) existingNodeIds.add(n.id);
-        for (const level of currentHierarchy) for (const n of level.nodes) existingNodeIds.add(n.id);
-        const existingEdgeIds = new Set<string>();
-        for (const level of currentHierarchy) for (const e of level.edges) existingEdgeIds.add(e.id);
-        const baseUrl = getApiUrl();
-        const params = new URLSearchParams({ ontology_path: ontologyPath });
-        frontierNodes.forEach((n) => params.append('class_iris', n.id));
-        const response = await authFetch(`${baseUrl}/api/ontology/overview/parents?${params.toString()}`);
-        if (!response.ok) break;
-        const data = await response.json() as { nodes?: OntologyOverviewGraphNode[]; edges?: OntologyOverviewGraphEdge[] };
-        const fetchedNodes = Array.isArray(data.nodes) ? data.nodes : [];
-        const fetchedEdges = Array.isArray(data.edges) ? data.edges : [];
-        const fetchedUniqueNodesById = new Map<string, OntologyOverviewGraphNode>();
-        for (const n of fetchedNodes) fetchedUniqueNodesById.set(n.id, n);
-        const frontierForNext = Array.from(fetchedUniqueNodesById.values());
-        const nextExistingIds = new Set(existingNodeIds);
-        for (const n of frontierForNext) nextExistingIds.add(n.id);
-        const newNodes = frontierForNext.filter((n) => !existingNodeIds.has(n.id));
-        const newEdges = fetchedEdges
-          .filter((e) => !existingEdgeIds.has(e.id))
-          .filter((e) => nextExistingIds.has(e.source) && nextExistingIds.has(e.target));
-        const levelData = { frontier: frontierForNext, nodes: newNodes, edges: newEdges, introducedNewNodes: newNodes.length > 0 };
-        currentHierarchy = [...currentHierarchy];
-        currentHierarchy[nextLevel - 1] = levelData;
-        currentLevels = nextLevel;
-        if (!levelData.introducedNewNodes) break;
+      // Group by precomputed level (set by the backend on each node).
+      const nodesByLevel = new Map<number, OntologyOverviewGraphNode[]>();
+      for (const n of nodes) {
+        const lvl = typeof n.properties?.level === 'number' ? (n.properties.level as number) : 1;
+        const arr = nodesByLevel.get(lvl) ?? [];
+        arr.push(n);
+        nodesByLevel.set(lvl, arr);
       }
+      for (const arr of nodesByLevel.values()) {
+        arr.sort((a, b) => a.label.localeCompare(b.label));
+      }
+
+      // Edges keyed by source-node level (matches previous client-side grouping).
+      const levelById = new Map<string, number>();
+      for (const n of nodes) {
+        const lvl = typeof n.properties?.level === 'number' ? (n.properties.level as number) : 1;
+        levelById.set(n.id, lvl);
+      }
+      const edgesByLevel = new Map<number, OntologyOverviewGraphEdge[]>();
+      for (const e of edges) {
+        if (e.properties?.relation_kind !== 'is_a') continue;
+        const srcLvl = levelById.get(e.source);
+        if (srcLvl === undefined) continue;
+        const arr = edgesByLevel.get(srcLvl) ?? [];
+        arr.push(e);
+        edgesByLevel.set(srcLvl, arr);
+      }
+
+      const maxLevel = nodes.length > 0
+        ? Math.max(...Array.from(levelById.values()))
+        : 0;
+      const hierarchy: Array<{
+        level: number;
+        nodes: OntologyOverviewGraphNode[];
+        edges: OntologyOverviewGraphEdge[];
+      }> = [];
+      for (let lvl = 1; lvl <= maxLevel; lvl++) {
+        hierarchy.push({
+          level: lvl,
+          nodes: nodesByLevel.get(lvl) ?? [],
+          edges: edgesByLevel.get(lvl) ?? [],
+        });
+      }
+
+      setHierarchyByLevel(hierarchy);
+      setSubclassOfHiddenTopLevels(0);
+      setSubclassOfEnabled(true);
     } catch (err) {
-      console.error('Failed to fetch all parent levels:', err);
+      console.error('Failed to fetch full SubclassOf hierarchy:', err);
+    } finally {
+      setLoadingSubclassOfHierarchy(false);
     }
-    setHierarchyByLevel(currentHierarchy);
-    setSubclassOfLevels(currentLevels);
-    setLoadingNextLevel(false);
-  };
+  }, [
+    ontologyPath,
+    loadingSubclassOfHierarchy,
+    subclassOfFrontierForHierarchy,
+  ]);
 
   // Auto-expand the first subclassOf level once the graph finishes loading (loadingGraph: true → false).
+  // Resets per ontology so switching ontologies re-applies the hierarchical view.
   const didAutoExpandRef = useRef(false);
   const wasLoadingRef = useRef(false);
+  const autoExpandedForPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (autoExpandedForPathRef.current !== ontologyPath) {
+      didAutoExpandRef.current = false;
+      autoExpandedForPathRef.current = ontologyPath;
+    }
+  }, [ontologyPath]);
   useEffect(() => {
     if (loadingGraph) {
       wasLoadingRef.current = true;
@@ -1997,28 +1991,9 @@ function OntologyNetworkView({
     if (didAutoExpandRef.current) return;
     if (!ontologyPath || graphNodes.length === 0) return;
     didAutoExpandRef.current = true;
-    handleExpandAll();
+    fetchAndComputeFullSubclassOfHierarchy();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ontologyPath, loadingGraph, graphNodes.length]);
-
-  // "+" is hidden once the latest fetched level returned 0 nodes (no more parents exist).
-  // Stays visible when the user has collapsed below a cached non-empty level.
-  const canExpandMore = useMemo(() => {
-    // No attempt yet: allow first expansion.
-    if (hierarchyByLevel.length === 0) return true;
-
-    // Collapsed: allow showing "+" only if the first level actually returned something.
-    if (subclassOfLevels === 0) {
-      return (hierarchyByLevel[0]?.nodes.length ?? 0) > 0 || (hierarchyByLevel[0]?.edges.length ?? 0) > 0;
-    }
-
-    // If there are cached levels beyond the currently visible ones, user can always expand into them.
-    if (subclassOfLevels < hierarchyByLevel.length) return true;
-
-    // Otherwise, allow fetching one more level only if the last visible fetched level introduced new nodes.
-    // This prevents repeatedly "expanding" when everything is already in the graph (e.g. BFO).
-    return hierarchyByLevel[subclassOfLevels - 1]?.introducedNewNodes ?? false;
-  }, [hierarchyByLevel, subclassOfLevels]);
 
   const graphNodesById = useMemo(
     () => new Map(allVisibleNodes.map((node) => [node.id, node])),
@@ -2027,12 +2002,10 @@ function OntologyNetworkView({
   const selectedGraphNode = selectedGraphNodeId ? graphNodesById.get(selectedGraphNodeId) : null;
   const selectedGraphNodeLevel = useMemo(() => {
     if (!selectedGraphNode) return null;
-    if (graphNodes.some((n) => n.id === selectedGraphNode.id)) return 0;
-    for (let i = 0; i < hierarchyByLevel.length; i++) {
-      if (hierarchyByLevel[i].nodes.some((n) => n.id === selectedGraphNode.id)) return i + 1;
-    }
+    const computed = nodeLevelById.get(selectedGraphNode.id);
+    if (computed !== undefined) return computed;
     return null;
-  }, [selectedGraphNode, graphNodes, hierarchyByLevel]);
+  }, [selectedGraphNode, nodeLevelById]);
   const selectedGraphNodeIsOntology = selectedGraphNode?.type === 'Ontology';
   const selectedGraphNodeDescription =
     selectedGraphNode?.properties?.comment ||
@@ -2069,42 +2042,53 @@ function OntologyNetworkView({
               <>
                 <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
                   <button
-                    onClick={() => subclassOfLevels === 0 ? handleExpandAll() : setSubclassOfLevels(0)}
-                    title={subclassOfLevels === 0 ? "Show all SubclassOf levels (rdfs:subClassOf)" : "Hide SubclassOf hierarchy"}
-                    disabled={loadingNextLevel}
+                    onClick={() => {
+                      if (!subclassOfEnabled) {
+                        fetchAndComputeFullSubclassOfHierarchy();
+                        return;
+                      }
+                      setSubclassOfEnabled(false);
+                      setSubclassOfHiddenTopLevels(0);
+                    }}
+                    title={subclassOfEnabled ? "Hide SubclassOf hierarchy" : "Show full SubclassOf hierarchy (rdfs:subClassOf)"}
+                    disabled={loadingSubclassOfHierarchy}
                     className={cn(
                       'flex items-center gap-1.5 px-3 py-1.5 text-xs',
-                      subclassOfLevels > 0
+                      subclassOfEnabled
                         ? 'bg-foreground text-background'
                         : 'text-muted-foreground hover:text-foreground',
-                      loadingNextLevel && 'opacity-60 cursor-not-allowed'
+                      loadingSubclassOfHierarchy && 'opacity-60 cursor-not-allowed'
                     )}
                   >
-                    {loadingNextLevel ? <Loader2 size={12} className="animate-spin" /> : <GitBranch size={12} />}
-                    SubclassOf{subclassOfLevels > 0 && ` (${subclassOfLevels})`}
+                    {loadingSubclassOfHierarchy ? <Loader2 size={12} className="animate-spin" /> : <GitBranch size={12} />}
+                    SubclassOf{subclassOfEnabled && totalSubclassOfLevels > 0 && ` (${totalSubclassOfLevels - subclassOfHiddenTopLevels})`}
                   </button>
-                  {subclassOfLevels > 0 && (
+                  {subclassOfEnabled && totalSubclassOfLevels > 1 && (
                     <button
-                      onClick={() => setSubclassOfLevels((v) => Math.max(0, v - 1))}
-                      title="Go down one level"
-                      disabled={loadingNextLevel}
+                      onClick={() =>
+                        setSubclassOfHiddenTopLevels((v) =>
+                          Math.min(totalSubclassOfLevels - 1, v + 1)
+                        )
+                      }
+                      title="Hide top level (−1)"
+                      disabled={loadingSubclassOfHierarchy || subclassOfHiddenTopLevels >= totalSubclassOfLevels - 1}
                       className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
                     >
                       −
                     </button>
                   )}
-                  {subclassOfLevels > 0 && (
+                  {subclassOfEnabled && totalSubclassOfLevels > 1 && (
                     <button
-                      onClick={handleExpandSubclassOf}
-                      title="Go up one level"
-                      disabled={loadingNextLevel || !canExpandMore}
+                      onClick={() => setSubclassOfHiddenTopLevels((v) => Math.max(0, v - 1))}
+                      title="Show one more top level (+1)"
+                      disabled={loadingSubclassOfHierarchy || subclassOfHiddenTopLevels === 0}
                       className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       +
                     </button>
                   )}
                 </div>
-                {subclassOfLevels > 0 && (
+                {subclassOfEnabled && (
                   <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
                     <button
                       onClick={() => setLayoutDirection('LR')}
@@ -2210,7 +2194,8 @@ function OntologyNetworkView({
                 setSelectedGraphEdgeId(edgeId);
                 if (edgeId) setSelectedGraphNodeId(null);
               }}
-              layoutDirection={subclassOfLevels > 0 ? layoutDirection : undefined}
+              layoutDirection={subclassOfEnabled ? layoutDirection : undefined}
+              viewStateKey={ontologyGraphViewStateKey}
             />
           )}
         </div>
@@ -2283,7 +2268,7 @@ function OntologyNetworkView({
                   {!isAllOntologiesOverview && selectedGraphNodeLevel !== null && (
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Level</p>
-                      <p>{selectedGraphNodeLevel === 0 ? '0 (primary)' : selectedGraphNodeLevel}</p>
+                      <p>{selectedGraphNodeLevel}</p>
                     </div>
                   )}
                   <button
