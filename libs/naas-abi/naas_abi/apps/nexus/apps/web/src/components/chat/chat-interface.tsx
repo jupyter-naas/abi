@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy } from 'lucide-react';
 import Image from 'next/image';
@@ -175,6 +175,22 @@ export function ChatInterface() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const autosizeComposer = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    // Match Tailwind `max-h-36` (9rem). Keep in sync with textarea class.
+    const maxHeightPx = 144;
+    el.style.height = 'auto';
+    const nextHeight = Math.min(el.scrollHeight, maxHeightPx);
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > maxHeightPx ? 'auto' : 'hidden';
+  }, []);
+
+  useLayoutEffect(() => {
+    autosizeComposer();
+  }, [input, autosizeComposer]);
+
   const focusChatInput = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -189,8 +205,9 @@ export function ChatInterface() {
       } catch {
         // Some browsers can throw if the element isn't focusable yet; ignore.
       }
+      autosizeComposer();
     });
-  }, []);
+  }, [autosizeComposer]);
 
   // Voice capture state
   const [voiceMode, setVoiceMode] = useState<'idle' | 'recording' | 'transcribing'>('idle');
@@ -1809,7 +1826,7 @@ export function ChatInterface() {
                     attachedImages.length > 0 ? 'Ask about the image...' : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
-                  className="max-h-36 min-h-[24px] w-full resize-none bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
+                  className="max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
                   rows={1}
                 />
               </div>
