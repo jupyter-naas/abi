@@ -195,7 +195,7 @@ async def table_exists(table_name: str) -> bool:
             """),
             {"name": table_name},
         )
-        return result.scalar()
+        return result.scalar() or False
 
 
 async def get_row_count(table_name: str) -> int:
