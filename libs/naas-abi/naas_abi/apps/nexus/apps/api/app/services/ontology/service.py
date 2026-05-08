@@ -1023,6 +1023,145 @@ class OntologyService:
             edges=list(new_edges.values()),
         )
 
+    async def get_subclassof_hierarchy(
+        self,
+        class_iris: list[str],
+        ontology_path: str,
+    ) -> OntologyOverviewGraphData:
+        """Return the full rdfs:subClassOf hierarchy for the given class IRIs.
+
+        Walks rdfs:subClassOf transitively upward from class_iris and returns
+        every (start class + ancestor) node together with every is_a edge
+        between them. Each node's ``properties`` dict is annotated with a
+        1-based ``level`` key derived from BFS:
+
+          * BFO:entity (BFO_0000001) is level 1.
+          * Any other root (no rdfs:subClassOf parent in the closure) is level 1.
+          * A child's level is ``min(existing, parent_level + 1)``.
+
+        Cycles and disconnected nodes default to level 1.
+        """
+        store = self._get_triple_store()
+        if not class_iris:
+            return OntologyOverviewGraphData(nodes=[], edges=[])
+
+        ancestor_graph = _load_ontology_graph_with_imports_cached(ontology_path)
+
+        # 1. Collect every (sub, super) edge in the upward closure with one SPARQL query.
+        iris_values = " ".join(f"<{iri}>" for iri in class_iris)
+        closure_query = f"""
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            SELECT DISTINCT ?subClass ?superClass WHERE {{
+                VALUES ?startClass {{ {iris_values} }}
+                ?startClass rdfs:subClassOf* ?subClass .
+                ?subClass rdfs:subClassOf ?superClass .
+                FILTER(isIRI(?subClass))
+                FILTER(isIRI(?superClass))
+            }}
+        """
+
+        edges_raw: list[tuple[str, str]] = []
+        node_iris: set[str] = set(class_iris)
+        for row in ancestor_graph.query(closure_query):
+            assert isinstance(row, ResultRow)
+            sub_iri = str(row.get("subClass")) if row.get("subClass") else None
+            super_iri = str(row.get("superClass")) if row.get("superClass") else None
+            if not sub_iri or not super_iri:
+                continue
+            edges_raw.append((sub_iri, super_iri))
+            node_iris.add(sub_iri)
+            node_iris.add(super_iri)
+
+        # 2. BFS from BFO:entity (and any other roots) to compute levels.
+        bfo_entity_iri = "http://purl.obolibrary.org/obo/BFO_0000001"
+        parents_by_child: dict[str, set[str]] = {}
+        children_by_parent: dict[str, set[str]] = {}
+        for sub, sup in edges_raw:
+            parents_by_child.setdefault(sub, set()).add(sup)
+            children_by_parent.setdefault(sup, set()).add(sub)
+
+        levels: dict[str, int] = {}
+        queue: list[tuple[str, int]] = []
+
+        if bfo_entity_iri in node_iris:
+            levels[bfo_entity_iri] = 1
+            queue.append((bfo_entity_iri, 1))
+
+        for iri in node_iris:
+            if iri in levels:
+                continue
+            if not parents_by_child.get(iri):
+                levels[iri] = 1
+                queue.append((iri, 1))
+
+        while queue:
+            iri, level = queue.pop(0)
+            for child in children_by_parent.get(iri, ()):
+                next_level = level + 1
+                existing = levels.get(child)
+                if existing is None or next_level < existing:
+                    levels[child] = next_level
+                    queue.append((child, next_level))
+
+        # Any cycle/disconnected leftovers default to level 1.
+        for iri in node_iris:
+            levels.setdefault(iri, 1)
+
+        # 3. Build node + edge result objects.
+        primary_iris = set(class_iris)
+        result_nodes: dict[str, OntologyOverviewGraphNodeData] = {}
+        for iri in node_iris:
+            d = _get_uri_metadata(store, iri)
+            raw_lbl = d.get("label")
+            label = raw_lbl or iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+            parent_iri = d.get("subClassOf")
+            parent_label = (
+                _get_uri_metadata(store, parent_iri).get("label", "Unknown") if parent_iri else None
+            )
+            if _is_bfo_entity_iri(iri):
+                parent_iri = iri
+                parent_label = "entity"
+            bfo_anc = _find_bfo_ancestor(ancestor_graph, iri)
+            result_nodes[iri] = OntologyOverviewGraphNodeData(
+                id=iri,
+                label=str(label),
+                type=parent_label,
+                properties={
+                    "iri": iri,
+                    "definition": str(d.get("definition", "")),
+                    "comment": str(d.get("comment", "")),
+                    "parent_iri": str(parent_iri) if parent_iri else "",
+                    "parent_label": str(parent_label) if parent_label else "",
+                    "bfo_parent_iri": bfo_anc or "",
+                    "is_primary": iri in primary_iris,
+                    "level": levels[iri],
+                },
+            )
+
+        result_edges: dict[str, OntologyOverviewGraphEdgeData] = {}
+        for sub_iri, super_iri in edges_raw:
+            edge_id = f"{sub_iri}|is_a|{super_iri}"
+            if edge_id in result_edges:
+                continue
+            result_edges[edge_id] = OntologyOverviewGraphEdgeData(
+                id=edge_id,
+                source=sub_iri,
+                target=super_iri,
+                type="is a",
+                label="is a",
+                properties={
+                    "relation_kind": "is_a",
+                    "iri": str(RDFS.subClassOf),
+                    "definition": "",
+                    "parent_property_iri": "",
+                },
+            )
+
+        return OntologyOverviewGraphData(
+            nodes=list(result_nodes.values()),
+            edges=list(result_edges.values()),
+        )
+
     async def create_entity(
         self,
         name: str,

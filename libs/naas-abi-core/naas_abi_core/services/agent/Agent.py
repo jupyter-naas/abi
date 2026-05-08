@@ -297,6 +297,16 @@ class FinalStateEvent(Event):
 
 
 @dataclass
+class CallModelEvent(Event):
+    agent_name: str
+
+
+@dataclass
+class AgentRoutingEvent(Event):
+    agent_name: str
+
+
+@dataclass
 class AgentConfiguration:
     on_tool_usage: Callable[[AnyMessage], None] = field(
         default_factory=lambda: lambda _: None
@@ -306,6 +316,12 @@ class AgentConfiguration:
     )
     on_ai_message: Callable[[AnyMessage, str], None] = field(
         default_factory=lambda: lambda _, __: None
+    )
+    on_agent_calling: Callable[[str], None] = field(
+        default_factory=lambda: lambda _: None
+    )
+    on_agent_routing: Callable[[str], None] = field(
+        default_factory=lambda: lambda _: None
     )
     system_prompt: str | Callable[[list[AnyMessage]], str] = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
@@ -389,6 +405,7 @@ class Agent(Expose):
     _event_queue: Queue
 
     _chat_model_output_version: Union[str, None] = None
+    _markdown_pretty_display: bool
 
     @classmethod
     def New(
@@ -420,6 +437,7 @@ class Agent(Expose):
         event_queue: Queue | None = None,
         native_tools: list[dict] = [],
         enable_default_tools: bool = True,
+        markdown_pretty_display: bool = True,
     ):
         """Initialize a new Agent instance.
 
@@ -433,6 +451,7 @@ class Agent(Expose):
         self._name = Agent.validate_name(name)
         logger.debug(f"'{self._name}' is being initialized")
         self._description = description
+        self._markdown_pretty_display = markdown_pretty_display
         self._state = state
         self._original_tools = tools
         self._original_agents = agents
@@ -561,12 +580,15 @@ class Agent(Expose):
         self._on_tool_usage = configuration.on_tool_usage
         self._on_tool_response = configuration.on_tool_response
         self._on_ai_message = configuration.on_ai_message
+        self._on_call_model = configuration.on_agent_calling
+        self._on_agent_routing = configuration.on_agent_routing
 
         # Initialize the event queue.
         if event_queue is None:
             self._event_queue = Queue()
         else:
             self._event_queue = event_queue
+        self._sync_event_queue_with_subagents()
 
         # We build the graph.
         self.build_graph()
@@ -760,6 +782,7 @@ class Agent(Expose):
             if agent is not None:
                 agent_name = Agent.validate_name(agent.name)
                 self._state.set_current_active_agent(agent_name)
+                self._notify_agent_routing(agent_name)
                 return Command(
                     goto=agent_name,
                     update={"messages": state["messages"]},
@@ -774,6 +797,7 @@ class Agent(Expose):
             logger.debug(
                 f"⏩ Continuing conversation with: '{self._state.current_active_agent}'"
             )
+            # self._notify_agent_routing(self._state.current_active_agent)
             return Command(goto=self._state.current_active_agent)
 
         # self._state.set_current_active_agent(self.name)
@@ -837,65 +861,57 @@ SUBAGENT SYSTEM PROMPT:
     def continue_conversation(self, state: ABIAgentState) -> Command:
         return Command(goto="call_model")
 
-    def handle_openai_response_v1(self, response: BaseMessage) -> Command:
-        content_str: str = ""
-        tool_call: list[ToolCall] = []
-        logger.debug(f"Chat model output version is responses/v1: {response}")
+    def _pretty_display_markdown(
+        self,
+        response: BaseMessage,
+    ) -> BaseMessage:
+        prompt = [
+            SystemMessage(
+                content=(
+                    """You are a Markdown formatting pass for AI responses.
 
-        if isinstance(response.content, list):
-            # Parse response content
-            for item in response.content:
-                # Ensure item is a dict before accessing attributes
-                if isinstance(item, dict):
-                    # Get text content
-                    if item.get("type") == "text":
-                        text_content = item.get("text", "")
-                        if isinstance(text_content, str):
-                            content_str += text_content
+## Objective
+Reformat the input into clean, readable Markdown. Preserve all meaning and details — do not add or remove information.
 
-                        # Add sources from annotations if any
-                        annotations = item.get("annotations", [])
-                        if isinstance(annotations, list) and len(annotations) > 0:
-                            content_str += "\n\n\n\n*Annotations:*\n"
-                            for annotation in annotations:
-                                if (
-                                    isinstance(annotation, dict)
-                                    and annotation.get("type") == "url_citation"
-                                ):
-                                    title = annotation.get("title", "")
-                                    url = annotation.get("url", "")
-                                    content_str += f"- [{title}]({url})\n"
+## Formatting rules
 
-                    if "action" in item:
-                        tool_call.append(
-                            ToolCall(
-                                name=item["type"],
-                                args={"query": item["action"].get("query", "")},
-                                id=item.get("id"),
-                                type="tool_call",
-                            )
-                        )
+- Write in prose by default. Use structure only when it genuinely improves readability.
+- Bullets: only for genuinely enumerable content. Write short lists inline: "options include x, y, and z."
+- Headers: only for long, document-like content. Avoid in conversational or explanatory responses.
+- Bold: reserved for key terms. Not for decorative emphasis.
+- Code blocks: always use for code, commands, file paths, and technical strings.
+- Tables: only for structured comparisons with clear categories.
+- Length: match the complexity of the content. Remove filler, padding, and restatements.
 
-        # Create AIMessage with the content
-        usage_metadata = None
-        if hasattr(response, "usage_metadata"):
-            usage_metadata = response.usage_metadata
-        ai_message = AIMessage(content=content_str, usage_metadata=usage_metadata)
+## Spacing conventions
 
-        # If action was detected, notify tool usage
-        if len(tool_call) > 0:
-            # Use the ai_message which is already the correct type
-            ai_message.tool_calls = tool_call
-            self._notify_tool_usage(ai_message)
-            tool_message = ToolMessage(
-                content=content_str, tool_call_id=tool_call[0].get("id")
+- After a greeting: add two blank lines before continuing.
+- Before a question to the user: add two blank lines above it.
+
+## Constraints
+
+- Return only the reformatted response — no preamble, no commentary.
+- Preserve technical accuracy: warnings, links, code, commands, and citations must be kept intact.
+- Preserve the language of the input.
+- If the input is already well-formatted, make minimal changes."""
+                )
+            ),
+            AIMessage(content=(f"Initial content:\n{response.content}")),
+        ]
+
+        try:
+            formatted_response = self._chat_model.invoke(prompt)
+            logger.debug(f"Markdown pretty display response: {formatted_response}")
+            if not isinstance(formatted_response.content, str):
+                return response
+
+            response.content = formatted_response.content.strip()
+            return response
+        except Exception as e:
+            logger.warning(
+                f"Markdown pretty display failed for agent '{self._name}': {e}"
             )
-            self._notify_tool_response(tool_message)
-            return Command(
-                goto="__end__", update={"messages": [tool_message, ai_message]}
-            )
-
-        return Command(goto="__end__", update={"messages": [ai_message]})
+            return response
 
     def call_model(
         self,
@@ -903,6 +919,7 @@ SUBAGENT SYSTEM PROMPT:
     ) -> Command[Literal["call_tools", "__end__"]]:
         self._state.set_current_active_agent(self.name)
         logger.debug(f"🧠 Calling model for agent '{self._name}'")
+        self._notify_call_model(self._name)
 
         # Inserting system prompt before messages.
         messages = state["messages"]
@@ -919,7 +936,13 @@ SUBAGENT SYSTEM PROMPT:
             logger.error(f"Model invocation failed for agent '{self._name}': {e}")
             return Command(
                 goto="__end__",
-                update={"messages": [AIMessage(content=f"I'm sorry, I encountered an error while processing your request: {e}")]},
+                update={
+                    "messages": [
+                        AIMessage(
+                            content=f"I'm sorry, I encountered an error while processing your request:\n\n{e}"
+                        )
+                    ]
+                },
             )
         logger.debug(f"Model response: {response}")
         logger.debug(
@@ -942,9 +965,8 @@ SUBAGENT SYSTEM PROMPT:
 
             return Command(goto="call_tools", update={"messages": [response]})
 
-        elif self._chat_model_output_version == "responses/v1":
-            return self.handle_openai_response_v1(response)
-
+        if self._markdown_pretty_display:
+            response = self._pretty_display_markdown(response)
         return Command(goto="__end__", update={"messages": [response]})
 
     def call_tools(self, state: ABIAgentState) -> list[Command]:
@@ -1123,6 +1145,22 @@ SUBAGENT SYSTEM PROMPT:
         self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
         self._on_ai_message(message, agent_name)
 
+    def _notify_call_model(self, agent_name: str):
+        self._event_queue.put(CallModelEvent(payload=agent_name, agent_name=agent_name))
+        self._on_call_model(agent_name)
+
+    def _notify_agent_routing(self, agent_name: str):
+        self._event_queue.put(
+            AgentRoutingEvent(payload=agent_name, agent_name=agent_name)
+        )
+        self._on_agent_routing(agent_name)
+
+    def _sync_event_queue_with_subagents(self):
+        """Ensure all nested sub-agents publish runtime events to the same queue."""
+        for agent in self._agents:
+            agent._event_queue = self._event_queue
+            agent._sync_event_queue_with_subagents()
+
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
 
@@ -1276,7 +1314,8 @@ SUBAGENT SYSTEM PROMPT:
             if isinstance(chunk, tuple):
                 chunk = chunk[1]
 
-            assert isinstance(chunk, dict)
+            if not isinstance(chunk, dict):
+                continue
 
             chunks.append(chunk)
 
@@ -1365,6 +1404,7 @@ SUBAGENT SYSTEM PROMPT:
             configuration=self._configuration,
             event_queue=queue,
             enable_default_tools=self._enable_default_tools,
+            markdown_pretty_display=self._markdown_pretty_display,
         )
 
         return new_agent
@@ -1440,7 +1480,15 @@ SUBAGENT SYSTEM PROMPT:
 
         # Start a thread to run the invoke and put results in queue
         def run_invoke():
-            final_state = self.invoke(prompt)
+            try:
+                final_state = self.invoke(prompt)
+            except Exception as e:
+                logger.error(
+                    f"Agent invoke thread error for '{self._name}': {e}", exc_info=True
+                )
+                final_state = (
+                    f"I encountered an error while processing your request: {e}"
+                )
             self._event_queue.put(FinalStateEvent(payload=final_state))
 
         from threading import Thread
@@ -1466,6 +1514,16 @@ SUBAGENT SYSTEM PROMPT:
                     yield {
                         "event": "ai_message",
                         "data": str(message.payload.content),
+                    }
+                elif isinstance(message, CallModelEvent):
+                    yield {
+                        "event": "call_model",
+                        "data": str(message.payload),
+                    }
+                elif isinstance(message, AgentRoutingEvent):
+                    yield {
+                        "event": "agent_routing",
+                        "data": str(message.payload),
                     }
                 elif isinstance(message, FinalStateEvent):
                     final_state = message.payload

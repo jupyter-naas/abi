@@ -261,6 +261,32 @@ async def get_class_parents(
     )
 
 
+@router.get("/overview/hierarchy")
+async def get_subclassof_hierarchy(
+    ontology_path: str = Query(..., alias="ontology_path"),
+    class_iris: list[str] = Query(..., alias="class_iris"),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+) -> OntologyOverviewGraph:
+    """Return the full rdfs:subClassOf hierarchy starting from class_iris.
+
+    Each returned node has a precomputed `level` (1-based) in its `properties`
+    dict, so the frontend can group nodes by level without recomputing BFS.
+    """
+    try:
+        result = await ontology_service.get_subclassof_hierarchy(
+            class_iris=class_iris,
+            ontology_path=ontology_path,
+        )
+    except OntologyPathNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OntologyServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return OntologyOverviewGraph(
+        nodes=[_node_to_schema(n) for n in result.nodes],
+        edges=[_edge_to_schema(e) for e in result.edges],
+    )
+
+
 @router.post("/entity")
 async def create_entity(
     data: EntityCreate,

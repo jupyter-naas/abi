@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Network, DataSet, type Options, type Node, type Edge } from 'vis-network/standalone';
 import 'vis-network/styles/vis-network.css';
@@ -369,6 +369,19 @@ interface VisNetworkProps {
   onEdgeSelect: (edgeId: string | null) => void;
   stabilizeKey?: number;
   layoutDirection?: 'LR' | 'TD';
+  /**
+   * Stable id for the current graph “mode” (e.g. ontology relation toggles).
+   * When this changes before the canvas updates, the previous zoom/pan is stored
+   * and reapplied when returning to that mode.
+   */
+  viewStateKey?: string;
+  /**
+   * When true (and not in hierarchical layout), physics stays continuously
+   * enabled instead of freezing after stabilization. Set by the parent when
+   * filters that benefit from a live force-directed layout are active
+   * (e.g. Restrictions / Object Properties).
+   */
+  physicsEnabled?: boolean;
 }
 
 export function VisNetwork({
@@ -379,12 +392,71 @@ export function VisNetwork({
   onEdgeSelect,
   stabilizeKey,
   layoutDirection,
+  viewStateKey,
+  physicsEnabled = false,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
+  const onNodeSelectRef = useRef(onNodeSelect);
+  const onEdgeSelectRef = useRef(onEdgeSelect);
+  const prevSelectedNodeIdRef = useRef<string | null>(null);
   const [logoDataByUrl, setLogoDataByUrl] = useState<Record<string, string>>({});
+
+  const savedFilterViewsRef = useRef(
+    new Map<string, { scale: number; position: { x: number; y: number } }>()
+  );
+  const prevFilterViewKeyRef = useRef<string | undefined>(undefined);
+  const currentFilterViewKeyRef = useRef<string>('__default');
+  /** True after filter key changed: next graph update should restore or fit for the new key. */
+  const pendingFilterViewportApplyRef = useRef(false);
+
+  /** Restore saved zoom/pan for `currentFilterViewKeyRef`, or fit if unseen. */
+  const applySavedViewportOrFit = useCallback((opts?: { fitDurationMs?: number }) => {
+    const net = networkRef.current;
+    if (!net || nodesDataRef.current.length === 0) return;
+    const key = currentFilterViewKeyRef.current;
+    const saved = savedFilterViewsRef.current.get(key);
+    const fitDurationMs = opts?.fitDurationMs ?? 300;
+    if (saved) {
+      try {
+        net.moveTo({
+          scale: saved.scale,
+          position: saved.position,
+          animation: { duration: 0, easingFunction: 'linear' },
+        });
+        return;
+      } catch {
+        // fallthrough to fit
+      }
+    }
+    net.fit({ animation: { duration: fitDurationMs, easingFunction: 'easeInOutQuad' } });
+  }, []);
+
+  useLayoutEffect(() => {
+    const key = viewStateKey ?? '__default';
+    const net = networkRef.current;
+    const prevKey = prevFilterViewKeyRef.current;
+    if (net && prevKey !== undefined && prevKey !== key) {
+      try {
+        savedFilterViewsRef.current.set(prevKey, {
+          scale: net.getScale(),
+          position: net.getViewPosition(),
+        });
+      } catch {
+        // Ignore read errors during teardown / empty graph.
+      }
+      pendingFilterViewportApplyRef.current = true;
+    }
+    prevFilterViewKeyRef.current = key;
+    currentFilterViewKeyRef.current = key;
+  }, [viewStateKey]);
+
+  useEffect(() => {
+    onNodeSelectRef.current = onNodeSelect;
+    onEdgeSelectRef.current = onEdgeSelect;
+  }, [onNodeSelect, onEdgeSelect]);
 
   const nodesByIri = useMemo(() => {
     const map = new Map<string, GraphNode>();
@@ -559,12 +631,12 @@ export function VisNetwork({
 
     networkRef.current.on('click', (params) => {
       if (params.nodes.length > 0) {
-        onNodeSelect(params.nodes[0] as string);
+        onNodeSelectRef.current(params.nodes[0] as string);
       } else if (params.edges.length > 0) {
-        onEdgeSelect(params.edges[0] as string);
+        onEdgeSelectRef.current(params.edges[0] as string);
       } else {
-        onNodeSelect(null);
-        onEdgeSelect(null);
+        onNodeSelectRef.current(null);
+        onEdgeSelectRef.current(null);
       }
     });
 
@@ -574,14 +646,46 @@ export function VisNetwork({
         networkRef.current = null;
       }
     };
-  }, [onNodeSelect, onEdgeSelect]);
+  }, []);
 
   // Track if initial stabilization is done
   const isStabilizedRef = useRef(false);
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  /** Last `layoutDirection` from the nodes effect — used to detect leaving hierarchical layout. */
+  const prevLayoutDirectionRef = useRef<'LR' | 'TD' | undefined>(undefined);
+  /**
+   * Mirror of the `physicsEnabled` prop, readable from inside async vis-network
+   * event callbacks (`stabilizationIterationsDone`) where the closure-captured
+   * prop value would be stale.
+   */
+  const physicsEnabledRef = useRef(physicsEnabled);
+  useEffect(() => {
+    physicsEnabledRef.current = physicsEnabled;
+  }, [physicsEnabled]);
+
+  // Toggle live physics on/off when the prop changes. Hierarchical layout always
+  // runs with physics off (positions are baked in), so this is a no-op there.
+  useEffect(() => {
+    const net = networkRef.current;
+    if (!net) return;
+    if (layoutDirection) return;
+    if (physicsEnabled) {
+      net.setOptions({ physics: { enabled: true } });
+      return;
+    }
+    // Disabling: capture positions so they survive future updates / context switches.
+    const positions = net.getPositions();
+    Object.entries(positions).forEach(([id, pos]) => {
+      nodePositionsRef.current.set(id, pos as { x: number; y: number });
+    });
+    net.setOptions({ physics: { enabled: false } });
+  }, [physicsEnabled, layoutDirection]);
 
   // Update nodes
   useEffect(() => {
+    const prevLayoutDir = prevLayoutDirectionRef.current;
+    const exitedHierarchicalLayout = prevLayoutDir !== undefined && layoutDirection === undefined;
+
     const seenIds = new Set<string>();
     const uniqueNodes = nodes.filter((node) => {
       if (seenIds.has(node.id)) return false;
@@ -589,6 +693,7 @@ export function VisNetwork({
       return true;
     });
 
+    try {
     if (layoutDirection) {
       // Hierarchical layout: positions are baked into toVisNode via hierarchicalPositions.
       // Disable physics and fit the view to the positioned graph.
@@ -596,10 +701,23 @@ export function VisNetwork({
       nodesDataRef.current.add(uniqueNodes.map(toVisNode));
       if (networkRef.current && uniqueNodes.length > 0) {
         networkRef.current.setOptions({ physics: { enabled: false } });
-        networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+        if (pendingFilterViewportApplyRef.current) {
+          pendingFilterViewportApplyRef.current = false;
+          applySavedViewportOrFit({ fitDurationMs: 500 });
+        } else {
+          networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+        }
       }
       isStabilizedRef.current = true;
       return;
+    }
+
+    // SubclassOf / hierarchy layout turned off: force a fresh force-directed pass (physics was disabled above).
+    if (exitedHierarchicalLayout && networkRef.current) {
+      isStabilizedRef.current = false;
+      // Drop baked coordinates so ForceAtlas2 can lay out from scratch, not the hierarchy positions.
+      nodePositionsRef.current.clear();
+      networkRef.current.setOptions({ physics: { enabled: true } });
     }
 
     if (isStabilizedRef.current && networkRef.current) {
@@ -645,6 +763,10 @@ export function VisNetwork({
       }
       if (toUpdate.length > 0) nodesDataRef.current.update(toUpdate);
       if (toAdd.length > 0) nodesDataRef.current.add(toAdd);
+      if (pendingFilterViewportApplyRef.current && networkRef.current) {
+        pendingFilterViewportApplyRef.current = false;
+        requestAnimationFrame(() => applySavedViewportOrFit({ fitDurationMs: 300 }));
+      }
       return;
     }
 
@@ -667,12 +789,51 @@ export function VisNetwork({
             nodePositionsRef.current.set(id, pos as { x: number; y: number });
           });
           isStabilizedRef.current = true;
-          networkRef.current.setOptions({ physics: { enabled: false } });
-          networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+          if (!physicsEnabledRef.current) {
+            networkRef.current.setOptions({ physics: { enabled: false } });
+          }
+          if (pendingFilterViewportApplyRef.current) {
+            pendingFilterViewportApplyRef.current = false;
+            applySavedViewportOrFit({ fitDurationMs: 500 });
+          } else {
+            networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+          }
         }
       });
+      if (exitedHierarchicalLayout) {
+        networkRef.current.stabilize(200);
+      }
     }
-  }, [nodes, toVisNode, layoutDirection]);
+    } finally {
+      prevLayoutDirectionRef.current = layoutDirection;
+    }
+  }, [nodes, toVisNode, layoutDirection, applySavedViewportOrFit]);
+
+  /**
+   * If no code path consumes `pendingFilterViewportApplyRef` this frame (e.g. edges-only refresh),
+   * still restore viewport after the graph settles.
+   */
+  useEffect(() => {
+    if (!pendingFilterViewportApplyRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (
+        !pendingFilterViewportApplyRef.current ||
+        !networkRef.current ||
+        nodesDataRef.current.length === 0
+      ) {
+        return;
+      }
+      pendingFilterViewportApplyRef.current = false;
+      applySavedViewportOrFit({ fitDurationMs: 300 });
+    }, 420);
+    return () => clearTimeout(timer);
+  }, [
+    viewStateKey,
+    nodes.length,
+    edges.length,
+    layoutDirection,
+    applySavedViewportOrFit,
+  ]);
 
   // Update edges
   useEffect(() => {
@@ -700,19 +861,54 @@ export function VisNetwork({
         nodePositionsRef.current.set(id, pos as { x: number; y: number });
       });
       isStabilizedRef.current = true;
-      networkRef.current.setOptions({ physics: { enabled: false } });
+      if (!physicsEnabledRef.current) {
+        networkRef.current.setOptions({ physics: { enabled: false } });
+      }
     });
     networkRef.current.stabilize(200);
   }, [stabilizeKey, layoutDirection]);
 
   // Handle selected node — select visually and pan to center on it without changing zoom.
+  // Double-RAF delay lets the canvas finish resizing (inspector open/close) before we pan.
   useEffect(() => {
-    if (!networkRef.current || !selectedNodeId || !nodesDataRef.current.get(selectedNodeId)) return;
+    if (!networkRef.current) return;
+
+    const hadSelected = prevSelectedNodeIdRef.current !== null;
+    prevSelectedNodeIdRef.current = selectedNodeId;
+
+    let cancelled = false;
+
+    if (!selectedNodeId) {
+      // Inspector closing: re-fit the graph into the now-wider canvas.
+      if (!hadSelected) return;
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        requestAnimationFrame(() => {
+          if (cancelled || !networkRef.current || nodesDataRef.current.length === 0) return;
+          networkRef.current.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
+        });
+      });
+      return () => { cancelled = true; };
+    }
+
+    if (!nodesDataRef.current.get(selectedNodeId)) return;
     networkRef.current.selectNodes([selectedNodeId]);
-    networkRef.current.focus(selectedNodeId, {
-      scale: networkRef.current.getScale(),
-      animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+
+    // Wait for the canvas to finish resizing (inspector open shrinks it) before centering.
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        if (cancelled || !networkRef.current) return;
+        const currentScale = networkRef.current.getScale();
+        const targetScale = Math.max(currentScale, 1.35);
+        networkRef.current.focus(selectedNodeId, {
+          scale: targetScale,
+          animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+        });
+      });
     });
+
+    return () => { cancelled = true; };
   }, [selectedNodeId]);
 
   return (

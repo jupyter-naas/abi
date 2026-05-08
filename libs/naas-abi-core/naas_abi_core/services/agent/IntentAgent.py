@@ -102,6 +102,7 @@ class IntentAgent(Agent):
         direct_intent_score: float = 0.90,
         enable_default_intents: bool = True,
         enable_default_tools: bool = True,
+        markdown_pretty_display: bool = True,
     ):
         """Initialize the IntentAgent.
 
@@ -185,6 +186,7 @@ class IntentAgent(Agent):
             configuration=configuration,
             event_queue=event_queue,
             enable_default_tools=enable_default_tools,
+            markdown_pretty_display=markdown_pretty_display,
         )
 
     @property
@@ -728,6 +730,7 @@ Last user message: "{last_human_message.content}"
                     )
                     if intent.intent_target != "call_model":
                         self.state.set_current_active_agent(intent.intent_target)
+                        self._notify_agent_routing(intent.intent_target)
                     return Command(goto=intent.intent_target)
                 else:
                     logger.debug(
@@ -852,6 +855,7 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             direct_intent_score=self._direct_intent_score,
             enable_default_intents=self._enable_default_intents,
             enable_default_tools=self._enable_default_tools,
+            markdown_pretty_display=self._markdown_pretty_display,
         )
 
         return new_agent

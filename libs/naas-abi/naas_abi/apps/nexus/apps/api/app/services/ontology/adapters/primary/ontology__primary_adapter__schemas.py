@@ -88,7 +88,7 @@ class OntologyOverviewGraphNode(BaseModel):
     id: str
     label: str
     type: str | None = None
-    properties: dict[str, str | bool]
+    properties: dict[str, str | bool | int]
 
 
 class OntologyOverviewGraphEdge(BaseModel):
@@ -97,7 +97,7 @@ class OntologyOverviewGraphEdge(BaseModel):
     target: str
     type: str
     label: str
-    properties: dict[str, str | bool]
+    properties: dict[str, str | bool | int]
 
 
 class OntologyOverviewGraph(BaseModel):
