@@ -1,0 +1,37 @@
+{$PUBLIC_WEB_HOST:localhost} {
+    reverse_proxy nexus-web:3000 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+{$PUBLIC_API_HOST:api.localhost} {
+    reverse_proxy abi:9879 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+
+{$HEADSCALE_SERVER_URL:headscale.localhost} {
+    reverse_proxy headscale:8080 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+
+graph-explorer.{$PUBLIC_WEB_HOST:localhost} {
+    @allowed remote_ip private_ranges 100.64.0.0/10 fd7a:115c:a1e0::/48 172.64.0.0/13
+    handle @allowed {
+        @root path /
+        redir @root /explorer 308
+
+        reverse_proxy https://graph-explorer:443 {
+            transport http {
+                tls_insecure_skip_verify
+            }
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    handle {
+        respond "Forbidden (remote: {remote_host})" 403
+    }
+}
