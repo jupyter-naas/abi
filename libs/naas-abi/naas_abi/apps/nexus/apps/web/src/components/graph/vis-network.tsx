@@ -375,6 +375,13 @@ interface VisNetworkProps {
    * and reapplied when returning to that mode.
    */
   viewStateKey?: string;
+  /**
+   * When true (and not in hierarchical layout), physics stays continuously
+   * enabled instead of freezing after stabilization. Set by the parent when
+   * filters that benefit from a live force-directed layout are active
+   * (e.g. Restrictions / Object Properties).
+   */
+  physicsEnabled?: boolean;
 }
 
 export function VisNetwork({
@@ -386,6 +393,7 @@ export function VisNetwork({
   stabilizeKey,
   layoutDirection,
   viewStateKey,
+  physicsEnabled = false,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -645,6 +653,33 @@ export function VisNetwork({
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   /** Last `layoutDirection` from the nodes effect — used to detect leaving hierarchical layout. */
   const prevLayoutDirectionRef = useRef<'LR' | 'TD' | undefined>(undefined);
+  /**
+   * Mirror of the `physicsEnabled` prop, readable from inside async vis-network
+   * event callbacks (`stabilizationIterationsDone`) where the closure-captured
+   * prop value would be stale.
+   */
+  const physicsEnabledRef = useRef(physicsEnabled);
+  useEffect(() => {
+    physicsEnabledRef.current = physicsEnabled;
+  }, [physicsEnabled]);
+
+  // Toggle live physics on/off when the prop changes. Hierarchical layout always
+  // runs with physics off (positions are baked in), so this is a no-op there.
+  useEffect(() => {
+    const net = networkRef.current;
+    if (!net) return;
+    if (layoutDirection) return;
+    if (physicsEnabled) {
+      net.setOptions({ physics: { enabled: true } });
+      return;
+    }
+    // Disabling: capture positions so they survive future updates / context switches.
+    const positions = net.getPositions();
+    Object.entries(positions).forEach(([id, pos]) => {
+      nodePositionsRef.current.set(id, pos as { x: number; y: number });
+    });
+    net.setOptions({ physics: { enabled: false } });
+  }, [physicsEnabled, layoutDirection]);
 
   // Update nodes
   useEffect(() => {
@@ -754,7 +789,9 @@ export function VisNetwork({
             nodePositionsRef.current.set(id, pos as { x: number; y: number });
           });
           isStabilizedRef.current = true;
-          networkRef.current.setOptions({ physics: { enabled: false } });
+          if (!physicsEnabledRef.current) {
+            networkRef.current.setOptions({ physics: { enabled: false } });
+          }
           if (pendingFilterViewportApplyRef.current) {
             pendingFilterViewportApplyRef.current = false;
             applySavedViewportOrFit({ fitDurationMs: 500 });
@@ -824,7 +861,9 @@ export function VisNetwork({
         nodePositionsRef.current.set(id, pos as { x: number; y: number });
       });
       isStabilizedRef.current = true;
-      networkRef.current.setOptions({ physics: { enabled: false } });
+      if (!physicsEnabledRef.current) {
+        networkRef.current.setOptions({ physics: { enabled: false } });
+      }
     });
     networkRef.current.stabilize(200);
   }, [stabilizeKey, layoutDirection]);

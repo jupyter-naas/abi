@@ -1620,6 +1620,21 @@ function OntologyNetworkView({
     showObjectProperties,
   ]);
 
+  /**
+   * Live force-directed physics is on whenever Restrictions or Object Properties
+   * filters are active — those edge sets benefit from a self-organising layout.
+   * Persisted per `(ontology, filters)` context so navigating back to the same
+   * view restores the same physics state.
+   */
+  const physicsByContextRef = useRef(new Map<string, boolean>());
+  const physicsEnabled = useMemo(
+    () => showRestrictions || showObjectProperties,
+    [showRestrictions, showObjectProperties]
+  );
+  useEffect(() => {
+    physicsByContextRef.current.set(ontologyGraphViewStateKey, physicsEnabled);
+  }, [ontologyGraphViewStateKey, physicsEnabled]);
+
   const handleBucketToggle = useCallback((bucketType: string) => {
     setActiveBuckets((prev) => {
       const next = new Set(prev);
@@ -2196,6 +2211,7 @@ function OntologyNetworkView({
               }}
               layoutDirection={subclassOfEnabled ? layoutDirection : undefined}
               viewStateKey={ontologyGraphViewStateKey}
+              physicsEnabled={physicsEnabled}
             />
           )}
         </div>
