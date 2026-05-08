@@ -94,6 +94,17 @@ function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, vi
   return null;
 }
 
+function computeSpreadPositions(nodeIds: string[], spacing = 300): Map<string, { x: number; y: number }> {
+  const result = new Map<string, { x: number; y: number }>();
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  nodeIds.forEach((id, i) => {
+    const r = spacing * Math.sqrt(i);
+    const theta = i * goldenAngle;
+    result.set(id, { x: r * Math.cos(theta), y: r * Math.sin(theta) });
+  });
+  return result;
+}
+
 const EDGE_COLORS: Record<string, string> = {
   // 'participates in': '#22c55e',
   // 'has participant': '#22c55e',
@@ -614,8 +625,7 @@ export function VisNetwork({
       dragView: true,
     },
     layout: {
-      improvedLayout: true,
-      randomSeed: 42,
+      improvedLayout: false,
     },
   };
 
@@ -771,10 +781,19 @@ export function VisNetwork({
     }
 
     // Initial load — full clear + add, then let physics stabilize.
+    // Pre-spread nodes without a saved position using a sunflower spiral so
+    // physics starts from a distributed layout rather than piling up at the origin.
+    const unsavedIds = uniqueNodes
+      .filter((n) => !nodePositionsRef.current.has(n.id))
+      .map((n) => n.id);
+    const spreadPositions = computeSpreadPositions(unsavedIds);
+
     const visNodes = uniqueNodes.map((node) => {
       const baseNode = toVisNode(node);
       const savedPos = nodePositionsRef.current.get(node.id);
       if (savedPos) return { ...baseNode, x: savedPos.x, y: savedPos.y };
+      const initPos = spreadPositions.get(node.id);
+      if (initPos) return { ...baseNode, x: initPos.x, y: initPos.y };
       return baseNode;
     });
 
