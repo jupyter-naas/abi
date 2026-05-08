@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.37.2 (2026-05-08)
+
+### Bug Fixes
+
+- **core/database**: Return False if table_exists query result is None
+  ([`ba03a42`](https://github.com/jupyter-naas/abi/commit/ba03a42656814e6dd1b992dc80aa02d0b8deaa81))
+
+- **nexus**: Improve vis-network graph layout by pre-spreading nodes
+  ([`fcb887e`](https://github.com/jupyter-naas/abi/commit/fcb887e682cc143310e8c1646d1c8f84d82b823f))
+
+
 ## v1.37.1 (2026-05-08)
 
 ### Bug Fixes
