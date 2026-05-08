@@ -263,9 +263,7 @@ class MarkdownToVectorPipeline(Pipeline):
         graph_name = parameters.graph_name
 
         logger.info(
-            "MarkdownToVectorPipeline: collection=%s file_path_filter=%r",
-            cfg.collection_name,
-            cfg.file_path,
+            f"MarkdownToVectorPipeline: collection={cfg.collection_name} file_path_filter={cfg.file_path}",
         )
 
         vector_store = self.module.engine.services.vector_store
@@ -280,7 +278,7 @@ class MarkdownToVectorPipeline(Pipeline):
         )
 
         markdown_files = self._get_markdown_files(graph_name)
-        logger.info("Found %d Markdown file(s) to process.", len(markdown_files))
+        logger.info(f"Found {len(markdown_files)} Markdown file(s) to process.")
 
         combined_graph = Graph()
 
@@ -290,9 +288,7 @@ class MarkdownToVectorPipeline(Pipeline):
 
             if self._chunk_already_vectorized(file_iri, graph_name):
                 logger.debug(
-                    "Skipping already-vectorized file: %s (collection=%s)",
-                    file_path_val,
-                    cfg.collection_name,
+                    f"Skipping already-vectorized file: {file_path_val} (collection={cfg.collection_name})",
                 )
                 continue
 
@@ -302,23 +298,20 @@ class MarkdownToVectorPipeline(Pipeline):
                 )
                 text = content_bytes.decode("utf-8", errors="replace")
             except Exception as exc:
-                logger.warning("Could not read %s: %s", file_path_val, exc)
+                logger.warning(f"Could not read {file_path_val}: {exc}")
                 continue
 
             chunks = _split_markdown(text, cfg.chunk_size, cfg.chunk_overlap)
             if not chunks:
-                logger.debug("No chunks produced for %s", file_path_val)
+                logger.debug(f"No chunks produced for {file_path_val}")
                 continue
 
-            logger.info("Embedding %d chunk(s) for %s …", len(chunks), file_path_val)
+            logger.info(f"Embedding {len(chunks)} chunk(s) for {file_path_val} …")
 
             vectors = self._embed(chunks, embeddings_model)
             if len(vectors) != len(chunks):
                 logger.error(
-                    "Embedding count mismatch for %s: got %d, expected %d",
-                    file_path_val,
-                    len(vectors),
-                    len(chunks),
+                    f"Embedding count mismatch for {file_path_val}: got {len(vectors)}, expected {len(chunks)}",
                 )
                 continue
 
@@ -345,7 +338,7 @@ class MarkdownToVectorPipeline(Pipeline):
                     content=chunk_text,
                     chunk_index=idx,
                     embedding_id=chunk_id,
-                    file_path=file_path_val,
+                    chunk_file_path=file_path_val,
                     collection_name=cfg.collection_name,
                     isChunkOf=[file_iri],
                 )

@@ -176,4 +176,5 @@ def create_agent(
 class DocumentAgent(IntentAgent):
     """Agent that answers questions over ingested and vectorized documents."""
 
+    name: str = NAME
     pass

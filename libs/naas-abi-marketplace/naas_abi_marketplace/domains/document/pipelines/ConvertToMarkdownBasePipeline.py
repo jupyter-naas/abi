@@ -75,13 +75,23 @@ class ConvertToMarkdownBasePipeline(Pipeline):
                 filename=f.file_name + ".md",
                 graph_name=parameters.graph_name,
                 destination_path=os.path.join(os.path.dirname(f.file_path)),
+                mime_type="text/markdown",
                 kwargs={
                     "derivedFrom": [f._uri],
                     "processedBy": [parameters.processor_iri],
                 },
             )
 
+            existing = list(f.processedBy or [])
+            if parameters.processor_iri not in [str(p) for p in existing]:
+                existing.append(parameters.processor_iri)
+            f.processedBy = existing
+            self.module.engine.services.triple_store.insert(
+                f.rdf(), graph_name=parameters.graph_name
+            )
+
             graph += new_file.rdf()
+            graph += f.rdf()
 
         return graph
 

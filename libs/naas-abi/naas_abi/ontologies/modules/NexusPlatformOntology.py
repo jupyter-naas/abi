@@ -324,9 +324,7 @@ class Tenant(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_tenant_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -344,7 +342,7 @@ class Tenant(RDFEntity):
                 description="Relates a tenant role to the organization in which it inheres."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Server(RDFEntity):
@@ -363,9 +361,7 @@ class Server(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"located_in_deployment_site"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -383,7 +379,7 @@ class Server(RDFEntity):
                 description="Relates a server to the deployment site in which it is located."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class DeploymentSite(RDFEntity):
@@ -401,9 +397,7 @@ class DeploymentSite(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -429,9 +423,7 @@ class User(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -460,9 +452,7 @@ class NexusOrganization(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_tenant", "has_user", "has_workspace"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -478,7 +468,7 @@ class NexusOrganization(RDFEntity):
             List[Union[Tenant, URIRef, str]],
             Field(description="Relates an organization to the tenant role it bears."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_user: Optional[
         Annotated[
             List[Union[URIRef, User, str]],
@@ -486,7 +476,7 @@ class NexusOrganization(RDFEntity):
                 description="Relates an organization to a user that is a member of it in the platform."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_workspace: Optional[
         Annotated[
             List[Union[URIRef, Workspace, str]],
@@ -494,7 +484,7 @@ class NexusOrganization(RDFEntity):
                 description="Relates an organization to a workspace that depends on it within the Nexus platform."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Workspace(RDFEntity):
@@ -531,10 +521,8 @@ class Workspace(RDFEntity):
                 description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance."
             ),
         ]
-    ] = "unknown"
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -552,7 +540,7 @@ class Workspace(RDFEntity):
                 description="Relates a workspace to a conversation it carries or contains."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_marketplace_apps: Optional[
         Annotated[
             List[Union[MarketplaceApps, URIRef, str]],
@@ -560,7 +548,7 @@ class Workspace(RDFEntity):
                 description="Relates a workspace to a marketplace application available in or associated with it."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_workspace_role: Optional[
         Annotated[
             List[Union[URIRef, WorkspaceRole, str]],
@@ -568,7 +556,7 @@ class Workspace(RDFEntity):
                 description="Relates a workspace to a workspace role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     hosted_on: Optional[
         Annotated[
             List[Union[Server, URIRef, str]],
@@ -576,7 +564,7 @@ class Workspace(RDFEntity):
                 description="Relates a workspace to the physical server on which it depends for hosting."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     is_workspace_of: Optional[
         Annotated[
             List[Union[NexusOrganization, URIRef, str]],
@@ -584,7 +572,7 @@ class Workspace(RDFEntity):
                 description="Relates a workspace to the organization on which it generically depends."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Search(RDFEntity):
@@ -603,9 +591,7 @@ class Search(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_search_role"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -623,7 +609,7 @@ class Search(RDFEntity):
                 description="Relates a search artifact to a search role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Conversation(RDFEntity):
@@ -648,9 +634,7 @@ class Conversation(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -668,13 +652,13 @@ class Conversation(RDFEntity):
                 description="Relates a conversation to a conversation role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_message: Optional[
         Annotated[
             List[Union[Message, URIRef, str]],
             Field(description="Relates a conversation to a message it contains."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     is_conversation_of: Optional[
         Annotated[
             List[Union[URIRef, Workspace, str]],
@@ -682,7 +666,7 @@ class Conversation(RDFEntity):
                 description="Relates a conversation to the workspace on which it depends."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Message(RDFEntity):
@@ -702,9 +686,7 @@ class Message(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_message_role", "is_message_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -722,7 +704,7 @@ class Message(RDFEntity):
                 description="Relates a message to a message role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     is_message_of: Optional[
         Annotated[
             List[Union[Conversation, URIRef, str]],
@@ -730,7 +712,7 @@ class Message(RDFEntity):
                 description="Relates a message to the conversation on which it depends."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Agent(RDFEntity):
@@ -772,7 +754,7 @@ class Agent(RDFEntity):
                 description="A description used in Nexus platform to identify a generically dependent continuant instance."
             ),
         ]
-    ] = "unknown"
+    ] = None
     logo_url: Optional[
         Annotated[
             str,
@@ -780,16 +762,14 @@ class Agent(RDFEntity):
                 description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance."
             ),
         ]
-    ] = "unknown"
-    class_name: Optional[Annotated[str, Field(description="Agent class name.")]] = (
-        "unknown"
-    )
+    ] = None
+    class_name: Optional[Annotated[str, Field(description="Agent class name.")]] = None
     module_path: Optional[
         Annotated[str, Field(description="Agent module path in naas-abi.")]
-    ] = "unknown"
+    ] = None
     class_path: Optional[
         Annotated[str, Field(description="Agent module path and class name.")]
-    ] = "unknown"
+    ] = None
     system_prompt: Optional[
         Annotated[
             str,
@@ -797,10 +777,8 @@ class Agent(RDFEntity):
                 description="A system prompt used in Nexus platform to configure a software agent."
             ),
         ]
-    ] = "unknown"
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -818,13 +796,13 @@ class Agent(RDFEntity):
                 description="Relates an agent to an agent role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_intent: Optional[
         Annotated[
             List[Union[AgentIntent, URIRef, str]],
             Field(description="Relates an agent to an intent available to it."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_subagent: Optional[
         Annotated[
             List[Union[Agent, URIRef, str]],
@@ -832,13 +810,13 @@ class Agent(RDFEntity):
                 description="Relates a supervisor agent to a sub-agent it orchestrates within the Nexus platform."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_tool: Optional[
         Annotated[
             List[Union[AgentTool, URIRef, str]],
             Field(description="Relates an agent to a tool available to it."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     is_subagent_of: Optional[
         Annotated[
             List[Union[Agent, URIRef, str]],
@@ -846,7 +824,7 @@ class Agent(RDFEntity):
                 description="Relates a sub-agent to the supervisor agent that orchestrates it within the Nexus platform."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class AgentTool(RDFEntity):
@@ -873,10 +851,8 @@ class AgentTool(RDFEntity):
                 description="A description used in Nexus platform to identify a generically dependent continuant instance."
             ),
         ]
-    ] = "unknown"
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -892,7 +868,7 @@ class AgentTool(RDFEntity):
             List[Union[Agent, URIRef, str]],
             Field(description="Relates a tool to the agent on which it depends."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class AgentIntent(RDFEntity):
@@ -923,22 +899,20 @@ class AgentIntent(RDFEntity):
                 description="A description used in Nexus platform to identify a generically dependent continuant instance."
             ),
         ]
-    ] = "unknown"
+    ] = None
     intent_type: Optional[
         Annotated[str, Field(description="The type of the intent.")]
-    ] = "unknown"
+    ] = None
     intent_value: Optional[
         Annotated[str, Field(description="The value of the intent.")]
-    ] = "unknown"
+    ] = None
     intent_target: Optional[
         Annotated[str, Field(description="The target of the intent.")]
-    ] = "unknown"
+    ] = None
     intent_scope: Optional[
         Annotated[str, Field(description="The scope of the intent.")]
-    ] = "unknown"
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -954,7 +928,7 @@ class AgentIntent(RDFEntity):
             List[Union[Agent, URIRef, str]],
             Field(description="Relates an intent to the agent on which it depends."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Ontology(RDFEntity):
@@ -981,9 +955,7 @@ class Ontology(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -999,13 +971,13 @@ class Ontology(RDFEntity):
             List[Union[OntologyClass, URIRef, str]],
             Field(description="Relates an ontology to a class defined within it."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_ontology_module: Optional[
         Annotated[
             List[Union[OntologyModule, URIRef, str]],
             Field(description="Relates an ontology to one of its ontology modules."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_ontology_object_property: Optional[
         Annotated[
             List[Union[OntologyObjectProperty, URIRef, str]],
@@ -1013,7 +985,7 @@ class Ontology(RDFEntity):
                 description="Relates an ontology to an object property defined within it."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_ontology_role: Optional[
         Annotated[
             List[Union[OntologyRole, URIRef, str]],
@@ -1021,7 +993,7 @@ class Ontology(RDFEntity):
                 description="Relates an ontology to an ontology role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class OntologyModule(RDFEntity):
@@ -1044,9 +1016,7 @@ class OntologyModule(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1064,7 +1034,7 @@ class OntologyModule(RDFEntity):
                 description="Relates an ontology module to an ontology module role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     is_ontology_module_of: Optional[
         Annotated[
             List[Union[Ontology, URIRef, str]],
@@ -1072,7 +1042,7 @@ class OntologyModule(RDFEntity):
                 description="Relates an ontology module to the ontology on which it depends."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class OntologyClass(RDFEntity):
@@ -1091,9 +1061,7 @@ class OntologyClass(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_ontology_class_role"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1111,7 +1079,7 @@ class OntologyClass(RDFEntity):
                 description="Relates an ontology class to an ontology class role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class OntologyObjectProperty(RDFEntity):
@@ -1130,9 +1098,7 @@ class OntologyObjectProperty(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_ontology_object_property_role"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1150,7 +1116,7 @@ class OntologyObjectProperty(RDFEntity):
                 description="Relates an ontology object property to an ontology object property role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class KnowledgeGraph(RDFEntity):
@@ -1181,10 +1147,8 @@ class KnowledgeGraph(RDFEntity):
                 description="A description used in Nexus platform to identify a generically dependent continuant instance."
             ),
         ]
-    ] = "unknown"
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1202,7 +1166,7 @@ class KnowledgeGraph(RDFEntity):
                 description="Relates a knowledge graph to a graph view derived from it."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_knowledge_graph_role: Optional[
         Annotated[
             List[Union[KnowledgeGraphRole, URIRef, str]],
@@ -1210,7 +1174,7 @@ class KnowledgeGraph(RDFEntity):
                 description="Relates a knowledge graph to a knowledge graph role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class GraphView(RDFEntity):
@@ -1243,10 +1207,8 @@ class GraphView(RDFEntity):
                 description="A description used in Nexus platform to identify a generically dependent continuant instance."
             ),
         ]
-    ] = "unknown"
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1262,7 +1224,7 @@ class GraphView(RDFEntity):
             List[Union[GraphFilter, URIRef, str]],
             Field(description="Relates a graph view to a graph filter used in it."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_graph_view_role: Optional[
         Annotated[
             List[Union[GraphViewRole, URIRef, str]],
@@ -1270,13 +1232,13 @@ class GraphView(RDFEntity):
                 description="Relates a graph view to a graph view role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     includes_knowledge_graph: Optional[
         Annotated[
             List[Union[KnowledgeGraph, URIRef, str]],
             Field(description="Relates a graph view to a knowledge graph it includes."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class GraphFilter(RDFEntity):
@@ -1303,13 +1265,13 @@ class GraphFilter(RDFEntity):
             str,
             Field(description="The URI of the subject filtering the graph view."),
         ]
-    ] = "unknown"
+    ] = None
     predicate_uri: Optional[
         Annotated[
             str,
             Field(description="The URI of the predicate filtering the graph view."),
         ]
-    ] = "unknown"
+    ] = None
     object_uri: Optional[
         Annotated[
             str,
@@ -1317,10 +1279,8 @@ class GraphFilter(RDFEntity):
                 description="The URI or literal of the object filtering the graph view."
             ),
         ]
-    ] = "unknown"
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1338,7 +1298,7 @@ class GraphFilter(RDFEntity):
                 description="Relates a graph filter to a graph filter role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class Files(RDFEntity):
@@ -1357,9 +1317,7 @@ class Files(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_file_role"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1377,7 +1335,7 @@ class Files(RDFEntity):
                 description="Relates a file artifact to a file role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class FileSystem(RDFEntity):
@@ -1397,9 +1355,7 @@ class FileSystem(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_file_system_role", "has_files"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1417,13 +1373,13 @@ class FileSystem(RDFEntity):
                 description="Relates a file system to a file system role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
     has_files: Optional[
         Annotated[
             List[Union[Files, URIRef, str]],
             Field(description="Relates a file system to files accessible through it."),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class MarketplaceApps(RDFEntity):
@@ -1442,9 +1398,7 @@ class MarketplaceApps(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_marketplace_app_role"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1462,7 +1416,7 @@ class MarketplaceApps(RDFEntity):
                 description="Relates a marketplace application to a marketplace application role that concretizes it in platform use."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class WorkspaceRole(RDFEntity):
@@ -1481,9 +1435,7 @@ class WorkspaceRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_workspace_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1501,7 +1453,7 @@ class WorkspaceRole(RDFEntity):
                 description="Relates a workspace role to the workspace of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class SearchRole(RDFEntity):
@@ -1520,9 +1472,7 @@ class SearchRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_search_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1540,7 +1490,7 @@ class SearchRole(RDFEntity):
                 description="Relates a search role to the search artifact of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class ConversationRole(RDFEntity):
@@ -1559,9 +1509,7 @@ class ConversationRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_conversation_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1579,7 +1527,7 @@ class ConversationRole(RDFEntity):
                 description="Relates a conversation role to the conversation of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class MessageRole(RDFEntity):
@@ -1598,9 +1546,7 @@ class MessageRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_message_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1618,7 +1564,7 @@ class MessageRole(RDFEntity):
                 description="Relates a message role to the message of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class AgentRole(RDFEntity):
@@ -1645,10 +1591,8 @@ class AgentRole(RDFEntity):
                 description="A description used in Nexus platform to identify a generically dependent continuant instance."
             ),
         ]
-    ] = "unknown"
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1666,7 +1610,7 @@ class AgentRole(RDFEntity):
                 description="Relates an agent role to the agent of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class OntologyRole(RDFEntity):
@@ -1685,9 +1629,7 @@ class OntologyRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_ontology_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1705,7 +1647,7 @@ class OntologyRole(RDFEntity):
                 description="Relates an ontology role to the ontology of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class OntologyModuleRole(RDFEntity):
@@ -1724,9 +1666,7 @@ class OntologyModuleRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_ontology_module_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1744,7 +1684,7 @@ class OntologyModuleRole(RDFEntity):
                 description="Relates an ontology module role to the ontology module of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class OntologyClassRole(RDFEntity):
@@ -1763,9 +1703,7 @@ class OntologyClassRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_ontology_class_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1783,7 +1721,7 @@ class OntologyClassRole(RDFEntity):
                 description="Relates an ontology class role to the ontology class of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class OntologyObjectPropertyRole(RDFEntity):
@@ -1804,9 +1742,7 @@ class OntologyObjectPropertyRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_ontology_object_property_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1824,7 +1760,7 @@ class OntologyObjectPropertyRole(RDFEntity):
                 description="Relates an ontology object property role to the ontology object property of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class KnowledgeGraphRole(RDFEntity):
@@ -1843,9 +1779,7 @@ class KnowledgeGraphRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_knowledge_graph_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1863,7 +1797,7 @@ class KnowledgeGraphRole(RDFEntity):
                 description="Relates a knowledge graph role to the knowledge graph of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class GraphViewRole(RDFEntity):
@@ -1882,9 +1816,7 @@ class GraphViewRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_graph_view_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1902,7 +1834,7 @@ class GraphViewRole(RDFEntity):
                 description="Relates a graph view role to the graph view of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class GraphFilterRole(RDFEntity):
@@ -1921,9 +1853,7 @@ class GraphFilterRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_graph_filter_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1941,7 +1871,7 @@ class GraphFilterRole(RDFEntity):
                 description="Relates a graph filter role to the graph filter of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class FileRole(RDFEntity):
@@ -1960,9 +1890,7 @@ class FileRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_file_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -1980,7 +1908,7 @@ class FileRole(RDFEntity):
                 description="Relates a file role to the file artifact of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class FileSystemRole(RDFEntity):
@@ -1999,9 +1927,7 @@ class FileSystemRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_file_system_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -2019,7 +1945,7 @@ class FileSystemRole(RDFEntity):
                 description="Relates a file system role to the file system of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 class MarketplaceAppRole(RDFEntity):
@@ -2038,9 +1964,7 @@ class MarketplaceAppRole(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_marketplace_app_role_of"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = (
-        "unknown"
-    )
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
@@ -2058,7 +1982,7 @@ class MarketplaceAppRole(RDFEntity):
                 description="Relates a marketplace application role to the marketplace application of which it is the role-side concretization."
             ),
         ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    ] = None
 
 
 # Rebuild models to resolve forward references

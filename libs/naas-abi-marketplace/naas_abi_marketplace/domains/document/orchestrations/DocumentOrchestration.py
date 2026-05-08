@@ -92,10 +92,17 @@ def _build_file_ingestion_job_sensor(
             FilesIngestionPipelineConfiguration,
         )
 
+        pipeline = FilesIngestionPipeline(FilesIngestionPipelineConfiguration())
+
+        # Make sure the input/output directories exist in the object store
+        # so users can see and drop files into them even before any ingestion
+        # has happened.
+        pipeline._ensure_prefix_marker(config.input_path)
+        pipeline._ensure_prefix_marker(config.output_path)
+
         if _has_in_progress_run(context, graph_name):
             return dg.SkipReason(f"Job '{graph_name}' is already running.")
 
-        pipeline = FilesIngestionPipeline(FilesIngestionPipelineConfiguration())
         object_keys = pipeline._get_files_from_path(
             config.input_path, recursive=config.recursive
         )

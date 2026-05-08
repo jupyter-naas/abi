@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.28.2 (2026-05-07)
+
+### Bug Fixes
+
+- Bump
+  ([`c884f71`](https://github.com/jupyter-naas/abi/commit/c884f71e48a45d4a2f7bf284bc8e00e4f15a8226))
+
+### Chores
+
+- Commit uv.lock from libs
+  ([`dbb210a`](https://github.com/jupyter-naas/abi/commit/dbb210ac9587035922ffd823d92e724d09e1afc0))
+
+- Uv.lock
+  ([`4241536`](https://github.com/jupyter-naas/abi/commit/424153634dcdaa9184d803a4a0d70801f5adcb39))
+
+
 ## v1.28.1 (2026-05-04)
 
 ### Bug Fixes

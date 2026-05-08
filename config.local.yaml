@@ -157,6 +157,8 @@ modules:
         api_key: "{{ secret.OPENAI_API_KEY }}"
       markdowntovector_pipelines:
         - api_key: "{{ secret.OPENAI_API_KEY }}"
+      document_agent:
+        api_key: "{{ secret.OPENAI_API_KEY }}"
 
 services:
   secret:
