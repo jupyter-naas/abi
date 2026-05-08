@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.37.1 (2026-05-08)
+
+### Bug Fixes
+
+- Add useLayoutEffect for autosizing chat input
+  ([`79fa2f4`](https://github.com/jupyter-naas/abi/commit/79fa2f4f198625677363192d0c2cce0739681418))
+
+
 ## v1.37.0 (2026-05-08)
 
 
