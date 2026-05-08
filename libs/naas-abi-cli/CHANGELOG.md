@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.28.3 (2026-05-08)
+
+### Bug Fixes
+
+- **nexus**: Improve vis-network graph layout by pre-spreading nodes
+  ([`fcb887e`](https://github.com/jupyter-naas/abi/commit/fcb887e682cc143310e8c1646d1c8f84d82b823f))
+
+
 ## v1.28.2 (2026-05-07)
 
 ### Bug Fixes
