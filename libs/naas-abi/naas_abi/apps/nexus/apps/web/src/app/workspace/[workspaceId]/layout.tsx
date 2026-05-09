@@ -6,6 +6,7 @@ import { isWorkspacePathAllowed } from '@/lib/feature-access';
 import { WorkspaceLayout } from '@/components/shell/workspace-layout';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
+import { QueryProvider } from '@/providers/query-provider';
 
 // Catches unhandled promise rejections (not caught by React error boundaries)
 function AsyncErrorCatcher() {
@@ -208,7 +209,9 @@ export default function WorkspaceIdLayout({
   return (
     <WorkspaceErrorBoundary>
       <AsyncErrorCatcher />
-      <WorkspaceLayout>{children}</WorkspaceLayout>
+      <QueryProvider>
+        <WorkspaceLayout>{children}</WorkspaceLayout>
+      </QueryProvider>
     </WorkspaceErrorBoundary>
   );
 }

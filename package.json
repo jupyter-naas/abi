@@ -1,0 +1,6 @@
+{
+	"dependencies": {
+		"@tanstack/react-query": "^5",
+		"zod": "^3"
+	}
+}

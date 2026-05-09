@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/shell/header';
 import {
   Database,
@@ -32,14 +33,42 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getApiUrl } from '@/lib/config';
 import {
   useKnowledgeGraphStore,
   type GraphViewType,
   type GraphTripleFilter,
   type GraphView,
 } from '@/stores/knowledge-graph';
-import { authFetch } from '@/stores/auth';
+import {
+  useGraphList,
+  useGraphNetwork,
+  useGraphOverview,
+  useGraphViews,
+  useOntologyClasses,
+  useFilterOptions,
+  useTriplePreview,
+  useCreateGraph,
+  useCreateIndividual,
+  useCreateView,
+  useUpdateView,
+  useUpdateNode,
+  useDeleteNode,
+} from './_hooks/use-graph-queries';
+import { fetchNetworkParents, type GraphSelection } from '@/lib/api/graph';
+import { usePrompt, useConfirm } from '@/components/ui/dialogs';
+import { FilterOptionDropdown } from './_components/FilterOptionDropdown';
+import { ClassOptionDropdown } from './_components/ClassOptionDropdown';
+import { StatCard } from './_components/StatCard';
+import { IndividualsSplitView } from './_components/IndividualsSplitView';
+import type {
+  FilterOption,
+  GraphEdge,
+  GraphNode,
+  GraphOption,
+  GraphPageMode,
+  OntologyClassOption,
+  ViewFilterDraft,
+} from './_components/types';
 
 // Dynamically import vis-network to avoid SSR issues
 const VisNetwork = dynamic(
@@ -69,27 +98,6 @@ interface ApiEdge {
   source_label?: string;
   target_label?: string;
   type: string;
-  properties?: Record<string, unknown>;
-}
-
-// Types for vis-network (adapted for visualization)
-interface GraphNode {
-  id: string;
-  label: string;
-  type: string;
-  properties: Record<string, unknown>;
-  x?: number;
-  y?: number;
-}
-
-interface GraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  sourceLabel?: string;
-  targetLabel?: string;
-  type: string;
-  label?: string;
   properties?: Record<string, unknown>;
 }
 
@@ -147,361 +155,19 @@ function isSystemGraph(option: GraphOption): boolean {
 const isGraphViewType = (value: string): value is GraphViewType =>
   GRAPH_VIEW_TYPES.some((view) => view.id === value);
 
-type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'create-graph' | 'sparql';
 
-interface OntologyClassOption {
-  id: string;
-  name: string;
-  description: string;
-}
-
-interface GraphOption {
-  id: string;
-  name: string;
-}
-
-interface FilterOption {
-  uri: string;
-  label: string;
-}
-
-interface FilterOptionsResponse {
-  subjects: FilterOption[];
-  predicates: FilterOption[];
-  objects: FilterOption[];
-}
-
-interface TriplePreviewRow {
-  subject: string;
-  predicate: string;
-  object: string;
-}
-
-interface TriplePreviewResponse {
-  count: number;
-  individual_count: number;
-  object_properties_count: number;
-  data_properties_count: number;
-  rows: TriplePreviewRow[];
-}
-
-interface ApiOverview {
-  kpis: {
-    total_instances: number;
-    total_relationships: number;
-    average_degree: number;
-    density: number;
-  };
-  instances_by_class: Array<{
-    type: string;
-    count: number;
-  }>;
-}
-
-interface ViewFilterDraft {
-  subject_uri: string;
-  predicate_uri: string;
-  object_uri: string;
-}
-
-function FilterOptionDropdown({
-  options,
-  value,
-  onChange,
-  placeholder,
-}: {
-  options: FilterOption[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        setOpen(false);
-        setSearchQuery('');
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const filtered = useMemo(() => {
-    const t = searchQuery.trim().toLowerCase();
-    const list = !t
-      ? options
-      : options.filter(
-          (o) => o.label.toLowerCase().includes(t) || o.uri.toLowerCase().includes(t)
-        );
-    if (value && !list.some((o) => o.uri === value)) {
-      const sel = options.find((o) => o.uri === value);
-      if (sel) return [sel, ...list];
-    }
-    return list;
-  }, [options, searchQuery, value]);
-
-  const selected = options.find((o) => o.uri === value);
-  const displayLabel = selected ? selected.label : '';
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={cn(
-          'flex w-full items-center justify-between rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary',
-          'hover:bg-muted/50'
-        )}
-      >
-        <span className={cn('truncate', !value && 'text-muted-foreground')}>
-          {displayLabel || placeholder}
-        </span>
-        <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground', open && 'rotate-180')} />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[16rem] max-h-64 overflow-hidden rounded-lg border bg-background shadow-lg">
-          <div className="sticky top-0 border-b bg-background p-2">
-            <input
-              type="text"
-              placeholder={`Search ${placeholder.toLowerCase()}...`}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              autoFocus
-            />
-          </div>
-          <div className="max-h-48 overflow-y-auto py-1">
-            <button
-              type="button"
-              onClick={() => {
-                onChange('');
-                setOpen(false);
-                setSearchQuery('');
-              }}
-              className={cn(
-                'flex w-full items-center px-3 py-2 text-left text-sm',
-                'hover:bg-muted',
-                !value && 'bg-muted'
-              )}
-            >
-              <span className="text-muted-foreground">{placeholder}</span>
-            </button>
-            {filtered.map((option) => (
-              <button
-                key={option.uri}
-                type="button"
-                onClick={() => {
-                  onChange(option.uri);
-                  setOpen(false);
-                  setSearchQuery('');
-                }}
-                className={cn(
-                  'flex w-full items-center px-3 py-2 text-left text-sm',
-                  'hover:bg-muted',
-                  value === option.uri && 'bg-muted'
-                )}
-              >
-                <span className="truncate">{option.label}</span>
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                No matches for &quot;{searchQuery}&quot;
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ClassOptionDropdown({
-  options,
-  value,
-  onChange,
-  placeholder,
-  disabled = false,
-}: {
-  options: OntologyClassOption[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        setOpen(false);
-        setSearchQuery('');
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const filtered = useMemo(() => {
-    const t = searchQuery.trim().toLowerCase();
-    if (!t) return options;
-    return options.filter(
-      (option) =>
-        option.name.toLowerCase().includes(t) ||
-        option.description.toLowerCase().includes(t)
-    );
-  }, [options, searchQuery]);
-
-  const selected = options.find((option) => option.id === value);
-  const selectedDisplay = selected
-    ? selected.description
-      ? `${selected.name}: ${selected.description}`
-      : selected.name
-    : '';
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => !disabled && setOpen((prev) => !prev)}
-        disabled={disabled}
-        className={cn(
-          'flex w-full items-center justify-between rounded-lg border bg-background px-3 py-2 text-left text-sm outline-none focus:ring-2 focus:ring-primary',
-          'hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60'
-        )}
-      >
-        <span className={cn('line-clamp-2 break-words', !value && 'text-muted-foreground')}>
-          {selectedDisplay || placeholder}
-        </span>
-        <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground', open && 'rotate-180')} />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-full max-h-64 overflow-hidden rounded-lg border bg-background shadow-lg">
-          <div className="sticky top-0 border-b bg-background p-2">
-            <input
-              type="text"
-              placeholder="Search class..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              autoFocus
-            />
-          </div>
-          <div className="max-h-48 overflow-y-auto py-1">
-            <button
-              type="button"
-              onClick={() => {
-                onChange('');
-                setOpen(false);
-                setSearchQuery('');
-              }}
-              className={cn('w-full px-3 py-2 text-left text-sm hover:bg-muted', !value && 'bg-muted')}
-            >
-              <span className="text-muted-foreground">{placeholder}</span>
-            </button>
-            {filtered.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => {
-                  onChange(option.id);
-                  setOpen(false);
-                  setSearchQuery('');
-                }}
-                className={cn(
-                  'w-full px-3 py-2 text-left text-sm hover:bg-muted',
-                  value === option.id && 'bg-muted'
-                )}
-              >
-                <span className="block break-words">
-                  {option.name}
-                  {option.description ? `: ${option.description}` : ''}
-                </span>
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                No matches for &quot;{searchQuery}&quot;
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface GraphViewInfo {
-  workspace_id: string;
-  id: string;
-  label: string;
-  graph_names: string[];
-  graph_filters: string[];
-  scope: 'workspace' | 'user';
-  user_id?: string | null;
-  created_at?: string;
-}
-
-const GRAPH_CACHE_TTL_MS = 10 * 60 * 1000;
-const GRAPH_CACHE_REFRESH_EVENT = 'graph-cache-refresh';
-
-type TimestampedCacheEntry<T> = {
-  data: T;
-  expiresAt: number;
-};
-
-const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[] }>>();
-const overviewCache = new Map<string, TimestampedCacheEntry<ApiOverview | null>>();
-const graphListCache = new Map<
-  string,
-  TimestampedCacheEntry<{
-    graphOptions: GraphOption[];
-    normalized: Array<{ id: string; label?: string }>;
-    defaultGraphName: string;
-  }>
->();
-
-function readFreshCache<T>(cache: Map<string, TimestampedCacheEntry<T>>, key: string): T | undefined {
-  const hit = cache.get(key);
-  if (!hit) return undefined;
-  if (Date.now() > hit.expiresAt) {
-    cache.delete(key);
-    return undefined;
-  }
-  return hit.data;
-}
-
-function writeCache<T>(cache: Map<string, TimestampedCacheEntry<T>>, key: string, data: T): void {
-  cache.set(key, { data, expiresAt: Date.now() + GRAPH_CACHE_TTL_MS });
-}
-
-function clearGraphPageCaches(): void {
-  networkCache.clear();
-  overviewCache.clear();
-  graphListCache.clear();
-}
+// Cache invalidation: the workspace `QueryProvider` listens for the
+// `graph-cache-refresh` window event and invalidates ['graph'] / ['ontology']
+// keys, so external callers (agent tools, bulk imports) keep working without
+// coupling to this module.
 
 export default function GraphPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const workspaceId = params.workspaceId as string;
-  
-  // Local state for graph data from API (not persisted to localStorage)
-  const [nodes, setNodes] = useState<GraphNode[]>([]);
-  const [edges, setEdges] = useState<GraphEdge[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [overview, setOverview] = useState<ApiOverview | null>(null);
-  
+
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -539,7 +205,6 @@ export default function GraphPage() {
     edges: GraphEdge[];
   }>>([]);
 
-  // Relations filter — on by default
   const [showRelations, setShowRelations] = useState(true);
 
   // Increment to trigger physics re-layout in VisNetwork
@@ -551,7 +216,6 @@ export default function GraphPage() {
     visibleGraphIds,
     selectGraph,
     setVisibleGraphs,
-    views,
     activeSavedViewId,
     setActiveSavedView,
     setViews,
@@ -565,369 +229,230 @@ export default function GraphPage() {
   const [pageMode, setPageMode] = useState<GraphPageMode>('graph');
   const [individualLabel, setIndividualLabel] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [availableClasses, setAvailableClasses] = useState<OntologyClassOption[]>([]);
-  const [classesLoading, setClassesLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [creatingIndividual, setCreatingIndividual] = useState(false);
   const [selectedIndividualGraphId, setSelectedIndividualGraphId] = useState('');
   const [viewName, setViewName] = useState('');
-  const [graphOptions, setGraphOptions] = useState<GraphOption[]>([]);
   const [selectedViewGraphIds, setSelectedViewGraphIds] = useState<string[]>([]);
   const [viewFilters, setViewFilters] = useState<ViewFilterDraft[]>([
     { subject_uri: '', predicate_uri: '', object_uri: '' },
   ]);
-  const [viewFilterOptions, setViewFilterOptions] = useState<FilterOptionsResponse[]>([]);
-  const [triplePreview, setTriplePreview] = useState<TriplePreviewResponse>({
-    count: 0,
-    individual_count: 0,
-    object_properties_count: 0,
-    data_properties_count: 0,
-    rows: [],
-  });
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [viewFormError, setViewFormError] = useState<string | null>(null);
   const [viewDescription, setViewDescription] = useState('');
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
   const [graphName, setGraphName] = useState('');
   const [graphDescription, setGraphDescription] = useState('');
   const [graphFormError, setGraphFormError] = useState<string | null>(null);
-  const [creatingGraph, setCreatingGraph] = useState(false);
-  const loadRequestIdRef = useRef(0);
-  const overviewRequestIdRef = useRef(0);
-  const viewFilterOptionsRequestIdRef = useRef(0);
-  const viewPreviewRequestIdRef = useRef(0);
+
+  // Server data via TanStack Query.
+  const graphListQuery = useGraphList(workspaceId);
+  const graphOptions = useMemo<GraphOption[]>(
+    () => graphListQuery.data?.items ?? [],
+    [graphListQuery.data],
+  );
+  const knownGraphIds = useMemo(() => graphOptions.map((g) => g.id), [graphOptions]);
+
+  const viewsQuery = useGraphViews(workspaceId);
+  const apiViews: GraphView[] = useMemo(
+    () =>
+      (viewsQuery.data ?? []).map((v) => ({
+        id: v.id,
+        name: v.label || v.id,
+        scope: v.scope,
+        userId: v.user_id ?? undefined,
+        type: 'entities' as const,
+        graphIds: v.graph_names ?? [],
+        filters: (v.graph_filters ?? []).map(
+          (uri) =>
+            ({
+              subject_uri: '',
+              predicate_uri: '',
+              object_uri: '',
+              uri,
+            }) as GraphTripleFilter,
+        ),
+        createdAt: v.created_at ? new Date(v.created_at) : new Date(),
+      })),
+    [viewsQuery.data],
+  );
+
+  // Sync view list into Zustand for components elsewhere that subscribe to it.
+  useEffect(() => {
+    setViews(apiViews);
+  }, [apiViews, setViews]);
+
   const activeSavedView = useMemo(
-    () => views.find((view) => view.id === activeSavedViewId) ?? null,
-    [views, activeSavedViewId]
+    () => apiViews.find((view) => view.id === activeSavedViewId) ?? null,
+    [apiViews, activeSavedViewId],
   );
   const editingView = useMemo(
-    () => (editingViewId ? views.find((view) => view.id === editingViewId) ?? null : null),
-    [views, editingViewId]
+    () => (editingViewId ? apiViews.find((view) => view.id === editingViewId) ?? null : null),
+    [apiViews, editingViewId],
   );
+
+  const graphSelection: GraphSelection = useMemo(
+    () => ({
+      workspaceId,
+      graphId: selectedGraphId,
+      visibleGraphIds,
+      savedViewId: activeSavedView?.id ?? null,
+      knownGraphIds,
+    }),
+    [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView?.id, knownGraphIds],
+  );
+
+  const networkQuery = useGraphNetwork(graphSelection, {
+    enabled: graphListQuery.isFetched,
+  });
+  const overviewQuery = useGraphOverview(graphSelection, {
+    enabled: pageMode === 'graph' && activeViewType === 'overview',
+  });
+
+  const nodes = useMemo<GraphNode[]>(
+    () =>
+      (networkQuery.data?.nodes ?? []).map((n) => ({
+        id: n.id,
+        label: n.label,
+        type: n.type,
+        properties: n.properties ?? {},
+        x: n.properties?.x as number | undefined,
+        y: n.properties?.y as number | undefined,
+      })),
+    [networkQuery.data],
+  );
+  const edges = useMemo<GraphEdge[]>(
+    () =>
+      (networkQuery.data?.edges ?? []).map((e) => ({
+        id: e.id,
+        source: e.source_id,
+        target: e.target_id,
+        sourceLabel: e.source_label,
+        targetLabel: e.target_label,
+        type: e.type,
+        label: e.type,
+        properties: e.properties ?? {},
+      })),
+    [networkQuery.data],
+  );
+  const loading = networkQuery.isPending;
+  const error = networkQuery.error
+    ? networkQuery.error instanceof Error
+      ? networkQuery.error.message
+      : 'Failed to load graph'
+    : null;
+  const overview = overviewQuery.data ?? null;
+
+  const reloadGraph = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['graph', workspaceId] });
+  }, [queryClient, workspaceId]);
+
+  const classesQuery = useOntologyClasses(pageMode === 'create-individual');
+  const availableClasses = classesQuery.data ?? [];
+  const classesLoading = classesQuery.isFetching;
+
   const individualGraphOptions = useMemo(
     () => graphOptions.filter((option) => !isSystemGraph(option)),
-    [graphOptions]
+    [graphOptions],
   );
 
-  // Load graphs from API - fetches all visible graphs and merges them
-  const loadFromApi = useCallback(async (options?: { force?: boolean }) => {
-    const forceRefresh = options?.force === true;
-    const requestId = ++loadRequestIdRef.current;
-    setLoading(true);
-    setError(null);
-
-    try {
-      const apiUrl = getApiUrl();
-      const allNodes: GraphNode[] = [];
-      const allEdges: GraphEdge[] = [];
-      let defaultGraphName = '';
-      let normalized: { id: string; label?: string }[] = [];
-
-      try {
-        const listCacheKey = `graph-list:${workspaceId}`;
-        const cachedGraphList = !forceRefresh ? readFreshCache(graphListCache, listCacheKey) : undefined;
-        if (cachedGraphList) {
-          normalized = cachedGraphList.normalized;
-          defaultGraphName = cachedGraphList.defaultGraphName;
-          setGraphOptions(cachedGraphList.graphOptions);
-        } else {
-          const namesRes = await authFetch(
-            `${apiUrl}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`
-          );
-
-          if (!namesRes.ok) {
-            setGraphOptions([]);
-          } else {
-            const namesData = await namesRes.json();
-            const graphs = Array.isArray(namesData)
-              ? namesData.flatMap((entry: unknown) => {
-                if (
-                  entry
-                  && typeof entry === 'object'
-                  && 'graphs' in entry
-                  && Array.isArray((entry as { graphs: unknown[] }).graphs)
-                ) {
-                  return (entry as { graphs: unknown[] }).graphs;
-                }
-                return [entry];
-              })
-              : Array.isArray(namesData?.graphs)
-                ? namesData.graphs
-                : [];
-
-            // Proper type guard: id AND label must be string
-            normalized = graphs.filter(
-              (g: unknown): g is { id: string; label: string } =>
-                typeof g === "object" &&
-                g !== null &&
-                "id" in g &&
-                "label" in g &&
-                typeof (g as any).id === "string" &&
-                typeof (g as any).label === "string"
-            );
-
-            if (normalized.length === 0) {
-              setGraphOptions([]);
-            } else {
-              defaultGraphName = normalized[0].id;
-              const optionsToCache = normalized.map((g: { id: string; label?: string }) => ({
-                id: g.id,
-                name: g.label ?? g.id,
-              }));
-              setGraphOptions(optionsToCache);
-              writeCache(graphListCache, listCacheKey, {
-                graphOptions: optionsToCache,
-                normalized,
-                defaultGraphName,
-              });
-            }
-          }
-        }
-      } catch {
-        setGraphOptions([]);
-      }
-
-      // Determine fetch strategy: use view endpoint when view selected; otherwise fetch selected graph.
-      type NetworkRequest = { url: string; init?: RequestInit };
-      let requestsToFetch: NetworkRequest[];
-
-      if (activeSavedView) {
-        const params = new URLSearchParams({
-          workspace_id: workspaceId,
-          limit: '500',
-        });
-        requestsToFetch = [
-          {
-            url: `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/network?${params.toString()}`,
-          },
-        ];
-      } else {
-        const graphIdsToFetch =
-          selectedGraphId
-            ? [selectedGraphId]
-            : visibleGraphIds.length > 0
-            ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
-            : normalized.map((graph) => graph.id);
-        const effectiveGraphId = graphIdsToFetch[0] ?? defaultGraphName ?? '';
-        const params = new URLSearchParams({
-          workspace_id: workspaceId,
-          limit: '500',
-        });
-        requestsToFetch = effectiveGraphId
-          ? [{ url: `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/network?${params.toString()}` }]
-          : [];
-      }
-
-      const networkCacheKey = `network:${requestsToFetch.map(({ url }) => url).join('||')}`;
-      const cachedNetwork = !forceRefresh ? readFreshCache(networkCache, networkCacheKey) : undefined;
-      if (cachedNetwork) {
-        if (requestId === loadRequestIdRef.current) {
-          setNodes(cachedNetwork.nodes);
-          setEdges(cachedNetwork.edges);
-        }
-        return;
-      }
-
-      const responses = await Promise.all(
-        requestsToFetch.map(({ url, init }) =>
-          authFetch(url, init)
-            .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-            .catch(() => ({ nodes: [], edges: [] }))
-        )
-      );
-      
-      // Merge all graph data
-      responses.forEach((data) => {
-        if (data.nodes) {
-          const visNodes: GraphNode[] = data.nodes.map((node: ApiNode) => ({
-            id: node.id,
-            label: node.label,
-            type: node.type,
-            properties: node.properties || {},
-            x: node.properties?.x as number | undefined,
-            y: node.properties?.y as number | undefined,
-          }));
-          allNodes.push(...visNodes);
-        }
-        
-        if (data.edges) {
-          const visEdges: GraphEdge[] = data.edges.map((edge: ApiEdge) => ({
-            id: edge.id,
-            source: edge.source_id,
-            target: edge.target_id,
-            sourceLabel: edge.source_label,
-            targetLabel: edge.target_label,
-            type: edge.type,
-            label: edge.type,
-            properties: edge.properties || {},
-          }));
-          allEdges.push(...visEdges);
-        }
-      });
-      
-      // Deduplicate nodes and edges by ID
-      const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values());
-      const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values());
-
-      if (requestId !== loadRequestIdRef.current) {
-        return;
-      }
-
-      setNodes(uniqueNodes);
-      setEdges(uniqueEdges);
-      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges });
-    } catch (err) {
-      if (requestId !== loadRequestIdRef.current) {
-        return;
-      }
-      console.error('Failed to load graph from API:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load graph');
-    } finally {
-      if (requestId === loadRequestIdRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView]);
-
-  const loadOverviewFromApi = useCallback(async (options?: { force?: boolean }) => {
-    const forceRefresh = options?.force === true;
-    if (pageMode !== 'graph' || activeViewType !== 'overview') {
-      return;
-    }
-
-    const requestId = ++overviewRequestIdRef.current;
-    const apiUrl = getApiUrl();
-    let overviewUrl: string | null = null;
-
-    if (activeSavedView) {
-      overviewUrl = `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
-    } else {
-      const graphIdsToFetch =
-        selectedGraphId
-          ? [selectedGraphId]
-          : visibleGraphIds.length > 0
-          ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
-          : graphOptions.map((graph) => graph.id);
-      const effectiveGraphId = graphIdsToFetch[0] ?? '';
-      if (effectiveGraphId) {
-        overviewUrl = `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
-      }
-    }
-
-    if (!overviewUrl) {
-      if (requestId === overviewRequestIdRef.current) {
-        setOverview(null);
-      }
-      return;
-    }
-
-    const overviewCacheKey = `overview:${overviewUrl}`;
-    const cachedOverview = !forceRefresh ? readFreshCache(overviewCache, overviewCacheKey) : undefined;
-    if (cachedOverview !== undefined) {
-      if (requestId === overviewRequestIdRef.current) {
-        setOverview(cachedOverview);
-      }
-      return;
-    }
-
-    try {
-      const response = await authFetch(overviewUrl);
-      const data = response.ok ? await response.json() : null;
-      if (requestId === overviewRequestIdRef.current) {
-        setOverview(data as ApiOverview | null);
-        writeCache(overviewCache, overviewCacheKey, data as ApiOverview | null);
-      }
-    } catch {
-      if (requestId === overviewRequestIdRef.current) {
-        setOverview(null);
-      }
-    }
-  }, [
-    activeSavedView,
-    activeViewType,
-    graphOptions,
-    pageMode,
-    selectedGraphId,
-    visibleGraphIds,
+  // View-builder live preview + filter options.
+  const viewBuilderGraphIds = useMemo(
+    () => (selectedViewGraphIds.length > 0 ? selectedViewGraphIds : ['default']),
+    [selectedViewGraphIds],
+  );
+  const filterOptionsQuery = useFilterOptions({
     workspaceId,
-  ]);
+    graphIds: viewBuilderGraphIds,
+    rows: viewFilters,
+    enabled: pageMode === 'create-view',
+  });
+  const viewFilterOptions = filterOptionsQuery.data ?? [];
+  const triplePreviewQuery = useTriplePreview({
+    workspaceId,
+    graphIds: viewBuilderGraphIds,
+    filters: viewFilters,
+    enabled: pageMode === 'create-view',
+  });
+  const triplePreview = useMemo(() => {
+    const data = triplePreviewQuery.data;
+    return {
+      count: data?.count ?? 0,
+      individual_count: data?.individual_count ?? 0,
+      object_properties_count: data?.object_properties_count ?? 0,
+      data_properties_count: data?.data_properties_count ?? 0,
+      rows: data?.rows ?? [],
+    };
+  }, [triplePreviewQuery.data]);
+  const previewLoading = triplePreviewQuery.isFetching;
 
-  const loadViewsFromApi = useCallback(async () => {
-    const apiUrl = getApiUrl();
-    const response = await authFetch(
-      `${apiUrl}/api/view/list?workspace_id=${encodeURIComponent(workspaceId)}`
-    );
-    if (!response.ok) {
-      throw new Error(`Failed to load views: ${response.status}`);
+  const createGraphMutation = useCreateGraph();
+  const createIndividualMutation = useCreateIndividual();
+  const createViewMutation = useCreateView(workspaceId);
+  const updateViewMutation = useUpdateView(workspaceId);
+  const updateNodeMutation = useUpdateNode(workspaceId);
+  const deleteNodeMutation = useDeleteNode(workspaceId);
+  const creatingIndividual = createIndividualMutation.isPending;
+  const creatingGraph = createGraphMutation.isPending;
+
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedNodeId),
+    [nodes, selectedNodeId],
+  );
+
+  const { prompt: showPrompt, dialog: promptDialog } = usePrompt();
+  const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+  const [inspectorError, setInspectorError] = useState<string | null>(null);
+
+  const handleEditNode = useCallback(async () => {
+    if (!selectedNode) return;
+    const newLabel = await showPrompt({
+      title: 'Edit node label',
+      defaultValue: selectedNode.label,
+      placeholder: 'Label',
+      confirmLabel: 'Save',
+    });
+    if (!newLabel || newLabel === selectedNode.label) return;
+    try {
+      await updateNodeMutation.mutateAsync({
+        id: selectedNode.id,
+        label: newLabel,
+        type: selectedNode.type,
+        properties: selectedNode.properties,
+      });
+      setInspectorError(null);
+    } catch (err) {
+      console.error('Failed to update node:', err);
+      setInspectorError('Failed to update node.');
     }
-    const data: unknown = await response.json();
-    const apiViews: GraphViewInfo[] = Array.isArray(data) ? (data as GraphViewInfo[]) : [];
-    const normalizedViews: GraphView[] = apiViews.map((view) => ({
-      id: view.id,
-      name: view.label || view.id,
-      scope: view.scope,
-      userId: view.user_id ?? undefined,
-      type: 'entities',
-      graphIds: Array.isArray(view.graph_names) ? view.graph_names : [],
-      filters: Array.isArray(view.graph_filters)
-        ? view.graph_filters.map(
-            (uri) =>
-              ({
-                subject_uri: '',
-                predicate_uri: '',
-                object_uri: '',
-                uri,
-              }) as GraphTripleFilter
-          )
-        : [],
-      createdAt: view.created_at ? new Date(view.created_at) : new Date(),
-    }));
-    setViews(normalizedViews);
-  }, [workspaceId, setViews]);
+  }, [selectedNode, showPrompt, updateNodeMutation]);
 
-  // Reset selection and filters when the active graph identity changes
+  const handleDeleteNode = useCallback(async () => {
+    if (!selectedNode) return;
+    const ok = await showConfirm({
+      title: 'Delete node',
+      description: `Delete "${selectedNode.label}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteNodeMutation.mutateAsync(selectedNode.id);
+      setSelectedNodeId(null);
+      setInspectorError(null);
+    } catch (err) {
+      console.error('Failed to delete node:', err);
+      setInspectorError('Failed to delete node.');
+    }
+  }, [selectedNode, showConfirm, deleteNodeMutation]);
+
+  // Reset selection and filters when the active graph identity changes.
   useEffect(() => {
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setParentsLevels(0);
-    setHierarchyByLevel([]);
     setShowRelations(true);
     setHiddenNodeIds(new Set());
     setNodeDisplayLimit(200);
   }, [selectedGraphId, activeSavedViewId]);
-
-  // Load on mount and when workspace or visible graphs change
-  useEffect(() => {
-    loadFromApi();
-  }, [loadFromApi]);
-
-  useEffect(() => {
-    if (pageMode !== 'graph' || activeViewType !== 'overview') {
-      setOverview(null);
-      return;
-    }
-    loadOverviewFromApi();
-  }, [activeViewType, loadOverviewFromApi, pageMode]);
-
-  useEffect(() => {
-    const onGraphCacheRefresh = () => {
-      clearGraphPageCaches();
-      void loadFromApi({ force: true });
-      if (pageMode === 'graph' && activeViewType === 'overview') {
-        void loadOverviewFromApi({ force: true });
-      } else {
-        setOverview(null);
-      }
-    };
-    window.addEventListener(GRAPH_CACHE_REFRESH_EVENT, onGraphCacheRefresh);
-    return () => window.removeEventListener(GRAPH_CACHE_REFRESH_EVENT, onGraphCacheRefresh);
-  }, [activeViewType, loadFromApi, loadOverviewFromApi, pageMode]);
-
-  useEffect(() => {
-    loadViewsFromApi().catch((err) => {
-      console.error('Failed to load graph views:', err);
-    });
-  }, [loadViewsFromApi]);
 
   useEffect(() => {
     const requestedView = searchParams.get('view');
@@ -973,52 +498,6 @@ export default function GraphPage() {
     }
   }, [pageMode, activeViewType, setActiveViewType]);
 
-  const loadOntologyClasses = useCallback(async () => {
-    setClassesLoading(true);
-    try {
-      const apiUrl = getApiUrl();
-      const response = await authFetch(`${apiUrl}/api/ontology/classes`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch classes: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const sourceItems = Array.isArray(data) ? data : (data as { items?: unknown[] })?.items || [];
-      const normalizedClasses = sourceItems
-        .map((item) => {
-          const typedItem = item as {
-            id?: string;
-            iri?: string;
-            name?: string;
-            label?: string;
-            description?: string;
-            definition?: string;
-          };
-          const id = typedItem.id || typedItem.iri || '';
-          const name = typedItem.name || typedItem.label || typedItem.iri || '';
-          const description = typedItem.description || typedItem.definition || '';
-          if (!id || !name) {
-            return null;
-          }
-          return { id, name, description };
-        })
-        .filter((item): item is OntologyClassOption => item !== null)
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-      setAvailableClasses(normalizedClasses);
-    } catch (err) {
-      console.error('Failed to fetch ontology classes:', err);
-      setAvailableClasses([]);
-    } finally {
-      setClassesLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (pageMode === 'create-individual') {
-      loadOntologyClasses();
-    }
-  }, [pageMode, loadOntologyClasses]);
-
   useEffect(() => {
     if (pageMode !== 'create-individual') {
       return;
@@ -1041,130 +520,6 @@ export default function GraphPage() {
         : individualGraphOptions[0].id;
     setSelectedIndividualGraphId(preferredGraphId);
   }, [individualGraphOptions, pageMode, selectedGraphId, selectedIndividualGraphId]);
-
-  const loadRowFilterOptions = useCallback(
-    async (row: ViewFilterDraft, graphIds: string[]): Promise<FilterOptionsResponse> => {
-      const apiUrl = getApiUrl();
-      const params = new URLSearchParams({
-        workspace_id: workspaceId,
-      });
-      const names = graphIds.length > 0 ? graphIds : ['default'];
-      for (const graphId of names) {
-        params.append('graph_names', graphId);
-      }
-      if (row.subject_uri.trim()) params.set('subject_uri', row.subject_uri.trim());
-      if (row.predicate_uri.trim()) params.set('predicate_uri', row.predicate_uri.trim());
-      if (row.object_uri.trim()) params.set('object_uri', row.object_uri.trim());
-      const response = await authFetch(`${apiUrl}/api/view/filters/options?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error(`Failed to load filter options: ${response.status}`);
-      }
-      const data = await response.json();
-      return {
-        subjects: Array.isArray(data?.subjects) ? data.subjects : [],
-        predicates: Array.isArray(data?.predicates) ? data.predicates : [],
-        objects: Array.isArray(data?.objects) ? data.objects : [],
-      };
-    },
-    [workspaceId]
-  );
-
-  const loadViewFilterPreview = useCallback(
-    async (graphIds: string[], filters: ViewFilterDraft[]) => {
-      const requestId = ++viewPreviewRequestIdRef.current;
-      const shouldPreview = filters.some(
-        (item) =>
-          item.subject_uri.trim().length > 0 ||
-          (item.predicate_uri.trim().length > 0 && item.object_uri.trim().length > 0)
-      );
-      if (!shouldPreview) {
-        if (requestId === viewPreviewRequestIdRef.current) {
-          setTriplePreview({
-            count: 0,
-            individual_count: 0,
-            object_properties_count: 0,
-            data_properties_count: 0,
-            rows: [],
-          });
-          setPreviewLoading(false);
-        }
-        return;
-      }
-
-      const apiUrl = getApiUrl();
-      setPreviewLoading(true);
-      try {
-        const response = await authFetch(`${apiUrl}/api/view/filters/preview`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workspace_id: workspaceId,
-            graph_names: graphIds.length > 0 ? graphIds : ['default'],
-            filters,
-            limit: 10,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to preview triples: ${response.status}`);
-        }
-        const data = await response.json();
-        if (requestId !== viewPreviewRequestIdRef.current) {
-          return;
-        }
-        setTriplePreview({
-          count: typeof data?.count === 'number' ? data.count : 0,
-          individual_count:
-            typeof data?.individual_count === 'number' ? data.individual_count : 0,
-          object_properties_count:
-            typeof data?.object_properties_count === 'number' ? data.object_properties_count : 0,
-          data_properties_count:
-            typeof data?.data_properties_count === 'number' ? data.data_properties_count : 0,
-          rows: Array.isArray(data?.rows) ? data.rows : [],
-        });
-      } catch (err) {
-        console.error('Failed to load triple preview:', err);
-        if (requestId === viewPreviewRequestIdRef.current) {
-          setTriplePreview({
-            count: 0,
-            individual_count: 0,
-            object_properties_count: 0,
-            data_properties_count: 0,
-            rows: [],
-          });
-        }
-      } finally {
-        if (requestId === viewPreviewRequestIdRef.current) {
-          setPreviewLoading(false);
-        }
-      }
-    },
-    [workspaceId]
-  );
-
-  useEffect(() => {
-    if (pageMode !== 'create-view') return;
-    const graphIds = selectedViewGraphIds.length > 0 ? selectedViewGraphIds : ['default'];
-    const optionsRequestId = ++viewFilterOptionsRequestIdRef.current;
-
-    Promise.all(viewFilters.map((row) => loadRowFilterOptions(row, graphIds)))
-      .then((rows) => {
-        if (optionsRequestId !== viewFilterOptionsRequestIdRef.current) {
-          return;
-        }
-        setViewFilterOptions(rows);
-      })
-      .catch((err) => {
-        console.error('Failed to load filter options:', err);
-        if (optionsRequestId !== viewFilterOptionsRequestIdRef.current) {
-          return;
-        }
-        setViewFilterOptions(
-          viewFilters.map(() => ({ subjects: [], predicates: [], objects: [] }))
-        );
-      });
-
-    void loadViewFilterPreview(graphIds, viewFilters);
-  }, [loadRowFilterOptions, loadViewFilterPreview, pageMode, selectedViewGraphIds, viewFilters]);
 
   const resetCreateIndividualForm = () => {
     setIndividualLabel('');
@@ -1212,40 +567,20 @@ export default function GraphPage() {
       return;
     }
     setGraphFormError(null);
-    setCreatingGraph(true);
     try {
-      const apiUrl = getApiUrl();
-      const body: { workspace_id: string; label: string; description?: string } = {
-        workspace_id: workspaceId,
+      const { id: createdId } = await createGraphMutation.mutateAsync({
+        workspaceId,
         label,
-      };
-      if (graphDescription.trim()) body.description = graphDescription.trim();
-      const response = await authFetch(`${apiUrl}/api/graph/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        description: graphDescription.trim() || undefined,
       });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `Failed to create graph: ${response.status}`);
-      }
-      const created = await response.json();
-      const createdId = typeof created?.id === 'string' ? created.id : null;
-      if (!createdId) {
-        throw new Error('Created graph response is missing an id.');
-      }
       setActiveSavedView(null);
       selectGraph(createdId);
       setVisibleGraphs([createdId]);
       setActiveViewType('entities');
       closeCreateGraphForm();
-      clearGraphPageCaches();
-      await loadFromApi({ force: true });
       window.dispatchEvent(new CustomEvent('graph-list-update'));
     } catch (err) {
       setGraphFormError(err instanceof Error ? err.message : 'Failed to create graph');
-    } finally {
-      setCreatingGraph(false);
     }
   };
 
@@ -1270,59 +605,20 @@ export default function GraphPage() {
     }
 
     setViewFormError(null);
-    const apiUrl = getApiUrl();
     const payload = {
-      workspace_id: workspaceId,
+      workspaceId,
       name: normalizedName,
       description: viewDescription.trim() || undefined,
-      graph_names: graphIds,
+      graphIds,
       filters: normalizedFilters,
     };
 
     try {
-      let savedViewId: string | null = null;
-      if (editingViewId) {
-        const response = await authFetch(
-          `${apiUrl}/api/view/${encodeURIComponent(editingViewId)}?workspace_id=${encodeURIComponent(workspaceId)}`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          }
-        );
-        if (!response.ok) {
-          setViewFormError('Failed to update view.');
-          return;
-        }
-        const updated = await response.json();
-        savedViewId = typeof updated?.id === 'string' ? updated.id : editingViewId;
-      } else {
-        const response = await authFetch(`${apiUrl}/api/view/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) {
-          setViewFormError('Failed to create view.');
-          return;
-        }
-        const created = await response.json();
-        savedViewId =
-          typeof created?.id === 'string'
-            ? created.id
-            : typeof created?.view_id === 'string'
-              ? created.view_id
-              : typeof created?.uri === 'string'
-                ? created.uri.split('/').pop() ?? null
-                : typeof created?.view_uri === 'string'
-                  ? created.view_uri.split('/').pop() ?? null
-                  : null;
-      }
+      const { id: savedViewId } = editingViewId
+        ? await updateViewMutation.mutateAsync({ viewId: editingViewId, payload })
+        : await createViewMutation.mutateAsync(payload);
 
-      await loadViewsFromApi();
-      if (savedViewId) {
-        setActiveSavedView(savedViewId);
-      }
+      if (savedViewId) setActiveSavedView(savedViewId);
       setVisibleGraphs(graphIds);
       setActiveViewType('entities');
       closeCreateViewForm();
@@ -1366,14 +662,8 @@ export default function GraphPage() {
     setViewDescription('');
     setSelectedViewGraphIds([]);
     setViewFilters([{ subject_uri: '', predicate_uri: '', object_uri: '' }]);
-    setViewFilterOptions([]);
-    setTriplePreview({
-      count: 0,
-      individual_count: 0,
-      object_properties_count: 0,
-      data_properties_count: 0,
-      rows: [],
-    });
+    // viewFilterOptions / triplePreview are derived from queries; they reset
+    // automatically when `viewFilters` / `selectedViewGraphIds` change.
     setViewFormError(null);
   }, [pageMode, editingView]);
 
@@ -1385,48 +675,25 @@ export default function GraphPage() {
       return;
     }
 
-    setCreatingIndividual(true);
     setCreateError(null);
     try {
       setActiveSavedView(null);
       selectGraph(selectedIndividualGraphId);
       setVisibleGraphs([selectedIndividualGraphId]);
       const selectedClass = availableClasses.find((item) => item.id === selectedClassId);
-      const apiUrl = getApiUrl();
-      const response = await authFetch(`${apiUrl}/api/graph/nodes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspace_id: workspaceId,
-          type: 'Individual',
-          label: normalizedLabel,
-          properties: selectedClass
-            ? {
-              class_id: selectedClass.id,
-              class_label: selectedClass.name,
-            }
-            : {},
-        }),
+      await createIndividualMutation.mutateAsync({
+        workspaceId,
+        label: normalizedLabel,
+        classId: selectedClass?.id,
+        className: selectedClass?.name,
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed with status ${response.status}`);
-      }
-
-      clearGraphPageCaches();
-      await loadFromApi({ force: true });
       closeCreateIndividualForm();
     } catch (err) {
       console.error('Failed to create individual:', err);
       setCreateError('Failed to create individual. Please try again.');
-    } finally {
-      setCreatingIndividual(false);
     }
   };
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-
-  // Parents: expand one level — detect individuals or classes and fetch their parents
   const handleExpandParents = useCallback(async () => {
     const nextLevel = parentsLevels + 1;
     if (hierarchyByLevel[nextLevel - 1]) {
@@ -1436,8 +703,6 @@ export default function GraphPage() {
     if (loadingNextParentLevel) return;
     setLoadingNextParentLevel(true);
     try {
-      const baseUrl = getApiUrl();
-      // Frontier: original nodes for level 1, previous level's class nodes for deeper levels
       const frontier: GraphNode[] =
         parentsLevels === 0
           ? nodes
@@ -1447,22 +712,26 @@ export default function GraphPage() {
       const graphIdsForParents = selectedGraphId
         ? [selectedGraphId]
         : visibleGraphIds.filter((id) => !id.includes('#layer='));
-      const graphNamesForParents = graphIdsForParents.map((id) => `http://ontology.naas.ai/graph/${id}`);
-      const params = new URLSearchParams({ workspace_id: workspaceId! });
-      graphNamesForParents.forEach((n) => params.append('graph_names', n));
-      frontier.forEach((n) => params.append('node_iris', n.id));
 
-      const response = await authFetch(`${baseUrl}/api/graph/network/parents?${params.toString()}`);
-      if (!response.ok) throw new Error(`parents fetch failed: ${response.status}`);
-      const data = await response.json() as { nodes?: ApiNode[]; edges?: ApiEdge[] };
+      const data = await fetchNetworkParents(workspaceId, {
+        graphIds: graphIdsForParents,
+        nodeIris: frontier.map((n) => n.id),
+      });
 
-      const newNodes: GraphNode[] = (Array.isArray(data.nodes) ? data.nodes : []).map((n) => ({
-        id: n.id, label: n.label, type: n.type, properties: n.properties,
+      const newNodes: GraphNode[] = data.nodes.map((n) => ({
+        id: n.id,
+        label: n.label,
+        type: n.type,
+        properties: n.properties ?? {},
       }));
-      const newEdges: GraphEdge[] = (Array.isArray(data.edges) ? data.edges : []).map((e) => ({
-        id: e.id, source: e.source_id, target: e.target_id,
-        sourceLabel: e.source_label, targetLabel: e.target_label,
-        type: e.type, label: 'is a',
+      const newEdges: GraphEdge[] = data.edges.map((e) => ({
+        id: e.id,
+        source: e.source_id,
+        target: e.target_id,
+        sourceLabel: e.source_label,
+        targetLabel: e.target_label,
+        type: e.type,
+        label: 'is a',
         properties: { ...(e.properties ?? {}), relation_kind: 'is_a' },
       }));
 
@@ -2137,13 +1406,13 @@ export default function GraphPage() {
                   </button>
                 </div>
                 <div className="grid grid-cols-4 gap-6">
-                  <StatCard title="Instances" value={overview?.kpis.total_instances ?? stats.totalNodes} icon={Circle} />
-                  <StatCard title="Relationships" value={overview?.kpis.total_relationships ?? stats.totalEdges} icon={Link2} />
-                  <StatCard title="Average Degree" value={(overview?.kpis.average_degree ?? stats.avgDegree).toFixed(2)} icon={Share2} />
-                  <StatCard title="Density" value={((overview?.kpis.density ?? stats.density) * 100).toFixed(1) + '%'} icon={Workflow} />
+                  <StatCard title="Instances" value={overview?.kpis?.total_instances ?? stats.totalNodes} icon={Circle} />
+                  <StatCard title="Relationships" value={overview?.kpis?.total_relationships ?? stats.totalEdges} icon={Link2} />
+                  <StatCard title="Average Degree" value={(overview?.kpis?.average_degree ?? stats.avgDegree).toFixed(2)} icon={Share2} />
+                  <StatCard title="Density" value={((overview?.kpis?.density ?? stats.density) * 100).toFixed(1) + '%'} icon={Workflow} />
                 </div>
 
-                {((overview?.instances_by_class.length ?? 0) > 0 || Object.keys(stats.nodesByType).length > 0) && (
+                {((overview?.instances_by_class?.length ?? 0) > 0 || Object.keys(stats.nodesByType).length > 0) && (
                   <div className="mt-8">
                     <h3 className="mb-4 font-medium">Nodes by Type</h3>
                     <div className="rounded-lg border">
@@ -2278,7 +1547,7 @@ export default function GraphPage() {
                         Make sure the API is running and the database is seeded.
                       </p>
                       <button
-                        onClick={() => void loadFromApi()}
+                        onClick={reloadGraph}
                         className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 mx-auto"
                       >
                         <RefreshCw size={16} />
@@ -2303,7 +1572,7 @@ export default function GraphPage() {
                       </code>
                       <div className="mt-4">
                         <button
-                          onClick={() => void loadFromApi()}
+                          onClick={reloadGraph}
                           className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 mx-auto"
                         >
                           <RefreshCw size={16} />
@@ -2683,425 +1952,36 @@ LIMIT 100`}
                 </div>
               </div>
 
+              {inspectorError && (
+                <p className="mt-3 rounded border border-destructive/50 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+                  {inspectorError}
+                </p>
+              )}
+
               <div className="mt-6 flex gap-2">
-                <button 
-                  onClick={async () => {
-                    // TODO: Add proper edit dialog
-                    const newLabel = prompt('New label:', selectedNode.label);
-                    if (newLabel && newLabel !== selectedNode.label) {
-                      try {
-                        const { authFetch } = await import('@/stores/auth');
-                        await authFetch(`/api/graph/nodes/${selectedNode.id}`, {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            label: newLabel,
-                            type: selectedNode.type,
-                            properties: selectedNode.properties,
-                          }),
-                        });
-                        // Refresh graph data
-                        window.location.reload();
-                      } catch (error) {
-                        console.error('Failed to update node:', error);
-                        alert('Failed to update node');
-                      }
-                    }
-                  }}
-                  className="flex-1 rounded border px-3 py-1.5 text-sm hover:bg-muted"
+                <button
+                  type="button"
+                  onClick={() => void handleEditNode()}
+                  disabled={updateNodeMutation.isPending}
+                  className="flex-1 rounded border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
                 >
-                  Edit
+                  {updateNodeMutation.isPending ? 'Saving…' : 'Edit'}
                 </button>
-                <button 
-                  onClick={async () => {
-                    if (confirm(`Delete node "${selectedNode.label}"?`)) {
-                      try {
-                        const { authFetch } = await import('@/stores/auth');
-                        await authFetch(`/api/graph/nodes/${selectedNode.id}`, {
-                          method: 'DELETE',
-                        });
-                        setSelectedNodeId(null);
-                        // Refresh graph data
-                        window.location.reload();
-                      } catch (error) {
-                        console.error('Failed to delete node:', error);
-                        alert('Failed to delete node');
-                      }
-                    }
-                  }}
-                  className="rounded border px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteNode()}
+                  disabled={deleteNodeMutation.isPending}
+                  className="rounded border px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
                 >
-                  <Trash2 size={14} />
+                  {deleteNodeMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 </button>
               </div>
             </div>
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-}: {
-  title: string;
-  value: string | number;
-  icon: React.ElementType;
-}) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="mb-2 flex items-center gap-2 text-muted-foreground">
-        <Icon size={16} />
-        <span className="text-sm">{title}</span>
-      </div>
-      <p className="text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
-// ── Individuals Split View ──────────────────────────────────────────────────
-
-function IndividualDetailPanel({
-  node,
-  dataProperties,
-  objectProperties,
-}: {
-  node: GraphNode;
-  dataProperties: { predicate: string; value: string }[];
-  objectProperties: { predicate: string; targetId: string; targetLabel: string }[];
-}) {
-  return (
-    <div className="flex-1 overflow-y-auto p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="mb-2 flex items-start gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30">
-            <Circle size={20} className="text-orange-500" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold">{node.label}</h2>
-            <p
-              className="truncate font-mono text-xs text-muted-foreground"
-              title={node.id}
-            >
-              {node.id}
-            </p>
-          </div>
-        </div>
-        <div className="ml-13 flex items-center gap-2">
-          <Box size={14} className="text-blue-500" />
-          <span className="text-sm text-muted-foreground">{node.type}</span>
-        </div>
-      </div>
-
-      {/* Data Properties */}
-      <div className="mb-6">
-        <h3 className="mb-3 flex items-center gap-2 font-medium">
-          <Hash size={16} className="text-purple-500" />
-          Data Properties
-          <span className="text-xs text-muted-foreground">({dataProperties.length})</span>
-        </h3>
-        {dataProperties.length === 0 ? (
-          <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
-            No data properties.
-          </p>
-        ) : (
-          <div className="overflow-hidden rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40">
-                <tr>
-                  <th className="w-2/5 px-4 py-2 text-left font-medium text-muted-foreground">
-                    Property
-                  </th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-                    Value
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {dataProperties.map(({ predicate, value }, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="px-4 py-2 font-medium text-purple-600 dark:text-purple-400">
-                      {predicate}
-                    </td>
-                    <td className="break-all px-4 py-2 text-muted-foreground">{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Object Properties */}
-      <div>
-        <h3 className="mb-3 flex items-center gap-2 font-medium">
-          <Link2 size={16} className="text-green-500" />
-          Object Properties
-          <span className="text-xs text-muted-foreground">({objectProperties.length})</span>
-        </h3>
-        {objectProperties.length === 0 ? (
-          <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
-            No object properties.
-          </p>
-        ) : (
-          <div className="overflow-hidden rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40">
-                <tr>
-                  <th className="w-2/5 px-4 py-2 text-left font-medium text-muted-foreground">
-                    Property
-                  </th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-                    Value
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {objectProperties.map(({ predicate, targetId, targetLabel }, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="px-4 py-2 font-medium text-green-600 dark:text-green-400">
-                      {predicate}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="font-medium">{targetLabel}</span>
-                      {targetLabel !== targetId && (
-                        <span
-                          className="mt-0.5 block truncate font-mono text-xs text-muted-foreground"
-                          title={targetId}
-                        >
-                          {targetId}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function IndividualsSplitView({
-  nodes,
-  edges,
-  loading,
-  error,
-  onCreateIndividual,
-}: {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  loading: boolean;
-  error: string | null;
-  onCreateIndividual: () => void;
-}) {
-  const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
-  const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
-  const [didInitExpanded, setDidInitExpanded] = useState(false);
-  const [search, setSearch] = useState('');
-
-  // Group nodes by rdf:type (node.type = class label)
-  const nodesByClass = useMemo(() => {
-    const grouped = new Map<string, GraphNode[]>();
-    for (const node of nodes) {
-      const type = node.type || 'Unknown';
-      if (!grouped.has(type)) grouped.set(type, []);
-      grouped.get(type)!.push(node);
-    }
-    return new Map([...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0])));
-  }, [nodes]);
-
-  // Expand all classes on first load
-  useEffect(() => {
-    if (!didInitExpanded && nodesByClass.size > 0) {
-      setExpandedClasses(new Set(nodesByClass.keys()));
-      setDidInitExpanded(true);
-    }
-  }, [didInitExpanded, nodesByClass]);
-
-  const selectedNode = useMemo(
-    () => nodes.find((n) => n.id === selectedIndividualId) ?? null,
-    [nodes, selectedIndividualId]
-  );
-
-  const dataProperties = useMemo(() => {
-    if (!selectedNode) return [];
-    const INTERNAL_KEYS = new Set(['bfo_parent_iri', 'is_class', 'x', 'y']);
-    return Object.entries(selectedNode.properties)
-      .filter(([k]) => !INTERNAL_KEYS.has(k))
-      .map(([k, v]) => ({ predicate: k, value: String(v) }));
-  }, [selectedNode]);
-
-  const objectProperties = useMemo(() => {
-    if (!selectedNode) return [];
-    return edges
-      .filter((e) => e.source === selectedNode.id)
-      .map((e) => ({
-        predicate: e.type,
-        targetId: e.target,
-        targetLabel: e.targetLabel ?? e.target,
-      }));
-  }, [selectedNode, edges]);
-
-  // Filter classes and individuals by search query
-  const filteredNodesByClass = useMemo(() => {
-    if (!search.trim()) return nodesByClass;
-    const q = search.toLowerCase();
-    const result = new Map<string, GraphNode[]>();
-    for (const [cls, individuals] of nodesByClass) {
-      const classMatches = cls.toLowerCase().includes(q);
-      const matchingIndividuals = individuals.filter(
-        (n) => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q)
-      );
-      if (classMatches || matchingIndividuals.length > 0) {
-        result.set(cls, classMatches ? individuals : matchingIndividuals);
-      }
-    }
-    return result;
-  }, [nodesByClass, search]);
-
-  const toggleClass = useCallback((cls: string) => {
-    setExpandedClasses((prev) => {
-      const next = new Set(prev);
-      if (next.has(cls)) next.delete(cls);
-      else next.add(cls);
-      return next;
-    });
-  }, []);
-
-  return (
-    <div className="flex flex-1 overflow-hidden bg-card">
-      {/* Left panel — class groups + individual list */}
-      <div className="flex w-80 flex-shrink-0 flex-col border-r bg-muted/20">
-        <div className="border-b p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users size={18} className="text-orange-500 dark:text-orange-400" />
-              <h2 className="font-semibold">Individuals</h2>
-              <span className="text-xs text-muted-foreground">({nodes.length})</span>
-            </div>
-            <button
-              type="button"
-              onClick={onCreateIndividual}
-              className="flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium hover:bg-muted"
-            >
-              <UserPlus size={12} className="text-orange-500 dark:text-orange-400" />
-              New
-            </button>
-          </div>
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search individuals..."
-              className="w-full rounded-md border bg-background py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-        </div>
-
-        <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-              <Loader2 size={16} className="animate-spin" />
-              <span className="text-sm">Loading…</span>
-            </div>
-          ) : error ? (
-            <p className="px-2 py-4 text-center text-sm text-red-500">{error}</p>
-          ) : filteredNodesByClass.size === 0 ? (
-            <p className="px-2 py-4 text-center text-sm text-muted-foreground">
-              No individuals found.
-            </p>
-          ) : (
-            Array.from(filteredNodesByClass.entries()).map(([cls, individuals]) => {
-              const isExpanded = expandedClasses.has(cls);
-              const sorted = [...individuals].sort((a, b) =>
-                a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
-              );
-              return (
-                <div key={cls}>
-                  {/* Class row */}
-                  <button
-                    type="button"
-                    onClick={() => toggleClass(cls)}
-                    className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-background"
-                  >
-                    <ChevronRight
-                      size={14}
-                      className={cn(
-                        'flex-shrink-0 text-muted-foreground transition-transform',
-                        isExpanded && 'rotate-90'
-                      )}
-                    />
-                    <Box size={14} className="flex-shrink-0 text-blue-500" />
-                    <span className="flex-1 truncate font-medium">{cls}</span>
-                    <span className="text-xs text-muted-foreground">{individuals.length}</span>
-                  </button>
-
-                  {/* Individuals under this class */}
-                  {isExpanded &&
-                    sorted.map((ind) => (
-                      <button
-                        key={ind.id}
-                        type="button"
-                        onClick={() => setSelectedIndividualId(ind.id)}
-                        title={ind.id}
-                        className={cn(
-                          'flex w-full items-center gap-2 rounded-md py-1 pl-8 pr-2 text-left text-sm transition-colors',
-                          selectedIndividualId === ind.id
-                            ? 'bg-workspace-accent-10 text-workspace-accent'
-                            : 'hover:bg-background'
-                        )}
-                      >
-                        <Circle size={10} className="flex-shrink-0 text-orange-500 dark:text-orange-400" />
-                        <span className="truncate">{ind.label}</span>
-                      </button>
-                    ))}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Right panel — individual detail or empty state */}
-      <div className="flex flex-1 overflow-hidden">
-        {selectedNode ? (
-          <IndividualDetailPanel
-            node={selectedNode}
-            dataProperties={dataProperties}
-            objectProperties={objectProperties}
-          />
-        ) : (
-          <div className="flex flex-1 items-center justify-center">
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-                  <Users size={32} className="text-orange-500 dark:text-orange-400" />
-                </div>
-              </div>
-              <h2 className="mb-2 text-lg font-semibold">Individuals</h2>
-              <p className="mb-6 max-w-md text-muted-foreground">
-                Select an individual from the left panel to view its data and object
-                properties, or create a new one.
-              </p>
-              <button
-                onClick={onCreateIndividual}
-                className="mx-auto flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-              >
-                <UserPlus size={16} />
-                Create Individual
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      {promptDialog}
+      {confirmDialog}
     </div>
   );
 }
