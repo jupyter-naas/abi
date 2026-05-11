@@ -3,9 +3,9 @@
 
 # ABI
 
-_Agentic Brain Infrastructure_
+_Question Everything, Create your own AI System_
 
-**Open Source Alternative to Palantir**
+ABI (Agentic Brain Infrastructure) is the open-source AI Operating System that grounds LLMs in your organization's ontology to create tools that extend human capabilities. An open and accessible alternative to Palantir.
 
 </div>
 
@@ -22,26 +22,13 @@ _Agentic Brain Infrastructure_
 
 </div>
 
-> ABI is the open-source AI infrastructure for your organization. Connect any data source to a living knowledge graph, build domain expert agents for any role, and route every query to the right model. Self-hosted, MIT licensed, permanently yours.
-
-**Who it's for:**
-
-- 👤 **Individuals**: Run locally, own your data, no vendor lock-in
-- ⚡ **Professionals**: Automate repetitive workflows and connect your tools
-- 👥 **Teams**: Share a knowledge base, build domain-specific agents
-- 🏢 **Enterprise**: Deploy at scale with full auditability and control
-
 ## Quick Start
 
 ### Prerequisites
 
-```bash
-# Install uv package manager
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install Docker Desktop (for local services)
-# https://www.docker.com/products/docker-desktop
-```
+- Python 3.10+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack, 2GB+ for cloud AI only)
+- At least one LLM API key: OpenAI, Anthropic, Google AI, OpenRouter, or similar
 
 ### Local Development
 
@@ -143,12 +130,12 @@ graph LR
 
 ## Repository Layout
 
-| Package | What it does |
-|---------|-------------|
-| `naas-abi-core` | Infrastructure adapters: storage, vector DB, message bus, SPARQL |
-| `naas-abi` | Core agents, ontologies, and the Nexus app (API + web UI) |
-| `naas-abi-cli` | The `abi` CLI (`stack start`, `chat`, `seed-jena`, etc.) |
-| `naas-abi-marketplace` | Optional domain agents and third-party integrations |
+| Package                | What it does                                                     |
+| ---------------------- | ---------------------------------------------------------------- |
+| `naas-abi-core`        | Infrastructure adapters: storage, vector DB, message bus, SPARQL |
+| `naas-abi`             | Core agents, ontologies, and the Nexus app (API + web UI)        |
+| `naas-abi-cli`         | The `abi` CLI (`stack start`, `chat`, `seed-jena`, etc.)         |
+| `naas-abi-marketplace` | Optional domain agents and third-party integrations              |
 
 ## Key Features
 
@@ -230,29 +217,6 @@ Collaborative effort between:
 - **[University at Buffalo](https://www.buffalo.edu/)** - Research University
 - **[NCOR](https://ncor.buffalo.edu/)** - National Center for Ontological Research
 - **[Forvis Mazars](https://www.forvismazars.com/)** - Global Audit & Consulting
-
-## Requirements
-
-**System:**
-
-- Python 3.10+
-- uv package manager
-- Git
-
-**Hardware (Minimal - Cloud AI):**
-
-- 2GB+ RAM
-- 500MB disk
-
-**Hardware (Full - Local/Docker):**
-
-- 8GB+ RAM
-- 10GB+ disk
-- Docker Desktop
-
-**API Keys (at least one):**
-
-- OpenAI, Anthropic, Google AI, OpenRouter, or other LLM providers
 
 ⭐ **If ABI is useful to you, star the repo to help others find it.**
 
