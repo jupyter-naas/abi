@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.29.0 (2026-05-11)
+
+### Bug Fixes
+
+- **cli**: Unblock new project on macOS py3.12 and disable matrix/element by default
+  ([`394c7fa`](https://github.com/jupyter-naas/abi/commit/394c7fa0964f4d2975606746040d95617dfeb87e))
+
+### Features
+
+- **cli**: Seed local config with filesystem email and default ABI workspace
+  ([`e638132`](https://github.com/jupyter-naas/abi/commit/e638132c2fcddb13f341f7b56a48dff06213c44f))
+
+
 ## v1.28.3 (2026-05-08)
 
 ### Bug Fixes
