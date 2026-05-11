@@ -2,7 +2,9 @@
 <img src="libs/naas-abi/naas_abi/apps/nexus/apps/web/public/abi-logo-rounded.png" alt="ABI Logo" width="128" height="128">
 
 # ABI
-*Agentic Brain Infrastructure*
+
+_Agentic Brain Infrastructure_
+
 </div>
 
 <div align="center">
@@ -11,7 +13,6 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-00a393.svg)](https://fastapi.tiangolo.com/)
-
 
 [![GitHub Stars](https://img.shields.io/github/stars/jupyter-naas/abi?style=social)](https://github.com/jupyter-naas/abi/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/jupyter-naas/abi?style=social)](https://github.com/jupyter-naas/abi/network/members)
@@ -26,6 +27,7 @@
 ## Quick Start
 
 ### Prerequisites
+
 ```bash
 # Install uv package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -35,6 +37,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ### Local Development
+
 ```bash
 # Clone repository
 git clone https://github.com/jupyter-naas/abi.git
@@ -66,12 +69,14 @@ uv run abi stack start
 ```
 
 **Platform will launch at:**
+
 - 🌐 **Nexus UI**: http://localhost:3000
 - 📊 **Nexus API**: http://localhost:9879
 - 🤖 **Agent API**: http://localhost:8001
 - 🗄️ **Fuseki**: http://localhost:3030
 
 ### CLI Commands
+
 ```bash
 uv run abi stack start         # Start all services
 uv run abi stack stop          # Stop all services
@@ -84,6 +89,7 @@ uv run abi chat                # Interactive agent chat
 ### Configuration
 
 **Minimal config (loads AbiAgent only):**
+
 ```yaml
 modules:
   - module: naas_abi
@@ -125,69 +131,76 @@ graph LR
 ## Key Features
 
 ### 🤖 Multi-Model AI
+
 - **Cloud**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral
 - **Local**: Qwen, DeepSeek, Gemma (via Ollama)
 - **Supervisor**: ABI agent with intelligent routing
 
 ### 🧠 Knowledge Management
+
 - **Semantic Graph**: BFO-compliant RDF ontologies
 - **SPARQL Queries**: 30+ optimized queries
 - **Vector Search**: Intent matching via embeddings
 - **Memory**: Persistent conversation context
 
 ### 🏪 Marketplace
+
 - **Domain Experts**: 20+ agents (Engineer, Analyst, Creator, etc.)
 - **Integrations**: GitHub, LinkedIn, Google, PostgreSQL, ArXiv, etc.
 - **Modular**: Enable/disable via `config.yaml`
 
 ### ⚙️ Automation
+
 - **Workflows**: End-to-end process automation
 - **Pipelines**: Data → Semantic transformation
 - **Event-Driven**: Knowledge graph triggers
 - **Integrations**: External APIs and exports
 
 ### 🌐 Multiple Interfaces
+
 - **Terminal**: `uv run abi chat` - Interactive CLI
 - **REST API**: HTTP endpoints
 - **MCP Protocol**: Claude Desktop / VS Code
 - **Web UI**: http://localhost:3000
 
-### Production Deployment
-
-### Deploy to Naas Cloud
-```bash
-uv run abi deploy naas
-```
-Requires [Naas subscription](https://naas.ai). Deploys as containerized API at `https://{space}.default.space.naas.ai`
+## Production Deployment
 
 ### Self-Hosted Docker
+
 ```bash
 docker-compose up -d
 ```
+
 Full stack with PostgreSQL, Fuseki, Qdrant, MinIO
+
+### Managed Hosting
+
+Need a hosted, managed deployment? [Get started on naas.ai](https://naas.ai) or reach out to the team directly.
 
 ## Services
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| Nexus Web | 3000 | Frontend UI |
-| Nexus API | 9879 | Platform API |
-| Agent API | 8001 | Agent execution |
-| Fuseki | 3030 | Graph database |
-| PostgreSQL | 5432 | Relational DB |
-| Qdrant | 6333 | Vector DB |
-| MinIO | 9000/9001 | Object storage |
+| Service    | Port      | Purpose         |
+| ---------- | --------- | --------------- |
+| Nexus Web  | 3000      | Frontend UI     |
+| Nexus API  | 9879      | Platform API    |
+| Agent API  | 8001      | Agent execution |
+| Fuseki     | 3030      | Graph database  |
+| PostgreSQL | 5432      | Relational DB   |
+| Qdrant     | 6333      | Vector DB       |
+| MinIO      | 9000/9001 | Object storage  |
 
 ## Why ABI?
 
 **Ontology-Based AI for Freedom to Reason**: When semantic alignment meets kinetic action through ontology-driven systems, we get one of the most powerful technologies ever created. This power should be distributed, not concentrated - the ability to understand, reason, and act upon complex information is fundamental to human autonomy and democratic society.
 
 **Built on International Standards:**
+
 - [ISO/IEC 42001:2023](https://www.iso.org/standard/42001) - AI Management Systems
 - [ISO/IEC 21838-2:2021](https://www.iso.org/standard/74572.html) - Basic Formal Ontology (BFO)
 - EU AI Act compliance-ready
 
 **For:**
+
 - 👤 **Individuals**: Run locally, own your data
 - ⚡ **Pro**: Automate workflows, optimize costs
 - 👥 **Teams**: Share knowledge, build agents
@@ -196,6 +209,7 @@ Full stack with PostgreSQL, Fuseki, Qdrant, MinIO
 ## Research & Development
 
 Collaborative effort between:
+
 - **[NaasAI](https://naas.ai)** - Applied AI Research Lab
 - **[OpenTeams](https://openteams.com/)** - Open SaaS Infrastructure
 - **[University at Buffalo](https://www.buffalo.edu/)** - Research University
@@ -205,20 +219,24 @@ Collaborative effort between:
 ## Requirements
 
 **System:**
+
 - Python 3.10+
 - uv package manager
 - Git
 
 **Hardware (Minimal - Cloud AI):**
+
 - 2GB+ RAM
 - 500MB disk
 
 **Hardware (Full - Local/Docker):**
+
 - 8GB+ RAM
 - 10GB+ disk
 - Docker Desktop
 
 **API Keys (at least one):**
+
 - OpenAI, Anthropic, Google AI, OpenRouter, or other LLM providers
 
 ## Contributing
