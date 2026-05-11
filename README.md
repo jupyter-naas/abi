@@ -30,36 +30,16 @@ ABI (Agentic Brain Infrastructure) is the open-source AI Operating System that g
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack, 2GB+ for cloud AI only)
 - At least one LLM API key: OpenAI, Anthropic, Google AI, OpenRouter, or similar
 
+You also need to have the `docker` command available in your terminal.
+
 ### Local Development
 
 ```bash
-# Clone repository
-git clone https://github.com/jupyter-naas/abi.git
-cd abi
+uv tool install naas-abi-cli --force --upgrade
 
-# Install dependencies (Python + frontend)
-uv sync --all-extras
-
-# Install frontend dependencies
-cd libs/naas-abi/naas_abi/apps/nexus/apps/web
-pnpm install
-cd ../../../../..
-
-# Create local config
-cp config.yaml.example config.yaml
-# Edit config.yaml with your API keys
-
-# Configure for local development (update .env)
-# Change Docker hostnames to localhost:
-#   POSTGRES_HOST=localhost (not postgres)
-#   QDRANT_HOST=localhost (not qdrant)
-#   MINIO_HOST=localhost (not minio)
-
-# Start infrastructure
-docker compose up -d postgres fuseki rabbitmq
-
-# Start platform
-uv run abi stack start
+abi new project demo #You can change the project name to your own
+cd demo
+abi start
 ```
 
 **Platform will launch at:**
@@ -72,12 +52,10 @@ uv run abi stack start
 ### CLI Commands
 
 ```bash
-uv run abi stack start         # Start all services
-uv run abi stack stop          # Stop all services
-uv run abi stack status        # Show service health
-uv run abi stack logs [svc]    # Stream BFO logs (api|web|core|all)
-uv run abi seed-jena           # Populate graph database
-uv run abi chat                # Interactive agent chat
+abi start         # Start all services
+abi stop          # Stop all services
+abi chat          # Interactive agent chat
+abi config validate # Validate the configuration
 ```
 
 ### Configuration
