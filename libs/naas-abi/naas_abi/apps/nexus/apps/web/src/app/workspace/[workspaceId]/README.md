@@ -77,11 +77,13 @@ and render `_components/*`.
 | File | Purpose |
 |------|---------|
 | `types.ts` | `GraphNode`, `GraphEdge`, `GraphOption`, `FilterOption`, `OntologyClassOption`, `ViewFilterDraft`, `GraphPageMode`. Single source of truth for page-local types. |
+| `resolveGraphNodeBucket.ts` | BFO bucket resolution for instance-graph nodes. Reads `properties.bfo_parent_iri` / `properties.parent_iri` instead of doing a structural traversal (variant of `lib/bfo.ts:resolveBucket`). |
+| `GraphNetworkView.tsx` | Network canvas for the `entities` sub-mode. Owns search, BFO buckets, hidden nodes, parents-hierarchy expansion, relations toggle, node display limit, and the physics-restart key. Selection state stays at the page level (shared with table view + inspector). |
 | `FilterOptionDropdown.tsx` | Searchable URI/label dropdown for view filter values. |
 | `ClassOptionDropdown.tsx` | Searchable ontology-class dropdown for "create individual". |
 | `StatCard.tsx` | One-stat tile with icon. |
 | `IndividualDetailPanel.tsx` | Right-pane detail for a selected individual: data props + object props. |
-| `IndividualsSplitView.tsx` | Class-grouped list + detail panel for the `graph` mode. |
+| `IndividualsSplitView.tsx` | Class-grouped list + detail panel for the `graph` / `individuals` sub-mode. |
 
 ### 3.3 `ontology/_components/`
 
