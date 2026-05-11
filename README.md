@@ -58,27 +58,6 @@ abi chat          # Interactive agent chat
 abi config validate # Validate the configuration
 ```
 
-### Configuration
-
-**Minimal config (loads AbiAgent only):**
-
-```yaml
-modules:
-  - module: naas_abi
-    enabled: true
-  - module: naas_abi_core.modules.templatablesparqlquery
-    enabled: true
-  - module: naas_abi_marketplace.ai.chatgpt
-    enabled: true
-
-services:
-  triple_store:
-    triple_store_adapter:
-      adapter: "apache_jena_tdb2"
-      config:
-        jena_tdb2_url: "http://admin:abi@localhost:3030/ds"
-```
-
 ## How It Works
 
 **1. Your data becomes structured knowledge**
@@ -93,18 +72,7 @@ Build agents for any role and workflow, each grounded in your organization's ont
 
 A supervisor agent reads the intent behind each request and routes it to the right AI model, domain expert agent, or directly into your knowledge graph. Swap providers without rebuilding. The infrastructure adapts as AI evolves.
 
-```mermaid
-graph LR
-    USER[👤 User] --> SUPERVISOR[🧠 Supervisor Agent]
-    SUPERVISOR --> AGENTS[Domain Expert Agents]
-    SUPERVISOR --> KG[(Knowledge Graph)]
-    SUPERVISOR --> MODELS[AI Models]
-    AGENTS --> KG
-    KG --> ONT[BFO Ontology]
-    KG --> VDB[(Vector DB)]
-    MODELS --> CLOUD[Cloud: GPT / Claude / Gemini]
-    MODELS --> LOCAL[Local: Ollama]
-```
+For the full architecture, including module structure, five-layer stack, services, and data flow, see [The ABI Stack](https://docs.naas.ai/architecture/the-stack).
 
 ## Repository Layout
 
@@ -114,41 +82,6 @@ graph LR
 | `naas-abi`             | Core agents, ontologies, and the Nexus app (API + web UI)        |
 | `naas-abi-cli`         | The `abi` CLI (`stack start`, `chat`, `seed-jena`, etc.)         |
 | `naas-abi-marketplace` | Optional domain agents and third-party integrations              |
-
-## Key Features
-
-### 🤖 Multi-Model AI
-
-- **Cloud**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral
-- **Local**: Qwen, DeepSeek, Gemma (via Ollama)
-- **Supervisor**: ABI agent with intelligent routing
-
-### 🧠 Knowledge Management
-
-- **Semantic Graph**: BFO-compliant RDF ontologies
-- **SPARQL Queries**: 30+ optimized queries
-- **Vector Search**: Intent matching via embeddings
-- **Memory**: Persistent conversation context
-
-### 🏪 Marketplace
-
-- **Domain Experts**: 20+ agents (Engineer, Analyst, Creator, etc.)
-- **Integrations**: GitHub, LinkedIn, Google, PostgreSQL, ArXiv, etc.
-- **Modular**: Enable/disable via `config.yaml`
-
-### ⚙️ Automation
-
-- **Workflows**: End-to-end process automation
-- **Pipelines**: Data → Semantic transformation
-- **Event-Driven**: Knowledge graph triggers
-- **Integrations**: External APIs and exports
-
-### 🌐 Multiple Interfaces
-
-- **Terminal**: `uv run abi chat` - Interactive CLI
-- **REST API**: HTTP endpoints
-- **MCP Protocol**: Claude Desktop / VS Code
-- **Web UI**: http://localhost:3000
 
 ## Production Deployment
 
@@ -163,18 +96,6 @@ Full stack with PostgreSQL, Fuseki, Qdrant, MinIO
 ### Managed Hosting
 
 Need a hosted, managed deployment? [Get started on naas.ai](https://naas.ai) or reach out to the team directly.
-
-## Services
-
-| Service    | Port      | Purpose         |
-| ---------- | --------- | --------------- |
-| Nexus Web  | 3000      | Frontend UI     |
-| Nexus API  | 9879      | Platform API    |
-| Agent API  | 8001      | Agent execution |
-| Fuseki     | 3030      | Graph database  |
-| PostgreSQL | 5432      | Relational DB   |
-| Qdrant     | 6333      | Vector DB       |
-| MinIO      | 9000/9001 | Object storage  |
 
 ## Why ABI?
 
