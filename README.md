@@ -5,6 +5,8 @@
 
 _Agentic Brain Infrastructure_
 
+**Open Source Alternative to Palantir**
+
 </div>
 
 <div align="center">
@@ -20,9 +22,14 @@ _Agentic Brain Infrastructure_
 
 </div>
 
-> Multi-agent AI Operating System with semantic knowledge graphs, ontology-driven reasoning, and intelligent workflow automation.
+> ABI is the open-source AI infrastructure for your organization. Connect any data source to a living knowledge graph, build domain expert agents for any role, and route every query to the right model. Self-hosted, MIT licensed, permanently yours.
 
-⭐ **Star and follow to stay updated!**
+**Who it's for:**
+
+- 👤 **Individuals**: Run locally, own your data, no vendor lock-in
+- ⚡ **Professionals**: Automate repetitive workflows and connect your tools
+- 👥 **Teams**: Share a knowledge base, build domain-specific agents
+- 🏢 **Enterprise**: Deploy at scale with full auditability and control
 
 ## Quick Start
 
@@ -107,26 +114,41 @@ services:
         jena_tdb2_url: "http://admin:abi@localhost:3030/ds"
 ```
 
-## Architecture
+## How It Works
 
-**Four-Layer AI Operating System:**
+**1. Your data becomes structured knowledge**
 
-1. **User Layer**: Chat UI, REST API, MCP Protocol
-2. **Agent Layer**: ABI SuperAssistant + 20+ domain experts
-3. **Storage Layer**: Knowledge Graph (Jena/Oxigraph), Vector DB (Qdrant), Memory (PostgreSQL)
-4. **Execution Layer**: Ontologies (BFO), Workflows, Integrations, Analytics
+Connect any data source: CRMs, code repositories, databases, productivity tools, financial systems. ABI ingests everything, maps relationships between entities, and builds a living knowledge graph of your organization. Not a data warehouse. A model of your reality.
+
+**2. Your team gets AI that knows their job**
+
+Build agents for any role and workflow, each grounded in your organization's ontology. They understand the context of the work, not just the words in the question. The more you build, the deeper the institutional intelligence.
+
+**3. Every question finds the right intelligence**
+
+A supervisor agent reads the intent behind each request and routes it to the right AI model, domain expert agent, or directly into your knowledge graph. Swap providers without rebuilding. The infrastructure adapts as AI evolves.
 
 ```mermaid
 graph LR
-    USER[👤 User] --> APPS[📱 Apps]
-    APPS --> AGENTS[🧠 Agents]
-    AGENTS --> STORAGE[(💾 Storage)]
-    AGENTS --> EXEC[⚙️ Components]
-    STORAGE --> KG[(Knowledge Graph)]
-    STORAGE --> VDB[(Vector DB)]
-    EXEC --> ONT[Ontologies]
-    EXEC --> WF[Workflows]
+    USER[👤 User] --> SUPERVISOR[🧠 Supervisor Agent]
+    SUPERVISOR --> AGENTS[Domain Expert Agents]
+    SUPERVISOR --> KG[(Knowledge Graph)]
+    SUPERVISOR --> MODELS[AI Models]
+    AGENTS --> KG
+    KG --> ONT[BFO Ontology]
+    KG --> VDB[(Vector DB)]
+    MODELS --> CLOUD[Cloud: GPT / Claude / Gemini]
+    MODELS --> LOCAL[Local: Ollama]
 ```
+
+## Repository Layout
+
+| Package | What it does |
+|---------|-------------|
+| `naas-abi-core` | Infrastructure adapters: storage, vector DB, message bus, SPARQL |
+| `naas-abi` | Core agents, ontologies, and the Nexus app (API + web UI) |
+| `naas-abi-cli` | The `abi` CLI (`stack start`, `chat`, `seed-jena`, etc.) |
+| `naas-abi-marketplace` | Optional domain agents and third-party integrations |
 
 ## Key Features
 
@@ -191,20 +213,13 @@ Need a hosted, managed deployment? [Get started on naas.ai](https://naas.ai) or 
 
 ## Why ABI?
 
-**Ontology-Based AI for Freedom to Reason**: When semantic alignment meets kinetic action through ontology-driven systems, we get one of the most powerful technologies ever created. This power should be distributed, not concentrated - the ability to understand, reason, and act upon complex information is fundamental to human autonomy and democratic society.
+Most AI tools are black boxes. ABI is built on open standards so every decision is traceable, every model is replaceable, and you own your data.
 
-**Built on International Standards:**
+**Built on international standards:**
 
 - [ISO/IEC 42001:2023](https://www.iso.org/standard/42001) - AI Management Systems
 - [ISO/IEC 21838-2:2021](https://www.iso.org/standard/74572.html) - Basic Formal Ontology (BFO)
 - EU AI Act compliance-ready
-
-**For:**
-
-- 👤 **Individuals**: Run locally, own your data
-- ⚡ **Pro**: Automate workflows, optimize costs
-- 👥 **Teams**: Share knowledge, build agents
-- 🏢 **Enterprise**: Deploy at scale, full control
 
 ## Research & Development
 
@@ -239,6 +254,8 @@ Collaborative effort between:
 
 - OpenAI, Anthropic, Google AI, OpenRouter, or other LLM providers
 
+⭐ **If ABI is useful to you, star the repo to help others find it.**
+
 ## Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
@@ -247,4 +264,4 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guideline
 
 MIT License - see [LICENSE](https://opensource.org/licenses/MIT)
 
-For enterprise support: support@naas.ai
+For enterprise support or managed hosting, visit [naas.ai](https://naas.ai).
