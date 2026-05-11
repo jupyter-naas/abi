@@ -14,6 +14,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.uv]
+# onnxruntime 1.26.0 ships no cp312 macOS wheel; pin it until upstream
+# (pymupdf-layout -> pymupdf4llm) loosens or onnxruntime releases the wheel.
+override-dependencies = ["onnxruntime<1.26"]
+
 
 # [tool.uv.sources]
 # naas-abi = { path = ".abi/libs/naas-abi",  editable = true }
