@@ -12,7 +12,7 @@ ABI (Agentic Brain Infrastructure) is the open-source AI Operating System that g
 <div align="center">
 
 [![Version](https://img.shields.io/badge/version-ABI--OS1%20Beta-red.svg)](https://github.com/jupyter-naas/abi/releases)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-00a393.svg)](https://fastapi.tiangolo.com/)
 
@@ -26,9 +26,9 @@ ABI (Agentic Brain Infrastructure) is the open-source AI Operating System that g
 
 ### Prerequisites
 
-- Python 3.10+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack, 2GB+ for cloud AI only)
-- At least one LLM API key: OpenAI, Anthropic, Google AI, OpenRouter, or similar
+- Python 3.12+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
+- LLMs API key: OpenAI and OpenRouter
 
 You also need to have the `docker` command available in your terminal.
 
@@ -42,12 +42,11 @@ cd demo
 abi start
 ```
 
-**Platform will launch at:**
+**Platform launch:**
 
-- 🌐 **Nexus UI**: http://localhost:3000
-- 📊 **Nexus API**: http://localhost:9879
-- 🤖 **Agent API**: http://localhost:8001
-- 🗄️ **Fuseki**: http://localhost:3030
+- Services Portal: https://localhost:8080
+- Backend: https://api.localhost (Important: you must access it first and accept the self-signed TLS certificate for the frontend to work)
+- Frontend: https://nexus.localhost
 
 ### CLI Commands
 
@@ -80,7 +79,7 @@ For the full architecture, including module structure, five-layer stack, service
 | ---------------------- | ---------------------------------------------------------------- |
 | `naas-abi-core`        | Infrastructure adapters: storage, vector DB, message bus, SPARQL |
 | `naas-abi`             | Core agents, ontologies, and the Nexus app (API + web UI)        |
-| `naas-abi-cli`         | The `abi` CLI (`stack start`, `chat`, `seed-jena`, etc.)         |
+| `naas-abi-cli`         | The `abi` CLI                                                    |
 | `naas-abi-marketplace` | Optional domain agents and third-party integrations              |
 
 ## Production Deployment
@@ -88,7 +87,7 @@ For the full architecture, including module structure, five-layer stack, service
 ### Self-Hosted Docker
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 Full stack with PostgreSQL, Fuseki, Qdrant, MinIO
