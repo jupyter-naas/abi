@@ -50,10 +50,8 @@ abi start
 
 **Platform will launch at:**
 
-- 🌐 **Nexus UI**: http://localhost:3000
-- 📊 **Nexus API**: http://localhost:9879
-- 🤖 **Agent API**: http://localhost:8001
-- 🗄️ **Fuseki**: http://localhost:3030
+- 🌐 **Nexus UI**: https://nexus.localhost
+- 🌐 **Service Portal**: http://localhost:8080 
 
 ### CLI Commands
 
