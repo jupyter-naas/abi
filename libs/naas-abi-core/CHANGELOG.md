@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.36.1 (2026-05-12)
+
+### Bug Fixes
+
+- **agent**: Return non-empty response content early
+  ([`6a40d0f`](https://github.com/jupyter-naas/abi/commit/6a40d0fa5311231a1c9131568f41d5e85c3657a5))
+
+
 ## v1.36.0 (2026-05-08)
 
 
