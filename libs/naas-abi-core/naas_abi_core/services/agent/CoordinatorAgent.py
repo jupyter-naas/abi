@@ -208,9 +208,11 @@ class CoordinatorAgent(IntentAgent):
         if not self._agents:
             return Command(goto="coordinator_refusal")
 
-        # Step 1 — vector pre-filter for fallback suggestions
+        # Step 1 — vector pre-filter for fallback suggestions.
+        # The intent vector index is built lazily on first use, so we gate
+        # this on whether intents exist (not on `vector_store is not None`).
         raw_candidates: list[dict] = []
-        if self._intent_mapper.vector_store is not None:
+        if self._intent_mapper.intents:
             raw_candidates = [
                 r
                 for r in self._intent_mapper.map_intent(

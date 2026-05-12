@@ -149,7 +149,6 @@ Respond only based on what your available agents and tools can actually deliver.
 
     @staticmethod
     def get_agents(cls) -> tuple[list, AgentSharedState]:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
         from queue import Queue
 
         from naas_abi import ABIModule
@@ -184,20 +183,22 @@ Respond only based on what your available agents and tools can actually deliver.
                 if issubclass(agent_cls, Agent):
                     _register_candidate(agent_cls)
 
-        def _load_agent(agent_cls: type) -> Agent | None:
-            if issubclass(agent_cls, Agent):
-                return agent_cls.New().duplicate(
-                    queue=agent_queue, agent_shared_state=agent_shared_state
-                )
-            return None
-
+        # NOTE: this used to run in a ThreadPoolExecutor with the default
+        # max_workers (up to 32 threads). Agent construction is pure-Python
+        # (pydantic models, langchain tool wiring, supervisor attachment) and
+        # therefore GIL-bound — concurrent threads couldn't overlap useful
+        # work and just thrashed on lock waits. cProfile showed ~3s out of
+        # 3.76s spent in `_thread.lock.acquire` / `as_completed`. Running
+        # serially removes that overhead entirely.
         agents: list = []
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(_load_agent, c): c for c in candidate_classes}
-            for future in as_completed(futures):
-                agent = future.result()
-                if agent is not None:
-                    agents.append(agent)
+        for agent_cls in candidate_classes:
+            if not issubclass(agent_cls, Agent):
+                continue
+            agent = agent_cls.New().duplicate(
+                queue=agent_queue, agent_shared_state=agent_shared_state
+            )
+            if agent is not None:
+                agents.append(agent)
 
         return agents, agent_shared_state
 

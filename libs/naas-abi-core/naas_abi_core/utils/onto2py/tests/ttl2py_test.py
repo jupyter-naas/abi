@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest.mock import patch
 
 import pytest
 import rdflib
@@ -349,3 +350,49 @@ ex:mentionOf rdf:type owl:ObjectProperty ;
     # Model builds without NameError; the value is a URI string.
     instance = module.Mention(mention_of=["http://example.org/SomeClass"])
     assert instance.mention_of == ["http://example.org/SomeClass"]
+
+
+def test_onto2py_skips_parsing_on_unchanged_ttl(tmp_path):
+    """When the TTL file hasn't changed, onto2py must not re-parse it.
+
+    The marker line written into the generated .py lets us short-circuit
+    before any rdflib work — which is what makes engine boot fast on warm
+    starts.
+    """
+    ttl = tmp_path / "schema.ttl"
+    ttl.write_text(
+        """@prefix ex: <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:Widget rdf:type owl:Class ;
+    rdfs:label "Widget" ;
+    rdfs:comment "A simple test class" .
+""",
+        encoding="utf-8",
+    )
+
+    # First call: must actually parse and generate.
+    first = onto2py(str(ttl))
+    py_file = ttl.with_suffix(".py")
+    assert py_file.exists()
+    assert "class Widget" in first
+
+    # Second call with unchanged content: rdflib.Graph.parse must not run.
+    with patch(
+        "naas_abi_core.utils.onto2py.onto2py.rdflib.Graph.parse"
+    ) as mock_parse:
+        second = onto2py(str(ttl))
+    mock_parse.assert_not_called()
+    assert "class Widget" in second
+
+    # Editing the TTL should invalidate the cache: the new run must include
+    # the freshly added class (proving rdflib actually re-parsed).
+    ttl.write_text(
+        ttl.read_text(encoding="utf-8")
+        + "\nex:Gadget rdf:type owl:Class ; rdfs:label \"Gadget\" .\n",
+        encoding="utf-8",
+    )
+    third = onto2py(str(ttl))
+    assert "class Gadget" in third
