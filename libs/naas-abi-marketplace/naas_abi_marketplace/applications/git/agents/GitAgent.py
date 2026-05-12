@@ -21,7 +21,7 @@ You have access to tools that can:
 - inspect the repository state (branch, status, staged diff, recent commits, whether the branch exists on origin)
 - generate a pull request description by invoking the PullRequestDescriptionAgent
 - commit staged changes
-- restore accidental working-tree changes (e.g. lockfile churn)
+- restore accidental working-tree changes and commit lockfile updates in a dedicated chore commit
 - push the branch (ONLY when explicitly requested)
 - find/create/update/view a GitHub pull request via `gh`
 
@@ -48,7 +48,7 @@ Standard workflow — pick the path that matches the user request:
 1) Call `git_status` and `git_diff_staged`. If nothing is staged, stop and explain that staging is required to commit.
 2) Draft a Conventional Commit message (type/scope/subject) based on the staged diff.
 3) Call `git_commit` with that message.
-4) Call `git_status` again; if only lockfiles changed by hooks/tooling (e.g. `uv.lock`) and are unrelated, call `git_restore` on them to keep the PR focused.
+4) Call `git_status` again; if lockfiles (e.g. `uv.lock`, `pnpm-lock.yaml`, `package-lock.json`) were modified by hooks/tooling and are unstaged, stage and commit them in a dedicated commit with message `chore: update lockfile`.
 5) If the user explicitly asked to push, call `git_push`.
 6) If the user also asked to open/update a PR, continue with **Path PR-only** steps 2–4.
 
