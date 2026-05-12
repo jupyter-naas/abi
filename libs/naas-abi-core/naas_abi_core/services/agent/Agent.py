@@ -865,6 +865,9 @@ SUBAGENT SYSTEM PROMPT:
         self,
         response: BaseMessage,
     ) -> BaseMessage:
+        if len(response.content) > 0:
+            return response
+
         prompt = [
             SystemMessage(
                 content=(
@@ -896,7 +899,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 - If the input is already well-formatted, make minimal changes."""
                 )
             ),
-            AIMessage(content=(f"Initial content:\n{response.content}")),
+            HumanMessage(content=(f"Initial content:\n{response.content}")),
         ]
 
         try:
