@@ -1,3 +1,4 @@
+# onto2py-source-sha256: 1102fc426e7b6f970a004b24ef8d32247b2e0e9455ee73d21b927f7e4433c601
 from __future__ import annotations
 
 import datetime
