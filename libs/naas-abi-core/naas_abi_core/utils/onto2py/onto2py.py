@@ -1,3 +1,4 @@
+import hashlib
 import io
 import os
 import re
@@ -11,6 +12,8 @@ from typing import Dict, List, Optional, Set
 import rdflib
 from rdflib import BNode
 from rdflib.collection import Collection
+
+_CACHE_MARKER_PREFIX = "# onto2py-source-sha256: "
 
 
 @dataclass
@@ -577,6 +580,17 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
         ttl_file_path = ttl_file
         with open(ttl_file, "r") as f:
             content = f.read()
+
+        # Short-circuit: if the generated .py file already exists and was
+        # produced from the same TTL content (matching SHA-256 marker), skip
+        # the expensive rdflib parse + code generation + ruff format. This is
+        # the common case on boot — TTL files don't change across restarts.
+        if not overwrite:
+            ttl_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            cached_code = _read_cached_python(ttl_file_path, ttl_hash)
+            if cached_code is not None:
+                return cached_code
+
         g = rdflib.Graph()
         g.parse(data=content, format="turtle")
     else:
@@ -717,20 +731,26 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     if ttl_file_path:
         py_file = Path(ttl_file_path).with_suffix(".py")
 
+        # Embed the source hash so future calls can short-circuit before parsing.
+        ttl_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        python_code_with_marker = (
+            f"{_CACHE_MARKER_PREFIX}{ttl_hash}\n{python_code}"
+        )
+
         # Read the existing file if it exists
         if py_file.exists():
             with open(py_file, "r") as f:
                 existing_code = f.read()
-            if existing_code == python_code:
+            if existing_code == python_code_with_marker:
                 print(f"✅ {ttl_file_path} already converted to {py_file}")
             else:
                 with open(py_file, "w") as f:
-                    f.write(python_code)
+                    f.write(python_code_with_marker)
                 _run_ruff([str(py_file)])
                 print(f"✅ Successfully converted {ttl_file_path} to {py_file}")
         else:
             with open(py_file, "w") as f:
-                f.write(python_code)
+                f.write(python_code_with_marker)
             _run_ruff([str(py_file)])
             print(f"✅ Successfully converted {ttl_file_path} to {py_file}")
 
@@ -738,6 +758,29 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
         create_class_files(ttl_file_path, classes, py_file, overwrite)
 
     return python_code
+
+
+def _read_cached_python(ttl_file_path: str, ttl_hash: str) -> Optional[str]:
+    """Return cached .py content if it was generated from the same TTL hash.
+
+    The cache marker is written near the top of the generated .py file. We
+    look for it within the first handful of lines so a formatter (ruff) is
+    free to add a blank line or shuffle imports without invalidating cache.
+    """
+    py_file = Path(ttl_file_path).with_suffix(".py")
+    if not py_file.exists():
+        return None
+    expected = f"{_CACHE_MARKER_PREFIX}{ttl_hash}"
+    try:
+        with open(py_file, "r") as f:
+            content = f.read()
+    except OSError:
+        return None
+    head = content.split("\n", 10)[:10]
+    for line in head:
+        if line.strip() == expected:
+            return content
+    return None
 
 
 def get_label(g: rdflib.Graph, resource) -> Optional[str]:
