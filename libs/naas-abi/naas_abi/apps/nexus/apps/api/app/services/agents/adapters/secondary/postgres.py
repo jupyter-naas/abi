@@ -46,10 +46,12 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             system_prompt=str(model.system_prompt),
             model_id=str(model.model_id),
             provider=str(model.provider),
-            logo_url=str(model.logo_url),
+            logo_url=str(model.logo_url) if model.logo_url is not None else None,
             enabled=bool(model.enabled),
             created_at=datetime.fromisoformat(str(model.created_at)),
             updated_at=datetime.fromisoformat(str(model.updated_at)),
+            suggestions=model.suggestions if isinstance(model.suggestions, list) else None,
+            intents=model.intents if isinstance(model.intents, list) else None,
         )
 
     async def list_by_workspace(self, workspace_id: str) -> list[AgentRecord]:
@@ -99,6 +101,8 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             provider=data.provider,
             logo_url=data.logo_url,
             enabled=data.enabled,
+            suggestions=data.suggestions,
+            intents=data.intents,
         )
         self.db.add(agent_model)
         await self.db.commit()
@@ -123,6 +127,8 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
                 provider=data.provider,
                 logo_url=data.logo_url,
                 enabled=data.enabled,
+                suggestions=data.suggestions,
+                intents=data.intents,
             )
             self.db.add(model)
             models.append(model)
@@ -157,6 +163,10 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             agent_model.logo_url = str(updates.logo_url)
         if updates.enabled is not None:
             agent_model.enabled = bool(updates.enabled)
+        if updates.suggestions is not None:
+            agent_model.suggestions = updates.suggestions
+        if updates.intents is not None:
+            agent_model.intents = updates.intents
 
         await self.db.commit()
         await self.db.refresh(agent_model)

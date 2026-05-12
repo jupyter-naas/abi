@@ -46,6 +46,8 @@ class AgentCreateInput:
     provider: str | None = None
     logo_url: str | None = None
     enabled: bool = False
+    suggestions: list[dict[str, str]] | None = None
+    intents: list[dict[str, str]] | None = None
 
 
 @dataclass
@@ -59,6 +61,8 @@ class AgentUpdateInput:
     logo_url: str | None = None
     enabled: bool | None = None
     model: str | None = None
+    suggestions: list[dict[str, str]] | None = None
+    intents: list[dict[str, str]] | None = None
 
 
 class AgentPersistencePort(ABC):
