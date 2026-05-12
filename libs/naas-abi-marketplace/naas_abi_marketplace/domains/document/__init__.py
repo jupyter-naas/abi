@@ -35,6 +35,42 @@ class MarkdownToVectorConfiguration(BaseModel):
     api_key: str  # API Key to authenticate the model_id calls. Not optional
 
 
+class PdfToHtmlImageDescriptionConfiguration(BaseModel):
+    """Optional vision-LLM captioning configured on ``PdfToHtmlPipeline``.
+
+    When set, docling calls an OpenAI-compatible vision endpoint for each
+    image found in the PDF and injects the description as a ``<figcaption>``
+    in the exported HTML. Same pipeline run; no separate enrichment step.
+
+    Uses OpenRouter by default so any vision model exposed by the provider
+    can be selected by changing ``model``.
+    """
+
+    api_key: str  # API key for the OpenAI-compatible vision endpoint
+    base_url: str = "https://openrouter.ai/api/v1/chat/completions"
+    model: str = "google/gemini-2.0-flash-001"
+    prompt: str = (
+        "Describe this image in one or two sentences, focusing on factual "
+        "content that would be useful for document understanding (people, "
+        "charts, tables, diagrams, scenes). Be concise and factual."
+    )
+    concurrency: int = 4
+    timeout_seconds: float = 30.0
+    picture_area_threshold: float = 0.05  # skip images < 5% of page area
+
+
+class HtmlToVectorConfiguration(BaseModel):
+    """Configuration for a single HtmlToVector pipeline instance."""
+
+    collection_name: str = "documents"
+    file_path: str = ""
+    model_id: str = "text-embedding-3-small"
+    dimension: int = 1536
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    api_key: str  # API Key to authenticate the model_id calls. Not optional
+
+
 class DocumentAgentConfiguration(BaseModel):
     """Configuration for the DocumentAgent."""
 
@@ -65,6 +101,10 @@ class ABIModule(BaseModule):
         docxtomarkdown_enabled: bool = True
         pptxtomarkdown_enabled: bool = True
         markdowntovector_pipelines: list[MarkdownToVectorConfiguration] = []
+        htmltovector_pipelines: list[HtmlToVectorConfiguration] = []
+        pdftohtml_image_description: PdfToHtmlImageDescriptionConfiguration | None = (
+            None
+        )
         document_agent: DocumentAgentConfiguration
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
