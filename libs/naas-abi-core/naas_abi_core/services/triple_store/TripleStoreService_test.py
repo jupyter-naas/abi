@@ -10,7 +10,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     OntologyEvent,
 )
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from rdflib import Graph, Literal, RDF, URIRef
+from rdflib import ConjunctiveGraph, Graph, Literal, RDF, URIRef
 
 
 class _FakeBus:
@@ -80,21 +80,28 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
 
 class _InMemoryTripleStoreAdapter(ITripleStorePort):
     def __init__(self) -> None:
-        self.graph = Graph()
+        # ConjunctiveGraph supports named graphs and the SPARQL `GRAPH <...>`
+        # syntax that the service uses for schema metadata storage.
+        self.graph = ConjunctiveGraph()
         self.insert_calls: list[tuple[Graph, URIRef | None]] = []
         self.remove_calls: list[tuple[Graph, URIRef | None]] = []
 
+    def _named_graph(self, graph_name: URIRef | None) -> Graph:
+        if graph_name is None:
+            return self.graph.default_context
+        return self.graph.get_context(graph_name)
+
     def insert(self, triples: Graph, graph_name: URIRef | None = None):
-        if graph_name is not None:
-            raise NotImplementedError
         self.insert_calls.append((triples, graph_name))
-        self.graph += triples
+        target = self._named_graph(graph_name)
+        for triple in triples:
+            target.add(triple)
 
     def remove(self, triples: Graph, graph_name: URIRef | None = None):
-        if graph_name is not None:
-            raise NotImplementedError
         self.remove_calls.append((triples, graph_name))
-        self.graph -= triples
+        target = self._named_graph(graph_name)
+        for triple in triples:
+            target.remove(triple)
 
     def get(self) -> Graph:
         return self.graph
@@ -352,7 +359,10 @@ ex:Thing a ex:Class .
 ''',
         format="turtle",
     )
-    service.insert(duplicate_metadata)
+    service.insert(
+        duplicate_metadata,
+        graph_name=URIRef("http://ontology.naas.ai/graph/schema"),
+    )
 
     before_rows = list(
         service.query(
@@ -381,3 +391,44 @@ SELECT ?s WHERE {{
     assert len(after_rows) == 1
     assert len(adapter.insert_calls) == insert_count_before_reload
     assert len(adapter.remove_calls) >= 1
+
+
+def test_load_schemas_indexes_each_file_exactly_once(tmp_path):
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+
+    filepaths: list[str] = []
+    for i in range(16):
+        path = tmp_path / f"schema-{i}.ttl"
+        path.write_text(
+            f"""@prefix ex: <http://example.org/{i}/> .
+
+ex:Thing{i} a ex:Class .
+""",
+            encoding="utf-8",
+        )
+        filepaths.append(str(path))
+
+    service.load_schemas(filepaths)
+
+    # Each file should be tracked by exactly one Schema entry.
+    rows = list(
+        service.query(
+            """PREFIX internal: <http://triple-store.internal#>
+SELECT ?filePath (COUNT(?s) AS ?n) WHERE {
+    GRAPH <http://ontology.naas.ai/graph/schema> {
+        ?s a internal:Schema ; internal:filePath ?filePath .
+    }
+} GROUP BY ?filePath"""
+        )
+    )
+    counts = {str(filePath): int(n) for filePath, n in rows}
+    for filepath in filepaths:
+        assert counts.get(filepath) == 1, f"missing or duplicated: {filepath}"
+
+    # A second pass over unchanged files should be a no-op (cache hit).
+    inserts_before = len(adapter.insert_calls)
+    removes_before = len(adapter.remove_calls)
+    service.load_schemas(filepaths)
+    assert len(adapter.insert_calls) == inserts_before
+    assert len(adapter.remove_calls) == removes_before

@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, cast
@@ -18,7 +19,11 @@ from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelinePara
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.SPARQL import SPARQLUtils
-from rdflib import RDF, Graph, Namespace, URIRef
+from rdflib import RDF, Graph, Literal, Namespace, URIRef
+
+# Bump when the schema of what the pipeline writes changes (so old signatures
+# from older code versions trigger a rebuild even if inputs look identical).
+_SIGNATURE_VERSION = "1"
 
 
 def _module_name_from_module_path(module_path: str | None) -> str | None:
@@ -49,7 +54,11 @@ class NexusPlatformPipelineConfiguration(PipelineConfiguration):
     triple_store: TripleStoreService
     nexus_namespace: Namespace = Namespace("http://ontology.naas.ai/nexus/")
     nexus_graph_uri: URIRef = URIRef("http://ontology.naas.ai/graph/nexus")
-    force_update: bool = True
+    # When True, always clear + rebuild the nexus graph. When False (default),
+    # compute a signature of the inputs (agent class paths + named graphs +
+    # version) and skip the rebuild entirely if the stored signature matches.
+    # This makes warm boots ~one SPARQL read instead of ~6 reads + writes.
+    force_update: bool = False
 
 
 class NexusPlatformPipelineParameters(PipelineParameters):
@@ -76,19 +85,137 @@ class NexusPlatformPipeline(Pipeline):
         self.__force_update = configuration.force_update
         self.__triple_store = configuration.triple_store
         self.__sparql_utils = SPARQLUtils(self.__triple_store)
+        # Note: clearing the nexus graph used to happen here, which made
+        # merely *constructing* the pipeline destructive. We've moved that
+        # into run() so we can check the signature first and skip the rebuild
+        # entirely when nothing has changed.
 
-        # Create the Nexus named graph if it does not exist.
-        logger.debug(f"Nexus graph list: {self.__triple_store.list_graphs()}")
-        if self.__nexus_graph_uri not in self.__triple_store.list_graphs():
-            self.__triple_store.create_graph(self.__nexus_graph_uri)
-            logger.debug(f"Nexus graph created at {self.__nexus_graph_uri}")
+    # ------------------------------------------------------------------
+    # Signature-based fast path
+    # ------------------------------------------------------------------
 
-        if (
-            self.__force_update
-            and self.__nexus_graph_uri in self.__triple_store.list_graphs()
-        ):
-            logger.debug(f"Nexus graph cleared at {self.__nexus_graph_uri}")
-            self.__triple_store.clear_graph(self.__nexus_graph_uri)
+    def _bootstrap_uri(self) -> URIRef:
+        return URIRef(self.__nexus_namespace["Bootstrap"])
+
+    def _signature_predicate(self) -> URIRef:
+        return URIRef(self.__nexus_namespace["signature"])
+
+    def _compute_signature(self) -> str:
+        """Hash the inputs we'd write so we can detect a no-op rebuild.
+
+        For each agent we include its class path AND the SHA-256 of the
+        source file that defines it. Editing an agent's `system_prompt`,
+        `get_tools()`, `get_intents()`, etc. changes the file's content
+        hash, which changes the signature, which triggers a rebuild. We
+        deliberately do NOT call `get_tools()` / `get_intents()` /
+        `get_system_prompt()` here — those are the expensive operations
+        the fast path is trying to avoid.
+
+        Agent source files are typically small (a few KB), so reading and
+        hashing them is cheap, and each file is hashed at most once even
+        when it defines multiple agents.
+
+        We also include sorted named graph URIs (so a newly loaded
+        ontology triggers a rebuild) and a version tag.
+        """
+        import inspect
+
+        from naas_abi import ABIModule
+        from naas_abi_core.services.agent.Agent import Agent as RuntimeAgent
+
+        agent_entries: list[str] = []
+        try:
+            abi = ABIModule.get_instance()
+            # Cache file hashes so we don't read/hash the same module twice
+            # when it defines multiple agents.
+            file_hashes: dict[str, str] = {}
+            for module in abi.engine.modules.values():
+                for agent_cls in module.agents:
+                    if (
+                        agent_cls is None
+                        or not isinstance(agent_cls, type)
+                        or not issubclass(agent_cls, RuntimeAgent)
+                    ):
+                        continue
+                    class_path = f"{agent_cls.__module__}/{agent_cls.__name__}"
+                    try:
+                        source_file = inspect.getfile(agent_cls)
+                    except (TypeError, OSError):
+                        source_file = ""
+                    if source_file and source_file not in file_hashes:
+                        try:
+                            with open(source_file, "rb") as f:
+                                file_hashes[source_file] = hashlib.sha256(
+                                    f.read()
+                                ).hexdigest()
+                        except OSError:
+                            file_hashes[source_file] = ""
+                    agent_entries.append(
+                        f"{class_path}@{file_hashes.get(source_file, '')}"
+                    )
+        except Exception:
+            # If we can't enumerate agents we should not pretend the cache
+            # is valid — fall through to a forced rebuild by returning a
+            # signature that will never match.
+            return "unavailable"
+
+        graph_uris = sorted(str(g) for g in self.__triple_store.list_graphs())
+
+        parts = [
+            f"v:{_SIGNATURE_VERSION}",
+            "agents:" + ",".join(sorted(agent_entries)),
+            "graphs:" + ",".join(graph_uris),
+        ]
+        return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+    def _read_stored_signature(self) -> str | None:
+        results = self.__triple_store.query(
+            f"""
+            SELECT ?sig WHERE {{
+                GRAPH <{str(self.__nexus_graph_uri)}> {{
+                    <{str(self._bootstrap_uri())}>
+                        <{str(self._signature_predicate())}>
+                        ?sig .
+                }}
+            }}
+            """
+        )
+        for row in results:
+            return str(row[0])
+        return None
+
+    def _write_signature(self, signature: str) -> None:
+        # Drop any prior signature triple(s) then write the new one.
+        old_results = self.__triple_store.query(
+            f"""
+            SELECT ?sig WHERE {{
+                GRAPH <{str(self.__nexus_graph_uri)}> {{
+                    <{str(self._bootstrap_uri())}>
+                        <{str(self._signature_predicate())}>
+                        ?sig .
+                }}
+            }}
+            """
+        )
+        old_graph = Graph()
+        for row in old_results:
+            old_graph.add(
+                (self._bootstrap_uri(), self._signature_predicate(), row[0])
+            )
+        if len(old_graph) > 0:
+            self.__triple_store.remove(
+                old_graph, graph_name=self.__nexus_graph_uri
+            )
+
+        new_graph = Graph()
+        new_graph.add(
+            (
+                self._bootstrap_uri(),
+                self._signature_predicate(),
+                Literal(signature),
+            )
+        )
+        self.__triple_store.insert(new_graph, graph_name=self.__nexus_graph_uri)
 
     def _query_nexus_instances(
         self,
@@ -465,6 +592,28 @@ class NexusPlatformPipeline(Pipeline):
         # Initialize Nexus Platform
         from rdflib.namespace import OWL, RDF, RDFS, XSD
 
+        # Fast path: if the inputs haven't changed since the last successful
+        # rebuild, skip the whole pipeline. This is the common case on warm
+        # API boots and turns ~6 SPARQL round trips + writes into 2 reads.
+        current_signature = self._compute_signature()
+        if not self.__force_update:
+            stored_signature = self._read_stored_signature()
+            if stored_signature is not None and stored_signature == current_signature:
+                logger.debug(
+                    "Nexus platform signature unchanged; skipping rebuild."
+                )
+                return Graph()
+
+        # Ensure the nexus graph exists, then clear it so removed agents
+        # don't linger. Clearing only happens on the rebuild path — pure
+        # construction of the pipeline is now non-destructive.
+        if self.__nexus_graph_uri not in self.__triple_store.list_graphs():
+            self.__triple_store.create_graph(self.__nexus_graph_uri)
+            logger.debug(f"Nexus graph created at {self.__nexus_graph_uri}")
+        else:
+            logger.debug(f"Nexus graph cleared at {self.__nexus_graph_uri}")
+            self.__triple_store.clear_graph(self.__nexus_graph_uri)
+
         graph = Graph()
         graph.bind("rdf", RDF)
         graph.bind("rdfs", RDFS)
@@ -475,6 +624,9 @@ class NexusPlatformPipeline(Pipeline):
         graph += self.initialize_nexus_graphs()
         graph += self.initialize_nexus_agents()
         graph += self.initialize_nexus_graph_views()
+
+        # Persist the new signature so the next boot can short-circuit.
+        self._write_signature(current_signature)
         return graph
 
     def as_tools(self) -> list[BaseTool]:

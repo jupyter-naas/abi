@@ -400,7 +400,21 @@ class ABIModule(BaseModule):
                     f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
                 )
 
-        # Initialize Nexus platform
+    def on_load(self):
+        super().on_load()
+        # from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
+        # from rdflib import URIRef
+
+        # self.engine.services.triple_store.subscribe(
+        #     (URIRef("http://example.com/subject"), None, None),
+        #     lambda triple: print(f"Triple received: {triple.decode('utf-8')}"),
+        #     OntologyEvent.INSERT,
+        # )
+
+    def api(self, app: FastAPI) -> None:
+        # Initialize Nexus platform (graphs + agent metadata in the triple
+        # store). Deferred from on_initialized so non-API entry points
+        # (Dagster run workers, CLI commands, tests) don't pay this cost.
         from naas_abi.pipelines.NexusPlatformPipeline import (
             NexusPlatformPipeline,
             NexusPlatformPipelineConfiguration,
@@ -414,18 +428,6 @@ class ABIModule(BaseModule):
         )
         pipeline.run(NexusPlatformPipelineParameters())
 
-    def on_load(self):
-        super().on_load()
-        # from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
-        # from rdflib import URIRef
-
-        # self.engine.services.triple_store.subscribe(
-        #     (URIRef("http://example.com/subject"), None, None),
-        #     lambda triple: print(f"Triple received: {triple.decode('utf-8')}"),
-        #     OntologyEvent.INSERT,
-        # )
-
-    def api(self, app: FastAPI) -> None:
         # Keep API and Nexus CORS aligned from a single source of truth.
         app.state.abi_cors_origins = self.engine.api_configuration.cors_origins
 
