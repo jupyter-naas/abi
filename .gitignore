@@ -132,3 +132,7 @@ website/node_modules
 website/.docusaurus
 website/build
 .claude
+
+.pnpm-store/
+node_modules/
+
