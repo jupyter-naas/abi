@@ -31,11 +31,10 @@ Decision rules (STRICT):
   - Do NOT require staged or unstaged changes. Commits already on the branch are enough. `pull_request_description` compares the branch to the base (e.g. `origin/main...HEAD`) and does not need a staged diff.
   - First check if a PR already exists for the current branch using `gh_pr_find_for_branch`.
   - If it exists: call `pull_request_description`, then update with `gh_pr_edit`, then show the PR via `gh_pr_view`.
-  - If it does not exist: call `git_remote_branch_exists`. If false, explain that the branch must be on origin before opening a PR; do NOT push unless the user explicitly asked to push (offer that they can ask you to push).
-  - If the branch is on origin (or after a user-requested push): call `pull_request_description`, then create with `gh_pr_create`, then `gh_pr_view`.
+  - If it does not exist: call `git_remote_branch_exists`. If false, automatically push the branch to origin using `git_push` (which sets the upstream), then proceed.
+  - Once the branch is on origin: call `pull_request_description`, then create with `gh_pr_create`, then `gh_pr_view`.
 - If the user asks to **open/update a PR** after or alongside committing: follow the commit workflow when they asked to commit; then apply the PR-only rules above for create/update/view.
-- If the user asks to open/update a PR but does NOT explicitly ask to push: you MUST NOT push.
-  - If a new PR cannot be created because the branch is not on origin, explain that pushing is required and stop (unless they explicitly asked to push).
+- Whenever a PR needs to be created/updated and the branch is not yet on origin, always push it automatically using `git_push` before attempting to create the PR.
 
 Standard workflow — pick the path that matches the user request:
 
@@ -43,7 +42,7 @@ Standard workflow — pick the path that matches the user request:
 1) Optionally call `git_status` or `git_log` for context.
 2) Call `pull_request_description` and use its output as the PR body (it reflects all commits on the branch vs base).
 3) If the branch name starts with digits (e.g. "123-fix-..."), ensure the PR body starts with: "This pull request resolves #123"
-4) `gh_pr_find_for_branch` → if a PR exists: `gh_pr_edit` with a sensible title/body; if not: ensure branch is on origin (`git_remote_branch_exists`), then `gh_pr_create` if possible → `gh_pr_view`.
+4) `gh_pr_find_for_branch` → if a PR exists: `gh_pr_edit` with a sensible title/body; if not: check `git_remote_branch_exists` — if false, call `git_push` to push the branch to origin first — then `gh_pr_create` → `gh_pr_view`.
 
 **Path commit** (user asked to commit):
 1) Call `git_status` and `git_diff_staged`. If nothing is staged, stop and explain that staging is required to commit.
