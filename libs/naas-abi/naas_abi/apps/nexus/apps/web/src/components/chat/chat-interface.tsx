@@ -63,6 +63,99 @@ function linkifyText(text: string, isUser: boolean): React.ReactNode {
   return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts;
 }
 
+/** Extract unique HTTP(S) URLs from message content (markdown links + bare URLs). */
+function extractUrlsFromContent(content: string): string[] {
+  if (!content) return [];
+  const urls = new Set<string>();
+  const mdLinkRe = /\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = mdLinkRe.exec(content)) !== null) urls.add(m[2]);
+  const stripped = content.replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '');
+  const bareRe = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
+  while ((m = bareRe.exec(stripped)) !== null) urls.add(m[0]);
+  return Array.from(urls);
+}
+
+const LOGIN_REQUIRED_RE = /(?:^|\.)linkedin\.com$/i;
+
+function isLoginRequiredDomain(url: string): boolean {
+  try {
+    return LOGIN_REQUIRED_RE.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Right-side preview panel — iframe for public pages, auth message for login-gated ones. */
+function PreviewPanel({ url, onClose }: { url: string; onClose: () => void }) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const needsLogin = isLoginRequiredDomain(url);
+  const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+
+  return (
+    <div className="flex w-[45%] min-w-[340px] max-w-[640px] flex-col border-l border-border bg-background">
+      <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{domain}</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Open in new tab"
+        >
+          <ExternalLink size={14} />
+        </a>
+        {!needsLogin && (
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Reload"
+          >
+            <RefreshCw size={13} />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Close"
+        >
+          <X size={14} />
+        </button>
+      </div>
+      {needsLogin ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <AlertCircle size={20} />
+          </div>
+          <p className="text-sm font-medium">Authentication required</p>
+          <p className="text-xs text-muted-foreground max-w-[260px]">
+            This page requires you to be logged in and cannot be previewed here.
+          </p>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+          >
+            <ExternalLink size={12} />
+            Open in new tab
+          </a>
+        </div>
+      ) : (
+        <iframe
+          key={reloadKey}
+          src={url}
+          title={domain}
+          className="h-full w-full flex-1 border-none"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        />
+      )}
+    </div>
+  );
+}
+
 /** Styled link with hover card: open in new tab only. Rendered via portal so it stays above chat list/input. */
 function LinkWithPreview({
   href,
@@ -169,6 +262,7 @@ export function ChatInterface() {
   // Per-job ingestion status tracking
   const [ingestionJobs, setIngestionJobs] = useState<Map<string, {filename: string; status: string; progress?: number; error?: string; conversationId: string}>>(new Map());
   const ingestionAbortRefs = useRef<Map<string, AbortController>>(new Map());
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1582,7 +1676,9 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-1 flex-col min-h-0">
+    <div className="flex flex-1 min-h-0">
+    {/* Chat column */}
+    <div className="flex flex-1 flex-col min-h-0 min-w-0">
       {/* Messages area */}
       <div className="flex-1 overflow-auto p-4 min-h-0">
         {!activeConversation || activeConversation.messages.length === 0 ? (
@@ -1595,15 +1691,16 @@ export function ChatInterface() {
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
             {activeConversation.messages.map((message) => (
-              <MessageBubble 
-                key={message.id} 
-                message={message} 
+              <MessageBubble
+                key={message.id}
+                message={message}
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
                 showStop={Boolean(streamingMessageId)}
                 onStop={() => {
                   streamControllerRef.current?.abort();
                 }}
+                onPreviewUrl={setPreviewUrl}
               />
             ))}
             {isLoading && !isStreaming && (
@@ -2005,6 +2102,11 @@ export function ChatInterface() {
         </div>
       </div>
     </div>
+    {/* Preview panel — right side */}
+    {previewUrl && (
+      <PreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} />
+    )}
+    </div>
   );
 }
 
@@ -2323,12 +2425,14 @@ const MessageBubble = React.memo(function MessageBubble({
   showConnecting,
   showStop,
   onStop,
-}: { 
-  message: Message; 
+  onPreviewUrl,
+}: {
+  message: Message;
   currentSelectedAgent: string;
-  showConnecting: boolean; 
-  showStop: boolean; 
-  onStop: () => void; 
+  showConnecting: boolean;
+  showStop: boolean;
+  onStop: () => void;
+  onPreviewUrl?: (url: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
@@ -2442,6 +2546,12 @@ const MessageBubble = React.memo(function MessageBubble({
       || (isStillProcessing && showConnecting ? 'Processing...' : '')
       || (isStillProcessing ? 'Processing...' : ''))
     : '';
+
+  const contentUrls = useMemo(() => {
+    if (isUser || typeof responseForDisplay !== 'string' || isStillProcessing) return [];
+    return extractUrlsFromContent(responseForDisplay);
+  }, [isUser, responseForDisplay, isStillProcessing]);
+
   const handleCopyCode = useCallback(async (code: string, key: string) => {
     try {
       await navigator.clipboard.writeText(code);
@@ -2673,7 +2783,7 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
         </div>
 
-        {/* Source pills — shown when RAG context was used */}
+        {/* RAG document source pills */}
         {!isUser && message.sources && message.sources.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
             {message.sources.map((src) => (
@@ -2685,6 +2795,36 @@ const MessageBubble = React.memo(function MessageBubble({
                 {src}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* URL sources extracted from message content */}
+        {!isUser && contentUrls.length > 0 && (
+          <div className="mt-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
+            <div className="space-y-1">
+              {contentUrls.map((url, i) => {
+                const needsLogin = isLoginRequiredDomain(url);
+                const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+                return (
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => onPreviewUrl?.(url)}
+                    className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted"
+                  >
+                    <span className="w-4 shrink-0 text-center tabular-nums text-muted-foreground">{i + 1}</span>
+                    <span className="flex-1 truncate font-medium text-foreground">{domain}</span>
+                    {needsLogin && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        Login
+                      </span>
+                    )}
+                    <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
