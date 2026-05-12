@@ -3,6 +3,8 @@ import hashlib
 import io
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Callable, List
 
 import rdflib
@@ -13,7 +15,14 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
 )
-from rdflib import RDF, Graph, URIRef
+from rdflib import Graph, URIRef
+
+
+@dataclass(frozen=True)
+class _SchemaIndexEntry:
+    subject: URIRef
+    hash: str
+    file_last_update_time: str
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -215,279 +224,241 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     # Schema Management
     ############################################################
 
-    def load_schemas(self, filepaths: List[str]):
-        # First build a cache of all schemas to speed up the process.
-        schema_cache = Graph()
+    def _build_schema_index(
+        self, filepath_filter: str | None = None
+    ) -> dict[str, list[_SchemaIndexEntry]]:
+        """Read stored Schema metadata into a plain Python dict.
 
+        The index is keyed by filePath and contains one entry per stored
+        Schema subject (lists allow detecting duplicate metadata). We
+        intentionally do NOT include `content` here — it can be megabytes
+        and is only needed when a file has actually changed (rare). Fetched
+        on demand via `_fetch_schema_content`.
+
+        A plain dict is used (rather than an rdflib Graph) because the index
+        is read concurrently from multiple worker threads, and rdflib's
+        SPARQL/turtle parser uses pyparsing which has thread-unsafe global
+        state. Python dicts are safe to read concurrently.
+        """
+        filter_clause = (
+            f'FILTER(STR(?filePath) = "{filepath_filter}") .'
+            if filepath_filter is not None
+            else ""
+        )
         results = self.query(f"""
             PREFIX internal: <http://triple-store.internal#>
-            SELECT ?schema ?filePath ?hash ?fileLastUpdateTime ?content
+            SELECT ?schema ?filePath ?hash ?fileLastUpdateTime
             WHERE {{
                 GRAPH <{str(self.__schema_graph)}> {{
-                ?schema a internal:Schema ;
-                    internal:filePath ?filePath ;
-                    internal:hash ?hash ;
-                    internal:fileLastUpdateTime ?fileLastUpdateTime ;
-                    internal:content ?content .
+                    ?schema a internal:Schema ;
+                        internal:filePath ?filePath ;
+                        internal:hash ?hash ;
+                        internal:fileLastUpdateTime ?fileLastUpdateTime .
+                    {filter_clause}
                 }}
             }}
         """)
-
+        index: dict[str, list[_SchemaIndexEntry]] = {}
         for row in results:
             assert isinstance(row, rdflib.query.ResultRow)
-            schema, filePath, hash, fileLastUpdateTime, content = row
-            schema_cache.add(
-                (schema, RDF.type, URIRef("http://triple-store.internal#Schema"))
-            )
-            schema_cache.add(
-                (schema, URIRef("http://triple-store.internal#filePath"), filePath)
-            )
-            schema_cache.add(
-                (schema, URIRef("http://triple-store.internal#hash"), hash)
-            )
-            schema_cache.add(
-                (
-                    schema,
-                    URIRef("http://triple-store.internal#fileLastUpdateTime"),
-                    fileLastUpdateTime,
+            schema, filePath, h, t = row
+            assert isinstance(schema, URIRef)
+            index.setdefault(str(filePath), []).append(
+                _SchemaIndexEntry(
+                    subject=schema,
+                    hash=str(h),
+                    file_last_update_time=str(t),
                 )
             )
-            schema_cache.add(
-                (schema, URIRef("http://triple-store.internal#content"), content)
-            )
+        return index
 
-        for filepath in filepaths:
-            self.load_schema(filepath, schema_cache)
-
-    def load_schema(self, filepath: str, schema_cache: Graph | None = None):
-        # logger.debug(f"Loading schema: {filepath}")
-        if schema_cache is not None:
-
-            def _read_query_func(query: str):
-                return schema_cache.query(query)
-
-            read_query_func = _read_query_func
-        else:
-            read_query_func = self.query
-
-        def _load_schema_metadata(subject: URIRef) -> dict[str, str]:
-            triples: rdflib.query.Result = read_query_func(
-                f"""
-                PREFIX internal: <http://triple-store.internal#>
-                SELECT ?p ?o 
-                WHERE {{
-                    GRAPH <{str(self.__schema_graph)}> {{
-                        <{subject}> ?p ?o .
-                    }}
-                }}
-                """
-            )
-
-            schema_dict: dict[str, str] = {}
-            for row in triples:
-                assert isinstance(row, rdflib.query.ResultRow)
-                p, o = row
-                schema_dict[str(p).replace("http://triple-store.internal#", "")] = str(
-                    o
-                )
-
-            return schema_dict
-
-        def _remove_schema_subject(subject: URIRef) -> None:
-            triples: rdflib.query.Result = read_query_func(
-                f"""
-                SELECT ?p ?o 
-                WHERE {{ 
-                    GRAPH <{str(self.__schema_graph)}> {{ 
-                    <{str(subject)}> ?p ?o . 
-                    }} 
-                }}
-                """
-            )
-
-            cleanup_graph = Graph()
-            for row in triples:
-                assert isinstance(row, rdflib.query.ResultRow)
-                p, o = row
-                cleanup_graph.add((subject, p, o))
-
-            if len(cleanup_graph) > 0:
-                self.remove(cleanup_graph, graph_name=self.__schema_graph)
-
-        try:
-            query = f"""
+    def _fetch_schema_content(self, subject: URIRef) -> str | None:
+        results = self.query(
+            f"""
             PREFIX internal: <http://triple-store.internal#>
-
-            SELECT *
+            SELECT ?content
             WHERE {{
                 GRAPH <{str(self.__schema_graph)}> {{
-                    ?s internal:filePath "{filepath}" .
+                    <{str(subject)}> internal:content ?content .
                 }}
             }}
             """
-            # logger.debug(f"Query: {query}")
-            # Check if schema with filePath == filepath already exists and grab all triples.
-            schema_triples: rdflib.query.Result = read_query_func(query)
+        )
+        for row in results:
+            assert isinstance(row, rdflib.query.ResultRow)
+            return str(row[0])
+        return None
 
-            schema_rows = list(schema_triples)
-            # logger.debug(f"len(schema_rows): {len(schema_rows)}")
-            # If schema with filePath == filepath already exists, we check if the file has been modified.
-            schema_exists_in_store = len(schema_rows) > 0
-            # logger.debug(f"Schema exists in store: {schema_exists_in_store}")
-            if schema_exists_in_store:
-                # Open file and get content.
-                with open(filepath, "r") as file:
-                    new_content = file.read()
+    def _remove_schema_subject(self, subject: URIRef) -> None:
+        triples = self.query(
+            f"""
+            SELECT ?p ?o
+            WHERE {{
+                GRAPH <{str(self.__schema_graph)}> {{
+                    <{str(subject)}> ?p ?o .
+                }}
+            }}
+            """
+        )
+        cleanup_graph = Graph()
+        for row in triples:
+            assert isinstance(row, rdflib.query.ResultRow)
+            p, o = row
+            cleanup_graph.add((subject, p, o))
+        if len(cleanup_graph) > 0:
+            self.remove(cleanup_graph, graph_name=self.__schema_graph)
 
-                new_content_hash = hashlib.sha256(
-                    new_content.encode("utf-8")
-                ).hexdigest()
+    def load_schemas(self, filepaths: List[str]):
+        """Parallel schema load. See `_apply_schema_for_file` for per-file logic."""
+        if not filepaths:
+            return
 
-                schema_entries: list[tuple[URIRef, dict[str, str]]] = []
-                for row in schema_rows:
-                    assert isinstance(row, rdflib.query.ResultRow)
-                    _SUBJECT_TUPLE_INDEX = 0
-                    subject = row[_SUBJECT_TUPLE_INDEX]
-                    assert isinstance(subject, URIRef)
-                    schema_entries.append((subject, _load_schema_metadata(subject)))
+        index = self._build_schema_index()
 
-                matching_entry = next(
-                    (
-                        (subject, schema_dict)
-                        for subject, schema_dict in schema_entries
-                        if schema_dict.get("hash") == new_content_hash
-                    ),
-                    None,
+        # Parallelize per-file work. For unchanged files this is just file I/O
+        # + SHA-256 + dict lookup — no Fuseki traffic at all. For changed/new
+        # files it also includes Fuseki writes; those overlap across workers.
+        # The shared `index` dict is read-only during this loop.
+        max_workers = min(8, len(filepaths))
+        with ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="ts-schema-load"
+        ) as executor:
+            futures = [
+                executor.submit(
+                    self._apply_schema_for_file, filepath, index.get(filepath, [])
                 )
+                for filepath in filepaths
+            ]
+            for future in futures:
+                future.result()
 
-                if matching_entry is not None:
-                    subject, schema_dict = matching_entry
-                else:
-                    subject, schema_dict = schema_entries[0]
+    def load_schema(self, filepath: str, schema_cache: Graph | None = None):
+        """Single-file schema load. `schema_cache` is accepted for backward
+        compatibility but ignored — we always look up via a filtered query."""
+        del schema_cache  # legacy param, no longer used
+        entries = self._build_schema_index(filepath_filter=filepath).get(filepath, [])
+        self._apply_schema_for_file(filepath, entries)
 
-                # Get file last update time
-                file_last_update_time = os.path.getmtime(filepath)
+    def _apply_schema_for_file(
+        self, filepath: str, entries: List[_SchemaIndexEntry]
+    ) -> None:
+        try:
+            if not entries:
+                self._insert_new_schema(filepath)
+                return
 
-                duplicate_subjects = [
-                    candidate_subject
-                    for candidate_subject, _ in schema_entries
-                    if candidate_subject != subject
-                ]
+            with open(filepath, "r") as file:
+                new_content = file.read()
+            new_content_hash = hashlib.sha256(
+                new_content.encode("utf-8")
+            ).hexdigest()
 
-                # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
-                if schema_dict["hash"] == new_content_hash:
-                    if len(duplicate_subjects) > 0:
-                        logger.debug(
-                            f"Cleaning up {len(duplicate_subjects)} duplicate schema metadata entries for {filepath}."
-                        )
-                        for duplicate_subject in duplicate_subjects:
-                            _remove_schema_subject(duplicate_subject)
+            matching = next(
+                (e for e in entries if e.hash == new_content_hash), None
+            )
+            primary = matching if matching is not None else entries[0]
+            duplicate_subjects = [
+                e.subject for e in entries if e.subject != primary.subject
+            ]
 
-                    # logger.debug("Schema is up to date, no need to update.")
-                    return
-
-                logger.debug(f"Loading schema: '{filepath}'")
-
-                # Decode old content
-                old_content = base64.b64decode(schema_dict["content"]).decode("utf-8")
-
-                # Parse old and new schema
-                old_schema = Graph().parse(io.StringIO(old_content), format="turtle")
-
-                new_schema = Graph().parse(io.StringIO(new_content), format="turtle")
-
-                # Compute addition and deletion triples
-                addition_triples = new_schema - old_schema
-                deletion_triples = old_schema - new_schema
-
-                # Insert addition and remove deletion triples
-                self.insert(addition_triples, graph_name=self.__schema_graph)
-                self.remove(deletion_triples, graph_name=self.__schema_graph)
-
-                # Update schema information in the triple store.
-
-                self.remove(
-                    Graph().parse(
-                        io.StringIO(f'''
-                    @prefix internal: <http://triple-store.internal#> .
-                    
-                    <{subject}> internal:hash "{schema_dict["hash"]}" ;
-                        internal:fileLastUpdateTime "{schema_dict["fileLastUpdateTime"]}" ;
-                        internal:content "{schema_dict["content"]}" .
-                '''),
-                        format="turtle",
-                    ),
-                    graph_name=self.__schema_graph,
-                )
-
-                self.insert(
-                    Graph().parse(
-                        io.StringIO(f'''
-                    @prefix internal: <http://triple-store.internal#> .
-                    
-                    <{subject}> internal:hash "{new_content_hash}" ;
-                        internal:fileLastUpdateTime "{file_last_update_time}" ;
-                        internal:content "{base64.b64encode(new_content.encode("utf-8")).decode("utf-8")}" .
-                '''),
-                        format="turtle",
-                    ),
-                    graph_name=self.__schema_graph,
-                )
-
-                if len(duplicate_subjects) > 0:
+            if primary.hash == new_content_hash:
+                if duplicate_subjects:
                     logger.debug(
-                        f"Cleaning up {len(duplicate_subjects)} duplicate schema metadata entries for {filepath}."
+                        f"Cleaning up {len(duplicate_subjects)} duplicate schema "
+                        f"metadata entries for {filepath}."
                     )
                     for duplicate_subject in duplicate_subjects:
-                        _remove_schema_subject(duplicate_subject)
-
-                # Return as we don't need to continue as we have already updated the schema.
+                        self._remove_schema_subject(duplicate_subject)
                 return
-            elif not schema_exists_in_store:
-                logger.debug("Loading schema in graph as it doesn't exist in store.")
 
-                # Open file and get content.
-                with open(filepath, "r") as file:
-                    content = file.read()
+            logger.debug(f"Loading schema: '{filepath}'")
 
-                # Compute base64 content
-                base64_content = base64.b64encode(content.encode("utf-8")).decode(
-                    "utf-8"
+            old_content_b64 = self._fetch_schema_content(primary.subject)
+            if old_content_b64 is None:
+                raise ValueError(
+                    f"Schema metadata for '{filepath}' is missing stored content."
                 )
+            old_content = base64.b64decode(old_content_b64).decode("utf-8")
 
-                # Compute hash of content
-                content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            old_schema = Graph().parse(io.StringIO(old_content), format="turtle")
+            new_schema = Graph().parse(io.StringIO(new_content), format="turtle")
 
-                # Parse schema
-                g = Graph().parse(filepath)
+            addition_triples = new_schema - old_schema
+            deletion_triples = old_schema - new_schema
+            self.insert(addition_triples, graph_name=self.__schema_graph)
+            self.remove(deletion_triples, graph_name=self.__schema_graph)
 
-                # Insert schema into the triple store
-                self.insert(g, graph_name=self.__schema_graph)
+            file_last_update_time = os.path.getmtime(filepath)
 
-                # Get file last update time
-                file_last_update_time = os.path.getmtime(filepath)
+            self.remove(
+                Graph().parse(
+                    io.StringIO(f'''
+                @prefix internal: <http://triple-store.internal#> .
 
-                # Insert Schema with hash, filePath, fileLastUpdateTime and content to be able to track changes.
-                self.insert(
-                    Graph().parse(
-                        io.StringIO(f'''
-                    @prefix internal: <http://triple-store.internal#> .
-                                                    
-                    <http://triple-store.internal/{uuid.uuid4()}> a internal:Schema ;
-                        internal:hash "{content_hash}" ;
-                        internal:filePath "{filepath}" ;
-                        internal:fileLastUpdateTime "{file_last_update_time}" ;
-                        internal:content "{base64_content}" .
-                '''),
-                        format="turtle",
-                    ),
-                    graph_name=self.__schema_graph,
+                <{primary.subject}> internal:hash "{primary.hash}" ;
+                    internal:fileLastUpdateTime "{primary.file_last_update_time}" ;
+                    internal:content "{old_content_b64}" .
+            '''),
+                    format="turtle",
+                ),
+                graph_name=self.__schema_graph,
+            )
+            self.insert(
+                Graph().parse(
+                    io.StringIO(f'''
+                @prefix internal: <http://triple-store.internal#> .
+
+                <{primary.subject}> internal:hash "{new_content_hash}" ;
+                    internal:fileLastUpdateTime "{file_last_update_time}" ;
+                    internal:content "{base64.b64encode(new_content.encode("utf-8")).decode("utf-8")}" .
+            '''),
+                    format="turtle",
+                ),
+                graph_name=self.__schema_graph,
+            )
+
+            if duplicate_subjects:
+                logger.debug(
+                    f"Cleaning up {len(duplicate_subjects)} duplicate schema "
+                    f"metadata entries for {filepath}."
                 )
+                for duplicate_subject in duplicate_subjects:
+                    self._remove_schema_subject(duplicate_subject)
         except Exception as e:
             import traceback
 
             logger.error(f"Error loading schema ({filepath}): {str(e)}")
             traceback.print_exc()
+
+    def _insert_new_schema(self, filepath: str) -> None:
+        logger.debug("Loading schema in graph as it doesn't exist in store.")
+
+        with open(filepath, "r") as file:
+            content = file.read()
+
+        base64_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+        g = Graph().parse(filepath)
+        self.insert(g, graph_name=self.__schema_graph)
+
+        file_last_update_time = os.path.getmtime(filepath)
+
+        self.insert(
+            Graph().parse(
+                io.StringIO(f'''
+            @prefix internal: <http://triple-store.internal#> .
+
+            <http://triple-store.internal/{uuid.uuid4()}> a internal:Schema ;
+                internal:hash "{content_hash}" ;
+                internal:filePath "{filepath}" ;
+                internal:fileLastUpdateTime "{file_last_update_time}" ;
+                internal:content "{base64_content}" .
+        '''),
+                format="turtle",
+            ),
+            graph_name=self.__schema_graph,
+        )
 
     def remove_schema(self, filepath: str):
         logger.debug(f"Removing schema: {filepath}")

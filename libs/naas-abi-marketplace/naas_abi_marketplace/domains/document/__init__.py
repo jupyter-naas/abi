@@ -61,6 +61,7 @@ class ABIModule(BaseModule):
             FileIngestionConfiguration()
         ]
         pdftomarkdown_enabled: bool = True
+        pdftohtml_enabled: bool = True
         docxtomarkdown_enabled: bool = True
         pptxtomarkdown_enabled: bool = True
         markdowntovector_pipelines: list[MarkdownToVectorConfiguration] = []

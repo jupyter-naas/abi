@@ -264,6 +264,19 @@ def _load_runtime_routes():
     for module in runtime_engine.modules.values():
         module.api(app)
 
+    # Kick off background warmup of every IntentMapper's vector index. We
+    # deferred this work out of agent __init__ to keep boot fast; doing it
+    # now in the background means the index is normally ready before the
+    # first chat request arrives. If a request does race it, the request's
+    # `_ensure_index` call will block briefly on the same lock and reuse
+    # whatever the warmup has already built.
+    try:
+        from naas_abi_core.services.agent.beta.IntentMapper import IntentMapper
+
+        IntentMapper.warm_all_in_background()
+    except Exception as exc:
+        logger.warning(f"Could not start intent-index warmup thread: {exc}")
+
     app.state.runtime_routes_loaded = True
 
 
