@@ -2,6 +2,9 @@
 
 <!-- version list -->
 
+## v1.18.0 (2026-05-12)
+
+
 ## v1.17.4 (2026-05-12)
 
 ### Performance Improvements
