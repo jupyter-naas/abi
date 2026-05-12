@@ -865,9 +865,6 @@ SUBAGENT SYSTEM PROMPT:
         self,
         response: BaseMessage,
     ) -> BaseMessage:
-        if len(response.content) > 0:
-            return response
-
         prompt = [
             SystemMessage(
                 content=(
@@ -903,8 +900,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         ]
 
         try:
-            formatted_response = self._chat_model.invoke(prompt)
-            logger.debug(f"Markdown pretty display response: {formatted_response}")
+            formatted_response = self._chat_model_with_tools.invoke(prompt)
+            logger.debug(
+                f"Markdown pretty display response: {formatted_response.content}"
+            )
+
             if not isinstance(formatted_response.content, str):
                 return response
 
@@ -948,9 +948,6 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 },
             )
         logger.debug(f"Model response: {response}")
-        logger.debug(
-            f"Model response content: {response.content if hasattr(response, 'content') else response}"
-        )
 
         # Handle tool calls if present
         if (
@@ -969,6 +966,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return Command(goto="call_tools", update={"messages": [response]})
 
         if self._markdown_pretty_display:
+            logger.debug("Applying Markdown pretty display to response")
             response = self._pretty_display_markdown(response)
         return Command(goto="__end__", update={"messages": [response]})
 
