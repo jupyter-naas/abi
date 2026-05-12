@@ -86,13 +86,16 @@ x-abi-template: &abi_template
 
 services:
   nexus-web:
-    image: ${NEXUS_WEB_IMAGE}:${NEXUS_WEB_TAG}
-    pull_policy: always
+    build:
+      context: libs/naas-abi/naas_abi/apps/nexus/
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - ${NEXUS_WEB_PORT}:3000
+    volumes:
+      - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
       - NEXUS_API_URL=${NEXUS_API_URL}
