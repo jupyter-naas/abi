@@ -3444,7 +3444,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "1.37.2"
+version = "1.37.3"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "alembic" },
@@ -3548,7 +3548,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "1.36.1"
+version = "1.36.2"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3673,7 +3673,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "1.17.3"
+version = "1.17.4"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "naas-abi-core" },
@@ -3764,6 +3764,7 @@ requires-dist = [
     { name = "arxiv", marker = "extra == 'applications-arxiv'", specifier = ">=2.1.3,<3" },
     { name = "beautifulsoup4", marker = "extra == 'applications-googlesearch'", specifier = ">=4.12.0" },
     { name = "boto3", marker = "extra == 'applications-bodo'", specifier = ">=1.38.19,<2" },
+    { name = "docling", marker = "extra == 'domains-document'", specifier = ">=2.0.0" },
     { name = "flask", marker = "extra == 'applications-twilio'", specifier = ">=3.1.2" },
     { name = "fuzzywuzzy-stubs", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.0.1" },
     { name = "google-api-python-client", marker = "extra == 'applications-gmail'", specifier = ">=2.188.0" },

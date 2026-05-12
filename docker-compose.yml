@@ -51,6 +51,7 @@ x-abi-template: &abi_template
     # - ./.env:/app/.env
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
+    - huggingface_cache:/root/.cache/huggingface  # Docling / HF model weights
   environment:
     - ENV=local
     - LOG_LEVEL=DEBUG
@@ -85,13 +86,16 @@ x-abi-template: &abi_template
 
 services:
   nexus-web:
-    image: ${NEXUS_WEB_IMAGE}:${NEXUS_WEB_TAG}
-    pull_policy: always
+    build:
+      context: libs/naas-abi/naas_abi/apps/nexus/
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - ${NEXUS_WEB_PORT}:3000
+    volumes:
+      - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
       - NEXUS_API_URL=${NEXUS_API_URL}
@@ -524,6 +528,7 @@ services:
 
 volumes:
   venv_cache:     # Python virtual environment cache for faster startup
+  huggingface_cache: # Hugging Face model cache (docling layout / table models)
   fuseki_data:    # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   dagster_home:   # Dagster metadata, run history, and configuration

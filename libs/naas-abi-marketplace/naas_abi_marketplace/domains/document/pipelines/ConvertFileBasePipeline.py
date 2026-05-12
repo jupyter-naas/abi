@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated
 
-# PyMuPDF is used to convert the PDF to markdown
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.utils.Expose import APIRouter
@@ -17,16 +16,24 @@ from rdflib import Graph
 
 
 @dataclass
-class ConvertToMarkdownBasePipelineConfiguration(PipelineConfiguration):
-    """Configuration for ConvertToMarkdownBasePipeline."""
+class ConvertFileBasePipelineConfiguration(PipelineConfiguration):
+    """Configuration for ConvertFileBasePipeline."""
 
     mime_type: Annotated[
         str,
-        Field(description="The MIME type of the files to convert to markdown."),
+        Field(description="The MIME type of the files to convert."),
+    ]
+    output_mime_type: Annotated[
+        str,
+        Field(description="The MIME type of the converted output files."),
+    ]
+    output_extension: Annotated[
+        str,
+        Field(description="The file extension (including dot) appended to converted files."),
     ]
 
 
-class ConvertToMarkdownBasePipelineParameters(PipelineParameters):
+class ConvertFileBasePipelineParameters(PipelineParameters):
     graph_name: Annotated[
         str,
         Field(description="The graph name to ingest the files to."),
@@ -37,23 +44,22 @@ class ConvertToMarkdownBasePipelineParameters(PipelineParameters):
     ]
 
 
-class ConvertToMarkdownBasePipeline(Pipeline):
-    """Pipeline for adding a named individual."""
+class ConvertFileBasePipeline(Pipeline):
+    """Base pipeline for converting files from one format to another."""
 
-    __configuration: ConvertToMarkdownBasePipelineConfiguration
+    __configuration: ConvertFileBasePipelineConfiguration
     module: ABIModule
 
-    def __init__(self, configuration: ConvertToMarkdownBasePipelineConfiguration):
+    def __init__(self, configuration: ConvertFileBasePipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.module = ABIModule.get_instance()
 
-    def convert_to_markdown(self, file: File) -> str:
+    def convert(self, file: File) -> str:
         raise NotImplementedError("This method should be implemented by the subclass")
 
     def run(self, parameters: PipelineParameters) -> Graph:
-        # Implement the pipeline logic here.
-        assert isinstance(parameters, ConvertToMarkdownBasePipelineParameters)
+        assert isinstance(parameters, ConvertFileBasePipelineParameters)
 
         files_to_process = get_files_to_process(
             parameters.graph_name,
@@ -69,13 +75,13 @@ class ConvertToMarkdownBasePipeline(Pipeline):
                 query_executor=self.module.engine.services.triple_store.query,
                 graph_name=parameters.graph_name,
             )
-            md_content = self.convert_to_markdown(f)
+            converted_content = self.convert(f)
             new_file = File.UploadAndCreateFile(
-                content=md_content.encode("utf-8"),
-                filename=f.file_name + ".md",
+                content=converted_content.encode("utf-8"),
+                filename=f.file_name + self.__configuration.output_extension,
                 graph_name=parameters.graph_name,
                 destination_path=os.path.join(os.path.dirname(f.file_path)),
-                mime_type="text/markdown",
+                mime_type=self.__configuration.output_mime_type,
                 kwargs={
                     "derivedFrom": [f._uri],
                     "processedBy": [parameters.processor_iri],
@@ -98,12 +104,12 @@ class ConvertToMarkdownBasePipeline(Pipeline):
     def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ConvertToMarkdownBase",
+                name="ConvertFileBase",
                 description="Description of what the pipeline does",
                 func=lambda **kwargs: self.run(
-                    ConvertToMarkdownBasePipelineParameters(**kwargs)
+                    ConvertFileBasePipelineParameters(**kwargs)
                 ),
-                args_schema=ConvertToMarkdownBasePipelineParameters,
+                args_schema=ConvertFileBasePipelineParameters,
             )
         ]
 
