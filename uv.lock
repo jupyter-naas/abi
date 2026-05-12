@@ -3522,7 +3522,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "1.28.3"
+version = "1.29.0"
 source = { editable = "libs/naas-abi-cli" }
 dependencies = [
     { name = "naas-abi" },
