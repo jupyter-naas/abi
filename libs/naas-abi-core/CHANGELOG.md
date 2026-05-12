@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.36.2 (2026-05-12)
+
+### Performance Improvements
+
+- Cut API boot time from ~13.8s to ~9.9s
+  ([`b9bd744`](https://github.com/jupyter-naas/abi/commit/b9bd7443a52e516bad240e9a33286d2381c0bac9))
+
+
+## v1.36.1 (2026-05-12)
+
+### Bug Fixes
+
+- **agent**: Return non-empty response content early
+  ([`6a40d0f`](https://github.com/jupyter-naas/abi/commit/6a40d0fa5311231a1c9131568f41d5e85c3657a5))
+
+
 ## v1.36.0 (2026-05-08)
 
 

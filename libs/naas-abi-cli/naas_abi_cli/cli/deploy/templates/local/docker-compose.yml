@@ -406,38 +406,38 @@ services:
   # -----------------------------------------------------------------------------
   # Matrix (Synapse) - Federated Messaging Server
   # -----------------------------------------------------------------------------
-  matrix:
-    image: matrixdotorg/synapse:latest
-    pull_policy: always
-    restart: unless-stopped
-    environment:
-      SYNAPSE_SERVER_NAME: localhost
-      SYNAPSE_REPORT_STATS: "no"
-    ports:
-      - 8008:8008  # Matrix client-server API - http://localhost:8008
-      - 8448:8448  # Matrix federation API
-    volumes:
-      - synapse_data:/data
-      - ./.deploy/docker/synapse/bootstrap.sh:/bootstrap.sh:ro
-    entrypoint: ["/bin/sh", "/bootstrap.sh"]
-    networks:
-      - abi-network
+  # matrix:
+  #   image: matrixdotorg/synapse:latest
+  #   pull_policy: always
+  #   restart: unless-stopped
+  #   environment:
+  #     SYNAPSE_SERVER_NAME: localhost
+  #     SYNAPSE_REPORT_STATS: "no"
+  #   ports:
+  #     - 8008:8008  # Matrix client-server API - http://localhost:8008
+  #     - 8448:8448  # Matrix federation API
+  #   volumes:
+  #     - synapse_data:/data
+  #     - ./.deploy/docker/synapse/bootstrap.sh:/bootstrap.sh:ro
+  #   entrypoint: ["/bin/sh", "/bootstrap.sh"]
+  #   networks:
+  #     - abi-network
 
   # -----------------------------------------------------------------------------
   # Element Web - Matrix Client
   # -----------------------------------------------------------------------------
-  element-web:
-    image: vectorim/element-web:latest
-    pull_policy: always
-    restart: unless-stopped
-    ports:
-      - 8081:80  # Element web client - http://localhost:8081
-    volumes:
-      - ./.deploy/docker/element-config.json:/app/config.json:ro
-    depends_on:
-      - matrix
-    networks:
-      - abi-network
+  # element-web:
+  #   image: vectorim/element-web:latest
+  #   pull_policy: always
+  #   restart: unless-stopped
+  #   ports:
+  #     - 8081:80  # Element web client - http://localhost:8081
+  #   volumes:
+  #     - ./.deploy/docker/element-config.json:/app/config.json:ro
+  #   depends_on:
+  #     - matrix
+  #   networks:
+  #     - abi-network
 
   # -----------------------------------------------------------------------------
   # Service Portal - Single-page navigation for all HTTP UIs
@@ -537,7 +537,7 @@ volumes:
   minio_data:     # MinIO object storage data
   rabbitmq_data:  # RabbitMQ message bus data
   redis_data:     # Redis persistence data
-  synapse_data:   # Matrix Synapse data
+  # synapse_data:   # Matrix Synapse data
   caddy_data:     # Caddy certificates and ACME data
   caddy_config:   # Caddy runtime configuration
 

@@ -1,3 +1,5 @@
+import threading
+import weakref
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from enum import Enum
@@ -6,6 +8,7 @@ from typing import Any, Optional, Tuple
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 
@@ -41,6 +44,11 @@ class IntentMapper:
     system_prompt: str
     embedding_workers: int
 
+    # Weak refs to every live IntentMapper so a single helper can warm them
+    # all from a background thread after API boot completes.
+    _instances: "weakref.WeakSet[IntentMapper]" = weakref.WeakSet()
+    _instances_lock = threading.Lock()
+
     def __init__(
         self,
         intents: list[Intent],
@@ -56,18 +64,80 @@ class IntentMapper:
         self.vector_store = None
         self.embedding_workers = max(1, int(embedding_workers))
 
-        # if embedding_model is None:
-        #     logger.warning(
-        #         "No embedding_model provided to IntentMapper; using default OpenAIEmbeddings "
-        #         "model='text-embedding-3-large'."
-        #     )
-        # if model is None:
-        #     logger.warning(
-        #         "No model provided to IntentMapper; using default ChatOpenAI model='gpt-4.1-mini'."
-        #     )
+        # Lazy-index state. Embedding + Qdrant upsert used to happen here in
+        # __init__; cProfile showed it cost ~280ms per agent (mostly Qdrant
+        # client-side pydantic schema work) and was the dominant boot cost
+        # when constructing many agents. We defer the work to the first
+        # `map_intent` / `map_prompt` call. The lock guards against two
+        # concurrent requests racing the first-time build. In production a
+        # background warmup thread (see `warm_all`) typically builds the
+        # index before any request arrives, so the latency is invisible.
+        self._index_lock = threading.Lock()
+        self._index_built = False
 
-        intents_values = [intent.intent_value for intent in intents]
-        if len(intents_values) > 0:
+        with IntentMapper._instances_lock:
+            IntentMapper._instances.add(self)
+
+        # Set the system prompt
+        self.system_prompt = """
+You are an intent mapper. The user will send you a prompt and you should output the intent and the intent only. If the user references a technology, you must have the name of the technology in the intent.
+
+Example:
+User: 3 / 4 + 5
+You: calculate an arithmetic result
+
+User: I need to write a report about the latest trends in AI.
+You: write a report
+
+User: I need to code a project.
+You: code a project
+"""
+
+    @classmethod
+    def warm_all_in_background(cls) -> threading.Thread:
+        """Start a daemon thread that builds the vector index for every live
+        IntentMapper instance. Returns the thread (for tests / instrumentation).
+
+        Safe to call multiple times — `_ensure_index` is idempotent. If a
+        chat request races the warmup, the request's call to `_ensure_index`
+        will block briefly on the same lock and reuse the result.
+        """
+
+        def _warm():
+            with cls._instances_lock:
+                mappers = list(cls._instances)
+            logger.debug(
+                f"Warming intent index for {len(mappers)} IntentMapper instances "
+                f"in background."
+            )
+            for mapper in mappers:
+                try:
+                    mapper._ensure_index()
+                except Exception as exc:
+                    logger.warning(
+                        f"Background intent-index warmup failed for one mapper: {exc}"
+                    )
+            logger.debug("Intent index background warmup complete.")
+
+        thread = threading.Thread(
+            target=_warm, name="intent-index-warmup", daemon=True
+        )
+        thread.start()
+        return thread
+
+    def _ensure_index(self) -> None:
+        """Build the vector index on first use. Idempotent and thread-safe."""
+        if self._index_built:
+            return
+        with self._index_lock:
+            if self._index_built:
+                return
+
+            intents_values = [intent.intent_value for intent in self.intents]
+            if len(intents_values) == 0:
+                self._index_built = True
+                return
+
             if len(intents_values) <= 1 or self.embedding_workers <= 1:
                 vectors = self._embed_documents(intents_values)
             else:
@@ -104,21 +174,7 @@ class IntentMapper:
                 embeddings=vectors,
                 metadatas=metadatas,
             )
-
-        # Set the system prompt
-        self.system_prompt = """
-You are an intent mapper. The user will send you a prompt and you should output the intent and the intent only. If the user references a technology, you must have the name of the technology in the intent.
-
-Example:
-User: 3 / 4 + 5
-You: calculate an arithmetic result
-
-User: I need to write a report about the latest trends in AI.
-You: write a report
-
-User: I need to code a project.
-You: code a project
-"""
+            self._index_built = True
 
     def get_intent_from_value(self, value: str) -> Intent | None:
         for intent in self.intents:
@@ -137,6 +193,7 @@ You: code a project
         return self._embedding_model.embed_query(text)
 
     def map_intent(self, intent: str, k: int = 1) -> list[dict]:
+        self._ensure_index()
         if self.vector_store is None:
             return []
 

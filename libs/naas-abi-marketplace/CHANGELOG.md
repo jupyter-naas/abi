@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.17.4 (2026-05-12)
+
+### Performance Improvements
+
+- Cut API boot time from ~13.8s to ~9.9s
+  ([`b9bd744`](https://github.com/jupyter-naas/abi/commit/b9bd7443a52e516bad240e9a33286d2381c0bac9))
+
+
+## v1.17.3 (2026-05-12)
+
+### Bug Fixes
+
+- **git-agent**: Update commit message for lockfile handling
+  ([`ca05cf3`](https://github.com/jupyter-naas/abi/commit/ca05cf3c5386b8b1a08d2018dccdb9138a66d54f))
+
+- **naas_abi_marketplace**: Update GitAgent.py logic in decision rules
+  ([`a06cbcb`](https://github.com/jupyter-naas/abi/commit/a06cbcb72e8fc38f4bbbd41742f3a20c26e47828))
+
+
 ## v1.17.2 (2026-05-08)
 
 ### Bug Fixes
