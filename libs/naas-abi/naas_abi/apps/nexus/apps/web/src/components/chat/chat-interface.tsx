@@ -63,6 +63,22 @@ function linkifyText(text: string, isUser: boolean): React.ReactNode {
   return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts;
 }
 
+/** Wrap bare URLs (not already in [text](url) syntax) as [domain](url) markdown links. */
+function transformBareUrls(content: string): string {
+  return content.replace(
+    /(?<!\]\()https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g,
+    (url) => {
+      try {
+        const h = new URL(url).hostname;
+        const domain = h.startsWith('www.') ? h.slice(4) : h;
+        return `[${domain}](${url})`;
+      } catch {
+        return url;
+      }
+    }
+  );
+}
+
 /** Extract unique HTTP(S) URLs from message content (markdown links + bare URLs). */
 function extractUrlsFromContent(content: string): string[] {
   if (!content) return [];
@@ -86,16 +102,79 @@ function isLoginRequiredDomain(url: string): boolean {
   }
 }
 
-/** Right-side preview panel — iframe for public pages, auth message for login-gated ones. */
-function PreviewPanel({ url, onClose }: { url: string; onClose: () => void }) {
+/** Right-side preview panel — tries direct iframe, falls back to backend proxy, closes + opens new tab if both fail. */
+function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => void; width: number }) {
   const [reloadKey, setReloadKey] = useState(0);
-  const needsLogin = isLoginRequiredDomain(url);
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'proxy-loading' | 'proxy-loaded'>('loading');
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const usingProxyRef = useRef(false);
+  const token = useAuthStore((s) => s.token);
   const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+  const proxyUrl = `${getApiBase()}/api/proxy/page?url=${encodeURIComponent(url)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+
+  useEffect(() => {
+    usingProxyRef.current = false;
+    setLoadState('loading');
+    setReloadKey((k) => k + 1);
+  }, [url]);
+
+  const handleLoad = useCallback(() => {
+    if (usingProxyRef.current) {
+      // Proxy is same-origin with the API, so contentDocument always throws — treat as loaded.
+      setLoadState('proxy-loaded');
+      return;
+    }
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (doc && (!doc.body || doc.body.innerHTML === '')) {
+        // Blocked by X-Frame-Options / CSP — try backend proxy.
+        usingProxyRef.current = true;
+        setLoadState('proxy-loading');
+        setReloadKey((k) => k + 1);
+      } else {
+        setLoadState('loaded');
+      }
+    } catch {
+      // SecurityError = cross-origin page loaded fine.
+      setLoadState('loaded');
+    }
+  }, []);
+
+  // If proxy itself reports empty (shouldn't happen, but defensive): close panel + open new tab.
+  const handleProxyLoad = useCallback(() => {
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (doc && (!doc.body || doc.body.innerHTML === '')) {
+        onClose();
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+    } catch {
+      // SecurityError = different-origin proxy = loaded fine (expected path).
+    }
+    setLoadState('proxy-loaded');
+  }, [url, onClose]);
+
+  const handleReload = () => {
+    usingProxyRef.current = false;
+    setLoadState('loading');
+    setReloadKey((k) => k + 1);
+  };
+
+  const isLoading = loadState === 'loading' || loadState === 'proxy-loading';
+  const isSrc = usingProxyRef.current ? proxyUrl : url;
+  const onLoadHandler = usingProxyRef.current ? handleProxyLoad : handleLoad;
 
   return (
-    <div className="flex w-[45%] min-w-[340px] max-w-[640px] flex-col border-l border-border bg-background">
+    <div className="flex flex-col border-border bg-background" style={{ width, minWidth: 280, maxWidth: 900 }}>
+      {/* Header */}
       <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{domain}</span>
+        {loadState === 'proxy-loaded' && (
+          <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+            via proxy
+          </span>
+        )}
         <a
           href={url}
           target="_blank"
@@ -105,16 +184,14 @@ function PreviewPanel({ url, onClose }: { url: string; onClose: () => void }) {
         >
           <ExternalLink size={14} />
         </a>
-        {!needsLogin && (
-          <button
-            type="button"
-            onClick={() => setReloadKey((k) => k + 1)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Reload"
-          >
-            <RefreshCw size={13} />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleReload}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Reload"
+        >
+          <RefreshCw size={13} />
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -124,34 +201,27 @@ function PreviewPanel({ url, onClose }: { url: string; onClose: () => void }) {
           <X size={14} />
         </button>
       </div>
-      {needsLogin ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <AlertCircle size={20} />
+
+      {/* Body */}
+      <div className="relative flex-1">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background">
+            <Loader2 size={20} className="animate-spin text-muted-foreground" />
+            {loadState === 'proxy-loading' && (
+              <p className="text-xs text-muted-foreground">Loading via proxy…</p>
+            )}
           </div>
-          <p className="text-sm font-medium">Authentication required</p>
-          <p className="text-xs text-muted-foreground max-w-[260px]">
-            This page requires you to be logged in and cannot be previewed here.
-          </p>
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
-          >
-            <ExternalLink size={12} />
-            Open in new tab
-          </a>
-        </div>
-      ) : (
+        )}
         <iframe
           key={reloadKey}
-          src={url}
+          ref={iframeRef}
+          src={isSrc}
           title={domain}
-          className="h-full w-full flex-1 border-none"
+          className="h-full w-full border-none"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          onLoad={onLoadHandler}
         />
-      )}
+      </div>
     </div>
   );
 }
@@ -263,6 +333,11 @@ export function ChatInterface() {
   const [ingestionJobs, setIngestionJobs] = useState<Map<string, {filename: string; status: string; progress?: number; error?: string; conversationId: string}>>(new Map());
   const ingestionAbortRefs = useRef<Map<string, AbortController>>(new Map());
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(420);
+  const [isPanelDragging, setIsPanelDragging] = useState(false);
+  const isPanelDraggingRef = useRef(false);
+  const panelDragStartXRef = useRef(0);
+  const panelDragStartWidthRef = useRef(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1046,6 +1121,43 @@ export function ChatInterface() {
     };
   }, [stopVoiceStream]);
 
+  // Panel resize — global pointer handlers so the drag keeps working even when
+  // the cursor leaves the handle strip.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isPanelDraggingRef.current) return;
+      const delta = panelDragStartXRef.current - e.clientX;
+      setPanelWidth(Math.max(280, Math.min(900, panelDragStartWidthRef.current + delta)));
+    };
+    const onUp = () => {
+      if (!isPanelDraggingRef.current) return;
+      isPanelDraggingRef.current = false;
+      setIsPanelDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      // Clean up in case component unmounts mid-drag
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, []);
+
+  const handlePanelDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isPanelDraggingRef.current = true;
+    setIsPanelDragging(true);
+    panelDragStartXRef.current = e.clientX;
+    panelDragStartWidthRef.current = panelWidth;
+    // Lock cursor and disable text selection for the entire page during drag
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [panelWidth]);
+
   const handleSubmit = async (
     e?: React.FormEvent,
     messageOverride?: string,
@@ -1676,7 +1788,7 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-1 min-h-0">
+    <div className="flex flex-1 min-h-0 relative">
     {/* Chat column */}
     <div className="flex flex-1 flex-col min-h-0 min-w-0">
       {/* Messages area */}
@@ -2102,9 +2214,30 @@ export function ChatInterface() {
         </div>
       </div>
     </div>
-    {/* Preview panel — right side */}
+    {/* Full-viewport overlay during drag — keeps mouse events away from the iframe */}
+    {isPanelDragging && (
+      <div className="fixed inset-0 z-50 cursor-col-resize" />
+    )}
+
+    {/* Drag handle + preview panel */}
     {previewUrl && (
-      <PreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} />
+      <>
+        {/* Resize handle — 8 px hit-area with a 1 px visible line in the centre */}
+        <div
+          className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center"
+          onMouseDown={handlePanelDragStart}
+        >
+          {/* Visible line */}
+          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border group-hover:bg-workspace-accent transition-colors" />
+          {/* Grip dots centred on the line */}
+          <div className="relative z-10 flex flex-col gap-[5px]">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-[3px] w-[3px] rounded-full bg-muted-foreground/40 group-hover:bg-workspace-accent transition-colors" />
+            ))}
+          </div>
+        </div>
+        <PreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} width={panelWidth} />
+      </>
     )}
     </div>
   );
@@ -2778,7 +2911,7 @@ const MessageBubble = React.memo(function MessageBubble({
             </div>
           ) : (
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {responseForDisplay}
+              {transformBareUrls(responseForDisplay as string)}
             </ReactMarkdown>
           )}
         </div>
@@ -2805,21 +2938,23 @@ const MessageBubble = React.memo(function MessageBubble({
             <div className="space-y-1">
               {contentUrls.map((url, i) => {
                 const needsLogin = isLoginRequiredDomain(url);
-                const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+                // Strip query params for display (keep path only)
+                const displayUrl = url.split('?')[0];
                 return (
                   <button
                     key={url}
                     type="button"
-                    onClick={() => onPreviewUrl?.(url)}
+                    onClick={() => {
+                      if (needsLogin) {
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      } else {
+                        onPreviewUrl?.(url);
+                      }
+                    }}
                     className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted"
                   >
                     <span className="w-4 shrink-0 text-center tabular-nums text-muted-foreground">{i + 1}</span>
-                    <span className="flex-1 truncate font-medium text-foreground">{domain}</span>
-                    {needsLogin && (
-                      <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                        Login
-                      </span>
-                    )}
+                    <span className="flex-1 truncate font-medium text-foreground">{displayUrl}</span>
                     <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                   </button>
                 );
