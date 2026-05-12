@@ -339,7 +339,7 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
                     else:
                         df = df.sort_values("uri", ascending=True)
                     df.to_excel(writer, sheet_name=sheet_name, index=False)
-                    writer = self.autofit_columns(writer, sheet_name)
+                    writer = self.autofit_columns(writer, sheet_name)  # type: ignore[assignment,arg-type]
 
                 summary_data.append(
                     {
@@ -362,7 +362,7 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
             summary_df.to_excel(writer, sheet_name="Classes", index=False)
             sheet = writer.sheets["Classes"]
             sheet.sheet_properties.tabColor = "000000"
-            writer = self.autofit_columns(writer, "Classes")
+            writer = self.autofit_columns(writer, "Classes")  # type: ignore[assignment,arg-type]
 
             # Create Object Properties
             object_properties_summary = []
@@ -375,7 +375,7 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
                         ["domain_class", "domain_label", "range_label"]
                     )
                     prop_df.to_excel(writer, sheet_name=sheet_name, index=False)
-                    writer = self.autofit_columns(writer, sheet_name)
+                    writer = self.autofit_columns(writer, sheet_name)  # type: ignore[assignment,arg-type]
 
                     object_properties_summary.append(
                         {
@@ -399,7 +399,7 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
             )
             sheet = writer.sheets["Object Properties"]
             sheet.sheet_properties.tabColor = "000000"
-            writer = self.autofit_columns(writer, "Object Properties")
+            writer = self.autofit_columns(writer, "Object Properties")  # type: ignore[assignment,arg-type]
 
             # Save data to storage and create download URL
             buffer = BytesIO()

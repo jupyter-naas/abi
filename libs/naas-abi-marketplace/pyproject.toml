@@ -154,4 +154,5 @@ domains-ontology-engineer = [
 domains-document = [
     "pymupdf>=1.27.2.2",
     "pymupdf4llm>=1.27.2.2",
+    "docling>=2.0.0",
 ]

@@ -8,10 +8,10 @@ from xml.etree import ElementTree as ET
 from naas_abi_marketplace.domains.document.ontologies.classes.ontology_naas_ai.abi.document.File import (
     File,
 )
-from naas_abi_marketplace.domains.document.pipelines.ConvertToMarkdownBasePipeline import (
-    ConvertToMarkdownBasePipeline,
-    ConvertToMarkdownBasePipelineConfiguration,
-    ConvertToMarkdownBasePipelineParameters,
+from naas_abi_marketplace.domains.document.pipelines.ConvertFileBasePipeline import (
+    ConvertFileBasePipeline,
+    ConvertFileBasePipelineConfiguration,
+    ConvertFileBasePipelineParameters,
 )
 from pydantic import Field
 
@@ -20,23 +20,31 @@ _DOCX_NS_MAP = {"w": _DOCX_NS}
 
 
 @dataclass
-class DocxToMarkdownPipelineConfiguration(ConvertToMarkdownBasePipelineConfiguration):
+class DocxToMarkdownPipelineConfiguration(ConvertFileBasePipelineConfiguration):
     """Configuration for DocxToMarkdownPipeline."""
 
     mime_type: Annotated[
         str,
         Field(description="The MIME type of the files to convert to markdown."),
     ] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    output_mime_type: Annotated[
+        str,
+        Field(description="The MIME type of the converted output files."),
+    ] = "text/markdown"
+    output_extension: Annotated[
+        str,
+        Field(description="The file extension appended to converted files."),
+    ] = ".md"
 
 
-class DocxToMarkdownPipelineParameters(ConvertToMarkdownBasePipelineParameters):
+class DocxToMarkdownPipelineParameters(ConvertFileBasePipelineParameters):
     processor_iri: Annotated[
         str,
         Field(description="The IRI of the file ingestion processor."),
     ] = "http://ontology.naas.ai/abi/document/DocxToMarkdownProcessor"
 
 
-class DocxToMarkdownPipeline(ConvertToMarkdownBasePipeline):
+class DocxToMarkdownPipeline(ConvertFileBasePipeline):
     """Pipeline converting DOCX files to markdown content."""
 
     @staticmethod
@@ -83,7 +91,7 @@ class DocxToMarkdownPipeline(ConvertToMarkdownBasePipeline):
 
         return text
 
-    def convert_to_markdown(self, file: File) -> str:
+    def convert(self, file: File) -> str:
         content = file.read()
         root = self._extract_document_root(content)
 

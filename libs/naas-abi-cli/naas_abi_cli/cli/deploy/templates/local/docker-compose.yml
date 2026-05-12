@@ -51,6 +51,7 @@ x-abi-template: &abi_template
     # - ./.env:/app/.env
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
+    - huggingface_cache:/root/.cache/huggingface  # Docling / HF model weights
   environment:
     - ENV=local
     - LOG_LEVEL=DEBUG
@@ -524,6 +525,7 @@ services:
 
 volumes:
   venv_cache:     # Python virtual environment cache for faster startup
+  huggingface_cache: # Hugging Face model cache (docling layout / table models)
   fuseki_data:    # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   dagster_home:   # Dagster metadata, run history, and configuration
