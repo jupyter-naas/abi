@@ -10,6 +10,7 @@ from datetime import datetime
 from naas_abi.apps.nexus.apps.api.app.core.database import Base
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -585,6 +586,8 @@ class AgentConfigModel(Base):
     )  # Provider name (xai, openai, anthropic, etc.)
     is_default = Column(Integer, nullable=False, default=0)
     enabled = Column(Boolean, nullable=False, default=False)  # Whether agent is available for chat
+    suggestions = Column(JSON, nullable=True)  # [{label, value}, ...]
+    intents = Column(JSON, nullable=True)  # [{intent_value, intent_type, ...}, ...]
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

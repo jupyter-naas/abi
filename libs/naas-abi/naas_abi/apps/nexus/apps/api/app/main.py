@@ -28,25 +28,21 @@ from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
-async def _prefetch_agent_class_registry() -> None:
-    """Warm up the agent class registry in a thread-pool worker.
+async def _seed_abi_agents() -> None:
+    """Build the agent class registry and upsert agents for all workspaces.
 
-    The registry build triggers dynamic imports of all ~160 agent modules, which
-    is synchronous and CPU/IO-bound.  Running it via run_in_executor keeps the
-    event loop free during startup while ensuring the cache is hot before the
-    first GET /agents/ request arrives.
+    Runs in a background task so it does not block the event loop during
+    startup.  Any failure is logged but non-fatal — agents already in the DB
+    remain available.
     """
     _log = logging.getLogger(__name__)
     try:
-        from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
-            _get_agent_class_registry,
-        )
+        from naas_abi.apps.nexus.apps.api.app.core.agent_seed import seed_abi_agents
 
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _get_agent_class_registry)
-        _log.info("✓ Agent class registry pre-populated at startup")
+        await seed_abi_agents()
+        _log.info("✓ ABI agent seed complete")
     except Exception:
-        _log.exception("Background agent registry pre-fetch failed (non-fatal)")
+        _log.exception("ABI agent seed failed (non-fatal)")
 
 
 async def _startup(app: FastAPI) -> None:
@@ -88,10 +84,10 @@ async def _startup(app: FastAPI) -> None:
     except Exception:
         logging.getLogger(__name__).exception("Unable to start chat ingestion consumer")
 
-    # Pre-populate the agent class registry in the background so the first
-    # GET /agents/ request returns instantly from cache instead of waiting
-    # for all agent modules to be imported.  create_task returns immediately.
-    asyncio.create_task(_prefetch_agent_class_registry())
+    # Seed ABI agents into the database in the background.  The task builds the
+    # class registry (once) and upserts all agent metadata per workspace so
+    # GET /agents/ only needs to query the DB.
+    asyncio.create_task(_seed_abi_agents())
 
     # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
     # print("Checking Ollama status...")
