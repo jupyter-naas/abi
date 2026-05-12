@@ -8,10 +8,10 @@ from xml.etree import ElementTree as ET
 from naas_abi_marketplace.domains.document.ontologies.classes.ontology_naas_ai.abi.document.File import (
     File,
 )
-from naas_abi_marketplace.domains.document.pipelines.ConvertToMarkdownBasePipeline import (
-    ConvertToMarkdownBasePipeline,
-    ConvertToMarkdownBasePipelineConfiguration,
-    ConvertToMarkdownBasePipelineParameters,
+from naas_abi_marketplace.domains.document.pipelines.ConvertFileBasePipeline import (
+    ConvertFileBasePipeline,
+    ConvertFileBasePipelineConfiguration,
+    ConvertFileBasePipelineParameters,
 )
 from pydantic import Field
 
@@ -21,23 +21,31 @@ _NS_MAP = {"p": _P_NS, "a": _A_NS}
 
 
 @dataclass
-class PptxToMarkdownPipelineConfiguration(ConvertToMarkdownBasePipelineConfiguration):
+class PptxToMarkdownPipelineConfiguration(ConvertFileBasePipelineConfiguration):
     """Configuration for PptxToMarkdownPipeline."""
 
     mime_type: Annotated[
         str,
         Field(description="The MIME type of the files to convert to markdown."),
     ] = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    output_mime_type: Annotated[
+        str,
+        Field(description="The MIME type of the converted output files."),
+    ] = "text/markdown"
+    output_extension: Annotated[
+        str,
+        Field(description="The file extension appended to converted files."),
+    ] = ".md"
 
 
-class PptxToMarkdownPipelineParameters(ConvertToMarkdownBasePipelineParameters):
+class PptxToMarkdownPipelineParameters(ConvertFileBasePipelineParameters):
     processor_iri: Annotated[
         str,
         Field(description="The IRI of the file ingestion processor."),
     ] = "http://ontology.naas.ai/abi/document/PptxToMarkdownProcessor"
 
 
-class PptxToMarkdownPipeline(ConvertToMarkdownBasePipeline):
+class PptxToMarkdownPipeline(ConvertFileBasePipeline):
     """Pipeline converting PPTX files to markdown content."""
 
     @staticmethod
@@ -78,7 +86,7 @@ class PptxToMarkdownPipeline(ConvertToMarkdownBasePipeline):
 
         return lines
 
-    def convert_to_markdown(self, file: File) -> str:
+    def convert(self, file: File) -> str:
         content = file.read()
         markdown_parts: list[str] = []
 
