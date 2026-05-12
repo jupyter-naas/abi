@@ -85,7 +85,7 @@ class TestCacheKey:
         )
         # Bypass ABIModule singleton by constructing without calling __init__
         pipeline = object.__new__(MarkdownToVectorPipeline)
-        pipeline._MarkdownToVectorPipeline__configuration = config
+        pipeline._configuration = config
         return pipeline
 
     def test_key_format(self):
@@ -154,7 +154,7 @@ class TestEmbeddingCache:
             model_id="test-model", dimension=4
         )
         pipeline = object.__new__(MarkdownToVectorPipeline)
-        pipeline._MarkdownToVectorPipeline__configuration = config
+        pipeline._configuration = config
         pipeline.module = FakeModule(fake_kv)
         return pipeline, fake_kv
 

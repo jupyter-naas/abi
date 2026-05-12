@@ -5,6 +5,7 @@ from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestrati
 from naas_abi_marketplace.domains.document import (
     ABIModule,
     FileIngestionConfiguration,
+    HtmlToVectorConfiguration,
     MarkdownToVectorConfiguration,
 )
 
@@ -159,8 +160,29 @@ def _build_pdftohtml_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition
             PdfToHtmlPipelineParameters,
         )
 
+        module = ABIModule.get_instance()
+        img_desc = getattr(
+            module.configuration, "pdftohtml_image_description", None
+        )
+
+        config_kwargs: dict = {}
+        if img_desc is not None:
+            config_kwargs.update(
+                {
+                    "image_description_api_key": img_desc.api_key,
+                    "image_description_base_url": img_desc.base_url,
+                    "image_description_model": img_desc.model,
+                    "image_description_prompt": img_desc.prompt,
+                    "image_description_concurrency": img_desc.concurrency,
+                    "image_description_timeout_seconds": img_desc.timeout_seconds,
+                    "image_description_picture_area_threshold": (
+                        img_desc.picture_area_threshold
+                    ),
+                }
+            )
+
         parameters = PdfToHtmlPipelineParameters()
-        pipeline = PdfToHtmlPipeline(PdfToHtmlPipelineConfiguration())
+        pipeline = PdfToHtmlPipeline(PdfToHtmlPipelineConfiguration(**config_kwargs))
         pipeline.run(parameters)
 
     graph_name = "pdftohtml_graph"
@@ -317,7 +339,7 @@ def _build_markdowntovector_job_sensor(
                 api_key=config.api_key,
             )
         )
-        markdown_files = pipeline._get_markdown_files(DEFAULT_GRAPH_NAME)
+        markdown_files = pipeline._get_files_to_process(DEFAULT_GRAPH_NAME)
         for file_info in markdown_files:
             if not pipeline._chunk_already_vectorized(
                 file_info["iri"], DEFAULT_GRAPH_NAME
@@ -328,6 +350,84 @@ def _build_markdowntovector_job_sensor(
         )
 
     return job, markdowntovector_sensor
+
+
+def _build_htmltovector_job_sensor(
+    config: HtmlToVectorConfiguration,
+) -> tuple[dg.JobDefinition, dg.SensorDefinition]:
+    safe_name = re.sub(r"[^a-zA-Z0-9]", "_", config.collection_name)
+    if config.file_path:
+        safe_name += "_" + re.sub(r"[^a-zA-Z0-9]", "_", config.file_path)
+
+    @dg.op(name=f"htmltovector_{safe_name}")
+    def htmltovector_op():
+        from naas_abi_marketplace.domains.document.pipelines.HtmlToVectorPipeline import (
+            HtmlToVectorPipeline,
+            HtmlToVectorPipelineConfiguration,
+            HtmlToVectorPipelineParameters,
+        )
+
+        pipeline_config = HtmlToVectorPipelineConfiguration(
+            collection_name=config.collection_name,
+            file_path=config.file_path,
+            model_id=config.model_id,
+            dimension=config.dimension,
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+            api_key=config.api_key,
+        )
+        pipeline = HtmlToVectorPipeline(pipeline_config)
+        pipeline.run(HtmlToVectorPipelineParameters())
+
+    graph_name = f"htmltovector_graph_{safe_name}"
+    graph = dg.GraphDefinition(name=graph_name, node_defs=[htmltovector_op])
+    job = graph.to_job(name=graph_name)
+
+    @dg.sensor(
+        name=f"htmltovector_sensor_{safe_name}",
+        description=(
+            f"Sensor to trigger HtmlToVector pipeline for collection "
+            f"'{config.collection_name}'"
+            + (
+                f" filtered by file_path '{config.file_path}'"
+                if config.file_path
+                else ""
+            )
+        ),
+        job=job,
+        minimum_interval_seconds=120,
+    )
+    def htmltovector_sensor(context):
+        from naas_abi_marketplace.domains.document.pipelines.HtmlToVectorPipeline import (
+            HtmlToVectorPipeline,
+            HtmlToVectorPipelineConfiguration,
+        )
+
+        if _has_in_progress_run(context, graph_name):
+            return dg.SkipReason(f"Job '{graph_name}' is already running.")
+
+        pipeline = HtmlToVectorPipeline(
+            HtmlToVectorPipelineConfiguration(
+                collection_name=config.collection_name,
+                file_path=config.file_path,
+                model_id=config.model_id,
+                dimension=config.dimension,
+                chunk_size=config.chunk_size,
+                chunk_overlap=config.chunk_overlap,
+                api_key=config.api_key,
+            )
+        )
+        html_files = pipeline._get_files_to_process(DEFAULT_GRAPH_NAME)
+        for file_info in html_files:
+            if not pipeline._chunk_already_vectorized(
+                file_info["iri"], DEFAULT_GRAPH_NAME
+            ):
+                return [dg.RunRequest(run_key=None)]
+        return dg.SkipReason(
+            f"No unvectorized HTML files for collection '{config.collection_name}'."
+        )
+
+    return job, htmltovector_sensor
 
 
 class DocumentOrchestration(DagsterOrchestration):
@@ -370,6 +470,13 @@ class DocumentOrchestration(DagsterOrchestration):
 
         for mtv_config in module.configuration.markdowntovector_pipelines:
             job, sensor = _build_markdowntovector_job_sensor(mtv_config)
+            jobs.append(job)
+            sensors.append(sensor)
+
+        for htv_config in getattr(
+            module.configuration, "htmltovector_pipelines", []
+        ):
+            job, sensor = _build_htmltovector_job_sensor(htv_config)
             jobs.append(job)
             sensors.append(sensor)
 
