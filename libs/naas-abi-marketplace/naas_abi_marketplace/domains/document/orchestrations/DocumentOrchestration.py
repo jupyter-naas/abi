@@ -12,6 +12,7 @@ DEFAULT_GRAPH_NAME = "http://ontology.naas.ai/graph/document"
 
 PDF_MIME_TYPE = "application/pdf"
 PDF_PROCESSOR_IRI = "http://ontology.naas.ai/abi/document/PDFToMarkdownProcessor"
+PDF_HTML_PROCESSOR_IRI = "http://ontology.naas.ai/abi/document/PDFToHTMLProcessor"
 
 DOCX_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -147,6 +148,40 @@ def _build_pdftomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefini
         return [dg.RunRequest(run_key=None)]
 
     return job, pdftomarkdown_sensor
+
+
+def _build_pdftohtml_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
+    @dg.op(name="pdftohtml_pipeline")
+    def pdftohtml_op():
+        from naas_abi_marketplace.domains.document.pipelines.PdfToHtmlPipeline import (
+            PdfToHtmlPipeline,
+            PdfToHtmlPipelineConfiguration,
+            PdfToHtmlPipelineParameters,
+        )
+
+        parameters = PdfToHtmlPipelineParameters()
+        pipeline = PdfToHtmlPipeline(PdfToHtmlPipelineConfiguration())
+        pipeline.run(parameters)
+
+    graph_name = "pdftohtml_graph"
+
+    graph = dg.GraphDefinition(name=graph_name, node_defs=[pdftohtml_op])
+    job = graph.to_job(name=graph_name)
+
+    @dg.sensor(
+        name="pdftohtml_sensor",
+        description="Sensor to trigger pdftohtml job",
+        job=job,
+        minimum_interval_seconds=60,
+    )
+    def pdftohtml_sensor(context):
+        if _has_in_progress_run(context, graph_name):
+            return dg.SkipReason(f"Job '{graph_name}' is already running.")
+        if not _has_unprocessed_files(PDF_MIME_TYPE, PDF_HTML_PROCESSOR_IRI):
+            return dg.SkipReason("No unprocessed PDF files to convert to HTML.")
+        return [dg.RunRequest(run_key=None)]
+
+    return job, pdftohtml_sensor
 
 
 def _build_docxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
@@ -315,6 +350,11 @@ class DocumentOrchestration(DagsterOrchestration):
 
         if module.configuration.pdftomarkdown_enabled:
             job, sensor = _build_pdftomarkdown_job_sensor()
+            jobs.append(job)
+            sensors.append(sensor)
+
+        if getattr(module.configuration, "pdftohtml_enabled", True):
+            job, sensor = _build_pdftohtml_job_sensor()
             jobs.append(job)
             sensors.append(sensor)
 
