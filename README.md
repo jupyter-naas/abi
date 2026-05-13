@@ -44,9 +44,8 @@ abi start
 
 **Platform launch:**
 
-- Services Portal: https://localhost:8080
-- Backend: https://api.localhost (Important: you must access it first and accept the self-signed TLS certificate for the frontend to work)
-- Frontend: https://nexus.localhost
+- Web UI: http://localhost:3042 — login with `admin@example.com` / `Admin1234!`
+- API docs: http://localhost:8080/docs
 
 ### CLI Commands
 
