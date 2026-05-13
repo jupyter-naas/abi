@@ -539,8 +539,8 @@ export default function GraphPage() {
     edges: GraphEdge[];
   }>>([]);
 
-  // Relations filter — on by default
-  const [showRelations, setShowRelations] = useState(true);
+  // Relations filter — off by default
+  const [showRelations, setShowRelations] = useState(false);
 
   // Increment to trigger physics re-layout in VisNetwork
   const [stabilizeKey, setStabilizeKey] = useState(0);
@@ -2261,7 +2261,9 @@ export default function GraphPage() {
                   <div className="flex h-full items-center justify-center">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 size={20} className="animate-spin" />
-                      <span>Loading NEXUS Knowledge Graph...</span>
+                      <span>
+                        Loading {graphOptions.find((g) => g.id === selectedGraphId)?.name ?? 'Knowledge Graph'}…
+                      </span>
                     </div>
                   </div>
                 ) : error ? (
@@ -2322,6 +2324,7 @@ export default function GraphPage() {
                       onNodeSelect={setSelectedNodeId}
                       onEdgeSelect={setSelectedEdgeId}
                       stabilizeKey={stabilizeKey}
+                      layoutDirection={showRelations ? undefined : 'LR'}
                     />
                     {filteredNodes.length > 0 && (
                       <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-1.5 rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm w-52">
