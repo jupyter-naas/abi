@@ -1,4 +1,6 @@
+import os
 import webbrowser
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -15,7 +17,19 @@ from .stack_runtime import (
 from .stack_services import SERVICE_CATALOG, evaluate_service_readiness
 from .stack_tui import StackTUI
 
-SERVICE_PORTAL_URL = "http://127.0.0.1:8080/"
+
+def _nexus_web_url() -> str:
+    """Return the Nexus web app URL, respecting NEXUS_WEB_PORT from .env or env."""
+    port = os.getenv("NEXUS_WEB_PORT")
+    if not port:
+        env_file = Path(".env")
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("NEXUS_WEB_PORT="):
+                    port = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    return f"http://127.0.0.1:{port or '3042'}/"
 
 
 def _is_container_in_error(
@@ -89,8 +103,9 @@ def _start_stack() -> None:
             )
             continue
 
-        webbrowser.open(SERVICE_PORTAL_URL)
-        click.echo(f"Opened {SERVICE_PORTAL_URL}")
+        url = _nexus_web_url()
+        webbrowser.open(url)
+        click.echo(f"Opened {url}")
         return
 
 
