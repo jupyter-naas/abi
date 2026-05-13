@@ -169,12 +169,11 @@ def unsupported_method(self, arg: str) -> None:
 
 After `abi stack start`, the web UI is at `http://localhost:3042`.
 
-Default admin credentials (set in `.env`, defined in `config.local.yaml` under `nexus_config.users`):
+Default admin credentials (set in `config.local.yaml` under `nexus_config.users`):
 
-Default admin credentials:
-
-Email: admin@example.com  
-Password: Admin1234!
+| Email | Password |
+|---|---|
+| `admin@example.com` | `Admin1234!` |
 
 Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
 
