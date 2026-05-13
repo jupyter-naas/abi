@@ -6,7 +6,7 @@ import {
   BrainCircuit, ChevronRight, Box, Link2,
   RefreshCw, Import, BookOpen, FileCode,
 } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -41,7 +41,6 @@ type ModuleSubmoduleGroup = {
 
 export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [ontologyFiles, setOntologyFiles] = useState<OntologyFile[]>([]);
   const [expandedOntologyModules, setExpandedOntologyModules] = useState<string[]>([]);
   const [expandedOntologySubmodules, setExpandedOntologySubmodules] = useState<string[]>([]);
@@ -54,8 +53,9 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
     referenceOntologies,
     expandedReferences,
     toggleReference,
+    selectedOntologyPath,
+    setSelectedOntologyPath,
   } = useOntologyStore();
-  const selectedOntologyPath = searchParams.get('ontology');
   const [ontologyTooltip, setOntologyTooltip] = useState<{
     name: string;
     description: string;
@@ -260,6 +260,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                         <button
                           key={`${moduleName}:${ontologyFile.path}`}
                           onClick={() => {
+                            setSelectedOntologyPath(ontologyFile.path);
                             const params = new URLSearchParams({
                               view: 'network',
                               ontology: ontologyFile.path,
@@ -316,6 +317,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                                   <button
                                     key={`${submoduleKey}:${ontologyFile.path}`}
                                     onClick={() => {
+                                      setSelectedOntologyPath(ontologyFile.path);
                                       const params = new URLSearchParams({
                                         view: 'network',
                                         ontology: ontologyFile.path,
