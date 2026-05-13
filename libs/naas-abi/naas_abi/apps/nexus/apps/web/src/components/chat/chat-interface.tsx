@@ -1781,7 +1781,7 @@ export function ChatInterface() {
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
             suggestions={selectedAgentData?.suggestions}
-            onSuggestionClick={(prompt) => setInput(prompt)}
+            onSuggestionClick={(prompt) => { setInput(prompt); focusChatInput(); }}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
