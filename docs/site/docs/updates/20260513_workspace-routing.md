@@ -34,11 +34,3 @@ The login action in `stores/auth.ts` was also updated to fetch the user's first 
 The cookie-first approach keeps the risk window narrow: it only applies to a user's very first request or after the 30-day cookie expires. Once a user has visited any workspace, routing is automatic.
 
 Local development is unaffected: `config.local.yaml` seeds a workspace with slug `primary`, matching the fallback.
-
-## Alternatives considered
-
-**Single hardcoded slug**: Simple but requires source changes per deployment.
-
-**Redirect to workspace picker on first visit**: Better UX for multi-workspace setups, but adds friction for single-workspace deployments that make up the majority of ABI installs.
-
-**Read slug from API on every middleware request**: Always correct, but adds backend latency to every unauthenticated request and conflicts with the edge runtime constraint on Next.js middleware.
