@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 
-export function AppsSection({ collapsed }: { collapsed: boolean }) {
+export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const { currentWorkspaceId } = useWorkspaceStore();
 
   return (
@@ -17,6 +17,7 @@ export function AppsSection({ collapsed }: { collapsed: boolean }) {
       description="Extensions and integrations"
       href={getWorkspacePath(currentWorkspaceId, '/apps')}
       collapsed={collapsed}
+      detailOnly={detailOnly}
     >
       <button
         className={cn(

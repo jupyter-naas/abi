@@ -86,13 +86,20 @@ x-abi-template: &abi_template
 
 services:
   nexus-web:
-    image: ${NEXUS_WEB_IMAGE}:${NEXUS_WEB_TAG}
-    pull_policy: always
+    build:
+      context: libs/naas-abi/naas_abi/apps/nexus/
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - ${NEXUS_WEB_PORT}:3000
+    volumes:
+      - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
+      # Preserve the image's node_modules under the bind mount above so the
+      # host's missing/stale node_modules doesn't mask the deps installed at
+      # build time (which is what produces `sh: next: not found`).
+      - /app/apps/web/node_modules
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
       - NEXUS_API_URL=${NEXUS_API_URL}

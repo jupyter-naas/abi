@@ -1,39 +1,55 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Check, ChevronsUpDown, PanelLeft } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid,
+} from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFeature } from '@/hooks/use-feature';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
+import { getWorkspacePath } from './utils';
 
-// Section components
-import { ChatSection } from './chat-section';
-import { SearchSection } from './search-section';
-import { FilesSection } from './files-section';
-import { LabSection } from './lab-section';
-import { OntologySection } from './ontology-section';
-import { KnowledgeGraphSection } from './knowledge-graph-section';
-import { AppsSection } from './apps-section';
+type SectionDef = {
+  id: SidebarSection;
+  icon: React.ReactNode;
+  label: string;
+  href: string;
+  feature?: 'chat' | 'files' | 'agents' | 'knowledge';
+  extraHref?: string;
+};
+
+const SECTIONS: SectionDef[] = [
+  { id: 'search',   icon: <Search size={18} />,      label: 'Search',          href: '/search',   feature: 'knowledge' },
+  { id: 'chat',     icon: <MessageSquare size={18} />, label: 'Chat',           href: '/chat',     feature: 'chat' },
+  { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'knowledge' },
+  { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'knowledge' },
+  { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
+  { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',      feature: 'agents' },
+  { id: 'apps',     icon: <LayoutGrid size={18} />,    label: 'App',            href: '/apps',     feature: 'agents' },
+];
 
 export function Sidebar() {
   const [mounted, setMounted] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
-  const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const workspaceBtnRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
   const {
-    sidebarCollapsed,
-    toggleSidebar,
     workspaces,
     currentWorkspaceId,
     selectWorkspace,
-    initializeDemoWorkspace,
+    activePanelSection,
+    setActivePanelSection,
   } = useWorkspaceStore();
 
-  const { fetchFiles, fetchLabFiles } = useFilesStore();
+  const { fetchFiles, fetchLabFiles, setActiveSource } = useFilesStore();
   const { fetchItems: fetchOntology } = useOntologyStore();
 
   const canChat = useFeature('chat');
@@ -43,104 +59,149 @@ export function Sidebar() {
 
   useEffect(() => {
     setMounted(true);
-    if (canFiles) {
-      fetchFiles();
-      fetchLabFiles();
-    }
-    if (canKnowledge) {
-      fetchOntology();
-    }
+    if (canFiles) { fetchFiles(); fetchLabFiles(); }
+    if (canKnowledge) { fetchOntology(); }
   }, [canFiles, canKnowledge, fetchFiles, fetchLabFiles, fetchOntology]);
 
-  // Close workspace menu on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (workspaceMenuRef.current && !workspaceMenuRef.current.contains(event.target as Node)) {
-        setWorkspaceMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const collapsed = mounted ? sidebarCollapsed : false;
   const currentWorkspace = mounted ? workspaces.find((w) => w.id === currentWorkspaceId) || null : null;
   const displayWorkspaces = mounted ? workspaces : [];
 
+  const isFeatureEnabled = (feature?: SectionDef['feature']) => {
+    if (!feature) return true;
+    if (feature === 'chat') return !!canChat;
+    if (feature === 'files') return !!canFiles;
+    if (feature === 'agents') return !!canAgents;
+    if (feature === 'knowledge') return !!canKnowledge;
+    return true;
+  };
+
+  const isSectionActive = (section: SectionDef) => {
+    if (activePanelSection === section.id) return true;
+    const base = getWorkspacePath(currentWorkspaceId, section.href);
+    if (pathname.startsWith(base)) return true;
+    if (section.extraHref) {
+      const extra = getWorkspacePath(currentWorkspaceId, section.extraHref);
+      if (pathname.startsWith(extra)) return true;
+    }
+    return false;
+  };
+
+  const getDefaultPath = (sectionId: SidebarSection): string => {
+    switch (sectionId) {
+      case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
+      case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
+      case 'ontology': {
+        const ontologyPath =
+          useOntologyStore.getState().selectedOntologyPath
+          ?? '/app/libs/naas-abi-core/naas_abi_core/modules/bfo/ontologies/modules/bfo-core.ttl';
+        const params = new URLSearchParams({ view: 'network', ontology: ontologyPath });
+        return getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`);
+      }
+      case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
+      case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
+      case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
+      case 'apps':     return getWorkspacePath(currentWorkspaceId, '/apps');
+    }
+  };
+
+  const handleSectionClick = (section: SectionDef) => {
+    if (activePanelSection === section.id) {
+      setActivePanelSection(null);
+      return;
+    }
+    setActivePanelSection(section.id);
+    if (section.id === 'files') setActiveSource('my-drive');
+    router.push(getDefaultPath(section.id));
+  };
+
+  const openWorkspaceMenu = () => {
+    if (!workspaceBtnRef.current) return;
+    const rect = workspaceBtnRef.current.getBoundingClientRect();
+    setDropdownPos({ top: rect.top, left: rect.right + 8 });
+    setWorkspaceMenuOpen(true);
+  };
+
+  // Clicking the aside background (not a child button) toggles expanded
+  const handleAsideClick = (e: React.MouseEvent<HTMLElement>) => {
+    if (e.target === e.currentTarget) setExpanded((v) => !v);
+  };
+
   return (
     <aside
+      onClick={handleAsideClick}
       className={cn(
-        'glass flex h-full flex-col border-r border-border/50 transition-all duration-300',
-        collapsed ? 'w-16' : 'w-64'
+        'glass flex h-full flex-col border-r border-border/50 flex-shrink-0 transition-all duration-300',
+        expanded ? 'w-48' : 'w-14'
       )}
     >
-      {/* Workspace Selector */}
+      {/* Workspace logo / switcher */}
       <div
-        ref={workspaceMenuRef}
+        data-workspace-menu
         className={cn(
-          'relative flex h-14 items-center gap-3 border-b border-border/50 px-3',
-          collapsed && 'justify-center px-2'
+          'flex h-14 flex-shrink-0 items-center border-b border-border/50',
+          expanded ? 'px-3 gap-3' : 'justify-center'
         )}
       >
         <button
-          onClick={() => {
-            if (collapsed) {
-              toggleSidebar();
-            } else {
-              setWorkspaceMenuOpen(!workspaceMenuOpen);
-            }
-          }}
-          className={cn(
-            'flex items-center gap-3 rounded-md transition-colors',
-            !collapsed && 'hover:bg-muted/50 px-2 py-1.5 -mx-2'
-          )}
+          ref={workspaceBtnRef}
+          onClick={openWorkspaceMenu}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg transition-all hover:ring-2 hover:ring-workspace-accent/50"
+          style={{ backgroundColor: currentWorkspace?.theme?.primaryColor || '#22c55e' }}
+          title={currentWorkspace?.name || 'NEXUS'}
         >
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-lg overflow-hidden flex-shrink-0"
-            style={{ backgroundColor: currentWorkspace?.theme?.primaryColor || '#22c55e' }}
-          >
-            {currentWorkspace?.theme?.logoUrl ? (
-              <img
-                src={currentWorkspace.theme.logoUrl}
-                alt={currentWorkspace.name}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-sm font-bold text-white">
-                {currentWorkspace?.theme?.logoEmoji || currentWorkspace?.icon || currentWorkspace?.name?.charAt(0) || 'N'}
-              </span>
-            )}
-          </div>
-          {!collapsed && (
-            <>
-              <span
-                className="text-sm font-medium truncate w-[120px] text-left text-foreground"
-                title={currentWorkspace?.name || 'NEXUS'}
-              >
-                {currentWorkspace?.name || 'NEXUS'}
-              </span>
-              <ChevronsUpDown
-                size={14}
-                className="text-muted-foreground flex-shrink-0"
-              />
-            </>
+          {currentWorkspace?.theme?.logoUrl ? (
+            <img src={currentWorkspace.theme.logoUrl} alt={currentWorkspace.name} className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-sm font-bold text-white">
+              {currentWorkspace?.theme?.logoEmoji || currentWorkspace?.icon || currentWorkspace?.name?.charAt(0) || 'N'}
+            </span>
           )}
         </button>
 
-        {/* Collapse sidebar button */}
-        {!collapsed && (
-          <button
-            onClick={toggleSidebar}
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
-            title="Collapse sidebar"
-          >
-            <PanelLeft size={16} />
-          </button>
+        {expanded && (
+          <span className="truncate text-sm font-medium text-foreground">
+            {currentWorkspace?.name || 'NEXUS'}
+          </span>
         )}
+      </div>
 
-        {/* Workspace dropdown */}
-        {workspaceMenuOpen && !collapsed && (
-          <div className="glass-card absolute left-2 top-full z-50 mt-1 w-60 py-1">
+      {/* Section icon buttons */}
+      <nav
+        onClick={handleAsideClick}
+        className={cn(
+          'flex flex-1 flex-col gap-1 py-3',
+          expanded ? 'px-2' : 'items-center px-2'
+        )}
+      >
+        {SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
+          const active = isSectionActive(section);
+          return (
+            <button
+              key={section.id}
+              onClick={() => handleSectionClick(section)}
+              title={!expanded ? section.label : undefined}
+              className={cn(
+                'flex items-center rounded-lg transition-all',
+                'hover:bg-workspace-accent-10 hover:text-workspace-accent',
+                active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
+                expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+              )}
+            >
+              <span className="flex-shrink-0">{section.icon}</span>
+              {expanded && <span className="truncate text-sm font-medium">{section.label}</span>}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Workspace dropdown — portal so it escapes the glass stacking context */}
+      {workspaceMenuOpen && mounted && createPortal(
+        <>
+          <div className="fixed inset-0 z-[199]" onClick={() => setWorkspaceMenuOpen(false)} />
+          <div
+            className="glass-card fixed z-[200] w-60 py-1 shadow-lg"
+            style={{ top: dropdownPos.top, left: dropdownPos.left }}
+          >
             <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Workspaces
             </p>
@@ -159,15 +220,11 @@ export function Sidebar() {
                 )}
               >
                 <div
-                  className="flex h-6 w-6 items-center justify-center rounded overflow-hidden flex-shrink-0"
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded"
                   style={{ backgroundColor: workspace.theme?.primaryColor || '#22c55e' }}
                 >
                   {workspace.theme?.logoUrl ? (
-                    <img
-                      src={workspace.theme.logoUrl}
-                      alt={workspace.name}
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={workspace.theme.logoUrl} alt={workspace.name} className="h-full w-full object-cover" />
                   ) : (
                     <span className="text-xs text-white">
                       {workspace.theme?.logoEmoji || workspace.icon || workspace.name.charAt(0)}
@@ -181,19 +238,9 @@ export function Sidebar() {
               </button>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Navigation Sections */}
-      <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-        {canKnowledge && <SearchSection collapsed={collapsed} />}
-        {canChat && <ChatSection collapsed={collapsed} />}
-        {canKnowledge && <OntologySection collapsed={collapsed} />}
-        {canKnowledge && <KnowledgeGraphSection collapsed={collapsed} />}
-        {canFiles && <FilesSection collapsed={collapsed} />}
-        {canAgents && <LabSection collapsed={collapsed} />}
-        {canAgents && <AppsSection collapsed={collapsed} />}
-      </nav>
+        </>,
+        document.body
+      )}
     </aside>
   );
 }

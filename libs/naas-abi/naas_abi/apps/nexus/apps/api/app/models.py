@@ -242,6 +242,9 @@ class WorkspaceModel(Base):
     sidebar_color = Column(String, nullable=True)  # Custom sidebar background color (hex)
     font_family = Column(String, nullable=True)  # Custom font family name
 
+    # Drive-scope feature flags
+    platform_drive_enabled = Column(Boolean, nullable=False, default=False)
+
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
