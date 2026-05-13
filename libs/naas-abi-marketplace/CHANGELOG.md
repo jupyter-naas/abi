@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.19.0 (2026-05-13)
+
+### Features
+
+- **document**: Add HtmlToVectorPipeline + vision-LLM image captioning
+  ([`7f1cb29`](https://github.com/jupyter-naas/abi/commit/7f1cb29894be8fe28efbd138b2e93dfbe7d6d625))
+
+### Refactoring
+
+- **graph**: Update default settings and add flexible bucket grid layout
+  ([`3e4cf9b`](https://github.com/jupyter-naas/abi/commit/3e4cf9ba207de55ec90bc99bdd91fdbef7cf9a00))
+
+
 ## v1.18.0 (2026-05-12)
 
 
