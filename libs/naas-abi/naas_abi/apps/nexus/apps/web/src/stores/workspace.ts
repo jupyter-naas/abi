@@ -174,6 +174,8 @@ interface WorkspaceState {
   toggleSidebar: () => void;
   expandedSections: SidebarSection[];
   toggleSection: (section: SidebarSection) => void;
+  activePanelSection: SidebarSection | null;
+  setActivePanelSection: (section: SidebarSection | null) => void;
 
   // Context panel
   contextPanelOpen: boolean;
@@ -302,6 +304,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         ? state.expandedSections.filter((s) => s !== section)
         : [...state.expandedSections, section],
     })),
+  activePanelSection: null,
+  setActivePanelSection: (section) => set({ activePanelSection: section }),
 
   // Context panel
   contextPanelOpen: false,

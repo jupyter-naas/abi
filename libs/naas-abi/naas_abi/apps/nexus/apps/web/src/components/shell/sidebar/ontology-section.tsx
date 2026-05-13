@@ -39,7 +39,7 @@ type ModuleSubmoduleGroup = {
   submodules: Array<[string, OntologyFile[]]>;
 };
 
-export function OntologySection({ collapsed }: { collapsed: boolean }) {
+export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [ontologyFiles, setOntologyFiles] = useState<OntologyFile[]>([]);
@@ -170,6 +170,7 @@ export function OntologySection({ collapsed }: { collapsed: boolean }) {
       description="Define classes, relationships, and schemas"
       href={getWorkspacePath(currentWorkspaceId, '/ontology?view=network')}
       collapsed={collapsed}
+      detailOnly={detailOnly}
     >
       {/* Toolbar */}
       <div className="flex items-center gap-0.5 px-1 pb-1">
