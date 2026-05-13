@@ -212,7 +212,7 @@ const ViewItemRow = React.memo(function ViewItemRow({
   );
 });
 
-export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
+export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const GRAPH_CACHE_REFRESH_EVENT = 'graph-cache-refresh';
   const router = useRouter();
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -412,6 +412,7 @@ export function KnowledgeGraphSection({ collapsed }: { collapsed: boolean }) {
       description="Visualize and explore your knowledge"
       href={graphNetworkPath}
       collapsed={collapsed}
+      detailOnly={detailOnly}
       onNavigate={selectKnowledgeGraphRoot}
     >
       <div className="flex items-center gap-0.5 px-1 pb-1">

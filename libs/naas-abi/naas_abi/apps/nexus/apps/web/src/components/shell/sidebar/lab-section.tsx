@@ -242,7 +242,7 @@ const FileItem = React.memo(function FileItem({
   );
 });
 
-export function LabSection({ collapsed }: { collapsed: boolean }) {
+export function LabSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const [selectedLabPath, setSelectedLabPath] = useState<string | null>(null);
   const { currentWorkspaceId } = useWorkspaceStore();
@@ -324,6 +324,7 @@ export function LabSection({ collapsed }: { collapsed: boolean }) {
       description="Embedded development environment"
       href={getWorkspacePath(currentWorkspaceId, '/lab')}
       collapsed={collapsed}
+      detailOnly={detailOnly}
     >
       {/* File explorer toolbar */}
       <div className="flex items-center gap-0.5 px-1 pb-1">
