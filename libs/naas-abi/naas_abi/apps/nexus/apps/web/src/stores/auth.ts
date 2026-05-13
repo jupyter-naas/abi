@@ -122,7 +122,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      login: async (email: string, password: string): Promise<boolean> => {
+      login: async (email: string, password: string): Promise<string | null> => {
         set({ isLoading: true, error: null });
         try {
           const apiBase = getApiUrl();
@@ -152,13 +152,30 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
 
-          return true;
+          // Resolve the first workspace ID so the login page can redirect
+          // directly to the correct workspace URL without relying on a
+          // hardcoded slug fallback in middleware.
+          try {
+            const wsResponse = await fetch(`${apiBase}/api/workspaces`, {
+              headers: { Authorization: `Bearer ${data.access_token}` },
+            });
+            if (wsResponse.ok) {
+              const workspaces = await wsResponse.json();
+              if (Array.isArray(workspaces) && workspaces.length > 0) {
+                return workspaces[0].id;
+              }
+            }
+          } catch {
+            // Non-fatal: fall back to middleware redirect
+          }
+
+          return null;
         } catch (error) {
           set({
             isLoading: false,
             error: error instanceof Error ? error.message : 'Invalid email or password',
           });
-          return false;
+          return null;
         }
       },
 
