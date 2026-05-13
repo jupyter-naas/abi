@@ -55,6 +55,7 @@ modules:
             member: [chat, files]
             viewer: [chat, files]
           workspace_overrides: {}
+        auth_password_enabled: true
         magic_link_allow_signup: false
         magic_link_email_app_name: "ABI Platform"
         magic_link_email_subject_template: "Your {app_name} sign-in link"

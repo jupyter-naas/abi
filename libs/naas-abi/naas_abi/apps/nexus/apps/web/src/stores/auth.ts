@@ -122,8 +122,44 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      login: async (email: string, _password: string): Promise<boolean> => {
-        return get().requestMagicLink(email);
+      login: async (email: string, password: string): Promise<boolean> => {
+        set({ isLoading: true, error: null });
+        try {
+          const apiBase = getApiUrl();
+          const response = await fetch(`${apiBase}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password }),
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Invalid email or password');
+          }
+
+          const data = await response.json();
+          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
+
+          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000';
+
+          set({
+            user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
+            token: data.access_token,
+            refreshToken: data.refresh_token ?? null,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
+
+          return true;
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Invalid email or password',
+          });
+          return false;
+        }
       },
 
       register: async (email: string, _password: string, _name: string): Promise<boolean> => {

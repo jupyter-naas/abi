@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from urllib.parse import urlencode
 
@@ -57,6 +58,8 @@ from naas_abi_core.services.email.EmailFactory import EmailFactory
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions as StorageExceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 AVATAR_STORAGE_PREFIX = "nexus/avatars"
@@ -87,6 +90,11 @@ def _get_object_storage(request: Request) -> ObjectStorageService:
             status_code=500,
             detail="Object storage is not initialized.",
         ) from exc
+
+
+@router.get("/config")
+async def get_auth_config() -> dict:
+    return {"password_auth_enabled": settings.auth_password_enabled}
 
 
 @router.post("/register", response_model=AuthResponse)
@@ -472,11 +480,16 @@ def _delete_old_avatar(
 
 
 async def _send_magic_link_email(to_email: str, token: str) -> None:
-    if not settings.smtp_enabled:
-        return
-
     query = urlencode({"token": token})
     magic_link_url = f"{settings.frontend_url.rstrip('/')}{settings.magic_link_path}?{query}"
+
+    if not settings.smtp_enabled:
+        logger.warning(
+            "SMTP disabled. Magic link for %s: %s",
+            to_email,
+            magic_link_url,
+        )
+        return
     app_name = settings.magic_link_email_app_name
     template_values = {
         "app_name": app_name,
