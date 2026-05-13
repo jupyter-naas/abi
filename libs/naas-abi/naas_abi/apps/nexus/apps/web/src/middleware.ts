@@ -17,7 +17,7 @@ import type { NextRequest } from 'next/server';
  * Workspace redirect priority (used when redirecting / and legacy routes):
  *   1. nexus-last-workspace cookie  — set whenever the user visits a workspace
  *   2. DEFAULT_WORKSPACE env var    — server-side, read at runtime (no NEXT_PUBLIC_ prefix)
- *   3. Hard fallback 'workspace-nexus'
+ *   3. Hard fallback 'primary'
  */
 
 // Read at request time from the server-side env (no build-time baking).
