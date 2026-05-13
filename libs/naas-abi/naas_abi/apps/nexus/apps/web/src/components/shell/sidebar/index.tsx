@@ -102,7 +102,13 @@ export function Sidebar() {
     switch (sectionId) {
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
-      case 'ontology': return getWorkspacePath(currentWorkspaceId, '/ontology?view=network');
+      case 'ontology': {
+        const ontologyPath =
+          useOntologyStore.getState().selectedOntologyPath
+          ?? '/app/libs/naas-abi-core/naas_abi_core/modules/bfo/ontologies/modules/bfo-core.ttl';
+        const params = new URLSearchParams({ view: 'network', ontology: ontologyPath });
+        return getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`);
+      }
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
