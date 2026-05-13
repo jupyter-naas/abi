@@ -152,9 +152,7 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
 
-          // Resolve the first workspace ID so the login page can redirect
-          // directly to the correct workspace URL without relying on a
-          // hardcoded slug fallback in middleware.
+          // Return the first workspace ID so the caller can redirect directly, bypassing middleware slug guessing.
           try {
             const wsResponse = await fetch(`${apiBase}/api/workspaces`, {
               headers: { Authorization: `Bearer ${data.access_token}` },
