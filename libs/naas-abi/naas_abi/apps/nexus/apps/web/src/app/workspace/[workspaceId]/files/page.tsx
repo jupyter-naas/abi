@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFilesStore, type FileInfo } from '@/stores/files';
-import { authFetch } from '@/stores/auth';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -141,6 +141,48 @@ export default function FilesPage() {
         ? 'platform_drive'
         : 'workspace';
   const fileQueryParams = `workspace_id=${encodeURIComponent(workspaceId)}&scope=${filesScope}`;
+
+  // Compute the drive's storage root and a user-facing label. The breadcrumb
+  // hides anything above the drive — users have no business navigating into
+  // naas_abi/<drive>/<entity-id>/... above their drive.
+  const authUserId = useAuthStore((state) => state.user?.id);
+  const driveRoot =
+    activeSource === 'my-drive'
+      ? authUserId
+        ? `naas_abi/my-drive/${authUserId}`
+        : ''
+      : activeSource === 'platform-drive'
+        ? 'naas_abi/platform-drive'
+        : workspaceId
+          ? `naas_abi/workspace-drive/${workspaceId}`
+          : '';
+  const driveLabel = isLocalFolder
+    ? activeSyncedFolder?.name || 'Drive'
+    : activeSource === 'my-drive'
+      ? 'My Drive'
+      : activeSource === 'platform-drive'
+        ? 'Platform Drive'
+        : 'Workspace Drive';
+
+  // Strip the drive root (and the legacy bare-workspace-id root, for backwards
+  // compatibility) from the current path so the breadcrumb only shows what's
+  // under the drive.
+  const stripRoot = (path: string, root: string): string | null => {
+    const normalized = path.replace(/^\/+|\/+$/g, '');
+    if (!root) return null;
+    if (normalized === root) return '';
+    if (normalized.startsWith(`${root}/`)) return normalized.slice(root.length + 1);
+    return null;
+  };
+  const legacyRoots = activeSource === 'workspace' && workspaceId ? [workspaceId] : [];
+  let relativePath = (currentPath || '').replace(/^\/+|\/+$/g, '');
+  for (const root of [driveRoot, ...legacyRoots]) {
+    const stripped = stripRoot(relativePath, root);
+    if (stripped !== null) {
+      relativePath = stripped;
+      break;
+    }
+  }
 
   useEffect(() => {
     // Clear any previous errors
@@ -825,20 +867,25 @@ export default function FilesPage() {
                 fetchFiles('');
               }
             }}
-            className="text-muted-foreground hover:text-foreground"
+            className={cn(
+              relativePath ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
+            )}
           >
-            {isLocalFolder ? activeSyncedFolder?.name || 'Root' : 'Root'}
+            {driveLabel}
           </button>
-          {currentPath && currentPath.split('/').map((part, i, arr) => (
+          {relativePath && relativePath.split('/').map((part, i, arr) => (
             <span key={i} className="flex items-center gap-1">
               <span className="text-muted-foreground">/</span>
               <button
                 onClick={() => {
-                  const path = arr.slice(0, i + 1).join('/');
+                  const sub = arr.slice(0, i + 1).join('/');
                   if (isLocalFolder && activeSyncedFolder) {
-                    fetchLocalFiles(activeSyncedFolder.id, path);
+                    fetchLocalFiles(activeSyncedFolder.id, sub);
                   } else {
-                    fetchFiles(path);
+                    // Send the storage-relative path so the API resolver anchors it
+                    // under the drive root (server normalizes a leading drive root).
+                    const fullPath = driveRoot ? `${driveRoot}/${sub}` : sub;
+                    fetchFiles(fullPath);
                   }
                 }}
                 className={cn(
