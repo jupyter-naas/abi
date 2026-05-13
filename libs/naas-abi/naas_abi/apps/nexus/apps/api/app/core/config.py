@@ -45,7 +45,7 @@ class TenantConfig(BaseModel):
     login_border_radius: str = "0"
     login_bg_image_url: str | None = None
     show_terms_footer: bool = False
-    show_powered_by: bool = True
+    show_powered_by: bool = False
     login_footer_text: str | None = None
     apps: list["ExternalAppConfig"] = Field(default_factory=list)
 
@@ -162,7 +162,7 @@ class OrganizationSeedConfig(BaseModel):
     login_border_radius: str | None = None
     login_bg_image_url: str | None = None
     show_terms_footer: bool = True
-    show_powered_by: bool = True
+    show_powered_by: bool = False
     login_footer_text: str | None = None
     secondary_logo_url: str | None = None
     show_logo_separator: bool = False
