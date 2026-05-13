@@ -94,6 +94,10 @@ services:
       - ${NEXUS_WEB_PORT}:3000
     volumes:
       - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
+      # Preserve the image's node_modules under the bind mount above so the
+      # host's missing/stale node_modules doesn't mask the deps installed at
+      # build time (which is what produces `sh: next: not found`).
+      - /app/apps/web/node_modules
     environment:
       - NODE_ENV=development
       - PORT=3000
