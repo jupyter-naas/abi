@@ -9,6 +9,7 @@ import {
   Users,
   Bot,
   Brush,
+  HardDrive,
   Shield,
   Server,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ const workspaceSettingsNav = [
   { href: '/settings/models', label: 'Models', icon: Cpu },
   { href: '/settings/agents', label: 'Agents', icon: Bot },
   { href: '/settings/theme', label: 'Theme', icon: Brush },
+  { href: '/settings/drives', label: 'Drives', icon: HardDrive },
   { href: '/settings/members', label: 'Members', icon: Users },
   { href: '/settings/export', label: 'Data Export', icon: Download },
 ];

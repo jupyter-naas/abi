@@ -99,6 +99,33 @@ async def require_workspace_access(user_id: str, workspace_id: str) -> str:
             session_registry.unbind(session_id)
 
 
+async def require_workspace_platform_drive(user_id: str, workspace_id: str) -> None:
+    """Authorize access to the shared platform drive via a workspace.
+
+    The platform drive is a single tree shared across every workspace; a
+    workspace's members may use it only when ``platform_drive_enabled`` is
+    set on the workspace row.
+    """
+    await require_workspace_access(user_id=user_id, workspace_id=workspace_id)
+    async with AsyncSessionLocal() as db:
+        registry = ServiceRegistry.instance()
+        session_registry = PostgresSessionRegistry.instance()
+        session_id = f"sess-{uuid4().hex}"
+        session_registry.bind(session_id=session_id, db=db)
+        token = session_registry.set_current_session(session_id)
+        try:
+            workspace = await registry.workspaces.get_workspace(workspace_id=workspace_id)
+        finally:
+            session_registry.reset_current_session(token)
+            session_registry.unbind(session_id)
+
+    if workspace is None or not workspace.platform_drive_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform drive is not enabled for this workspace",
+        )
+
+
 __all__ = [
     "decode_token",
     "get_auth_service",
@@ -107,5 +134,6 @@ __all__ = [
     "get_workspace_role",
     "oauth2_scheme",
     "require_workspace_access",
+    "require_workspace_platform_drive",
     "to_user_schema",
 ]
