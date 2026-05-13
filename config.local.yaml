@@ -100,7 +100,7 @@ modules:
                 role: "owner"
             workspaces:
               - name: "Naas.ai"
-                slug: "default"
+                slug: "my-workspace"
                 owner_email: "florent@naas.ai"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
