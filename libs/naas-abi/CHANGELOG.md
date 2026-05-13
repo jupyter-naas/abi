@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.39.0 (2026-05-13)
+
+### Features
+
+- **sidebar**: Add support for selectedOntologyPath in ontology sidebar navigation
+  ([`130e417`](https://github.com/jupyter-naas/abi/commit/130e4178e5e9f6ec29a3e85226112d33500625f9))
+
+### Refactoring
+
+- **graph**: Update default settings and add flexible bucket grid layout
+  ([`3e4cf9b`](https://github.com/jupyter-naas/abi/commit/3e4cf9ba207de55ec90bc99bdd91fdbef7cf9a00))
+
+
 ## v1.38.0 (2026-05-13)
 
 ### Features
