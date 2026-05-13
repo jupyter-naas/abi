@@ -110,6 +110,30 @@ modules:
                     role: "owner"
                   - email: "florent@naas.ai"
                     role: "owner"
+              - name: "Maxime"
+                slug: "maxime"
+                owner_email: "maxime@naas.ai"
+                primary_color: "#34D399"
+                accent_color: "#34D399"
+                members:
+                  - email: "maxime@naas.ai"
+                    role: "owner"
+              - name: "Jeremy"
+                slug: "jeremy"
+                owner_email: "jeremy@naas.ai"
+                primary_color: "#34D399"
+                accent_color: "#34D399"
+                members:
+                  - email: "jeremy@naas.ai"
+                    role: "owner"
+              - name: "Florent"
+                slug: "florent"
+                owner_email: "florent@naas.ai"
+                primary_color: "#34D399"
+                accent_color: "#34D399"
+                members:
+                  - email: "florent@naas.ai"
+                    role: "owner"
 
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true

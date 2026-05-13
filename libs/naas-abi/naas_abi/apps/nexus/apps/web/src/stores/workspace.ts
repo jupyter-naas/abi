@@ -149,6 +149,7 @@ export interface Workspace {
   updatedAt: Date;
   currentUserRole?: string;
   featureFlags?: WorkspaceFeatureFlags;
+  platformDriveEnabled?: boolean;
   isDemo?: boolean;
 }
 
@@ -174,6 +175,8 @@ interface WorkspaceState {
   toggleSidebar: () => void;
   expandedSections: SidebarSection[];
   toggleSection: (section: SidebarSection) => void;
+  activePanelSection: SidebarSection | null;
+  setActivePanelSection: (section: SidebarSection | null) => void;
 
   // Context panel
   contextPanelOpen: boolean;
@@ -302,6 +305,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         ? state.expandedSections.filter((s) => s !== section)
         : [...state.expandedSections, section],
     })),
+  activePanelSection: null,
+  setActivePanelSection: (section) => set({ activePanelSection: section }),
 
   // Context panel
   contextPanelOpen: false,
@@ -767,6 +772,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         updatedAt: new Date(ws.updated_at || Date.now()),
         currentUserRole: ws.current_user_role,
         featureFlags: ws.feature_flags,
+        platformDriveEnabled: Boolean(ws.platform_drive_enabled),
       }));
       
       set({ workspaces });

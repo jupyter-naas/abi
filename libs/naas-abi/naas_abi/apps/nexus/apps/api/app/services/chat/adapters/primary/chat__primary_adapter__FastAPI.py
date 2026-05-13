@@ -43,6 +43,9 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__streaming import (
     stream_chat_response,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
+    ChatFileIngestionService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_jobs import (
     ChatIngestionJobService,
 )
@@ -174,7 +177,7 @@ async def upload_file_for_chat(
 
     await require_workspace_access(current_user.id, row.workspace_id)
 
-    upload_prefix = f"my-drive/{current_user.id}/uploads"
+    upload_prefix = ChatFileIngestionService.my_drive_uploads_path(current_user.id)
     filename = (file.filename or "untitled").split("/")[-1].split("\\")[-1]
     object_storage.put_object(upload_prefix, filename, await file.read())
     source_path = f"{upload_prefix}/{filename}"

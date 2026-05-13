@@ -16,6 +16,7 @@ export interface SectionProps {
   href: string;
   collapsed: boolean;
   suppressActiveHighlight?: boolean;
+  detailOnly?: boolean;
   children?: React.ReactNode;
   onAdd?: () => void;
   onNavigate?: () => void;
@@ -29,6 +30,7 @@ export function CollapsibleSection({
   href,
   collapsed,
   suppressActiveHighlight = false,
+  detailOnly = false,
   children,
   onAdd,
   onNavigate,
@@ -36,12 +38,17 @@ export function CollapsibleSection({
   const pathname = usePathname();
   const { expandedSections, toggleSection, sidebarCollapsed, toggleSidebar } = useWorkspaceStore();
   const isExpanded = expandedSections.includes(id);
-  const isActive = pathname.startsWith(href);
-  const hasChildren = Boolean(children);
-  const showSectionActive = isActive && !suppressActiveHighlight;
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const sectionRef = useRef<HTMLDivElement>(null);
+
+  if (detailOnly) {
+    return <div className="space-y-0.5">{children}</div>;
+  }
+
+  const isActive = pathname.startsWith(href);
+  const hasChildren = Boolean(children);
+  const showSectionActive = isActive && !suppressActiveHighlight;
 
   const handleIconClick = (e: React.MouseEvent) => {
     if (collapsed && sidebarCollapsed) {

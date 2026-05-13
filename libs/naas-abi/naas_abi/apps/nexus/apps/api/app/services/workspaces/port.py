@@ -19,6 +19,7 @@ class WorkspaceRecord:
     background_color: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    platform_drive_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
     organization_logo_url: str | None = None
@@ -50,6 +51,7 @@ class WorkspaceUpdateInput:
     background_color: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    platform_drive_enabled: bool | None = None
 
 
 @dataclass

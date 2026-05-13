@@ -132,6 +132,79 @@ const LR_NODE_SLOT   = 110; // px per leaf slot in cross-axis (y)
 const TD_LEVEL_GAP   = 180; // px between depth levels  (main axis = y)
 const TD_NODE_SLOT   = 168; // px per leaf slot in cross-axis (x)
 
+// Bucket grid layout constants (flat / no-edge case)
+const GRID_BUCKET_ORDER = [
+  'Material Entity', 'Process', 'Quality', 'Realizable',
+  'Temporal Region', 'Site', 'GDC', 'Unknown',
+];
+const GRID_ZONE_COLS    = 3;    // bucket zones per row
+const GRID_ZONE_W       = 1400; // px between bucket zone centres (x)
+const GRID_ZONE_H       = 900;  // px between bucket zone centres (y)
+const GRID_NODE_W       = 240;  // horizontal node spacing within a zone
+const GRID_NODE_H       = 160;  // vertical node spacing within a zone
+const GRID_NODES_PER_ROW = 5;   // nodes per row inside a zone
+
+/**
+ * 2-D bucket grid layout used when no is_a edges exist.
+ * Zones are arranged in a GRID_ZONE_COLS-column grid; nodes within each zone
+ * are arranged in rows of GRID_NODES_PER_ROW, sorted alphabetically.
+ */
+function computeBucketGridPositions(
+  nodes: GraphNode[],
+  nodesById: Map<string, GraphNode>,
+): Map<string, { x: number; y: number }> {
+  const byBucket = new Map<string, string[]>();
+  for (const node of nodes) {
+    const bucket = resolveNodeBucketKey(node, nodesById);
+    const list = byBucket.get(bucket) ?? [];
+    list.push(node.id);
+    byBucket.set(bucket, list);
+  }
+
+  for (const [, ids] of byBucket) {
+    ids.sort((a, b) =>
+      (nodesById.get(a)?.label ?? a).localeCompare(nodesById.get(b)?.label ?? b)
+    );
+  }
+
+  const activeBuckets = [
+    ...GRID_BUCKET_ORDER.filter((b) => byBucket.has(b)),
+    ...Array.from(byBucket.keys()).filter((b) => !GRID_BUCKET_ORDER.includes(b)),
+  ];
+
+  const positions = new Map<string, { x: number; y: number }>();
+
+  activeBuckets.forEach((bucket, zoneIdx) => {
+    const ids = byBucket.get(bucket) ?? [];
+    const zoneCol = zoneIdx % GRID_ZONE_COLS;
+    const zoneRow = Math.floor(zoneIdx / GRID_ZONE_COLS);
+    const zoneOriginX = zoneCol * GRID_ZONE_W;
+    const zoneOriginY = zoneRow * GRID_ZONE_H;
+    const cols = GRID_NODES_PER_ROW;
+    const usedW = (Math.min(ids.length, cols) - 1) * GRID_NODE_W;
+    const usedH = (Math.ceil(ids.length / cols) - 1) * GRID_NODE_H;
+
+    ids.forEach((id, i) => {
+      positions.set(id, {
+        x: zoneOriginX - usedW / 2 + (i % cols) * GRID_NODE_W,
+        y: zoneOriginY - usedH / 2 + Math.floor(i / cols) * GRID_NODE_H,
+      });
+    });
+  });
+
+  if (positions.size > 0) {
+    const xs = Array.from(positions.values()).map((p) => p.x);
+    const ys = Array.from(positions.values()).map((p) => p.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    for (const [id, pos] of positions) {
+      positions.set(id, { x: pos.x - cx, y: pos.y - cy });
+    }
+  }
+
+  return positions;
+}
+
 // Resolve a stable bucket key for a node (used to sort / group siblings)
 function resolveNodeBucketKey(
   node: GraphNode,
@@ -178,6 +251,11 @@ function computeHierarchicalPositions(
   const nodesById  = new Map(nodes.map((n) => [n.id, n]));
   const nodeIds    = new Set(nodes.map((n) => n.id));
   const isaEdges   = edges.filter((e) => e.properties?.relation_kind === 'is_a');
+
+  // Flat case: no is_a edges → use the 2-D bucket grid instead of a 1-D tree row.
+  if (isaEdges.length === 0) {
+    return computeBucketGridPositions(nodes, nodesById);
+  }
 
   // ── 1. Build tree ──────────────────────────────────────────────────────────
   const childrenOf = new Map<string, string[]>();
