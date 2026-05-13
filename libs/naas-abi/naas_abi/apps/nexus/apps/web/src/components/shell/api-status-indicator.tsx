@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { useNetworkActivityStore } from '@/stores/network-activity';
@@ -49,7 +50,9 @@ export function ApiStatusIndicator() {
   const [status, setStatus] = useState<Status>('checking');
   const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null);
   const [hovered, setHovered] = useState(false);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; right: number } | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const inflight = useNetworkActivityStore((state) => state.inflight);
   const totalStarted = useNetworkActivityStore((state) => state.totalStarted);
   const totalCompleted = useNetworkActivityStore((state) => state.totalCompleted);
@@ -102,6 +105,30 @@ export function ApiStatusIndicator() {
     return () => clearInterval(id);
   }, [hovered]);
 
+  // Anchor the portal popover to the trigger button. Recompute on hover and on
+  // window resize/scroll so it stays attached.
+  useLayoutEffect(() => {
+    if (!hovered) {
+      setPopoverPos(null);
+      return;
+    }
+    const updatePos = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setPopoverPos({
+        top: rect.bottom + 8,
+        right: Math.max(0, window.innerWidth - rect.right),
+      });
+    };
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
+  }, [hovered]);
+
   const label =
     status === 'online'
       ? 'API: connected'
@@ -142,6 +169,7 @@ export function ApiStatusIndicator() {
       onMouseLeave={() => setHovered(false)}
     >
       <button
+        ref={triggerRef}
         type="button"
         onClick={handleClick}
         aria-label={label}
@@ -181,8 +209,13 @@ export function ApiStatusIndicator() {
         </span>
       </button>
 
-      {hovered && (
-        <div className="glass-card absolute right-0 top-full z-[10000] mt-2 w-72 rounded-lg border bg-card p-3 text-xs shadow-lg">
+      {hovered && popoverPos && typeof document !== 'undefined' && createPortal(
+        <div
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{ position: 'fixed', top: popoverPos.top, right: popoverPos.right, zIndex: 2147483647 }}
+          className="glass-card w-72 rounded-lg border bg-card p-3 text-xs shadow-lg"
+        >
           <div className="mb-2 flex items-center justify-between">
             <span className="font-medium text-foreground">API status</span>
             <span
@@ -245,7 +278,8 @@ export function ApiStatusIndicator() {
               Click the indicator to open the API URL in a new tab.
             </p>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
