@@ -18,18 +18,28 @@ from .stack_services import SERVICE_CATALOG, evaluate_service_readiness
 from .stack_tui import StackTUI
 
 
+def _read_dotenv_key(key: str) -> str | None:
+    """Read a single key from the .env file in the current directory."""
+    env_file = Path(".env")
+    if not env_file.exists():
+        return None
+    for raw in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith(f"{key}="):
+            return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return None
+
+
 def _nexus_web_url() -> str:
-    """Return the Nexus web app URL, respecting NEXUS_WEB_PORT from .env or env."""
-    port = os.getenv("NEXUS_WEB_PORT")
-    if not port:
-        env_file = Path(".env")
-        if env_file.exists():
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("NEXUS_WEB_PORT="):
-                    port = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
-    return f"http://127.0.0.1:{port or '3042'}/"
+    """Return the Nexus login URL with admin email pre-filled.
+
+    Reads NEXUS_WEB_PORT and NEXUS_USER_ADMIN_EMAIL from the environment
+    or .env file so the browser opens with the email field already populated.
+    """
+    port = os.getenv("NEXUS_WEB_PORT") or _read_dotenv_key("NEXUS_WEB_PORT") or "3042"
+    email = os.getenv("NEXUS_USER_ADMIN_EMAIL") or _read_dotenv_key("NEXUS_USER_ADMIN_EMAIL")
+    path = f"auth/login?email={email}" if email else "auth/login"
+    return f"http://127.0.0.1:{port}/{path}"
 
 
 def _is_container_in_error(

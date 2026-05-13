@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,10 +24,11 @@ function isLightColor(hex: string): boolean {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, requestMagicLink, isLoading, error, clearError, isAuthenticated } = useAuthStore();
   const tenant = useTenant();
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
