@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.40.0 (2026-05-13)
+
+### Features
+
+- **nexus-web**: Drive-aware breadcrumb and portalised status popover
+  ([`28963e2`](https://github.com/jupyter-naas/abi/commit/28963e2d7df7fdb562b4d608272c74cf5f1d8f65))
+
+
 ## v1.39.0 (2026-05-13)
 
 ### Features
