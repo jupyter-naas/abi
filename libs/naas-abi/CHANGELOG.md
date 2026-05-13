@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v1.41.0 (2026-05-13)
+
+### Bug Fixes
+
+- **knowledge-graph**: Auto-select first graph and navigate to entities view on first selection
+  ([`e669b24`](https://github.com/jupyter-naas/abi/commit/e669b24c7974136fb0a0d4413b583a1d506b59ab))
+
+### Features
+
+- **config**: Add new owners Maxime, Jeremy, and Florent with custom colors
+  ([`e669b24`](https://github.com/jupyter-naas/abi/commit/e669b24c7974136fb0a0d4413b583a1d506b59ab))
+
+- **ontology**: Auto-select and navigate to first ontology if none selected
+  ([`e669b24`](https://github.com/jupyter-naas/abi/commit/e669b24c7974136fb0a0d4413b583a1d506b59ab))
+
+### Refactoring
+
+- **sidebar**: Remove workspace dropdown outside click handler
+  ([`e669b24`](https://github.com/jupyter-naas/abi/commit/e669b24c7974136fb0a0d4413b583a1d506b59ab))
+
+
 ## v1.40.0 (2026-05-13)
 
 ### Features
