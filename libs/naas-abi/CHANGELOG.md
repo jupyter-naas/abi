@@ -2,6 +2,26 @@
 
 <!-- version list -->
 
+## v1.38.0 (2026-05-13)
+
+### Features
+
+- **chat-interface**: Add predefined suggestion label and focus chat input on suggestion click
+  ([`7f2d388`](https://github.com/jupyter-naas/abi/commit/7f2d3886511db3c3aa3934a82df8899c41ac9009))
+
+- **chat-interface**: Add sources panel with toggle for extracted URLs
+  ([`7e20efb`](https://github.com/jupyter-naas/abi/commit/7e20efba8a4eee2ea80f183eccb9590ac632d365))
+
+- **chat-interface**: Add URL collection and preview panel with resizable preview
+  ([`7e37c15`](https://github.com/jupyter-naas/abi/commit/7e37c15b68193670e315871e33250b602cb83f2c))
+
+- **chat-interface**: Add URL embeddability and existence probes for source URLs
+  ([`8d245a1`](https://github.com/jupyter-naas/abi/commit/8d245a1e9baf6e3cc397d1d8242af35e369432b3))
+
+- **next.config**: Add '@embedpdf/snippet' to transpilePackages
+  ([`299e7ac`](https://github.com/jupyter-naas/abi/commit/299e7ac60af3a9dbbf491bad4f7d8c088aa06e7b))
+
+
 ## v1.37.3 (2026-05-12)
 
 ### Performance Improvements
