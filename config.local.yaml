@@ -226,12 +226,6 @@ services:
         redis_url: "redis://redis:6379"
   email:
     email_adapter:
-      adapter: "smtp"
+      adapter: "filesystem"
       config:
-        host: "{{ secret.SMTP_HOST }}"
-        port: "{{ secret.SMTP_PORT }}"
-        username: "{{ secret.SMTP_USERNAME }}"
-        password: "{{ secret.SMTP_PASSWORD }}"
-        use_tls: true
-        use_ssl: false
-        timeout: 10
+        directory: "/tmp/abi-emails"
