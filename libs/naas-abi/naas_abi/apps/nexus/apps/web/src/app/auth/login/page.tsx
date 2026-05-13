@@ -43,7 +43,7 @@ export default function LoginPage() {
       .catch(() => setPasswordAuthEnabled(false));
   }, []);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (e.g. page loaded while session is active)
   useEffect(() => {
     if (mounted && isAuthenticated) {
       router.push('/');
@@ -67,7 +67,10 @@ export default function LoginPage() {
     if (Object.keys(errors).length > 0) return;
 
     if (passwordAuthEnabled) {
-      await login(email, password);
+      const workspaceId = await login(email, password);
+      if (workspaceId) {
+        router.push(`/workspace/${workspaceId}/chat`);
+      }
     } else {
       const success = await requestMagicLink(email);
       if (success) setLinkSent(true);
