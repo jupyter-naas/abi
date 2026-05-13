@@ -448,6 +448,11 @@ class FilesService:
             return True
         except Exceptions.ObjectNotFound:
             return False
+        except (NotADirectoryError, OSError):
+            # Some adapters (e.g. local filesystem) surface "this is a file,
+            # not a directory" as a low-level OSError rather than as
+            # ObjectNotFound — treat that as "not a directory" too.
+            return False
 
     def _list_directory(self, path: str) -> list[str]:
         prefix = self._directory_prefix(path)

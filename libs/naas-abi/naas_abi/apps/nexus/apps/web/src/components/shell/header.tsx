@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type WorkspaceBranch, type Workspace } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
+import { ApiStatusIndicator } from './api-status-indicator';
 
 interface HeaderProps {
   title?: string;
@@ -113,6 +114,9 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
 
       {/* Right side */}
       <div className="flex items-center gap-1">
+        {/* API connection status */}
+        <ApiStatusIndicator />
+
         {/* Branch Selector - Simple dropdown like Palantir */}
         <div ref={branchMenuRef} className="relative mr-2">
           <button

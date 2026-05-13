@@ -236,7 +236,7 @@ def test_ingest_from_path_rejects_cross_user_path() -> None:
         service.ingest_from_path(
             user_id="user-1",
             conversation_id="c",
-            source_path="my-drive/user-2/uploads/evil.txt",
+            source_path="naas_abi/my-drive/user-2/uploads/evil.txt",
             embedding_model="hash-v1",
             embedding_dimension=32,
         )
@@ -248,7 +248,7 @@ def test_ingest_from_path_rejects_path_traversal() -> None:
         service.ingest_from_path(
             user_id="user-1",
             conversation_id="c",
-            source_path="my-drive/user-1/../../etc/passwd",
+            source_path="naas_abi/my-drive/user-1/../../etc/passwd",
             embedding_model="hash-v1",
             embedding_dimension=32,
         )

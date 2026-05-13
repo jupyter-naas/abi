@@ -134,8 +134,12 @@ export default function FilesPage() {
   const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
   const isLocalFolder = !!activeSyncedFolder;
   // Source-aware scope param to match how file ops are routed in the store.
-  const filesScope: 'workspace' | 'my_drive' =
-    activeSource === 'my-drive' ? 'my_drive' : 'workspace';
+  const filesScope: 'workspace' | 'my_drive' | 'platform_drive' =
+    activeSource === 'my-drive'
+      ? 'my_drive'
+      : activeSource === 'platform-drive'
+        ? 'platform_drive'
+        : 'workspace';
   const fileQueryParams = `workspace_id=${encodeURIComponent(workspaceId)}&scope=${filesScope}`;
 
   useEffect(() => {
