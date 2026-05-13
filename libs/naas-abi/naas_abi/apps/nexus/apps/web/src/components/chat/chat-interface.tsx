@@ -79,6 +79,23 @@ function transformBareUrls(content: string): string {
   );
 }
 
+/**
+ * Strip a trailing "Sources" block from message content so it isn't rendered
+ * inline — the sources are shown in the dedicated collapsible panel instead.
+ * Handles variants: "Sources", "**Sources**", "## Sources", etc.
+ * Also removes trailing bare URL lines (e.g. a lone https://… at the end).
+ */
+function stripTrailingSources(content: string): string {
+  // Remove "Sources" heading + everything after it when at the end of the text
+  let result = content.replace(
+    /\n{1,2}(?:#{1,3}\s*)?(?:\*{1,2})?Sources(?:\*{1,2})?:?\s*\n[\s\S]*$/i,
+    ''
+  );
+  // Remove trailing lines that are only a bare URL
+  result = result.replace(/(\n+https?:\/\/\S+)+\s*$/, '');
+  return result.trimEnd();
+}
+
 /** Extract unique HTTP(S) URLs from message content (markdown links + bare URLs). */
 function extractUrlsFromContent(content: string): string[] {
   if (!content) return [];
@@ -102,79 +119,48 @@ function isLoginRequiredDomain(url: string): boolean {
   }
 }
 
-/** Right-side preview panel — tries direct iframe, falls back to backend proxy, closes + opens new tab if both fail. */
+/** Right-side preview panel.
+ *  Loads the URL directly in an iframe.
+ *  If the site blocks embedding (empty contentDocument on load), closes the
+ *  panel and opens the URL in a new browser tab instead.
+ */
 function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => void; width: number }) {
   const [reloadKey, setReloadKey] = useState(0);
-  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'proxy-loading' | 'proxy-loaded'>('loading');
+  const [isLoading, setIsLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const usingProxyRef = useRef(false);
-  const token = useAuthStore((s) => s.token);
   const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
-  const proxyUrl = `${getApiBase()}/api/proxy/page?url=${encodeURIComponent(url)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 
   useEffect(() => {
-    usingProxyRef.current = false;
-    setLoadState('loading');
+    setIsLoading(true);
     setReloadKey((k) => k + 1);
   }, [url]);
 
   const handleLoad = useCallback(() => {
-    if (usingProxyRef.current) {
-      // Proxy is same-origin with the API, so contentDocument always throws — treat as loaded.
-      setLoadState('proxy-loaded');
-      return;
-    }
     try {
       const doc = iframeRef.current?.contentDocument;
-      if (doc && (!doc.body || doc.body.innerHTML === '')) {
-        // Blocked by X-Frame-Options / CSP — try backend proxy.
-        usingProxyRef.current = true;
-        setLoadState('proxy-loading');
-        setReloadKey((k) => k + 1);
-      } else {
-        setLoadState('loaded');
-      }
-    } catch {
-      // SecurityError = cross-origin page loaded fine.
-      setLoadState('loaded');
-    }
-  }, []);
-
-  // If proxy itself reports empty (shouldn't happen, but defensive): close panel + open new tab.
-  const handleProxyLoad = useCallback(() => {
-    try {
-      const doc = iframeRef.current?.contentDocument;
+      // Accessible + empty body = browser blocked the embed (X-Frame-Options / CSP).
+      // A cross-origin page that loaded successfully throws SecurityError here instead.
       if (doc && (!doc.body || doc.body.innerHTML === '')) {
         onClose();
         window.open(url, '_blank', 'noopener,noreferrer');
         return;
       }
     } catch {
-      // SecurityError = different-origin proxy = loaded fine (expected path).
+      // SecurityError = cross-origin page loaded fine — keep the panel open.
     }
-    setLoadState('proxy-loaded');
+    setIsLoading(false);
   }, [url, onClose]);
 
   const handleReload = () => {
-    usingProxyRef.current = false;
-    setLoadState('loading');
+    setIsLoading(true);
     setReloadKey((k) => k + 1);
   };
-
-  const isLoading = loadState === 'loading' || loadState === 'proxy-loading';
-  const isSrc = usingProxyRef.current ? proxyUrl : url;
-  const onLoadHandler = usingProxyRef.current ? handleProxyLoad : handleLoad;
 
   return (
     <div className="flex flex-col border-border bg-background" style={{ width, minWidth: 280, maxWidth: 900 }}>
       {/* Header */}
       <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{domain}</span>
-        {loadState === 'proxy-loaded' && (
-          <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-            via proxy
-          </span>
-        )}
         <a
           href={url}
           target="_blank"
@@ -205,21 +191,18 @@ function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => voi
       {/* Body */}
       <div className="relative flex-1">
         {isLoading && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
             <Loader2 size={20} className="animate-spin text-muted-foreground" />
-            {loadState === 'proxy-loading' && (
-              <p className="text-xs text-muted-foreground">Loading via proxy…</p>
-            )}
           </div>
         )}
         <iframe
           key={reloadKey}
           ref={iframeRef}
-          src={isSrc}
+          src={url}
           title={domain}
           className="h-full w-full border-none"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          onLoad={onLoadHandler}
+          onLoad={handleLoad}
         />
       </div>
     </div>
@@ -2572,6 +2555,7 @@ const MessageBubble = React.memo(function MessageBubble({
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const wasProcessingRef = useRef(false);
   const processingStartRef = useRef<number | null>(null);
   
@@ -2684,6 +2668,13 @@ const MessageBubble = React.memo(function MessageBubble({
     if (isUser || typeof responseForDisplay !== 'string' || isStillProcessing) return [];
     return extractUrlsFromContent(responseForDisplay);
   }, [isUser, responseForDisplay, isStillProcessing]);
+
+  // Strip trailing "Sources" blocks so they don't render inline — the
+  // collapsible panel below handles display.
+  const responseForRender = useMemo(() => {
+    if (isUser || typeof responseForDisplay !== 'string') return responseForDisplay;
+    return stripTrailingSources(responseForDisplay);
+  }, [isUser, responseForDisplay]);
 
   const handleCopyCode = useCallback(async (code: string, key: string) => {
     try {
@@ -2903,15 +2894,15 @@ const MessageBubble = React.memo(function MessageBubble({
             </p>
           ) : isStillProcessing ? (
             <div className="max-w-full">
-              {responseForDisplay && (
+              {responseForRender && (
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {responseForDisplay}
+                  {responseForRender as string}
                 </ReactMarkdown>
               )}
             </div>
           ) : (
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {transformBareUrls(responseForDisplay as string)}
+              {transformBareUrls(responseForRender as string)}
             </ReactMarkdown>
           )}
         </div>
@@ -2934,32 +2925,55 @@ const MessageBubble = React.memo(function MessageBubble({
         {/* URL sources extracted from message content */}
         {!isUser && contentUrls.length > 0 && (
           <div className="mt-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
-            <div className="space-y-1">
-              {contentUrls.map((url, i) => {
-                const needsLogin = isLoginRequiredDomain(url);
-                // Strip query params for display (keep path only)
-                const displayUrl = url.split('?')[0];
-                return (
-                  <button
-                    key={url}
-                    type="button"
-                    onClick={() => {
-                      if (needsLogin) {
-                        window.open(url, '_blank', 'noopener,noreferrer');
-                      } else {
-                        onPreviewUrl?.(url);
-                      }
-                    }}
-                    className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted"
-                  >
-                    <span className="w-4 shrink-0 text-center tabular-nums text-muted-foreground">{i + 1}</span>
-                    <span className="flex-1 truncate font-medium text-foreground">{displayUrl}</span>
-                    <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              type="button"
+              onClick={() => setSourcesExpanded(v => !v)}
+              className="flex w-full items-center gap-1.5 text-left"
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className={`shrink-0 text-muted-foreground transition-transform duration-150 ${sourcesExpanded ? 'rotate-90' : ''}`}
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {sourcesExpanded ? 'Sources' : `Sources (${contentUrls.length})`}
+              </span>
+            </button>
+            {sourcesExpanded && (
+              <div className="mt-2 space-y-1">
+                {contentUrls.map((url, i) => {
+                  const needsLogin = isLoginRequiredDomain(url);
+                  const displayUrl = url.split('?')[0];
+                  return (
+                    <button
+                      key={url}
+                      type="button"
+                      onClick={() => {
+                        if (needsLogin) {
+                          window.open(url, '_blank', 'noopener,noreferrer');
+                        } else {
+                          onPreviewUrl?.(url);
+                        }
+                      }}
+                      className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted"
+                    >
+                      <span className="w-4 shrink-0 text-center tabular-nums text-muted-foreground">{i + 1}</span>
+                      <span className="flex-1 truncate font-medium text-foreground">{displayUrl}</span>
+                      <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
