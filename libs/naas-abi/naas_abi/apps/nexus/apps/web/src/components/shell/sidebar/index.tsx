@@ -63,18 +63,6 @@ export function Sidebar() {
     if (canKnowledge) { fetchOntology(); }
   }, [canFiles, canKnowledge, fetchFiles, fetchLabFiles, fetchOntology]);
 
-  // Close workspace dropdown on outside click
-  useEffect(() => {
-    if (!workspaceMenuOpen) return;
-    const handle = (e: MouseEvent) => {
-      if (workspaceBtnRef.current && !workspaceBtnRef.current.closest('[data-workspace-menu]')?.contains(e.target as Node)) {
-        setWorkspaceMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, [workspaceMenuOpen]);
-
   const currentWorkspace = mounted ? workspaces.find((w) => w.id === currentWorkspaceId) || null : null;
   const displayWorkspaces = mounted ? workspaces : [];
 
