@@ -7,13 +7,12 @@ git clone https://github.com/jravenel/nexus.git && cd nexus
 make install    # Install dependencies
 make db-up      # Start database
 make db-migrate # Setup tables
-make db-seed    # Load demo data
 make up         # Start servers
 ```
 
 Visit http://localhost:3000
 
-**Login:** alice@example.com / nexus2026
+**Login:** admin@example.com / Admin1234!
 
 ## What Is This?
 
@@ -66,7 +65,6 @@ apps/
       app/       # Pages
       components/
       stores/    # Zustand state
-demo/            # Demo data (JSON)
 docs/            # You are here
 ontology/        # BFO ontology (provider specs)
 ```

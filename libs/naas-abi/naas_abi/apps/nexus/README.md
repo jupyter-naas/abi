@@ -13,10 +13,10 @@ Enterprise AI agent platform with knowledge graphs, semantic search, and multi-L
 
 ```bash
 git clone https://github.com/jravenel/nexus.git && cd nexus
-make install && make db-up && make db-migrate && make db-seed && make up
+make install && make db-up && make db-migrate && make up
 ```
 
-→ **http://localhost:3000/auth/login** · `alice@example.com` / `nexus2026`
+→ **http://localhost:3000/auth/login** · `admin@example.com` / `Admin1234!`
 
 ## Features
 

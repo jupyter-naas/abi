@@ -41,17 +41,16 @@ make install
 # Start PostgreSQL
 make db-up
 
-# Run migrations and seed demo data
+# Run migrations
 make db-migrate
-make db-seed
 
 # Start dev servers
 make up
 ```
 
 Visit http://localhost:3000 and login with:
-- Email: `alice@example.com`
-- Password: `nexus2026`
+- Email: `admin@example.com`
+- Password: `Admin1234!`
 
 ## Development Setup
 
@@ -75,7 +74,6 @@ Required for AI features:
 ```bash
 make db-up        # Start PostgreSQL container
 make db-migrate   # Run migrations
-make db-seed      # Load demo data
 make db-reset     # Reset database (WARNING: deletes all data)
 ```
 
