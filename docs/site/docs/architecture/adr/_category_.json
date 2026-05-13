@@ -1,0 +1,8 @@
+{
+  "label": "Architecture Decision Records",
+  "position": 10,
+  "link": {
+    "type": "generated-index",
+    "description": "Records of significant architectural decisions made in the ABI project, their context, and their consequences."
+  }
+}
