@@ -2535,6 +2535,9 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
   );
 }
 
+// Matches page titles that indicate a soft-404 ("Page Not Found", etc.)
+const NOT_FOUND_TITLE_RE = /\b(404|not found|page not found|introuvable|doesn.t exist|no page)\b/i;
+
 const MessageBubble = React.memo(function MessageBubble({
   message,
   currentSelectedAgent,
@@ -2556,6 +2559,12 @@ const MessageBubble = React.memo(function MessageBubble({
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  // true = iframe-embeddable → open in preview panel
+  // false = blocked / unreachable → open new tab
+  // undefined = test in progress
+  const [urlEmbeddability, setUrlEmbeddability] = useState<Record<string, boolean>>({});
+  // true = URL responded (exists), false = network error (unreachable), undefined = testing
+  const [urlExists, setUrlExists] = useState<Record<string, boolean>>({});
   const wasProcessingRef = useRef(false);
   const processingStartRef = useRef<number | null>(null);
   
@@ -2668,6 +2677,123 @@ const MessageBubble = React.memo(function MessageBubble({
     if (isUser || typeof responseForDisplay !== 'string' || isStillProcessing) return [];
     return extractUrlsFromContent(responseForDisplay);
   }, [isUser, responseForDisplay, isStillProcessing]);
+
+  // Probe each URL with a hidden iframe to decide panel vs new-tab behaviour.
+  // Known login-gated domains (e.g. LinkedIn) are marked blocked immediately.
+  // ── Embeddability probe (hidden iframe) ──────────────────────────────────
+  useEffect(() => {
+    if (contentUrls.length === 0) return;
+    let cancelled = false;
+    const addedIframes: HTMLIFrameElement[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    contentUrls.forEach(url => {
+      if (isLoginRequiredDomain(url)) {
+        setUrlEmbeddability(prev => ({ ...prev, [url]: false }));
+        return;
+      }
+
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText =
+        'position:fixed;left:-9999px;width:0;height:0;opacity:0;pointer-events:none;border:none;';
+      addedIframes.push(iframe);
+
+      const resolve = (embeddable: boolean) => {
+        if (cancelled) return;
+        setUrlEmbeddability(prev => ({ ...prev, [url]: embeddable }));
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      };
+
+      const t = setTimeout(() => resolve(false), 6000);
+      timers.push(t);
+
+      iframe.onload = () => {
+        clearTimeout(t);
+        try {
+          const doc = iframe.contentDocument;
+          resolve(!!(doc?.body && doc.body.innerHTML !== ''));
+        } catch {
+          resolve(true); // SecurityError = cross-origin loaded fine
+        }
+      };
+      iframe.onerror = () => { clearTimeout(t); resolve(false); };
+
+      iframe.src = url;
+      document.body.appendChild(iframe);
+    });
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+      addedIframes.forEach(f => f.parentNode?.removeChild(f));
+    };
+  }, [contentUrls]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Existence probe (fetch) ───────────────────────────────────────────────
+  // Strategy:
+  //   1. CORS GET → real HTTP status + parse HTML <title> for "not found" text
+  //   2. If CORS blocked → no-cors HEAD → basic reachability only
+  //   3. If network error at either step → mark unreachable
+  useEffect(() => {
+    if (contentUrls.length === 0) return;
+    let cancelled = false;
+    const controllers: AbortController[] = [];
+
+    contentUrls.forEach(async url => {
+      if (isLoginRequiredDomain(url)) {
+        setUrlExists(prev => ({ ...prev, [url]: true }));
+        return;
+      }
+
+      const ctrl = new AbortController();
+      controllers.push(ctrl);
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+
+      try {
+        // Step 1: try a CORS fetch to get status + HTML title
+        const response = await fetch(url, { method: 'GET', mode: 'cors', signal: ctrl.signal });
+        clearTimeout(timer);
+        if (cancelled) return;
+
+        if (!response.ok) {
+          setUrlExists(prev => ({ ...prev, [url]: false }));
+          return;
+        }
+
+        // For HTML responses, parse the <title> for soft-404 patterns
+        const ct = response.headers.get('content-type') ?? '';
+        if (ct.includes('text/html')) {
+          const text = await response.text();
+          if (cancelled) return;
+          const doc = new DOMParser().parseFromString(text, 'text/html');
+          const valid = !NOT_FOUND_TITLE_RE.test(doc.title);
+          setUrlExists(prev => ({ ...prev, [url]: valid }));
+        } else {
+          setUrlExists(prev => ({ ...prev, [url]: true }));
+        }
+      } catch {
+        clearTimeout(timer);
+        if (cancelled) return;
+
+        // Step 2: CORS blocked → fall back to no-cors HEAD for basic reachability
+        try {
+          const ctrl2 = new AbortController();
+          controllers.push(ctrl2);
+          const t2 = setTimeout(() => ctrl2.abort(), 5000);
+          await fetch(url, { method: 'HEAD', mode: 'no-cors', signal: ctrl2.signal });
+          clearTimeout(t2);
+          if (!cancelled) setUrlExists(prev => ({ ...prev, [url]: true }));
+        } catch {
+          if (!cancelled) setUrlExists(prev => ({ ...prev, [url]: false }));
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      controllers.forEach(c => c.abort());
+    };
+  }, [contentUrls]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Strip trailing "Sources" blocks so they don't render inline — the
   // collapsible panel below handles display.
@@ -2951,14 +3077,17 @@ const MessageBubble = React.memo(function MessageBubble({
             {sourcesExpanded && (
               <div className="mt-2 space-y-1">
                 {contentUrls.map((url, i) => {
-                  const needsLogin = isLoginRequiredDomain(url);
+                  const embeddable = urlEmbeddability[url]; // true | false | undefined (testing)
+                  const exists = urlExists[url];             // true | false | undefined (testing)
+                  const isTesting = exists === undefined;
+                  const opensNewTab = embeddable === false;
                   const displayUrl = url.split('?')[0];
                   return (
                     <button
                       key={url}
                       type="button"
                       onClick={() => {
-                        if (needsLogin) {
+                        if (opensNewTab) {
                           window.open(url, '_blank', 'noopener,noreferrer');
                         } else {
                           onPreviewUrl?.(url);
@@ -2968,7 +3097,24 @@ const MessageBubble = React.memo(function MessageBubble({
                     >
                       <span className="w-4 shrink-0 text-center tabular-nums text-muted-foreground">{i + 1}</span>
                       <span className="flex-1 truncate font-medium text-foreground">{displayUrl}</span>
-                      <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+
+                      {/* Existence validator */}
+                      {isTesting ? (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="Checking…" className="shrink-0 animate-spin text-muted-foreground opacity-40"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                      ) : exists ? (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-label="URL reachable" className="shrink-0 text-emerald-500"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                      ) : (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-label="URL unreachable" className="shrink-0 text-red-500"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      )}
+
+                      {/* Open action icon (visible on hover once tested) */}
+                      {!isTesting && (
+                        opensNewTab ? (
+                          <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                        ) : (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                        )
+                      )}
                     </button>
                   );
                 })}
