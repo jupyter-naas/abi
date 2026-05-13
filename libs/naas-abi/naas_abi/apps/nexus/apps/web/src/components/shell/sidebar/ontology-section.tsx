@@ -137,6 +137,16 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
             || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
           );
         setOntologyFiles(normalizedFiles);
+
+        // Auto-select and navigate to the first ontology when none is selected.
+        // Read from getState() so we see the post-hydration value.
+        if (!useOntologyStore.getState().selectedOntologyPath && normalizedFiles.length > 0) {
+          const firstPath = normalizedFiles[0].path;
+          setSelectedOntologyPath(firstPath);
+          const params = new URLSearchParams({ view: 'network', ontology: firstPath });
+          router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
+        }
+
         setExpandedOntologyModules(
           Array.from(new Set(normalizedFiles.map((file) => file.moduleName)))
         );

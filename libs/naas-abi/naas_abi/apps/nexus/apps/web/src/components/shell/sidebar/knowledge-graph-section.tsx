@@ -317,7 +317,13 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
       }
 
       if (!selectedGraphId || !allowedIds.includes(selectedGraphId)) {
-        selectGraph(graphs[0]?.id ?? null);
+        const firstId = graphs[0]?.id ?? null;
+        selectGraph(firstId);
+        // Navigate to entities view when auto-selecting for the first time.
+        if (firstId && !selectedGraphId) {
+          setVisibleGraphs([firstId]);
+          router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=entities'));
+        }
       }
     } catch (err) {
       // Silently handle 403 (permission denied) - user doesn't have access to this workspace
@@ -326,7 +332,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
       }
       console.error('Failed to fetch graphs:', err);
     }
-  }, [currentWorkspaceId, selectGraph, selectedGraphId, setVisibleGraphs, visibleGraphIds]);
+  }, [currentWorkspaceId, router, selectGraph, selectedGraphId, setVisibleGraphs, visibleGraphIds]);
 
   useEffect(() => {
     void fetchGraphs();
