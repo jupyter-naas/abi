@@ -41,6 +41,55 @@ The web frontend is served at `http://localhost:9879` (or your configured port).
 
 ---
 
+## Authentication
+
+### Local development
+
+The local stack seeds a single admin account on first start. Default credentials:
+
+| Email | Password |
+|---|---|
+| `admin@example.com` | `Admin1234!` |
+
+The password is read from `.env` at seed time via `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`. Change it there before sharing the stack with others.
+
+### Password login vs. magic link
+
+`config.local.yaml` controls which method is active:
+
+```yaml
+nexus_config:
+  auth_password_enabled: true   # password form
+  # auth_password_enabled: false  # magic link form
+```
+
+Switch by editing the flag and restarting the backend:
+
+```bash
+docker compose restart abi
+```
+
+No frontend rebuild required. The login page fetches `/api/auth/config` at runtime.
+
+### Retrieving a magic link locally
+
+When `auth_password_enabled: false` and SMTP is not configured (the default for local dev), magic links are generated but not emailed. Retrieve the latest token directly from the database:
+
+```bash
+docker compose exec postgres psql -U abi -d nexus \
+  -c "SELECT token, expires_at FROM magic_link_tokens ORDER BY created_at DESC LIMIT 1;"
+```
+
+Then open:
+
+```
+http://localhost:3042/auth/magic-link?token=<token>
+```
+
+Tokens expire after 15 minutes.
+
+---
+
 ## Tenant branding
 
 Nexus supports per-deployment white-labeling configured in `config.yaml`:
