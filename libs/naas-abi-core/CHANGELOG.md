@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.37.0 (2026-05-13)
+
+### Features
+
+- **agent**: Improve markdown formatting and logging in Agent.py
+  ([`e1d6c9d`](https://github.com/jupyter-naas/abi/commit/e1d6c9d00dd52641f9122dba54b77dfe17bd20d5))
+
+
 ## v1.36.2 (2026-05-12)
 
 ### Performance Improvements
