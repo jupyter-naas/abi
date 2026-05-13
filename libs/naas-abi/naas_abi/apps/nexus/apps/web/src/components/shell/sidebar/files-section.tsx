@@ -9,7 +9,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 
-export function FilesSection({ collapsed }: { collapsed: boolean }) {
+export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const { currentWorkspaceId } = useWorkspaceStore();
   const workspaces = useWorkspaceStore((state) => state.workspaces);
@@ -32,6 +32,7 @@ export function FilesSection({ collapsed }: { collapsed: boolean }) {
       description="Workspace file storage"
       href={getWorkspacePath(currentWorkspaceId, '/files')}
       collapsed={collapsed}
+      detailOnly={detailOnly}
     >
       {/* Local section */}
       <div className="space-y-0.5">

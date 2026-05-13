@@ -136,3 +136,4 @@ website/build
 .pnpm-store/
 node_modules/
 
+CLAUDE.md

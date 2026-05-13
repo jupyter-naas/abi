@@ -1,7 +1,18 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@nexus/ui'],
+  transpilePackages: ['@nexus/ui', '@embedpdf/snippet'],
+  webpack(config) {
+    // pnpm's strict package isolation stops webpack from resolving this ESM-only
+    // package through normal module lookup; point it directly to the bundle file.
+    config.resolve.alias['@embedpdf/snippet'] = path.resolve(
+      __dirname,
+      'node_modules/@embedpdf/snippet/dist/embedpdf.js'
+    );
+    return config;
+  },
   async rewrites() {
     return [
       {

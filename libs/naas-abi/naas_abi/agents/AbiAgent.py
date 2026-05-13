@@ -67,6 +67,12 @@ Respond only based on what your available agents and tools can actually deliver.
 - Keep responses concise and factual.
 </constraints>
 """
+    suggestions: list[dict[str, str]] = [
+        {
+            "label": "Chat with a specific agent",
+            "value": "Chat with {{Agent Name}}",
+        },
+    ]
 
     # @staticmethod
     # def build_suggestions(cls: type) -> list[dict[str, str]]:

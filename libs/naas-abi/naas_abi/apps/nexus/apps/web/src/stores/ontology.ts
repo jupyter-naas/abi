@@ -114,13 +114,15 @@ interface OntologyState {
   
   // Selection
   selectedItemId: string | null;
+  selectedOntologyPath: string | null;
   expandedFolders: string[];
-  
+
   // Actions
   setItems: (items: OntologyItem[]) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setSelectedItem: (id: string | null) => void;
+  setSelectedOntologyPath: (path: string | null) => void;
   toggleFolder: (id: string) => void;
   toggleReference: (id: string) => void;
   
@@ -223,6 +225,7 @@ export const useOntologyStore = create<OntologyState>()(
       loading: false,
       error: null,
       selectedItemId: null,
+      selectedOntologyPath: null,
       expandedFolders: [],
       referenceOntologies: [],
       loadingReference: false,
@@ -232,6 +235,7 @@ export const useOntologyStore = create<OntologyState>()(
       setLoading: (loading) => set({ loading }),
       setError: (error) => set({ error }),
       setSelectedItem: (id) => set({ selectedItemId: id }),
+      setSelectedOntologyPath: (path) => set({ selectedOntologyPath: path }),
       
       toggleFolder: (id) => set((state) => ({
         expandedFolders: state.expandedFolders.includes(id)
@@ -584,6 +588,7 @@ export const useOntologyStore = create<OntologyState>()(
         expandedFolders: state.expandedFolders,
         referenceOntologies: state.referenceOntologies,
         expandedReferences: state.expandedReferences,
+        selectedOntologyPath: state.selectedOntologyPath,
       }),
     }
   )
