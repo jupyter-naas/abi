@@ -15,7 +15,7 @@ import type { NextRequest } from 'next/server';
  *   /workspace/[id]/...               -> authed, existing workspace routes
  */
 
-const DEFAULT_WORKSPACE = 'workspace-nexus';
+const DEFAULT_WORKSPACE = process.env.NEXT_PUBLIC_DEFAULT_WORKSPACE || 'workspace-nexus';
 
 // Legacy bare routes that should redirect to workspace-scoped routes
 const legacyRoutes = [
