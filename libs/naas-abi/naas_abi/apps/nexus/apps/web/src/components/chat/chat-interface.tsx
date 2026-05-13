@@ -63,6 +63,152 @@ function linkifyText(text: string, isUser: boolean): React.ReactNode {
   return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts;
 }
 
+/** Wrap bare URLs (not already in [text](url) syntax) as [domain](url) markdown links. */
+function transformBareUrls(content: string): string {
+  return content.replace(
+    /(?<!\]\()https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g,
+    (url) => {
+      try {
+        const h = new URL(url).hostname;
+        const domain = h.startsWith('www.') ? h.slice(4) : h;
+        return `[${domain}](${url})`;
+      } catch {
+        return url;
+      }
+    }
+  );
+}
+
+/**
+ * Strip a trailing "Sources" block from message content so it isn't rendered
+ * inline — the sources are shown in the dedicated collapsible panel instead.
+ * Handles variants: "Sources", "**Sources**", "## Sources", etc.
+ * Also removes trailing bare URL lines (e.g. a lone https://… at the end).
+ */
+function stripTrailingSources(content: string): string {
+  // Remove "Sources" heading + everything after it when at the end of the text
+  let result = content.replace(
+    /\n{1,2}(?:#{1,3}\s*)?(?:\*{1,2})?Sources(?:\*{1,2})?:?\s*\n[\s\S]*$/i,
+    ''
+  );
+  // Remove trailing lines that are only a bare URL
+  result = result.replace(/(\n+https?:\/\/\S+)+\s*$/, '');
+  return result.trimEnd();
+}
+
+/** Extract unique HTTP(S) URLs from message content (markdown links + bare URLs). */
+function extractUrlsFromContent(content: string): string[] {
+  if (!content) return [];
+  const urls = new Set<string>();
+  const mdLinkRe = /\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = mdLinkRe.exec(content)) !== null) urls.add(m[2]);
+  const stripped = content.replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '');
+  const bareRe = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
+  while ((m = bareRe.exec(stripped)) !== null) urls.add(m[0]);
+  return Array.from(urls);
+}
+
+const LOGIN_REQUIRED_RE = /(?:^|\.)linkedin\.com$/i;
+
+function isLoginRequiredDomain(url: string): boolean {
+  try {
+    return LOGIN_REQUIRED_RE.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Right-side preview panel.
+ *  Loads the URL directly in an iframe.
+ *  If the site blocks embedding (empty contentDocument on load), closes the
+ *  panel and opens the URL in a new browser tab instead.
+ */
+function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => void; width: number }) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+
+  useEffect(() => {
+    setIsLoading(true);
+    setReloadKey((k) => k + 1);
+  }, [url]);
+
+  const handleLoad = useCallback(() => {
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      // Accessible + empty body = browser blocked the embed (X-Frame-Options / CSP).
+      // A cross-origin page that loaded successfully throws SecurityError here instead.
+      if (doc && (!doc.body || doc.body.innerHTML === '')) {
+        onClose();
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+    } catch {
+      // SecurityError = cross-origin page loaded fine — keep the panel open.
+    }
+    setIsLoading(false);
+  }, [url, onClose]);
+
+  const handleReload = () => {
+    setIsLoading(true);
+    setReloadKey((k) => k + 1);
+  };
+
+  return (
+    <div className="flex flex-col border-border bg-background" style={{ width, minWidth: 280, maxWidth: 900 }}>
+      {/* Header */}
+      <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{domain}</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Open in new tab"
+        >
+          <ExternalLink size={14} />
+        </a>
+        <button
+          type="button"
+          onClick={handleReload}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Reload"
+        >
+          <RefreshCw size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Close"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="relative flex-1">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+            <Loader2 size={20} className="animate-spin text-muted-foreground" />
+          </div>
+        )}
+        <iframe
+          key={reloadKey}
+          ref={iframeRef}
+          src={url}
+          title={domain}
+          className="h-full w-full border-none"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          onLoad={handleLoad}
+        />
+      </div>
+    </div>
+  );
+}
+
 /** Styled link with hover card: open in new tab only. Rendered via portal so it stays above chat list/input. */
 function LinkWithPreview({
   href,
@@ -169,6 +315,12 @@ export function ChatInterface() {
   // Per-job ingestion status tracking
   const [ingestionJobs, setIngestionJobs] = useState<Map<string, {filename: string; status: string; progress?: number; error?: string; conversationId: string}>>(new Map());
   const ingestionAbortRefs = useRef<Map<string, AbortController>>(new Map());
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(420);
+  const [isPanelDragging, setIsPanelDragging] = useState(false);
+  const isPanelDraggingRef = useRef(false);
+  const panelDragStartXRef = useRef(0);
+  const panelDragStartWidthRef = useRef(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -952,6 +1104,43 @@ export function ChatInterface() {
     };
   }, [stopVoiceStream]);
 
+  // Panel resize — global pointer handlers so the drag keeps working even when
+  // the cursor leaves the handle strip.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isPanelDraggingRef.current) return;
+      const delta = panelDragStartXRef.current - e.clientX;
+      setPanelWidth(Math.max(280, Math.min(900, panelDragStartWidthRef.current + delta)));
+    };
+    const onUp = () => {
+      if (!isPanelDraggingRef.current) return;
+      isPanelDraggingRef.current = false;
+      setIsPanelDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      // Clean up in case component unmounts mid-drag
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, []);
+
+  const handlePanelDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isPanelDraggingRef.current = true;
+    setIsPanelDragging(true);
+    panelDragStartXRef.current = e.clientX;
+    panelDragStartWidthRef.current = panelWidth;
+    // Lock cursor and disable text selection for the entire page during drag
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [panelWidth]);
+
   const handleSubmit = async (
     e?: React.FormEvent,
     messageOverride?: string,
@@ -1582,7 +1771,9 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-1 flex-col min-h-0">
+    <div className="flex flex-1 min-h-0 relative">
+    {/* Chat column */}
+    <div className="flex flex-1 flex-col min-h-0 min-w-0">
       {/* Messages area */}
       <div className="flex-1 overflow-auto p-4 min-h-0">
         {!activeConversation || activeConversation.messages.length === 0 ? (
@@ -1590,20 +1781,21 @@ export function ChatInterface() {
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
             suggestions={selectedAgentData?.suggestions}
-            onSuggestionClick={(prompt) => setInput(prompt)}
+            onSuggestionClick={(prompt) => { setInput(prompt); focusChatInput(); }}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
             {activeConversation.messages.map((message) => (
-              <MessageBubble 
-                key={message.id} 
-                message={message} 
+              <MessageBubble
+                key={message.id}
+                message={message}
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
                 showStop={Boolean(streamingMessageId)}
                 onStop={() => {
                   streamControllerRef.current?.abort();
                 }}
+                onPreviewUrl={setPreviewUrl}
               />
             ))}
             {isLoading && !isStreaming && (
@@ -2005,6 +2197,32 @@ export function ChatInterface() {
         </div>
       </div>
     </div>
+    {/* Full-viewport overlay during drag — keeps mouse events away from the iframe */}
+    {isPanelDragging && (
+      <div className="fixed inset-0 z-50 cursor-col-resize" />
+    )}
+
+    {/* Drag handle + preview panel */}
+    {previewUrl && (
+      <>
+        {/* Resize handle — 8 px hit-area with a 1 px visible line in the centre */}
+        <div
+          className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center"
+          onMouseDown={handlePanelDragStart}
+        >
+          {/* Visible line */}
+          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border group-hover:bg-workspace-accent transition-colors" />
+          {/* Grip dots centred on the line */}
+          <div className="relative z-10 flex flex-col gap-[5px]">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-[3px] w-[3px] rounded-full bg-muted-foreground/40 group-hover:bg-workspace-accent transition-colors" />
+            ))}
+          </div>
+        </div>
+        <PreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} width={panelWidth} />
+      </>
+    )}
+    </div>
   );
 }
 
@@ -2317,24 +2535,36 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
   );
 }
 
+// Matches page titles that indicate a soft-404 ("Page Not Found", etc.)
+const NOT_FOUND_TITLE_RE = /\b(404|not found|page not found|introuvable|doesn.t exist|no page)\b/i;
+
 const MessageBubble = React.memo(function MessageBubble({
   message,
   currentSelectedAgent,
   showConnecting,
   showStop,
   onStop,
-}: { 
-  message: Message; 
+  onPreviewUrl,
+}: {
+  message: Message;
   currentSelectedAgent: string;
-  showConnecting: boolean; 
-  showStop: boolean; 
-  onStop: () => void; 
+  showConnecting: boolean;
+  showStop: boolean;
+  onStop: () => void;
+  onPreviewUrl?: (url: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  // true = iframe-embeddable → open in preview panel
+  // false = blocked / unreachable → open new tab
+  // undefined = test in progress
+  const [urlEmbeddability, setUrlEmbeddability] = useState<Record<string, boolean>>({});
+  // true = URL responded (exists), false = network error (unreachable), undefined = testing
+  const [urlExists, setUrlExists] = useState<Record<string, boolean>>({});
   const wasProcessingRef = useRef(false);
   const processingStartRef = useRef<number | null>(null);
   
@@ -2442,6 +2672,136 @@ const MessageBubble = React.memo(function MessageBubble({
       || (isStillProcessing && showConnecting ? 'Processing...' : '')
       || (isStillProcessing ? 'Processing...' : ''))
     : '';
+
+  const contentUrls = useMemo(() => {
+    if (isUser || typeof responseForDisplay !== 'string' || isStillProcessing) return [];
+    return extractUrlsFromContent(responseForDisplay);
+  }, [isUser, responseForDisplay, isStillProcessing]);
+
+  // Probe each URL with a hidden iframe to decide panel vs new-tab behaviour.
+  // Known login-gated domains (e.g. LinkedIn) are marked blocked immediately.
+  // ── Embeddability probe (hidden iframe) ──────────────────────────────────
+  useEffect(() => {
+    if (contentUrls.length === 0) return;
+    let cancelled = false;
+    const addedIframes: HTMLIFrameElement[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    contentUrls.forEach(url => {
+      if (isLoginRequiredDomain(url)) {
+        setUrlEmbeddability(prev => ({ ...prev, [url]: false }));
+        return;
+      }
+
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText =
+        'position:fixed;left:-9999px;width:0;height:0;opacity:0;pointer-events:none;border:none;';
+      addedIframes.push(iframe);
+
+      const resolve = (embeddable: boolean) => {
+        if (cancelled) return;
+        setUrlEmbeddability(prev => ({ ...prev, [url]: embeddable }));
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      };
+
+      const t = setTimeout(() => resolve(false), 6000);
+      timers.push(t);
+
+      iframe.onload = () => {
+        clearTimeout(t);
+        try {
+          const doc = iframe.contentDocument;
+          resolve(!!(doc?.body && doc.body.innerHTML !== ''));
+        } catch {
+          resolve(true); // SecurityError = cross-origin loaded fine
+        }
+      };
+      iframe.onerror = () => { clearTimeout(t); resolve(false); };
+
+      iframe.src = url;
+      document.body.appendChild(iframe);
+    });
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+      addedIframes.forEach(f => f.parentNode?.removeChild(f));
+    };
+  }, [contentUrls]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Existence probe (fetch) ───────────────────────────────────────────────
+  // Strategy:
+  //   1. CORS GET → real HTTP status + parse HTML <title> for "not found" text
+  //   2. If CORS blocked → no-cors HEAD → basic reachability only
+  //   3. If network error at either step → mark unreachable
+  useEffect(() => {
+    if (contentUrls.length === 0) return;
+    let cancelled = false;
+    const controllers: AbortController[] = [];
+
+    contentUrls.forEach(async url => {
+      if (isLoginRequiredDomain(url)) {
+        setUrlExists(prev => ({ ...prev, [url]: true }));
+        return;
+      }
+
+      const ctrl = new AbortController();
+      controllers.push(ctrl);
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+
+      try {
+        // Step 1: try a CORS fetch to get status + HTML title
+        const response = await fetch(url, { method: 'GET', mode: 'cors', signal: ctrl.signal });
+        clearTimeout(timer);
+        if (cancelled) return;
+
+        if (!response.ok) {
+          setUrlExists(prev => ({ ...prev, [url]: false }));
+          return;
+        }
+
+        // For HTML responses, parse the <title> for soft-404 patterns
+        const ct = response.headers.get('content-type') ?? '';
+        if (ct.includes('text/html')) {
+          const text = await response.text();
+          if (cancelled) return;
+          const doc = new DOMParser().parseFromString(text, 'text/html');
+          const valid = !NOT_FOUND_TITLE_RE.test(doc.title);
+          setUrlExists(prev => ({ ...prev, [url]: valid }));
+        } else {
+          setUrlExists(prev => ({ ...prev, [url]: true }));
+        }
+      } catch {
+        clearTimeout(timer);
+        if (cancelled) return;
+
+        // Step 2: CORS blocked → fall back to no-cors HEAD for basic reachability
+        try {
+          const ctrl2 = new AbortController();
+          controllers.push(ctrl2);
+          const t2 = setTimeout(() => ctrl2.abort(), 5000);
+          await fetch(url, { method: 'HEAD', mode: 'no-cors', signal: ctrl2.signal });
+          clearTimeout(t2);
+          if (!cancelled) setUrlExists(prev => ({ ...prev, [url]: true }));
+        } catch {
+          if (!cancelled) setUrlExists(prev => ({ ...prev, [url]: false }));
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      controllers.forEach(c => c.abort());
+    };
+  }, [contentUrls]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Strip trailing "Sources" blocks so they don't render inline — the
+  // collapsible panel below handles display.
+  const responseForRender = useMemo(() => {
+    if (isUser || typeof responseForDisplay !== 'string') return responseForDisplay;
+    return stripTrailingSources(responseForDisplay);
+  }, [isUser, responseForDisplay]);
+
   const handleCopyCode = useCallback(async (code: string, key: string) => {
     try {
       await navigator.clipboard.writeText(code);
@@ -2660,20 +3020,20 @@ const MessageBubble = React.memo(function MessageBubble({
             </p>
           ) : isStillProcessing ? (
             <div className="max-w-full">
-              {responseForDisplay && (
+              {responseForRender && (
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {responseForDisplay}
+                  {responseForRender as string}
                 </ReactMarkdown>
               )}
             </div>
           ) : (
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {responseForDisplay}
+              {transformBareUrls(responseForRender as string)}
             </ReactMarkdown>
           )}
         </div>
 
-        {/* Source pills — shown when RAG context was used */}
+        {/* RAG document source pills */}
         {!isUser && message.sources && message.sources.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
             {message.sources.map((src) => (
@@ -2685,6 +3045,81 @@ const MessageBubble = React.memo(function MessageBubble({
                 {src}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* URL sources extracted from message content */}
+        {!isUser && contentUrls.length > 0 && (
+          <div className="mt-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+            <button
+              type="button"
+              onClick={() => setSourcesExpanded(v => !v)}
+              className="flex w-full items-center gap-1.5 text-left"
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className={`shrink-0 text-muted-foreground transition-transform duration-150 ${sourcesExpanded ? 'rotate-90' : ''}`}
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {sourcesExpanded ? 'Sources' : `Sources (${contentUrls.length})`}
+              </span>
+            </button>
+            {sourcesExpanded && (
+              <div className="mt-2 space-y-1">
+                {contentUrls.map((url, i) => {
+                  const embeddable = urlEmbeddability[url]; // true | false | undefined (testing)
+                  const exists = urlExists[url];             // true | false | undefined (testing)
+                  const isTesting = exists === undefined;
+                  const opensNewTab = embeddable === false;
+                  const displayUrl = url.split('?')[0];
+                  return (
+                    <button
+                      key={url}
+                      type="button"
+                      onClick={() => {
+                        if (opensNewTab) {
+                          window.open(url, '_blank', 'noopener,noreferrer');
+                        } else {
+                          onPreviewUrl?.(url);
+                        }
+                      }}
+                      className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted"
+                    >
+                      <span className="w-4 shrink-0 text-center tabular-nums text-muted-foreground">{i + 1}</span>
+                      <span className="flex-1 truncate font-medium text-foreground">{displayUrl}</span>
+
+                      {/* Existence validator */}
+                      {isTesting ? (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="Checking…" className="shrink-0 animate-spin text-muted-foreground opacity-40"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                      ) : exists ? (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-label="URL reachable" className="shrink-0 text-emerald-500"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                      ) : (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-label="URL unreachable" className="shrink-0 text-red-500"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      )}
+
+                      {/* Open action icon (visible on hover once tested) */}
+                      {!isTesting && (
+                        opensNewTab ? (
+                          <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                        ) : (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                        )
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

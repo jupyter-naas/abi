@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@nexus/ui'],
+  transpilePackages: ['@nexus/ui', '@embedpdf/snippet'],
   async rewrites() {
     return [
       {
