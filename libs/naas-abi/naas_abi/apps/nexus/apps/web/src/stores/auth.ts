@@ -29,7 +29,7 @@ export interface AuthState {
   // Actions
   requestMagicLink: (email: string) => Promise<boolean>;
   verifyMagicLink: (token: string) => Promise<boolean>;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<string | null>;
   register: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
   setUser: (user: User | null) => void;
