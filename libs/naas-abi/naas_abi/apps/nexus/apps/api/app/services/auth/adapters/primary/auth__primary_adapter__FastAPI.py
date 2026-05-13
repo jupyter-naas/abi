@@ -92,8 +92,8 @@ def _get_object_storage(request: Request) -> ObjectStorageService:
         ) from exc
 
 
-@router.get("/config")
-async def get_auth_config() -> dict:
+@router.get("/config", response_model=dict[str, bool])
+async def get_auth_config() -> dict[str, bool]:
     return {"password_auth_enabled": settings.auth_password_enabled}
 
 
@@ -484,7 +484,7 @@ async def _send_magic_link_email(to_email: str, token: str) -> None:
     magic_link_url = f"{settings.frontend_url.rstrip('/')}{settings.magic_link_path}?{query}"
 
     if not settings.smtp_enabled:
-        logger.warning(
+        logger.info(
             "SMTP disabled. Magic link for %s: %s",
             to_email,
             magic_link_url,
