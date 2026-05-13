@@ -118,4 +118,4 @@ After login, Nexus redirects users to their workspace using a three-tier resolut
 
 **Production deployments must set `NEXUS_DEFAULT_WORKSPACE`** in `.env` to match their workspace slug, or first-visit redirects will land on a 404.
 
-See [ADR-001: Default workspace routing](/architecture/adr/adr-001-workspace-routing) for the full decision record.
+See [ADR: Default workspace routing](/updates/workspace-routing) for the full decision record.
