@@ -106,7 +106,7 @@ services:
       - NEXT_PUBLIC_API_URL=${NEXUS_API_URL}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
       - NEXT_PUBLIC_PASSWORD_AUTH_ENABLED=${AUTH_PASSWORD_ENABLED:-false}
-      - NEXT_PUBLIC_DEFAULT_WORKSPACE=${NEXUS_DEFAULT_WORKSPACE:-naas-ai}
+      - DEFAULT_WORKSPACE=${NEXUS_DEFAULT_WORKSPACE:-naas-ai}
     networks:
       - abi-network
 
