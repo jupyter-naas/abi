@@ -220,7 +220,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
   );
 });
 
-export function ChatSection({ collapsed }: { collapsed: boolean }) {
+export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [agentsExpanded, setAgentsExpanded] = useState(true);
@@ -291,6 +291,7 @@ export function ChatSection({ collapsed }: { collapsed: boolean }) {
       description="Interact with ABI-powered agents"
       href={getWorkspacePath(currentWorkspaceId, '/chat')}
       collapsed={collapsed}
+      detailOnly={detailOnly}
       onNavigate={() => setActiveConversation(null)}
     >
       {/* New Chat button */}

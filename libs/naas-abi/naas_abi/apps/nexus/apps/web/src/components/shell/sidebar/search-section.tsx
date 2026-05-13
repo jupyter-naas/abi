@@ -85,7 +85,7 @@ const SearchCategoryGroup = React.memo(function SearchCategoryGroup({
   );
 });
 
-export function SearchSection({ collapsed }: { collapsed: boolean }) {
+export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const { currentWorkspaceId } = useWorkspaceStore();
   const {
     sources,
@@ -106,6 +106,7 @@ export function SearchSection({ collapsed }: { collapsed: boolean }) {
       description="Semantic search across all your knowledge"
       href={getWorkspacePath(currentWorkspaceId, '/search')}
       collapsed={collapsed}
+      detailOnly={detailOnly}
     >
       <SearchCategoryGroup
         category="public"

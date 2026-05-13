@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { Sidebar } from './sidebar';
+import { SectionPanel } from './sidebar/section-panel';
 import { AIPane } from './ai-pane';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
@@ -179,8 +180,11 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       style={themeStyles}
       data-org-branded="true"
     >
-      {/* Left sidebar - Global navigation */}
+      {/* Primary icon sidebar */}
       <Sidebar />
+
+      {/* Secondary detail panel — pushes main content */}
+      <SectionPanel />
 
       {/* Main content area */}
       <main className="flex flex-1 flex-col overflow-hidden">
