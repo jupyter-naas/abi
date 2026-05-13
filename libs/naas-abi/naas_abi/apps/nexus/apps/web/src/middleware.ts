@@ -21,7 +21,7 @@ import type { NextRequest } from 'next/server';
  */
 
 // Read at request time from the server-side env (no build-time baking).
-const CONFIGURED_DEFAULT = process.env.DEFAULT_WORKSPACE || 'workspace-nexus';
+const CONFIGURED_DEFAULT = process.env.DEFAULT_WORKSPACE || 'primary';
 
 /** Returns the best workspace to redirect to for this request. */
 function resolveDefaultWorkspace(request: NextRequest): string {
