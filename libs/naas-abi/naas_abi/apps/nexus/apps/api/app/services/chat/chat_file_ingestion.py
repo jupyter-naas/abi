@@ -18,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import 
     chunk_markdown,
     embed_texts,
 )
+from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import my_drive_root
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
@@ -63,7 +64,7 @@ class ChatFileIngestionService:
 
     @staticmethod
     def my_drive_uploads_path(user_id: str) -> str:
-        return PurePosixPath("my-drive", user_id, "uploads").as_posix()
+        return PurePosixPath(my_drive_root(user_id), "uploads").as_posix()
 
     def upload_and_ingest(
         self,
@@ -103,10 +104,10 @@ class ChatFileIngestionService:
         statuses = ["hashing", "cache_lookup"]
 
         # Normalise the path to resolve any ".." traversal attempts before
-        # checking ownership (e.g. "my-drive/user/../../etc/passwd" must not pass).
+        # checking ownership (e.g. "naas_abi/my-drive/user/../../etc/passwd" must not pass).
         import posixpath
         normalized_source = posixpath.normpath(source_path.strip().strip("/"))
-        expected_prefix = PurePosixPath("my-drive", user_id).as_posix()
+        expected_prefix = my_drive_root(user_id)
         if not (
             normalized_source == expected_prefix
             or normalized_source.startswith(f"{expected_prefix}/")

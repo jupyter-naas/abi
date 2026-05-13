@@ -300,23 +300,32 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
     return fetch(fullUrl, { ...options, headers });
   };
 
-  const response = await makeRequest(useAuthStore.getState().token);
+  // Surface in-flight activity to the UI (e.g. ApiStatusIndicator pulses while busy).
+  const { useNetworkActivityStore } = await import('./network-activity');
+  const { begin, end } = useNetworkActivityStore.getState();
+  begin();
 
-  if (response.status === 401) {
-    // Try a silent token refresh
-    const refreshed = await useAuthStore.getState().refreshAccessToken();
-    if (refreshed) {
-      // Retry the original request with the new token
-      return makeRequest(useAuthStore.getState().token);
+  try {
+    const response = await makeRequest(useAuthStore.getState().token);
+
+    if (response.status === 401) {
+      // Try a silent token refresh
+      const refreshed = await useAuthStore.getState().refreshAccessToken();
+      if (refreshed) {
+        // Retry the original request with the new token
+        return await makeRequest(useAuthStore.getState().token);
+      }
+
+      // Refresh failed — full logout
+      console.warn('Auth token expired and refresh failed, logging out...');
+      useAuthStore.getState().logout();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth/login';
+      }
     }
 
-    // Refresh failed — full logout
-    console.warn('Auth token expired and refresh failed, logging out...');
-    useAuthStore.getState().logout();
-    if (typeof window !== 'undefined') {
-      window.location.href = '/auth/login';
-    }
+    return response;
+  } finally {
+    end();
   }
-
-  return response;
 }

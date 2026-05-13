@@ -53,6 +53,7 @@ class Workspace(BaseModel):
     background_color: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    platform_drive_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
     organization_logo_url: str | None = None
@@ -83,6 +84,7 @@ class WorkspaceUpdate(BaseModel):
     background_color: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    platform_drive_enabled: bool | None = None
 
 
 class WorkspaceMember(BaseModel):
@@ -151,6 +153,7 @@ def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Worksp
         background_color=record.background_color,
         sidebar_color=record.sidebar_color,
         font_family=record.font_family,
+        platform_drive_enabled=record.platform_drive_enabled,
         created_at=record.created_at,
         updated_at=record.updated_at,
         organization_logo_url=record.organization_logo_url,

@@ -40,6 +40,7 @@ export const defaultStorageSources: StorageSource[] = [
   // Local - default workspace storage on server
   { id: 'my-drive', name: 'My Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Personal files shared across workspaces' },
   { id: 'workspace', name: 'Workspace Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Workspace files (create, edit, upload)' },
+  { id: 'platform-drive', name: 'Platform Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Files shared across every workspace where platform drive is enabled' },
   
   // Cloud sources - third-party cloud storage
   { id: 'google-drive', name: 'Google Drive', icon: 'cloud', category: 'cloud', enabled: false, connected: false, description: 'Sync with Google Drive' },
@@ -147,8 +148,10 @@ import { getApiUrl } from '@/lib/config';
 
 const getApiBase = () => getApiUrl();
 
-const getFilesScope = (activeSource: string): 'workspace' | 'my_drive' => {
-  return activeSource === 'my-drive' ? 'my_drive' : 'workspace';
+const getFilesScope = (activeSource: string): 'workspace' | 'my_drive' | 'platform_drive' => {
+  if (activeSource === 'my-drive') return 'my_drive';
+  if (activeSource === 'platform-drive') return 'platform_drive';
+  return 'workspace';
 };
 
 export const useFilesStore = create<FilesState>((set, get) => ({
@@ -399,9 +402,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
 
-    // The files API requires a workspace when listing root.
+    // The files API requires a workspace for workspace/platform-drive scopes.
     // During app bootstrap the workspace can still be null.
-    if (scope === 'workspace' && !relativePath && !workspaceId) {
+    if (scope !== 'my_drive' && !relativePath && !workspaceId) {
       set({ files: [], currentPath: '', loading: false, error: null });
       return;
     }
@@ -409,7 +412,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const fetchListing = async (targetPath: string) => {
-        const workspaceParam = scope === 'workspace' && workspaceId
+        const workspaceParam = scope !== 'my_drive' && workspaceId
           ? `&workspace_id=${encodeURIComponent(workspaceId)}`
           : '';
         const scopeParam = `&scope=${scope}`;
@@ -511,7 +514,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
 
-    if (scope === 'workspace' && !workspaceId) {
+    if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return null;
     }
@@ -551,7 +554,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
 
-    if (scope === 'workspace' && !workspaceId) {
+    if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return null;
     }
@@ -583,14 +586,14 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   deleteFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
-    if (scope === 'workspace' && !workspaceId) {
+    if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return false;
     }
 
     set({ loading: true, error: null });
     try {
-      const workspaceParam = scope === 'workspace' && workspaceId
+      const workspaceParam = scope !== 'my_drive' && workspaceId
         ? `workspace_id=${encodeURIComponent(workspaceId)}&`
         : '';
       const scopeParam = `scope=${scope}`;
@@ -622,7 +625,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   renameFile: async (oldPath, newPath) => {
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
-    if (scope === 'workspace' && !workspaceId) {
+    if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return false;
     }
@@ -679,7 +682,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
 
-    if (scope === 'workspace' && !workspaceId) {
+    if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return null;
     }
@@ -689,7 +692,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       const formData = new FormData();
       formData.append('file', file);
       formData.append('path', uploadPath);
-      if (scope === 'workspace' && workspaceId) {
+      if (scope !== 'my_drive' && workspaceId) {
         formData.append('workspace_id', workspaceId);
       }
       formData.append('scope', scope);
@@ -743,13 +746,13 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   readFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
-    if (scope === 'workspace' && !workspaceId) {
+    if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected' });
       return null;
     }
 
     try {
-      const workspaceParam = scope === 'workspace' && workspaceId
+      const workspaceParam = scope !== 'my_drive' && workspaceId
         ? `workspace_id=${encodeURIComponent(workspaceId)}&`
         : '';
       const scopeParam = `scope=${scope}`;
@@ -779,13 +782,13 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       return false;
     }
 
-    if (scope === 'workspace' && !workspaceId) {
+    if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected' });
       return false;
     }
     
     try {
-      const workspaceParam = scope === 'workspace' && workspaceId
+      const workspaceParam = scope !== 'my_drive' && workspaceId
         ? `workspace_id=${encodeURIComponent(workspaceId)}&`
         : '';
       const scopeParam = `scope=${scope}`;

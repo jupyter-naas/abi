@@ -268,3 +268,21 @@ html {
 [data-org-branded="true"] input[type="radio"] {
   /* Keep their default border-radius */
 }
+
+/* Soft, slow halo used by the API status indicator while requests are in flight. */
+@keyframes api-status-halo {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.9);
+    opacity: 0.35;
+  }
+}
+
+/* Orbit animation used by the API status indicator — one satellite per in-flight request. */
+@keyframes api-status-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
