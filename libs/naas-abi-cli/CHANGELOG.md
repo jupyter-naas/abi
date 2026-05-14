@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.34.1 (2026-05-14)
+
+### Bug Fixes
+
+- **suggestions**: Restore rich fields after rebase, swap disabled states, rename App to Apps
+  ([`9395da1`](https://github.com/jupyter-naas/abi/commit/9395da1c14f11451e8996c3393604189633f7f9f))
+
+
 ## v1.34.0 (2026-05-14)
 
 ### Bug Fixes
