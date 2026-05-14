@@ -2,6 +2,55 @@
 
 <!-- version list -->
 
+## v1.44.0 (2026-05-14)
+
+### Bug Fixes
+
+- **chat**: Merge greeting and hint into single line
+  ([`537d799`](https://github.com/jupyter-naas/abi/commit/537d7999ecd964b278781e4eaaafafdb35ede3f5))
+
+- **chat**: Revert greeting size, tune suggestion rows to max-w-lg
+  ([`8911d2e`](https://github.com/jupyter-naas/abi/commit/8911d2e7109df467d161044fa7c36f663e8040a3))
+
+- **suggestions**: Activate sidebar panel section on cta card click
+  ([`2596b3e`](https://github.com/jupyter-naas/abi/commit/2596b3eb67b4125e484f2e0eacbdb4e98366b7c8))
+
+- **suggestions**: Move router and setActivePanelSection into EmptyState component
+  ([`ff51c0e`](https://github.com/jupyter-naas/abi/commit/ff51c0ed9b17a8644e7aaa14c7cfb15a1f0e3944))
+
+- **suggestions**: Restore rich fields after rebase, swap disabled states, rename App to Apps
+  ([`9395da1`](https://github.com/jupyter-naas/abi/commit/9395da1c14f11451e8996c3393604189633f7f9f))
+
+- **suggestions**: Tighten card font size and padding to match sidebar scale
+  ([`4974170`](https://github.com/jupyter-naas/abi/commit/497417002b09e45ad7d29f17a47fc8c94f228eca))
+
+### Features
+
+- **chat**: Match suggestion width to input bar, enlarge greeting heading
+  ([`d14e79c`](https://github.com/jupyter-naas/abi/commit/d14e79c3a0040afbd14dda8011add4a4bc57df32))
+
+- **chat**: Replace static subtitle with time-aware greeting using user name
+  ([`81eea7a`](https://github.com/jupyter-naas/abi/commit/81eea7a66e164d221ec8d13f746afcf5843e8490))
+
+- **chat**: Restore onboarding hint below greeting
+  ([`c30d26e`](https://github.com/jupyter-naas/abi/commit/c30d26e227f4542680219ecad8c22bdcb7399165))
+
+- **chat**: Simplify greeting to Hello name with short onboarding hint
+  ([`bf631b8`](https://github.com/jupyter-naas/abi/commit/bf631b855940df4fce8bfd596b95e0b5d823b45d))
+
+- **suggestions**: Hover prefills input bar, click sends — remove tooltip
+  ([`603c6bc`](https://github.com/jupyter-naas/abi/commit/603c6bc69a7374cec1fd61971e2d82a8ff348bf2))
+
+- **suggestions**: Navigate to knowledge graph section on card click
+  ([`ba6375b`](https://github.com/jupyter-naas/abi/commit/ba6375b771b160f284270cbf0d5bdb63fee2f6af))
+
+- **suggestions**: Switch from 2x2 grid to single-column rows
+  ([`914d162`](https://github.com/jupyter-naas/abi/commit/914d162b2c567cf134c7b07373ddf55b2c1c9bbf))
+
+- **suggestions**: Truncate overflow text, add hover tooltip, fix mobile width
+  ([`a8c1bf9`](https://github.com/jupyter-naas/abi/commit/a8c1bf96c18643cada7531cb16ddcadea788a27c))
+
+
 ## v1.43.2 (2026-05-14)
 
 ### Bug Fixes
