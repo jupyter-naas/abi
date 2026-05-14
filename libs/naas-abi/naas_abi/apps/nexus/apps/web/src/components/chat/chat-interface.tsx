@@ -2259,9 +2259,8 @@ function EmptyState({
           <Bot size={24} className="text-workspace-accent" />
         )}
       </div>
-      <p className="mb-1 text-center text-muted-foreground">{greeting}</p>
-      <p className="mb-6 text-center text-xs text-muted-foreground/60">
-        Pick a suggestion or type a message to get started.
+      <p className="mb-6 text-center text-muted-foreground">
+        {greeting} Pick a suggestion or type a message to get started.
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
         <div className="flex w-full max-w-lg flex-col gap-1.5">
