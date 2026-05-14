@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffe
 import { createPortal } from 'react-dom';
 import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy } from 'lucide-react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
@@ -1339,7 +1340,7 @@ export function ChatInterface() {
           if (!stepName) return;
 
           const label = stepType === 'call_model'
-            ? `Calling model`
+            ? `Calling ${stepName}`
             : `Routing to ${stepName}`;
 
           const last = streamToolCalls[streamToolCalls.length - 1];
@@ -1377,7 +1378,7 @@ export function ChatInterface() {
               if (!rawTool) return false;
               const input = getStringValue(payload.input, payload.data) || undefined;
               handleToolStartEvent(rawTool, input);
-              streamActivityLine = `${formatToolName(rawTool)}`;
+              streamActivityLine = `Tool: ${formatToolName(rawTool)}`;
               hasDetailedActivity = true;
               return true;
             }
@@ -1782,6 +1783,8 @@ export function ChatInterface() {
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
             suggestions={selectedAgentData?.suggestions}
             onSuggestionClick={(prompt) => { setInput(prompt); focusChatInput(); }}
+            onSuggestionHover={(value) => setInput(value)}
+            onSuggestionLeave={() => setInput('')}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -2231,16 +2234,26 @@ function EmptyState({
   logoUrl,
   suggestions,
   onSuggestionClick,
+  onSuggestionHover,
+  onSuggestionLeave,
 }: {
   selectedAgentName: string;
   logoUrl?: string | null;
-  suggestions?: Array<{ label: string; value: string }>;
+  suggestions?: Array<{ label: string; value: string; description?: string; disabled?: boolean; cta?: string }>;
   onSuggestionClick: (prompt: string) => void;
+  onSuggestionHover?: (value: string) => void;
+  onSuggestionLeave?: () => void;
 }) {
+  const router = useRouter();
+  const { setActivePanelSection } = useWorkspaceStore();
+  const { user } = useAuthStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
+
+  const firstName = user?.name?.split(' ')[0];
+  const greeting = firstName ? `Hello, ${firstName}.` : 'Hello.';
   return (
-    <div className="flex h-full flex-col items-center justify-center">
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-workspace-accent-10 overflow-hidden">
+    <div className="flex h-full flex-col items-center justify-center px-4">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
         {resolvedLogoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -2249,28 +2262,72 @@ function EmptyState({
             className="h-full w-full object-contain p-1"
           />
         ) : (
-          <Bot size={32} className="text-workspace-accent" />
+          <Bot size={24} className="text-workspace-accent" />
         )}
       </div>
-      <p className="mb-8 max-w-md text-center text-muted-foreground">
-        Start a conversation with {selectedAgentName}. Ask questions, explore your data, or get
-        help with tasks.
+      <p className="mb-6 text-center text-muted-foreground">
+        {greeting} Pick a suggestion or type a message to get started.
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div className="grid w-full max-w-xl grid-cols-2 gap-3">
-          {suggestions.map((suggestion, index) => {
-            const isOddLastItem = suggestions.length % 2 === 1 && index === suggestions.length - 1;
+        <div className="flex w-full max-w-lg flex-col gap-1.5">
+          {suggestions.map((suggestion) => {
+            const baseClass = cn(
+              'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
+              suggestion.disabled
+                ? 'opacity-40 cursor-not-allowed'
+                : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
+            );
+
+            const content = (
+              <>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium leading-tight">{suggestion.label}</span>
+                  {suggestion.description && (
+                    <span className="block truncate text-xs text-muted-foreground leading-snug">
+                      {suggestion.description}
+                    </span>
+                  )}
+                  {suggestion.disabled && (
+                    <span className="block text-xs text-muted-foreground/60 italic">
+                      Coming soon
+                    </span>
+                  )}
+                </div>
+                {!suggestion.disabled && (
+                  <span className="ml-3 shrink-0 text-muted-foreground/40">›</span>
+                )}
+              </>
+            );
+
+            if (suggestion.cta && !suggestion.disabled) {
+              const sectionId = suggestion.cta.replace(/^\//, '') as Parameters<typeof setActivePanelSection>[0];
+              return (
+                <button
+                  key={`${suggestion.label}:${suggestion.value}`}
+                  onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
+                  onMouseLeave={() => onSuggestionLeave?.()}
+                  onClick={() => {
+                    setActivePanelSection(sectionId);
+                    router.push(suggestion.cta!);
+                  }}
+                  className={baseClass}
+                >
+                  {content}
+                </button>
+              );
+            }
+
             return (
-            <button
-              key={`${suggestion.label}:${suggestion.value}`}
-              onClick={() => onSuggestionClick(suggestion.value)}
-              className={cn(
-                'glass-card p-4 text-center text-sm transition-all hover:border-primary/30 hover:glow-primary-sm',
-                isOddLastItem && 'col-span-2 w-full max-w-[calc(50%-0.375rem)] justify-self-center'
-              )}
-            >
-              {suggestion.label}
-            </button>
+              <button
+                key={`${suggestion.label}:${suggestion.value}`}
+                onMouseEnter={() => !suggestion.disabled && onSuggestionHover?.(suggestion.value)}
+                onMouseLeave={() => onSuggestionLeave?.()}
+                onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
+                disabled={suggestion.disabled}
+                className={baseClass}
+              >
+                {content}
+              </button>
             );
           })}
         </div>
