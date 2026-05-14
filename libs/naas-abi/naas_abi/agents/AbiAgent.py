@@ -80,16 +80,15 @@ Respond only based on what your available agents and tools can actually deliver.
         },
         {
             "label": "Explore my knowledge graph",
-            "value": "Show me what's in my knowledge graph",
+            "value": "",
             "description": "Browse entities and relationships in your data",
-            "cta": "/graph",
+            "disabled": True,
         },
         {
             "label": "Browse Apps",
             "value": "",
             "description": "Discover and enable modules from the marketplace",
-            "disabled": True,
-            "cta": "apps",
+            "cta": "/apps",
         },
     ]
 

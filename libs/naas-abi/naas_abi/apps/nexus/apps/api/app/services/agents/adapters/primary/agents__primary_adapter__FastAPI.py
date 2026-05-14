@@ -111,19 +111,27 @@ def request_context(current_user: User) -> RequestContext:
     )
 
 
-def _extract_agent_suggestions(agent_cls: type) -> list[dict[str, str]] | None:
+def _extract_agent_suggestions(agent_cls: type) -> list[dict] | None:
     suggestions = getattr(agent_cls, "suggestions", None)
     if not isinstance(suggestions, list):
         return None
 
-    normalized: list[dict[str, str]] = []
+    normalized: list[dict] = []
     for item in suggestions:
         if not isinstance(item, dict):
             continue
         label = item.get("label")
         value = item.get("value")
-        if isinstance(label, str) and isinstance(value, str):
-            normalized.append({"label": label, "value": value})
+        if not isinstance(label, str) or not isinstance(value, str):
+            continue
+        entry: dict = {"label": label, "value": value}
+        if "description" in item:
+            entry["description"] = item["description"]
+        if "disabled" in item:
+            entry["disabled"] = item["disabled"]
+        if "cta" in item:
+            entry["cta"] = item["cta"]
+        normalized.append(entry)
     return normalized
 
 

@@ -20,7 +20,7 @@ class AgentRecord:
     logo_url: str | None
     created_at: datetime
     updated_at: datetime
-    suggestions: list[dict[str, str]] | None = None
+    suggestions: list[dict] | None = None
     intents: list[dict[str, str]] | None = None
 
 
