@@ -26,21 +26,32 @@ _CATEGORY_MAP = {
     "domains": "domain",
 }
 
-# Regex patterns to extract class-level string attributes from agent source files.
-# Handles both inline:       name: str = "value"
-# and parenthesised:         logo_url: str = (
-#                                "https://..."
-#                            )
+# Regex patterns to extract metadata from agent source files.
+# Supports three conventions used across the codebase:
+#
+#   Class attributes (with optional type annotation, inline or parenthesised):
+#     name: str = "Accountant"
+#     logo_url: str = (
+#         "https://..."
+#     )
+#
+#   Module-level constants (used by most domain/app agents):
+#     NAME = "Accountant"
+#     AVATAR_URL = "https://..."
+#     DESCRIPTION = "..."
+#
+# Each pattern tries the class-attribute form first (indented), then the
+# module-level constant form (no indentation).
 _RE_NAME = re.compile(
-    r'^\s+name\s*(?::[^=\n]*)?\s*=\s*\(?\s*["\']([^"\']+)["\']',
+    r'(?:^\s+name\s*(?::[^=\n]*)?\s*=\s*\(?\s*|^NAME\s*=\s*)["\']([^"\']+)["\']',
     re.MULTILINE,
 )
 _RE_DESC = re.compile(
-    r'^\s+description\s*(?::[^=\n]*)?\s*=\s*\(?\s*["\']([^"\']+)["\']',
+    r'(?:^\s+description\s*(?::[^=\n]*)?\s*=\s*\(?\s*|^DESCRIPTION\s*=\s*)["\']([^"\']+)["\']',
     re.MULTILINE,
 )
 _RE_LOGO = re.compile(
-    r'^\s+logo_url\s*(?::[^=\n]*)?\s*=\s*\(?\s*["\']([^"\']+)["\']',
+    r'(?:^\s+logo_url\s*(?::[^=\n]*)?\s*=\s*\(?\s*|^AVATAR_URL\s*=\s*)["\']([^"\']+)["\']',
     re.MULTILINE,
 )
 
