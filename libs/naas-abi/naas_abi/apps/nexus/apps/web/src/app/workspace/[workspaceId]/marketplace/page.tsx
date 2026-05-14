@@ -94,17 +94,26 @@ const CATEGORY_COLORS: Record<string, string> = {
 //              system prompts, fixes API drift, and keeps ontologies current.
 // ---------------------------------------------------------------------------
 
-// Maintenance fee — fixed, predictable, paid to Naas per agent per month.
-// This is NOT a license fee. The agent is MIT licensed.
-// You pay for the people who keep the agent production-ready.
+// Maintenance fee — an expert retainer, not a software subscription.
 //
-// Standard rate: $79/mo   (live, fully maintained agents)
-// Early access:  $49/mo   (preview agents, reduced rate while in development)
+// Naas employs AI engineers at $200+/hr doing continuous work per agent:
+//   - Domain knowledge curation and system prompt refinement
+//   - Model migration when underlying LLMs are deprecated or repriced
+//   - Ontology updates as standards and regulations evolve
+//   - API and tool integration patching when third-party services drift
+//   - Regression testing after every model or platform change
 //
-// Benchmark: a freelance domain specialist costs $100-300/hr.
-// Even 1 hour saved per week delivers a 20-50x ROI on the maintenance fee.
-const ENTERPRISE_MAINTENANCE_FEE_USD = 199;
-const ENTERPRISE_EARLY_ACCESS_FEE_USD = 99;
+// At ~10 hrs/month of expert time per agent, cost to Naas = ~$2,000/mo.
+// With 10-20 early subscribers per agent, the fee must cover that cost.
+//
+// Standard rate: $499/mo   (live, fully maintained by dedicated expert)
+// Early access:  $299/mo   (introductory rate — locks in before standard pricing)
+//
+// Benchmark: Artisan AI managed SDR = $1,500-2,500/mo.
+//            Human fractional domain specialist = $2,000-10,000/mo.
+//            This agent at $499/mo is a 4-20x cost reduction with 24/7 availability.
+const ENTERPRISE_MAINTENANCE_FEE_USD = 499;
+const ENTERPRISE_EARLY_ACCESS_FEE_USD = 299;
 const ENTERPRISE_CTA_URL = 'https://naas.ai/enterprise';
 
 // Which module categories are Enterprise-maintained by Naas
@@ -298,13 +307,15 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
       {/* What the maintenance fee covers */}
       {ent && (
         <div className="border-t pt-2.5 space-y-1.5">
-          <p className="text-xs font-semibold text-foreground">What the maintenance fee covers</p>
+          <p className="text-xs font-semibold text-foreground">What your expert retainer covers</p>
           <ul className="space-y-1 text-xs text-muted-foreground">
             {[
-              'Agent kept current when the underlying model is deprecated or repriced',
-              'System prompt tuned when regulations, workflows, or standards change',
-              'Tool and API integrations patched when third-party services drift',
-              'Ontology connections updated as the knowledge graph evolves',
+              'Dedicated AI engineer continuously refining domain knowledge and system prompts',
+              'Model migration when the underlying LLM is deprecated, updated, or repriced',
+              'Regulatory and standards monitoring — prompts updated when rules change',
+              'Tool and API integrations patched as third-party services evolve',
+              'Ontology and knowledge graph connections kept current',
+              'Regression testing after every model or platform change',
             ].map((item) => (
               <li key={item} className="flex items-start gap-1.5">
                 <span className="mt-0.5 text-blue-500 shrink-0">+</span>
@@ -313,7 +324,7 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
             ))}
           </ul>
           <p className="text-xs text-muted-foreground/60 pt-0.5">
-            Not a license. The agent is MIT licensed and yours to fork. You pay for the people keeping it production-ready.
+            Not a license. Not a SaaS subscription. A retainer for the expert who keeps this agent production-ready. The agent itself is MIT licensed and yours to fork.
           </p>
         </div>
       )}
