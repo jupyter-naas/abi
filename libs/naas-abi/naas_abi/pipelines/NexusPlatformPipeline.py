@@ -20,6 +20,7 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.SPARQL import SPARQLUtils
 from rdflib import RDF, Graph, Literal, Namespace, URIRef
+from rdflib.query import ResultRow
 
 # Bump when the schema of what the pipeline writes changes (so old signatures
 # from older code versions trigger a rebuild even if inputs look identical).
@@ -181,6 +182,7 @@ class NexusPlatformPipeline(Pipeline):
             """
         )
         for row in results:
+            assert isinstance(row, ResultRow)
             return str(row[0])
         return None
 
@@ -199,13 +201,10 @@ class NexusPlatformPipeline(Pipeline):
         )
         old_graph = Graph()
         for row in old_results:
-            old_graph.add(
-                (self._bootstrap_uri(), self._signature_predicate(), row[0])
-            )
+            assert isinstance(row, ResultRow)
+            old_graph.add((self._bootstrap_uri(), self._signature_predicate(), row[0]))
         if len(old_graph) > 0:
-            self.__triple_store.remove(
-                old_graph, graph_name=self.__nexus_graph_uri
-            )
+            self.__triple_store.remove(old_graph, graph_name=self.__nexus_graph_uri)
 
         new_graph = Graph()
         new_graph.add(
@@ -277,9 +276,14 @@ class NexusPlatformPipeline(Pipeline):
             label=role_label,
             is_knowledge_graph_role_of=[uri],
         )
+        label = " ".join(
+            word.capitalize()
+            for word in uri.split("/")[-1].split("#")[-1].replace("_", " ").split()
+        )
+
         knowledge_graph = KnowledgeGraph(
             _uri=uri,
-            label=uri.split("/")[-1].split("#")[-1].capitalize(),
+            label=label,
             has_knowledge_graph_role=[knowledge_graph_role],
         )
         return knowledge_graph, knowledge_graph_role
@@ -599,9 +603,7 @@ class NexusPlatformPipeline(Pipeline):
         if not self.__force_update:
             stored_signature = self._read_stored_signature()
             if stored_signature is not None and stored_signature == current_signature:
-                logger.debug(
-                    "Nexus platform signature unchanged; skipping rebuild."
-                )
+                logger.debug("Nexus platform signature unchanged; skipping rebuild.")
                 return Graph()
 
         # Ensure the nexus graph exists, then clear it so removed agents
