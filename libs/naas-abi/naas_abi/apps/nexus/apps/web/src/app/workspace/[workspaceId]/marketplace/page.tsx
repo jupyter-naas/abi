@@ -262,39 +262,38 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
             Paid directly to {modelLabel ? `your ${modelLabel} provider` : 'your model provider'}. Not included in the maintenance fee.
           </p>
           <div className="border divide-y text-xs">
-            <div className="grid grid-cols-3 px-2 py-1.5 bg-muted/40 text-muted-foreground font-medium">
-              <span>Usage tier</span>
-              <span className="text-center">Interactions/mo</span>
-              <span className="text-right">Token cost</span>
+            <div className={cn('grid px-2 py-1.5 bg-muted/40 text-muted-foreground font-medium', ent ? 'grid-cols-4' : 'grid-cols-3')}>
+              <span>Tier</span>
+              <span className="text-center">Queries/mo</span>
+              <span className="text-right">LLM cost</span>
+              {ent && <span className="text-right text-blue-600">TCO</span>}
             </div>
             {USAGE_TIERS.map(({ label, interactions, avgTokens, description }) => {
-              const cost = mod.model ? llmCostForTier(mod.model, interactions, avgTokens) : null;
+              const llmCost = mod.model ? llmCostForTier(mod.model, interactions, avgTokens) : null;
+              const tco = ent && llmCost !== null ? maintenance + llmCost : null;
               return (
-                <div key={label} className="grid grid-cols-3 px-2 py-1.5 text-muted-foreground">
+                <div key={label} className={cn('grid px-2 py-1.5', ent ? 'grid-cols-4' : 'grid-cols-3')}>
                   <span className="font-medium text-foreground">{label}</span>
                   <span className="text-center text-muted-foreground/80">{description}</span>
-                  <span className="text-right tabular-nums font-medium text-foreground">
-                    {cost !== null ? formatUSD(cost) : 'N/A'}
+                  <span className="text-right tabular-nums text-muted-foreground">
+                    {llmCost !== null ? formatUSD(llmCost) : 'N/A'}
                   </span>
+                  {ent && (
+                    <span className="text-right tabular-nums font-semibold text-blue-600">
+                      {tco !== null ? formatUSD(tco) : `$${maintenance}/mo`}
+                    </span>
+                  )}
                 </div>
               );
             })}
           </div>
+          {ent && (
+            <p className="text-xs text-muted-foreground/60">
+              TCO = ${maintenance}/mo maintenance + LLM tokens billed by your model provider.
+            </p>
+          )}
         </div>
       )}
-
-      {/* Total at Professional tier as reference */}
-      {ent && hasModel && (() => {
-        const profTier = USAGE_TIERS[1];
-        const llmPro = mod.model ? llmCostForTier(mod.model, profTier.interactions, profTier.avgTokens) : null;
-        if (!llmPro) return null;
-        return (
-          <div className="flex justify-between items-center border-t pt-2">
-            <span className="text-xs text-muted-foreground">Total at Professional use</span>
-            <span className="text-sm font-bold text-blue-600 tabular-nums">{formatUSD(maintenance + llmPro)}/mo</span>
-          </div>
-        );
-      })()}
 
       {/* What the maintenance fee covers */}
       {ent && (
