@@ -103,8 +103,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 //
 // Benchmark: a freelance domain specialist costs $100-300/hr.
 // Even 1 hour saved per week delivers a 20-50x ROI on the maintenance fee.
-const ENTERPRISE_MAINTENANCE_FEE_USD = 79;
-const ENTERPRISE_EARLY_ACCESS_FEE_USD = 49;
+const ENTERPRISE_MAINTENANCE_FEE_USD = 199;
+const ENTERPRISE_EARLY_ACCESS_FEE_USD = 99;
 const ENTERPRISE_CTA_URL = 'https://naas.ai/enterprise';
 
 // Which module categories are Enterprise-maintained by Naas
@@ -289,7 +289,7 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
           </div>
           {ent && (
             <p className="text-xs text-muted-foreground/60">
-              TCO = ${maintenance}/mo maintenance + LLM tokens billed by your model provider.
+              TCO = ${maintenance}/mo maintenance{!mod.functional ? ` (early access rate, standard is $${ENTERPRISE_MAINTENANCE_FEE_USD}/mo)` : ''} + LLM tokens billed by your model provider.
             </p>
           )}
         </div>
