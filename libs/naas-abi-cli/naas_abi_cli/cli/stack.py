@@ -1,6 +1,6 @@
-import os
 import webbrowser
-from pathlib import Path
+from functools import lru_cache
+from urllib.parse import urlencode
 
 import click
 from rich.console import Console
@@ -18,28 +18,44 @@ from .stack_services import SERVICE_CATALOG, evaluate_service_readiness
 from .stack_tui import StackTUI
 
 
-def _read_dotenv_key(key: str) -> str | None:
-    """Read a single key from the .env file in the current directory."""
-    env_file = Path(".env")
-    if not env_file.exists():
+@lru_cache(maxsize=1)
+def _secret_service():
+    """Load the secret service from the project's engine configuration.
+
+    Returns None if the config can't be loaded (e.g. running outside a project).
+    The dotenv adapter falls back to os.environ, so docker-compose-set vars work.
+    """
+    try:
+        from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+            EngineConfiguration,
+        )
+
+        return EngineConfiguration.load_configuration().services.secret.load()
+    except Exception:
         return None
-    for raw in env_file.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if line.startswith(f"{key}="):
-            return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return None
+
+
+def _get_secret(key: str, default: str | None = None) -> str | None:
+    service = _secret_service()
+    if service is None:
+        import os
+
+        return os.environ.get(key, default)
+    value = service.get(key)
+    return str(value) if value is not None else default
 
 
 def _nexus_web_url() -> str:
     """Return the Nexus login URL with admin email pre-filled.
 
-    Reads NEXUS_WEB_PORT and NEXUS_USER_ADMIN_EMAIL from the environment
-    or .env file so the browser opens with the email field already populated.
+    Reads NEXUS_WEB_PORT and NEXUS_USER_ADMIN_EMAIL through the engine's
+    secret service so any configured adapter (dotenv, Naas, …) resolves them.
     """
-    port = os.getenv("NEXUS_WEB_PORT") or _read_dotenv_key("NEXUS_WEB_PORT") or "3042"
-    email = os.getenv("NEXUS_USER_ADMIN_EMAIL") or _read_dotenv_key("NEXUS_USER_ADMIN_EMAIL")
-    path = f"auth/login?email={email}" if email else "auth/login"
-    return f"http://127.0.0.1:{port}/{path}"
+    port = _get_secret("NEXUS_WEB_PORT", "3042") or "3042"
+    email = _get_secret("NEXUS_USER_ADMIN_EMAIL")
+    if email:
+        return f"http://127.0.0.1:{port}/auth/login?{urlencode({'email': email})}"
+    return f"http://127.0.0.1:{port}/auth/login"
 
 
 def _is_container_in_error(
