@@ -2259,15 +2259,15 @@ function EmptyState({
           <Bot size={24} className="text-workspace-accent" />
         )}
       </div>
-      <p className="mb-6 text-center text-2xl font-semibold tracking-tight">
+      <p className="mb-6 text-center text-muted-foreground">
         {greeting}
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div className="flex w-full max-w-3xl flex-col gap-2">
+        <div className="flex w-full max-w-lg flex-col gap-1.5">
           {suggestions.map((suggestion) => {
             const tooltipText = [suggestion.label, suggestion.description].filter(Boolean).join(' — ');
             const baseClass = cn(
-              'glass-card flex min-w-0 items-center justify-between px-5 py-3 text-left transition-all',
+              'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
               suggestion.disabled
                 ? 'opacity-40 cursor-not-allowed'
                 : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
