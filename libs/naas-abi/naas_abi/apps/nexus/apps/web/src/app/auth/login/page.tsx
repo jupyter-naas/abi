@@ -33,15 +33,31 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [mounted, setMounted] = useState(false);
-  const [passwordAuthEnabled, setPasswordAuthEnabled] = useState<boolean | null>(null);
+  // Hydrate from sessionStorage so the page renders without waiting on /auth/config
+  // every visit. Refresh the value in the background so config changes propagate.
+  const [passwordAuthEnabled, setPasswordAuthEnabled] = useState<boolean | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const cached = window.sessionStorage.getItem('nexus-password-auth-enabled');
+    if (cached === 'true') return true;
+    if (cached === 'false') return false;
+    return null;
+  });
   const [linkSent, setLinkSent] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     fetch(`${getApiUrl()}/api/auth/config`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => setPasswordAuthEnabled(d.password_auth_enabled ?? false))
-      .catch(() => setPasswordAuthEnabled(false));
+      .then((d) => {
+        const enabled = Boolean(d.password_auth_enabled ?? false);
+        setPasswordAuthEnabled(enabled);
+        try {
+          window.sessionStorage.setItem('nexus-password-auth-enabled', String(enabled));
+        } catch {
+          // sessionStorage can be unavailable (private mode, SSR); ignore.
+        }
+      })
+      .catch(() => setPasswordAuthEnabled((prev) => (prev === null ? false : prev)));
   }, []);
 
   // Redirect if already authenticated (e.g. page loaded while session is active)
