@@ -141,7 +141,7 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json();
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
 
-          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000';
+          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000; SameSite=Lax';
 
           set({
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
@@ -152,7 +152,8 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
 
-          // Return the first workspace ID so the caller can redirect directly, bypassing middleware slug guessing.
+          // Return a workspace ID so the caller can redirect directly, bypassing middleware slug guessing.
+          // Sort by created_at then slug for stable ordering across requests.
           try {
             const wsResponse = await fetch(`${apiBase}/api/workspaces`, {
               headers: { Authorization: `Bearer ${data.access_token}` },
@@ -160,7 +161,13 @@ export const useAuthStore = create<AuthState>()(
             if (wsResponse.ok) {
               const workspaces = await wsResponse.json();
               if (Array.isArray(workspaces) && workspaces.length > 0) {
-                return workspaces[0].id;
+                const sorted = [...workspaces].sort((a, b) => {
+                  const ac = a.created_at ?? '';
+                  const bc = b.created_at ?? '';
+                  if (ac !== bc) return ac < bc ? -1 : 1;
+                  return (a.slug ?? '').localeCompare(b.slug ?? '');
+                });
+                return sorted[0].id;
               }
             }
           } catch {
