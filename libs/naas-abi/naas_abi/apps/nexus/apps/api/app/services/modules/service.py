@@ -75,8 +75,14 @@ def _build_catalog() -> list[ModuleInfo]:
     try:
         import naas_abi_marketplace
 
-        base = Path(naas_abi_marketplace.__file__).parent
-    except (ImportError, AttributeError):
+        # naas_abi_marketplace is a namespace package — __file__ is None.
+        # Use __path__ (a list of root directories) instead.
+        pkg_paths = list(naas_abi_marketplace.__path__)
+        if not pkg_paths:
+            _log.warning("naas_abi_marketplace.__path__ is empty — catalog will be empty")
+            return []
+        base = Path(pkg_paths[0])
+    except (ImportError, AttributeError, StopIteration):
         _log.warning("naas_abi_marketplace not available — catalog will be empty")
         return []
 
