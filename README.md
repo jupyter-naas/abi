@@ -28,37 +28,33 @@ ABI (Agentic Brain Infrastructure) is the open-source AI Operating System that g
 
 - Python 3.12+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
-- API keys: OpenAI and OpenRouter (and optionally Naas)
+- LLMs API key: OpenAI and OpenRouter
 
-### Create a new project
+You also need to have the `docker` command available in your terminal.
 
-Install the CLI, scaffold a project, and start the stack:
+### Local Development
 
 ```bash
 uv tool install naas-abi-cli --force --upgrade
 
-abi new project demo   # replace "demo" with your project name
+abi new project demo #You can change the project name to your own
 cd demo
 abi start
 ```
 
-`abi start` opens the platform in your browser automatically. Default login:
+**Platform launch:**
 
-- Web UI: `http://localhost:3042` — `admin@example.com` / `Admin1234!`
-- API docs: `http://localhost:9879/docs`
+- Web UI: http://localhost:3042 — login with `admin@example.com` / `Admin1234!`
+- API docs: http://localhost:8080/docs
 
 ### CLI Commands
 
 ```bash
-abi start            # Start all services and open the browser
-abi stop             # Stop all services
-abi chat             # Interactive agent chat
-abi config validate  # Validate the configuration
+abi start         # Start all services
+abi stop          # Stop all services
+abi chat          # Interactive agent chat
+abi config validate # Validate the configuration
 ```
-
-### Contributing to ABI
-
-If you want to modify the platform itself rather than build on top of it, see [CONTRIBUTING.md](./CONTRIBUTING.md). The dev setup clones this repo and builds images from source instead of using the pre-built registry images.
 
 ## How It Works
 
