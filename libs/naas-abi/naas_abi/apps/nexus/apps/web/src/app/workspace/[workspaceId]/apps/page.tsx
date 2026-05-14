@@ -85,56 +85,119 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Pricing helpers
+// TCO / Pricing helpers
 // ---------------------------------------------------------------------------
+
+// Monthly estimates assume ~500 agent interactions at avg 2 000 tokens each.
+// Input/output split 60/40. Prices in USD per 1M tokens (as of mid-2025).
+const MODEL_PRICING: Record<string, { input: number; output: number; label: string }> = {
+  'gpt-4o':           { input: 2.50,  output: 10.00, label: 'GPT-4o'         },
+  'gpt-4o-mini':      { input: 0.15,  output: 0.60,  label: 'GPT-4o mini'    },
+  'gpt-4':            { input: 30.00, output: 60.00, label: 'GPT-4'          },
+  'gpt-3.5-turbo':    { input: 0.50,  output: 1.50,  label: 'GPT-3.5 Turbo'  },
+  'o1':               { input: 15.00, output: 60.00, label: 'o1'             },
+  'o3-mini':          { input: 1.10,  output: 4.40,  label: 'o3-mini'        },
+  'claude-opus':      { input: 15.00, output: 75.00, label: 'Claude Opus'    },
+  'claude-sonnet':    { input: 3.00,  output: 15.00, label: 'Claude Sonnet'  },
+  'claude-haiku':     { input: 0.25,  output: 1.25,  label: 'Claude Haiku'   },
+  'gemini-1.5-pro':   { input: 3.50,  output: 10.50, label: 'Gemini 1.5 Pro' },
+  'gemini-1.5-flash': { input: 0.075, output: 0.30,  label: 'Gemini Flash'   },
+};
+
+const MONTHLY_INTERACTIONS = 500;
+const AVG_TOKENS = 2_000;
+const INPUT_RATIO = 0.6;
+
+function estimateMonthlyUSD(modelKey: string): number | null {
+  const entry = Object.entries(MODEL_PRICING).find(([k]) => modelKey.toLowerCase().includes(k));
+  if (!entry) return null;
+  const { input, output } = entry[1];
+  const totalTokens = MONTHLY_INTERACTIONS * AVG_TOKENS;
+  const inputTokens = totalTokens * INPUT_RATIO;
+  const outputTokens = totalTokens * (1 - INPUT_RATIO);
+  return (inputTokens * input + outputTokens * output) / 1_000_000;
+}
+
+function formatUSD(usd: number): string {
+  if (usd < 1) return `~$${(usd * 100).toFixed(0)}¢/mo`;
+  if (usd < 10) return `~$${usd.toFixed(1)}/mo`;
+  return `~$${Math.round(usd)}/mo`;
+}
+
+function getPriceLabel(mod: ModuleInfo): { price: string; tier: 'free' | 'paid' | 'preview' | 'installed' } {
+  if (mod.installed) return { price: 'Installed', tier: 'installed' };
+  if (!mod.functional) return { price: 'Preview', tier: 'preview' };
+  if (mod.model) {
+    const est = estimateMonthlyUSD(mod.model);
+    if (est !== null) return { price: formatUSD(est), tier: 'paid' };
+  }
+  return { price: 'Free', tier: 'free' };
+}
+
+const PRICE_STYLE: Record<string, string> = {
+  installed: 'text-emerald-600 bg-emerald-500/10',
+  preview:   'text-amber-600 bg-amber-500/10',
+  paid:      'text-blue-600 bg-blue-500/10',
+  free:      'text-muted-foreground bg-muted',
+};
 
 type Pricing = { label: string; labelStyle: string; cta: string; ctaStyle: string; ctaDisabled: boolean };
 
 function getModulePricing(mod: ModuleInfo): Pricing {
-  if (mod.installed) {
-    return {
-      label: 'Installed',
-      labelStyle: 'text-emerald-600 bg-emerald-500/10',
-      cta: 'Installed',
-      ctaStyle: 'bg-emerald-500/10 text-emerald-600 cursor-default',
-      ctaDisabled: true,
-    };
+  const { price, tier } = getPriceLabel(mod);
+  if (tier === 'installed') {
+    return { label: price, labelStyle: PRICE_STYLE.installed, cta: 'Installed', ctaStyle: 'bg-emerald-500/10 text-emerald-600 cursor-default', ctaDisabled: true };
   }
-  if (!mod.functional) {
-    return {
-      label: 'Preview',
-      labelStyle: 'text-amber-600 bg-amber-500/10',
-      cta: 'Preview',
-      ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed',
-      ctaDisabled: true,
-    };
+  if (tier === 'preview') {
+    return { label: price, labelStyle: PRICE_STYLE.preview, cta: 'Preview', ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed', ctaDisabled: true };
   }
-  return {
-    label: 'Free',
-    labelStyle: 'text-muted-foreground bg-muted',
-    cta: 'Get',
-    ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90',
-    ctaDisabled: false,
-  };
+  return { label: price, labelStyle: PRICE_STYLE[tier], cta: 'Get', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
 }
 
 function getStaticPricing(status: 'available' | 'coming-soon'): Pricing {
   if (status === 'available') {
-    return {
-      label: 'Free',
-      labelStyle: 'text-muted-foreground bg-muted',
-      cta: 'Open',
-      ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90',
-      ctaDisabled: false,
-    };
+    return { label: 'Free', labelStyle: PRICE_STYLE.free, cta: 'Open', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
   }
-  return {
-    label: 'Coming soon',
-    labelStyle: 'text-muted-foreground bg-muted',
-    cta: 'Coming soon',
-    ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed',
-    ctaDisabled: true,
-  };
+  return { label: 'Coming soon', labelStyle: PRICE_STYLE.free, cta: 'Coming soon', ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed', ctaDisabled: true };
+}
+
+// Full TCO breakdown shown in the ID Card panel
+function TcoBadge({ mod }: { mod: ModuleInfo }) {
+  if (!mod.model) return null;
+  const est = estimateMonthlyUSD(mod.model);
+  if (est === null) return null;
+
+  const modelEntry = Object.entries(MODEL_PRICING).find(([k]) => mod.model!.toLowerCase().includes(k));
+  const modelLabel = modelEntry ? modelEntry[1].label : mod.model;
+
+  return (
+    <div className="border bg-muted/30 p-3 space-y-2.5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estimated TCO</p>
+      <div className="space-y-1.5 text-xs text-muted-foreground">
+        <div className="flex justify-between">
+          <span>Model</span>
+          <span className="font-medium text-foreground">{modelLabel}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Assumption</span>
+          <span>{MONTHLY_INTERACTIONS} interactions/mo, ~{(AVG_TOKENS / 1000).toFixed(0)}k tokens each</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Input tokens</span>
+          <span>{((MONTHLY_INTERACTIONS * AVG_TOKENS * INPUT_RATIO) / 1000).toFixed(0)}k</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Output tokens</span>
+          <span>{((MONTHLY_INTERACTIONS * AVG_TOKENS * (1 - INPUT_RATIO)) / 1000).toFixed(0)}k</span>
+        </div>
+      </div>
+      <div className="flex justify-between items-center border-t pt-2">
+        <span className="text-xs font-semibold">Monthly LLM cost</span>
+        <span className="text-sm font-bold text-blue-600">{formatUSD(est)}</span>
+      </div>
+      <p className="text-xs text-muted-foreground/60">Excludes infrastructure. Scales linearly with usage.</p>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +443,9 @@ function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void })
                 <p className="text-xs leading-relaxed text-foreground/80">{mod.system_prompt_preview}</p>
               </div>
             )}
+
+            {/* TCO estimate */}
+            <TcoBadge mod={mod} />
 
             {/* Module path */}
             <div className="border bg-muted/30 p-3 space-y-1.5">
