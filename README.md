@@ -42,36 +42,60 @@ cd my_ai
 abi start
 ```
 
-**Web UI** — http://localhost:3042 (login: `admin@example.com` / `Admin1234!`)
+### Web UI
+
+The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and log in with `admin@example.com` / `Admin1234!`.
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
 </div>
 
-**API** — http://localhost:9879/docs
+### API
+
+Every agent is exposed as a REST endpoint. Useful for integrating ABI into your own tools, triggering agents from scripts, or building on top of the platform. Explore the full reference at [http://localhost:9879/docs](http://localhost:9879/docs).
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_API.png" alt="ABI API docs" width="800">
 </div>
 
-**CLI** — `abi chat` for a terminal conversation
+### CLI
+
+Run `abi chat` to talk to Abi directly from your terminal. No browser needed.
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_CLI.png" alt="ABI CLI" width="800">
 </div>
 
-### CLI Commands
-
 ```bash
-abi start            # Start all services
-abi stop             # Stop all services
-abi chat             # Interactive agent chat
-abi config validate  # Validate the configuration
+abi start            # Start the full stack and open the browser
+abi stop             # Stop all running services
+abi chat             # Chat with Abi in the terminal
+abi logs             # Tail logs from a service (e.g. abi logs abi)
+abi stack status     # Check health of all running containers
+abi config validate  # Check your config.yaml for errors
+abi new module       # Scaffold a new module
+abi new agent        # Scaffold a new agent
+abi new workflow     # Scaffold a new workflow
 ```
 
 ## How It Works
 
-Connect your data sources, build domain agents grounded in your organization's ontology, and route every question to the right model or expert agent through a knowledge graph you own and control.
+The atomic unit is the **module**: a self-contained package that models a domain, ingests data about it, and exposes intelligent capabilities on top. Think of it as a semantic data and AI product you enable with a single line in `config.yaml`.
+
+A module bundles:
+
+- **Ontologies** — OWL/Turtle files that model the domain as typed entities and relationships in a knowledge graph
+- **Integrations** — connectors to external APIs (GitHub, Salesforce, LinkedIn, Notion, ...)
+- **Pipelines** — ingestion logic that converts raw data into RDF triples and keeps the graph current
+- **Orchestrations** — scheduled tasks and event-driven sensors
+- **Agents** — LLM-powered agents that reason over the knowledge graph, not just text chunks
+- **Workflows** — SPARQL-backed tools that agents and users invoke directly
+
+The **Context Engine** wires all services at startup and routes every request to the right agent. **Abi** acts as the supervisor: it reads the intent behind each request and dispatches to the right domain agent or answers directly from the knowledge graph.
+
+Infrastructure concerns (triple store, vector store, object storage, message bus, cache, secrets) are abstracted as ports with swappable adapters. Change the adapter in `config.yaml`, no code edits needed.
+
+Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain.
 
 Full architecture: [The ABI Stack](https://docs.naas.ai/architecture/the-stack)
 
