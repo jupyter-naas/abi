@@ -103,7 +103,7 @@ services:
       - PORT=3000
       - NEXT_PUBLIC_NEXUS_ENV=local
       - NEXUS_API_URL=${NEXUS_API_URL}
-      - NEXT_PUBLIC_API_URL=${NEXUS_API_URL}
+      - NEXT_PUBLIC_API_URL=http://${PUBLIC_WEB_HOST:-localhost}:9879
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
       - DEFAULT_WORKSPACE=${NEXUS_DEFAULT_WORKSPACE:-primary}
     networks:
