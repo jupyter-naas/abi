@@ -1,14 +1,17 @@
 """
 ModulesService: returns installed modules (from the running engine) and
 the full catalog of available modules (scanned from naas_abi_marketplace).
+
+The catalog is built via pure filesystem + regex scanning — no dynamic
+imports — so it is fast and never fails due to heavy module dependencies.
 """
 
 from __future__ import annotations
 
-import importlib
 import logging
-import pkgutil
+import re
 from functools import lru_cache
+from pathlib import Path
 
 from naas_abi.apps.nexus.apps.api.app.services.modules.schema import (
     ModuleInfo,
@@ -23,6 +26,11 @@ _CATEGORY_MAP = {
     "domains": "domain",
 }
 
+# Regex patterns to extract class-level string attributes from agent source files.
+_RE_NAME = re.compile(r'^\s+name\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+_RE_DESC = re.compile(r'^\s+description\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+_RE_LOGO = re.compile(r'^\s+logo_url\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+
 
 def _get_category(module_path: str) -> str:
     parts = module_path.split(".")
@@ -31,6 +39,91 @@ def _get_category(module_path: str) -> str:
     if len(parts) >= 3:
         return _CATEGORY_MAP.get(parts[1], parts[1])
     return "core"
+
+
+def _scan_agent_file(path: Path) -> tuple[str | None, str | None, str | None]:
+    """Extract name/description/logo_url from an agent source file via regex."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None, None, None
+
+    name_m = _RE_NAME.search(text)
+    desc_m = _RE_DESC.search(text)
+    logo_m = _RE_LOGO.search(text)
+
+    return (
+        name_m.group(1) if name_m else None,
+        desc_m.group(1) if desc_m else None,
+        logo_m.group(1) if logo_m else None,
+    )
+
+
+def _fallback_name(dir_name: str) -> str:
+    return dir_name.replace("-", " ").replace("_", " ").title()
+
+
+@lru_cache(maxsize=1)
+def _build_catalog() -> list[ModuleInfo]:
+    """
+    Scan naas_abi_marketplace at depth 2 using pure filesystem I/O.
+
+    For each module, look for agent source files and extract metadata via
+    regex — no imports, no side-effects, sub-second execution.
+    Results are process-cached; a container restart picks up new modules.
+    """
+    try:
+        import naas_abi_marketplace
+
+        base = Path(naas_abi_marketplace.__file__).parent
+    except (ImportError, AttributeError):
+        _log.warning("naas_abi_marketplace not available — catalog will be empty")
+        return []
+
+    catalog: list[ModuleInfo] = []
+
+    for cat_dir in sorted(base.iterdir()):
+        if not cat_dir.is_dir() or cat_dir.name.startswith("_"):
+            continue
+        category = _CATEGORY_MAP.get(cat_dir.name, cat_dir.name)
+
+        for mod_dir in sorted(cat_dir.iterdir()):
+            if not mod_dir.is_dir() or mod_dir.name.startswith("_"):
+                continue
+            if not (mod_dir / "__init__.py").exists():
+                continue
+
+            module_path = f"naas_abi_marketplace.{cat_dir.name}.{mod_dir.name}"
+
+            # Search for agent files (*Agent.py or agents/*.py)
+            name: str | None = None
+            description: str | None = None
+            logo_url: str | None = None
+
+            agent_candidates = list((mod_dir / "agents").glob("*.py")) if (mod_dir / "agents").is_dir() else []
+            agent_candidates += list(mod_dir.glob("*Agent.py"))
+
+            for agent_file in agent_candidates:
+                if agent_file.name.startswith("_"):
+                    continue
+                n, d, lurl = _scan_agent_file(agent_file)
+                if n:
+                    name, description, logo_url = n, d, lurl
+                    break
+
+            catalog.append(
+                ModuleInfo(
+                    module_path=module_path,
+                    name=name or _fallback_name(mod_dir.name),
+                    description=description or "",
+                    logo_url=logo_url,
+                    category=category,
+                    installed=False,
+                )
+            )
+
+    _log.info("Marketplace catalog built: %d modules", len(catalog))
+    return catalog
 
 
 def _agent_meta(agent_cls: type) -> tuple[str | None, str | None, str | None]:
@@ -42,99 +135,6 @@ def _agent_meta(agent_cls: type) -> tuple[str | None, str | None, str | None]:
         str(agent_desc) if agent_desc else None,
         str(agent_logo) if agent_logo else None,
     )
-
-
-@lru_cache(maxsize=1)
-def _build_catalog() -> list[ModuleInfo]:
-    """
-    Walk naas_abi_marketplace at depth 2 and collect one representative
-    agent per module to extract name/description/logo_url.
-
-    Results are cached for the process lifetime (modules don't change at
-    runtime).
-    """
-    try:
-        import naas_abi_marketplace
-    except ImportError:
-        _log.warning("naas_abi_marketplace not available - catalog will be empty")
-        return []
-
-    catalog: dict[str, ModuleInfo] = {}
-
-    # Iterate depth-1 categories (ai, applications, domains)
-    for _cat_finder, cat_name, cat_ispkg in pkgutil.iter_modules(
-        naas_abi_marketplace.__path__,
-        naas_abi_marketplace.__name__ + ".",
-    ):
-        if not cat_ispkg or cat_name.startswith("naas_abi_marketplace.__"):
-            continue
-
-        try:
-            cat_mod = importlib.import_module(cat_name)
-        except Exception:
-            continue
-
-        # Iterate depth-2 modules within the category
-        cat_path = getattr(cat_mod, "__path__", [])
-        for _mod_finder, mod_name, mod_ispkg in pkgutil.iter_modules(
-            cat_path,
-            cat_name + ".",
-        ):
-            if not mod_ispkg:
-                continue
-
-            module_path = mod_name  # e.g. naas_abi_marketplace.ai.chatgpt
-            agents_pkg = module_path + ".agents"
-            name: str | None = None
-            description: str | None = None
-            logo_url: str | None = None
-
-            try:
-                agents_mod = importlib.import_module(agents_pkg)
-                agent_path = getattr(agents_mod, "__path__", [])
-                for _a_finder, agent_mod_name, _a_ispkg in pkgutil.iter_modules(
-                    agent_path,
-                    agents_pkg + ".",
-                ):
-                    if "_test" in agent_mod_name:
-                        continue
-                    try:
-                        agent_file_mod = importlib.import_module(agent_mod_name)
-                        for attr_name in dir(agent_file_mod):
-                            cls = getattr(agent_file_mod, attr_name, None)
-                            if (
-                                cls is None
-                                or not isinstance(cls, type)
-                                or not hasattr(cls, "name")
-                                or attr_name.startswith("_")
-                            ):
-                                continue
-                            ag_name, ag_desc, ag_logo = _agent_meta(cls)
-                            if ag_name:
-                                name = ag_name
-                                description = ag_desc
-                                logo_url = ag_logo
-                                break
-                        if name:
-                            break
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-
-            if not name:
-                name = module_path.split(".")[-1].replace("_", " ").title()
-
-            catalog[module_path] = ModuleInfo(
-                module_path=module_path,
-                name=name,
-                description=description or "",
-                logo_url=logo_url,
-                category=_get_category(module_path),
-                installed=False,
-            )
-
-    return list(catalog.values())
 
 
 class ModulesService:
@@ -161,7 +161,7 @@ class ModulesService:
                     break
 
             if not name:
-                name = module_path.split(".")[-1].replace("_", " ").title()
+                name = _fallback_name(module_path.split(".")[-1])
 
             installed.append(
                 ModuleInfo(
@@ -174,12 +174,10 @@ class ModulesService:
                 )
             )
 
-        # Available: full catalog from naas_abi_marketplace, flagged as installed
+        # Available: full filesystem catalog, flagged with installed status
         catalog = _build_catalog()
         available: list[ModuleInfo] = [
-            ModuleInfo(
-                **{**m.model_dump(), "installed": m.module_path in installed_paths}
-            )
+            ModuleInfo(**{**m.model_dump(), "installed": m.module_path in installed_paths})
             for m in catalog
         ]
         available.sort(key=lambda m: (m.category, m.name.lower()))
