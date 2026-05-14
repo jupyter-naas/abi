@@ -109,7 +109,13 @@ def _build_catalog() -> list[ModuleInfo]:
         for mod_dir in sorted(cat_dir.iterdir()):
             if not mod_dir.is_dir() or mod_dir.name.startswith("_"):
                 continue
-            if not (mod_dir / "__init__.py").exists():
+            # Accept both proper Python packages (__init__.py) and
+            # non-identifier dirs (e.g. "account-executive") that still
+            # contain an agents/ subdir or a top-level *Agent.py file.
+            has_agents_dir = (mod_dir / "agents").is_dir()
+            has_agent_file = any(mod_dir.glob("*Agent.py"))
+            has_init = (mod_dir / "__init__.py").exists()
+            if not (has_init or has_agents_dir or has_agent_file):
                 continue
 
             module_path = f"naas_abi_marketplace.{cat_dir.name}.{mod_dir.name}"
