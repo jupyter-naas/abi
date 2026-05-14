@@ -8,6 +8,7 @@ from naas_abi_core.module.Module import (
 )
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -305,7 +306,7 @@ class ABIModule(BaseModule):
             "naas_abi_marketplace.applications.zoho#soft",
             "naas_abi_marketplace.domains.support#soft",
         ],
-        services=[Secret, TripleStoreService, ObjectStorageService, VectorStoreService, BusService, CacheService],
+        services=[Secret, TripleStoreService, ObjectStorageService, VectorStoreService, BusService, CacheService, EmailService],
     )
 
     class Configuration(ModuleConfiguration):
