@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v1.34.0 (2026-05-14)
+
+### Bug Fixes
+
+- **cli**: Align deploy templates + drop dead .env.example
+  ([`58b6b4a`](https://github.com/jupyter-naas/abi/commit/58b6b4ad9c9f861b60ac1eb746f9581a97f2122e))
+
+### Chores
+
+- Remove unused matrix/element services and stale comment refs
+  ([`2acbbb0`](https://github.com/jupyter-naas/abi/commit/2acbbb0725a736fa9d01fc23f9f6e1e76daa33da))
+
+### Features
+
+- **cli**: Open Nexus web app on stack start instead of service portal
+  ([`9eae875`](https://github.com/jupyter-naas/abi/commit/9eae875c531fb014c8f543b089161cf57221fa13))
+
+- **ux**: Pre-fill login email from NEXUS_USER_ADMIN_EMAIL on local stack start
+  ([`92d1fb9`](https://github.com/jupyter-naas/abi/commit/92d1fb90bb4240739a24d777855d67764d315a4d))
+
+
 ## v1.33.0 (2026-05-13)
 
 ### Features
