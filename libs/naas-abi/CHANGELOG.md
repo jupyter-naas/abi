@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.42.1 (2026-05-14)
+
+### Bug Fixes
+
+- **pipelines**: Add type assertions and improve label formatting in NexusPlatformPipeline
+  ([`a12778a`](https://github.com/jupyter-naas/abi/commit/a12778a9320fd529604dcaceaaa5756c8d26d55d))
+
+
 ## v1.42.0 (2026-05-14)
 
 ### Features
