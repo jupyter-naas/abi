@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
-import { LayoutGrid, Package, Store, Search, Bot } from 'lucide-react';
+import { LayoutGrid, Package, Store, Search, Bot, X, Cpu, Tag, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
@@ -15,6 +15,11 @@ interface ModuleInfo {
   logo_url: string | null;
   category: string;
   installed: boolean;
+  model: string | null;
+  slug: string | null;
+  agent_type: string | null;
+  system_prompt_preview: string | null;
+  functional: boolean;
 }
 
 interface ModulesResponse {
@@ -36,45 +41,55 @@ const CATEGORY_COLORS: Record<string, string> = {
   domain: 'bg-amber-500/10 text-amber-600',
 };
 
-function ModuleCard({ mod }: { mod: ModuleInfo }) {
+function ModuleAvatar({
+  mod,
+  className,
+  imgClassName,
+}: {
+  mod: ModuleInfo;
+  className?: string;
+  imgClassName?: string;
+}) {
   const [imgFailed, setImgFailed] = useState(false);
-
-  // Domain agents have portrait photos — fill the banner.
-  // AI / application agents have brand logos — center them on a clean bg.
   const isPortrait = mod.category === 'domain';
 
   return (
-    <div className="glass-card flex flex-col overflow-hidden transition-all hover:border-primary/30 hover:-translate-y-0.5 hover:shadow-md cursor-default">
-      {/* Hero image area */}
-      <div
-        className={cn(
-          'relative w-full overflow-hidden bg-muted',
-          isPortrait ? 'h-44' : 'flex h-32 items-center justify-center p-6'
-        )}
-      >
-        {mod.logo_url && !imgFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={mod.logo_url}
-            alt={mod.name}
-            className={cn(
-              'transition-transform duration-300 group-hover:scale-105',
-              isPortrait
-                ? 'h-full w-full object-cover object-top'
-                : 'max-h-full max-w-full object-contain'
-            )}
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
+    <div className={cn('relative overflow-hidden bg-muted', className)}>
+      {mod.logo_url && !imgFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={mod.logo_url}
+          alt={mod.name}
+          className={cn(
+            isPortrait ? 'h-full w-full object-cover object-top' : 'max-h-full max-w-full object-contain',
+            imgClassName
+          )}
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
           <Bot size={36} className="text-muted-foreground/30" />
-        )}
-        {/* Subtle gradient at the bottom of portrait images */}
-        {isPortrait && mod.logo_url && !imgFailed && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/20 to-transparent" />
-        )}
-      </div>
+        </div>
+      )}
+      {isPortrait && mod.logo_url && !imgFailed && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/20 to-transparent" />
+      )}
+    </div>
+  );
+}
 
-      {/* Content */}
+function ModuleCard({ mod, onClick }: { mod: ModuleInfo; onClick: () => void }) {
+  const isPortrait = mod.category === 'domain';
+
+  return (
+    <button
+      onClick={onClick}
+      className="glass-card flex flex-col overflow-hidden text-left transition-all hover:border-primary/30 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      <ModuleAvatar
+        mod={mod}
+        className={cn('w-full', isPortrait ? 'h-44' : 'flex h-32 items-center justify-center p-6')}
+      />
       <div className="flex flex-col gap-1.5 p-4">
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-1 font-semibold leading-tight">{mod.name}</h3>
@@ -96,7 +111,120 @@ function ModuleCard({ mod }: { mod: ModuleInfo }) {
           {mod.description || mod.module_path}
         </p>
       </div>
-    </div>
+    </button>
+  );
+}
+
+function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void }) {
+  const isPortrait = mod.category === 'domain';
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      {/* Panel */}
+      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-background shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Agent ID Card
+          </span>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Avatar hero */}
+          <ModuleAvatar
+            mod={mod}
+            className={cn('w-full', isPortrait ? 'h-64' : 'flex h-44 items-center justify-center p-10')}
+          />
+
+          {/* Identity block */}
+          <div className="space-y-4 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold">{mod.name}</h2>
+                {mod.slug && (
+                  <p className="mt-0.5 text-xs text-muted-foreground font-mono">{mod.slug}</p>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1.5">
+                {mod.installed && (
+                  <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
+                    <CheckCircle2 size={11} /> Installed
+                  </span>
+                )}
+                {!mod.functional && (
+                  <span className="flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600">
+                    <AlertTriangle size={11} /> Not functional yet
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Badges row */}
+            <div className="flex flex-wrap gap-2">
+              <span
+                className={cn(
+                  'rounded-full px-2.5 py-0.5 text-xs font-medium',
+                  CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground'
+                )}
+              >
+                <Tag size={10} className="mr-1 inline" />
+                {CATEGORY_LABELS[mod.category] ?? mod.category}
+              </span>
+              {mod.agent_type && (
+                <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                  {mod.agent_type}
+                </span>
+              )}
+              {mod.model && (
+                <span className="flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-600">
+                  <Cpu size={10} /> {mod.model}
+                </span>
+              )}
+            </div>
+
+            {/* Description */}
+            {mod.description && (
+              <div>
+                <p className="text-sm text-muted-foreground leading-relaxed">{mod.description}</p>
+              </div>
+            )}
+
+            {/* System prompt preview */}
+            {mod.system_prompt_preview && (
+              <div className="rounded-lg border bg-muted/40 p-3">
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  System prompt
+                </p>
+                <p className="text-xs leading-relaxed text-foreground/80">
+                  {mod.system_prompt_preview}
+                </p>
+              </div>
+            )}
+
+            {/* Technical info */}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Module
+              </p>
+              <p className="break-all font-mono text-xs text-muted-foreground">
+                {mod.module_path}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -111,6 +239,7 @@ export default function AppsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [selectedMod, setSelectedMod] = useState<ModuleInfo | null>(null);
 
   useEffect(() => {
     const t = searchParams?.get('tab') === 'marketplace' ? 'marketplace' : 'installed';
@@ -206,7 +335,7 @@ export default function AppsPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {data?.installed.map((mod) => (
-                    <ModuleCard key={mod.module_path} mod={mod} />
+                    <ModuleCard key={mod.module_path} mod={mod} onClick={() => setSelectedMod(mod)} />
                   ))}
                 </div>
               )}
@@ -261,7 +390,7 @@ export default function AppsPage() {
                   </h2>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {mods.map((mod) => (
-                      <ModuleCard key={mod.module_path} mod={mod} />
+                      <ModuleCard key={mod.module_path} mod={mod} onClick={() => setSelectedMod(mod)} />
                     ))}
                   </div>
                 </div>
@@ -270,6 +399,11 @@ export default function AppsPage() {
           )}
         </div>
       </div>
+
+      {/* Agent ID Card side panel */}
+      {selectedMod && (
+        <AgentIdCard mod={selectedMod} onClose={() => setSelectedMod(null)} />
+      )}
     </div>
   );
 }

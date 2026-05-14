@@ -8,6 +8,11 @@ class ModuleInfo(BaseModel):
     logo_url: str | None = None
     category: str  # "core" | "ai" | "application" | "domain"
     installed: bool
+    model: str | None = None
+    slug: str | None = None
+    agent_type: str | None = None
+    system_prompt_preview: str | None = None
+    functional: bool = True
 
 
 class ModulesResponse(BaseModel):

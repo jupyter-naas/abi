@@ -54,6 +54,20 @@ _RE_LOGO = re.compile(
     r'(?:^\s+logo_url\s*(?::[^=\n]*)?\s*=\s*\(?\s*|^AVATAR_URL\s*=\s*)["\']([^"\']+)["\']',
     re.MULTILINE,
 )
+_RE_MODEL = re.compile(
+    r'(?:^\s+model\s*(?::[^=\n]*)?\s*=\s*\(?\s*|^MODEL\s*=\s*)["\']([^"\']+)["\']',
+    re.MULTILINE,
+)
+_RE_SLUG = re.compile(r'^SLUG\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+_RE_AGENT_TYPE = re.compile(r'^TYPE\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+# Triple-quoted system prompts (class attr or module constant)
+_RE_SYSTEM_PROMPT = re.compile(
+    r'(?:^SYSTEM_PROMPT|^\s+system_prompt\s*(?::[^=\n]*)?)\s*=\s*"""(.*?)"""',
+    re.MULTILINE | re.DOTALL,
+)
+_NOT_FUNCTIONAL_RE = re.compile(r'NOT FUNCTIONAL', re.IGNORECASE)
+
+_SYSTEM_PROMPT_PREVIEW_LEN = 280
 
 
 def _get_category(module_path: str) -> str:
@@ -65,21 +79,52 @@ def _get_category(module_path: str) -> str:
     return "core"
 
 
-def _scan_agent_file(path: Path) -> tuple[str | None, str | None, str | None]:
-    """Extract name/description/logo_url from an agent source file via regex."""
+def _trim_prompt(raw: str) -> str | None:
+    """Return the first meaningful paragraph of a system prompt, trimmed."""
+    text = raw.strip()
+    if not text:
+        return None
+    # Strip leading markdown headers / role lines
+    lines = [ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    clean = " ".join(lines)
+    if len(clean) > _SYSTEM_PROMPT_PREVIEW_LEN:
+        clean = clean[:_SYSTEM_PROMPT_PREVIEW_LEN].rsplit(" ", 1)[0] + "…"
+    return clean or None
+
+
+AgentMeta = tuple[
+    str | None,  # name
+    str | None,  # description
+    str | None,  # logo_url
+    str | None,  # model
+    str | None,  # slug
+    str | None,  # agent_type
+    str | None,  # system_prompt_preview
+    bool,        # functional
+]
+
+
+def _scan_agent_file(path: Path) -> AgentMeta:
+    """Extract all agent metadata from a source file via regex (no imports)."""
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
-        return None, None, None
+        return None, None, None, None, None, None, None, True
 
-    name_m = _RE_NAME.search(text)
-    desc_m = _RE_DESC.search(text)
-    logo_m = _RE_LOGO.search(text)
+    def _m(pattern: re.Pattern[str]) -> str | None:
+        m = pattern.search(text)
+        return m.group(1) if m else None
 
+    prompt_raw = _m(_RE_SYSTEM_PROMPT)
     return (
-        name_m.group(1) if name_m else None,
-        desc_m.group(1) if desc_m else None,
-        logo_m.group(1) if logo_m else None,
+        _m(_RE_NAME),
+        _m(_RE_DESC),
+        _m(_RE_LOGO),
+        _m(_RE_MODEL),
+        _m(_RE_SLUG),
+        _m(_RE_AGENT_TYPE),
+        _trim_prompt(prompt_raw) if prompt_raw else None,
+        not bool(_NOT_FUNCTIONAL_RE.search(text)),
     )
 
 
@@ -135,6 +180,11 @@ def _build_catalog() -> list[ModuleInfo]:
             name: str | None = None
             description: str | None = None
             logo_url: str | None = None
+            model: str | None = None
+            slug: str | None = None
+            agent_type: str | None = None
+            system_prompt_preview: str | None = None
+            functional: bool = True
 
             agent_candidates = list((mod_dir / "agents").glob("*.py")) if (mod_dir / "agents").is_dir() else []
             agent_candidates += list(mod_dir.glob("*Agent.py"))
@@ -142,9 +192,11 @@ def _build_catalog() -> list[ModuleInfo]:
             for agent_file in agent_candidates:
                 if agent_file.name.startswith("_"):
                     continue
-                n, d, lurl = _scan_agent_file(agent_file)
+                n, d, lurl, mdl, slg, atype, spp, func = _scan_agent_file(agent_file)
                 if n:
                     name, description, logo_url = n, d, lurl
+                    model, slug, agent_type = mdl, slg, atype
+                    system_prompt_preview, functional = spp, func
                     break
 
             catalog.append(
@@ -155,6 +207,11 @@ def _build_catalog() -> list[ModuleInfo]:
                     logo_url=logo_url,
                     category=category,
                     installed=False,
+                    model=model,
+                    slug=slug,
+                    agent_type=agent_type,
+                    system_prompt_preview=system_prompt_preview,
+                    functional=functional,
                 )
             )
 
