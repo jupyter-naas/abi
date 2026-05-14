@@ -1783,6 +1783,8 @@ export function ChatInterface() {
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
             suggestions={selectedAgentData?.suggestions}
             onSuggestionClick={(prompt) => { setInput(prompt); focusChatInput(); }}
+            onSuggestionHover={(value) => setInput(value)}
+            onSuggestionLeave={() => setInput('')}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -2232,11 +2234,15 @@ function EmptyState({
   logoUrl,
   suggestions,
   onSuggestionClick,
+  onSuggestionHover,
+  onSuggestionLeave,
 }: {
   selectedAgentName: string;
   logoUrl?: string | null;
   suggestions?: Array<{ label: string; value: string; description?: string; disabled?: boolean; cta?: string }>;
   onSuggestionClick: (prompt: string) => void;
+  onSuggestionHover?: (value: string) => void;
+  onSuggestionLeave?: () => void;
 }) {
   const router = useRouter();
   const { setActivePanelSection } = useWorkspaceStore();
@@ -2265,7 +2271,6 @@ function EmptyState({
       {Array.isArray(suggestions) && suggestions.length > 0 && (
         <div className="flex w-full max-w-lg flex-col gap-1.5">
           {suggestions.map((suggestion) => {
-            const tooltipText = [suggestion.label, suggestion.description].filter(Boolean).join(' — ');
             const baseClass = cn(
               'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
               suggestion.disabled
@@ -2299,7 +2304,8 @@ function EmptyState({
               return (
                 <button
                   key={`${suggestion.label}:${suggestion.value}`}
-                  title={tooltipText}
+                  onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
+                  onMouseLeave={() => onSuggestionLeave?.()}
                   onClick={() => {
                     setActivePanelSection(sectionId);
                     router.push(suggestion.cta!);
@@ -2314,7 +2320,8 @@ function EmptyState({
             return (
               <button
                 key={`${suggestion.label}:${suggestion.value}`}
-                title={tooltipText}
+                onMouseEnter={() => !suggestion.disabled && onSuggestionHover?.(suggestion.value)}
+                onMouseLeave={() => onSuggestionLeave?.()}
                 onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
                 disabled={suggestion.disabled}
                 className={baseClass}
