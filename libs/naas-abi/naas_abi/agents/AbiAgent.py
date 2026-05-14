@@ -67,11 +67,30 @@ Respond only based on what your available agents and tools can actually deliver.
 - Keep responses concise and factual.
 </constraints>
 """
-    suggestions: list[dict[str, str]] = [
-        # {
-        #     "label": "Chat with a specific agent",
-        #     "value": "Chat with {{Agent Name}}",
-        # },
+    suggestions: list[dict] = [
+        {
+            "label": "What can you do?",
+            "value": "What can you do?",
+            "description": "Get an overview of all available agents and their capabilities",
+        },
+        {
+            "label": "Find the right agent",
+            "value": "Find the best agent for my task",
+            "description": "Let Abi recommend the right agent for your request",
+        },
+        {
+            "label": "Explore my knowledge graph",
+            "value": "Show me what's in my knowledge graph",
+            "description": "Browse entities and relationships in your data",
+            "cta": "/graph",
+        },
+        {
+            "label": "Browse Apps",
+            "value": "",
+            "description": "Discover and enable modules from the marketplace",
+            "disabled": True,
+            "cta": "apps",
+        },
     ]
 
     # @staticmethod
