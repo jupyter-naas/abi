@@ -85,6 +85,22 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Community vs Enterprise model (Red Hat model for AI infrastructure)
+//
+// Community  — MIT licensed, self-hosted, self-maintained. Free.
+// Enterprise — Naas maintains, patches, and guarantees the agent.
+//              A predictable maintenance fee, not a license.
+//              Domain expert agents all fall here: Naas tunes the
+//              system prompts, fixes API drift, and keeps ontologies current.
+// ---------------------------------------------------------------------------
+
+const ENTERPRISE_MAINTENANCE_FEE_USD = 19; // per agent per month (early-access rate)
+const ENTERPRISE_CTA_URL = 'https://naas.ai/enterprise';
+
+// Which module categories are Enterprise-maintained by Naas
+const ENTERPRISE_CATEGORIES = new Set(['domain']);
+
+// ---------------------------------------------------------------------------
 // TCO / Pricing helpers
 // ---------------------------------------------------------------------------
 
@@ -124,83 +140,122 @@ function formatUSD(usd: number): string {
   return `~$${Math.round(usd)}/mo`;
 }
 
-// Price is always shown from the model cost estimate if available —
-// functional status only controls the CTA, not the price display.
-function getPriceLabel(mod: ModuleInfo): { price: string; tier: 'free' | 'paid' | 'preview' | 'installed' } {
+function isEnterprise(mod: ModuleInfo): boolean {
+  return ENTERPRISE_CATEGORIES.has(mod.category);
+}
+
+// Tier derivation — price badge is always informational regardless of functional status.
+function getPriceLabel(mod: ModuleInfo): {
+  price: string;
+  tier: 'community' | 'enterprise' | 'early-access' | 'installed';
+} {
   if (mod.installed) return { price: 'Installed', tier: 'installed' };
-  if (mod.model) {
-    const est = estimateMonthlyUSD(mod.model);
-    if (est !== null) {
-      // Show estimated cost whether functional or not — it's informational
-      return { price: formatUSD(est), tier: mod.functional ? 'paid' : 'preview' };
-    }
+  if (isEnterprise(mod)) {
+    const llm = mod.model ? estimateMonthlyUSD(mod.model) : null;
+    const total = ENTERPRISE_MAINTENANCE_FEE_USD + (llm ?? 0);
+    return { price: `~$${Math.round(total)}/mo`, tier: mod.functional ? 'enterprise' : 'early-access' };
   }
-  if (!mod.functional) return { price: 'Preview', tier: 'preview' };
-  return { price: 'Free', tier: 'free' };
+  return { price: 'Community', tier: 'community' };
 }
 
 const PRICE_STYLE: Record<string, string> = {
-  installed: 'text-emerald-600 bg-emerald-500/10',
-  preview:   'text-amber-600 bg-amber-500/10',
-  paid:      'text-blue-600 bg-blue-500/10',
-  free:      'text-muted-foreground bg-muted',
+  installed:    'text-emerald-600 bg-emerald-500/10',
+  enterprise:   'text-blue-600 bg-blue-500/10',
+  'early-access': 'text-amber-600 bg-amber-500/10',
+  community:    'text-muted-foreground bg-muted',
 };
 
-type Pricing = { label: string; labelStyle: string; cta: string; ctaStyle: string; ctaDisabled: boolean };
+type Pricing = {
+  label: string;
+  labelStyle: string;
+  cta: string;
+  ctaStyle: string;
+  ctaDisabled: boolean;
+  ctaUrl?: string;
+};
 
 function getModulePricing(mod: ModuleInfo): Pricing {
   const { price, tier } = getPriceLabel(mod);
   if (tier === 'installed') {
     return { label: price, labelStyle: PRICE_STYLE.installed, cta: 'Installed', ctaStyle: 'bg-emerald-500/10 text-emerald-600 cursor-default', ctaDisabled: true };
   }
-  if (tier === 'preview') {
-    return { label: price, labelStyle: PRICE_STYLE.preview, cta: 'Preview', ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed', ctaDisabled: true };
+  if (tier === 'enterprise') {
+    return { label: price, labelStyle: PRICE_STYLE.enterprise, cta: 'Subscribe', ctaStyle: 'bg-blue-600 text-white hover:bg-blue-700', ctaDisabled: false, ctaUrl: ENTERPRISE_CTA_URL };
   }
-  return { label: price, labelStyle: PRICE_STYLE[tier], cta: 'Get', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
+  if (tier === 'early-access') {
+    return { label: price, labelStyle: PRICE_STYLE['early-access'], cta: 'Early access', ctaStyle: 'bg-amber-500 text-white hover:bg-amber-600', ctaDisabled: false, ctaUrl: ENTERPRISE_CTA_URL };
+  }
+  // community
+  return { label: price, labelStyle: PRICE_STYLE.community, cta: 'Install', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
 }
 
 function getStaticPricing(status: 'available' | 'coming-soon'): Pricing {
   if (status === 'available') {
-    return { label: 'Free', labelStyle: PRICE_STYLE.free, cta: 'Open', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
+    return { label: 'Community', labelStyle: PRICE_STYLE.community, cta: 'Open', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
   }
-  return { label: 'Coming soon', labelStyle: PRICE_STYLE.free, cta: 'Coming soon', ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed', ctaDisabled: true };
+  return { label: 'Coming soon', labelStyle: PRICE_STYLE.community, cta: 'Coming soon', ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed', ctaDisabled: true };
 }
 
 // Full TCO breakdown shown in the ID Card panel
 function TcoBadge({ mod }: { mod: ModuleInfo }) {
-  if (!mod.model) return null;
-  const est = estimateMonthlyUSD(mod.model);
-  if (est === null) return null;
+  const llmEst = mod.model ? estimateMonthlyUSD(mod.model) : null;
+  const ent = isEnterprise(mod);
+  if (!llmEst && !ent) return null;
 
-  const modelEntry = Object.entries(MODEL_PRICING).find(([k]) => mod.model!.toLowerCase().includes(k));
-  const modelLabel = modelEntry ? modelEntry[1].label : mod.model;
+  const modelEntry = mod.model
+    ? Object.entries(MODEL_PRICING).find(([k]) => mod.model!.toLowerCase().includes(k))
+    : null;
+  const modelLabel = modelEntry ? modelEntry[1].label : (mod.model ?? 'Unknown');
+  const llm = llmEst ?? 0;
+  const maintenance = ent ? ENTERPRISE_MAINTENANCE_FEE_USD : 0;
 
   return (
     <div className="border bg-muted/30 p-3 space-y-2.5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estimated TCO</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estimated TCO</p>
+        {ent && (
+          <span className="px-2 py-0.5 text-xs font-medium bg-blue-500/10 text-blue-600">Enterprise</span>
+        )}
+        {!ent && (
+          <span className="px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">Community</span>
+        )}
+      </div>
       <div className="space-y-1.5 text-xs text-muted-foreground">
-        <div className="flex justify-between">
-          <span>Model</span>
-          <span className="font-medium text-foreground">{modelLabel}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Assumption</span>
-          <span>{MONTHLY_INTERACTIONS} interactions/mo, ~{(AVG_TOKENS / 1000).toFixed(0)}k tokens each</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Input tokens</span>
-          <span>{((MONTHLY_INTERACTIONS * AVG_TOKENS * INPUT_RATIO) / 1000).toFixed(0)}k</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Output tokens</span>
-          <span>{((MONTHLY_INTERACTIONS * AVG_TOKENS * (1 - INPUT_RATIO)) / 1000).toFixed(0)}k</span>
-        </div>
+        {mod.model && (
+          <>
+            <div className="flex justify-between">
+              <span>Model</span>
+              <span className="font-medium text-foreground">{modelLabel}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Assumption</span>
+              <span>{MONTHLY_INTERACTIONS} interactions/mo, ~{(AVG_TOKENS / 1000).toFixed(0)}k tokens each</span>
+            </div>
+            <div className="flex justify-between">
+              <span>LLM cost</span>
+              <span className="font-medium text-foreground">{formatUSD(llm)}</span>
+            </div>
+          </>
+        )}
+        {ent && (
+          <div className="flex justify-between">
+            <span>Maintenance fee</span>
+            <span className="font-medium text-foreground">${maintenance}/mo</span>
+          </div>
+        )}
       </div>
       <div className="flex justify-between items-center border-t pt-2">
-        <span className="text-xs font-semibold">Monthly LLM cost</span>
-        <span className="text-sm font-bold text-blue-600">{formatUSD(est)}</span>
+        <span className="text-xs font-semibold">Total monthly</span>
+        <span className="text-sm font-bold text-blue-600">{formatUSD(llm + maintenance)}</span>
       </div>
-      <p className="text-xs text-muted-foreground/60">Excludes infrastructure. Scales linearly with usage.</p>
+      {ent && (
+        <p className="text-xs text-muted-foreground/60">
+          Maintenance fee funds ongoing agent updates, prompt tuning, and API compatibility. Not a license.
+        </p>
+      )}
+      {!ent && (
+        <p className="text-xs text-muted-foreground/60">Community tier. Self-hosted, self-maintained. MIT licensed.</p>
+      )}
     </div>
   );
 }
@@ -295,17 +350,33 @@ function ModuleCard({ mod, onClick }: { mod: ModuleInfo; onClick: () => void }) 
           <span className={cn('px-2 py-0.5 text-xs font-medium tabular-nums', pricing.labelStyle)}>
             {pricing.label}
           </span>
-          <button
-            disabled={pricing.ctaDisabled}
-            onClick={(e) => e.stopPropagation()}
-            className={cn(
-              'flex items-center gap-1 px-3 py-1 text-xs font-semibold transition-colors',
-              pricing.ctaStyle,
-            )}
-          >
-            {!pricing.ctaDisabled && <Download size={11} />}
-            {pricing.cta}
-          </button>
+          {pricing.ctaUrl && !pricing.ctaDisabled ? (
+            <a
+              href={pricing.ctaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                'flex items-center gap-1 px-3 py-1 text-xs font-semibold transition-colors',
+                pricing.ctaStyle,
+              )}
+            >
+              <ExternalLink size={11} />
+              {pricing.cta}
+            </a>
+          ) : (
+            <button
+              disabled={pricing.ctaDisabled}
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                'flex items-center gap-1 px-3 py-1 text-xs font-semibold transition-colors',
+                pricing.ctaStyle,
+              )}
+            >
+              {!pricing.ctaDisabled && <Download size={11} />}
+              {pricing.cta}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -461,13 +532,25 @@ function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void })
             </div>
 
             {/* CTA */}
-            <button
-              disabled={pricing.ctaDisabled}
-              className={cn('w-full py-2.5 text-sm font-semibold transition-colors flex items-center justify-center gap-2', pricing.ctaStyle)}
-            >
-              {!pricing.ctaDisabled && <Download size={14} />}
-              {pricing.cta}
-            </button>
+            {pricing.ctaUrl && !pricing.ctaDisabled ? (
+              <a
+                href={pricing.ctaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn('w-full py-2.5 text-sm font-semibold transition-colors flex items-center justify-center gap-2', pricing.ctaStyle)}
+              >
+                <ExternalLink size={14} />
+                {pricing.cta}
+              </a>
+            ) : (
+              <button
+                disabled={pricing.ctaDisabled}
+                className={cn('w-full py-2.5 text-sm font-semibold transition-colors flex items-center justify-center gap-2', pricing.ctaStyle)}
+              >
+                {!pricing.ctaDisabled && <Download size={14} />}
+                {pricing.cta}
+              </button>
+            )}
           </div>
         </div>
       </div>
