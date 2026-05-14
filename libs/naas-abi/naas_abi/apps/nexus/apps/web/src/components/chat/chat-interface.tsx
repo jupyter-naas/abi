@@ -2246,8 +2246,8 @@ function EmptyState({
   const firstName = user?.name?.split(' ')[0];
   const greeting = firstName ? `Hello, ${firstName}.` : 'Hello.';
   return (
-    <div className="flex h-full flex-col items-center justify-center">
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-workspace-accent-10 overflow-hidden">
+    <div className="flex h-full flex-col items-center justify-center px-4">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
         {resolvedLogoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -2256,19 +2256,18 @@ function EmptyState({
             className="h-full w-full object-contain p-1"
           />
         ) : (
-          <Bot size={32} className="text-workspace-accent" />
+          <Bot size={24} className="text-workspace-accent" />
         )}
       </div>
-      <p className="mb-1 text-center text-foreground font-medium">{greeting}</p>
-      <p className="mb-8 text-center text-sm text-muted-foreground">
-        Pick a suggestion below or type to get started.
+      <p className="mb-6 text-center text-2xl font-semibold tracking-tight">
+        {greeting}
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div className="flex w-full max-w-xs sm:max-w-sm flex-col gap-2">
+        <div className="flex w-full max-w-3xl flex-col gap-2">
           {suggestions.map((suggestion) => {
             const tooltipText = [suggestion.label, suggestion.description].filter(Boolean).join(' — ');
             const baseClass = cn(
-              'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
+              'glass-card flex min-w-0 items-center justify-between px-5 py-3 text-left transition-all',
               suggestion.disabled
                 ? 'opacity-40 cursor-not-allowed'
                 : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
