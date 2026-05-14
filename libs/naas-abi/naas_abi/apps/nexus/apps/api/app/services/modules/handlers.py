@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from naas_abi.apps.nexus.apps.api.app.services.auth.handlers import (
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.modules.schema import ModulesResponse
