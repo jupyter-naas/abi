@@ -42,23 +42,31 @@ cd my_ai
 abi start
 ```
 
-**Platform launch:**
-
-- Web UI: http://localhost:3042 (login: `admin@example.com` / `Admin1234!`)
-- API docs: http://localhost:9879/docs
+**Web UI** — http://localhost:3042 (login: `admin@example.com` / `Admin1234!`)
 
 <div align="center">
-  <img src="docs/site/static/abi/Screenshot_Local.png" alt="ABI chat interface" width="800">
-  <p><em>ABI running locally after first login</em></p>
+  <img src="docs/site/static/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
+</div>
+
+**API** — http://localhost:9879/docs
+
+<div align="center">
+  <img src="docs/site/static/abi/Screenshot_Local_API.png" alt="ABI API docs" width="800">
+</div>
+
+**CLI** — `abi chat` for a terminal conversation
+
+<div align="center">
+  <img src="docs/site/static/abi/Screenshot_Local_CLI.png" alt="ABI CLI" width="800">
 </div>
 
 ### CLI Commands
 
 ```bash
-abi start         # Start all services
-abi stop          # Stop all services
-abi chat          # Interactive agent chat
-abi config validate # Validate the configuration
+abi start            # Start all services
+abi stop             # Stop all services
+abi chat             # Interactive agent chat
+abi config validate  # Validate the configuration
 ```
 
 ## How It Works
