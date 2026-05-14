@@ -104,6 +104,15 @@ interface FilesState {
   // Synced folders
   syncedFolders: SyncedFolder[];
 
+  // Upload progress (for folder / multi-file uploads)
+  uploadProgress: {
+    active: boolean;
+    total: number;
+    completed: number;
+    failed: number;
+    currentName: string | null;
+  } | null;
+
   // Actions
   setFiles: (files: FileInfo[]) => void;
   setCurrentPath: (path: string) => void;
@@ -136,8 +145,8 @@ interface FilesState {
   createFolder: (path: string) => Promise<FileInfo | null>;
   deleteFile: (path: string) => Promise<boolean>;
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>;
-  uploadFile: (file: File) => Promise<FileInfo | null>;
-  uploadFiles: (files: FileList | File[]) => Promise<FileInfo[]>;
+  uploadFile: (file: File, relativeDir?: string) => Promise<FileInfo | null>;
+  uploadFiles: (files: FileList | File[] | { file: File; relativeDir?: string }[]) => Promise<FileInfo[]>;
   refreshFiles: () => Promise<void>;
   refreshLabFiles: () => Promise<void>;  // Refreshes Lab's file tree
   readFile: (path: string) => Promise<string | null>;
@@ -179,6 +188,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   
   // Synced folders
   syncedFolders: [] as SyncedFolder[],
+
+  uploadProgress: null,
 
   setFiles: (files) => set({ files }),
   setCurrentPath: (currentPath) => set({ currentPath }),
@@ -676,9 +687,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     }
   },
 
-  uploadFile: async (file) => {
+  uploadFile: async (file, relativeDir) => {
     const { currentPath } = get();
-    const uploadPath = currentPath ? currentPath : '';
+    const cleanRelative = (relativeDir || '').replace(/^\/+|\/+$/g, '');
+    const uploadPath = [currentPath, cleanRelative].filter(Boolean).join('/');
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
 
@@ -722,15 +734,63 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   uploadFiles: async (files) => {
     const results: FileInfo[] = [];
-    const fileArray = Array.from(files);
-    
-    for (const file of fileArray) {
-      const result = await get().uploadFile(file);
-      if (result) {
-        results.push(result);
+    const fileArray = Array.from(files as ArrayLike<File | { file: File; relativeDir?: string }>);
+
+    set({
+      uploadProgress: {
+        active: true,
+        total: fileArray.length,
+        completed: 0,
+        failed: 0,
+        currentName: null,
+      },
+    });
+
+    try {
+      for (const item of fileArray) {
+        const file = item instanceof File ? item : item.file;
+        const relativeDir = item instanceof File ? undefined : item.relativeDir;
+        const displayName = relativeDir ? `${relativeDir}/${file.name}` : file.name;
+
+        set((state) => ({
+          uploadProgress: state.uploadProgress
+            ? { ...state.uploadProgress, currentName: displayName }
+            : state.uploadProgress,
+        }));
+
+        const result = await get().uploadFile(file, relativeDir);
+        if (result) {
+          results.push(result);
+          set((state) => ({
+            uploadProgress: state.uploadProgress
+              ? { ...state.uploadProgress, completed: state.uploadProgress.completed + 1 }
+              : state.uploadProgress,
+          }));
+        } else {
+          set((state) => ({
+            uploadProgress: state.uploadProgress
+              ? { ...state.uploadProgress, failed: state.uploadProgress.failed + 1 }
+              : state.uploadProgress,
+          }));
+        }
       }
+    } finally {
+      set((state) => ({
+        uploadProgress: state.uploadProgress
+          ? { ...state.uploadProgress, active: false, currentName: null }
+          : state.uploadProgress,
+      }));
+      // Auto-clear after a short delay so the user sees the final state
+      setTimeout(() => {
+        set((state) => {
+          if (state.uploadProgress && !state.uploadProgress.active) {
+            return { uploadProgress: null };
+          }
+          return state;
+        });
+      }, 4000);
     }
-    
+
     return results;
   },
 

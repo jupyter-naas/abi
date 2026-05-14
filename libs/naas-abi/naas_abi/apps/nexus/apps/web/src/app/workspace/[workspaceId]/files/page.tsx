@@ -36,6 +36,45 @@ import { authFetch, useAuthStore } from '@/stores/auth';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
+type FileWithRelativeDir = { file: File; relativeDir?: string };
+
+async function readDirectoryEntries(
+  reader: FileSystemDirectoryReader,
+): Promise<FileSystemEntry[]> {
+  const all: FileSystemEntry[] = [];
+  while (true) {
+    const batch: FileSystemEntry[] = await new Promise((resolve, reject) => {
+      reader.readEntries(resolve, reject);
+    });
+    if (batch.length === 0) break;
+    all.push(...batch);
+  }
+  return all;
+}
+
+async function collectEntries(
+  entries: FileSystemEntry[],
+  parentDir = '',
+): Promise<FileWithRelativeDir[]> {
+  const out: FileWithRelativeDir[] = [];
+  for (const entry of entries) {
+    if (entry.isFile) {
+      const fileEntry = entry as FileSystemFileEntry;
+      const file = await new Promise<File>((resolve, reject) => {
+        fileEntry.file(resolve, reject);
+      });
+      out.push({ file, relativeDir: parentDir || undefined });
+    } else if (entry.isDirectory) {
+      const dirEntry = entry as FileSystemDirectoryEntry;
+      const children = await readDirectoryEntries(dirEntry.createReader());
+      const childDir = parentDir ? `${parentDir}/${entry.name}` : entry.name;
+      const nested = await collectEntries(children, childDir);
+      out.push(...nested);
+    }
+  }
+  return out;
+}
+
 export default function FilesPage() {
   const router = useRouter();
   const params = useParams();
@@ -59,6 +98,7 @@ export default function FilesPage() {
     syncedFolders,
     fetchLocalFiles,
     setError,
+    uploadProgress,
   } = useFilesStore();
 
   const { prompt, dialog: promptDialog } = usePrompt();
@@ -196,6 +236,17 @@ export default function FilesPage() {
     }
   }, [fetchFiles, fetchLocalFiles, isLocalFolder, activeSyncedFolder, activeSource, setError]);
 
+  // Warn the user before leaving while an upload is in progress.
+  useEffect(() => {
+    if (!uploadProgress?.active) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [uploadProgress?.active]);
+
   const INTERNAL_DRAG_MIME = 'application/x-nexus-file';
 
   const isInternalDrag = (e: React.DragEvent) =>
@@ -221,6 +272,22 @@ export default function FilesPage() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
+      const entries: FileSystemEntry[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i].webkitGetAsEntry();
+        if (entry) entries.push(entry);
+      }
+      if (entries.length > 0) {
+        const collected = await collectEntries(entries);
+        if (collected.length > 0) {
+          await uploadFiles(collected);
+        }
+        return;
+      }
+    }
 
     const droppedFiles = e.dataTransfer.files;
     if (droppedFiles.length > 0) {
@@ -914,7 +981,44 @@ export default function FilesPage() {
               <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-primary p-8">
                 <Upload size={48} className="text-primary" />
                 <p className="text-lg font-medium">Drop files here to upload</p>
-                <p className="text-sm text-muted-foreground">Files will be uploaded to the current folder</p>
+                <p className="text-sm text-muted-foreground">Files and folders will be uploaded to the current folder</p>
+              </div>
+            </div>
+          )}
+
+          {uploadProgress && (
+            <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border bg-background shadow-lg">
+              <div className="flex items-center justify-between border-b px-4 py-2">
+                <div className="flex items-center gap-2">
+                  <Upload size={16} className={uploadProgress.active ? 'animate-pulse text-primary' : 'text-muted-foreground'} />
+                  <p className="text-sm font-medium">
+                    {uploadProgress.active
+                      ? `Uploading ${uploadProgress.completed + 1} of ${uploadProgress.total}`
+                      : uploadProgress.failed > 0
+                        ? `Uploaded ${uploadProgress.completed} of ${uploadProgress.total} (${uploadProgress.failed} failed)`
+                        : `Uploaded ${uploadProgress.completed} file${uploadProgress.completed === 1 ? '' : 's'}`}
+                  </p>
+                </div>
+              </div>
+              <div className="px-4 py-3">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{
+                      width: `${uploadProgress.total === 0 ? 0 : ((uploadProgress.completed + uploadProgress.failed) / uploadProgress.total) * 100}%`,
+                    }}
+                  />
+                </div>
+                {uploadProgress.currentName && (
+                  <p className="mt-2 truncate text-xs text-muted-foreground" title={uploadProgress.currentName}>
+                    {uploadProgress.currentName}
+                  </p>
+                )}
+                {uploadProgress.active && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Please keep this page open until the upload finishes.
+                  </p>
+                )}
               </div>
             </div>
           )}
