@@ -2243,12 +2243,8 @@ function EmptyState({
   const { user } = useAuthStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
 
-  const greeting = (() => {
-    const hour = new Date().getHours();
-    const period = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-    const firstName = user?.name?.split(' ')[0];
-    return firstName ? `Good ${period}, ${firstName}.` : `Good ${period}.`;
-  })();
+  const firstName = user?.name?.split(' ')[0];
+  const greeting = firstName ? `Hello, ${firstName}.` : 'Hello.';
   return (
     <div className="flex h-full flex-col items-center justify-center">
       <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-workspace-accent-10 overflow-hidden">
@@ -2263,8 +2259,9 @@ function EmptyState({
           <Bot size={32} className="text-workspace-accent" />
         )}
       </div>
-      <p className="mb-8 text-center text-muted-foreground">
-        {greeting}
+      <p className="mb-1 text-center text-foreground font-medium">{greeting}</p>
+      <p className="mb-8 text-center text-sm text-muted-foreground">
+        Pick a suggestion below or type to get started.
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
         <div className="flex w-full max-w-xs sm:max-w-sm flex-col gap-2">
