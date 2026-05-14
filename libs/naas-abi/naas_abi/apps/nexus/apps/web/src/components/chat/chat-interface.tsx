@@ -373,8 +373,6 @@ export function ChatInterface() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const router = useRouter();
-
   const {
     activeConversationId,
     selectedAgent,
@@ -384,7 +382,6 @@ export function ChatInterface() {
     getWorkspaceConversations,
     currentWorkspaceId,
     loadConversationMessages,
-    setActivePanelSection,
   } = useWorkspaceStore();
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
@@ -2241,6 +2238,8 @@ function EmptyState({
   suggestions?: Array<{ label: string; value: string; description?: string; disabled?: boolean; cta?: string }>;
   onSuggestionClick: (prompt: string) => void;
 }) {
+  const router = useRouter();
+  const { setActivePanelSection } = useWorkspaceStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
   return (
     <div className="flex h-full flex-col items-center justify-center">
