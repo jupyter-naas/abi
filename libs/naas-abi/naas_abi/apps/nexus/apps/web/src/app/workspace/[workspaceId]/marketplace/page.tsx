@@ -94,19 +94,33 @@ const CATEGORY_COLORS: Record<string, string> = {
 //              system prompts, fixes API drift, and keeps ontologies current.
 // ---------------------------------------------------------------------------
 
-const ENTERPRISE_MAINTENANCE_FEE_USD = 79;       // per agent per month (standard rate)
-const ENTERPRISE_EARLY_ACCESS_FEE_USD = 49;     // introductory rate while in early access
+// Maintenance fee — fixed, predictable, paid to Naas per agent per month.
+// This is NOT a license fee. The agent is MIT licensed.
+// You pay for the people who keep the agent production-ready.
+//
+// Standard rate: $79/mo   (live, fully maintained agents)
+// Early access:  $49/mo   (preview agents, reduced rate while in development)
+//
+// Benchmark: a freelance domain specialist costs $100-300/hr.
+// Even 1 hour saved per week delivers a 20-50x ROI on the maintenance fee.
+const ENTERPRISE_MAINTENANCE_FEE_USD = 79;
+const ENTERPRISE_EARLY_ACCESS_FEE_USD = 49;
 const ENTERPRISE_CTA_URL = 'https://naas.ai/enterprise';
 
 // Which module categories are Enterprise-maintained by Naas
 const ENTERPRISE_CATEGORIES = new Set(['domain']);
 
 // ---------------------------------------------------------------------------
-// TCO / Pricing helpers
+// LLM token cost engine
+//
+// These costs are SEPARATE from the maintenance fee. They are paid directly
+// to the model provider (OpenAI, Anthropic, Google) by the user.
+// They scale with usage — the maintenance fee does not.
+//
+// Prices in USD per 1M tokens (verified May 2026).
+// Input/output split assumed 60/40 for domain agent workloads
+// (system prompt + context = large input; concise structured answers = smaller output).
 // ---------------------------------------------------------------------------
-
-// Monthly estimates assume ~500 agent interactions at avg 2 000 tokens each.
-// Input/output split 60/40. Prices in USD per 1M tokens (as of mid-2025).
 const MODEL_PRICING: Record<string, { input: number; output: number; label: string }> = {
   'gpt-4o':           { input: 2.50,  output: 10.00, label: 'GPT-4o'         },
   'gpt-4o-mini':      { input: 0.15,  output: 0.60,  label: 'GPT-4o mini'    },
@@ -121,23 +135,27 @@ const MODEL_PRICING: Record<string, { input: number; output: number; label: stri
   'gemini-1.5-flash': { input: 0.075, output: 0.30,  label: 'Gemini Flash'   },
 };
 
-const MONTHLY_INTERACTIONS = 500;
-const AVG_TOKENS = 2_000;
 const INPUT_RATIO = 0.6;
 
-function estimateMonthlyUSD(modelKey: string): number | null {
+// Three realistic usage tiers for a domain expert agent
+const USAGE_TIERS = [
+  { label: 'Starter',      interactions: 50,    avgTokens: 2_000, description: '~2 queries/day' },
+  { label: 'Professional', interactions: 300,   avgTokens: 5_000, description: '~10 queries/day' },
+  { label: 'Scale',        interactions: 2_000, avgTokens: 10_000, description: '~65 queries/day, team use' },
+] as const;
+
+function llmCostForTier(modelKey: string, interactions: number, avgTokens: number): number | null {
   const entry = Object.entries(MODEL_PRICING).find(([k]) => modelKey.toLowerCase().includes(k));
   if (!entry) return null;
   const { input, output } = entry[1];
-  const totalTokens = MONTHLY_INTERACTIONS * AVG_TOKENS;
-  const inputTokens = totalTokens * INPUT_RATIO;
-  const outputTokens = totalTokens * (1 - INPUT_RATIO);
-  return (inputTokens * input + outputTokens * output) / 1_000_000;
+  const total = interactions * avgTokens;
+  return (total * INPUT_RATIO * input + total * (1 - INPUT_RATIO) * output) / 1_000_000;
 }
 
 function formatUSD(usd: number): string {
-  if (usd < 1) return `~$${(usd * 100).toFixed(0)}¢/mo`;
-  if (usd < 10) return `~$${usd.toFixed(1)}/mo`;
+  if (usd < 0.01) return '<$0.01/mo';
+  if (usd < 1)    return `~$${usd.toFixed(2)}/mo`;
+  if (usd < 10)   return `~$${usd.toFixed(1)}/mo`;
   return `~$${Math.round(usd)}/mo`;
 }
 
@@ -145,26 +163,25 @@ function isEnterprise(mod: ModuleInfo): boolean {
   return ENTERPRISE_CATEGORIES.has(mod.category);
 }
 
-// Tier derivation — price badge is always informational regardless of functional status.
+// Card badge shows ONLY the maintenance fee — the fixed cost a buyer controls.
+// LLM costs (variable, paid to the model provider) are shown only in the TCO block.
 function getPriceLabel(mod: ModuleInfo): {
   price: string;
   tier: 'community' | 'enterprise' | 'early-access' | 'installed';
 } {
   if (mod.installed) return { price: 'Installed', tier: 'installed' };
   if (isEnterprise(mod)) {
-    const maintenanceFee = mod.functional ? ENTERPRISE_MAINTENANCE_FEE_USD : ENTERPRISE_EARLY_ACCESS_FEE_USD;
-    const llm = mod.model ? estimateMonthlyUSD(mod.model) : null;
-    const total = maintenanceFee + (llm ?? 0);
-    return { price: `~$${Math.round(total)}/mo`, tier: mod.functional ? 'enterprise' : 'early-access' };
+    const fee = mod.functional ? ENTERPRISE_MAINTENANCE_FEE_USD : ENTERPRISE_EARLY_ACCESS_FEE_USD;
+    return { price: `$${fee}/mo`, tier: mod.functional ? 'enterprise' : 'early-access' };
   }
   return { price: 'Community', tier: 'community' };
 }
 
 const PRICE_STYLE: Record<string, string> = {
-  installed:    'text-emerald-600 bg-emerald-500/10',
-  enterprise:   'text-blue-600 bg-blue-500/10',
+  installed:      'text-emerald-600 bg-emerald-500/10',
+  enterprise:     'text-blue-600 bg-blue-500/10',
   'early-access': 'text-amber-600 bg-amber-500/10',
-  community:    'text-muted-foreground bg-muted',
+  community:      'text-muted-foreground bg-muted',
 };
 
 type Pricing = {
@@ -187,7 +204,6 @@ function getModulePricing(mod: ModuleInfo): Pricing {
   if (tier === 'early-access') {
     return { label: price, labelStyle: PRICE_STYLE['early-access'], cta: 'Early access', ctaStyle: 'bg-amber-500 text-white hover:bg-amber-600', ctaDisabled: false, ctaUrl: ENTERPRISE_CTA_URL };
   }
-  // community
   return { label: price, labelStyle: PRICE_STYLE.community, cta: 'Install', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
 }
 
@@ -198,80 +214,104 @@ function getStaticPricing(status: 'available' | 'coming-soon'): Pricing {
   return { label: 'Coming soon', labelStyle: PRICE_STYLE.community, cta: 'Coming soon', ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed', ctaDisabled: true };
 }
 
-// Full TCO breakdown shown in the ID Card panel
+// Full TCO breakdown shown in the ID Card panel.
+// Separates maintenance fee (fixed, to Naas) from LLM token costs (variable, to model provider).
 function TcoBadge({ mod }: { mod: ModuleInfo }) {
-  const llmEst = mod.model ? estimateMonthlyUSD(mod.model) : null;
   const ent = isEnterprise(mod);
-  if (!llmEst && !ent) return null;
+  const hasModel = !!mod.model;
+  if (!ent && !hasModel) return null;
 
   const modelEntry = mod.model
     ? Object.entries(MODEL_PRICING).find(([k]) => mod.model!.toLowerCase().includes(k))
     : null;
   const modelLabel = modelEntry ? modelEntry[1].label : (mod.model ?? 'Unknown');
-  const llm = llmEst ?? 0;
   const maintenance = ent
     ? (mod.functional ? ENTERPRISE_MAINTENANCE_FEE_USD : ENTERPRISE_EARLY_ACCESS_FEE_USD)
     : 0;
 
   return (
-    <div className="border bg-muted/30 p-3 space-y-2.5">
+    <div className="border bg-muted/30 p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estimated TCO</p>
-        {ent && (
-          <span className="px-2 py-0.5 text-xs font-medium bg-blue-500/10 text-blue-600">Enterprise</span>
-        )}
-        {!ent && (
-          <span className="px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">Community</span>
-        )}
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cost breakdown</p>
+        <span className={cn('px-2 py-0.5 text-xs font-medium', ent ? 'bg-blue-500/10 text-blue-600' : 'bg-muted text-muted-foreground')}>
+          {ent ? 'Enterprise' : 'Community'}
+        </span>
       </div>
-      <div className="space-y-1.5 text-xs text-muted-foreground">
-        {mod.model && (
-          <>
-            <div className="flex justify-between">
-              <span>Model</span>
-              <span className="font-medium text-foreground">{modelLabel}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Assumption</span>
-              <span>{MONTHLY_INTERACTIONS} interactions/mo, ~{(AVG_TOKENS / 1000).toFixed(0)}k tokens each</span>
-            </div>
-            <div className="flex justify-between">
-              <span>LLM cost</span>
-              <span className="font-medium text-foreground">{formatUSD(llm)}</span>
-            </div>
-          </>
-        )}
-        {ent && (
-          <div className="flex justify-between">
-            <span>Maintenance fee{!mod.functional ? ' (early access)' : ''}</span>
-            <span className="font-medium text-foreground">${maintenance}/mo</span>
+
+      {/* Row 1: Maintenance fee — fixed, paid to Naas */}
+      {ent && (
+        <div className="space-y-1">
+          <div className="flex justify-between items-baseline text-xs">
+            <span className="text-muted-foreground">Maintenance fee</span>
+            <span className="font-semibold text-foreground tabular-nums">${maintenance}/mo</span>
           </div>
-        )}
-      </div>
-      <div className="flex justify-between items-center border-t pt-2">
-        <span className="text-xs font-semibold">Total monthly</span>
-        <span className="text-sm font-bold text-blue-600">{formatUSD(llm + maintenance)}</span>
-      </div>
+          <p className="text-xs text-muted-foreground/60">
+            Fixed. Paid to Naas. Covers agent upkeep regardless of your usage.
+          </p>
+        </div>
+      )}
+
+      {/* Row 2: LLM token cost — variable, paid to model provider */}
+      {hasModel && (
+        <div className="space-y-1.5">
+          <div className="flex justify-between items-baseline text-xs">
+            <span className="text-muted-foreground">LLM token cost</span>
+            <span className="font-medium text-muted-foreground italic">varies with usage</span>
+          </div>
+          <p className="text-xs text-muted-foreground/60">
+            Paid directly to {modelLabel ? `your ${modelLabel} provider` : 'your model provider'}. Not included in the maintenance fee.
+          </p>
+          <div className="border divide-y text-xs">
+            <div className="grid grid-cols-3 px-2 py-1.5 bg-muted/40 text-muted-foreground font-medium">
+              <span>Usage tier</span>
+              <span className="text-center">Interactions/mo</span>
+              <span className="text-right">Token cost</span>
+            </div>
+            {USAGE_TIERS.map(({ label, interactions, avgTokens, description }) => {
+              const cost = mod.model ? llmCostForTier(mod.model, interactions, avgTokens) : null;
+              return (
+                <div key={label} className="grid grid-cols-3 px-2 py-1.5 text-muted-foreground">
+                  <span className="font-medium text-foreground">{label}</span>
+                  <span className="text-center text-muted-foreground/80">{description}</span>
+                  <span className="text-right tabular-nums font-medium text-foreground">
+                    {cost !== null ? formatUSD(cost) : 'N/A'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Total at Professional tier as reference */}
+      {ent && hasModel && (() => {
+        const profTier = USAGE_TIERS[1];
+        const llmPro = mod.model ? llmCostForTier(mod.model, profTier.interactions, profTier.avgTokens) : null;
+        if (!llmPro) return null;
+        return (
+          <div className="flex justify-between items-center border-t pt-2">
+            <span className="text-xs text-muted-foreground">Total at Professional use</span>
+            <span className="text-sm font-bold text-blue-600 tabular-nums">{formatUSD(maintenance + llmPro)}/mo</span>
+          </div>
+        );
+      })()}
+
+      {/* What the maintenance fee covers */}
       {ent && (
         <div className="border-t pt-2.5 space-y-1.5">
           <p className="text-xs font-semibold text-foreground">What the maintenance fee covers</p>
           <ul className="space-y-1 text-xs text-muted-foreground">
-            <li className="flex items-start gap-1.5">
-              <span className="mt-0.5 text-blue-500 shrink-0">+</span>
-              <span>Agent kept current when the underlying model is deprecated or repriced</span>
-            </li>
-            <li className="flex items-start gap-1.5">
-              <span className="mt-0.5 text-blue-500 shrink-0">+</span>
-              <span>System prompt tuned when regulations, workflows, or standards change</span>
-            </li>
-            <li className="flex items-start gap-1.5">
-              <span className="mt-0.5 text-blue-500 shrink-0">+</span>
-              <span>Tool and API integrations patched when third-party services drift</span>
-            </li>
-            <li className="flex items-start gap-1.5">
-              <span className="mt-0.5 text-blue-500 shrink-0">+</span>
-              <span>Ontology connections updated as the knowledge graph evolves</span>
-            </li>
+            {[
+              'Agent kept current when the underlying model is deprecated or repriced',
+              'System prompt tuned when regulations, workflows, or standards change',
+              'Tool and API integrations patched when third-party services drift',
+              'Ontology connections updated as the knowledge graph evolves',
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-1.5">
+                <span className="mt-0.5 text-blue-500 shrink-0">+</span>
+                <span>{item}</span>
+              </li>
+            ))}
           </ul>
           <p className="text-xs text-muted-foreground/60 pt-0.5">
             Not a license. The agent is MIT licensed and yours to fork. You pay for the people keeping it production-ready.
@@ -280,7 +320,7 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
       )}
       {!ent && (
         <p className="text-xs text-muted-foreground/60 border-t pt-2">
-          Community tier. MIT licensed, self-hosted, self-maintained.
+          Community tier. MIT licensed, self-hosted, self-maintained. LLM costs are your only expense.
         </p>
       )}
     </div>
