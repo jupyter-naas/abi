@@ -32,6 +32,8 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "NEXUS_WEB_IMAGE": "ghcr.io/jupyter-naas/nexus-web",
     "NEXUS_WEB_TAG": "latest",
     "NEXUS_WEB_PORT": "3042",
+    "NEXUS_USER_ADMIN_EMAIL": "admin@example.com",
+    "NEXUS_USER_ADMIN_PASSWORD": "Admin1234!",
     "HEADSCALE_SERVER_URL": "headscale.localhost",
     "HEADSCALE_SERVER_PORT": "8083",
     "HEADSCALE_METRICS_PORT": "9090",
@@ -45,6 +47,7 @@ RANDOM_ENV_KEYS: tuple[str, ...] = (
     "MINIO_ROOT_PASSWORD",
     "RABBITMQ_PASSWORD",
     "FUSEKI_ADMIN_PASSWORD",
+    "ABI_API_KEY",
 )
 
 HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
@@ -416,6 +419,7 @@ def setup_local_deploy(
         "MINIO_ROOT_PASSWORD": str(uuid4()),
         "RABBITMQ_PASSWORD": str(uuid4()),
         "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
+        "ABI_API_KEY": str(uuid4()),
     }
 
     existing_env_vars = _read_env_vars(local_env_target_path)
