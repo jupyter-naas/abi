@@ -1339,7 +1339,7 @@ export function ChatInterface() {
           if (!stepName) return;
 
           const label = stepType === 'call_model'
-            ? `Calling ${stepName}`
+            ? `Calling model`
             : `Routing to ${stepName}`;
 
           const last = streamToolCalls[streamToolCalls.length - 1];
@@ -1377,7 +1377,7 @@ export function ChatInterface() {
               if (!rawTool) return false;
               const input = getStringValue(payload.input, payload.data) || undefined;
               handleToolStartEvent(rawTool, input);
-              streamActivityLine = `Tool: ${formatToolName(rawTool)}`;
+              streamActivityLine = `${formatToolName(rawTool)}`;
               hasDetailedActivity = true;
               return true;
             }
