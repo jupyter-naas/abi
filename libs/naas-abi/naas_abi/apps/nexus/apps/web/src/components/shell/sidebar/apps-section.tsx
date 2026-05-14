@@ -1,7 +1,6 @@
 'use client';
 
-import { LayoutGrid, Package, Store, ExternalLink } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { LayoutGrid } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
@@ -14,32 +13,10 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
       id="apps"
       icon={<LayoutGrid size={18} />}
       label="Apps"
-      description="Extensions and integrations"
+      description="Installed modules and marketplace"
       href={getWorkspacePath(currentWorkspaceId, '/apps')}
       collapsed={collapsed}
       detailOnly={detailOnly}
-    >
-      <button
-        className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-          'text-muted-foreground hover:bg-muted hover:text-foreground'
-        )}
-      >
-        <Package size={14} />
-        <span>Installed</span>
-        <span className="ml-auto text-xs text-muted-foreground">0</span>
-      </button>
-
-      <button
-        className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-          'text-muted-foreground hover:bg-muted hover:text-foreground'
-        )}
-      >
-        <Store size={14} />
-        <span>Marketplace</span>
-        <ExternalLink size={12} className="ml-auto" />
-      </button>
-    </CollapsibleSection>
+    />
   );
 }

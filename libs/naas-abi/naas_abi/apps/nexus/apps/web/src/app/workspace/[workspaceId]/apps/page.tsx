@@ -1,206 +1,247 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Header } from '@/components/shell/header';
-import {
-  Globe,
-  FileText,
-  Presentation,
-  Table,
-  Trello,
-  Calendar,
-  Plus,
-  ExternalLink,
-} from 'lucide-react';
+import { LayoutGrid, Package, Store, Search, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useTenant } from '@/contexts/tenant-context';
+import { getApiUrl } from '@/lib/config';
+import { authFetch } from '@/stores/auth';
 
-interface AppCardProps {
-  icon: React.ReactNode;
+interface ModuleInfo {
+  module_path: string;
   name: string;
   description: string;
-  url?: string;
-  status: 'available' | 'coming-soon';
+  logo_url: string | null;
+  category: string;
+  installed: boolean;
 }
 
-function AppCard({ icon, name, description, status, url }: AppCardProps) {
-  const content = (
-    <div
-      className={cn(
-        'group relative flex flex-col rounded-xl border bg-card p-6 transition-all',
-        status === 'available' && 'cursor-pointer hover:border-workspace-accent hover:shadow-md',
-        status === 'coming-soon' && 'opacity-60'
-      )}
-    >
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-workspace-accent-10 text-workspace-accent">
-        {icon}
-      </div>
-      <h3 className="mb-1 font-semibold">{name}</h3>
-      <p className="text-sm text-muted-foreground">{description}</p>
-      {status === 'coming-soon' && (
-        <span className="mt-3 inline-flex w-fit rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-          Coming Soon
-        </span>
-      )}
-      {status === 'available' && (
-        <ExternalLink
-          size={16}
-          className="absolute right-4 top-4 opacity-0 transition-opacity group-hover:opacity-100"
-        />
-      )}
-    </div>
-  );
-
-  if (status === 'available' && url) {
-    return (
-      <a href={url} target="_blank" rel="noreferrer noopener">
-        {content}
-      </a>
-    );
-  }
-
-  return content;
+interface ModulesResponse {
+  installed: ModuleInfo[];
+  available: ModuleInfo[];
 }
 
-const comingSoonApps: AppCardProps[] = [
-  {
-    icon: <FileText size={24} />,
-    name: 'Docs',
-    description: 'Rich text editor for documentation and notes',
-    status: 'coming-soon',
-  },
-  {
-    icon: <Presentation size={24} />,
-    name: 'Slides',
-    description: 'Create presentations with agent assistance',
-    status: 'coming-soon',
-  },
-  {
-    icon: <Table size={24} />,
-    name: 'Spreadsheets',
-    description: 'Data tables with formula support',
-    status: 'coming-soon',
-  },
-  {
-    icon: <Trello size={24} />,
-    name: 'Board',
-    description: 'Kanban boards and whiteboards',
-    status: 'coming-soon',
-  },
-  {
-    icon: <Calendar size={24} />,
-    name: 'Calendar',
-    description: 'Schedule and timeline management',
-    status: 'coming-soon',
-  },
-];
-
-type ExternalAppEntry = {
-  name: string;
-  url: string;
-  description?: string;
-  icon_emoji?: string;
+const CATEGORY_LABELS: Record<string, string> = {
+  core: 'Core',
+  ai: 'AI',
+  application: 'Application',
+  domain: 'Domain',
 };
 
-function parseExternalAppsFromEnv(): ExternalAppEntry[] {
-  const raw = process.env.NEXT_PUBLIC_EXTERNAL_APPS_JSON;
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((app): app is ExternalAppEntry => {
-      return (
-        typeof app === 'object' &&
-        app !== null &&
-        typeof app.name === 'string' &&
-        typeof app.url === 'string'
-      );
-    });
-  } catch {
-    return [];
-  }
+const CATEGORY_COLORS: Record<string, string> = {
+  core: 'bg-workspace-accent-10 text-workspace-accent',
+  ai: 'bg-blue-500/10 text-blue-500',
+  application: 'bg-purple-500/10 text-purple-500',
+  domain: 'bg-amber-500/10 text-amber-600',
+};
+
+function ModuleCard({ mod }: { mod: ModuleInfo }) {
+  return (
+    <div className="glass-card flex flex-col gap-3 p-5 transition-all hover:border-primary/30">
+      <div className="flex items-start gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted overflow-hidden">
+          {mod.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={mod.logo_url}
+              alt={mod.name}
+              className="h-full w-full object-contain"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                e.currentTarget.parentElement?.classList.add('fallback-icon');
+              }}
+            />
+          ) : (
+            <Bot size={22} className="text-muted-foreground" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-semibold leading-tight">{mod.name}</h3>
+            {mod.installed && (
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600">
+                Installed
+              </span>
+            )}
+            <span
+              className={cn(
+                'rounded-full px-2 py-0.5 text-xs font-medium',
+                CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground'
+              )}
+            >
+              {CATEGORY_LABELS[mod.category] ?? mod.category}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+            {mod.description || mod.module_path}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
+type Tab = 'installed' | 'marketplace';
+
 export default function AppsPage() {
-  const tenant = useTenant();
-  const envApps = useMemo(parseExternalAppsFromEnv, []);
-  const tenantApps = Array.isArray(tenant.apps) ? tenant.apps : [];
-  const configuredApps: AppCardProps[] = [...tenantApps, ...envApps].flatMap((app) => {
-    const normalizedUrl = app.url.trim();
-    if (!normalizedUrl) {
-      return [];
-    }
+  const [tab, setTab] = useState<Tab>('installed');
+  const [data, setData] = useState<ModulesResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
-    let fallbackDescription = normalizedUrl;
-    try {
-      fallbackDescription = new URL(normalizedUrl).hostname;
-    } catch {
-      // Keep the raw URL as a fallback when config contains a non-standard URL.
-    }
+  useEffect(() => {
+    setLoading(true);
+    authFetch(`${getApiUrl()}/api/modules/`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
+      .then((d: ModulesResponse) => setData(d))
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
+  }, []);
 
-    return [
-      {
-        icon: app.icon_emoji ? <span className="text-2xl leading-none">{app.icon_emoji}</span> : <Globe size={24} />,
-        name: app.name,
-        description: app.description || fallbackDescription,
-        url: normalizedUrl,
-        status: 'available' as const,
-      },
-    ];
+  const availableCategories = data
+    ? Array.from(new Set(data.available.map((m) => m.category))).sort()
+    : [];
+
+  const filteredAvailable = (data?.available ?? []).filter((m) => {
+    const matchesSearch =
+      !search ||
+      m.name.toLowerCase().includes(search.toLowerCase()) ||
+      m.description.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || m.category === categoryFilter;
+    return matchesSearch && matchesCategory;
   });
-  const apps = [...configuredApps, ...comingSoonApps];
+
+  const groupedAvailable = filteredAvailable.reduce<Record<string, ModuleInfo[]>>(
+    (acc, m) => {
+      const key = CATEGORY_LABELS[m.category] ?? m.category;
+      (acc[key] ??= []).push(m);
+      return acc;
+    },
+    {}
+  );
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Apps" subtitle="Extensible applications for your workspace" />
+      <Header title="Apps" subtitle="Installed modules and marketplace" />
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="mx-auto max-w-5xl">
-          {/* Header */}
-          <div className="mb-8 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">Installed Apps</h2>
-              <p className="text-muted-foreground">
-                Apps extend NEXUS with specialized functionality.
-              </p>
-            </div>
-            <button
-              className={cn(
-                'flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
-                'hover:opacity-90'
-              )}
-            >
-              <Plus size={16} />
-              Browse Marketplace
-            </button>
-          </div>
-          {configuredApps.length === 0 && (
-            <p className="mb-4 text-sm text-muted-foreground">
-              No external apps configured yet. Add entries in `nexus_config.tenant.apps` in your config file.
-            </p>
-          )}
-
-          {/* Apps grid */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {apps.map((app) => (
-              <AppCard key={app.name} {...app} />
+      <div className="flex-1 overflow-auto">
+        {/* Tabs */}
+        <div className="border-b px-6 pt-4">
+          <div className="flex gap-1">
+            {(['installed', 'marketplace'] as Tab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={cn(
+                  'flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors',
+                  tab === t
+                    ? 'border-b-2 border-workspace-accent text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {t === 'installed' ? <Package size={15} /> : <Store size={15} />}
+                {t === 'installed' ? 'Installed' : 'Marketplace'}
+                {t === 'installed' && data && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs">
+                    {data.installed.length}
+                  </span>
+                )}
+                {t === 'marketplace' && data && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs">
+                    {data.available.length}
+                  </span>
+                )}
+              </button>
             ))}
           </div>
+        </div>
 
-          {/* Framework info */}
-          <div className="mt-12 rounded-xl border bg-muted/30 p-6">
-            <h3 className="mb-2 font-semibold">App Framework</h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              NEXUS supports custom apps as first-class citizens. Apps share identity, permissions,
-              search, and ABI access through a unified API.
-            </p>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• App registration system</li>
-              <li>• Shared identity & permissions</li>
-              <li>• Shared search & context</li>
-              <li>• ABI access via API</li>
-            </ul>
-          </div>
+        <div className="p-6">
+          {loading && (
+            <div className="flex items-center justify-center py-20 text-muted-foreground">
+              <LayoutGrid size={20} className="mr-2 animate-pulse" />
+              Loading modules…
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
+              Failed to load modules: {error}
+            </div>
+          )}
+
+          {/* Installed tab */}
+          {!loading && !error && tab === 'installed' && (
+            <div className="mx-auto max-w-5xl">
+              {data?.installed.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No modules installed.</p>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {data?.installed.map((mod) => (
+                    <ModuleCard key={mod.module_path} mod={mod} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Marketplace tab */}
+          {!loading && !error && tab === 'marketplace' && (
+            <div className="mx-auto max-w-5xl space-y-8">
+              {/* Search + category filter */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search
+                    size={15}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search modules…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {['all', ...availableCategories].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setCategoryFilter(cat)}
+                      className={cn(
+                        'rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                        categoryFilter === cat
+                          ? 'bg-workspace-accent text-white'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      )}
+                    >
+                      {cat === 'all' ? 'All' : (CATEGORY_LABELS[cat] ?? cat)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {Object.keys(groupedAvailable).length === 0 && (
+                <p className="text-sm text-muted-foreground">No modules match your search.</p>
+              )}
+
+              {/* Grouped sections */}
+              {Object.entries(groupedAvailable).sort().map(([category, mods]) => (
+                <div key={category}>
+                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    {category}
+                  </h2>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {mods.map((mod) => (
+                      <ModuleCard key={mod.module_path} mod={mod} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
