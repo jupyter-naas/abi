@@ -1,17 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import {
-  LayoutGrid, Package, Store, Search, Bot, X, Cpu, Tag,
-  CheckCircle2, AlertTriangle, FileText, Presentation, Table2,
-  Trello, Calendar, ExternalLink, Wrench,
+  Search, Bot, X, Cpu, Tag, CheckCircle2, AlertTriangle,
+  FileText, Presentation, Table2, Trello, Calendar, ExternalLink,
+  LayoutGrid, GitBranch, Network, Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface ModuleInfo {
   module_path: string;
@@ -32,6 +36,40 @@ interface ModulesResponse {
   available: ModuleInfo[];
 }
 
+type ArtifactType = 'all' | 'agents' | 'applications' | 'tools' | 'ontologies' | 'workflows' | 'pipelines';
+type StatusFilter = 'all' | 'installed' | 'available' | 'coming-soon';
+
+// ---------------------------------------------------------------------------
+// Static metadata
+// ---------------------------------------------------------------------------
+
+const TYPE_LABELS: Record<ArtifactType, string> = {
+  all: 'All',
+  agents: 'Agents',
+  applications: 'Applications',
+  tools: 'Tools',
+  ontologies: 'Ontologies',
+  workflows: 'Workflows',
+  pipelines: 'Pipelines',
+};
+
+const TYPE_ICONS: Record<ArtifactType, React.ReactNode> = {
+  all: <LayoutGrid size={13} />,
+  agents: <Bot size={13} />,
+  applications: <ExternalLink size={13} />,
+  tools: <FileText size={13} />,
+  ontologies: <Network size={13} />,
+  workflows: <Workflow size={13} />,
+  pipelines: <GitBranch size={13} />,
+};
+
+const MODULE_CATEGORY_TO_TYPE: Record<string, ArtifactType> = {
+  ai: 'agents',
+  domain: 'agents',
+  application: 'applications',
+  core: 'agents',
+};
+
 const CATEGORY_LABELS: Record<string, string> = {
   core: 'Core',
   ai: 'AI',
@@ -40,11 +78,96 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  core: 'bg-workspace-accent-10 text-workspace-accent',
+  core: 'bg-workspace-accent/10 text-workspace-accent',
   ai: 'bg-blue-500/10 text-blue-500',
   application: 'bg-purple-500/10 text-purple-500',
   domain: 'bg-amber-500/10 text-amber-600',
 };
+
+// ---------------------------------------------------------------------------
+// Static artifacts (tools + coming-soon categories)
+// ---------------------------------------------------------------------------
+
+interface StaticArtifact {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  type: ArtifactType;
+  status: 'available' | 'coming-soon';
+  url?: string;
+}
+
+const STATIC_ARTIFACTS: StaticArtifact[] = [
+  {
+    id: 'docs',
+    name: 'Docs',
+    description: 'Rich text editor for documentation, notes, and runbooks with agent assistance.',
+    icon: <FileText size={22} />,
+    type: 'tools',
+    status: 'coming-soon',
+  },
+  {
+    id: 'slides',
+    name: 'Slides',
+    description: 'Build and narrate presentations driven by your knowledge graph.',
+    icon: <Presentation size={22} />,
+    type: 'tools',
+    status: 'coming-soon',
+  },
+  {
+    id: 'sheets',
+    name: 'Sheets',
+    description: 'Intelligent spreadsheets with formula support and live data connectors.',
+    icon: <Table2 size={22} />,
+    type: 'tools',
+    status: 'coming-soon',
+  },
+  {
+    id: 'board',
+    name: 'Board',
+    description: 'Kanban boards and whiteboards to manage tasks and visual workflows.',
+    icon: <Trello size={22} />,
+    type: 'tools',
+    status: 'coming-soon',
+  },
+  {
+    id: 'calendar',
+    name: 'Calendar',
+    description: 'Schedule and timeline management synced with your agents.',
+    icon: <Calendar size={22} />,
+    type: 'tools',
+    status: 'coming-soon',
+  },
+  {
+    id: 'ontologies-coming-soon',
+    name: 'Community Ontologies',
+    description: 'Browse and install shared ontology modules contributed by the ABI community.',
+    icon: <Network size={22} />,
+    type: 'ontologies',
+    status: 'coming-soon',
+  },
+  {
+    id: 'workflows-coming-soon',
+    name: 'Workflow Templates',
+    description: 'Reusable multi-step agent workflows for common business and data processes.',
+    icon: <Workflow size={22} />,
+    type: 'workflows',
+    status: 'coming-soon',
+  },
+  {
+    id: 'pipelines-coming-soon',
+    name: 'Pipeline Blueprints',
+    description: 'Pre-built data ingestion and transformation pipelines ready to configure.',
+    icon: <GitBranch size={22} />,
+    type: 'pipelines',
+    status: 'coming-soon',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Module avatar (shared between card and ID panel)
+// ---------------------------------------------------------------------------
 
 function ModuleAvatar({
   mod,
@@ -67,7 +190,7 @@ function ModuleAvatar({
           alt={mod.name}
           className={cn(
             isPortrait ? 'h-full w-full object-cover object-top' : 'max-h-full max-w-full object-contain',
-            imgClassName
+            imgClassName,
           )}
           onError={() => setImgFailed(true)}
         />
@@ -82,6 +205,10 @@ function ModuleAvatar({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Module card (agent / application)
+// ---------------------------------------------------------------------------
 
 function ModuleCard({ mod, onClick }: { mod: ModuleInfo; onClick: () => void }) {
   const isPortrait = mod.category === 'domain';
@@ -104,12 +231,7 @@ function ModuleCard({ mod, onClick }: { mod: ModuleInfo; onClick: () => void }) 
             </span>
           )}
         </div>
-        <span
-          className={cn(
-            'self-start rounded-full px-2 py-0.5 text-xs font-medium',
-            CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground'
-          )}
-        >
+        <span className={cn('self-start rounded-full px-2 py-0.5 text-xs font-medium', CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground')}>
           {CATEGORY_LABELS[mod.category] ?? mod.category}
         </span>
         <p className="line-clamp-2 text-xs text-muted-foreground">
@@ -120,46 +242,94 @@ function ModuleCard({ mod, onClick }: { mod: ModuleInfo; onClick: () => void }) 
   );
 }
 
+// ---------------------------------------------------------------------------
+// Static artifact card (tools, ontologies, workflows, pipelines)
+// ---------------------------------------------------------------------------
+
+function StaticCard({ artifact }: { artifact: StaticArtifact }) {
+  const inner = (
+    <div
+      className={cn(
+        'group relative flex flex-col gap-3 rounded-xl border bg-card p-5 transition-all h-full',
+        artifact.status === 'available'
+          ? 'cursor-pointer hover:border-workspace-accent hover:shadow-md'
+          : 'opacity-60 cursor-default',
+      )}
+    >
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-workspace-accent/10 text-workspace-accent">
+        {artifact.icon}
+      </div>
+      <div className="flex-1">
+        <h3 className="font-semibold leading-tight">{artifact.name}</h3>
+        <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{artifact.description}</p>
+      </div>
+      {artifact.status === 'coming-soon' && (
+        <span className="self-start rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          Coming soon
+        </span>
+      )}
+      {artifact.status === 'available' && (
+        <ExternalLink size={14} className="absolute right-4 top-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+      )}
+    </div>
+  );
+
+  if (artifact.status === 'available' && artifact.url) {
+    return <a href={artifact.url} target="_blank" rel="noreferrer noopener" className="h-full">{inner}</a>;
+  }
+  return inner;
+}
+
+// ---------------------------------------------------------------------------
+// External app card (from tenant config)
+// ---------------------------------------------------------------------------
+
+function ExternalAppCard({ app }: { app: { name: string; url: string; description?: string | null; icon_emoji?: string | null } }) {
+  return (
+    <a href={app.url} target="_blank" rel="noreferrer noopener">
+      <div className="group relative flex flex-col gap-3 rounded-xl border bg-card p-5 transition-all cursor-pointer hover:border-workspace-accent hover:shadow-md">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-workspace-accent/10 text-2xl">
+          {app.icon_emoji ?? <ExternalLink size={22} className="text-workspace-accent" />}
+        </div>
+        <div>
+          <h3 className="font-semibold leading-tight">{app.name}</h3>
+          {app.description && <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{app.description}</p>}
+        </div>
+        <ExternalLink size={14} className="absolute right-4 top-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+      </div>
+    </a>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Agent ID Card panel
+// ---------------------------------------------------------------------------
+
 function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void }) {
   const isPortrait = mod.category === 'domain';
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      {/* Panel */}
+      <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-background shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between border-b px-5 py-4">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Agent ID Card
-          </span>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Agent ID Card</span>
+          <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
             <X size={16} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Avatar hero */}
           <ModuleAvatar
             mod={mod}
             className={cn('w-full', isPortrait ? 'h-64' : 'flex h-44 items-center justify-center p-10')}
           />
 
-          {/* Identity block */}
           <div className="space-y-4 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold">{mod.name}</h2>
-                {mod.slug && (
-                  <p className="mt-0.5 text-xs text-muted-foreground font-mono">{mod.slug}</p>
-                )}
+                {mod.slug && <p className="mt-0.5 font-mono text-xs text-muted-foreground">{mod.slug}</p>}
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 {mod.installed && (
@@ -175,14 +345,8 @@ function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void })
               </div>
             </div>
 
-            {/* Badges row */}
             <div className="flex flex-wrap gap-2">
-              <span
-                className={cn(
-                  'rounded-full px-2.5 py-0.5 text-xs font-medium',
-                  CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground'
-                )}
-              >
+              <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium', CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground')}>
                 <Tag size={10} className="mr-1 inline" />
                 {CATEGORY_LABELS[mod.category] ?? mod.category}
               </span>
@@ -198,33 +362,20 @@ function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void })
               )}
             </div>
 
-            {/* Description */}
             {mod.description && (
-              <div>
-                <p className="text-sm text-muted-foreground leading-relaxed">{mod.description}</p>
-              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">{mod.description}</p>
             )}
 
-            {/* System prompt preview */}
             {mod.system_prompt_preview && (
               <div className="rounded-lg border bg-muted/40 p-3">
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  System prompt
-                </p>
-                <p className="text-xs leading-relaxed text-foreground/80">
-                  {mod.system_prompt_preview}
-                </p>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">System prompt</p>
+                <p className="text-xs leading-relaxed text-foreground/80">{mod.system_prompt_preview}</p>
               </div>
             )}
 
-            {/* Technical info */}
             <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Module
-              </p>
-              <p className="break-all font-mono text-xs text-muted-foreground">
-                {mod.module_path}
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Module</p>
+              <p className="break-all font-mono text-xs text-muted-foreground">{mod.module_path}</p>
             </div>
           </div>
         </div>
@@ -233,129 +384,30 @@ function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void })
   );
 }
 
-interface WorkspaceTool {
-  icon: React.ReactNode;
-  name: string;
-  description: string;
-  status: 'available' | 'coming-soon';
-  url?: string;
-}
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
-const WORKSPACE_TOOLS: WorkspaceTool[] = [
-  {
-    icon: <FileText size={22} />,
-    name: 'Docs',
-    description: 'Rich text editor for documentation, notes, and runbooks with agent assistance.',
-    status: 'coming-soon',
-  },
-  {
-    icon: <Presentation size={22} />,
-    name: 'Slides',
-    description: 'Build and narrate presentations driven by your knowledge graph.',
-    status: 'coming-soon',
-  },
-  {
-    icon: <Table2 size={22} />,
-    name: 'Sheets',
-    description: 'Intelligent spreadsheets with formula support and live data connectors.',
-    status: 'coming-soon',
-  },
-  {
-    icon: <Trello size={22} />,
-    name: 'Board',
-    description: 'Kanban boards and whiteboards to manage tasks and visual workflows.',
-    status: 'coming-soon',
-  },
-  {
-    icon: <Calendar size={22} />,
-    name: 'Calendar',
-    description: 'Schedule and timeline management synced with your agents.',
-    status: 'coming-soon',
-  },
-];
+const ALL_TYPES: ArtifactType[] = ['all', 'agents', 'applications', 'tools', 'ontologies', 'workflows', 'pipelines'];
 
-function ToolCard({ tool }: { tool: WorkspaceTool }) {
-  const inner = (
-    <div
-      className={cn(
-        'group relative flex flex-col gap-3 rounded-xl border bg-card p-5 transition-all',
-        tool.status === 'available'
-          ? 'cursor-pointer hover:border-workspace-accent hover:shadow-md'
-          : 'opacity-60 cursor-default'
-      )}
-    >
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-workspace-accent/10 text-workspace-accent">
-        {tool.icon}
-      </div>
-      <div>
-        <h3 className="font-semibold leading-tight">{tool.name}</h3>
-        <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{tool.description}</p>
-      </div>
-      {tool.status === 'coming-soon' && (
-        <span className="self-start rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-          Coming soon
-        </span>
-      )}
-      {tool.status === 'available' && (
-        <ExternalLink
-          size={14}
-          className="absolute right-4 top-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-        />
-      )}
-    </div>
-  );
-
-  if (tool.status === 'available' && tool.url) {
-    return (
-      <a href={tool.url} target="_blank" rel="noreferrer noopener">
-        {inner}
-      </a>
-    );
-  }
-  return inner;
-}
-
-function ExternalToolCard({ app }: { app: { name: string; url: string; description?: string | null; icon_emoji?: string | null } }) {
-  return (
-    <a href={app.url} target="_blank" rel="noreferrer noopener">
-      <div className="group relative flex flex-col gap-3 rounded-xl border bg-card p-5 transition-all cursor-pointer hover:border-workspace-accent hover:shadow-md">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-workspace-accent/10 text-2xl">
-          {app.icon_emoji ?? <ExternalLink size={22} className="text-workspace-accent" />}
-        </div>
-        <div>
-          <h3 className="font-semibold leading-tight">{app.name}</h3>
-          {app.description && (
-            <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{app.description}</p>
-          )}
-        </div>
-        <ExternalLink
-          size={14}
-          className="absolute right-4 top-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-        />
-      </div>
-    </a>
-  );
-}
-
-type Tab = 'installed' | 'marketplace' | 'tools';
-
-export default function AppsPage() {
+export default function MarketplacePage() {
   const searchParams = useSearchParams();
   const tenant = useTenant();
 
-  const rawTab = searchParams?.get('tab');
-  const initialTab: Tab = rawTab === 'marketplace' ? 'marketplace' : rawTab === 'tools' ? 'tools' : 'installed';
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [typeFilter, setTypeFilter] = useState<ArtifactType>(() => {
+    const t = searchParams?.get('type') as ArtifactType | null;
+    return t && ALL_TYPES.includes(t) ? t : 'all';
+  });
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [search, setSearch] = useState('');
   const [data, setData] = useState<ModulesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [selectedMod, setSelectedMod] = useState<ModuleInfo | null>(null);
 
   useEffect(() => {
-    const t = searchParams?.get('tab');
-    setTab(t === 'marketplace' ? 'marketplace' : t === 'tools' ? 'tools' : 'installed');
+    const t = searchParams?.get('type') as ArtifactType | null;
+    if (t && ALL_TYPES.includes(t)) setTypeFilter(t);
   }, [searchParams]);
 
   useEffect(() => {
@@ -367,200 +419,227 @@ export default function AppsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const availableCategories = data
-    ? Array.from(new Set(data.available.map((m) => m.category))).sort()
-    : [];
+  // Merge all modules into one flat list (deduplicated by module_path)
+  const allModules = useMemo<ModuleInfo[]>(() => {
+    if (!data) return [];
+    const map = new Map<string, ModuleInfo>();
+    for (const m of data.available) map.set(m.module_path, m);
+    for (const m of data.installed) map.set(m.module_path, { ...map.get(m.module_path) ?? m, installed: true });
+    return Array.from(map.values());
+  }, [data]);
 
-  const filteredAvailable = (data?.available ?? []).filter((m) => {
-    const matchesSearch =
-      !search ||
-      m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.description.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || m.category === categoryFilter;
-    return matchesSearch && matchesCategory;
-  });
+  // Tenant external apps as static artifacts
+  const tenantArtifacts = useMemo<StaticArtifact[]>(() =>
+    tenant.apps.map((app) => ({
+      id: `external-${app.url}`,
+      name: app.name,
+      description: app.description ?? '',
+      icon: app.icon_emoji
+        ? <span className="text-2xl">{app.icon_emoji}</span>
+        : <ExternalLink size={22} />,
+      type: 'tools' as ArtifactType,
+      status: 'available' as const,
+      url: app.url,
+    })),
+  [tenant.apps]);
 
-  const groupedAvailable = filteredAvailable.reduce<Record<string, ModuleInfo[]>>(
-    (acc, m) => {
+  const allStatic = useMemo(() => [...tenantArtifacts, ...STATIC_ARTIFACTS], [tenantArtifacts]);
+
+  // Count per type for badge display
+  const typeCounts = useMemo(() => {
+    const counts: Partial<Record<ArtifactType, number>> = {};
+    for (const m of allModules) {
+      const t = MODULE_CATEGORY_TO_TYPE[m.category] ?? 'agents';
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+    for (const s of allStatic) {
+      counts[s.type] = (counts[s.type] ?? 0) + 1;
+    }
+    counts.all = allModules.length + allStatic.length;
+    return counts;
+  }, [allModules, allStatic]);
+
+  // Filtered module results
+  const filteredModules = useMemo(() => {
+    return allModules.filter((m) => {
+      const artifactType = MODULE_CATEGORY_TO_TYPE[m.category] ?? 'agents';
+      if (typeFilter !== 'all' && artifactType !== typeFilter) return false;
+      if (statusFilter === 'installed' && !m.installed) return false;
+      if (statusFilter === 'available' && m.installed) return false;
+      if (statusFilter === 'coming-soon') return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (!m.name.toLowerCase().includes(q) && !m.description.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allModules, typeFilter, statusFilter, search]);
+
+  // Filtered static results
+  const filteredStatic = useMemo(() => {
+    return allStatic.filter((s) => {
+      if (typeFilter !== 'all' && s.type !== typeFilter) return false;
+      if (statusFilter === 'installed') return false;
+      if (statusFilter === 'available' && s.status !== 'available') return false;
+      if (statusFilter === 'coming-soon' && s.status !== 'coming-soon') return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (!s.name.toLowerCase().includes(q) && !s.description.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allStatic, typeFilter, statusFilter, search]);
+
+  // Group modules by their sub-category label when showing all types
+  const groupedModules = useMemo(() => {
+    if (typeFilter !== 'all') return { '': filteredModules };
+    return filteredModules.reduce<Record<string, ModuleInfo[]>>((acc, m) => {
       const key = CATEGORY_LABELS[m.category] ?? m.category;
       (acc[key] ??= []).push(m);
       return acc;
-    },
-    {}
-  );
+    }, {});
+  }, [filteredModules, typeFilter]);
+
+  // Group static by type when showing all
+  const groupedStatic = useMemo(() => {
+    if (typeFilter !== 'all') return { '': filteredStatic };
+    return filteredStatic.reduce<Record<string, StaticArtifact[]>>((acc, s) => {
+      const key = TYPE_LABELS[s.type];
+      (acc[key] ??= []).push(s);
+      return acc;
+    }, {});
+  }, [filteredStatic, typeFilter]);
+
+  const totalResults = filteredModules.length + filteredStatic.length;
+  const hasResults = totalResults > 0;
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Apps" subtitle="Installed modules and marketplace" />
+      <Header title="Marketplace" subtitle="Agents, applications, tools, ontologies, workflows and pipelines" />
 
       <div className="flex-1 overflow-auto">
-        {/* Tabs */}
-        <div className="border-b px-6 pt-4">
-          <div className="flex gap-1">
-            <button
-              onClick={() => setTab('installed')}
-              className={cn(
-                'flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors',
-                tab === 'installed'
-                  ? 'border-b-2 border-workspace-accent text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Package size={15} />
-              Installed
-              {data && (
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs">
-                  {data.installed.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setTab('marketplace')}
-              className={cn(
-                'flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors',
-                tab === 'marketplace'
-                  ? 'border-b-2 border-workspace-accent text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Store size={15} />
-              Marketplace
-              {data && (
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs">
-                  {data.available.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setTab('tools')}
-              className={cn(
-                'flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors',
-                tab === 'tools'
-                  ? 'border-b-2 border-workspace-accent text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Wrench size={15} />
-              Tools
-            </button>
-          </div>
-        </div>
+        <div className="p-6 space-y-5">
 
-        <div className="p-6">
+          {/* Search bar */}
+          <div className="relative max-w-2xl">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search the marketplace…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-10 w-full rounded-xl border bg-background pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+
+          {/* Type filter pills */}
+          <div className="flex flex-wrap gap-2">
+            {ALL_TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTypeFilter(t)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                  typeFilter === t
+                    ? 'bg-workspace-accent text-white shadow-sm'
+                    : 'bg-muted text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {TYPE_ICONS[t]}
+                {TYPE_LABELS[t]}
+                {typeCounts[t] !== undefined && (
+                  <span className={cn('rounded-full px-1.5 py-0.5 text-xs tabular-nums', typeFilter === t ? 'bg-white/20' : 'bg-background')}>
+                    {typeCounts[t]}
+                  </span>
+                )}
+              </button>
+            ))}
+
+            {/* Status filter — separated by a thin divider */}
+            <div className="mx-1 w-px self-stretch bg-border" />
+            {(['all', 'installed', 'available', 'coming-soon'] as StatusFilter[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={cn(
+                  'rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                  statusFilter === s
+                    ? 'bg-foreground text-background'
+                    : 'bg-muted text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {s === 'all' ? 'All status' : s === 'coming-soon' ? 'Coming soon' : s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Loading */}
           {loading && (
             <div className="flex items-center justify-center py-20 text-muted-foreground">
               <LayoutGrid size={20} className="mr-2 animate-pulse" />
-              Loading modules…
+              Loading marketplace…
             </div>
           )}
 
+          {/* Error */}
           {error && (
             <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
-              Failed to load modules: {error}
+              Failed to load: {error}
             </div>
           )}
 
-          {/* Installed tab */}
-          {!loading && !error && tab === 'installed' && (
-            <div className="mx-auto max-w-5xl">
-              {data?.installed.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No modules installed.</p>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {data?.installed.map((mod) => (
-                    <ModuleCard key={mod.module_path} mod={mod} onClick={() => setSelectedMod(mod)} />
-                  ))}
-                </div>
-              )}
-            </div>
+          {/* Empty */}
+          {!loading && !error && !hasResults && (
+            <p className="py-12 text-center text-sm text-muted-foreground">Nothing matches your search.</p>
           )}
 
-          {/* Marketplace tab */}
-          {!loading && !error && tab === 'marketplace' && (
-            <div className="mx-auto max-w-5xl space-y-8">
-              {/* Search + category filter */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="relative flex-1">
-                  <Search
-                    size={15}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Search modules…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {['all', ...availableCategories].map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setCategoryFilter(cat)}
-                      className={cn(
-                        'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                        categoryFilter === cat
-                          ? 'bg-workspace-accent text-white'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          {/* Results */}
+          {!loading && !error && hasResults && (
+            <div className="space-y-10">
+              {/* Module groups */}
+              {Object.entries(groupedModules)
+                .filter(([, mods]) => mods.length > 0)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([label, mods]) => (
+                  <section key={label || 'modules'}>
+                    {label && (
+                      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                        {label}
+                      </h2>
+                    )}
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {mods.map((mod) => (
+                        <ModuleCard key={mod.module_path} mod={mod} onClick={() => setSelectedMod(mod)} />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+
+              {/* Static artifact groups (tools, ontologies, workflows, pipelines) */}
+              {Object.entries(groupedStatic)
+                .filter(([, items]) => items.length > 0)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([label, items]) => (
+                  <section key={label || 'static'}>
+                    {label && (
+                      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                        {label}
+                      </h2>
+                    )}
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {items.map((artifact) =>
+                        artifact.id.startsWith('external-') ? (
+                          <ExternalAppCard
+                            key={artifact.id}
+                            app={{ name: artifact.name, url: artifact.url ?? '#', description: artifact.description }}
+                          />
+                        ) : (
+                          <StaticCard key={artifact.id} artifact={artifact} />
+                        ),
                       )}
-                    >
-                      {cat === 'all' ? 'All' : (CATEGORY_LABELS[cat] ?? cat)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {Object.keys(groupedAvailable).length === 0 && (
-                <p className="text-sm text-muted-foreground">No modules match your search.</p>
-              )}
-
-              {/* Grouped sections */}
-              {Object.entries(groupedAvailable).sort().map(([category, mods]) => (
-                <div key={category}>
-                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    {category}
-                  </h2>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {mods.map((mod) => (
-                      <ModuleCard key={mod.module_path} mod={mod} onClick={() => setSelectedMod(mod)} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* Tools tab */}
-          {tab === 'tools' && (
-            <div className="mx-auto max-w-5xl space-y-10">
-              {/* External apps from tenant config */}
-              {tenant.apps.length > 0 && (
-                <div>
-                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Your Apps
-                  </h2>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {tenant.apps.map((app) => (
-                      <ExternalToolCard key={app.url} app={app} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Built-in workspace tools (roadmap) */}
-              <div>
-                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Workspace Tools
-                </h2>
-                <p className="mb-4 text-xs text-muted-foreground">
-                  Native productivity tools built into the platform, powered by your agents and knowledge graph.
-                </p>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {WORKSPACE_TOOLS.map((tool) => (
-                    <ToolCard key={tool.name} tool={tool} />
-                  ))}
-                </div>
-              </div>
+                    </div>
+                  </section>
+                ))}
             </div>
           )}
         </div>
