@@ -28,7 +28,7 @@ Most AI platforms lock you in: proprietary data models, opaque pipelines, no exi
 
 ABI is built for continuity and ownership. Every layer is swappable: LLM providers, infrastructure services, data adapters. Agents reason over context sources you control (knowledge graph, vector store, file system), so your data and logic stay yours regardless of what any upstream vendor does.
 
-It also covers the full stack from ingestion to UI, so you are not stitching together five different tools. The knowledge graph is built on [ISO/IEC 21838-2 Basic Formal Ontology](https://www.iso.org/standard/74572.html), making outputs interoperable with any other BFO-compliant system. The platform is designed to be auditable against [ISO/IEC 42001:2023 AI Management Systems](https://www.iso.org/standard/42001) and EU AI Act requirements.
+It also covers the full stack from ingestion to UI, so you are not stitching together five different tools. The knowledge graph is built on [ISO/IEC 21838-2 Basic Formal Ontology (BFO)](https://www.iso.org/standard/74572.html), the open standard used in biotech, defense, and enterprise. BFO-grounded data makes compliance with [ISO/IEC 42001:2023 AI Management Systems](https://www.iso.org/standard/42001) and the EU AI Act significantly easier, since traceability and auditability are built into the data model from the start.
 
 ## Quick Start
 
