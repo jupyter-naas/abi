@@ -44,8 +44,13 @@ abi start
 
 **Platform launch:**
 
-- Web UI: http://localhost:3042 — login with `admin@example.com` / `Admin1234!`
+- Web UI: http://localhost:3042 (login: `admin@example.com` / `Admin1234!`)
 - API docs: http://localhost:9879/docs
+
+<div align="center">
+  <img src="docs/site/static/abi/Screenshot_Local.png" alt="ABI chat interface" width="800">
+  <p><em>ABI running locally after first login</em></p>
+</div>
 
 ### CLI Commands
 
@@ -56,26 +61,11 @@ abi chat          # Interactive agent chat
 abi config validate # Validate the configuration
 ```
 
-<div align="center">
-  <img src="docs/site/static/abi/Screenshot_Local.png" alt="ABI chat interface" width="800" style="border-radius:8px">
-  <p><em>ABI running locally — chat with your AI system at http://localhost:3042</em></p>
-</div>
-
 ## How It Works
 
-**1. Your data becomes structured knowledge**
+Connect your data sources, build domain agents grounded in your organization's ontology, and route every question to the right model or expert agent through a knowledge graph you own and control.
 
-Connect any data source: CRMs, code repositories, databases, productivity tools, financial systems. ABI ingests everything, maps relationships between entities, and builds a living knowledge graph of your organization. Not a data warehouse. A model of your reality.
-
-**2. Your team gets AI that knows their job**
-
-Build agents for any role and workflow, each grounded in your organization's ontology. They understand the context of the work, not just the words in the question. The more you build, the deeper the institutional intelligence.
-
-**3. Every question finds the right intelligence**
-
-A supervisor agent reads the intent behind each request and routes it to the right AI model, domain expert agent, or directly into your knowledge graph. Swap providers without rebuilding. The infrastructure adapts as AI evolves.
-
-For the full architecture, including module structure, five-layer stack, services, and data flow, see [The ABI Stack](https://docs.naas.ai/architecture/the-stack).
+Full architecture: [The ABI Stack](https://docs.naas.ai/architecture/the-stack)
 
 ## Repository Layout
 
