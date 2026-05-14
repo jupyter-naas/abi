@@ -236,7 +236,6 @@ class NexusConfig(BaseModel):
     cloudflare_api_token: str | None = None
     cloudflare_account_id: str | None = None
     enable_ollama_autostart: bool = False
-    auto_seed_demo_data: bool = True
 
     tenant: TenantConfig = Field(default_factory=TenantConfig)
     feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
@@ -437,6 +436,9 @@ class ABIModule(BaseModule):
         app.state.secret_service = self.engine.services.secret
         # Expose ABI triple store to Nexus graph routes.
         app.state.triple_store = self.engine.services.triple_store
+        # Expose Email service so Nexus auth routes can honor the engine's
+        # configured adapter (filesystem in dev, SMTP in prod, etc.).
+        app.state.email_service = self.engine.services.email
 
         from naas_abi.apps.nexus.apps.api.app.main import create_app
 

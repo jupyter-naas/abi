@@ -4,10 +4,9 @@ NEXUS API - Main Application Entry Point
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import cast
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
@@ -70,13 +69,6 @@ async def _startup(app: FastAPI) -> None:
         print(f"✗ Database initialization failed: {e}")
         print("  API will not start without database connection.")
         raise
-
-    if bool(getattr(settings, "auto_seed_demo_data", True)):
-        from naas_abi.apps.nexus.apps.api import seed as seed_module
-
-        ensure_seed_fn = getattr(seed_module, "ensure_seed_data", None)
-        if callable(ensure_seed_fn):
-            await cast(Callable[[], Awaitable[bool]], ensure_seed_fn)()
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds

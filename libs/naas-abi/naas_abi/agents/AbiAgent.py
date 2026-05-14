@@ -68,10 +68,10 @@ Respond only based on what your available agents and tools can actually deliver.
 </constraints>
 """
     suggestions: list[dict[str, str]] = [
-        {
-            "label": "Chat with a specific agent",
-            "value": "Chat with {{Agent Name}}",
-        },
+        # {
+        #     "label": "Chat with a specific agent",
+        #     "value": "Chat with {{Agent Name}}",
+        # },
     ]
 
     # @staticmethod

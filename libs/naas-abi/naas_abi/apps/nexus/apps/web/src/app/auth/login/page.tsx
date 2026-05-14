@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
+import { getApiUrl } from '@/lib/config';
 
 /**
  * Returns true if a hex color is "light" (should use dark text).
@@ -23,47 +24,77 @@ function isLightColor(hex: string): boolean {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { requestMagicLink, isLoading, error, clearError, isAuthenticated } = useAuthStore();
+  const searchParams = useSearchParams();
+  const { login, requestMagicLink, isLoading, error, clearError, isAuthenticated } = useAuthStore();
   const tenant = useTenant();
-  
-  const [email, setEmail] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string }>({});
-  const [linkSent, setLinkSent] = useState(false);
+
+  const [email, setEmail] = useState(searchParams.get('email') ?? '');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [mounted, setMounted] = useState(false);
-  
+  // Hydrate from sessionStorage so the page renders without waiting on /auth/config
+  // every visit. Refresh the value in the background so config changes propagate.
+  const [passwordAuthEnabled, setPasswordAuthEnabled] = useState<boolean | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const cached = window.sessionStorage.getItem('nexus-password-auth-enabled');
+    if (cached === 'true') return true;
+    if (cached === 'false') return false;
+    return null;
+  });
+  const [linkSent, setLinkSent] = useState(false);
+
   useEffect(() => {
     setMounted(true);
+    fetch(`${getApiUrl()}/api/auth/config`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        const enabled = Boolean(d.password_auth_enabled ?? false);
+        setPasswordAuthEnabled(enabled);
+        try {
+          window.sessionStorage.setItem('nexus-password-auth-enabled', String(enabled));
+        } catch {
+          // sessionStorage can be unavailable (private mode, SSR); ignore.
+        }
+      })
+      .catch(() => setPasswordAuthEnabled((prev) => (prev === null ? false : prev)));
   }, []);
-  
-  // Redirect if already authenticated
+
+  // Redirect if already authenticated (e.g. page loaded while session is active)
   useEffect(() => {
     if (mounted && isAuthenticated) {
       router.push('/');
     }
   }, [mounted, isAuthenticated, router]);
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-    
-    // Validate fields (inline)
-    const errors: { email?: string } = {};
+
+    const errors: { email?: string; password?: string } = {};
     if (!email.trim()) {
       errors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       errors.email = 'Enter a valid email address';
     }
+    if (passwordAuthEnabled && !password) {
+      errors.password = 'Password is required';
+    }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
-    
-    const success = await requestMagicLink(email);
-    if (success) {
-      setLinkSent(true);
+
+    if (passwordAuthEnabled) {
+      const workspaceId = await login(email, password);
+      if (workspaceId) {
+        router.push(`/workspace/${workspaceId}/chat`);
+      }
+    } else {
+      const success = await requestMagicLink(email);
+      if (success) setLinkSent(true);
     }
   };
-  
-  // Show loading state during hydration
-  if (!mounted) {
+
+  if (!mounted || passwordAuthEnabled === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -71,7 +102,7 @@ export default function LoginPage() {
     );
   }
 
-  // Default branding configuration - matches org login style
+  // Branding configuration sourced from tenant context with sensible defaults
   const primaryColor = tenant.primary_color || '#34D399';
   const accentColor = tenant.accent_color || '#1FA574';
   const bgColor = tenant.background_color || '#FFFFFF';
@@ -81,7 +112,7 @@ export default function LoginPage() {
   const cardPadding = tenant.login_card_padding || '2.5rem 3rem 3rem';
   const bgImageUrl = tenant.login_bg_image_url;
 
-  // Smart text color: auto-detect from card color
+  // Smart text color: auto-detect from card color, overridable via tenant
   const textColor = tenant.login_text_color || (cardColor && isLightColor(cardColor) ? '#1a1a1a' : '#ffffff');
   const cardIsLight = isLightColor(cardColor);
   const mutedTextColor = cardIsLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
@@ -99,7 +130,7 @@ export default function LoginPage() {
     color: textColor,
     '--tw-ring-color': focusRingColor,
   } as React.CSSProperties;
-  
+
   return (
     <div
       className="flex min-h-screen flex-col items-center justify-center px-4"
@@ -154,7 +185,7 @@ export default function LoginPage() {
         <div className="mb-6 text-center">
           <TypingWelcome textColor={textColor} mutedColor={mutedTextColor} />
         </div>
-        
+
         {/* Error Alert */}
         {error && (
           <div className="mb-6 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
@@ -162,33 +193,7 @@ export default function LoginPage() {
             <span>{error}</span>
           </div>
         )}
-        
-        {linkSent ? (
-          <div className="space-y-4">
-            <div className="flex items-center justify-center text-emerald-500">
-              <CheckCircle className="h-12 w-12" />
-            </div>
-            <p className="text-center text-sm" style={{ color: mutedTextColor }}>
-              If an account exists for <strong>{email}</strong>, we sent a magic sign-in link.
-            </p>
-            <button
-              type="button"
-              onClick={() => setLinkSent(false)}
-              className={cn(
-                'flex h-11 w-full items-center justify-center px-4 text-sm font-medium text-white',
-                'transition-all',
-                'focus:outline-none focus:ring-2 focus:ring-offset-2'
-              )}
-              style={{
-                backgroundColor: primaryColor,
-                borderRadius: buttonRadius,
-                '--tw-ring-color': primaryColor,
-              } as React.CSSProperties}
-            >
-              Send another link
-            </button>
-          </div>
-        ) : (
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email */}
           <div className="space-y-2">
@@ -212,7 +217,7 @@ export default function LoginPage() {
               disabled={isLoading}
               className={cn(
                 'flex h-11 w-full px-4 py-2 text-sm',
-                'focus:outline-none focus:ring-2',
+                'focus:outline-none focus:ring-2 focus:ring-primary/20',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
               aria-invalid={!!fieldErrors.email}
@@ -230,7 +235,64 @@ export default function LoginPage() {
               </p>
             )}
           </div>
-          
+
+          {/* Password field — only when password auth is enabled */}
+          {passwordAuthEnabled && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="text-sm font-medium" style={{ color: textColor }}>
+                  Password
+                </label>
+                <Link href="/auth/forgot-password" className="text-sm hover:underline" style={{ color: primaryColor }}>
+                  Forgot password?
+                </Link>
+              </div>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (fieldErrors.password) setFieldErrors((fe) => ({ ...fe, password: undefined }));
+                  }}
+                  placeholder="Enter your password"
+                  required
+                  disabled={isLoading}
+                  className={cn(
+                    'flex h-11 w-full px-4 py-2 pr-10 text-sm',
+                    'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                    'disabled:cursor-not-allowed disabled:opacity-50'
+                  )}
+                  aria-invalid={!!fieldErrors.password}
+                  aria-describedby={fieldErrors.password ? 'password-error' : undefined}
+                  style={{
+                    ...inputStyle,
+                    ...(fieldErrors.password ? { border: '1px solid #ef4444', backgroundColor: '#fee2e2' } : {}),
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: mutedTextColor }}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {fieldErrors.password && (
+                <p id="password-error" className="text-xs text-destructive">{fieldErrors.password}</p>
+              )}
+            </div>
+          )}
+
+          {/* Magic link success */}
+          {linkSent && !passwordAuthEnabled && (
+            <p className="text-center text-sm text-emerald-600">
+              If an account exists for <strong>{email}</strong>, a sign-in link is on its way.
+            </p>
+          )}
+
           {/* Submit Button */}
           <button
             type="submit"
@@ -244,30 +306,19 @@ export default function LoginPage() {
               borderRadius: buttonRadius,
               '--tw-ring-color': primaryColor,
             } as React.CSSProperties}
-            onMouseEnter={(e) => {
-              if (!isLoading) {
-                e.currentTarget.style.backgroundColor = accentColor;
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = primaryColor;
-            }}
+            onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.backgroundColor = accentColor; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = primaryColor; }}
           >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending magic link...
+                {passwordAuthEnabled ? 'Signing in...' : 'Sending magic link...'}
               </>
             ) : (
-              'Send magic link'
+              passwordAuthEnabled ? 'Sign in' : 'Send magic link'
             )}
           </button>
         </form>
-        )}
-        
-        <p className="mt-6 text-center text-sm" style={{ color: mutedTextColor }}>
-          Password sign-in is disabled for this workspace.
-        </p>
       </div>
       {tenant.show_terms_footer && (
         <p className="mt-8 text-center text-sm" style={{ color: subtitleColor }}>

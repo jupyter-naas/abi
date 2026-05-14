@@ -7,16 +7,35 @@ import pytest
 stack_module = importlib.import_module("naas_abi_cli.cli.stack")
 
 
-def test_start_stack_opens_service_portal_when_compose_succeeds(monkeypatch) -> None:
+def test_start_stack_opens_nexus_when_compose_succeeds(monkeypatch) -> None:
     opened: list[str] = []
 
     monkeypatch.setattr(stack_module, "run_compose", lambda args: None)
     monkeypatch.setattr(stack_module, "_get_error_services", lambda: [])
     monkeypatch.setattr(stack_module.webbrowser, "open", lambda url: opened.append(url))
+    monkeypatch.setattr(stack_module, "_nexus_web_url", lambda: "http://nexus/")
 
     stack_module._start_stack()
 
-    assert opened == [stack_module.SERVICE_PORTAL_URL]
+    assert opened == ["http://nexus/"]
+
+
+def test_nexus_web_url_url_encodes_email(monkeypatch) -> None:
+    monkeypatch.setattr(stack_module, "_secret_service", lambda: None)
+    monkeypatch.setenv("NEXUS_WEB_PORT", "3042")
+    monkeypatch.setenv("NEXUS_USER_ADMIN_EMAIL", "user+tag@example.com")
+
+    assert stack_module._nexus_web_url() == (
+        "http://127.0.0.1:3042/auth/login?email=user%2Btag%40example.com"
+    )
+
+
+def test_nexus_web_url_falls_back_when_email_missing(monkeypatch) -> None:
+    monkeypatch.setattr(stack_module, "_secret_service", lambda: None)
+    monkeypatch.delenv("NEXUS_USER_ADMIN_EMAIL", raising=False)
+    monkeypatch.setenv("NEXUS_WEB_PORT", "3042")
+
+    assert stack_module._nexus_web_url() == "http://127.0.0.1:3042/auth/login"
 
 
 def test_start_stack_retries_compose_up_before_succeeding(monkeypatch) -> None:

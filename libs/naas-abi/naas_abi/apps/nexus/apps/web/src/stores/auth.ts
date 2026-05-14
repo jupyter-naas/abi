@@ -29,7 +29,7 @@ export interface AuthState {
   // Actions
   requestMagicLink: (email: string) => Promise<boolean>;
   verifyMagicLink: (token: string) => Promise<boolean>;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<string | null>;
   register: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
   setUser: (user: User | null) => void;
@@ -122,8 +122,66 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      login: async (email: string, _password: string): Promise<boolean> => {
-        return get().requestMagicLink(email);
+      login: async (email: string, password: string): Promise<string | null> => {
+        set({ isLoading: true, error: null });
+        try {
+          const apiBase = getApiUrl();
+          const response = await fetch(`${apiBase}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password }),
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Invalid email or password');
+          }
+
+          const data = await response.json();
+          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
+
+          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000; SameSite=Lax';
+
+          set({
+            user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
+            token: data.access_token,
+            refreshToken: data.refresh_token ?? null,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
+
+          // Return a workspace ID so the caller can redirect directly, bypassing middleware slug guessing.
+          // Sort by created_at then slug for stable ordering across requests.
+          try {
+            const wsResponse = await fetch(`${apiBase}/api/workspaces`, {
+              headers: { Authorization: `Bearer ${data.access_token}` },
+            });
+            if (wsResponse.ok) {
+              const workspaces = await wsResponse.json();
+              if (Array.isArray(workspaces) && workspaces.length > 0) {
+                const sorted = [...workspaces].sort((a, b) => {
+                  const ac = a.created_at ?? '';
+                  const bc = b.created_at ?? '';
+                  if (ac !== bc) return ac < bc ? -1 : 1;
+                  return (a.slug ?? '').localeCompare(b.slug ?? '');
+                });
+                return sorted[0].id;
+              }
+            }
+          } catch {
+            // Non-fatal: fall back to middleware redirect
+          }
+
+          return null;
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Invalid email or password',
+          });
+          return null;
+        }
       },
 
       register: async (email: string, _password: string, _name: string): Promise<boolean> => {

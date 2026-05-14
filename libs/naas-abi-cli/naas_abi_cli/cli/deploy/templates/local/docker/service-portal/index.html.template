@@ -334,16 +334,6 @@ const NODES_DEF = [
     status: 'local',
     links: [{ label: 'Dagster UI', port: 3001, path: '/' }],
   },
-  // {
-  //   id: 'matrix', label: 'Matrix\n+ Element', group: 'ui',
-  //   type: 'Messaging UI',
-  //   desc: 'Federated Matrix server (Synapse) and Element web client for distributed AI output delivery.',
-  //   status: 'running',
-  //   links: [
-  //     { label: 'Element Web',  port: 8081, path: '/' },
-  //     { label: 'Synapse API',  port: 8008, path: '/' },
-  //   ],
-  // },
 
   // ── CUSTOM MODULES ────────────────────────────────────────────────────────
   // These nodes are populated from the abi00-modules package loaded by the
@@ -371,8 +361,6 @@ const EDGES_DEF = [
   { from: 'abi-api', to: 'dagster' },
   { from: 'dagster', to: 'minio'   },
   { from: 'dagster', to: 'postgres' },
-  // matrix
-  // { from: 'matrix', to: 'abi-api' },
   // nexus ↔ data
   { from: 'nexus', to: 'postgres' },
   { from: 'nexus', to: 'redis'    },

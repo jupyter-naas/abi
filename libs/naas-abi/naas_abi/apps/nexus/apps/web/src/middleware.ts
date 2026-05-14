@@ -2,174 +2,122 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * Middleware for route protection, legacy route redirects, and org-scoped routing.
- * 
+ * Route protection, legacy redirects, and org-scoped routing.
+ *
  * Routing hierarchy:
- *   /account/*                        -> authed, global user settings
- *   /organizations                    -> authed, list orgs (if admin of multiple)
- *   /organizations/[orgId]/settings   -> authed, org settings
+ *   /account/*                        -> authed
+ *   /organizations/[orgId]/settings   -> authed
  *   /org/[orgSlug]/login              -> public, org-branded login
- *   /org/[orgSlug]/workspace          -> authed, workspace picker
- *   /org/[orgSlug]/workspace/[id]/... -> authed, rewrite to /workspace/[id]/...
- *   /auth/login                       -> public, default Nexus login
- *   /workspace/[id]/...               -> authed, existing workspace routes
+ *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
+ *   /auth/login                       -> public
+ *   /workspace/[id]/...               -> authed
+ *
+ * Workspace redirect priority:
+ *   1. nexus-last-workspace cookie
+ *   2. DEFAULT_WORKSPACE env var (server-side, runtime — no NEXT_PUBLIC_ prefix)
+ *   3. 'primary'
  */
 
-const DEFAULT_WORKSPACE = 'workspace-nexus';
+const CONFIGURED_DEFAULT = process.env.DEFAULT_WORKSPACE || 'primary';
 
-// Legacy bare routes that should redirect to workspace-scoped routes
-const legacyRoutes = [
-  '/chat',
-  '/search',
-  '/lab',
-  '/ontology',
-  '/graph',
-  '/apps',
-  '/help',
-  '/files',
-  '/settings',
-];
+function resolveDefaultWorkspace(request: NextRequest): string {
+  return request.cookies.get('nexus-last-workspace')?.value || CONFIGURED_DEFAULT;
+}
 
-// Routes that are only for unauthenticated users
+const legacyRoutes = ['/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/help', '/files', '/settings'];
+
 const authRoutes = [
   '/auth/login',
   '/auth/magic-link',
   '/auth/register',
   '/auth/forgot-password',
-  '/login',        // Legacy alias
-  '/register',     // Legacy alias
+  '/login',
+  '/register',
 ];
 
-// Public routes (accessible to everyone)
-const publicRoutes = [
-  '/',
-  '/terms',
-  '/privacy',
-];
-
-// Regex to match /org/[slug]/workspace/[workspaceId]/...
 const orgWorkspaceRegex = /^\/org\/([^/]+)\/workspace\/([^/]+)(\/.*)?$/;
-
-// Regex to match /org/[slug]/login or /org/[slug]/register
 const orgAuthRegex = /^\/org\/([^/]+)\/(login|register)(\/.*)?$/;
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
-  // ============================================
-  // Org-scoped routes
-  // ============================================
-  
-  // /org/[orgSlug]/login and /org/[orgSlug]/register -> public, let through
-  const orgAuthMatch = pathname.match(orgAuthRegex);
-  if (orgAuthMatch) {
+
+  if (pathname.match(orgAuthRegex)) {
     return NextResponse.next();
   }
-  
-  // /org/[orgSlug]/workspace/[workspaceId]/... -> rewrite to /workspace/[workspaceId]/...
-  // This avoids duplicating all workspace page files under the /org/ path.
-  // The browser URL stays as /org/[orgSlug]/workspace/... but Next.js renders /workspace/...
+
+  // Rewrite /org/[slug]/workspace/[id]/... -> /workspace/[id]/...
+  // Browser URL is preserved; Next.js renders the workspace pages without duplication.
   const orgWsMatch = pathname.match(orgWorkspaceRegex);
   if (orgWsMatch) {
-    const [, orgSlug, workspaceId, rest] = orgWsMatch;
-    const rewritePath = `/workspace/${workspaceId}${rest || ''}`;
-    const rewriteUrl = new URL(rewritePath, request.url);
+    const [, , workspaceId, rest] = orgWsMatch;
+    const rewriteUrl = new URL(`/workspace/${workspaceId}${rest || ''}`, request.url);
     rewriteUrl.search = request.nextUrl.search;
     return NextResponse.rewrite(rewriteUrl);
   }
-  
-  // /org/[orgSlug]/workspace (no workspaceId) -> workspace picker page, let through
+
   if (/^\/org\/[^/]+\/workspace\/?$/.test(pathname)) {
     return NextResponse.next();
   }
-  
-  // /org/[orgSlug] (bare org route) -> redirect to org workspace picker
+
   if (/^\/org\/[^/]+\/?$/.test(pathname)) {
     const orgSlug = pathname.split('/')[2];
     return NextResponse.redirect(new URL(`/org/${orgSlug}/workspace`, request.url));
   }
-  
-  // ============================================
-  // Legacy route redirects
-  // ============================================
-  
-  // Redirect legacy auth routes to /auth/* prefix
-  if (pathname === '/login') {
-    const newUrl = new URL('/auth/login', request.url);
+
+  if (pathname === '/login' || pathname === '/register') {
+    const newUrl = new URL(pathname === '/login' ? '/auth/login' : '/auth/register', request.url);
     newUrl.search = request.nextUrl.search;
     return NextResponse.redirect(newUrl);
   }
-  
-  if (pathname === '/register') {
-    const newUrl = new URL('/auth/register', request.url);
-    newUrl.search = request.nextUrl.search;
-    return NextResponse.redirect(newUrl);
-  }
-  
-  // Redirect legacy bare routes to workspace-scoped routes
-  // e.g., /chat -> /workspace/workspace-nexus/chat
-  const isLegacyRoute = legacyRoutes.some(route => 
-    pathname === route || pathname.startsWith(`${route}/`)
-  );
-  
+
+  const isLegacyRoute = legacyRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
   if (isLegacyRoute) {
-    const newUrl = new URL(`/workspace/${DEFAULT_WORKSPACE}${pathname}`, request.url);
+    const newUrl = new URL(`/workspace/${resolveDefaultWorkspace(request)}${pathname}`, request.url);
     newUrl.search = request.nextUrl.search;
     return NextResponse.redirect(newUrl);
   }
-  
-  // ============================================
-  // Auth checks
-  // ============================================
-  
-  // Check if user has auth token in cookies
+
   const hasAuthCookie = request.cookies.has('nexus-auth-flag');
-  
-  // Special handling for root path - always redirect based on auth
+
   if (pathname === '/') {
-    if (hasAuthCookie) {
-      // Authenticated: redirect to default workspace
-      return NextResponse.redirect(new URL(`/workspace/${DEFAULT_WORKSPACE}/chat`, request.url));
-    } else {
-      // Not authenticated: redirect to login
-      return NextResponse.redirect(new URL('/auth/login', request.url));
-    }
+    return NextResponse.redirect(new URL(
+      hasAuthCookie ? `/workspace/${resolveDefaultWorkspace(request)}/chat` : '/auth/login',
+      request.url,
+    ));
   }
-  
-  // Check if current route is workspace-scoped (protected)
-  const isWorkspaceRoute = pathname.startsWith('/workspace/');
-  
-  // Check if current route is organization-scoped (protected)
-  const isOrganizationRoute = pathname.startsWith('/organizations/');
-  
-  // Check if current route is account-scoped (protected)
-  const isAccountRoute = pathname.startsWith('/account/');
-  
-  // Check if current route is auth-only (login/register)
-  const isAuthRoute = authRoutes.some(route => 
-    pathname === route || pathname.startsWith(`${route}/`)
-  );
-  
-  // For now, allow all routes in development
-  // Authentication will be enforced client-side
-  const isDev = process.env.NODE_ENV === 'development';
-  
-  if (isDev) {
+
+  const isProtectedRoute = pathname.startsWith('/workspace/') || pathname.startsWith('/organizations/') || pathname.startsWith('/account/');
+  const isAuthRoute = authRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
+
+  // In development auth is enforced client-side; still stamp the cookie so
+  // production redirects work correctly after switching NODE_ENV.
+  if (process.env.NODE_ENV === 'development') {
+    const wsMatch = pathname.match(/^\/workspace\/([^/]+)/);
+    if (wsMatch) {
+      const res = NextResponse.next();
+      res.cookies.set('nexus-last-workspace', wsMatch[1], { path: '/', maxAge: 60 * 60 * 24 * 30, sameSite: 'lax' });
+      return res;
+    }
     return NextResponse.next();
   }
-  
-  // In production, redirect unauthenticated users to login
-  if ((isWorkspaceRoute || isOrganizationRoute || isAccountRoute) && !hasAuthCookie) {
+
+  if (isProtectedRoute && !hasAuthCookie) {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
-  
-  // Redirect authenticated users away from auth pages
+
   if (isAuthRoute && hasAuthCookie) {
-    return NextResponse.redirect(new URL(`/workspace/${DEFAULT_WORKSPACE}/chat`, request.url));
+    return NextResponse.redirect(new URL(`/workspace/${resolveDefaultWorkspace(request)}/chat`, request.url));
   }
-  
+
+  const wsMatch = pathname.match(/^\/workspace\/([^/]+)/);
+  if (wsMatch) {
+    const res = NextResponse.next();
+    res.cookies.set('nexus-last-workspace', wsMatch[1], { path: '/', maxAge: 60 * 60 * 24 * 30, sameSite: 'lax' });
+    return res;
+  }
+
   return NextResponse.next();
 }
 
