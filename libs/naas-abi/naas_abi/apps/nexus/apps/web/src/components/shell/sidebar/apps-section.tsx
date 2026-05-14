@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutGrid, Package, Store } from 'lucide-react';
+import { LayoutGrid, Package, Store, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
@@ -51,6 +51,19 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
       >
         <Store size={14} />
         <span>Marketplace</span>
+      </Link>
+
+      <Link
+        href={`${basePath}?tab=tools`}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+          activeTab === 'tools'
+            ? 'bg-muted text-foreground font-medium'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        )}
+      >
+        <Wrench size={14} />
+        <span>Tools</span>
       </Link>
     </CollapsibleSection>
   );
