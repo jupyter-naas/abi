@@ -249,12 +249,35 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
         <span className="text-sm font-bold text-blue-600">{formatUSD(llm + maintenance)}</span>
       </div>
       {ent && (
-        <p className="text-xs text-muted-foreground/60">
-          Maintenance fee funds ongoing agent updates, prompt tuning, and API compatibility. Not a license.
-        </p>
+        <div className="border-t pt-2.5 space-y-1.5">
+          <p className="text-xs font-semibold text-foreground">What the maintenance fee covers</p>
+          <ul className="space-y-1 text-xs text-muted-foreground">
+            <li className="flex items-start gap-1.5">
+              <span className="mt-0.5 text-blue-500 shrink-0">+</span>
+              <span>Agent kept current when the underlying model is deprecated or repriced</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="mt-0.5 text-blue-500 shrink-0">+</span>
+              <span>System prompt tuned when regulations, workflows, or standards change</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="mt-0.5 text-blue-500 shrink-0">+</span>
+              <span>Tool and API integrations patched when third-party services drift</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="mt-0.5 text-blue-500 shrink-0">+</span>
+              <span>Ontology connections updated as the knowledge graph evolves</span>
+            </li>
+          </ul>
+          <p className="text-xs text-muted-foreground/60 pt-0.5">
+            Not a license. The agent is MIT licensed and yours to fork. You pay for the people keeping it production-ready.
+          </p>
+        </div>
       )}
       {!ent && (
-        <p className="text-xs text-muted-foreground/60">Community tier. Self-hosted, self-maintained. MIT licensed.</p>
+        <p className="text-xs text-muted-foreground/60 border-t pt-2">
+          Community tier. MIT licensed, self-hosted, self-maintained.
+        </p>
       )}
     </div>
   );
