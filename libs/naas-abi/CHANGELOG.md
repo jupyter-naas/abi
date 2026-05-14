@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.42.0 (2026-05-14)
+
+### Features
+
+- **nexus**: Support folder drag-and-drop upload with progress UI
+  ([`eb7ccba`](https://github.com/jupyter-naas/abi/commit/eb7ccbadaade4844c517528874207d9ca7ac8e6c))
+
+
 ## v1.41.0 (2026-05-13)
 
 ### Bug Fixes
