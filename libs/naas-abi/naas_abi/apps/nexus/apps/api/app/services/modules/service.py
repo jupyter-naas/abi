@@ -27,9 +27,22 @@ _CATEGORY_MAP = {
 }
 
 # Regex patterns to extract class-level string attributes from agent source files.
-_RE_NAME = re.compile(r'^\s+name\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
-_RE_DESC = re.compile(r'^\s+description\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
-_RE_LOGO = re.compile(r'^\s+logo_url\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+# Handles both inline:       name: str = "value"
+# and parenthesised:         logo_url: str = (
+#                                "https://..."
+#                            )
+_RE_NAME = re.compile(
+    r'^\s+name\s*(?::[^=\n]*)?\s*=\s*\(?\s*["\']([^"\']+)["\']',
+    re.MULTILINE,
+)
+_RE_DESC = re.compile(
+    r'^\s+description\s*(?::[^=\n]*)?\s*=\s*\(?\s*["\']([^"\']+)["\']',
+    re.MULTILINE,
+)
+_RE_LOGO = re.compile(
+    r'^\s+logo_url\s*(?::[^=\n]*)?\s*=\s*\(?\s*["\']([^"\']+)["\']',
+    re.MULTILINE,
+)
 
 
 def _get_category(module_path: str) -> str:
