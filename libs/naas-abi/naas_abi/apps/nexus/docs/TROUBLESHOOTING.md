@@ -152,16 +152,8 @@ make db-reset
 # 1. Run migrations first
 make db-migrate
 
-# 2. Check demo data files
-ls -la demo/*.json
-# Ensure all JSON files are valid
-
-# 3. Reset and reseed
+# 2. Reset database
 make db-reset
-
-# 4. Check for foreign key mismatches
-# Example: agents.json references workspace-nexus but it doesn't exist
-grep -r "workspace-nexus" demo/
 ```
 
 ### Database is too large
@@ -252,7 +244,7 @@ curl http://localhost:8000/docs
 # 5. Check specific endpoint
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"nexus2026"}'
+  -d '{"email":"admin@example.com","password":"Admin1234!"}'
 ```
 
 ### CORS errors
@@ -423,14 +415,14 @@ curl -I http://localhost:8000/uploads/logos/test.png
 # 1. Check demo users exist
 docker exec nexus-postgres psql -U nexus -d nexus -c "SELECT email FROM users;"
 
-# 2. Try demo credentials
-# Email: alice@example.com
-# Password: nexus2026
+# 2. Check local admin credentials (set in .env)
+# Email: admin@example.com (NEXUS_USER_ADMIN_EMAIL)
+# Password: Admin1234!  (NEXUS_USER_ADMIN_PASSWORD)
 
 # 3. Check API login endpoint
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"nexus2026"}'
+  -d '{"email":"admin@example.com","password":"Admin1234!"}'
 # Should return {"access_token": "...", "refresh_token": "..."}
 
 # 4. Check browser console for errors

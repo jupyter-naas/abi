@@ -32,20 +32,23 @@ uv pip install greenlet
 ## 2) Configure
 
 ```bash
-# Copy the example config
 cp config.yaml.example config.yaml
-cp .env.example .env
 ```
 
-Edit `.env` and set at minimum:
+Create a `.env` at the repo root with the required keys:
 
 ```bash
-# Cloud mode (recommended for full capability)
+# LLM provider (cloud mode — skip for local-only mode)
 OPENROUTER_API_KEY=sk-or-...
 
-# Local mode (no internet, no API key required)
-# Set ai_mode: "local" in config.yaml instead, and install Ollama
+# Local admin login at http://localhost:3042/auth/login
+NEXUS_USER_ADMIN_EMAIL=admin@example.com
+NEXUS_USER_ADMIN_PASSWORD=Admin1234!
+NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL=admin@example.com
+NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!
 ```
+
+For local mode (no internet, no API key required), set `ai_mode: "local"` in `config.yaml` and install Ollama.
 
 ---
 

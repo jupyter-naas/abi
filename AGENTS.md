@@ -165,7 +165,27 @@ def unsupported_method(self, arg: str) -> None:
 **Problem:** Frontend won't start (`next: command not found`)  
 **Solution:** Run `pnpm install` in `libs/naas-abi/naas_abi/apps/nexus/apps/web`
 
-### Stack Management
+### Local Access
+
+After `abi stack start`, the web UI is at `http://localhost:3042`.
+
+Default admin credentials (set in `config.local.yaml` under `nexus_config.users`):
+
+| Email | Password |
+|---|---|
+| `admin@example.com` | `Admin1234!` |
+
+Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
+
+If you see "Incorrect email or password", the Postgres volume may have been initialized with a different password. Reset it:
+
+```bash
+PG_PASS=$(grep POSTGRES_PASSWORD .env | cut -d= -f2)
+docker exec abi-postgres-1 psql -U abi -c "ALTER USER abi PASSWORD '$PG_PASS';"
+docker compose restart abi
+```
+
+## Stack Management
 
 ```bash
 # Start full stack (requires RabbitMQ, Redis, Qdrant, MinIO)
