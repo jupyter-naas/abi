@@ -32,20 +32,20 @@ ABI (Agentic Brain Infrastructure) is the open-source AI Operating System that g
 
 You also need to have the `docker` command available in your terminal.
 
-### Local Development
+### Get started
 
 ```bash
 uv tool install naas-abi-cli --force --upgrade
 
-abi new project demo #You can change the project name to your own
-cd demo
+abi new project my_ai   # replace "my_ai" with your project name
+cd my_ai
 abi start
 ```
 
 **Platform launch:**
 
 - Web UI: http://localhost:3042 — login with `admin@example.com` / `Admin1234!`
-- API docs: http://localhost:8080/docs
+- API docs: http://localhost:9879/docs
 
 ### CLI Commands
 
@@ -55,6 +55,11 @@ abi stop          # Stop all services
 abi chat          # Interactive agent chat
 abi config validate # Validate the configuration
 ```
+
+<div align="center">
+  <img src="docs/site/static/abi/Screenshot_Local.png" alt="ABI chat interface" width="800" style="border-radius:8px">
+  <p><em>ABI running locally — chat with your AI system at http://localhost:3042</em></p>
+</div>
 
 ## How It Works
 
@@ -119,7 +124,7 @@ Collaborative effort between:
 
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+We welcome contributions. Open an issue or pull request to get started.
 
 ## License
 
