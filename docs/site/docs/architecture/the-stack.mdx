@@ -5,7 +5,7 @@ title: "The ABI Stack"
 
 # The ABI Stack
 
-ABI is organized as three open-source Python packages that together constitute an enterprise AI operating system. The runtime layer (`naas-abi-core`) provides the Engine, all service port interfaces, and the infrastructure adapters. The application layer (`naas-abi`) adds the built-in agents, the Nexus platform, the base ontologies, and the core module library. The module layer (`naas-abi-marketplace`) extends the system with community-contributed domain modules, all disabled by default and opted in per deployment. A fourth package, `naas-abi-cli`, orchestrates the whole stack. All four are MIT-licensed Python packages you install and run on your own infrastructure.
+ABI is organized as three open-source Python packages that together constitute an enterprise AI operating system. The runtime layer (`naas-abi-core`) provides the Context Engine, all service port interfaces, and the infrastructure adapters. The application layer (`naas-abi`) adds the built-in agents, the Nexus platform, the base ontologies, and the core module library. The module layer (`naas-abi-marketplace`) extends the system with community-contributed domain modules, all disabled by default and opted in per deployment. A fourth package, `naas-abi-cli`, orchestrates the whole stack. All four are MIT-licensed Python packages you install and run on your own infrastructure.
 
 The atomic unit of that system is the **module**: a self-contained package that models a domain, ingests data about it, and exposes intelligent capabilities on top. This page walks through how modules are structured, how they fit into the five runtime layers, and what runs in production.
 
@@ -36,9 +36,9 @@ Every module declares a `ModuleConfiguration` (Pydantic, merged with global conf
 
 ## Architecture
 
-ABI follows a five-layer architecture. The **Interface** layer holds the entry points: the Nexus web app, the `abi` CLI, MCP clients, the SPARQL workbench, and the Dagster UI. The **Application** layer sits below it: four process boundaries (the Core API, the Nexus API, the MCP server, and Dagster) that translate incoming calls into a common internal format and hand them to the Engine.
+ABI follows a five-layer architecture. The **Interface** layer holds the entry points: the Nexus web app, the `abi` CLI, MCP clients, the SPARQL workbench, and the Dagster UI. The **Application** layer sits below it: four process boundaries (the Core API, the Nexus API, the MCP server, and Dagster) that translate incoming calls into a common internal format and hand them to the Context Engine.
 
-The **Intelligence** layer is where work happens. The Engine wires together services at startup, loads ontologies, and routes requests to the right agent based on intent. The AbiAgent acts as a supervisor: it reads the intent behind each request and dispatches to the right domain agent or marketplace agent. All LLM calls flow through OpenRouter (cloud providers) or Ollama (local, air-gapped), and the model can be swapped per request without rebuilding anything.
+The **Intelligence** layer is where work happens. The Context Engine wires together services at startup, loads ontologies, and routes requests to the right agent based on intent. The AbiAgent acts as a supervisor: it reads the intent behind each request and dispatches to the right domain agent or marketplace agent. All LLM calls flow through OpenRouter (cloud providers) or Ollama (local, air-gapped), and the model can be swapped per request without rebuilding anything.
 
 The **Services** layer provides six port interfaces, each with pluggable adapters you can swap via `config.yaml`: a triple store for RDF/OWL knowledge graphs, a vector store for embeddings, object storage for files, a message bus for async work, a key-value cache, and a secret store. The **Infrastructure** layer backs each port with a concrete Docker service. In local dev most fall back to lightweight in-process alternatives.
 
@@ -53,7 +53,7 @@ The **Services** layer provides six port interfaces, each with pluggable adapter
 
 ## Packages
 
-The codebase is split into four Python packages. `naas-abi-core` is the foundation: the Engine, all service port interfaces, and their adapters. It has no agents and no business logic, making it publishable as a standalone library.
+The codebase is split into four Python packages. `naas-abi-core` is the foundation: the Context Engine, all service port interfaces, and their adapters. It has no agents and no business logic, making it publishable as a standalone library.
 
 `naas-abi` builds on top of it, adding the built-in agents, the Nexus full-stack web app, the Core REST API, the MCP server, and the base ontologies. `naas-abi-marketplace` holds community-contributed modules and agents, all disabled by default and enabled selectively via `config.yaml`. `naas-abi-cli` is the `abi` command-line tool that orchestrates the whole stack.
 
@@ -68,7 +68,7 @@ The codebase is split into four Python packages. `naas-abi-core` is the foundati
 
 ## Services
 
-`naas-abi-core` follows a ports-and-adapters (hexagonal) architecture for all infrastructure concerns. Each service is defined as an abstract port interface; concrete adapters implement it. The Engine resolves which adapter to use at startup based on `config.yaml`. Swapping the triple store from Fuseki to Oxigraph, or the message bus from RabbitMQ to the built-in Python queue, requires only a config change with no code edits.
+`naas-abi-core` follows a ports-and-adapters (hexagonal) architecture for all infrastructure concerns. Each service is defined as an abstract port interface; concrete adapters implement it. The Context Engine resolves which adapter to use at startup based on `config.yaml`. Swapping the triple store from Fuseki to Oxigraph, or the message bus from RabbitMQ to the built-in Python queue, requires only a config change with no code edits.
 
 <BrowserOnly fallback={<div style={{height:'660px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
   {() => {
