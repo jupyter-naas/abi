@@ -37,20 +37,19 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 function ModuleCard({ mod }: { mod: ModuleInfo }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
   return (
     <div className="glass-card flex flex-col gap-3 p-5 transition-all hover:border-primary/30">
       <div className="flex items-start gap-3">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted overflow-hidden">
-          {mod.logo_url ? (
+          {mod.logo_url && !imgFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={mod.logo_url}
               alt={mod.name}
               className="h-full w-full object-contain"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-                e.currentTarget.parentElement?.classList.add('fallback-icon');
-              }}
+              onError={() => setImgFailed(true)}
             />
           ) : (
             <Bot size={22} className="text-muted-foreground" />
