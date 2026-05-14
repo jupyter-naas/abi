@@ -54,7 +54,7 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
 )
-from naas_abi_core.services.email.EmailFactory import EmailFactory
+from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions as StorageExceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
@@ -90,6 +90,25 @@ def _get_object_storage(request: Request) -> ObjectStorageService:
             status_code=500,
             detail="Object storage is not initialized.",
         ) from exc
+
+
+def _get_email_service(request: Request) -> EmailService | None:
+    """Resolve the engine-configured email service.
+
+    Returns None if no adapter is wired — caller logs the message instead of
+    sending it (useful for local dev without SMTP).
+    """
+    service = getattr(request.app.state, "email_service", None)
+    if service is not None:
+        return service
+    try:
+        from naas_abi import ABIModule  # noqa: PLC0415
+
+        service = ABIModule.get_instance().engine.services.email
+        request.app.state.email_service = service
+        return service
+    except Exception:
+        return None
 
 
 @router.get("/config", response_model=dict[str, bool])
@@ -349,13 +368,14 @@ async def request_magic_link(
     request: Request,
     payload: MagicLinkRequest,
     auth_service: AuthService = Depends(get_auth_service),
+    email_service: EmailService | None = Depends(_get_email_service),
 ) -> dict:
     identifier = get_rate_limit_identifier(request)
     await check_rate_limit(identifier, "/api/auth/magic-link/request")
 
     token = await auth_service.request_magic_link(payload.email)
     if token is not None:
-        await _send_magic_link_email(payload.email, token)
+        await _send_magic_link_email(payload.email, token, email_service)
     return {
         "status": "success",
         "message": "If an account exists with this email, a magic sign-in link has been sent.",
@@ -479,17 +499,22 @@ def _delete_old_avatar(
         pass
 
 
-async def _send_magic_link_email(to_email: str, token: str) -> None:
+async def _send_magic_link_email(
+    to_email: str,
+    token: str,
+    email_service: EmailService | None,
+) -> None:
     query = urlencode({"token": token})
     magic_link_url = f"{settings.frontend_url.rstrip('/')}{settings.magic_link_path}?{query}"
 
-    if not settings.smtp_enabled:
+    if email_service is None:
         logger.info(
-            "SMTP disabled. Magic link for %s: %s",
+            "Email service unavailable. Magic link for %s: %s",
             to_email,
             magic_link_url,
         )
         return
+
     app_name = settings.magic_link_email_app_name
     template_values = {
         "app_name": app_name,
@@ -505,21 +530,13 @@ async def _send_magic_link_email(to_email: str, token: str) -> None:
     html_body = settings.magic_link_email_html_template.format_map(
         _SafeTemplateValues(template_values)
     )
-    email_service = EmailFactory.EmailServiceSMTP(
-        host=settings.smtp_host,
-        port=settings.smtp_port,
-        username=settings.smtp_username,
-        password=settings.smtp_password,
-        use_tls=settings.smtp_use_tls,
-        use_ssl=settings.smtp_use_ssl,
-    )
     email_service.send(
         to_email=to_email,
         subject=subject,
         text_body=text_body,
         html_body=html_body,
-        from_email=str(settings.smtp_from_email),
-        from_name=settings.smtp_from_name,
+        from_email=str(settings.email_from_address),
+        from_name=settings.email_from_name,
     )
 
 

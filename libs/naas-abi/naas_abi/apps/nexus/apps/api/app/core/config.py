@@ -231,25 +231,15 @@ class Settings(BaseSettings):
         "<p>This link expires in {expire_minutes} minutes.</p>"
     )
 
-    # SMTP (magic link delivery)
-    smtp_enabled: bool = False
-    smtp_host: str = "localhost"
-    smtp_port: int = 1025
-    smtp_username: str | None = None
-    smtp_password: str | None = None
-    smtp_use_tls: bool = False
-    smtp_use_ssl: bool = False
-    smtp_from_email: EmailStr = "no-reply@nexus.example.com"
-    smtp_from_name: str = "NEXUS"
+    # Outgoing email "From" metadata. Transport details (host, credentials,
+    # adapter type) live in the engine config under `services.email`.
+    email_from_address: EmailStr = "no-reply@nexus.example.com"
+    email_from_name: str = "NEXUS"
 
     # Rate Limiting
     rate_limit_enabled: bool = True
     rate_limit_login_attempts: int = 5  # Max login attempts per window
     rate_limit_window_seconds: int = 300  # 5-minute window
-
-    # Demo data seeding (idempotent startup check)
-    # When enabled, startup seeds demo data only if users table is empty.
-    auto_seed_demo_data: bool = False
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
@@ -261,7 +251,6 @@ class Settings(BaseSettings):
         # - Force OFF unless environment is development or nexus_env is local
         if not (self.environment == "development" or self.nexus_env == "local"):
             self.enable_ollama_autostart = False
-            self.auto_seed_demo_data = False
 
     # Security Headers
     enable_security_headers: bool = True
