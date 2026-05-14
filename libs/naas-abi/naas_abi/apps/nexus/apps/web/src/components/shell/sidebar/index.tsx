@@ -29,7 +29,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'knowledge' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',      feature: 'agents' },
-  { id: 'apps',     icon: <LayoutGrid size={18} />,    label: 'Apps',           href: '/apps',     feature: 'agents' },
+  { id: 'apps',     icon: <LayoutGrid size={18} />,    label: 'Marketplace',    href: '/marketplace', feature: 'agents' },
 ];
 
 export function Sidebar() {
@@ -100,7 +100,7 @@ export function Sidebar() {
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
-      case 'apps':     return getWorkspacePath(currentWorkspaceId, '/apps');
+      case 'apps':     return getWorkspacePath(currentWorkspaceId, '/marketplace');
     }
   };
 

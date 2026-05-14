@@ -23,8 +23,8 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const basePath = getWorkspacePath(currentWorkspaceId, '/apps');
-  const isOnAppsPage = pathname?.includes('/apps');
+  const basePath = getWorkspacePath(currentWorkspaceId, '/marketplace');
+  const isOnAppsPage = pathname?.includes('/marketplace');
   const activeType = isOnAppsPage ? (searchParams?.get('type') ?? 'all') : null;
 
   return (
