@@ -155,6 +155,8 @@ class ApiConfiguration(BaseModel):
     favicon_path: str = "assets/favicon.ico"
     cors_origins: List[str] = ["http://localhost:9879"]
     reload: bool = True
+    host: str = "0.0.0.0"  # nosec B104 - default binds all interfaces
+    port: int = 9879
 
 
 class OpencodeProviderConfiguration(BaseModel):

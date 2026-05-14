@@ -200,7 +200,6 @@ class NexusConfig(BaseModel):
     websocket_path: str = "/ws/socket.io"
 
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
-    redis_url: str = "redis://localhost:6379/0"
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
@@ -322,7 +321,6 @@ class ABIModule(BaseModule):
             nexus_config:
                 # All settings accepted by app.core.config.Settings
                 database_url: "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
-                redis_url: "redis://localhost:6379/0"
                 api_url: "http://localhost:9879"
                 frontend_url: "http://localhost:3042"
                 websocket_path: "/ws/socket.io"

@@ -29,8 +29,7 @@ modules:
     enabled: true
     config:
       nexus_config:
-        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
-        redis_url: "redis://localhost:6379/0"
+        database_url: "sqlite+aiosqlite:///./storage/nexus.db"
 
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true

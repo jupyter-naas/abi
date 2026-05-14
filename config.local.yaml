@@ -41,7 +41,6 @@ modules:
       nexus_config:
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
-        redis_url: "redis://redis:6379/0"
         feature_flags:
           enabled_features:
             - chat
@@ -181,8 +180,6 @@ modules:
         api_key: "{{ secret.OPENAI_API_KEY }}"
       markdowntovector_pipelines:
         - api_key: "{{ secret.OPENAI_API_KEY }}"
-      document_agent:
-        api_key: "{{ secret.OPENAI_API_KEY }}"
 
 services:
   secret:

@@ -7,6 +7,7 @@ from .agent import agent
 from .chat import chat
 from .config import config
 from .deploy import deploy
+from .dev import dev
 from .docs import docs
 from .init import init
 from .module import module
@@ -37,6 +38,7 @@ _main.add_command(start)
 _main.add_command(stop)
 _main.add_command(logs)
 _main.add_command(stack)
+_main.add_command(dev)
 ran = False
 
 

@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from sqlalchemy import text
 
-from app.core.database import async_engine, get_row_count, init_db, table_exists
+from app.core.database import _is_sqlite, async_engine, get_row_count, init_db, table_exists
 
 # Demo data directory
 DEMO_DIR = Path(__file__).parent.parent.parent / "demo"
@@ -656,13 +656,23 @@ async def main():
             "users",
         ]
         async with async_engine.begin() as conn:
-            # Temporarily disable FK checks for faster truncation
-            await conn.execute(text("SET session_replication_role = 'replica'"))
-            try:
-                for t in tables:
-                    await conn.execute(text(f"TRUNCATE TABLE {t} RESTART IDENTITY CASCADE"))
-            finally:
-                await conn.execute(text("SET session_replication_role = 'origin'"))
+            if _is_sqlite:
+                # SQLite has no TRUNCATE / session_replication_role; emulate
+                # with DELETE while foreign keys are disabled.
+                await conn.execute(text("PRAGMA foreign_keys = OFF"))
+                try:
+                    for t in tables:
+                        await conn.execute(text(f"DELETE FROM {t}"))
+                finally:
+                    await conn.execute(text("PRAGMA foreign_keys = ON"))
+            else:
+                # Temporarily disable FK checks for faster truncation
+                await conn.execute(text("SET session_replication_role = 'replica'"))
+                try:
+                    for t in tables:
+                        await conn.execute(text(f"TRUNCATE TABLE {t} RESTART IDENTITY CASCADE"))
+                finally:
+                    await conn.execute(text("SET session_replication_role = 'origin'"))
         print("✓ Tables truncated")
 
     await seed_all()
