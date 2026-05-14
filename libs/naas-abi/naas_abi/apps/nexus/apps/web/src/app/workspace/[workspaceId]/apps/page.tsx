@@ -124,13 +124,18 @@ function formatUSD(usd: number): string {
   return `~$${Math.round(usd)}/mo`;
 }
 
+// Price is always shown from the model cost estimate if available —
+// functional status only controls the CTA, not the price display.
 function getPriceLabel(mod: ModuleInfo): { price: string; tier: 'free' | 'paid' | 'preview' | 'installed' } {
   if (mod.installed) return { price: 'Installed', tier: 'installed' };
-  if (!mod.functional) return { price: 'Preview', tier: 'preview' };
   if (mod.model) {
     const est = estimateMonthlyUSD(mod.model);
-    if (est !== null) return { price: formatUSD(est), tier: 'paid' };
+    if (est !== null) {
+      // Show estimated cost whether functional or not — it's informational
+      return { price: formatUSD(est), tier: mod.functional ? 'paid' : 'preview' };
+    }
   }
+  if (!mod.functional) return { price: 'Preview', tier: 'preview' };
   return { price: 'Free', tier: 'free' };
 }
 
@@ -263,20 +268,21 @@ function ModuleCard({ mod, onClick }: { mod: ModuleInfo; onClick: () => void }) 
   const pricing = getModulePricing(mod);
 
   return (
-    <div className="glass-card flex flex-col overflow-hidden transition-all hover:border-primary/30 hover:-translate-y-0.5 hover:shadow-md">
-      {/* Clickable hero */}
-      <button onClick={onClick} className="focus:outline-none text-left">
-        <ModuleAvatar
-          mod={mod}
-          className={cn('w-full', isPortrait ? 'h-44' : 'flex h-32 items-center justify-center p-6')}
-        />
-      </button>
+    // Whole card is clickable; CTA button stops propagation to avoid double-firing
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      className="glass-card flex flex-col overflow-hidden cursor-pointer transition-all hover:border-primary/30 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      <ModuleAvatar
+        mod={mod}
+        className={cn('w-full', isPortrait ? 'h-44' : 'flex h-32 items-center justify-center p-6')}
+      />
 
       <div className="flex flex-1 flex-col gap-2 p-4">
-        {/* Name + category */}
-        <button onClick={onClick} className="text-left focus:outline-none">
-          <h3 className="line-clamp-1 font-semibold leading-tight">{mod.name}</h3>
-        </button>
+        <h3 className="line-clamp-1 font-semibold leading-tight">{mod.name}</h3>
         <span className={cn('self-start px-2 py-0.5 text-xs font-medium', CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground')}>
           {CATEGORY_LABELS[mod.category] ?? mod.category}
         </span>
@@ -284,13 +290,14 @@ function ModuleCard({ mod, onClick }: { mod: ModuleInfo; onClick: () => void }) 
           {mod.description || mod.module_path}
         </p>
 
-        {/* Pricing + CTA */}
+        {/* Pricing + CTA — CTA stops propagation so it doesn't re-open the panel */}
         <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50 mt-1">
-          <span className={cn('px-2 py-0.5 text-xs font-medium', pricing.labelStyle)}>
+          <span className={cn('px-2 py-0.5 text-xs font-medium tabular-nums', pricing.labelStyle)}>
             {pricing.label}
           </span>
           <button
             disabled={pricing.ctaDisabled}
+            onClick={(e) => e.stopPropagation()}
             className={cn(
               'flex items-center gap-1 px-3 py-1 text-xs font-semibold transition-colors',
               pricing.ctaStyle,
