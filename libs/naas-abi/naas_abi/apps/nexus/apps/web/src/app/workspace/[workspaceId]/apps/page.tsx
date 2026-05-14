@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import { LayoutGrid, Package, Store, Search, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -84,12 +85,19 @@ function ModuleCard({ mod }: { mod: ModuleInfo }) {
 type Tab = 'installed' | 'marketplace';
 
 export default function AppsPage() {
-  const [tab, setTab] = useState<Tab>('installed');
+  const searchParams = useSearchParams();
+  const initialTab = (searchParams?.get('tab') === 'marketplace' ? 'marketplace' : 'installed') as Tab;
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [data, setData] = useState<ModulesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  useEffect(() => {
+    const t = searchParams?.get('tab') === 'marketplace' ? 'marketplace' : 'installed';
+    setTab(t as Tab);
+  }, [searchParams]);
 
   useEffect(() => {
     setLoading(true);
