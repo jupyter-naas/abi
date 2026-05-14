@@ -3,10 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
-import { LayoutGrid, Package, Store, Search, Bot, X, Cpu, Tag, CheckCircle2, AlertTriangle } from 'lucide-react';
+import {
+  LayoutGrid, Package, Store, Search, Bot, X, Cpu, Tag,
+  CheckCircle2, AlertTriangle, FileText, Presentation, Table2,
+  Trello, Calendar, ExternalLink, Wrench,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { useTenant } from '@/contexts/tenant-context';
 
 interface ModuleInfo {
   module_path: string;
@@ -228,11 +233,118 @@ function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void })
   );
 }
 
-type Tab = 'installed' | 'marketplace';
+interface WorkspaceTool {
+  icon: React.ReactNode;
+  name: string;
+  description: string;
+  status: 'available' | 'coming-soon';
+  url?: string;
+}
+
+const WORKSPACE_TOOLS: WorkspaceTool[] = [
+  {
+    icon: <FileText size={22} />,
+    name: 'Docs',
+    description: 'Rich text editor for documentation, notes, and runbooks with agent assistance.',
+    status: 'coming-soon',
+  },
+  {
+    icon: <Presentation size={22} />,
+    name: 'Slides',
+    description: 'Build and narrate presentations driven by your knowledge graph.',
+    status: 'coming-soon',
+  },
+  {
+    icon: <Table2 size={22} />,
+    name: 'Sheets',
+    description: 'Intelligent spreadsheets with formula support and live data connectors.',
+    status: 'coming-soon',
+  },
+  {
+    icon: <Trello size={22} />,
+    name: 'Board',
+    description: 'Kanban boards and whiteboards to manage tasks and visual workflows.',
+    status: 'coming-soon',
+  },
+  {
+    icon: <Calendar size={22} />,
+    name: 'Calendar',
+    description: 'Schedule and timeline management synced with your agents.',
+    status: 'coming-soon',
+  },
+];
+
+function ToolCard({ tool }: { tool: WorkspaceTool }) {
+  const inner = (
+    <div
+      className={cn(
+        'group relative flex flex-col gap-3 rounded-xl border bg-card p-5 transition-all',
+        tool.status === 'available'
+          ? 'cursor-pointer hover:border-workspace-accent hover:shadow-md'
+          : 'opacity-60 cursor-default'
+      )}
+    >
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-workspace-accent/10 text-workspace-accent">
+        {tool.icon}
+      </div>
+      <div>
+        <h3 className="font-semibold leading-tight">{tool.name}</h3>
+        <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{tool.description}</p>
+      </div>
+      {tool.status === 'coming-soon' && (
+        <span className="self-start rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          Coming soon
+        </span>
+      )}
+      {tool.status === 'available' && (
+        <ExternalLink
+          size={14}
+          className="absolute right-4 top-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      )}
+    </div>
+  );
+
+  if (tool.status === 'available' && tool.url) {
+    return (
+      <a href={tool.url} target="_blank" rel="noreferrer noopener">
+        {inner}
+      </a>
+    );
+  }
+  return inner;
+}
+
+function ExternalToolCard({ app }: { app: { name: string; url: string; description?: string | null; icon_emoji?: string | null } }) {
+  return (
+    <a href={app.url} target="_blank" rel="noreferrer noopener">
+      <div className="group relative flex flex-col gap-3 rounded-xl border bg-card p-5 transition-all cursor-pointer hover:border-workspace-accent hover:shadow-md">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-workspace-accent/10 text-2xl">
+          {app.icon_emoji ?? <ExternalLink size={22} className="text-workspace-accent" />}
+        </div>
+        <div>
+          <h3 className="font-semibold leading-tight">{app.name}</h3>
+          {app.description && (
+            <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{app.description}</p>
+          )}
+        </div>
+        <ExternalLink
+          size={14}
+          className="absolute right-4 top-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      </div>
+    </a>
+  );
+}
+
+type Tab = 'installed' | 'marketplace' | 'tools';
 
 export default function AppsPage() {
   const searchParams = useSearchParams();
-  const initialTab = (searchParams?.get('tab') === 'marketplace' ? 'marketplace' : 'installed') as Tab;
+  const tenant = useTenant();
+
+  const rawTab = searchParams?.get('tab');
+  const initialTab: Tab = rawTab === 'marketplace' ? 'marketplace' : rawTab === 'tools' ? 'tools' : 'installed';
   const [tab, setTab] = useState<Tab>(initialTab);
   const [data, setData] = useState<ModulesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -242,8 +354,8 @@ export default function AppsPage() {
   const [selectedMod, setSelectedMod] = useState<ModuleInfo | null>(null);
 
   useEffect(() => {
-    const t = searchParams?.get('tab') === 'marketplace' ? 'marketplace' : 'installed';
-    setTab(t as Tab);
+    const t = searchParams?.get('tab');
+    setTab(t === 'marketplace' ? 'marketplace' : t === 'tools' ? 'tools' : 'installed');
   }, [searchParams]);
 
   useEffect(() => {
@@ -285,31 +397,52 @@ export default function AppsPage() {
         {/* Tabs */}
         <div className="border-b px-6 pt-4">
           <div className="flex gap-1">
-            {(['installed', 'marketplace'] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={cn(
-                  'flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors',
-                  tab === t
-                    ? 'border-b-2 border-workspace-accent text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {t === 'installed' ? <Package size={15} /> : <Store size={15} />}
-                {t === 'installed' ? 'Installed' : 'Marketplace'}
-                {t === 'installed' && data && (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs">
-                    {data.installed.length}
-                  </span>
-                )}
-                {t === 'marketplace' && data && (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs">
-                    {data.available.length}
-                  </span>
-                )}
-              </button>
-            ))}
+            <button
+              onClick={() => setTab('installed')}
+              className={cn(
+                'flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors',
+                tab === 'installed'
+                  ? 'border-b-2 border-workspace-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Package size={15} />
+              Installed
+              {data && (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs">
+                  {data.installed.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setTab('marketplace')}
+              className={cn(
+                'flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors',
+                tab === 'marketplace'
+                  ? 'border-b-2 border-workspace-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Store size={15} />
+              Marketplace
+              {data && (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs">
+                  {data.available.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setTab('tools')}
+              className={cn(
+                'flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-medium transition-colors',
+                tab === 'tools'
+                  ? 'border-b-2 border-workspace-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Wrench size={15} />
+              Tools
+            </button>
           </div>
         </div>
 
@@ -395,6 +528,39 @@ export default function AppsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {/* Tools tab */}
+          {tab === 'tools' && (
+            <div className="mx-auto max-w-5xl space-y-10">
+              {/* External apps from tenant config */}
+              {tenant.apps.length > 0 && (
+                <div>
+                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Your Apps
+                  </h2>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {tenant.apps.map((app) => (
+                      <ExternalToolCard key={app.url} app={app} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Built-in workspace tools (roadmap) */}
+              <div>
+                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Workspace Tools
+                </h2>
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Native productivity tools built into the platform, powered by your agents and knowledge graph.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {WORKSPACE_TOOLS.map((tool) => (
+                    <ToolCard key={tool.name} tool={tool} />
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
