@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.43.1 (2026-05-14)
+
+### Bug Fixes
+
+- **engine**: Declare EmailService dependency in ABIModule
+  ([`199c306`](https://github.com/jupyter-naas/abi/commit/199c3063a304877f9059a4f8d79e3fe76b1efe7a))
+
+
 ## v1.43.0 (2026-05-14)
 
 ### Bug Fixes
