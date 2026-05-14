@@ -94,7 +94,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 //              system prompts, fixes API drift, and keeps ontologies current.
 // ---------------------------------------------------------------------------
 
-const ENTERPRISE_MAINTENANCE_FEE_USD = 19; // per agent per month (early-access rate)
+const ENTERPRISE_MAINTENANCE_FEE_USD = 79;       // per agent per month (standard rate)
+const ENTERPRISE_EARLY_ACCESS_FEE_USD = 49;     // introductory rate while in early access
 const ENTERPRISE_CTA_URL = 'https://naas.ai/enterprise';
 
 // Which module categories are Enterprise-maintained by Naas
@@ -151,8 +152,9 @@ function getPriceLabel(mod: ModuleInfo): {
 } {
   if (mod.installed) return { price: 'Installed', tier: 'installed' };
   if (isEnterprise(mod)) {
+    const maintenanceFee = mod.functional ? ENTERPRISE_MAINTENANCE_FEE_USD : ENTERPRISE_EARLY_ACCESS_FEE_USD;
     const llm = mod.model ? estimateMonthlyUSD(mod.model) : null;
-    const total = ENTERPRISE_MAINTENANCE_FEE_USD + (llm ?? 0);
+    const total = maintenanceFee + (llm ?? 0);
     return { price: `~$${Math.round(total)}/mo`, tier: mod.functional ? 'enterprise' : 'early-access' };
   }
   return { price: 'Community', tier: 'community' };
@@ -207,7 +209,9 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
     : null;
   const modelLabel = modelEntry ? modelEntry[1].label : (mod.model ?? 'Unknown');
   const llm = llmEst ?? 0;
-  const maintenance = ent ? ENTERPRISE_MAINTENANCE_FEE_USD : 0;
+  const maintenance = ent
+    ? (mod.functional ? ENTERPRISE_MAINTENANCE_FEE_USD : ENTERPRISE_EARLY_ACCESS_FEE_USD)
+    : 0;
 
   return (
     <div className="border bg-muted/30 p-3 space-y-2.5">
@@ -239,7 +243,7 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
         )}
         {ent && (
           <div className="flex justify-between">
-            <span>Maintenance fee</span>
+            <span>Maintenance fee{!mod.functional ? ' (early access)' : ''}</span>
             <span className="font-medium text-foreground">${maintenance}/mo</span>
           </div>
         )}
