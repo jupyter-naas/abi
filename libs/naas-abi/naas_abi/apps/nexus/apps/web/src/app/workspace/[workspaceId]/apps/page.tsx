@@ -39,43 +39,62 @@ const CATEGORY_COLORS: Record<string, string> = {
 function ModuleCard({ mod }: { mod: ModuleInfo }) {
   const [imgFailed, setImgFailed] = useState(false);
 
+  // Domain agents have portrait photos — fill the banner.
+  // AI / application agents have brand logos — center them on a clean bg.
+  const isPortrait = mod.category === 'domain';
+
   return (
-    <div className="glass-card flex flex-col gap-3 p-5 transition-all hover:border-primary/30">
-      <div className="flex items-start gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted overflow-hidden">
-          {mod.logo_url && !imgFailed ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={mod.logo_url}
-              alt={mod.name}
-              className="h-full w-full object-contain"
-              onError={() => setImgFailed(true)}
-            />
-          ) : (
-            <Bot size={22} className="text-muted-foreground" />
+    <div className="glass-card flex flex-col overflow-hidden transition-all hover:border-primary/30 hover:-translate-y-0.5 hover:shadow-md cursor-default">
+      {/* Hero image area */}
+      <div
+        className={cn(
+          'relative w-full overflow-hidden bg-muted',
+          isPortrait ? 'h-44' : 'flex h-32 items-center justify-center p-6'
+        )}
+      >
+        {mod.logo_url && !imgFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={mod.logo_url}
+            alt={mod.name}
+            className={cn(
+              'transition-transform duration-300 group-hover:scale-105',
+              isPortrait
+                ? 'h-full w-full object-cover object-top'
+                : 'max-h-full max-w-full object-contain'
+            )}
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <Bot size={36} className="text-muted-foreground/30" />
+        )}
+        {/* Subtle gradient at the bottom of portrait images */}
+        {isPortrait && mod.logo_url && !imgFailed && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/20 to-transparent" />
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex flex-col gap-1.5 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="line-clamp-1 font-semibold leading-tight">{mod.name}</h3>
+          {mod.installed && (
+            <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600">
+              Installed
+            </span>
           )}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold leading-tight">{mod.name}</h3>
-            {mod.installed && (
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600">
-                Installed
-              </span>
-            )}
-            <span
-              className={cn(
-                'rounded-full px-2 py-0.5 text-xs font-medium',
-                CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground'
-              )}
-            >
-              {CATEGORY_LABELS[mod.category] ?? mod.category}
-            </span>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-            {mod.description || mod.module_path}
-          </p>
-        </div>
+        <span
+          className={cn(
+            'self-start rounded-full px-2 py-0.5 text-xs font-medium',
+            CATEGORY_COLORS[mod.category] ?? 'bg-muted text-muted-foreground'
+          )}
+        >
+          {CATEGORY_LABELS[mod.category] ?? mod.category}
+        </span>
+        <p className="line-clamp-2 text-xs text-muted-foreground">
+          {mod.description || mod.module_path}
+        </p>
       </div>
     </div>
   );
@@ -185,7 +204,7 @@ export default function AppsPage() {
               {data?.installed.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No modules installed.</p>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {data?.installed.map((mod) => (
                     <ModuleCard key={mod.module_path} mod={mod} />
                   ))}
@@ -240,7 +259,7 @@ export default function AppsPage() {
                   <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                     {category}
                   </h2>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {mods.map((mod) => (
                       <ModuleCard key={mod.module_path} mod={mod} />
                     ))}
