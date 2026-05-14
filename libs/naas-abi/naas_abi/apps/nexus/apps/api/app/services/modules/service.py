@@ -66,6 +66,10 @@ _RE_SYSTEM_PROMPT = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 _NOT_FUNCTIONAL_RE = re.compile(r'NOT FUNCTIONAL', re.IGNORECASE)
+# Marketplace metadata (optional, set by agent author)
+_RE_TIER = re.compile(r'^TIER\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+_RE_MAINTAINER = re.compile(r'^MAINTAINER\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+_RE_STRIPE_URL = re.compile(r'^STRIPE_URL\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
 
 _SYSTEM_PROMPT_PREVIEW_LEN = 280
 
@@ -101,6 +105,9 @@ AgentMeta = tuple[
     str | None,  # agent_type
     str | None,  # system_prompt_preview
     bool,        # functional
+    str | None,  # tier
+    str | None,  # maintainer
+    str | None,  # stripe_url
 ]
 
 
@@ -109,7 +116,7 @@ def _scan_agent_file(path: Path) -> AgentMeta:
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
-        return None, None, None, None, None, None, None, True
+        return None, None, None, None, None, None, None, True, None, None, None
 
     def _m(pattern: re.Pattern[str]) -> str | None:
         m = pattern.search(text)
@@ -125,6 +132,9 @@ def _scan_agent_file(path: Path) -> AgentMeta:
         _m(_RE_AGENT_TYPE),
         _trim_prompt(prompt_raw) if prompt_raw else None,
         not bool(_NOT_FUNCTIONAL_RE.search(text)),
+        _m(_RE_TIER),
+        _m(_RE_MAINTAINER),
+        _m(_RE_STRIPE_URL),
     )
 
 
@@ -185,6 +195,9 @@ def _build_catalog() -> list[ModuleInfo]:
             agent_type: str | None = None
             system_prompt_preview: str | None = None
             functional: bool = True
+            tier: str | None = None
+            maintainer: str | None = None
+            stripe_url: str | None = None
 
             agent_candidates = list((mod_dir / "agents").glob("*.py")) if (mod_dir / "agents").is_dir() else []
             agent_candidates += list(mod_dir.glob("*Agent.py"))
@@ -192,11 +205,12 @@ def _build_catalog() -> list[ModuleInfo]:
             for agent_file in agent_candidates:
                 if agent_file.name.startswith("_"):
                     continue
-                n, d, lurl, mdl, slg, atype, spp, func = _scan_agent_file(agent_file)
+                n, d, lurl, mdl, slg, atype, spp, func, tr, maint, surl = _scan_agent_file(agent_file)
                 if n:
                     name, description, logo_url = n, d, lurl
                     model, slug, agent_type = mdl, slg, atype
                     system_prompt_preview, functional = spp, func
+                    tier, maintainer, stripe_url = tr, maint, surl
                     break
 
             catalog.append(
@@ -212,6 +226,9 @@ def _build_catalog() -> list[ModuleInfo]:
                     agent_type=agent_type,
                     system_prompt_preview=system_prompt_preview,
                     functional=functional,
+                    tier=tier,
+                    maintainer=maintainer,
+                    stripe_url=stripe_url,
                 )
             )
 

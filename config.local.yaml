@@ -61,6 +61,12 @@ modules:
         magic_link_email_subject_template: "Your {app_name} sign-in link"
         magic_link_email_text_template: "Use this link to sign in to {app_name}:\n\n{magic_link_url}\n\nThis link expires in {expire_minutes} minutes."
         magic_link_email_html_template: "<p>Use this link to sign in to {app_name}:</p><p><a href=\"{magic_link_url}\">Sign in</a></p><p>This link expires in {expire_minutes} minutes.</p>"
+        marketplace:
+          pricing:
+            maintenance_standard_usd: 499
+            maintenance_early_access_usd: 299
+            cta_url: "https://naas.ai/enterprise"
+            enterprise_categories: ["domain"]
         tenant:
           tab_title: "ABI AI Platform | Naas.ai"
           favicon_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"

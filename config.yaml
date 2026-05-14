@@ -38,6 +38,12 @@ modules:
       nexus_config:
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
         redis_url: "redis://localhost:6379/0"
+        marketplace:
+          pricing:
+            maintenance_standard_usd: 499
+            maintenance_early_access_usd: 299
+            cta_url: "https://naas.ai/enterprise"
+            enterprise_categories: ["domain"]
   
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true

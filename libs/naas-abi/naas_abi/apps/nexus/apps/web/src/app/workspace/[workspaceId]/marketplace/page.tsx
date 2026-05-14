@@ -29,12 +29,72 @@ interface ModuleInfo {
   agent_type: string | null;
   system_prompt_preview: string | null;
   functional: boolean;
+  tier: string | null;
+  maintainer: string | null;
+  stripe_url: string | null;
 }
 
 interface ModulesResponse {
   installed: ModuleInfo[];
   available: ModuleInfo[];
 }
+
+// Marketplace config shapes (mirrors backend Pydantic models)
+interface ModelPricingEntry {
+  input_per_million: number;
+  output_per_million: number;
+  label: string;
+}
+
+interface MarketplaceUsageTier {
+  label: string;
+  interactions: number;
+  avg_tokens: number;
+  description: string;
+}
+
+interface MarketplacePricingConfig {
+  maintenance_standard_usd: number;
+  maintenance_early_access_usd: number;
+  cta_url: string;
+  enterprise_categories: string[];
+  input_output_ratio: number;
+}
+
+interface MarketplaceConfig {
+  pricing: MarketplacePricingConfig;
+  usage_tiers: MarketplaceUsageTier[];
+  model_pricing: Record<string, ModelPricingEntry>;
+}
+
+// Sensible defaults used while the config fetch is in-flight
+const DEFAULT_MARKETPLACE_CONFIG: MarketplaceConfig = {
+  pricing: {
+    maintenance_standard_usd: 499,
+    maintenance_early_access_usd: 299,
+    cta_url: 'https://naas.ai/enterprise',
+    enterprise_categories: ['domain'],
+    input_output_ratio: 0.6,
+  },
+  usage_tiers: [
+    { label: 'Starter',      interactions: 50,    avg_tokens: 2_000,  description: '~2 queries/day' },
+    { label: 'Professional', interactions: 300,   avg_tokens: 5_000,  description: '~10 queries/day' },
+    { label: 'Scale',        interactions: 2_000, avg_tokens: 10_000, description: '~65 queries/day, team use' },
+  ],
+  model_pricing: {
+    'gpt-4o':           { input_per_million: 2.50,  output_per_million: 10.00, label: 'GPT-4o' },
+    'gpt-4o-mini':      { input_per_million: 0.15,  output_per_million: 0.60,  label: 'GPT-4o mini' },
+    'gpt-4':            { input_per_million: 30.00, output_per_million: 60.00, label: 'GPT-4' },
+    'gpt-3.5-turbo':    { input_per_million: 0.50,  output_per_million: 1.50,  label: 'GPT-3.5 Turbo' },
+    'o1':               { input_per_million: 15.00, output_per_million: 60.00, label: 'o1' },
+    'o3-mini':          { input_per_million: 1.10,  output_per_million: 4.40,  label: 'o3-mini' },
+    'claude-opus':      { input_per_million: 15.00, output_per_million: 75.00, label: 'Claude Opus' },
+    'claude-sonnet':    { input_per_million: 3.00,  output_per_million: 15.00, label: 'Claude Sonnet' },
+    'claude-haiku':     { input_per_million: 0.25,  output_per_million: 1.25,  label: 'Claude Haiku' },
+    'gemini-1.5-pro':   { input_per_million: 3.50,  output_per_million: 10.50, label: 'Gemini 1.5 Pro' },
+    'gemini-1.5-flash': { input_per_million: 0.075, output_per_million: 0.30,  label: 'Gemini Flash' },
+  },
+};
 
 type ArtifactType = 'all' | 'agents' | 'applications' | 'tools' | 'ontologies' | 'workflows' | 'pipelines';
 type StatusFilter = 'all' | 'installed' | 'available' | 'coming-soon';
@@ -85,81 +145,9 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Community vs Enterprise model (Red Hat model for AI infrastructure)
-//
-// Community  — MIT licensed, self-hosted, self-maintained. Free.
-// Enterprise — Naas maintains, patches, and guarantees the agent.
-//              A predictable maintenance fee, not a license.
-//              Domain expert agents all fall here: Naas tunes the
-//              system prompts, fixes API drift, and keeps ontologies current.
+// Pricing helpers — all driven by MarketplaceConfig from the API.
+// No hardcoded fees, tiers, or model prices here.
 // ---------------------------------------------------------------------------
-
-// Maintenance fee — an expert retainer, not a software subscription.
-//
-// Naas employs AI engineers at $200+/hr doing continuous work per agent:
-//   - Domain knowledge curation and system prompt refinement
-//   - Model migration when underlying LLMs are deprecated or repriced
-//   - Ontology updates as standards and regulations evolve
-//   - API and tool integration patching when third-party services drift
-//   - Regression testing after every model or platform change
-//
-// At ~10 hrs/month of expert time per agent, cost to Naas = ~$2,000/mo.
-// With 10-20 early subscribers per agent, the fee must cover that cost.
-//
-// Standard rate: $499/mo   (live, fully maintained by dedicated expert)
-// Early access:  $299/mo   (introductory rate — locks in before standard pricing)
-//
-// Benchmark: Artisan AI managed SDR = $1,500-2,500/mo.
-//            Human fractional domain specialist = $2,000-10,000/mo.
-//            This agent at $499/mo is a 4-20x cost reduction with 24/7 availability.
-const ENTERPRISE_MAINTENANCE_FEE_USD = 499;
-const ENTERPRISE_EARLY_ACCESS_FEE_USD = 299;
-const ENTERPRISE_CTA_URL = 'https://naas.ai/enterprise';
-
-// Which module categories are Enterprise-maintained by Naas
-const ENTERPRISE_CATEGORIES = new Set(['domain']);
-
-// ---------------------------------------------------------------------------
-// LLM token cost engine
-//
-// These costs are SEPARATE from the maintenance fee. They are paid directly
-// to the model provider (OpenAI, Anthropic, Google) by the user.
-// They scale with usage — the maintenance fee does not.
-//
-// Prices in USD per 1M tokens (verified May 2026).
-// Input/output split assumed 60/40 for domain agent workloads
-// (system prompt + context = large input; concise structured answers = smaller output).
-// ---------------------------------------------------------------------------
-const MODEL_PRICING: Record<string, { input: number; output: number; label: string }> = {
-  'gpt-4o':           { input: 2.50,  output: 10.00, label: 'GPT-4o'         },
-  'gpt-4o-mini':      { input: 0.15,  output: 0.60,  label: 'GPT-4o mini'    },
-  'gpt-4':            { input: 30.00, output: 60.00, label: 'GPT-4'          },
-  'gpt-3.5-turbo':    { input: 0.50,  output: 1.50,  label: 'GPT-3.5 Turbo'  },
-  'o1':               { input: 15.00, output: 60.00, label: 'o1'             },
-  'o3-mini':          { input: 1.10,  output: 4.40,  label: 'o3-mini'        },
-  'claude-opus':      { input: 15.00, output: 75.00, label: 'Claude Opus'    },
-  'claude-sonnet':    { input: 3.00,  output: 15.00, label: 'Claude Sonnet'  },
-  'claude-haiku':     { input: 0.25,  output: 1.25,  label: 'Claude Haiku'   },
-  'gemini-1.5-pro':   { input: 3.50,  output: 10.50, label: 'Gemini 1.5 Pro' },
-  'gemini-1.5-flash': { input: 0.075, output: 0.30,  label: 'Gemini Flash'   },
-};
-
-const INPUT_RATIO = 0.6;
-
-// Three realistic usage tiers for a domain expert agent
-const USAGE_TIERS = [
-  { label: 'Starter',      interactions: 50,    avgTokens: 2_000, description: '~2 queries/day' },
-  { label: 'Professional', interactions: 300,   avgTokens: 5_000, description: '~10 queries/day' },
-  { label: 'Scale',        interactions: 2_000, avgTokens: 10_000, description: '~65 queries/day, team use' },
-] as const;
-
-function llmCostForTier(modelKey: string, interactions: number, avgTokens: number): number | null {
-  const entry = Object.entries(MODEL_PRICING).find(([k]) => modelKey.toLowerCase().includes(k));
-  if (!entry) return null;
-  const { input, output } = entry[1];
-  const total = interactions * avgTokens;
-  return (total * INPUT_RATIO * input + total * (1 - INPUT_RATIO) * output) / 1_000_000;
-}
 
 function formatUSD(usd: number): string {
   if (usd < 0.01) return '<$0.01/mo';
@@ -168,22 +156,24 @@ function formatUSD(usd: number): string {
   return `~$${Math.round(usd)}/mo`;
 }
 
-function isEnterprise(mod: ModuleInfo): boolean {
-  return ENTERPRISE_CATEGORIES.has(mod.category);
+function isEnterprise(mod: ModuleInfo, cfg: MarketplaceConfig): boolean {
+  // Per-agent TIER field from the source file takes priority
+  if (mod.tier) return mod.tier === 'enterprise';
+  return cfg.pricing.enterprise_categories.includes(mod.category);
 }
 
-// Card badge shows ONLY the maintenance fee — the fixed cost a buyer controls.
-// LLM costs (variable, paid to the model provider) are shown only in the TCO block.
-function getPriceLabel(mod: ModuleInfo): {
-  price: string;
-  tier: 'community' | 'enterprise' | 'early-access' | 'installed';
-} {
-  if (mod.installed) return { price: 'Installed', tier: 'installed' };
-  if (isEnterprise(mod)) {
-    const fee = mod.functional ? ENTERPRISE_MAINTENANCE_FEE_USD : ENTERPRISE_EARLY_ACCESS_FEE_USD;
-    return { price: `$${fee}/mo`, tier: mod.functional ? 'enterprise' : 'early-access' };
-  }
-  return { price: 'Community', tier: 'community' };
+function llmCostForTier(
+  modelKey: string,
+  interactions: number,
+  avgTokens: number,
+  cfg: MarketplaceConfig,
+): number | null {
+  const entry = Object.entries(cfg.model_pricing).find(([k]) => modelKey.toLowerCase().includes(k));
+  if (!entry) return null;
+  const { input_per_million, output_per_million } = entry[1];
+  const total = interactions * avgTokens;
+  const r = cfg.pricing.input_output_ratio;
+  return (total * r * input_per_million + total * (1 - r) * output_per_million) / 1_000_000;
 }
 
 const PRICE_STYLE: Record<string, string> = {
@@ -202,18 +192,21 @@ type Pricing = {
   ctaUrl?: string;
 };
 
-function getModulePricing(mod: ModuleInfo): Pricing {
-  const { price, tier } = getPriceLabel(mod);
-  if (tier === 'installed') {
-    return { label: price, labelStyle: PRICE_STYLE.installed, cta: 'Installed', ctaStyle: 'bg-emerald-500/10 text-emerald-600 cursor-default', ctaDisabled: true };
+function getModulePricing(mod: ModuleInfo, cfg: MarketplaceConfig): Pricing {
+  if (mod.installed) {
+    return { label: 'Installed', labelStyle: PRICE_STYLE.installed, cta: 'Installed', ctaStyle: 'bg-emerald-500/10 text-emerald-600 cursor-default', ctaDisabled: true };
   }
-  if (tier === 'enterprise') {
-    return { label: price, labelStyle: PRICE_STYLE.enterprise, cta: 'Subscribe', ctaStyle: 'bg-blue-600 text-white hover:bg-blue-700', ctaDisabled: false, ctaUrl: ENTERPRISE_CTA_URL };
+  if (isEnterprise(mod, cfg)) {
+    const fee = mod.functional
+      ? cfg.pricing.maintenance_standard_usd
+      : cfg.pricing.maintenance_early_access_usd;
+    const ctaUrl = mod.stripe_url ?? cfg.pricing.cta_url;
+    if (mod.functional) {
+      return { label: `$${fee}/mo`, labelStyle: PRICE_STYLE.enterprise, cta: 'Subscribe', ctaStyle: 'bg-blue-600 text-white hover:bg-blue-700', ctaDisabled: false, ctaUrl };
+    }
+    return { label: `$${fee}/mo`, labelStyle: PRICE_STYLE['early-access'], cta: 'Early access', ctaStyle: 'bg-amber-500 text-white hover:bg-amber-600', ctaDisabled: false, ctaUrl };
   }
-  if (tier === 'early-access') {
-    return { label: price, labelStyle: PRICE_STYLE['early-access'], cta: 'Early access', ctaStyle: 'bg-amber-500 text-white hover:bg-amber-600', ctaDisabled: false, ctaUrl: ENTERPRISE_CTA_URL };
-  }
-  return { label: price, labelStyle: PRICE_STYLE.community, cta: 'Install', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
+  return { label: 'Community', labelStyle: PRICE_STYLE.community, cta: 'Install', ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90', ctaDisabled: false };
 }
 
 function getStaticPricing(status: 'available' | 'coming-soon'): Pricing {
@@ -223,19 +216,20 @@ function getStaticPricing(status: 'available' | 'coming-soon'): Pricing {
   return { label: 'Coming soon', labelStyle: PRICE_STYLE.community, cta: 'Coming soon', ctaStyle: 'bg-muted text-muted-foreground cursor-not-allowed', ctaDisabled: true };
 }
 
+
 // Full TCO breakdown shown in the ID Card panel.
 // Separates maintenance fee (fixed, to Naas) from LLM token costs (variable, to model provider).
-function TcoBadge({ mod }: { mod: ModuleInfo }) {
-  const ent = isEnterprise(mod);
+function TcoBadge({ mod, cfg }: { mod: ModuleInfo; cfg: MarketplaceConfig }) {
+  const ent = isEnterprise(mod, cfg);
   const hasModel = !!mod.model;
   if (!ent && !hasModel) return null;
 
   const modelEntry = mod.model
-    ? Object.entries(MODEL_PRICING).find(([k]) => mod.model!.toLowerCase().includes(k))
+    ? Object.entries(cfg.model_pricing).find(([k]) => mod.model!.toLowerCase().includes(k))
     : null;
   const modelLabel = modelEntry ? modelEntry[1].label : (mod.model ?? 'Unknown');
   const maintenance = ent
-    ? (mod.functional ? ENTERPRISE_MAINTENANCE_FEE_USD : ENTERPRISE_EARLY_ACCESS_FEE_USD)
+    ? (mod.functional ? cfg.pricing.maintenance_standard_usd : cfg.pricing.maintenance_early_access_usd)
     : 0;
 
   return (
@@ -277,8 +271,8 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
               <span className="text-right">LLM cost</span>
               {ent && <span className="text-right text-blue-600">TCO</span>}
             </div>
-            {USAGE_TIERS.map(({ label, interactions, avgTokens, description }) => {
-              const llmCost = mod.model ? llmCostForTier(mod.model, interactions, avgTokens) : null;
+            {cfg.usage_tiers.map(({ label, interactions, avg_tokens, description }) => {
+              const llmCost = mod.model ? llmCostForTier(mod.model, interactions, avg_tokens, cfg) : null;
               const tco = ent && llmCost !== null ? maintenance + llmCost : null;
               return (
                 <div key={label} className={cn('grid px-2 py-1.5', ent ? 'grid-cols-4' : 'grid-cols-3')}>
@@ -298,7 +292,7 @@ function TcoBadge({ mod }: { mod: ModuleInfo }) {
           </div>
           {ent && (
             <p className="text-xs text-muted-foreground/60">
-              TCO = ${maintenance}/mo maintenance{!mod.functional ? ` (early access rate, standard is $${ENTERPRISE_MAINTENANCE_FEE_USD}/mo)` : ''} + LLM tokens billed by your model provider.
+              TCO = ${maintenance}/mo maintenance{!mod.functional ? ` (early access rate, standard is $${cfg.pricing.maintenance_standard_usd}/mo)` : ''} + LLM tokens billed by your model provider.
             </p>
           )}
         </div>
@@ -395,9 +389,9 @@ function ModuleAvatar({ mod, className, imgClassName }: { mod: ModuleInfo; class
 // Module card
 // ---------------------------------------------------------------------------
 
-function ModuleCard({ mod, onClick }: { mod: ModuleInfo; onClick: () => void }) {
+function ModuleCard({ mod, onClick, cfg }: { mod: ModuleInfo; onClick: () => void; cfg: MarketplaceConfig }) {
   const isPortrait = mod.category === 'domain';
-  const pricing = getModulePricing(mod);
+  const pricing = getModulePricing(mod, cfg);
 
   return (
     // Whole card is clickable; CTA button stops propagation to avoid double-firing
@@ -528,9 +522,9 @@ function ExternalAppCard({ app }: { app: { name: string; url: string; descriptio
 // Agent ID Card panel
 // ---------------------------------------------------------------------------
 
-function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void }) {
+function AgentIdCard({ mod, onClose, cfg }: { mod: ModuleInfo; onClose: () => void; cfg: MarketplaceConfig }) {
   const isPortrait = mod.category === 'domain';
-  const pricing = getModulePricing(mod);
+  const pricing = getModulePricing(mod, cfg);
 
   return (
     <>
@@ -600,7 +594,7 @@ function AgentIdCard({ mod, onClose }: { mod: ModuleInfo; onClose: () => void })
             )}
 
             {/* TCO estimate */}
-            <TcoBadge mod={mod} />
+            <TcoBadge mod={mod} cfg={cfg} />
 
             {/* Module path */}
             <div className="border bg-muted/30 p-3 space-y-1.5">
@@ -652,6 +646,7 @@ export default function MarketplacePage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [data, setData] = useState<ModulesResponse | null>(null);
+  const [mktCfg, setMktCfg] = useState<MarketplaceConfig>(DEFAULT_MARKETPLACE_CONFIG);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMod, setSelectedMod] = useState<ModuleInfo | null>(null);
@@ -662,10 +657,16 @@ export default function MarketplacePage() {
   }, [searchParams]);
 
   useEffect(() => {
+    const apiBase = getApiUrl();
     setLoading(true);
-    authFetch(`${getApiUrl()}/api/modules/`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
-      .then((d: ModulesResponse) => setData(d))
+    Promise.all([
+      authFetch(`${apiBase}/api/modules/`).then((r) => (r.ok ? r.json() : Promise.reject(r.statusText))),
+      authFetch(`${apiBase}/api/modules/config`).then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([modules, cfgRes]: [ModulesResponse, { config: MarketplaceConfig } | null]) => {
+        setData(modules);
+        if (cfgRes?.config) setMktCfg(cfgRes.config);
+      })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   }, []);
@@ -840,7 +841,7 @@ export default function MarketplacePage() {
                     )}
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                       {mods.map((mod) => (
-                        <ModuleCard key={mod.module_path} mod={mod} onClick={() => setSelectedMod(mod)} />
+                        <ModuleCard key={mod.module_path} mod={mod} onClick={() => setSelectedMod(mod)} cfg={mktCfg} />
                       ))}
                     </div>
                   </section>
@@ -874,7 +875,7 @@ export default function MarketplacePage() {
       </div>
 
       {selectedMod && (
-        <AgentIdCard mod={selectedMod} onClose={() => setSelectedMod(null)} />
+        <AgentIdCard mod={selectedMod} onClose={() => setSelectedMod(null)} cfg={mktCfg} />
       )}
     </div>
   );
