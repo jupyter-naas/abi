@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.43.2 (2026-05-14)
+
+### Bug Fixes
+
+- Refactor chat interface tool call labels
+  ([`1e27dd0`](https://github.com/jupyter-naas/abi/commit/1e27dd07edbdbc0cd470050bafce765a7d722b2a))
+
+
 ## v1.43.1 (2026-05-14)
 
 ### Bug Fixes
