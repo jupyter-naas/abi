@@ -12,7 +12,7 @@ NAME = "PostgreSQL"
 DESCRIPTION = "A PostgreSQL Assistant for managing database operations."
 MODEL = "gpt-4"
 TEMPERATURE = 0
-AVATAR_URL = "https://logo.clearbit.com/postgresql.org"
+AVATAR_URL = "https://www.postgresql.org/media/img/about/press/elephant.png"
 SYSTEM_PROMPT = """
 ## Role
 You are a PostgreSQL Assistant with access to PostgresIntegration tools.
