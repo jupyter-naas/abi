@@ -2260,12 +2260,10 @@ function EmptyState({
         help with tasks.
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div className="grid w-full max-w-xl grid-cols-2 gap-3">
-          {suggestions.map((suggestion, index) => {
-            const isOddLastItem = suggestions.length % 2 === 1 && index === suggestions.length - 1;
+        <div className="flex w-full max-w-sm flex-col gap-2">
+          {suggestions.map((suggestion) => {
             const baseClass = cn(
-              'glass-card p-3 text-left text-xs transition-all',
-              isOddLastItem && 'col-span-2 w-full max-w-[calc(50%-0.375rem)] justify-self-center',
+              'glass-card flex items-center justify-between px-4 py-2.5 text-left transition-all',
               suggestion.disabled
                 ? 'opacity-40 cursor-not-allowed'
                 : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
@@ -2273,16 +2271,21 @@ function EmptyState({
 
             const content = (
               <>
-                <span className="font-medium text-sm leading-tight">{suggestion.label}</span>
-                {suggestion.description && (
-                  <span className="mt-0.5 block text-xs text-muted-foreground leading-snug">
-                    {suggestion.description}
-                  </span>
-                )}
-                {suggestion.disabled && (
-                  <span className="mt-0.5 block text-xs text-muted-foreground/60 italic">
-                    Coming soon
-                  </span>
+                <div>
+                  <span className="block text-sm font-medium leading-tight">{suggestion.label}</span>
+                  {suggestion.description && (
+                    <span className="block text-xs text-muted-foreground leading-snug">
+                      {suggestion.description}
+                    </span>
+                  )}
+                  {suggestion.disabled && (
+                    <span className="block text-xs text-muted-foreground/60 italic">
+                      Coming soon
+                    </span>
+                  )}
+                </div>
+                {!suggestion.disabled && (
+                  <span className="ml-3 shrink-0 text-muted-foreground/40">›</span>
                 )}
               </>
             );
