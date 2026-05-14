@@ -2260,10 +2260,11 @@ function EmptyState({
         help with tasks.
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div className="flex w-full max-w-sm flex-col gap-2">
+        <div className="flex w-full max-w-xs sm:max-w-sm flex-col gap-2">
           {suggestions.map((suggestion) => {
+            const tooltipText = [suggestion.label, suggestion.description].filter(Boolean).join(' — ');
             const baseClass = cn(
-              'glass-card flex items-center justify-between px-4 py-2.5 text-left transition-all',
+              'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
               suggestion.disabled
                 ? 'opacity-40 cursor-not-allowed'
                 : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
@@ -2271,10 +2272,10 @@ function EmptyState({
 
             const content = (
               <>
-                <div>
-                  <span className="block text-sm font-medium leading-tight">{suggestion.label}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium leading-tight">{suggestion.label}</span>
                   {suggestion.description && (
-                    <span className="block text-xs text-muted-foreground leading-snug">
+                    <span className="block truncate text-xs text-muted-foreground leading-snug">
                       {suggestion.description}
                     </span>
                   )}
@@ -2295,6 +2296,7 @@ function EmptyState({
               return (
                 <button
                   key={`${suggestion.label}:${suggestion.value}`}
+                  title={tooltipText}
                   onClick={() => {
                     setActivePanelSection(sectionId);
                     router.push(suggestion.cta!);
@@ -2309,6 +2311,7 @@ function EmptyState({
             return (
               <button
                 key={`${suggestion.label}:${suggestion.value}`}
+                title={tooltipText}
                 onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
                 disabled={suggestion.disabled}
                 className={baseClass}
