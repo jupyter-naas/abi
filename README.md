@@ -22,15 +22,21 @@ ABI (Agentic Brain Infrastructure) is the open-source AI Operating System that g
 
 </div>
 
+## Why ABI?
+
+Most AI platforms lock you in: proprietary data models, opaque pipelines, no exit. When the vendor changes pricing or discontinues a model, you have no contingency.
+
+ABI is built for continuity and ownership. Every layer is swappable: LLM providers, infrastructure services, data adapters. Agents reason over context sources you control (knowledge graph, vector store, file system), so your data and logic stay yours regardless of what any upstream vendor does.
+
+It also covers the full stack from ingestion to UI, so you are not stitching together five different tools. Built on open standards ([ISO/IEC 21838-2 BFO](https://www.iso.org/standard/74572.html), [ISO/IEC 42001:2023](https://www.iso.org/standard/42001), EU AI Act-ready), so the outputs are auditable and interoperable.
+
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.12+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
-- LLMs API key: OpenAI and OpenRouter
-
-You also need to have the `docker` command available in your terminal.
+- LLM API keys: any OpenAI-compatible provider (OpenAI, OpenRouter, or equivalent)
 
 ### Get started
 
@@ -80,57 +86,80 @@ abi new workflow     # Scaffold a new workflow
 
 ## How It Works
 
-The atomic unit is the **module**: a self-contained package that models a domain, ingests data about it, and exposes intelligent capabilities on top. Think of it as a semantic data and AI product you enable with a single line in `config.yaml`.
+Everything in ABI is organized around **modules**. A module models a domain, connects to its data sources, and exposes intelligent capabilities on top. You enable one with a single line in `config.yaml`.
 
 A module bundles:
 
-- **Ontologies** — OWL/Turtle files that model the domain as typed entities and relationships in a knowledge graph
-- **Integrations** — connectors to external APIs (GitHub, Salesforce, LinkedIn, Notion, ...)
-- **Pipelines** — ingestion logic that converts raw data into RDF triples and keeps the graph current
-- **Orchestrations** — scheduled tasks and event-driven sensors
-- **Agents** — LLM-powered agents that reason over the knowledge graph, not just text chunks
-- **Workflows** — SPARQL-backed tools that agents and users invoke directly
+- **Agents**: LLM-powered agents that reason over the knowledge graph and dispatch to the right domain capability
+- **Applications**: web UI, REST API, and CLI surfaces that expose module capabilities to end users and operators
+- **Integrations**: connectors to external APIs (GitHub, Salesforce, LinkedIn, Notion, ...) that pull data into the module
+- **Ontologies**: OWL/Turtle files that define the domain as typed entities and relationships in a knowledge graph
+- **Orchestrations**: Dagster-based schedules, jobs, and event sensors that automate module execution
+- **Pipelines**: operations that read and write RDF triples to the knowledge graph (add, merge, insert)
+- **Workflows**: structured callable tools exposed to agents and users that query or act on the knowledge graph
 
-The **Context Engine** wires all services at startup and routes every request to the right agent. **Abi** acts as the supervisor: it reads the intent behind each request and dispatches to the right domain agent or answers directly from the knowledge graph.
+Each infrastructure concern is abstracted as a port with a swappable adapter. Change the adapter in `config.yaml`, no module code changes needed. The community edition ships every service as a Docker container. Enterprise deployments swap each adapter for a managed cloud service or run the whole stack on Kubernetes.
 
-Infrastructure concerns (triple store, vector store, object storage, message bus, cache, secrets) are abstracted as ports with swappable adapters. Change the adapter in `config.yaml`, no code edits needed.
+- **Triple store** (knowledge graph): Community: Apache Fuseki / Enterprise: Amazon Neptune, Stardog, Ontotext GraphDB
+- **Vector store** (semantic search): Community: Qdrant / Enterprise: Pinecone, Weaviate, pgvector, Azure AI Search
+- **Relational store** (agent memory): Community: PostgreSQL / Enterprise: Amazon RDS, Azure Database, Cloud SQL
+- **Object storage** (files and artifacts): Community: MinIO / Enterprise: Amazon S3, Azure Blob Storage, Google Cloud Storage
+- **Message bus** (async task routing): Community: RabbitMQ / Enterprise: Amazon MQ, Azure Service Bus, Google Pub/Sub
+- **Cache** (sessions and hot data): Community: Redis / Enterprise: Amazon ElastiCache, Azure Cache for Redis, Memorystore
+- **Orchestration** (schedules and sensors): Community: Dagster / Enterprise: Dagster Cloud, Airflow on MWAA, Cloud Composer
 
-Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain.
+The **Context Engine** wires all these services at startup and routes every request to the right agent. **Abi** acts as the supervisor: it reads the intent behind each request and dispatches to the right domain agent or answers directly from the knowledge graph, vector store, or file system.
 
-Full architecture: [The ABI Stack](https://docs.naas.ai/architecture/the-stack)
+Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain. Full architecture reference: [The ABI Stack](https://docs.naas.ai/architecture/the-stack).
 
 ## Repository Layout
 
-| Package                | What it does                                                     |
-| ---------------------- | ---------------------------------------------------------------- |
-| `naas-abi-core`        | Infrastructure adapters: storage, vector DB, message bus, SPARQL |
-| `naas-abi`             | Core agents, ontologies, and the Nexus app (API + web UI)        |
-| `naas-abi-cli`         | The `abi` CLI                                                    |
-| `naas-abi-marketplace` | Optional domain agents and third-party integrations              |
+**Your project** (created with `abi new project my_ai`):
+
+```
+my_ai/
+├── src/
+│   └── my_ai/                 # Your module (agents, integrations, ontologies, ...)
+├── config.yaml                # Base module and service configuration
+├── config.local.yaml          # Local overrides (ports, credentials, enabled modules)
+├── config.remote.yaml         # Remote/production overrides
+├── docker-compose.yml         # Local stack definition (generated)
+├── pyproject.toml             # Python project, naas-abi-* installed as dependencies
+└── .env                       # Secrets and environment variables
+```
+
+**This repo** (for contributors):
+
+```
+abi/
+├── libs/
+│   ├── naas-abi-core/         # Infrastructure adapters (storage, vector DB, message bus, SPARQL)
+│   ├── naas-abi/              # Core agents, ontologies, and the Nexus app (API + web UI)
+│   ├── naas-abi-cli/          # The abi CLI
+│   └── naas-abi-marketplace/  # Domain modules and third-party integrations
+├── docs/site/                 # Docusaurus documentation site
+├── docker/                    # Caddy, Dagster, Postgres, and service configs
+├── scripts/                   # Utility scripts (sync, export, datastore, docs generation)
+├── config.local.yaml          # Module and service configuration (local)
+├── config.yaml                # Module and service configuration (base)
+└── docker-compose.yml         # Local stack definition
+```
 
 ## Production Deployment
 
-### Self-Hosted Docker
+### Self-Hosted
+
+Copy your `.env` and config files to the target server, then run:
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.yml up -d
 ```
 
-Full stack with PostgreSQL, Fuseki, Qdrant, MinIO
+All services (PostgreSQL, Fuseki, Qdrant, MinIO, RabbitMQ, Redis, Dagster) start as containers. For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
 
 ### Managed Hosting
 
 Need a hosted, managed deployment? [Get started on naas.ai](https://naas.ai) or reach out to the team directly.
-
-## Why ABI?
-
-Most AI tools are black boxes. ABI is built on open standards so every decision is traceable, every model is replaceable, and you own your data.
-
-**Built on international standards:**
-
-- [ISO/IEC 42001:2023](https://www.iso.org/standard/42001) - AI Management Systems
-- [ISO/IEC 21838-2:2021](https://www.iso.org/standard/74572.html) - Basic Formal Ontology (BFO)
-- EU AI Act compliance-ready
 
 ## Research & Development
 
@@ -142,14 +171,16 @@ Collaborative effort between:
 - **[NCOR](https://ncor.buffalo.edu/)** - National Center for Ontological Research
 - **[Forvis Mazars](https://www.forvismazars.com/)** - Global Audit & Consulting
 
-⭐ **If ABI is useful to you, star the repo to help others find it.**
-
 ## Contributing
 
 We welcome contributions. Open an issue or pull request to get started.
 
 ## License
 
-MIT License - see [LICENSE](https://opensource.org/licenses/MIT)
+MIT License - see [LICENSE](LICENSE)
 
 For enterprise support or managed hosting, visit [naas.ai](https://naas.ai).
+
+---
+
+⭐ If ABI is useful to you, star the repo to help others find it.
