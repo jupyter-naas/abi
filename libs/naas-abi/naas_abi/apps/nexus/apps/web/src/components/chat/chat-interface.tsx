@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffe
 import { createPortal } from 'react-dom';
 import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
@@ -373,6 +373,8 @@ export function ChatInterface() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const router = useRouter();
+
   const {
     activeConversationId,
     selectedAgent,
@@ -382,6 +384,7 @@ export function ChatInterface() {
     getWorkspaceConversations,
     currentWorkspaceId,
     loadConversationMessages,
+    setActivePanelSection,
   } = useWorkspaceStore();
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
@@ -2286,14 +2289,18 @@ function EmptyState({
             );
 
             if (suggestion.cta && !suggestion.disabled) {
+              const sectionId = suggestion.cta.replace(/^\//, '') as Parameters<typeof setActivePanelSection>[0];
               return (
-                <Link
+                <button
                   key={`${suggestion.label}:${suggestion.value}`}
-                  href={suggestion.cta}
+                  onClick={() => {
+                    setActivePanelSection(sectionId);
+                    router.push(suggestion.cta!);
+                  }}
                   className={baseClass}
                 >
                   {content}
-                </Link>
+                </button>
               );
             }
 
