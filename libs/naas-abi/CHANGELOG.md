@@ -2,6 +2,73 @@
 
 <!-- version list -->
 
+## v1.43.0 (2026-05-14)
+
+### Bug Fixes
+
+- **abi-agent**: Comment out chat-with-agent suggestion instead of deleting
+  ([`75c9c6e`](https://github.com/jupyter-naas/abi/commit/75c9c6eea595bbc377e214d107e21081fdd10cf4))
+
+- **abi-agent**: Remove stale chat-with-agent suggestion
+  ([`fbbb89f`](https://github.com/jupyter-naas/abi/commit/fbbb89fbb7e30aa97f6d85261f596bdf8acfb71a))
+
+- **auth**: Redirect to actual workspace ID after login instead of slug fallback
+  ([`9fe43b1`](https://github.com/jupyter-naas/abi/commit/9fe43b12bdbf4e64d4c17606896fdd2d4b513a2b))
+
+- **auth**: Restore tenant branding and clean up login page regressions
+  ([`ff3bfc5`](https://github.com/jupyter-naas/abi/commit/ff3bfc57575ed7d965bc9def3aef083becb46c66))
+
+- **auth**: Route magic-link email through engine email service
+  ([`124f23d`](https://github.com/jupyter-naas/abi/commit/124f23d2da946cc826f609afb2b596bf623522c4))
+
+- **header**: Fix user menu and branch menu blocked by sidebar overlay
+  ([`a23f751`](https://github.com/jupyter-naas/abi/commit/a23f751ba3d4ff4cdc6374f261bd7d42b0ed1d1e))
+
+- **middleware**: Make post-login default workspace configurable
+  ([`88a1362`](https://github.com/jupyter-naas/abi/commit/88a136234c110dea6a238e2b2ffb2ba36f2fd86c))
+
+- **middleware**: Update stale fallback comment to match code
+  ([`d31da10`](https://github.com/jupyter-naas/abi/commit/d31da108b59e8faa1f21cf4e10372caeb475d017))
+
+- **nexus**: Default show_powered_by to false for self-hosted deployments
+  ([`f53f769`](https://github.com/jupyter-naas/abi/commit/f53f769379f75b0a3718144e6e2fca7c3bba8e57))
+
+- **nexus**: Remove orphaned auto_seed_demo_data block from startup
+  ([`14c6a4d`](https://github.com/jupyter-naas/abi/commit/14c6a4d006dd42438a5fd8f5dbfe9e4b5c0df7ad))
+
+- **pr-audit**: Fix three issues found in code review
+  ([`8a1f477`](https://github.com/jupyter-naas/abi/commit/8a1f4772b17f4a1fe7b9fba8827a9cc66fd40739))
+
+- **web**: Cookie SameSite, stable workspace ordering, login render
+  ([`b6350ec`](https://github.com/jupyter-naas/abi/commit/b6350ec8d1cddfdcf13d358ec9a231d112ef3651))
+
+### Chores
+
+- **nexus**: Remove legacy demo seed script and fake data
+  ([`5f06cfc`](https://github.com/jupyter-naas/abi/commit/5f06cfce4f392f2e38de09bfca95c46abe6da86a))
+
+### Documentation
+
+- **nexus**: Remove demo seed references and update credentials
+  ([`e34bd31`](https://github.com/jupyter-naas/abi/commit/e34bd31022205eb57fcf7b45fae74eee4eb92ac0))
+
+### Features
+
+- **auth**: Enable password login for local development
+  ([`bf182cc`](https://github.com/jupyter-naas/abi/commit/bf182cc1d2ffd0f9049e9976a960fa35346d8432))
+
+- **ux**: Pre-fill login email from NEXUS_USER_ADMIN_EMAIL on local stack start
+  ([`92d1fb9`](https://github.com/jupyter-naas/abi/commit/92d1fb90bb4240739a24d777855d67764d315a4d))
+
+### Refactoring
+
+- **middleware**: Replace NEXT_PUBLIC_DEFAULT_WORKSPACE with runtime cookie + server-side env var
+  ([`9affadc`](https://github.com/jupyter-naas/abi/commit/9affadcc4e75e567e7a8673a9779427b246e1a50))
+
+- **middleware**: Strip noise comments, remove dead publicRoutes var
+  ([`28b0b00`](https://github.com/jupyter-naas/abi/commit/28b0b00dbc3e365ca42f38f14940440247a2df1d))
+
+
 ## v1.42.1 (2026-05-14)
 
 ### Bug Fixes
