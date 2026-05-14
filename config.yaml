@@ -36,8 +36,7 @@ modules:
     enabled: true
     config:
       nexus_config:
-        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
-        redis_url: "redis://localhost:6379/0"
+        database_url: "sqlite+aiosqlite:///./storage/nexus.db"
   
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
@@ -77,7 +76,14 @@ modules:
 
   - module: naas_abi_marketplace.domains.document
     enabled: true
-  
+    config:
+      document_agent:
+        model_id: "text-embedding-3-small"
+        dimension: 1536
+        api_key: "{{ secret.OPENAI_API_KEY }}"
+      markdowntovector_pipelines:
+        - api_key: "{{ secret.OPENAI_API_KEY }}"
+
   - module: naas_abi_marketplace.domains.support
     enabled: true
     config:
