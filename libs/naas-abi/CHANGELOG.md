@@ -2,6 +2,110 @@
 
 <!-- version list -->
 
+## v1.46.0 (2026-05-15)
+
+### Bug Fixes
+
+- **agents**: Prevent duplicate agent seeding via ON CONFLICT DO NOTHING
+  ([`bcd452d`](https://github.com/jupyter-naas/abi/commit/bcd452da649d9e913447f052062fadb2a76426af))
+
+- **apps**: Show Bot fallback icon when module logo fails to load
+  ([`30b939a`](https://github.com/jupyter-naas/abi/commit/30b939a84d1d0b03939e071ce897d26e446480a9))
+
+- **chat**: Prevent double-send on suggestion click via isSubmittingRef guard
+  ([`82aa443`](https://github.com/jupyter-naas/abi/commit/82aa44399299007b5cac4f3497ac5fac1984a5ad))
+
+- **marketplace**: Add MarketplaceConfig to NexusConfig to allow yaml override
+  ([`109ebb2`](https://github.com/jupyter-naas/abi/commit/109ebb206e63996c290072f88f977171f11e61ce))
+
+- **marketplace**: Show model cost on preview cards, whole card is clickable
+  ([`ad24a95`](https://github.com/jupyter-naas/abi/commit/ad24a95f14d7dac0765ed723763766858c3922bb))
+
+- **modules**: Correct auth import path for get_current_user_required
+  ([`bc842fe`](https://github.com/jupyter-naas/abi/commit/bc842fe713769207d8196eb68b1825ab9d11294d))
+
+- **modules**: Extract AVATAR_URL/NAME/DESCRIPTION module-level constants from agents
+  ([`612cc81`](https://github.com/jupyter-naas/abi/commit/612cc817e5c308883ed3ce853fbe5e8976992500))
+
+- **modules**: Handle namespace package — use __path__ instead of __file__
+  ([`d7bd6db`](https://github.com/jupyter-naas/abi/commit/d7bd6db70e3a851413c97618e39c9ac09c21910c))
+
+- **modules**: Include domain modules without __init__.py in catalog scan
+  ([`f0d3ad5`](https://github.com/jupyter-naas/abi/commit/f0d3ad5d201b7d51cd3747a4dfb8afef327a982b))
+
+- **modules**: Match multi-line logo_url/description regex in agent files
+  ([`9e78124`](https://github.com/jupyter-naas/abi/commit/9e78124abad8d865d9da9cc8d23a9ed45523e07e))
+
+- **sidebar**: Use Store icon for Marketplace nav item instead of LayoutGrid
+  ([`fc94f8d`](https://github.com/jupyter-naas/abi/commit/fc94f8d54b8e69c9935bebd96072f304dff0f652))
+
+- **suggestions**: Click sends message directly, matching Claude UX
+  ([`058a5da`](https://github.com/jupyter-naas/abi/commit/058a5da4ccaa1bae9b4b27b054f0fbf90426c5ff))
+
+- **suggestions**: Update Browse Marketplace cta + fix hover/click input clearing
+  ([`8d5ad60`](https://github.com/jupyter-naas/abi/commit/8d5ad60be24d93030fb9f56caca5ad5f09fc21dc))
+
+### Chores
+
+- **cleanup**: Remove legacy /apps route after rename to /marketplace
+  ([`2aef5c7`](https://github.com/jupyter-naas/abi/commit/2aef5c757c7bb698b61fef221ca6b7c3d5752791))
+
+### Features
+
+- **apps**: Add Tools tab with workspace productivity roadmap cards
+  ([`4fe9d0c`](https://github.com/jupyter-naas/abi/commit/4fe9d0c91d43c8d95b5ca915a65bc1ae32dd69f5))
+
+- **apps**: Agent ID card panel with enriched metadata
+  ([`85d34dc`](https://github.com/jupyter-naas/abi/commit/85d34dce891a1516752ed0dfb9d289b0887d6b01))
+
+- **apps**: Rebuild Apps section as a real marketplace
+  ([`9cdc8f2`](https://github.com/jupyter-naas/abi/commit/9cdc8f2c832ab805e8e061cc9ba6b3a21b0e5476))
+
+- **apps**: Redesign module cards with prominent hero image area
+  ([`24d087f`](https://github.com/jupyter-naas/abi/commit/24d087f549d14f3ab3c93726418104b67df8bf7b))
+
+- **marketplace**: Add enterprise value proposition to agent id card
+  ([`e7437bc`](https://github.com/jupyter-naas/abi/commit/e7437bc2622a5a9e570bf50a78b2f23016515a85))
+
+- **marketplace**: Add TCO column to usage tier table (maintenance + LLM)
+  ([`00eff80`](https://github.com/jupyter-naas/abi/commit/00eff8085c41bf8342290b1a5d76f333615cd55a))
+
+- **marketplace**: Community vs enterprise pricing model
+  ([`4a0f048`](https://github.com/jupyter-naas/abi/commit/4a0f04887a5d031d57c92fb063b4fc49d8ee458f))
+
+- **marketplace**: Credible enterprise pricing — $79/mo standard, $49/mo early access
+  ([`8a7524f`](https://github.com/jupyter-naas/abi/commit/8a7524fa7a5bce450fb164ad9657ed00e65863c4))
+
+- **marketplace**: Make pricing data-driven via config.yaml + API
+  ([`2e05316`](https://github.com/jupyter-naas/abi/commit/2e05316e6cb792c824e273f7c4a926a69f4b339f))
+
+- **marketplace**: Rename /apps route to /marketplace
+  ([`30b1b42`](https://github.com/jupyter-naas/abi/commit/30b1b424c8c3ae707f0733562813bd31d69ec727))
+
+- **marketplace**: Reprice to $199/mo standard, $99/mo early access
+  ([`1319477`](https://github.com/jupyter-naas/abi/commit/1319477e49aaf8bf0595a4e0bd793d8ca44e3880))
+
+- **marketplace**: Reprice to expert retainer model — $499/mo standard, $299/mo early access
+  ([`de4165e`](https://github.com/jupyter-naas/abi/commit/de4165e015748e3836a4e4d78f578a4e14acb44b))
+
+- **marketplace**: Separate maintenance fee from LLM token costs in TCO
+  ([`9de7b20`](https://github.com/jupyter-naas/abi/commit/9de7b20d65c6573c867adb4308e3e2145cae1a21))
+
+- **marketplace**: Sharp corners, pricing badges, and CTA buttons
+  ([`4102056`](https://github.com/jupyter-naas/abi/commit/4102056ac8a34fc467f015af16e5fcb4c55d8b7b))
+
+- **marketplace**: TCO estimate and model-based pricing on cards
+  ([`5656441`](https://github.com/jupyter-naas/abi/commit/565644156c95f581159f2fba56bff0e007c487e9))
+
+- **marketplace**: Unify marketplace — type filter pills, no tabs
+  ([`380e206`](https://github.com/jupyter-naas/abi/commit/380e2060e8e63d124e3df4cb1632de74fb678f2d))
+
+### Performance Improvements
+
+- **modules**: Fast filesystem catalog scan + sidebar sub-nav restore
+  ([`1c1a0d3`](https://github.com/jupyter-naas/abi/commit/1c1a0d34b3ea973586f6143ef4458b897c64989a))
+
+
 ## v1.45.1 (2026-05-15)
 
 
