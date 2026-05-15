@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AppWindow, Bot, LayoutGrid, Store } from 'lucide-react';
+import { LayoutGrid, Bot, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
@@ -65,7 +65,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
   return (
     <CollapsibleSection
       id="apps"
-      icon={<AppWindow size={18} />}
+      icon={<LayoutGrid size={18} />}
       label="Apps"
       description="Web apps from your installed modules"
       href={basePath}
