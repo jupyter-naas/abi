@@ -295,6 +295,7 @@ export function ChatInterface() {
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [requestSentAt, setRequestSentAt] = useState<number | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const streamControllerRef = useRef<AbortController | null>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -1183,6 +1184,7 @@ export function ChatInterface() {
     setAttachedImages([]); // Clear attached images after adding to message
     setImageError(null);
     // setSearchEnabled(false); // Reset search toggle after sending
+    setRequestSentAt(Date.now());
     setIsLoading(true);
 
     try {
@@ -1270,6 +1272,8 @@ export function ChatInterface() {
         let streamActivityLine: string | undefined = 'Processing...';
         let streamToolCalls: ToolCall[] = [];
         let hasDetailedActivity = false;
+        let firstCallModelSeen = false;
+        let lastEventWasToolResponse = false;
 
         const singleLine = (value: string) => value.replace(/\s+/g, ' ').trim();
         const truncateLine = (value: string, max = 140) =>
@@ -1284,10 +1288,13 @@ export function ChatInterface() {
             .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
 
-        const formatToolLabel = (raw: string): { prefix: 'Tool'; name: string } => ({
-          prefix: 'Tool',
-          name: formatToolName(raw),
-        });
+        const formatToolLabel = (raw: string): { prefix: 'Tool' | 'Routing to'; name: string } => {
+          if (raw.startsWith('transfer_to')) {
+            const target = raw.slice('transfer_to'.length).replace(/^_/, '');
+            return { prefix: 'Routing to', name: formatToolName(target || raw) };
+          }
+          return { prefix: 'Tool', name: formatToolName(raw) };
+        };
 
         const handleToolStartEvent = (rawTool: string, input?: string) => {
           const { prefix, name } = formatToolLabel(rawTool);
@@ -1307,7 +1314,7 @@ export function ChatInterface() {
             status: 'running',
             ...(input ? { input } : {}),
           });
-          streamActivityLine = `${prefix}: ${name}`;
+          streamActivityLine = prefix === 'Routing to' ? `${prefix} ${name}` : name;
           hasDetailedActivity = true;
         };
 
@@ -1335,13 +1342,14 @@ export function ChatInterface() {
         const handleAgentStepEvent = (
           stepType: 'agent_routing' | 'call_model',
           rawAgent: string,
+          labelOverride?: string,
         ) => {
           const stepName = formatToolName(rawAgent);
           if (!stepName) return;
 
-          const label = stepType === 'call_model'
-            ? `Calling ${stepName}`
-            : `Routing to ${stepName}`;
+          const label = labelOverride ?? (stepType === 'call_model'
+            ? 'Thinking'
+            : `Routing to ${stepName}`);
 
           const last = streamToolCalls[streamToolCalls.length - 1];
           if (last && last.status === 'running') {
@@ -1378,13 +1386,14 @@ export function ChatInterface() {
               if (!rawTool) return false;
               const input = getStringValue(payload.input, payload.data) || undefined;
               handleToolStartEvent(rawTool, input);
-              streamActivityLine = `Tool: ${formatToolName(rawTool)}`;
+              streamActivityLine = formatToolName(rawTool);
               hasDetailedActivity = true;
               return true;
             }
             case 'tool_response': {
               const output = getStringValue(payload.output, payload.content, payload.data);
               handleToolResponseEvent(output);
+              lastEventWasToolResponse = true;
               return true;
             }
             case 'agent.question': {
@@ -1398,10 +1407,19 @@ export function ChatInterface() {
             case 'agent_calling': {
               const rawAgent = getStringValue(payload.agent, payload.data);
               if (!rawAgent) return false;
-              const agentName = formatToolName(rawAgent);
-              if (!agentName) return false;
-              handleAgentStepEvent('call_model', rawAgent);
-              streamActivityLine = `Calling ${agentName}`;
+              if (!formatToolName(rawAgent)) return false;
+              // Skip the very first call_model — fires before any tool use
+              if (!firstCallModelSeen) {
+                firstCallModelSeen = true;
+                lastEventWasToolResponse = false;
+                return true;
+              }
+              const callModelLabel = lastEventWasToolResponse
+                ? 'Processing Tool Response'
+                : 'Thinking';
+              lastEventWasToolResponse = false;
+              handleAgentStepEvent('call_model', rawAgent, callModelLabel);
+              streamActivityLine = callModelLabel;
               hasDetailedActivity = true;
               return true;
             }
@@ -1799,6 +1817,7 @@ export function ChatInterface() {
                   streamControllerRef.current?.abort();
                 }}
                 onPreviewUrl={setPreviewUrl}
+                requestSentAt={requestSentAt}
               />
             ))}
             {isLoading && !isStreaming && (
@@ -2358,7 +2377,9 @@ function TypingDots() {
 
 function formatToolCallLabel(prefix: string, name: string): string {
   if (prefix === 'Agent') return name;
-  return prefix === 'Handoff to' ? `${prefix} ${name}` : `${prefix}: ${name}`;
+  if (prefix === 'Tool') return name;
+  if (prefix === 'Routing to' || prefix === 'Handoff to') return `${prefix} ${name}`;
+  return `${prefix}: ${name}`;
 }
 
 function ToolCallsDropdown({
@@ -2366,11 +2387,13 @@ function ToolCallsDropdown({
   isProcessing,
   showStop,
   onStop,
+  startTime,
 }: {
   toolCalls: ToolCall[];
   isProcessing: boolean;
   showStop: boolean;
   onStop: () => void;
+  startTime?: number | null;
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
@@ -2391,8 +2414,8 @@ function ToolCallsDropdown({
     if (isProcessing) {
       wasProcessingRef.current = true;
       if (processingStartRef.current === null) {
-        processingStartRef.current = Date.now();
-        setElapsedSeconds(0);
+        processingStartRef.current = startTime ?? Date.now();
+        setElapsedSeconds(Math.floor((Date.now() - processingStartRef.current) / 1000));
       }
       if (autoCollapsed) {
         setIsOpen(true);
@@ -2405,7 +2428,7 @@ function ToolCallsDropdown({
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [isProcessing, autoCollapsed]);
+  }, [isProcessing, autoCollapsed, startTime]);
 
   useEffect(() => {
     if (!isProcessing) {
@@ -2602,6 +2625,7 @@ const MessageBubble = React.memo(function MessageBubble({
   showStop,
   onStop,
   onPreviewUrl,
+  requestSentAt,
 }: {
   message: Message;
   currentSelectedAgent: string;
@@ -2609,6 +2633,7 @@ const MessageBubble = React.memo(function MessageBubble({
   showStop: boolean;
   onStop: () => void;
   onPreviewUrl?: (url: string) => void;
+  requestSentAt?: number | null;
 }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
@@ -2683,12 +2708,12 @@ const MessageBubble = React.memo(function MessageBubble({
     (thinking !== null ? (!response || endsWithCaret) : (response === '▌'))
   );
   
-  // Live elapsed timer while processing
+  // Live elapsed timer while processing — starts from requestSentAt if provided
   useEffect(() => {
     if (isStillProcessing) {
       if (processingStartRef.current === null) {
-        processingStartRef.current = Date.now();
-        setElapsedSeconds(0);
+        processingStartRef.current = requestSentAt ?? Date.now();
+        setElapsedSeconds(Math.floor((Date.now() - processingStartRef.current) / 1000));
       }
       const interval = setInterval(() => {
         setElapsedSeconds(Math.floor((Date.now() - (processingStartRef.current ?? Date.now())) / 1000));
@@ -2697,7 +2722,7 @@ const MessageBubble = React.memo(function MessageBubble({
     } else {
       processingStartRef.current = null;
     }
-  }, [isStillProcessing]);
+  }, [isStillProcessing, requestSentAt]);
 
   // Auto-close thinking 3s after processing finishes
   useEffect(() => {
@@ -3045,6 +3070,7 @@ const MessageBubble = React.memo(function MessageBubble({
               isProcessing={isStillProcessing}
               showStop={showStop}
               onStop={onStop}
+              startTime={requestSentAt}
             />
           )}
           {!isUser && !message.toolCalls && (activityLine || (isStillProcessing && showStop)) && (
