@@ -529,6 +529,8 @@ export default function AppsPage() {
           const mod = installed.find((m) => m.module_path === openParam);
           if (mod?.app_url) {
             setActiveApp({ kind: 'module', data: mod, url: mod.app_url });
+            setOpenAppModule(mod);
+            setActivePanelSection('apps');
           } else {
             // Try tenant apps by URL
             const tenantApp = tenant.apps.find((a) => a.url === openParam);
