@@ -11,11 +11,8 @@ import logging
 from core.cache import TTLCache
 from core.http_client import get_client
 from ports.models import CCTVCamera
-from services.cctv.CCTVPort import ICCTVAdapter, ICCTVService
-from services.cctv.adapters.london import LondonAdapter
 from services.cctv.adapters.mideast import MideastAdapter
-from services.cctv.adapters.nyc import NYCAdapter
-from services.webcams.adapters.openwebcamdb import OpenWebcamDBAdapter
+from services.cctv.CCTVPort import ICCTVAdapter, ICCTVService
 
 log = logging.getLogger(__name__)
 

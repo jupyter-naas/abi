@@ -81,6 +81,14 @@ modules:
         - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
 
+  - module: naas_abi_marketplace.alpha.wsr
+    enabled: true
+    config:
+      opensky_client_id: "{{ secret.OPENSKY_CLIENT_ID }}"
+      opensky_client_secret: "{{ secret.OPENSKY_CLIENT_SECRET }}"
+      tfl_app_key: "{{ secret.TFL_APP_KEY }}"
+      openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
+
   - module: naas_abi_marketplace.domains.document
     enabled: true
   
