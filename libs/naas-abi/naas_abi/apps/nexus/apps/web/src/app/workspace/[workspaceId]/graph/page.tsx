@@ -655,24 +655,27 @@ export default function GraphPage() {
                 ? namesData.graphs
                 : [];
 
-            // Proper type guard: id AND label must be string
+            // Proper type guard: id, label, and uri must be string
             normalized = graphs.filter(
-              (g: unknown): g is { id: string; label: string } =>
+              (g: unknown): g is { id: string; label: string; uri: string } =>
                 typeof g === "object" &&
                 g !== null &&
                 "id" in g &&
                 "label" in g &&
+                "uri" in g &&
                 typeof (g as any).id === "string" &&
-                typeof (g as any).label === "string"
+                typeof (g as any).label === "string" &&
+                typeof (g as any).uri === "string"
             );
 
             if (normalized.length === 0) {
               setGraphOptions([]);
             } else {
               defaultGraphName = normalized[0].id;
-              const optionsToCache = normalized.map((g: { id: string; label?: string }) => ({
+              const optionsToCache = normalized.map((g: { id: string; label?: string; uri: string }) => ({
                 id: g.id,
                 name: g.label ?? g.id,
+                uri: g.uri,
               }));
               setGraphOptions(optionsToCache);
               writeCache(graphListCache, listCacheKey, {
