@@ -127,6 +127,16 @@ modules:
         - "x-ai/grok-4.1-fast"
 
 
+  - module: naas_abi_marketplace.alpha.wsr
+    enabled: true
+    config:
+      opensky_client_id: ""
+      opensky_client_secret: ""
+      tfl_app_key: ""
+      openwebcamdb_api_key: ""
+      demo_login: "demo@naas.ai"
+      demo_password: "demo1234"
+
   - module: naas_abi_marketplace.domains.document
     enabled: true
     config:
