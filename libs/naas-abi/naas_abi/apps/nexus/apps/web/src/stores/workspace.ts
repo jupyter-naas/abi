@@ -65,6 +65,7 @@ export interface Message {
   toolCalls?: ToolCall[]; // Ordered list of tool invocations for this message
   images?: string[]; // Base64-encoded images for multimodal chat
   thinkingDuration?: number; // Duration in seconds the AI spent "thinking"
+  executionTime?: number; // Total seconds from request sent to response complete
   sources?: string[]; // filenames of RAG documents used to answer
   // Author attribution (preserved across sessions and users)
   authorId?: string;
@@ -199,6 +200,7 @@ interface WorkspaceState {
     sources?: string[],
     activityLine?: string | null,
     toolCalls?: ToolCall[] | null,
+    executionTime?: number,
   ) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
@@ -376,7 +378,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }));
   },
 
-  updateLastMessage: (conversationId, content, thinkingDuration, sources, activityLine, toolCalls) => {
+  updateLastMessage: (conversationId, content, thinkingDuration, sources, activityLine, toolCalls, executionTime) => {
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
@@ -391,6 +393,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                       ...(sources !== undefined && { sources }),
                       ...(activityLine !== undefined && { activityLine: activityLine || undefined }),
                       ...(toolCalls !== undefined && { toolCalls: toolCalls || undefined }),
+                      ...(executionTime !== undefined && { executionTime }),
                     }
                   : msg
               ),
