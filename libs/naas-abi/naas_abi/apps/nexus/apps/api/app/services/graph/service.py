@@ -107,7 +107,7 @@ def _list_individuals(
     workspace_id: str,
     graph_names: list[str],
     graph_filters: list[dict[str, str | None]],
-    limit: int = 500,
+    limit: int = 200,
     depth: int = 2,
 ) -> GraphNetworkData:
     sparql_utils = SPARQLUtils(triple_store)
@@ -141,6 +141,7 @@ def _list_individuals(
             BIND(?s AS ?uri)
         }}
     }}
+    LIMIT {int(limit)}
     """
     rows = triple_store.query(query)
     nodes: dict[str, dict[str, Any]] = {}
@@ -304,8 +305,20 @@ def _build_graph_overview(
             assert isinstance(row_edge, ResultRow)
             edges.append({"s": str(row_edge.s), "p": str(row_edge.p), "o": str(row_edge.o)})
 
+    count_query = f"""
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT (COUNT(DISTINCT ?uri) AS ?total)
+    WHERE {{
+        GRAPH <{str(graph_uri)}> {{
+            ?uri a owl:NamedIndividual .
+        }}
+    }}
+    """
+    count_rows = list(triple_store.query(count_query))
+    total_instances = int(count_rows[0].total) if count_rows else len(nodes)  # type: ignore[attr-defined]
+
     kpis: dict[str, Any] = {
-        "total_instances": len(nodes),
+        "total_instances": total_instances,
         "total_relationships": len(edges),
         "average_degree": (2 * len(edges) / len(nodes)) if nodes else 0,
         "density": (len(edges) / (len(nodes) * (len(nodes) - 1))) if len(nodes) > 1 else 0,
@@ -419,7 +432,7 @@ class GraphService:
         return _build_graph_overview(triple_store=store, graph_uri=URIRef(graph_uri), limit=limit)
 
     async def get_graph_network(
-        self, workspace_id: str, graph_uri: str, limit: int = 500
+        self, workspace_id: str, graph_uri: str, limit: int = 200
     ) -> GraphNetworkData:
         store = self._get_triple_store()
         return _list_individuals(
@@ -436,7 +449,7 @@ class GraphService:
         workspace_id: str,
         graph_names: list[str],
         graph_filters: list[dict[str, str | None]],
-        limit: int = 500,
+        limit: int = 200,
         depth: int = 2,
     ) -> GraphNetworkData:
         return _list_individuals(
