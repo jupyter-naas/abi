@@ -1782,7 +1782,7 @@ export function ChatInterface() {
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
             suggestions={selectedAgentData?.suggestions}
-            onSuggestionClick={(prompt) => { setInput(prompt); focusChatInput(); }}
+            onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
             onSuggestionHover={(value) => setInput(value)}
             onSuggestionLeave={() => setInput('')}
           />
@@ -2313,7 +2313,6 @@ function EmptyState({
                 <button
                   key={`${suggestion.label}:${suggestion.value}`}
                   onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
-                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     setActivePanelSection(sectionId);
                     router.push(suggestion.cta!);
@@ -2329,7 +2328,6 @@ function EmptyState({
               <button
                 key={`${suggestion.label}:${suggestion.value}`}
                 onMouseEnter={() => !suggestion.disabled && onSuggestionHover?.(suggestion.value)}
-                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
                 disabled={suggestion.disabled}
                 className={baseClass}
