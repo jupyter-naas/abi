@@ -168,6 +168,19 @@ export interface GitCommit {
 // Sidebar expandable sections
 export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace';
 
+export interface OpenAppModule {
+  module_path: string;
+  name: string;
+  description?: string;
+  logo_url: string | null;
+  category: string;
+  app_url?: string | null;
+  demo_login?: string | null;
+  demo_password?: string | null;
+  maintainer?: string | null;
+  tier?: string | null;
+}
+
 interface WorkspaceState {
   // Navigation
   activeNav: NavigationItem;
@@ -180,6 +193,10 @@ interface WorkspaceState {
   toggleSection: (section: SidebarSection) => void;
   activePanelSection: SidebarSection | null;
   setActivePanelSection: (section: SidebarSection | null) => void;
+
+  // Currently open app (for Apps section panel detail view)
+  openAppModule: OpenAppModule | null;
+  setOpenAppModule: (mod: OpenAppModule | null) => void;
 
   // Context panel
   contextPanelOpen: boolean;
@@ -311,6 +328,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     })),
   activePanelSection: null,
   setActivePanelSection: (section) => set({ activePanelSection: section }),
+
+  openAppModule: null,
+  setOpenAppModule: (mod) => set({ openAppModule: mod }),
 
   // Context panel
   contextPanelOpen: false,

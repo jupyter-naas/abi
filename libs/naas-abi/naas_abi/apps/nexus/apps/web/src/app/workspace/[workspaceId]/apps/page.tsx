@@ -491,7 +491,7 @@ function EmptyState({ hasSearch, workspaceId }: { hasSearch: boolean; workspaceI
 
 export default function AppsPage() {
   const tenant = useTenant();
-  const { currentWorkspaceId } = useWorkspaceStore();
+  const { currentWorkspaceId, setOpenAppModule } = useWorkspaceStore();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -500,6 +500,11 @@ export default function AppsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeApp, setActiveApp] = useState<AppEntry | null>(null);
+
+  useEffect(() => {
+    return () => { setOpenAppModule(null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const apiBase = getApiUrl();
@@ -533,16 +538,16 @@ export default function AppsPage() {
 
   const handleClose = () => {
     setActiveApp(null);
-    // Clear the ?open param without pushing a new history entry
+    setOpenAppModule(null);
     const base = `/workspace/${currentWorkspaceId}/apps`;
     router.replace(base);
   };
 
   const handleOpen = (entry: AppEntry) => {
     setActiveApp(entry);
-    const param = entry.kind === 'module'
-      ? entry.data.module_path
-      : entry.data.url;
+    if (entry.kind === 'module') setOpenAppModule(entry.data);
+    else setOpenAppModule(null);
+    const param = entry.kind === 'module' ? entry.data.module_path : entry.data.url;
     const base = `/workspace/${currentWorkspaceId}/apps`;
     router.replace(`${base}?open=${encodeURIComponent(param)}`);
   };

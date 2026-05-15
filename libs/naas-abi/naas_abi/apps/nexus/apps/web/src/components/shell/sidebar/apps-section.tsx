@@ -9,11 +9,12 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { APP_CATEGORIES } from '@/lib/app-constants';
+import { type OpenAppModule } from '@/stores/workspace';
 
 interface ModuleInfo {
   module_path: string;
@@ -165,12 +166,10 @@ function AppDetailView({ mod, basePath }: { mod: ModuleInfo; basePath: string })
 }
 
 export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
-  const { currentWorkspaceId, setActivePanelSection } = useWorkspaceStore();
+  const { currentWorkspaceId, setActivePanelSection, openAppModule } = useWorkspaceStore();
   const basePath = getWorkspacePath(currentWorkspaceId, '/apps');
   const marketplacePath = getWorkspacePath(currentWorkspaceId, '/marketplace?type=applications');
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const openParam = searchParams?.get('open');
   const isOnApps = pathname?.includes('/apps');
 
   const [apps, setApps] = useState<ModuleInfo[]>([]);
@@ -203,10 +202,8 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
       );
     }
 
-    const openedApp = openParam ? apps.find(m => m.module_path === openParam) : null;
-
-    if (openedApp) {
-      return <AppDetailView mod={openedApp} basePath={basePath} />;
+    if (openAppModule) {
+      return <AppDetailView mod={openAppModule} basePath={basePath} />;
     }
 
     return (
@@ -216,7 +213,12 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
             <Link
               key={mod.module_path}
               href={`${basePath}?open=${encodeURIComponent(mod.module_path)}`}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                openAppModule?.module_path === mod.module_path
+                  ? 'bg-muted text-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
             >
               <ModuleIcon mod={mod} size={14} />
               <span className="truncate">{mod.name}</span>
@@ -227,7 +229,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
             href={basePath}
             className={cn(
               'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              isOnApps && !openParam
+              isOnApps && !openAppModule
                 ? 'bg-muted text-foreground font-medium'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
