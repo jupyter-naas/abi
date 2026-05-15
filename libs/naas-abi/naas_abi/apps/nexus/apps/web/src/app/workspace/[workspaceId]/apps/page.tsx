@@ -397,7 +397,7 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft size={15} />
-          <span className="hidden sm:inline">Apps</span>
+          <span className="hidden sm:inline">Back</span>
         </button>
         <div className="h-4 w-px bg-border" />
         <span className="text-sm font-medium truncate flex-1">{name}</span>
