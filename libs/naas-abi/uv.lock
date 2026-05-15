@@ -2227,7 +2227,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "1.46.0"
+version = "1.47.0"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
@@ -2312,7 +2312,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "1.37.0"
+version = "1.37.1"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
