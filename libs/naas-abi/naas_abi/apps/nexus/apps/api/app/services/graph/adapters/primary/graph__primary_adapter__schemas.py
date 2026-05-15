@@ -26,12 +26,12 @@ class GraphCreate(BaseModel):
 
 class GraphClear(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
-    id: str = Field(..., min_length=1, max_length=200)
+    uri: str = Field(..., min_length=1)
 
 
 class GraphDelete(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
-    id: str = Field(..., min_length=1, max_length=200)
+    uri: str = Field(..., min_length=1)
 
 
 class GraphOverview(BaseModel):

@@ -19,6 +19,7 @@ interface GraphItem {
   id: string;
   name: string;
   type: 'workspace' | 'user';
+  uri: string;
 }
 
 interface GraphPackItem {
@@ -29,6 +30,7 @@ interface GraphPackItem {
 interface GraphApiItem {
   id: string;
   label?: string;
+  uri: string;
 }
 
 interface GraphPackApiItem {
@@ -42,6 +44,8 @@ function isGraphApiItem(value: unknown): value is GraphApiItem {
     && typeof value === 'object'
     && 'id' in value
     && typeof (value as { id: unknown }).id === 'string'
+    && 'uri' in value
+    && typeof (value as { uri: unknown }).uri === 'string'
   );
 }
 
@@ -278,6 +282,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
                   id: g.id,
                   name: g.label ?? g.id,
                   type: 'workspace' as const,
+                  uri: g.uri,
                 }))
                 .sort((a, b) => a.name.localeCompare(b.name));
               return {
@@ -294,6 +299,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
               id: g.id,
               name: g.label ?? g.id,
               type: 'workspace' as const,
+              uri: g.uri,
             }))
             .sort((a, b) => a.name.localeCompare(b.name));
           graphPacks = graphs.length > 0 ? [{ roleLabel: 'unknown', graphs }] : [];
@@ -527,7 +533,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
                                       workspace_id: currentWorkspaceId,
-                                      graph_uri: graph.id,
+                                      uri: graph.uri,
                                     }),
                                   });
                                   if (!response.ok) {
@@ -571,7 +577,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
                                       workspace_id: currentWorkspaceId,
-                                      graph_uri: graph.id,
+                                      uri: graph.uri,
                                     }),
                                   });
                                   if (!response.ok) {
