@@ -13,7 +13,6 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.port import (
     InferenceServerRecord,
 )
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -88,68 +87,49 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
         )
 
     async def create(self, data: AgentCreateInput) -> AgentRecord:
-        row = {
-            "id": str(uuid4()),
-            "workspace_id": data.workspace_id,
-            "name": data.name,
-            "class_name": data.class_name,
-            "module_path": data.module_path,
-            "description": data.description,
-            "system_prompt": data.system_prompt,
-            "model_id": data.model_id,
-            "provider": data.provider,
-            "logo_url": data.logo_url,
-            "enabled": data.enabled,
-        }
-        stmt = (
-            pg_insert(AgentConfigModel)
-            .values(**row)
-            .on_conflict_do_nothing(constraint="uq_agent_configs_workspace_class")
-            .returning(AgentConfigModel)
+        agent_model = AgentConfigModel(
+            id=str(uuid4()),
+            workspace_id=data.workspace_id,
+            name=data.name,
+            class_name=data.class_name,
+            module_path=data.module_path,
+            description=data.description,
+            system_prompt=data.system_prompt,
+            model_id=data.model_id,
+            provider=data.provider,
+            logo_url=data.logo_url,
+            enabled=data.enabled,
         )
-        result = await self.db.execute(stmt)
+        self.db.add(agent_model)
         await self.db.commit()
-        inserted = result.scalar_one_or_none()
-        if inserted is not None:
-            return self._to_record(inserted)
-        # Row already existed (race condition) — fetch the canonical row.
-        existing = await self.db.execute(
-            select(AgentConfigModel).where(
-                AgentConfigModel.workspace_id == data.workspace_id,
-                AgentConfigModel.class_name == data.class_name,
-            )
-        )
-        return self._to_record(existing.scalar_one())
+        await self.db.refresh(agent_model)
+        return self._to_record(agent_model)
 
     async def create_many(self, agents: list[AgentCreateInput]) -> list[AgentRecord]:
         if not agents:
             return []
 
-        rows = [
-            {
-                "id": str(uuid4()),
-                "workspace_id": data.workspace_id,
-                "name": data.name,
-                "class_name": data.class_name,
-                "module_path": data.module_path,
-                "description": data.description,
-                "system_prompt": data.system_prompt,
-                "model_id": data.model_id,
-                "provider": data.provider,
-                "logo_url": data.logo_url,
-                "enabled": data.enabled,
-            }
-            for data in agents
-        ]
-        stmt = (
-            pg_insert(AgentConfigModel)
-            .values(rows)
-            .on_conflict_do_nothing(constraint="uq_agent_configs_workspace_class")
-            .returning(AgentConfigModel)
-        )
-        result = await self.db.execute(stmt)
+        models: list[AgentConfigModel] = []
+        for data in agents:
+            model = AgentConfigModel(
+                id=str(uuid4()),
+                workspace_id=data.workspace_id,
+                name=data.name,
+                class_name=data.class_name,
+                module_path=data.module_path,
+                description=data.description,
+                system_prompt=data.system_prompt,
+                model_id=data.model_id,
+                provider=data.provider,
+                logo_url=data.logo_url,
+                enabled=data.enabled,
+            )
+            self.db.add(model)
+            models.append(model)
+
         await self.db.commit()
-        models = list(result.scalars())
+        for model in models:
+            await self.db.refresh(model)
 
         return [self._to_record(model) for model in models]
 
