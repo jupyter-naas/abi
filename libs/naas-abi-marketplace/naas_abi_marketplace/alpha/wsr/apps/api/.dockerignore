@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+.env
+.env.*
+!.env.example
+uv.lock

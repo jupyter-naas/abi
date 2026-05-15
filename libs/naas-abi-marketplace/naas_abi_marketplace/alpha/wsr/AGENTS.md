@@ -1,62 +1,60 @@
-# WSR — Agent & Contributor Guide
+# WSR — Agent and Contributor Guide
 
-This document is the authoritative reference for adding anything to the WSR (World Situation Room) project. Read it completely before making any change. Every rule here exists because a deviation caused a real bug or architectural regression.
+Read this completely before making any change. Every rule exists because a deviation caused a real bug or architectural regression.
 
 ---
 
-## 1. Mental model — what WSR actually is
+## 1. Mental model
 
 WSR is a **real-time geospatial intelligence fuser**. The globe is the UI. Data flows in from external APIs, gets normalised, and gets rendered as Cesium primitives. The architecture enforces a strict separation of concerns at every layer boundary.
 
 ```
 External APIs
     ↓  (adapter — infrastructure boundary)
-Backend services  →  FastAPI routers  →  JSON over HTTP
-    ↓  (data source adapter — frontend fetch boundary)
-GlobeEngine
+apps/api services  →  FastAPI routers  →  JSON over HTTP
+    ↓  (Next.js proxy rewrite — /api/* → localhost:8001)
+apps/web GlobeEngine
     ↓  (layer adapter — Cesium boundary)
 Cesium WebGL primitives  →  Analyst's screen
 ```
 
-**Every concept in the system is grounded in BFO.** Before writing any code, identify the BFO bucket the new thing belongs to:
+**Every concept is grounded in BFO.** Before writing any code, identify the BFO bucket:
 
-| BFO bucket                        | What goes here                                                                    |
-| --------------------------------- | --------------------------------------------------------------------------------- |
-| **Site** (BFO_0000029)            | Geographic regions, airspace, orbital shells                                      |
-| **Material Entity** (BFO_0000040) | Physical objects: aircraft, satellites, cameras, vessels                          |
-| **GDC / ICE** (BFO_0000031)       | Information about the world: TLE records, position reports, news, video streams   |
-| **Quality** (BFO_0000019)         | Measurable properties: magnitude, altitude, heading, severity                     |
-| **Role** (BFO_0000023)            | Institutional function: surveillance source, intelligence source, tracking target |
-| **Disposition** (BFO_0000016)     | Physical capability: ADS-B transponder, streaming encoder, orbital propagation    |
-| **Process** (BFO_0000015)         | What the system _does_: tracking, aggregation, streaming, rendering               |
+| BFO bucket | What goes here |
+|---|---|
+| **Site** (BFO_0000029) | Geographic regions, airspace, orbital shells |
+| **Material Entity** (BFO_0000040) | Physical objects: aircraft, satellites, cameras, vessels |
+| **GDC / ICE** (BFO_0000031) | Information: TLE records, position reports, news, video streams |
+| **Quality** (BFO_0000019) | Measurable properties: magnitude, altitude, heading, severity |
+| **Role** (BFO_0000023) | Institutional function: surveillance source, tracking target |
+| **Disposition** (BFO_0000016) | Physical capability: ADS-B transponder, orbital propagation |
+| **Process** (BFO_0000015) | What the system does: tracking, aggregation, streaming, rendering |
 
 ---
 
-## 2. The non-negotiable development order
+## 2. Non-negotiable development order
 
 Every feature addition follows this exact sequence. Skip a step and you break the source-of-truth chain.
 
 ```
-1. ontology/wsr.ttl       ← declare the concept and its properties here FIRST
-        ↓ make generate
-2. backend/ports/domain.py ← auto-generated, NEVER hand-edited
+1. ontology/wsr.ttl              ← declare the concept FIRST
+        ↓ make generate (from apps/)
+2. apps/api/ports/domain.py      ← auto-generated, NEVER hand-edited
         ↓ hand-write DTO
-3. backend/ports/models.py ← API DTO — clean field names, JSON aliases
+3. apps/api/ports/models.py      ← API DTO — clean field names, JSON aliases
         ↓ implement
-4. backend/services/{domain}/  ← Port → Service → adapters/
+4. apps/api/services/{domain}/   ← Port → Service → adapters/
         ↓ register
-5. backend/routers/{domain}.py ← thin HTTP layer
+5. apps/api/routers/{domain}.py  ← thin HTTP layer
         ↓ wire
-6. backend/main.py         ← include_router()
+6. apps/api/main.py              ← include_router()
         ↓ fetch in frontend
-7. frontend/src/lib/globe/adapters/data/{Domain}DataSource.ts
-        ↓ render in frontend
-8. frontend/src/lib/globe/adapters/layers/{Domain}LayerAdapter.ts
+7. apps/web/src/lib/globe/adapters/data/{Domain}DataSource.ts
+        ↓ render
+8. apps/web/src/lib/globe/adapters/layers/{Domain}LayerAdapter.ts
         ↓ register in
-9. frontend/src/components/WSR.tsx
+9. apps/web/src/components/WSR.tsx
 ```
-
-If your change touches only one of these layers (e.g. fixing a bug in an adapter), you still need to understand where it sits in this chain.
 
 ---
 
@@ -67,84 +65,65 @@ If your change touches only one of these layers (e.g. fixing a bug in an adapter
 - All new classes use the `wsr:` prefix (`http://ontology.naas.ai/wsr/`).
 - Every class needs `rdfs:label` (English), `skos:definition`, and `rdfs:subClassOf` pointing to a BFO class or a `wsr:` parent.
 - Every data property needs `rdfs:domain`, `rdfs:range`, `rdfs:label`, and `skos:definition`.
-- Domain can be a union: `rdfs:domain [ owl:unionOf ( wsr:A wsr:B ) ]`.
-- Object properties linking classes need `rdfs:subPropertyOf bfo:BFO_XXXXXXXX` where appropriate.
-- Do not add instances (named individuals) to `wsr.ttl` — they go in `wsr-instances.ttl`.
+- Do not add instances to `wsr.ttl` — they go in `wsr-instances.ttl`.
 
-### Regenerate Python domain types after any TTL edit
+### Regenerate after any TTL edit
 
 ```bash
-# from wsr/ root
+# from apps/
 make generate
 ```
 
-This runs `onto2py.py` on the TTL and copies the result to `backend/ports/domain.py`. The file is overwritten entirely — never edit it by hand.
+This runs `onto2py.py` and overwrites `apps/api/ports/domain.py` entirely. Never edit that file by hand.
 
-### Example: adding a new class
+### Example
 
 ```turtle
-# wsr.ttl
-
 wsr:DroneUnit a owl:Class ;
   rdfs:subClassOf wsr:Aircraft ;
   rdfs:label "Drone Unit"@en ;
   skos:definition "An unmanned aerial vehicle tracked via ADS-B or RF signal." @en .
-
-wsr:hasSwarmID a owl:DatatypeProperty ;
-  rdfs:domain wsr:DroneUnit ;
-  rdfs:range xsd:string ;
-  rdfs:label "has swarm ID"@en ;
-  skos:definition "Identifier shared by a coordinated group of drones." @en .
 ```
-
-Then `make generate` to get `DroneUnit` into `backend/ports/domain.py`.
 
 ---
 
-## 4. Backend — Python FastAPI
+## 4. Backend — `apps/api/`
 
 ### Directory structure
 
 ```
-backend/
+apps/api/
 ├── core/
 │   ├── cache.py          # TTLCache[T] — use this, never invent new caches
 │   └── http_client.py    # shared httpx.AsyncClient — never create new clients
 ├── ports/
-│   ├── domain.py         # AUTO-GENERATED by make generate — do not edit
-│   └── models.py         # hand-written API DTOs — one class per ontology type
+│   ├── domain.py         # AUTO-GENERATED — run make generate, do not edit
+│   └── models.py         # hand-written API DTOs
 ├── services/
 │   └── {domain}/
-│       ├── __init__.py      # instantiates singleton service, exports it
+│       ├── __init__.py      # singleton: service = MyService(adapters=[...])
 │       ├── {Domain}Port.py  # I{X}Adapter + I{X}Service interfaces
-│       ├── {Domain}Service.py # concrete service, implements I{X}Service
+│       ├── {Domain}Service.py
 │       └── adapters/
 │           └── {source}.py  # one file per external data source
 ├── routers/
-│   └── {domain}.py       # HTTP delivery — import service singleton, nothing else
-├── settings.py           # pydantic-settings; all env vars declared here
+│   └── {domain}.py       # HTTP delivery only
+├── settings.py           # pydantic-settings — all env vars here
 └── main.py               # app + middleware + include_router() calls
 ```
 
-### Adding a new data layer (end-to-end)
+### Adding a new data layer
 
-**Step 1 — Port file** (`services/{domain}/{Domain}Port.py`)
+**Step 1 — Port** (`services/{domain}/{Domain}Port.py`)
 
 ```python
-"""
-{Domain} port — wsr:{BFOProcess} interface contracts.
-"""
 from ports.models import MyNewType
 
-
 class IMyAdapter:
-    """Secondary port: one external data source."""
     async def fetch(self) -> list[MyNewType]:
         raise NotImplementedError
 
-
 class IMyService:
-    """Primary port: what routers call."""
     async def get_items(self) -> list[MyNewType]:
         raise NotImplementedError
 ```
@@ -157,8 +136,7 @@ from core.http_client import get_client
 from ports.models import MyNewType
 from services.{domain}.{Domain}Port import IMyAdapter
 
-_HEADERS = {"User-Agent": "WSR-Intel/1.0 (geospatial-intelligence-platform)"}
-
+_HEADERS = {"User-Agent": "WSR-Intel/1.0"}
 
 class SourceXAdapter(IMyAdapter):
     def __init__(self) -> None:
@@ -171,22 +149,10 @@ class SourceXAdapter(IMyAdapter):
         resp = await get_client().get("https://api.example.com/data",
                                       headers=_HEADERS, timeout=10)
         resp.raise_for_status()
-        result = []
-        for item in resp.json():
-            result.append(MyNewType(
-                id=item["id"],
-                # ... map fields
-            ))
-        return result
+        return [MyNewType(id=item["id"], ...) for item in resp.json()]
 ```
 
-Adapter rules:
-
-- Always set the `User-Agent` header.
-- Own your cache at the instance level (`self._cache`), not module level.
-- Return empty list on transient failure; let the service decide whether to fall back.
-- Never import from `routers/`. Never import from other service domains.
-- Never call `get_client()` outside an `async` method.
+Adapter rules: always set `User-Agent`. Return empty list on failure. Never import from `routers/` or other service domains. Never call `get_client()` outside an `async` method.
 
 **Step 3 — Service** (`services/{domain}/{Domain}Service.py`)
 
@@ -197,15 +163,13 @@ from services.{domain}.{Domain}Port import IMyAdapter, IMyService
 
 log = logging.getLogger(__name__)
 
-
 class MyService(IMyService):
     def __init__(self, adapters: list[IMyAdapter]) -> None:
         self._adapters = adapters
 
     async def get_items(self) -> list[MyNewType]:
         try:
-            results = await asyncio.gather(*(a.fetch() for a in self._adapters),
-                                           return_exceptions=False)
+            results = await asyncio.gather(*(a.fetch() for a in self._adapters))
             return [item for batch in results for item in batch]
         except Exception as exc:
             log.warning("[my-domain] fetch failed: %s", exc)
@@ -219,24 +183,16 @@ from services.{domain}.adapters.source_x import SourceXAdapter
 from services.{domain}.{Domain}Service import MyService
 
 my_service = MyService(adapters=[SourceXAdapter()])
-
-__all__ = ["my_service"]
 ```
 
 **Step 5 — Router** (`routers/{domain}.py`)
 
 ```python
-"""
-{Domain} router — wsr:{BFOProcess} HTTP interface.
-"""
-import logging
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from services.{domain} import my_service
 
-log = logging.getLogger(__name__)
 router = APIRouter(tags=["{domain}"])
-
 
 @router.get("/api/{domain}")
 async def get_items() -> JSONResponse:
@@ -247,143 +203,110 @@ async def get_items() -> JSONResponse:
     )
 ```
 
-Router rules:
+Always use `model_dump(by_alias=True)`. No business logic in routers.
 
-- Import only the service singleton. No direct adapter imports. No business logic.
-- Always serialize with `model_dump(by_alias=True)` to honour field aliases.
-- Set appropriate `Cache-Control` headers matching the service's TTL.
-
-**Step 6 — Register in `main.py`**
+**Step 6 — Register** in `main.py`:
 
 ```python
-from routers import ..., my_new_router
-
+from routers import my_new_router
 app.include_router(my_new_router.router)
 ```
 
-### Adding a new adapter to an existing domain
-
-Only steps 2 and 4 change:
+### Adding an adapter to an existing domain
 
 1. Create `services/{domain}/adapters/{new_source}.py` implementing `I{Domain}Adapter`.
-2. In `services/{domain}/__init__.py`, import the new adapter and add it to the `adapters=[...]` list in the service constructor.
+2. In `services/{domain}/__init__.py`, add it to `adapters=[...]`.
 
-Nothing else changes. The service and router are unaware.
+Nothing else changes.
 
-### Settings (environment variables)
+### Caching TTL reference
 
-All env vars live in `settings.py` as `pydantic-settings` fields with safe defaults:
+| Refresh frequency | TTL |
+|---|---|
+| 30 s | `TTLCache(ttl_seconds=30)` |
+| 60 s | `TTLCache(ttl_seconds=60)` |
+| 5 min | `TTLCache(ttl_seconds=300)` |
+| Snapshot proxy | `TTLCache(ttl_seconds=4, max_size=500)` |
+
+### Settings
+
+All env vars in `settings.py` with safe defaults:
 
 ```python
-# settings.py
 class Settings(BaseSettings):
     my_new_api_key: str = ""
 ```
 
-Then in `.env`:
-
-```
-MY_NEW_API_KEY=abc123
-```
-
-And document it in `.env.example`. Never hardcode credentials anywhere.
-
-### Caching rules
-
-| Refresh frequency | TTL                                     |
-| ----------------- | --------------------------------------- |
-| Every 30 s        | `TTLCache(ttl_seconds=30)`              |
-| Every 60 s        | `TTLCache(ttl_seconds=60)`              |
-| Every 5 min       | `TTLCache(ttl_seconds=300)`             |
-| Snapshot proxy    | `TTLCache(ttl_seconds=4, max_size=500)` |
-
-Always use `await cache.get_or_fetch(key, coroutine_factory)`. Never access `cache._store` directly.
+Document in `.env.example`. Never hardcode credentials.
 
 ---
 
-## 5. Frontend — TypeScript / Next.js / CesiumJS
+## 5. Frontend — `apps/web/`
 
 ### Directory structure
 
 ```
-frontend/src/
+apps/web/src/
 ├── app/
-│   ├── layout.tsx           # browser title, metadata
-│   └── page.tsx             # renders <WSR />
+│   ├── layout.tsx
+│   └── page.tsx            # login gate → <WSR />
 ├── components/
-│   ├── WSR.tsx              # root: initialises GlobeEngine, registers all adapters
+│   ├── LoginPage.tsx        # green-on-black terminal login
+│   ├── WSR.tsx              # root: GlobeEngine init + event wiring
 │   └── ui/
-│       ├── StatusBar.tsx    # top navbar
-│       ├── DataLayerPanel.tsx # left panel — layer toggles + counts
-│       ├── IntelPanel.tsx   # left panel — news + conflict list
-│       ├── IntelTicker.tsx  # full-width scrolling news ribbon
-│       ├── CCTVPanel.tsx    # CCTV feed viewer
-│       └── GeoSearch.tsx    # Nominatim-powered place search
+│       ├── StatusBar.tsx
+│       ├── DataLayerPanel.tsx
+│       ├── IntelPanel.tsx
+│       ├── IntelTicker.tsx
+│       ├── CCTVPanel.tsx
+│       └── GeoSearch.tsx
 └── lib/
-    ├── ontology.ts          # TypeScript mirror of BFO process types
-    ├── types.ts             # TypeScript mirror of backend/ports/models.py
+    ├── auth.ts              # sessionStorage login/logout/isAuthenticated
+    ├── ontology.ts          # TypeScript BFO process type bindings
+    ├── types.ts             # TypeScript mirror of apps/api/ports/models.py
+    ├── shaders.ts           # post-processing shader definitions
     └── globe/
-        ├── GlobeEngine.ts   # orchestrator — never touch unless adding engine capability
+        ├── GlobeEngine.ts
+        ├── GlobeLayerBase.ts
         ├── ports/
-        │   ├── IGlobeLayerPort.ts    # primary port for rendering adapters
-        │   ├── IDataSourcePort.ts    # primary port for fetch adapters
-        │   └── ICesiumContextPort.ts # Cesium dependency injection port
-        ├── GlobeLayerBase.ts         # abstract base class for layer adapters
+        │   ├── IGlobeLayerPort.ts
+        │   ├── IDataSourcePort.ts
+        │   └── ICesiumContextPort.ts
         └── adapters/
-            ├── layers/              # one file per rendered layer
-            │   ├── FlightLayerAdapter.ts
-            │   ├── MilitaryLayerAdapter.ts
-            │   ├── CCTVLayerAdapter.ts
-            │   ├── EarthquakeLayerAdapter.ts
-            │   ├── ConflictZoneAdapter.ts
-            │   ├── BorderLayerAdapter.ts
-            │   ├── CityLabelAdapter.ts
-            │   └── TheaterAircraftAdapter.ts
-            └── data/                # one file per backend data source
-                ├── FlightDataSource.ts
-                └── SpatialDataSources.ts
+            ├── layers/
+            └── data/
 ```
 
-### Adding a new data layer (end-to-end)
+### API calls
 
-A layer = one `IDataSourcePort` adapter (fetches from API) + one `IGlobeLayerPort` adapter (renders on globe).
-
-**Step 1 — Add the TypeScript type** (`lib/types.ts`)
-
-Mirror the Pydantic model from `backend/ports/models.py` exactly:
+All `/api/*` calls are proxied by `next.config.ts` to `apps/api` (default `http://localhost:8001`). Do not hardcode a full URL in data sources — use:
 
 ```typescript
-// lib/types.ts
-export interface MyNewType {
-  id: string;
-  lat: number;
-  lon: number;
-  // ... match backend model field aliases
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
 ```
 
-**Step 2 — Data source adapter** (`lib/globe/adapters/data/MyNewDataSource.ts`)
+With `API_BASE = ''`, requests go to the same origin and are caught by the Next.js proxy. Set `NEXT_PUBLIC_API_BASE_URL` only for non-local deployments.
+
+### Adding a new data layer
+
+**Step 1 — TypeScript type** (`lib/types.ts`)
+
+Mirror the Pydantic DTO from `apps/api/ports/models.py` exactly, matching field aliases.
+
+**Step 2 — Data source adapter** (`lib/globe/adapters/data/{Domain}DataSource.ts`)
 
 ```typescript
-import type {
-  IDataSourcePort,
-  DataSourceResult,
-} from "../ports/IDataSourcePort";
-import type { MyNewType } from "@/lib/types";
-
-const _API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
 
 export class MyNewDataSource implements IDataSourcePort<MyNewType[]> {
-  readonly dataSourceId = "my-new-source";
-  readonly targetLayerIds = ["my-new-layer"];
+  readonly dataSourceId = 'my-new-source';
+  readonly targetLayerIds = ['my-new-layer'];
   readonly refreshIntervalMs = 60_000;
-
   private _last: MyNewType[] = [];
 
   async fetch(): Promise<DataSourceResult<MyNewType[]>> {
-    const res = await fetch(`${_API_BASE}/api/my-domain`);
-    if (!res.ok) throw new Error(`my-domain fetch failed: ${res.status}`);
+    const res = await fetch(`${API_BASE}/api/my-domain`);
+    if (!res.ok) throw new Error(`my-domain ${res.status}`);
     const data: MyNewType[] = await res.json();
     const changed = JSON.stringify(data) !== JSON.stringify(this._last);
     this._last = data;
@@ -392,26 +315,17 @@ export class MyNewDataSource implements IDataSourcePort<MyNewType[]> {
 }
 ```
 
-**Step 3 — Layer adapter** (`lib/globe/adapters/layers/MyNewLayerAdapter.ts`)
+**Step 3 — Layer adapter** (`lib/globe/adapters/layers/{Domain}LayerAdapter.ts`)
 
 ```typescript
-import { GlobeLayerBase } from "../GlobeLayerBase";
-import type { GlobeLayerConfiguration } from "../ports/IGlobeLayerPort";
-import type { MyNewType } from "@/lib/types";
-
 export class MyNewLayerAdapter extends GlobeLayerBase<MyNewType[]> {
-  readonly layerId = "my-new-layer";
-  readonly processType = "wsr:MyNewProcess"; // must exist in ontology.ts
-  readonly configuration: GlobeLayerConfiguration = { visible: true };
+  readonly layerId = 'my-new-layer';
+  readonly processType = 'wsr:MyNewProcess'; // must exist in ontology.ts
 
   private _primitives: Cesium.PrimitiveCollection | null = null;
   private _last: MyNewType[] = [];
 
-  async initialize(): Promise<void> {
-    const { Cesium, viewer } = this._ctx!;
-    this._primitives = new Cesium.PrimitiveCollection();
-    (viewer as any).scene.primitives.add(this._primitives);
-  }
+  async initialize(): Promise<void> { /* create primitive collection */ }
 
   update(items: MyNewType[]): void {
     this._last = items;
@@ -424,192 +338,133 @@ export class MyNewLayerAdapter extends GlobeLayerBase<MyNewType[]> {
     if (visible) this._render();
   }
 
-  teardown(): void {
-    this._primitives?.removeAll();
-    this._primitives = null;
-  }
+  teardown(): void { this._primitives?.removeAll(); }
 
   private _render(): void {
     if (!this._primitives || !this._visible) return;
     this._primitives.removeAll();
-
-    const { Cesium } = this._ctx!;
-    const bbs = new Cesium.BillboardCollection();
-
-    for (const item of this._last) {
-      bbs.add({
-        position: Cesium.Cartesian3.fromDegrees(item.lon, item.lat),
-        id: { _wv: true, _type: "my-new", ...item },
-        // ... icon, scale, etc.
-      });
-    }
-
-    this._primitives.add(bbs);
-    // Emit count so DataLayerPanel badge updates
-    this.emit({
-      type: "data:updated",
-      layerId: this.layerId,
-      payload: { count: this._last.length },
-      timestamp: Date.now(),
-    });
+    // build billboards, emit data:updated
+    this.emit({ type: 'data:updated', layerId: this.layerId,
+                payload: { count: this._last.length }, timestamp: Date.now() });
   }
 }
 ```
 
-Layer adapter rules:
-
-- Cache the last received data in `_last` and re-call `_render()` from `setVisible(true)`. This prevents the layer from going blank when toggled.
-- Always emit `data:updated` with `{ count }` after render so the UI badge updates.
-- Store `_visible` state; check it at the top of `_render()` and return early if hidden.
-- Embed the full domain object in the billboard `id: { _wv: true, _type: 'x', ...item }` — this is what click handlers extract in `WSR.tsx`.
-- Call `primitives.removeAll()` then rebuild on each `update()`. This is intentional — Cesium billboards are cheap to recreate and diffing is fragile.
-
 **Step 4 — Register in `WSR.tsx`**
 
 ```tsx
-// WSR.tsx — inside the useEffect that builds the engine
-
 engine
   .registerLayer(new MyNewLayerAdapter())
   .registerDataSource(new MyNewDataSource());
 ```
 
-Then handle clicks if needed:
+**Step 5 — Add toggle to `DataLayerPanel.tsx`**
 
 ```tsx
-engine.events.subscribeGlobal("entity:click", (event) => {
-  const d = event.payload as any;
-  if (d._type === "my-new") {
-    // open panel, set state, etc.
-  }
-});
+{ id: 'my-new-layer', label: 'My New Layer', icon: '◎', countKey: 'myNewCount' }
 ```
 
-**Step 5 — Add the layer toggle to `DataLayerPanel.tsx`**
+### Layer adapter rules
 
-```tsx
-// DataLayerPanel.tsx — inside LAYERS array
-{ id: 'my-new-layer', label: 'My New Layer', icon: '◎', countKey: 'myNewCount' },
-```
-
-And pass the count from `WSR.tsx`:
-
-```tsx
-// WSR.tsx — subscribe to data:updated for the new layer
-engine.events.subscribe('my-new-layer', 'data:updated', (ev) => {
-  setMyNewCount((ev.payload as any).count ?? 0);
-});
-
-// Pass to DataLayerPanel
-<DataLayerPanel counts={{ ..., myNewCount }} />
-```
+- Cache `_last` and re-render on `setVisible(true)` — prevents blank layers on toggle.
+- Always emit `data:updated` with `{ count }` so UI badges update.
+- Embed the full domain object in billboard `id: { _wv: true, _type: 'x', ...item }` for click handlers.
+- `primitives.removeAll()` then rebuild on each `update()` — diffing Cesium primitives is fragile.
 
 ---
 
 ## 6. Cross-cutting conventions
 
-### Field names and units
+### Units and field names
 
-The same conventions apply in Python (Pydantic) and TypeScript. Never deviate:
-
-| Measurement      | Unit                    | Field name                    |
-| ---------------- | ----------------------- | ----------------------------- |
-| Latitude         | WGS84 decimal degrees   | `lat`                         |
-| Longitude        | WGS84 decimal degrees   | `lon`                         |
-| Altitude         | metres ASL              | `altitude`                    |
-| Speed / velocity | m/s                     | `velocity`                    |
-| Heading / track  | degrees true, 0–360     | `heading`                     |
-| Time             | Unix epoch milliseconds | `time`, `pub_date`, `pubDate` |
-| Depth (seismic)  | km                      | `depth`                       |
+| Measurement | Unit | Field name |
+|---|---|---|
+| Latitude | WGS84 decimal degrees | `lat` |
+| Longitude | WGS84 decimal degrees | `lon` |
+| Altitude | metres ASL | `altitude` |
+| Speed | m/s | `velocity` |
+| Heading | degrees true, 0-360 | `heading` |
+| Time | Unix epoch milliseconds | `time`, `pubDate` |
+| Depth | km | `depth` |
 
 ### Naming conventions
 
-| Thing                   | Convention                   | Example                           |
-| ----------------------- | ---------------------------- | --------------------------------- |
-| Backend service folder  | snake_case                   | `services/cctv/`                  |
-| Backend service class   | PascalCase                   | `CCTVService`                     |
-| Backend adapter class   | `{Source}Adapter`            | `LondonAdapter`, `OpenSkyAdapter` |
-| Backend port interface  | `I{X}Adapter`, `I{X}Service` | `ICCTVAdapter`                    |
-| Frontend layer adapter  | `{Domain}LayerAdapter`       | `FlightLayerAdapter`              |
-| Frontend data source    | `{Domain}DataSource`         | `FlightDataSource`                |
-| Frontend layer ID       | kebab-case, `-layer` suffix  | `'flight-layer'`                  |
-| Frontend data source ID | kebab-case, `-source` suffix | `'flight-source'`                 |
+| Thing | Convention | Example |
+|---|---|---|
+| Backend service folder | snake_case | `services/cctv/` |
+| Backend service class | PascalCase | `CCTVService` |
+| Backend adapter class | `{Source}Adapter` | `LondonAdapter` |
+| Backend port interface | `I{X}Adapter`, `I{X}Service` | `ICCTVAdapter` |
+| Frontend layer adapter | `{Domain}LayerAdapter` | `FlightLayerAdapter` |
+| Frontend data source | `{Domain}DataSource` | `FlightDataSource` |
+| Frontend layer ID | kebab-case, `-layer` suffix | `'flight-layer'` |
+| Frontend data source ID | kebab-case, `-source` suffix | `'flight-source'` |
 
 ### Error handling
 
-- **Backend adapters**: catch exceptions, log with `log.warning("[domain] message: %s", exc)`, return empty list. Never let an adapter exception propagate to the router uncaught.
-- **Backend routers**: no try/except needed — services guarantee a valid (possibly empty) return.
-- **Frontend data sources**: `fetch()` can throw; `GlobeEngine` catches and logs. Do not swallow errors silently inside the source.
-- **Frontend layer adapters**: never throw in `update()` or `initialize()`. Cesium errors must be caught internally.
+- **Backend adapters**: catch, log `log.warning("[domain] %s", exc)`, return `[]`.
+- **Backend routers**: no try/except — services guarantee a valid return.
+- **Frontend data sources**: let `fetch()` throw; `GlobeEngine` catches and logs.
+- **Frontend layer adapters**: never throw in `update()` or `initialize()`.
 
 ### HTTP headers
 
-Every backend adapter that calls an external API must include:
+Every backend adapter must send:
 
 ```python
-_HEADERS = {"User-Agent": "WSR-Intel/1.0 (geospatial-intelligence-platform)"}
+_HEADERS = {"User-Agent": "WSR-Intel/1.0"}
 ```
 
-Many public APIs (ADSB.lol, OpenSky, TfL) return 403 or 429 for requests without a User-Agent.
-
-### Caching
-
-- Backend: instance-level `TTLCache` inside the adapter, keyed on a stable string.
-- Frontend: `IDataSourcePort.fetch()` compares `JSON.stringify` of new vs previous result and returns `changed: false` when unchanged. `GlobeEngine` skips `layer.update()` when `!result.changed`.
+ADSB.lol, OpenSky, and TfL return 403/429 without a User-Agent.
 
 ---
 
 ## 7. What NOT to do
 
-These are the exact mistakes that have been made and fixed. Do not repeat them.
-
-| Anti-pattern                                                               | Why it breaks things                                                                |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Hand-editing `backend/ports/domain.py`                                     | `make generate` will overwrite your changes                                         |
-| Adding business logic to a router                                          | Routers are HTTP skin only; logic belongs in the service                            |
-| Importing a service from another service domain                            | Creates circular dependency chains                                                  |
-| Module-level `cache = {}` dict in an adapter                               | Race conditions; not cleared on hot reload                                          |
-| Creating a new `httpx.AsyncClient` inside an adapter                       | Leaks connections; use `get_client()` from `core/http_client.py`                    |
-| Setting `disableDepthTestDistance: Number.POSITIVE_INFINITY` on billboards | Cameras render visible from the other side of the globe                             |
-| Checking `!bb.show` to skip render                                         | Results in permanently hidden layers after toggle; use `_visible` flag + rebuild    |
-| `key` prop missing on panels that switch entity                            | React won't reset state when the prop changes; use `key={entity.id}`                |
-| Skipping `model_dump(by_alias=True)` in router                             | JSON aliases (`imageUrl`, `onGround`) are lost; frontend receives wrong field names |
-| Union domain in TTL without `owl:unionOf` parentheses                      | rdflib silently drops the triple                                                    |
-| Adding new fields only to `ports/models.py` without TTL                    | Breaks the source-of-truth chain; the ontology won't reflect reality                |
+| Anti-pattern | Why it breaks |
+|---|---|
+| Hand-editing `apps/api/ports/domain.py` | `make generate` overwrites it |
+| Business logic in a router | Routers are HTTP skin only |
+| Importing a service from another service domain | Circular dependency chains |
+| Module-level `cache = {}` in an adapter | Race conditions; not cleared on hot reload |
+| Creating a new `httpx.AsyncClient` in an adapter | Leaks connections; use `get_client()` |
+| `disableDepthTestDistance: POSITIVE_INFINITY` on billboards | Renders visible from the other side of the globe |
+| Not caching `_last` in a layer adapter | Layer goes blank on toggle |
+| Missing `key` prop on panels that switch entity | React won't reset state when entity changes |
+| Missing `model_dump(by_alias=True)` in a router | JSON aliases lost; frontend receives wrong field names |
+| New fields in `models.py` without TTL update | Ontology no longer reflects reality |
 
 ---
 
-## 8. Quick-reference checklist
-
-Use this before submitting any change.
+## 8. Pre-submit checklist
 
 **New data domain (end-to-end)**
 
 - [ ] Added class(es) and properties to `ontology/wsr.ttl`
-- [ ] Ran `make generate` — `backend/ports/domain.py` updated
-- [ ] Added DTO to `backend/ports/models.py` with correct aliases and BFO comment
+- [ ] Ran `make generate` from `apps/` — `apps/api/ports/domain.py` updated
+- [ ] Added DTO to `apps/api/ports/models.py` with aliases and BFO comment
 - [ ] Created `services/{domain}/{Domain}Port.py`
 - [ ] Created `services/{domain}/{Domain}Service.py`
 - [ ] Created `services/{domain}/adapters/{source}.py`
 - [ ] Created `services/{domain}/__init__.py` with singleton
 - [ ] Created `routers/{domain}.py` importing only the singleton
-- [ ] Registered router in `backend/main.py`
-- [ ] Added TypeScript type to `frontend/src/lib/types.ts`
+- [ ] Registered router in `apps/api/main.py`
+- [ ] Added TypeScript type to `apps/web/src/lib/types.ts`
 - [ ] Created `{Domain}DataSource.ts`
 - [ ] Created `{Domain}LayerAdapter.ts` (emits `data:updated`)
 - [ ] Registered both in `WSR.tsx`
 - [ ] Added toggle + count badge in `DataLayerPanel.tsx`
-- [ ] Added any needed env vars to `settings.py`, `.env`, `.env.example`
+- [ ] Added env vars to `settings.py` and `.env.example`
 
 **New adapter for existing domain**
 
-- [ ] Added properties to TTL if new fields are needed → `make generate`
+- [ ] Extended TTL if new fields needed, ran `make generate`
 - [ ] Created `services/{domain}/adapters/{new_source}.py`
-- [ ] Added it to the `adapters=[...]` list in `services/{domain}/__init__.py`
+- [ ] Added to `adapters=[...]` in `services/{domain}/__init__.py`
 
 **Bug fix**
 
-- [ ] Root cause identified at the correct layer (adapter / service / router / layer / data source)
-- [ ] Fix is contained within one layer — it does not leak logic across boundaries
+- [ ] Root cause identified at the correct layer
+- [ ] Fix contained within one layer — no logic leaking across boundaries
 - [ ] No new module-level mutable state introduced
-- [ ] If Cesium-related: `_visible` flag respected, `_last` cache populated, primitives rebuilt on `setVisible(true)`
+- [ ] If Cesium-related: `_visible` flag respected, `_last` cached, primitives rebuilt on `setVisible(true)`

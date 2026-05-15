@@ -1,6 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { isAuthenticated } from '@/lib/auth';
+import LoginPage from '@/components/LoginPage';
 
 const WSR = dynamic(() => import('@/components/WSR'), {
   ssr: false,
@@ -15,5 +18,18 @@ const WSR = dynamic(() => import('@/components/WSR'), {
 });
 
 export default function Page() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setAuthed(isAuthenticated());
+  }, []);
+
+  // While checking session (SSR/hydration gap) show nothing to avoid flash
+  if (authed === null) return null;
+
+  if (!authed) {
+    return <LoginPage onSuccess={() => setAuthed(true)} />;
+  }
+
   return <WSR />;
 }

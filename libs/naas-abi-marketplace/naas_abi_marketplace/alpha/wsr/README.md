@@ -2,9 +2,11 @@
 
 Real-time geospatial intelligence platform. Fuses live satellite orbits, commercial and military flight data, seismic activity, CCTV streams, and conflict-zone intelligence into a single 3D globe — all from open-source feeds.
 
+Part of the [ABI Marketplace](https://github.com/jupyter-naas/abi) (`naas_abi_marketplace.alpha.wsr`).
+
 ---
 
-## What it does
+## Data layers
 
 | Layer | Source | Refresh |
 |---|---|---|
@@ -18,126 +20,44 @@ Real-time geospatial intelligence platform. Fuses live satellite orbits, commerc
 | CCTV — Middle East theater | Curated static dataset | static |
 | CCTV — Global webcams | OpenWebcamDB (API key required) | 5 min |
 | Conflict zones | OSINT-sourced static dataset (20 sites) | static |
-| Intel feed | BBC / Al Jazeera / Reuters RSS | 3 min |
+| Intel feed | BBC / Al Jazeera RSS | 3 min |
 
 Visual modes: default, CRT, night-vision (NVG), thermal, bloom. Space-to-dive camera, GeoSearch, detection mode overlays, scrolling intel ticker, live CCTV panel.
 
 ---
 
-## Architecture
-
-```
-Browser
-  └── GlobeEngine (TypeScript)
-        ├── IGlobeLayerPort adapters   — Cesium rendering (one per BFO process)
-        └── IDataSourcePort adapters   — fetch from FastAPI (one per ICE type)
-
-FastAPI backend (port 8000)
-  └── routers/           — thin HTTP delivery (one per BFO process type)
-        └── services/    — domain orchestration (fan-out, merge, fallback)
-              └── adapters/  — one per external data source
-
-Ontology
-  └── ontology/wsr.ttl   — single source of truth for all domain concepts
-        ↓ make generate
-  └── backend/ports/domain.py   — auto-generated Pydantic + RDF domain types
-        ↓ hand-mapped
-  └── backend/ports/models.py   — API DTOs (JSON-optimised)
-```
-
-The design follows a hexagonal (ports & adapters) pattern grounded in **BFO** (Basic Formal Ontology). Every router maps 1:1 to a BFO process class defined in `ontology/wsr.ttl`.
-
----
-
-## Project layout
+## Module layout
 
 ```
 wsr/
-├── AGENTS.md                    # contributor guide — read before adding anything
-├── Makefile                     # dev launcher + code generator
+├── __init__.py              # ABI module registration (ABIModule + Configuration)
 ├── README.md
-├── ontology/
-│   ├── wsr.ttl                  # BFO-grounded OWL ontology (@prefix wsr:)
-│   └── wsr-instances.ttl        # named individuals
-├── backend/                     # Python 3.11+ / FastAPI
-│   ├── main.py                  # app + middleware + router registration
-│   ├── settings.py              # pydantic-settings — all env vars here
-│   ├── pyproject.toml
-│   ├── .env.example
-│   ├── core/
-│   │   ├── cache.py             # generic TTLCache[T]
-│   │   └── http_client.py       # shared async httpx client
-│   ├── ports/
-│   │   ├── domain.py            # AUTO-GENERATED — run `make generate`
-│   │   └── models.py            # hand-written API DTOs (mirrors TypeScript types)
-│   ├── services/
-│   │   ├── cctv/
-│   │   │   ├── CCTVPort.py      # ICCTVAdapter, ICCTVService interfaces
-│   │   │   ├── CCTVService.py   # fan-out to adapters, snapshot proxy
-│   │   │   ├── __init__.py      # cctv_service singleton
-│   │   │   └── adapters/
-│   │   │       ├── london.py    # TfL JamCam
-│   │   │       ├── nyc.py       # 511NY.org
-│   │   │       └── mideast.py   # static theater cameras
-│   │   ├── flights/
-│   │   │   ├── FlightsPort.py
-│   │   │   ├── FlightsService.py
-│   │   │   ├── __init__.py
-│   │   │   └── adapters/
-│   │   │       ├── opensky.py   # OAuth2 → basic auth → airplanes.live fallback
-│   │   │       ├── adsb_lol.py  # military: ADSB.lol → airplanes.live fallback
-│   │   │       └── airplanes_live.py
-│   │   ├── satellites/          # CelesTrak TLE
-│   │   ├── earthquakes/         # USGS GeoJSON
-│   │   ├── news/                # BBC / Al Jazeera / Reuters RSS
-│   │   ├── conflict/            # static OSINT dataset
-│   │   └── webcams/             # OpenWebcamDB
-│   └── routers/
-│       ├── flights.py
-│       ├── satellites.py
-│       ├── earthquakes.py
-│       ├── news.py
-│       ├── conflict.py
-│       ├── cctv.py
-│       └── webcams.py
-└── frontend/                    # Next.js 14 + CesiumJS
-    └── src/
-        ├── app/
-        │   ├── layout.tsx       # browser title, metadata
-        │   └── page.tsx
-        ├── components/
-        │   ├── WSR.tsx          # root globe component — engine init + event wiring
-        │   └── ui/
-        │       ├── StatusBar.tsx       # top navbar + GeoSearch
-        │       ├── DataLayerPanel.tsx  # left panel — layer toggles + live counts
-        │       ├── IntelPanel.tsx      # left panel — news + conflict list
-        │       ├── IntelTicker.tsx     # full-width scrolling news ribbon
-        │       ├── CCTVPanel.tsx       # live CCTV feed viewer
-        │       └── GeoSearch.tsx       # Nominatim place search
-        └── lib/
-            ├── ontology.ts      # TypeScript BFO process type bindings
-            ├── types.ts         # TypeScript mirror of backend/ports/models.py
-            ├── shaders.ts       # post-processing shader definitions
-            └── globe/
-                ├── GlobeEngine.ts       # hexagonal engine core
-                ├── GlobeLayerBase.ts    # abstract base for layer adapters
-                ├── ports/
-                │   ├── IGlobeLayerPort.ts
-                │   ├── IDataSourcePort.ts
-                │   └── ICesiumContextPort.ts
-                └── adapters/
-                    ├── layers/          # one adapter per rendered layer
-                    │   ├── FlightLayerAdapter.ts
-                    │   ├── MilitaryLayerAdapter.ts
-                    │   ├── TheaterAircraftAdapter.ts
-                    │   ├── CCTVLayerAdapter.ts
-                    │   ├── EarthquakeLayerAdapter.ts
-                    │   ├── ConflictZoneAdapter.ts
-                    │   ├── BorderLayerAdapter.ts
-                    │   └── CityLabelAdapter.ts
-                    └── data/            # one adapter per backend endpoint
-                        ├── FlightDataSource.ts
-                        └── SpatialDataSources.ts
+├── AGENTS.md                # contributor guide — read before changing anything
+├── ARCHITECTURE.md          # system design and BFO grounding
+├── TODO.md                  # backlog
+├── agents/
+│   └── WSRAgent.py          # ABI chat agent for situational awareness queries
+├── apps/
+│   ├── Makefile             # dev launcher: make dev / stop / logs / api / ui
+│   ├── api/                 # Python 3.11+ / FastAPI — geospatial data service
+│   │   ├── main.py
+│   │   ├── settings.py
+│   │   ├── pyproject.toml
+│   │   ├── .env.example
+│   │   ├── core/            # TTLCache, shared httpx client
+│   │   ├── ports/           # domain.py (auto-generated) + models.py (DTOs)
+│   │   ├── services/        # cctv, flights, satellites, earthquakes, news, conflict, webcams
+│   │   └── routers/
+│   └── web/                 # Next.js 16 + CesiumJS — 3D globe frontend
+│       ├── src/
+│       │   ├── app/         # login gate (page.tsx) + layout
+│       │   ├── components/  # WSR.tsx (root), LoginPage.tsx, ui/
+│       │   └── lib/         # auth.ts, ontology.ts, types.ts, globe/
+│       ├── .env.local        # optional: NEXT_PUBLIC_CESIUM_TOKEN
+│       └── next.config.ts   # proxies /api/* to apps/api (no CORS, no env var needed)
+└── ontology/
+    ├── wsr.ttl              # BFO-grounded OWL ontology
+    └── wsr-instances.ttl    # named individuals
 ```
 
 ---
@@ -146,34 +66,24 @@ wsr/
 
 | Tool | Version |
 |---|---|
-| Node.js | ≥ 20 |
 | Python | ≥ 3.11 |
-| pip packages | `fastapi uvicorn[standard] httpx pydantic pydantic-settings rdflib` |
+| Node.js | ≥ 20 |
+| uv | any recent |
+| npm | ≥ 9 |
 
 ---
 
 ## Setup
 
-**Backend**
-
 ```bash
-cd backend
-pip install fastapi "uvicorn[standard]" httpx pydantic pydantic-settings rdflib
-cp .env.example .env   # fill in API keys (all optional, see table below)
-```
+# API dependencies
+cd apps/api
+uv pip install "fastapi>=0.115" "uvicorn[standard]>=0.30" "httpx>=0.27" \
+               "pydantic>=2.7" "pydantic-settings>=2.3" "python-dotenv>=1.0"
 
-**Frontend**
-
-```bash
-cd frontend
+# Frontend dependencies
+cd apps/web
 npm install
-```
-
-Create `frontend/.env.local`:
-
-```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-NEXT_PUBLIC_CESIUM_TOKEN=          # free at ion.cesium.com — enables terrain + imagery
 ```
 
 ---
@@ -181,7 +91,8 @@ NEXT_PUBLIC_CESIUM_TOKEN=          # free at ion.cesium.com — enables terrain 
 ## Running
 
 ```bash
-# From wsr/ — starts both services in the background
+# From apps/ — starts both services in the background
+cd apps
 make dev
 
 # Tail logs for both
@@ -190,88 +101,104 @@ make logs
 # Stop both
 make stop
 
-# Foreground (useful for debugging one service at a time)
-make api    # FastAPI only  — http://localhost:8000
-make ui     # Next.js only  — http://localhost:3000
+# Foreground (one at a time, useful for debugging)
+make api    # FastAPI only  — http://localhost:8001
+make ui     # Next.js only  — http://localhost:3043
 
-# Regenerate backend/ports/domain.py from ontology/wsr.ttl
+# Regenerate apps/api/ports/domain.py from ontology/wsr.ttl
 make generate
 ```
 
-FastAPI interactive docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+Open **http://localhost:3043** and log in with:
+
+```
+demo@example.com
+wsr1234!
+```
+
+API docs: **http://localhost:8001/docs**
 
 ---
 
 ## API endpoints
 
-| Method | Path | Service | Description |
-|---|---|---|---|
-| GET | `/api/flights` | FlightsService | Civil aviation position reports |
-| GET | `/api/military` | FlightsService | Military aircraft (ADSB.lol) |
-| GET | `/api/mideast-aircraft` | FlightsService | Theater aircraft (airplanes.live) |
-| GET | `/api/satellites` | SatellitesService | TLE records (CelesTrak) |
-| GET | `/api/earthquakes` | EarthquakesService | M≥1.0 seismic events, past 24 h |
-| GET | `/api/news` | NewsService | RSS aggregation (BBC / AJ / Reuters) |
-| GET | `/api/conflict-events` | ConflictService | Static OSINT conflict site list |
-| GET | `/api/cctv` | CCTVService | Merged camera list (all sources) |
-| GET | `/api/cctv/snapshot?url=` | CCTVService | Server-side image/HLS proxy |
-| GET | `/api/webcams` | WebcamsService | OpenWebcamDB camera list |
-| GET | `/api/webcams/stream?slug=` | WebcamsService | Stream URL resolver |
-| GET | `/health` | — | Health check |
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/flights` | Civil aviation position reports |
+| GET | `/api/military` | Military aircraft (ADSB.lol) |
+| GET | `/api/mideast-aircraft` | Theater aircraft (airplanes.live) |
+| GET | `/api/satellites` | TLE records (CelesTrak) |
+| GET | `/api/earthquakes` | M≥1.0 seismic events, past 24 h |
+| GET | `/api/news` | RSS aggregation (BBC / Al Jazeera) |
+| GET | `/api/conflict-events` | Static OSINT conflict site list |
+| GET | `/api/cctv` | Merged camera list (all sources) |
+| GET | `/api/cctv/snapshot?url=` | Server-side image/HLS proxy |
+| GET | `/api/webcams` | OpenWebcamDB camera list |
+| GET | `/api/webcams/stream?slug=` | Stream URL resolver |
+| GET | `/health` | Health check |
+
+The Next.js app proxies all `/api/*` calls to the FastAPI backend via `next.config.ts`. No CORS configuration or `NEXT_PUBLIC_API_BASE_URL` needed for local development.
 
 ---
 
 ## Environment variables
 
-**Backend** (`backend/.env`)
+**Backend** (`apps/api/.env` — copy from `.env.example`)
 
 | Variable | Required | Description |
 |---|---|---|
-| `OPENSKY_CLIENT_ID` | No | OAuth2 client ID — new OpenSky accounts (post-March 2025) |
+| `OPENSKY_CLIENT_ID` | No | OAuth2 client ID for new OpenSky accounts (post-March 2025) |
 | `OPENSKY_CLIENT_SECRET` | No | OAuth2 client secret |
-| `OPENSKY_USERNAME` | No | Legacy basic-auth — pre-March 2025 accounts |
+| `OPENSKY_USERNAME` | No | Legacy basic-auth for pre-March 2025 accounts |
 | `OPENSKY_PASSWORD` | No | Legacy basic-auth password |
-| `TFL_APP_KEY` | No | TfL API key — raises JamCam rate limit from 60 to 500 req/min |
+| `TFL_APP_KEY` | No | Raises London CCTV rate limit from 60 to 500 req/min |
 | `OPENWEBCAMDB_API_KEY` | No | Enables `/api/webcams` and OWDB cameras in `/api/cctv` |
 | `ALLOWED_ORIGINS` | No | JSON array of allowed CORS origins, default `["*"]` |
 
-Without any API keys the backend still works: flights fall back to `airplanes.live`, London CCTV works anonymously (with lower rate limits), and OpenWebcamDB is simply disabled.
+Without any API keys, all free feeds still work: flights via airplanes.live, London CCTV anonymously, USGS earthquakes, CelesTrak satellites, BBC/Al Jazeera news.
 
-**Frontend** (`frontend/.env.local`)
+**Frontend** (`apps/web/.env.local`)
 
 | Variable | Required | Description |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | Yes | FastAPI base URL, e.g. `http://localhost:8000` |
-| `NEXT_PUBLIC_CESIUM_TOKEN` | No | Enables Cesium Ion terrain and imagery |
-| `NEXT_PUBLIC_GOOGLE_MAPS_KEY` | No | Enables Google Photorealistic 3D Tiles |
+| `NEXT_PUBLIC_CESIUM_TOKEN` | No | Enables Cesium Ion terrain + ESRI satellite imagery. Free at [ion.cesium.com](https://ion.cesium.com) |
+| `NEXT_PUBLIC_API_BASE_URL` | No | Override API base URL for non-local deployments |
+
+---
+
+## ABI integration
+
+When loaded as part of an ABI stack (`config.yaml` or `config.local.yaml`):
+
+```yaml
+- module: naas_abi_marketplace.alpha.wsr
+  enabled: true
+  config:
+    opensky_client_id: ""
+    opensky_client_secret: ""
+    tfl_app_key: ""
+    openwebcamdb_api_key: ""
+```
+
+The `WSRAgent` registers as a chat agent in Nexus under the Agents dropdown. It answers situational awareness queries (conflict zones, flight anomalies, seismic activity, breaking news) and can guide users to the WSR globe.
 
 ---
 
 ## Ontology
 
-All domain concepts are declared in `ontology/wsr.ttl` using the `wsr:` namespace (`http://ontology.naas.ai/wsr/`) and grounded in [BFO 2020](https://basic-formal-ontology.org/).
+All domain concepts are declared in `ontology/wsr.ttl` using the `wsr:` namespace (`http://ontology.naas.ai/wsr/`) grounded in [BFO 2020](https://basic-formal-ontology.org/).
 
 | BFO bucket | WSR classes |
 |---|---|
-| Site (BFO_0000029) | `GeographicSite`, `ConflictZone`, `NuclearFacilitySite`, `MilitaryBaseSite`, `AirspaceRegion`, `OrbitalShell` |
-| Material Entity (BFO_0000040) | `Satellite`, `Aircraft`, `MilitaryAircraft`, `CivilAircraft`, `NavalVessel`, `CCTVCameraUnit`, `SeismographStation`, `DataSourceEndpoint` |
-| GDC / ICE (BFO_0000031) | `TLERecord`, `AircraftPositionReport`, `EarthquakeEventRecord`, `NewsArticle`, `ConflictSiteRecord`, `VideoStream`, `RSSFeed` |
-| Quality (BFO_0000019) | `GeographicCoordinate`, `AltitudeQuality`, `EarthquakeMagnitude`, `ThreatSeverityLevel`, `CacheDuration` |
-| Role (BFO_0000023) | `SurveillanceSourceRole`, `IntelligenceSourceRole`, `TrackingTargetRole`, `TheaterActorRole` |
-| Disposition (BFO_0000016) | `StreamingDisposition`, `ADSBTransponderDisposition`, `OrbitalPropagationDisposition` |
-| Process (BFO_0000015) | `FlightTrackingProcess`, `SatelliteTrackingProcess`, `EarthquakeMonitoringProcess`, `CCTVStreamingProcess`, `NewsAggregationProcess`, `GlobeRenderingProcess`, `ThreatAssessmentProcess` |
+| Site | `GeographicSite`, `ConflictZone`, `NuclearFacilitySite`, `AirspaceRegion`, `OrbitalShell` |
+| Material Entity | `Satellite`, `Aircraft`, `MilitaryAircraft`, `CivilAircraft`, `CCTVCameraUnit` |
+| GDC / ICE | `TLERecord`, `AircraftPositionReport`, `EarthquakeEventRecord`, `NewsArticle`, `VideoStream` |
+| Process | `FlightTrackingProcess`, `SatelliteTrackingProcess`, `EarthquakeMonitoringProcess`, `CCTVStreamingProcess`, `NewsAggregationProcess` |
 
-Running `make generate` converts the TTL into `backend/ports/domain.py` — Pydantic model classes with a `.rdf()` method for serialising instances back to RDF triples. The hand-written `backend/ports/models.py` provides clean API DTOs aligned to the same ontology.
+Running `make generate` (from `apps/`) converts the TTL into `apps/api/ports/domain.py`.
 
 ---
 
 ## Contributing
 
-See **[AGENTS.md](./AGENTS.md)** for the full contributor and agent guide. It covers:
-
-- The mandatory ontology-first development order
-- End-to-end walkthrough for adding a new data layer (backend + frontend)
-- How to add a new adapter to an existing domain
-- Coding conventions (naming, units, caching, error handling)
-- A complete checklist before submitting any change
-- What not to do — and the exact bugs each anti-pattern caused
+See **[AGENTS.md](./AGENTS.md)** — covers the mandatory ontology-first development order, end-to-end walkthrough for adding a new data layer, naming conventions, caching rules, and what not to do.
