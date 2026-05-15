@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import {
   AppWindow, Bot, ExternalLink, Search, Globe,
@@ -63,11 +64,7 @@ function appEntryDescription(entry: AppEntry): string | null {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const APP_CATEGORIES = new Set(['application', 'alpha']);
-
-function hasApp(mod: ModuleInfo): boolean {
-  return APP_CATEGORIES.has(mod.category) || !!mod.app_url;
-}
+import { APP_CATEGORIES, hasApp } from '@/lib/app-constants';
 
 const CATEGORY_COLORS: Record<string, string> = {
   application: 'bg-purple-500/10 text-purple-500',
@@ -476,6 +473,8 @@ function EmptyState({ hasSearch, workspaceId }: { hasSearch: boolean; workspaceI
 export default function AppsPage() {
   const tenant = useTenant();
   const { currentWorkspaceId } = useWorkspaceStore();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [search, setSearch] = useState('');
   const [modules, setModules] = useState<ModuleInfo[]>([]);
@@ -492,11 +491,42 @@ export default function AppsPage() {
         const map = new Map<string, ModuleInfo>();
         for (const m of data.available) map.set(m.module_path, m);
         for (const m of data.installed) map.set(m.module_path, { ...map.get(m.module_path) ?? m, installed: true });
-        setModules(Array.from(map.values()).filter((m) => m.installed && hasApp(m)));
+        const installed = Array.from(map.values()).filter((m) => m.installed && hasApp(m));
+        setModules(installed);
+
+        // Auto-open from ?open= deep-link
+        const openParam = searchParams?.get('open');
+        if (openParam) {
+          const mod = installed.find((m) => m.module_path === openParam);
+          if (mod?.app_url) {
+            setActiveApp({ kind: 'module', data: mod, url: mod.app_url });
+          } else {
+            // Try tenant apps by URL
+            const tenantApp = tenant.apps.find((a) => a.url === openParam);
+            if (tenantApp) setActiveApp({ kind: 'tenant', data: tenantApp });
+          }
+        }
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleClose = () => {
+    setActiveApp(null);
+    // Clear the ?open param without pushing a new history entry
+    const base = `/workspace/${currentWorkspaceId}/apps`;
+    router.replace(base);
+  };
+
+  const handleOpen = (entry: AppEntry) => {
+    setActiveApp(entry);
+    const param = entry.kind === 'module'
+      ? entry.data.module_path
+      : entry.data.url;
+    const base = `/workspace/${currentWorkspaceId}/apps`;
+    router.replace(`${base}?open=${encodeURIComponent(param)}`);
+  };
 
   const filteredModules = useMemo(() => {
     if (!search) return modules;
@@ -517,7 +547,7 @@ export default function AppsPage() {
   if (activeApp) {
     return (
       <div className="flex h-full flex-col">
-        <EmbedView entry={activeApp} onBack={() => setActiveApp(null)} />
+        <EmbedView entry={activeApp} onBack={handleClose} />
       </div>
     );
   }
@@ -572,7 +602,7 @@ export default function AppsPage() {
                   <AppCard
                     key={app.url}
                     entry={{ kind: 'tenant', data: app }}
-                    onSelect={() => setActiveApp({ kind: 'tenant', data: app })}
+                    onSelect={() => handleOpen({ kind: 'tenant', data: app })}
                   />
                 ))}
               </div>
@@ -591,7 +621,7 @@ export default function AppsPage() {
                     <AppCard
                       key={mod.module_path}
                       entry={{ kind: 'module', data: mod, url }}
-                      onSelect={() => setActiveApp({ kind: 'module', data: mod, url })}
+                      onSelect={() => handleOpen({ kind: 'module', data: mod, url })}
                     />
                   );
                 })}
