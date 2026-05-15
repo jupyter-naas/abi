@@ -165,7 +165,17 @@ export default function WSR() {
       CsRef.current = Cesium;
 
       const token = process.env.NEXT_PUBLIC_CESIUM_TOKEN;
-      if (token) Cesium.Ion.defaultAccessToken = token;
+      // Explicitly clear the Ion token when none is configured so Cesium does
+      // not fire unauthenticated Ion/Bing requests that log console errors.
+      Cesium.Ion.defaultAccessToken = token ?? '';
+
+      // Pre-load OSM so it can be used as the initial imagery layer, avoiding
+      // the default Ion imagery request entirely.
+      const osmProvider = new Cesium.UrlTemplateImageryProvider({
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        subdomains: ['a', 'b', 'c'],
+        credit: '© OpenStreetMap contributors',
+      });
 
       // Build viewer options
       const viewerEl = containerRef.current;
@@ -176,6 +186,8 @@ export default function WSR() {
         navigationHelpButton: false, fullscreenButton: false,
         infoBox: false, selectionIndicator: false,
         creditContainer: document.createElement('div'),
+        // Provide OSM as the base layer directly — prevents any Ion imagery request.
+        baseLayer: new Cesium.ImageryLayer(osmProvider),
       };
 
       if (token) {
@@ -186,24 +198,17 @@ export default function WSR() {
 
       const viewer = new Cesium.Viewer(viewerEl, opts);
 
-      // Cesium 1.121+ requires async factory for all imagery providers
-      try {
-        const esriProvider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
-          'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer',
-          { credit: '© Esri World Imagery' }
-        );
-        viewer.imageryLayers.removeAll();
-        viewer.imageryLayers.add(new Cesium.ImageryLayer(esriProvider));
-      } catch (imgErr) {
-        console.warn('ESRI imagery failed, trying OSM:', imgErr);
+      // If an Ion token is available, upgrade to ESRI satellite imagery.
+      if (token) {
         try {
-          const osmProvider = await Cesium.OpenStreetMapImageryProvider.fromUrl(
-            'https://a.tile.openstreetmap.org/'
+          const esriProvider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
+            'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer',
+            { credit: '© Esri World Imagery' }
           );
           viewer.imageryLayers.removeAll();
-          viewer.imageryLayers.add(new Cesium.ImageryLayer(osmProvider));
-        } catch (e2) {
-          console.warn('All imagery providers failed:', e2);
+          viewer.imageryLayers.add(new Cesium.ImageryLayer(esriProvider));
+        } catch {
+          // Keep the OSM base layer that was set in the viewer constructor.
         }
       }
       viewerRef.current = viewer;

@@ -1,4 +1,5 @@
 from typing import Optional
+
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -7,14 +8,16 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "World Situation Room"
-DESCRIPTION = "Real-time geospatial intelligence platform combining satellite data, flight tracking, seismic activity, CCTV streams, and conflict-zone analysis on a live 3D globe."
-AVATAR_URL = "https://assets.naas.ai/marketplace/wsr/logo.png"
-MODEL = "gpt-4.1-mini"
-TIER = "community"
-MAINTAINER = "naas.ai"
 
-SYSTEM_PROMPT = """<role>
+class WSRAgent(IntentAgent):
+    name: str = "World Situation Room"
+    description: str = (
+        "Real-time geospatial intelligence platform combining satellite data, "
+        "flight tracking, seismic activity, CCTV streams, and conflict-zone "
+        "analysis on a live 3D globe."
+    )
+    logo_url: str = "https://assets.naas.ai/marketplace/wsr/logo.png"
+    system_prompt: str = """<role>
 You are the World Situation Room (WSR) Agent — a geospatial intelligence analyst with access to real-time global data feeds.
 </role>
 
@@ -28,10 +31,10 @@ The WSR platform fuses the following live data layers:
 - Commercial flights: OpenSky Network / airplanes.live (refresh: 30s)
 - Military flights: ADSB.lol with airplanes.live fallback (refresh: 60s)
 - Theater aircraft (Middle East): airplanes.live 3-region fan-out (refresh: 45s)
-- Earthquakes M≥1.0: USGS GeoJSON feed (refresh: 5min)
-- CCTV — New York: 511NY.org (refresh: 5min)
-- CCTV — London (~900 cameras): TfL JamCam API (refresh: 5min)
-- CCTV — Middle East theater: curated static dataset
+- Earthquakes M>=1.0: USGS GeoJSON feed (refresh: 5min)
+- CCTV New York: 511NY.org (refresh: 5min)
+- CCTV London (~900 cameras): TfL JamCam API (refresh: 5min)
+- CCTV Middle East theater: curated static dataset
 - Conflict zones: OSINT-sourced dataset (20+ active sites)
 - Intel feed: BBC / Al Jazeera / Reuters RSS (refresh: 3min)
 </context>
@@ -57,60 +60,79 @@ The WSR platform fuses the following live data layers:
 - Always distinguish military from commercial aviation
 </constraints>
 """
-
-
-def create_wsr_agent(
-    model=None,
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-):
-    from naas_abi_core.services.agent.model import ChatModel
-
-    if model is None:
-        model = ChatModel(model=MODEL)
-
-    tools: list = []
-
     intents: list = [
         Intent(
             intent_value="What is happening in the world right now?",
             intent_type=IntentType.RAW,
-            intent_target="I can give you a real-time situational brief across all WSR data layers: active conflict zones, flight anomalies, seismic activity, and breaking news from live RSS feeds. Open the WSR globe to see the live view.",
+            intent_target=(
+                "I can give you a real-time situational brief across all WSR data layers: "
+                "active conflict zones, flight anomalies, seismic activity, and breaking news "
+                "from live RSS feeds. Open the WSR globe to see the live view."
+            ),
         ),
         Intent(
             intent_value="Show me active conflict zones",
             intent_type=IntentType.RAW,
-            intent_target="The WSR conflict layer pulls from an OSINT-sourced dataset of 20+ active sites. Enable the Conflict Zones layer on the globe to visualise current hotspots with associated intelligence notes.",
+            intent_target=(
+                "The WSR conflict layer pulls from an OSINT-sourced dataset of 20+ active sites. "
+                "Enable the Conflict Zones layer on the globe to visualise current hotspots "
+                "with associated intelligence notes."
+            ),
         ),
         Intent(
             intent_value="Track military flights",
             intent_type=IntentType.RAW,
-            intent_target="Military flight tracking uses ADSB.lol with airplanes.live fallback, refreshed every 60s. Theater aircraft over the Middle East are tracked via a 3-region fan-out at 45s intervals. Enable the Military layer on the globe.",
+            intent_target=(
+                "Military flight tracking uses ADSB.lol with airplanes.live fallback, refreshed "
+                "every 60s. Theater aircraft over the Middle East are tracked via a 3-region "
+                "fan-out at 45s intervals. Enable the Military layer on the globe."
+            ),
         ),
         Intent(
             intent_value="What are the latest earthquakes?",
             intent_type=IntentType.RAW,
-            intent_target="Seismic data comes from the USGS GeoJSON feed covering all M≥1.0 events, refreshed every 5 minutes. Enable the Earthquake layer on the globe to see magnitude, depth, and location.",
+            intent_target=(
+                "Seismic data comes from the USGS GeoJSON feed covering all M>=1.0 events, "
+                "refreshed every 5 minutes. Enable the Earthquake layer on the globe to see "
+                "magnitude, depth, and location."
+            ),
         ),
     ]
 
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "WSRAgent":
+        from langchain_openai import ChatOpenAI
+        from naas_abi_core.models.Model import ChatModel
+        from naas_abi_marketplace.ai.chatgpt import ABIModule as ChatGPTModule
 
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    return WSRAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools,
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
+        model = ChatModel(
+            model_id="gpt-4.1-mini",
+            provider="openai",
+            model=ChatOpenAI(
+                model="gpt-4.1-mini",
+                temperature=0,
+                timeout=120,
+                max_retries=3,
+                api_key=ChatGPTModule.get_instance().configuration.openai_api_key,
+            ),
+        )
 
-
-class WSRAgent(IntentAgent):
-    pass
+        return WSRAgent(
+            name=cls.name,
+            description=cls.description,
+            chat_model=model,
+            tools=[],
+            intents=cls.intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )
