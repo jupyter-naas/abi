@@ -203,6 +203,8 @@ class NexusConfig(BaseModel):
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
     redis_url: str = "redis://localhost:6379/0"
 
+    graph_base_uri: str = "http://ontology.naas.ai/graph/"
+
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
     magic_link_allow_signup: bool = False
@@ -306,7 +308,15 @@ class ABIModule(BaseModule):
             "naas_abi_marketplace.applications.zoho#soft",
             "naas_abi_marketplace.domains.support#soft",
         ],
-        services=[Secret, TripleStoreService, ObjectStorageService, VectorStoreService, BusService, CacheService, EmailService],
+        services=[
+            Secret,
+            TripleStoreService,
+            ObjectStorageService,
+            VectorStoreService,
+            BusService,
+            CacheService,
+            EmailService,
+        ],
     )
 
     class Configuration(ModuleConfiguration):

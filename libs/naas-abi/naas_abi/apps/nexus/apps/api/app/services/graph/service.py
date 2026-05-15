@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
+from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphEdgeData,
     GraphInfoData,
@@ -27,7 +28,7 @@ from rdflib.query import ResultRow
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/graph")
 
-GRAPH_BASE_URI = URIRef("http://ontology.naas.ai/graph/")
+GRAPH_BASE_URI = URIRef(ABIModule.get_instance().configuration.nexus_config.graph_base_uri)
 NEXUS_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/nexus")
 SCHEMA_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/schema")
 
@@ -399,30 +400,28 @@ class GraphService:
         store.insert(new_graph.rdf(), graph_name=NEXUS_GRAPH_URI)
         return GraphInfoData(id=graph_id, uri=str(new_graph_uri), label=graph_label)
 
-    async def clear_graph(self, workspace_id: str, graph_id: str) -> None:
-        graph_uri = GRAPH_BASE_URI + graph_id
-        if graph_uri in _PROTECTED_URIS:
+    async def clear_graph(self, workspace_id: str, graph_uri: str) -> None:
+        uri = URIRef(graph_uri)
+        if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be cleared.")
-        self._get_triple_store().clear_graph(graph_uri)
+        self._get_triple_store().clear_graph(uri)
 
-    async def delete_graph(self, workspace_id: str, graph_id: str) -> None:
-        graph_uri = GRAPH_BASE_URI + graph_id
-        if graph_uri in _PROTECTED_URIS:
+    async def delete_graph(self, workspace_id: str, graph_uri: str) -> None:
+        uri = URIRef(graph_uri)
+        if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be deleted.")
-        self._get_triple_store().drop_graph(graph_uri)
+        self._get_triple_store().drop_graph(uri)
 
     async def get_graph_overview(
-        self, workspace_id: str, graph_id: str, limit: int = 500
+        self, workspace_id: str, graph_uri: str, limit: int = 500
     ) -> GraphOverviewData:
         store = self._get_triple_store()
-        graph_uri = GRAPH_BASE_URI + graph_id
-        return _build_graph_overview(triple_store=store, graph_uri=graph_uri, limit=limit)
+        return _build_graph_overview(triple_store=store, graph_uri=URIRef(graph_uri), limit=limit)
 
     async def get_graph_network(
-        self, workspace_id: str, graph_id: str, limit: int = 500
+        self, workspace_id: str, graph_uri: str, limit: int = 500
     ) -> GraphNetworkData:
         store = self._get_triple_store()
-        graph_uri = str(GRAPH_BASE_URI + graph_id)
         return _list_individuals(
             triple_store=store,
             workspace_id=workspace_id,

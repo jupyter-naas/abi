@@ -121,7 +121,7 @@ async def clear_graph(
 ) -> dict[str, str]:
     await require_workspace_access(current_user.id, payload.workspace_id)
     try:
-        await graph_service.clear_graph(workspace_id=payload.workspace_id, graph_id=payload.id)
+        await graph_service.clear_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
     except GraphProtectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GraphServiceUnavailableError as exc:
@@ -137,7 +137,7 @@ async def delete_graph(
 ) -> dict[str, str]:
     await require_workspace_access(current_user.id, payload.workspace_id)
     try:
-        await graph_service.delete_graph(workspace_id=payload.workspace_id, graph_id=payload.id)
+        await graph_service.delete_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
     except GraphProtectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GraphServiceUnavailableError as exc:
@@ -145,10 +145,10 @@ async def delete_graph(
     return {"status": "deleted"}
 
 
-@router.get("/{graph_id}/overview")
+@router.get("/overview")
 async def get_graph_overview(
-    graph_id: str,
     workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
     limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
@@ -157,7 +157,7 @@ async def get_graph_overview(
     await require_workspace_access(current_user.id, workspace_id)
     try:
         overview = await graph_service.get_graph_overview(
-            workspace_id=workspace_id, graph_id=graph_id, limit=limit
+            workspace_id=workspace_id, graph_uri=graph_uri, limit=limit
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -167,10 +167,10 @@ async def get_graph_overview(
     )
 
 
-@router.get("/{graph_id}/network")
+@router.get("/network")
 async def get_graph_network(
-    graph_id: str,
     workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
     limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
@@ -179,7 +179,7 @@ async def get_graph_network(
     await require_workspace_access(current_user.id, workspace_id)
     try:
         network = await graph_service.get_graph_network(
-            workspace_id=workspace_id, graph_id=graph_id, limit=limit
+            workspace_id=workspace_id, graph_uri=graph_uri, limit=limit
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

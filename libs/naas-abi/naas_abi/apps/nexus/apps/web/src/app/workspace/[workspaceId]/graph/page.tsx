@@ -158,6 +158,7 @@ interface OntologyClassOption {
 interface GraphOption {
   id: string;
   name: string;
+  uri: string;
 }
 
 interface FilterOption {
@@ -621,7 +622,7 @@ export default function GraphPage() {
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
       let defaultGraphName = '';
-      let normalized: { id: string; label?: string }[] = [];
+      let normalized: { id: string; label?: string; uri: string }[] = [];
 
       try {
         const listCacheKey = `graph-list:${workspaceId}`;
@@ -655,24 +656,27 @@ export default function GraphPage() {
                 ? namesData.graphs
                 : [];
 
-            // Proper type guard: id AND label must be string
+            // Proper type guard: id, label, and uri must be string
             normalized = graphs.filter(
-              (g: unknown): g is { id: string; label: string } =>
+              (g: unknown): g is { id: string; label: string; uri: string } =>
                 typeof g === "object" &&
                 g !== null &&
                 "id" in g &&
                 "label" in g &&
+                "uri" in g &&
                 typeof (g as any).id === "string" &&
-                typeof (g as any).label === "string"
+                typeof (g as any).label === "string" &&
+                typeof (g as any).uri === "string"
             );
 
             if (normalized.length === 0) {
               setGraphOptions([]);
             } else {
               defaultGraphName = normalized[0].id;
-              const optionsToCache = normalized.map((g: { id: string; label?: string }) => ({
+              const optionsToCache = normalized.map((g: { id: string; label?: string; uri: string }) => ({
                 id: g.id,
                 name: g.label ?? g.id,
+                uri: g.uri,
               }));
               setGraphOptions(optionsToCache);
               writeCache(graphListCache, listCacheKey, {
@@ -709,12 +713,17 @@ export default function GraphPage() {
             ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
             : normalized.map((graph) => graph.id);
         const effectiveGraphId = graphIdsToFetch[0] ?? defaultGraphName ?? '';
+        const effectiveUri =
+          normalized.find((g) => g.id === effectiveGraphId)?.uri ??
+          graphOptions.find((g) => g.id === effectiveGraphId)?.uri ??
+          '';
         const params = new URLSearchParams({
           workspace_id: workspaceId,
           limit: '500',
         });
-        requestsToFetch = effectiveGraphId
-          ? [{ url: `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/network?${params.toString()}` }]
+        if (effectiveUri) params.set('graph_uri', effectiveUri);
+        requestsToFetch = effectiveUri
+          ? [{ url: `${apiUrl}/api/graph/network?${params.toString()}` }]
           : [];
       }
 
@@ -809,8 +818,9 @@ export default function GraphPage() {
           ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
           : graphOptions.map((graph) => graph.id);
       const effectiveGraphId = graphIdsToFetch[0] ?? '';
-      if (effectiveGraphId) {
-        overviewUrl = `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+      const effectiveUri = graphOptions.find((g) => g.id === effectiveGraphId)?.uri ?? '';
+      if (effectiveUri) {
+        overviewUrl = `${apiUrl}/api/graph/overview?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(effectiveUri)}`;
       }
     }
 
@@ -1447,7 +1457,9 @@ export default function GraphPage() {
       const graphIdsForParents = selectedGraphId
         ? [selectedGraphId]
         : visibleGraphIds.filter((id) => !id.includes('#layer='));
-      const graphNamesForParents = graphIdsForParents.map((id) => `http://ontology.naas.ai/graph/${id}`);
+      const graphNamesForParents = graphIdsForParents.map(
+        (id) => graphOptions.find((g) => g.id === id)?.uri ?? `http://ontology.naas.ai/graph/${id}`
+      );
       const params = new URLSearchParams({ workspace_id: workspaceId! });
       graphNamesForParents.forEach((n) => params.append('graph_names', n));
       frontier.forEach((n) => params.append('node_iris', n.id));

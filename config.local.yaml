@@ -42,6 +42,7 @@ modules:
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
         redis_url: "redis://redis:6379/0"
+        graph_base_uri: "http://ontology.naas.ai/graph/"
         feature_flags:
           enabled_features:
             - chat
@@ -95,6 +96,14 @@ modules:
                 members:
                   - email: "admin@example.com"
                     role: "owner"
+              - name: "Secondary"
+                slug: "secondary"
+                owner_email: "admin@example.com"
+                primary_color: "#34D399"
+                accent_color: "#34D399"
+                members:
+                  - email: "admin@example.com"
+                    role: "member"
 
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
