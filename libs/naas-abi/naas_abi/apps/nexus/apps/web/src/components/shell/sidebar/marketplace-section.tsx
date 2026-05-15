@@ -18,7 +18,7 @@ const TYPE_LINKS = [
   { type: 'pipelines', label: 'Pipelines', icon: <GitBranch size={14} /> },
 ] as const;
 
-export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
+export function MarketplaceSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const { currentWorkspaceId } = useWorkspaceStore();
   const pathname = usePathname();
   const searchParams = useSearchParams();

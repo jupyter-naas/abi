@@ -295,6 +295,7 @@ export function ChatInterface() {
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const streamControllerRef = useRef<AbortController | null>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -1149,8 +1150,10 @@ export function ChatInterface() {
     conversationIdOverride?: string
   ) => {
     e?.preventDefault();
+    if (isSubmittingRef.current) return;
     const sourceText = messageOverride !== undefined ? messageOverride : input;
     if ((!sourceText.trim() && attachedImages.length === 0) || isLoading) return;
+    isSubmittingRef.current = true;
     const effectiveAgent = agentOverride ?? selectedAgent;
 
     const latestActiveConversationId = useWorkspaceStore.getState().activeConversationId;
@@ -1733,6 +1736,7 @@ export function ChatInterface() {
     } finally {
       setIsLoading(false);
       setIsStreaming(false);
+      isSubmittingRef.current = false;
     }
   };
 
