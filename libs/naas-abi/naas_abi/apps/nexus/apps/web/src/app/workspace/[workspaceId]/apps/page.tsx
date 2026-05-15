@@ -519,7 +519,11 @@ export default function AppsPage() {
       .then((data: ModulesResponse) => {
         const map = new Map<string, ModuleInfo>();
         for (const m of data.available) map.set(m.module_path, m);
-        for (const m of data.installed) map.set(m.module_path, { ...map.get(m.module_path) ?? m, installed: true });
+        // Spread available first (has app_url from catalog), then installed (has demo_login/demo_password)
+        for (const m of data.installed) {
+          const base = map.get(m.module_path) ?? {};
+          map.set(m.module_path, { ...base, ...m, installed: true });
+        }
         const installed = Array.from(map.values()).filter((m) => m.installed && hasApp(m));
         setModules(installed);
 
