@@ -193,6 +193,7 @@ interface WorkspaceState {
   toggleSection: (section: SidebarSection) => void;
   activePanelSection: SidebarSection | null;
   setActivePanelSection: (section: SidebarSection | null) => void;
+  lastActivePanelSection: SidebarSection | null;
 
   // Currently open app (for Apps section panel detail view)
   openAppModule: OpenAppModule | null;
@@ -327,7 +328,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         : [...state.expandedSections, section],
     })),
   activePanelSection: null,
-  setActivePanelSection: (section) => set({ activePanelSection: section }),
+  setActivePanelSection: (section) => set((state) => ({
+    activePanelSection: section,
+    lastActivePanelSection: section ?? state.lastActivePanelSection,
+  })),
+  lastActivePanelSection: null,
 
   openAppModule: null,
   setOpenAppModule: (mod) => set({ openAppModule: mod }),
