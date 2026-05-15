@@ -27,6 +27,25 @@ from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
+async def _prefetch_modules_catalog() -> None:
+    """Warm up the marketplace module catalog in a thread-pool worker.
+
+    The catalog scans naas_abi_marketplace via filesystem I/O which is
+    synchronous.  Running it via run_in_executor keeps the event loop free.
+    """
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.modules.service import (
+            _build_catalog,
+        )
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _build_catalog)
+        _log.info("✓ Marketplace catalog pre-populated at startup")
+    except Exception:
+        _log.exception("Background modules catalog pre-fetch failed (non-fatal)")
+
+
 async def _prefetch_agent_class_registry() -> None:
     """Warm up the agent class registry in a thread-pool worker.
 
@@ -84,6 +103,9 @@ async def _startup(app: FastAPI) -> None:
     # GET /agents/ request returns instantly from cache instead of waiting
     # for all agent modules to be imported.  create_task returns immediately.
     asyncio.create_task(_prefetch_agent_class_registry())
+
+    # Pre-populate the marketplace catalog so first GET /modules/ is instant.
+    asyncio.create_task(_prefetch_modules_catalog())
 
     # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
     # print("Checking Ollama status...")

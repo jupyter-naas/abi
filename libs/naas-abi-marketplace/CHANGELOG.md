@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.1 (2026-05-15)
+
+### Bug Fixes
+
+- **marketplace**: Replace dead Clearbit logo URLs with working alternatives
+  ([`a471479`](https://github.com/jupyter-naas/abi/commit/a471479ad00335eb221e432c12eb37a1a4717097))
+
+
 ## v1.19.0 (2026-05-13)
 
 ### Features
