@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AppWindow, Bot, ExternalLink, LayoutGrid } from 'lucide-react';
+import { AppWindow, Bot, LayoutGrid, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 
@@ -40,10 +40,11 @@ function ModuleIcon({ mod, size = 14 }: { mod: ModuleInfo; size?: number }) {
 }
 
 export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
-  const { currentWorkspaceId } = useWorkspaceStore();
+  const { currentWorkspaceId, setActivePanelSection } = useWorkspaceStore();
   const basePath = getWorkspacePath(currentWorkspaceId, '/apps');
   const marketplacePath = getWorkspacePath(currentWorkspaceId, '/marketplace?type=applications');
   const pathname = usePathname();
+  const router = useRouter();
   const isOnApps = pathname?.includes('/apps');
 
   const [apps, setApps] = useState<ModuleInfo[]>([]);
@@ -103,13 +104,16 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
         </Link>
       )}
 
-      <Link
-        href={marketplacePath}
+      <button
+        onClick={() => {
+          setActivePanelSection('marketplace');
+          router.push(marketplacePath);
+        }}
         className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
-        <ExternalLink size={14} />
+        <Store size={14} />
         <span>Browse Marketplace</span>
-      </Link>
+      </button>
     </CollapsibleSection>
   );
 }
