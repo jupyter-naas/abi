@@ -30,6 +30,69 @@ def _initialize_nexus_service_registry() -> None:
         pass
 
 
+class ModelPricingEntry(BaseModel):
+    """LLM token cost for one model (USD per 1M tokens)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_per_million: float
+    output_per_million: float
+    label: str
+
+
+class MarketplaceUsageTier(BaseModel):
+    """A concrete usage scenario used to estimate monthly LLM token costs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    interactions: int
+    avg_tokens: int
+    description: str
+
+
+class MarketplacePricingConfig(BaseModel):
+    """Maintenance fee configuration (expert retainer, not a license)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    maintenance_standard_usd: int = 499
+    maintenance_early_access_usd: int = 299
+    cta_url: str = "https://naas.ai/enterprise"
+    enterprise_categories: list[str] = Field(default_factory=lambda: ["domain"])
+    input_output_ratio: float = 0.6
+
+
+class MarketplaceConfig(BaseModel):
+    """Full marketplace configuration surfaced to the frontend via /api/modules/config."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pricing: MarketplacePricingConfig = Field(default_factory=MarketplacePricingConfig)
+    usage_tiers: list[MarketplaceUsageTier] = Field(
+        default_factory=lambda: [
+            MarketplaceUsageTier(label="Starter",      interactions=50,    avg_tokens=2_000,  description="~2 queries/day"),
+            MarketplaceUsageTier(label="Professional", interactions=300,   avg_tokens=5_000,  description="~10 queries/day"),
+            MarketplaceUsageTier(label="Scale",        interactions=2_000, avg_tokens=10_000, description="~65 queries/day, team use"),
+        ]
+    )
+    model_pricing: dict[str, ModelPricingEntry] = Field(
+        default_factory=lambda: {
+            "gpt-4o":           ModelPricingEntry(input_per_million=2.50,  output_per_million=10.00, label="GPT-4o"),
+            "gpt-4o-mini":      ModelPricingEntry(input_per_million=0.15,  output_per_million=0.60,  label="GPT-4o mini"),
+            "gpt-4":            ModelPricingEntry(input_per_million=30.00, output_per_million=60.00, label="GPT-4"),
+            "gpt-3.5-turbo":    ModelPricingEntry(input_per_million=0.50,  output_per_million=1.50,  label="GPT-3.5 Turbo"),
+            "o1":               ModelPricingEntry(input_per_million=15.00, output_per_million=60.00, label="o1"),
+            "o3-mini":          ModelPricingEntry(input_per_million=1.10,  output_per_million=4.40,  label="o3-mini"),
+            "claude-opus":      ModelPricingEntry(input_per_million=15.00, output_per_million=75.00, label="Claude Opus"),
+            "claude-sonnet":    ModelPricingEntry(input_per_million=3.00,  output_per_million=15.00, label="Claude Sonnet"),
+            "claude-haiku":     ModelPricingEntry(input_per_million=0.25,  output_per_million=1.25,  label="Claude Haiku"),
+            "gemini-1.5-pro":   ModelPricingEntry(input_per_million=3.50,  output_per_million=10.50, label="Gemini 1.5 Pro"),
+            "gemini-1.5-flash": ModelPricingEntry(input_per_million=0.075, output_per_million=0.30,  label="Gemini Flash"),
+        }
+    )
+
+
 class TenantConfig(BaseModel):
     """Tenant branding surfaced to the browser (tab title, favicon, etc.)."""
 
@@ -240,6 +303,7 @@ class NexusConfig(BaseModel):
 
     tenant: TenantConfig = Field(default_factory=TenantConfig)
     feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
+    marketplace: MarketplaceConfig = Field(default_factory=MarketplaceConfig)
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
 
