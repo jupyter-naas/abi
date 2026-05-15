@@ -71,7 +71,7 @@ const WORKSPACE_SEGMENT_TITLE: Record<string, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   lab: 'Lab',
-  apps: 'Apps',
+  marketplace: 'Marketplace',
   help: 'Help',
   settings: 'Workspace Settings',
   organization: 'Organization',
