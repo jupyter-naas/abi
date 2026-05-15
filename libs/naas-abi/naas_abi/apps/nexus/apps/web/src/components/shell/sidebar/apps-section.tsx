@@ -14,7 +14,6 @@ import Link from 'next/link';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { APP_CATEGORIES } from '@/lib/app-constants';
-import { type OpenAppModule } from '@/stores/workspace';
 
 interface ModuleInfo {
   module_path: string;
@@ -262,7 +261,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
       collapsed={collapsed}
     >
       {apps.map((mod) => {
-        const isActive = openParam === mod.module_path;
+        const isActive = openAppModule?.module_path === mod.module_path;
         return (
           <Link
             key={mod.module_path}
