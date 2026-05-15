@@ -6,7 +6,7 @@ import { Header } from '@/components/shell/header';
 import {
   AppWindow, Bot, ExternalLink, Search, Globe,
   ChevronLeft, ChevronRight, RefreshCw, AlertTriangle,
-  Tag, Info, KeyRound, Copy, Check,
+  Tag, Info, KeyRound, Copy, Check, PanelLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -368,6 +368,7 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
   const [blocked, setBlocked] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
 
   // Detect X-Frame-Options block: the iframe will fire onLoad with an empty
   // document when blocked. We use a timeout heuristic — if the iframe loads
@@ -391,7 +392,19 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
   return (
     <div className="flex h-full flex-col">
       {/* Top bar */}
-      <div className="flex h-12 flex-shrink-0 items-center gap-3 border-b border-border/50 px-4 bg-background">
+      <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-border/50 px-3 bg-background">
+        <button
+          onClick={() => setActivePanelSection(activePanelSection === 'apps' ? null : 'apps')}
+          title={activePanelSection === 'apps' ? 'Close panel' : 'Open panel'}
+          className={cn(
+            'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded transition-colors',
+            activePanelSection === 'apps'
+              ? 'bg-muted text-foreground'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          <PanelLeft size={15} />
+        </button>
         <span className="text-sm font-medium truncate flex-1">{name}</span>
         <button
           onClick={handleReload}
@@ -483,7 +496,7 @@ function EmptyState({ hasSearch, workspaceId }: { hasSearch: boolean; workspaceI
 
 export default function AppsPage() {
   const tenant = useTenant();
-  const { currentWorkspaceId, setOpenAppModule } = useWorkspaceStore();
+  const { currentWorkspaceId, setOpenAppModule, setActivePanelSection } = useWorkspaceStore();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -539,6 +552,7 @@ export default function AppsPage() {
     setActiveApp(entry);
     if (entry.kind === 'module') setOpenAppModule(entry.data);
     else setOpenAppModule(null);
+    setActivePanelSection('apps');
     const param = entry.kind === 'module' ? entry.data.module_path : entry.data.url;
     const base = `/workspace/${currentWorkspaceId}/apps`;
     router.replace(`${base}?open=${encodeURIComponent(param)}`);

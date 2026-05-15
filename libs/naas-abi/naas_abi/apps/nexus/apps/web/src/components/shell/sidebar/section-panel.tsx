@@ -1,7 +1,5 @@
 'use client';
 
-import { useRef } from 'react';
-import { X, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
@@ -44,53 +42,26 @@ function SectionContent({ section }: { section: SidebarSection }) {
 }
 
 export function SectionPanel() {
-  const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
-  const lastSection = useRef<SidebarSection | null>(null);
-
-  if (activePanelSection !== null) {
-    lastSection.current = activePanelSection;
-  }
-
+  const { activePanelSection } = useWorkspaceStore();
   const isOpen = activePanelSection !== null;
   const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
 
   return (
-    <div className="relative flex flex-shrink-0">
-      {/* Panel */}
-      <div
-        className={cn(
-          'glass flex flex-col border-r border-border/50 transition-all duration-300 overflow-hidden',
-          isOpen ? 'w-64' : 'w-0'
-        )}
-      >
-        {isOpen && activePanelSection && (
-          <>
-            <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border/50 px-4">
-              <span className="text-sm font-semibold truncate">{panelTitle}</span>
-              <button
-                onClick={() => setActivePanelSection(null)}
-                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title="Close panel"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <nav className="flex-1 overflow-y-auto p-2">
-              <SectionContent section={activePanelSection} />
-            </nav>
-          </>
-        )}
-      </div>
-
-      {/* Re-open tab — only visible when panel is closed and a section was previously open */}
-      {!isOpen && lastSection.current && (
-        <button
-          onClick={() => setActivePanelSection(lastSection.current)}
-          title={`Open ${SECTION_LABELS[lastSection.current]} panel`}
-          className="absolute left-0 top-1/2 -translate-y-1/2 flex h-10 w-4 items-center justify-center rounded-r border border-l-0 border-border/50 bg-background text-muted-foreground shadow-sm hover:text-foreground hover:bg-muted transition-colors z-10"
-        >
-          <ChevronRight size={10} />
-        </button>
+    <div
+      className={cn(
+        'glass flex flex-col border-r border-border/50 transition-all duration-300 overflow-hidden flex-shrink-0',
+        isOpen ? 'w-64' : 'w-0'
+      )}
+    >
+      {isOpen && activePanelSection && (
+        <>
+          <div className="flex h-14 flex-shrink-0 items-center border-b border-border/50 px-4">
+            <span className="text-sm font-semibold">{panelTitle}</span>
+          </div>
+          <nav className="flex-1 overflow-y-auto p-2">
+            <SectionContent section={activePanelSection} />
+          </nav>
+        </>
       )}
     </div>
   );
