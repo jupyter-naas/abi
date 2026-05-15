@@ -17,7 +17,7 @@
 # Your open-source AI Operating System. One config file, one stack,
 # every data and AI module your organization needs -- all data stays yours.
 #
-# {{ secret.X }}  read from .env at startup. Never hardcode credentials here.
+# `secret.X`  read from .env at startup. Never hardcode credentials here.
 # config.remote.yaml  the twin of this file for cloud/production deployments.
 # =============================================================================
 
@@ -200,7 +200,7 @@ modules:
 services:
 
   # Q: How does the app read secret values at startup?
-  # A: The dotenv adapter reads every {{ secret.X }} from your .env file.
+  # A: The dotenv adapter reads every `secret.X` from your .env file.
   secret:
     secret_adapters:
       - adapter: "dotenv"
