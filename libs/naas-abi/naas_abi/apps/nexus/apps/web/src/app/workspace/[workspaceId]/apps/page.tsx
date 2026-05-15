@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '@/components/shell/header';
 import {
-  AppWindow, Bot, ExternalLink, Search, Package, Globe,
+  AppWindow, Bot, ExternalLink, Search, Globe,
   ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, AlertTriangle,
   Tag, Info, KeyRound, Copy, Check,
 } from 'lucide-react';
@@ -150,8 +150,8 @@ function AppCard({ entry, onSelect }: { entry: AppEntry; onSelect: () => void })
       {/* Footer */}
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50">
         {entry.kind === 'module' ? (
-          <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-            <Package size={11} /> Installed
+          <span className="text-xs text-muted-foreground truncate max-w-[140px]">
+            {entry.data.maintainer ?? entry.data.category}
           </span>
         ) : (
           <span className="text-xs text-muted-foreground truncate max-w-[140px]">{url}</span>
@@ -524,7 +524,7 @@ export default function AppsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Apps" subtitle="Web apps from your installed modules" />
+      <Header title="Apps" subtitle="Your installed and configured apps" />
 
       <div className="flex-1 overflow-auto">
         <div className="p-6 space-y-6">
@@ -566,7 +566,7 @@ export default function AppsPage() {
           {/* Tenant apps */}
           {!loading && !error && filteredTenantApps.length > 0 && (
             <section>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Configured</h2>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">External</h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredTenantApps.map((app) => (
                   <AppCard
