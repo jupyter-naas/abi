@@ -12,7 +12,7 @@ import { useWorkspaceStore, type AgentType, type Message, type SidebarSection, t
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { AgentSelector } from './agent-selector';
 import { TypingIndicator } from '@/components/typing-indicator';
