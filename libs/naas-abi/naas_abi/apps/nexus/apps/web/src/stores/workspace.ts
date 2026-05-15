@@ -48,7 +48,7 @@ export type AgentType = string;
 export interface ToolCall {
   id: string;
   toolName: string;
-  prefix: 'Tool' | 'Agent' | 'Handoff to';
+  prefix: 'Tool' | 'Agent' | 'Handoff to' | 'Routing to';
   rawName: string;
   status: 'running' | 'done';
   input?: string;
