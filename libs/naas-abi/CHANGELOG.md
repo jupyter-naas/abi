@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v1.45.0 (2026-05-15)
+
+### Bug Fixes
+
+- Update ontology base URI in config and service
+  ([`1f3aec8`](https://github.com/jupyter-naas/abi/commit/1f3aec8318a992b92d475713483f302cd6df82b6))
+
+- **graph**: Reduce default limit, add total instance count for graph overview
+  ([`9ddd7e1`](https://github.com/jupyter-naas/abi/commit/9ddd7e12805093f9f21e9a4cb3aa13f55a7cc705))
+
+- **workspace**: Correct default and toggle for layout direction in OntologyNetworkView
+  ([`e722341`](https://github.com/jupyter-naas/abi/commit/e7223412ebe6b92285f93434979763404fcb8af5))
+
+### Features
+
+- **graph**: Add hierarchy direction control for parent tree layout in graph page
+  ([`1a2179c`](https://github.com/jupyter-naas/abi/commit/1a2179c18b1472d14f696702b2ebc19c540b8a63))
+
+- **graph**: Add physics-based bucket layout for graph nodes
+  ([`3675218`](https://github.com/jupyter-naas/abi/commit/36752180574507b0859209c526c2670d36c8b314))
+
+- **graph**: Add search API endpoint and backend search support in graph UI
+  ([`4bd35c1`](https://github.com/jupyter-naas/abi/commit/4bd35c1d63605c6be6ab4d2018beef3c264ec66f))
+
+- **graph**: Preserve per-graph filter state and restore on graph switch
+  ([`3675218`](https://github.com/jupyter-naas/abi/commit/36752180574507b0859209c526c2670d36c8b314))
+
+- **graph**: Support graph URIs parameter and base URI configuration
+  ([`bbbb9c5`](https://github.com/jupyter-naas/abi/commit/bbbb9c5057518d4e31d7244dedadf6705ca65724))
+
+
 ## v1.44.0 (2026-05-14)
 
 ### Bug Fixes
