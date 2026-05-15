@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.37.1 (2026-05-15)
+
+### Bug Fixes
+
+- **Agent**: Disable markdown_pretty_display by default
+  ([`9bf481c`](https://github.com/jupyter-naas/abi/commit/9bf481c432727a3fba47779190850074ab1f7cb0))
+
+
 ## v1.37.0 (2026-05-13)
 
 ### Features
