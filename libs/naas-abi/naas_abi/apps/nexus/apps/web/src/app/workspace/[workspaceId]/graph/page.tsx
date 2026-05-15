@@ -158,6 +158,7 @@ interface OntologyClassOption {
 interface GraphOption {
   id: string;
   name: string;
+  uri: string;
 }
 
 interface FilterOption {
@@ -458,7 +459,7 @@ type TimestampedCacheEntry<T> = {
   expiresAt: number;
 };
 
-const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[] }>>();
+const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[]; totalNodeCount: number | null }>>();
 const overviewCache = new Map<string, TimestampedCacheEntry<ApiOverview | null>>();
 const graphListCache = new Map<
   string,
@@ -501,9 +502,19 @@ export default function GraphPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<ApiOverview | null>(null);
+  const [totalNodeCount, setTotalNodeCount] = useState<number | null>(null);
+  // Tracks which graph's data is currently rendered — VisNetwork key is tied to this
+  // so it only remounts when correct data for the new graph has actually arrived,
+  // preventing the stale-data / nodes-packed-in-middle bug on rapid graph switches.
+  const [loadedGraphKey, setLoadedGraphKey] = useState('');
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
+  const [committedQuery, setCommittedQuery] = useState('');
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchNodes, setSearchNodes] = useState<GraphNode[]>([]);
+  const [searchEdges, setSearchEdges] = useState<GraphEdge[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
@@ -542,8 +553,39 @@ export default function GraphPage() {
   // Relations filter — off by default
   const [showRelations, setShowRelations] = useState(false);
 
+  // Hierarchy direction for parent tree layout (only visible when parents ON + relations OFF)
+  const [hierarchyDirection, setHierarchyDirection] = useState<'TD' | 'LR'>('TD');
+
+  // Refs to read current filter state inside effects without stale closures
+  const showRelationsRef = useRef(showRelations);
+  const activeBucketsRef = useRef(activeBuckets);
+  const hiddenNodeIdsRef = useRef(hiddenNodeIds);
+  const nodeDisplayLimitRef = useRef(nodeDisplayLimit);
+  const parentsLevelsRef = useRef(parentsLevels);
+  const hierarchyDirectionRef = useRef(hierarchyDirection);
+  showRelationsRef.current = showRelations;
+  activeBucketsRef.current = activeBuckets;
+  hiddenNodeIdsRef.current = hiddenNodeIds;
+  nodeDisplayLimitRef.current = nodeDisplayLimit;
+  parentsLevelsRef.current = parentsLevels;
+  hierarchyDirectionRef.current = hierarchyDirection;
+
+  // Per-graph/view filter state — keyed by activeSavedViewId ?? selectedGraphId
+  type PerGraphFilterState = {
+    showRelations: boolean;
+    activeBuckets: Set<string>;
+    hiddenNodeIds: Set<string>;
+    nodeDisplayLimit: number;
+    parentsLevels: number;
+    hierarchyDirection: 'TD' | 'LR';
+  };
+  const filterStateByGraphRef = useRef<Map<string, PerGraphFilterState>>(new Map());
+  const prevGraphKeyRef = useRef<string | null>(null);
+
   // Increment to trigger physics re-layout in VisNetwork
   const [stabilizeKey, setStabilizeKey] = useState(0);
+  // Increments each time search is cleared — forces VisNetwork to remount with a fresh layout
+  const [searchExitKey, setSearchExitKey] = useState(0);
   const {
     activeViewType,
     setActiveViewType,
@@ -613,6 +655,7 @@ export default function GraphPage() {
   const loadFromApi = useCallback(async (options?: { force?: boolean }) => {
     const forceRefresh = options?.force === true;
     const requestId = ++loadRequestIdRef.current;
+    const graphKey = activeSavedViewId ?? selectedGraphId ?? visibleGraphIds[0] ?? 'default';
     setLoading(true);
     setError(null);
 
@@ -621,7 +664,7 @@ export default function GraphPage() {
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
       let defaultGraphName = '';
-      let normalized: { id: string; label?: string }[] = [];
+      let normalized: { id: string; label?: string; uri: string }[] = [];
 
       try {
         const listCacheKey = `graph-list:${workspaceId}`;
@@ -694,16 +737,20 @@ export default function GraphPage() {
       type NetworkRequest = { url: string; init?: RequestInit };
       let requestsToFetch: NetworkRequest[];
 
+      const NODE_LIMIT = 200;
+      let overviewUrl: string | null = null;
+
       if (activeSavedView) {
         const params = new URLSearchParams({
           workspace_id: workspaceId,
-          limit: '500',
+          limit: String(NODE_LIMIT),
         });
         requestsToFetch = [
           {
             url: `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/network?${params.toString()}`,
           },
         ];
+        overviewUrl = `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
       } else {
         const graphIdsToFetch =
           selectedGraphId
@@ -712,13 +759,21 @@ export default function GraphPage() {
             ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
             : normalized.map((graph) => graph.id);
         const effectiveGraphId = graphIdsToFetch[0] ?? defaultGraphName ?? '';
+        const effectiveUri =
+          normalized.find((g) => g.id === effectiveGraphId)?.uri ??
+          graphOptions.find((g) => g.id === effectiveGraphId)?.uri ??
+          '';
         const params = new URLSearchParams({
           workspace_id: workspaceId,
-          limit: '500',
+          limit: String(NODE_LIMIT),
         });
-        requestsToFetch = effectiveGraphId
-          ? [{ url: `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/network?${params.toString()}` }]
+        if (effectiveUri) params.set('graph_uri', effectiveUri);
+        requestsToFetch = effectiveUri
+          ? [{ url: `${apiUrl}/api/graph/network?${params.toString()}` }]
           : [];
+        if (effectiveUri) {
+          overviewUrl = `${apiUrl}/api/graph/overview?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(effectiveUri)}`;
+        }
       }
 
       const networkCacheKey = `network:${requestsToFetch.map(({ url }) => url).join('||')}`;
@@ -727,17 +782,26 @@ export default function GraphPage() {
         if (requestId === loadRequestIdRef.current) {
           setNodes(cachedNetwork.nodes);
           setEdges(cachedNetwork.edges);
+          setTotalNodeCount(cachedNetwork.totalNodeCount ?? null);
+          setLoadedGraphKey(graphKey);
         }
         return;
       }
 
-      const responses = await Promise.all(
-        requestsToFetch.map(({ url, init }) =>
-          authFetch(url, init)
-            .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-            .catch(() => ({ nodes: [], edges: [] }))
-        )
-      );
+      const [responses, overviewData] = await Promise.all([
+        Promise.all(
+          requestsToFetch.map(({ url, init }) =>
+            authFetch(url, init)
+              .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
+              .catch(() => ({ nodes: [], edges: [] }))
+          )
+        ),
+        overviewUrl
+          ? authFetch(overviewUrl)
+              .then((res) => (res.ok ? res.json() : null))
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
       
       // Merge all graph data
       responses.forEach((data) => {
@@ -768,17 +832,23 @@ export default function GraphPage() {
         }
       });
       
-      // Deduplicate nodes and edges by ID
-      const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values());
-      const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values());
+      // Deduplicate nodes and edges by ID, then cap at NODE_LIMIT
+      const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values()).slice(0, NODE_LIMIT);
+      const nodeIds = new Set(uniqueNodes.map((n) => n.id));
+      const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values()).filter(
+        (e) => nodeIds.has(e.source) && nodeIds.has(e.target)
+      );
 
       if (requestId !== loadRequestIdRef.current) {
         return;
       }
 
+      const fetchedTotal: number | null = overviewData?.kpis?.total_instances ?? null;
+      setTotalNodeCount(fetchedTotal);
       setNodes(uniqueNodes);
       setEdges(uniqueEdges);
-      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges });
+      setLoadedGraphKey(graphKey);
+      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges, totalNodeCount: fetchedTotal });
     } catch (err) {
       if (requestId !== loadRequestIdRef.current) {
         return;
@@ -791,6 +861,10 @@ export default function GraphPage() {
       }
     }
   }, [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView]);
+
+  const loadFromApiRef = useRef(loadFromApi);
+  loadFromApiRef.current = loadFromApi;
+  const wasInSearchModeRef = useRef(false);
 
   const loadOverviewFromApi = useCallback(async (options?: { force?: boolean }) => {
     const forceRefresh = options?.force === true;
@@ -812,8 +886,9 @@ export default function GraphPage() {
           ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
           : graphOptions.map((graph) => graph.id);
       const effectiveGraphId = graphIdsToFetch[0] ?? '';
-      if (effectiveGraphId) {
-        overviewUrl = `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+      const effectiveUri = graphOptions.find((g) => g.id === effectiveGraphId)?.uri ?? '';
+      if (effectiveUri) {
+        overviewUrl = `${apiUrl}/api/graph/overview?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(effectiveUri)}`;
       }
     }
 
@@ -888,15 +963,44 @@ export default function GraphPage() {
     setViews(normalizedViews);
   }, [workspaceId, setViews]);
 
-  // Reset selection and filters when the active graph identity changes
+  // Save filters for the graph we're leaving, restore (or default) for the new one.
   useEffect(() => {
+    const graphKey = activeSavedViewId ?? selectedGraphId ?? '__default';
+    const prevKey = prevGraphKeyRef.current;
+
+    if (prevKey !== null && prevKey !== graphKey) {
+      filterStateByGraphRef.current.set(prevKey, {
+        showRelations: showRelationsRef.current,
+        activeBuckets: new Set(activeBucketsRef.current),
+        hiddenNodeIds: new Set(hiddenNodeIdsRef.current),
+        nodeDisplayLimit: nodeDisplayLimitRef.current,
+        parentsLevels: parentsLevelsRef.current,
+        hierarchyDirection: hierarchyDirectionRef.current,
+      });
+    }
+    prevGraphKeyRef.current = graphKey;
+
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
-    setParentsLevels(0);
     setHierarchyByLevel([]);
-    setShowRelations(true);
-    setHiddenNodeIds(new Set());
-    setNodeDisplayLimit(200);
+    wasInSearchModeRef.current = false;
+
+    const saved = filterStateByGraphRef.current.get(graphKey);
+    if (saved) {
+      setShowRelations(saved.showRelations);
+      setActiveBuckets(saved.activeBuckets);
+      setHiddenNodeIds(saved.hiddenNodeIds);
+      setNodeDisplayLimit(saved.nodeDisplayLimit);
+      setParentsLevels(saved.parentsLevels);
+      setHierarchyDirection(saved.hierarchyDirection);
+    } else {
+      setShowRelations(false);
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setNodeDisplayLimit(200);
+      setParentsLevels(0);
+      setHierarchyDirection('TD');
+    }
   }, [selectedGraphId, activeSavedViewId]);
 
   // Load on mount and when workspace or visible graphs change
@@ -1429,6 +1533,75 @@ export default function GraphPage() {
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
+  // Effective URI of the currently selected graph (used for backend search)
+  const effectiveGraphUri = useMemo(() => {
+    if (activeSavedView) return '';
+    const id = selectedGraphId ?? graphOptions[0]?.id ?? '';
+    return graphOptions.find((g) => g.id === id)?.uri ?? '';
+  }, [activeSavedView, graphOptions, selectedGraphId]);
+
+  // Backend search — fires when committedQuery changes (committed via Enter or X button)
+  useEffect(() => {
+    if (!committedQuery) {
+      wasInSearchModeRef.current = false;
+      setIsSearchMode(false);
+      setSearchNodes([]);
+      setSearchEdges([]);
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setParentsLevels(0);
+      setShowRelations(false);
+      setSearchExitKey((k) => k + 1);
+      loadFromApiRef.current();
+      return;
+    }
+    if (!effectiveGraphUri) return;
+
+    const controller = new AbortController();
+    // Clear all active filters only when first entering search mode for this session
+    if (!wasInSearchModeRef.current) {
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setParentsLevels(0);
+      setShowRelations(false);
+      wasInSearchModeRef.current = true;
+    }
+    setIsSearchMode(true);
+    setSearchLoading(true);
+    const run = async () => {
+      try {
+        const apiUrl = getApiUrl();
+        const params = new URLSearchParams({
+          workspace_id: workspaceId!,
+          graph_uri: effectiveGraphUri,
+          query: committedQuery,
+          limit: '200',
+        });
+        const res = await authFetch(`${apiUrl}/api/graph/network/search?${params}`, { signal: controller.signal });
+        if (!res.ok) throw new Error('search failed');
+        const data = await res.json();
+        const visNodes: GraphNode[] = (data.nodes ?? []).map((n: ApiNode) => ({
+          id: n.id, label: n.label, type: n.type, properties: n.properties || {},
+        }));
+        const visEdges: GraphEdge[] = (data.edges ?? []).map((e: ApiEdge) => ({
+          id: e.id, source: e.source_id, target: e.target_id,
+          sourceLabel: e.source_label, targetLabel: e.target_label,
+          type: e.type, label: e.type, properties: e.properties || {},
+        }));
+        setSearchNodes(visNodes);
+        setSearchEdges(visEdges);
+        setStabilizeKey((k) => k + 1);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setIsSearchMode(false);
+      } finally {
+        setSearchLoading(false);
+      }
+    };
+    void run();
+    return () => controller.abort();
+  }, [committedQuery, effectiveGraphUri, workspaceId]);
+
   // Parents: expand one level — detect individuals or classes and fetch their parents
   const handleExpandParents = useCallback(async () => {
     const nextLevel = parentsLevels + 1;
@@ -1450,7 +1623,9 @@ export default function GraphPage() {
       const graphIdsForParents = selectedGraphId
         ? [selectedGraphId]
         : visibleGraphIds.filter((id) => !id.includes('#layer='));
-      const graphNamesForParents = graphIdsForParents.map((id) => `http://ontology.naas.ai/graph/${id}`);
+      const graphNamesForParents = graphIdsForParents.map(
+        (id) => graphOptions.find((g) => g.id === id)?.uri ?? `http://ontology.naas.ai/graph/${id}`
+      );
       const params = new URLSearchParams({ workspace_id: workspaceId! });
       graphNamesForParents.forEach((n) => params.append('graph_names', n));
       frontier.forEach((n) => params.append('node_iris', n.id));
@@ -1499,10 +1674,11 @@ export default function GraphPage() {
     return result;
   }, [nodes, hierarchyByLevel, parentsLevels]);
 
-  // Nodes grouped by bucket for the BFO panel checkboxes
+  // Nodes grouped by bucket for the BFO panel checkboxes — recalculated from search results in search mode
   const nodesPerBucketForPanel = useMemo(() => {
+    const source = isSearchMode ? searchNodes : allVisibleNodes;
     const map = new Map<string, Array<{ id: string; label: string }>>();
-    for (const node of allVisibleNodes) {
+    for (const node of source) {
       const bucket = resolveGraphNodeBucket(node);
       const existing = map.get(bucket) ?? [];
       existing.push({ id: node.id, label: node.label });
@@ -1512,19 +1688,13 @@ export default function GraphPage() {
       bucketNodes.sort((a, b) => a.label.localeCompare(b.label));
     }
     return map;
-  }, [allVisibleNodes]);
+  }, [allVisibleNodes, isSearchMode, searchNodes]);
 
-  // Filter nodes: search + bucket + hidden
+  // Filter nodes: in search mode backend provides results with all filters OFF;
+  // otherwise apply bucket and hidden-node filters
   const filteredNodes = useMemo(() => {
+    if (isSearchMode) return searchNodes;
     let result = allVisibleNodes;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((node) =>
-        node.label.toLowerCase().includes(q) ||
-        node.type.toLowerCase().includes(q) ||
-        node.id.toLowerCase().includes(q)
-      );
-    }
     if (activeBuckets.size > 0) {
       result = result.filter((node) => activeBuckets.has(resolveGraphNodeBucket(node)));
     }
@@ -1532,11 +1702,17 @@ export default function GraphPage() {
       result = result.filter((node) => !hiddenNodeIds.has(node.id));
     }
     return result;
-  }, [allVisibleNodes, searchQuery, activeBuckets, hiddenNodeIds]);
+  }, [allVisibleNodes, isSearchMode, searchNodes, activeBuckets, hiddenNodeIds]);
 
-  // Filter edges: relations toggle + parents levels + constrain to visible nodes
+  // Filter edges: in search mode return backend edges; otherwise apply relations/parents toggles
   const filteredEdges = useMemo(() => {
     const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
+
+    if (isSearchMode) {
+      if (!showRelations) return [];
+      return searchEdges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+    }
+
     let result: GraphEdge[] = [];
 
     // Regular relation edges
@@ -1556,7 +1732,7 @@ export default function GraphPage() {
     }
 
     return result;
-  }, [edges, filteredNodes, showRelations, parentsLevels, hierarchyByLevel]);
+  }, [edges, filteredNodes, isSearchMode, searchEdges, showRelations, parentsLevels, hierarchyByLevel]);
 
   // Apply display limit — slice filteredNodes and constrain edges to those nodes
   const displayedNodes = useMemo(
@@ -2182,17 +2358,26 @@ export default function GraphPage() {
                 {/* Search + relation filters — left */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
                   <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
-                    <Search size={14} className="text-muted-foreground" />
+                    {searchLoading
+                      ? <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                      : <Search size={14} className="text-muted-foreground" />
+                    }
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search nodes..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const q = searchQuery.trim().toLowerCase();
+                          setCommittedQuery(q);
+                        }
+                      }}
+                      placeholder="Search nodes…"
                       className="w-48 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                     />
                     {searchQuery && (
                       <button
-                        onClick={() => setSearchQuery('')}
+                        onClick={() => { setSearchQuery(''); setCommittedQuery(''); }}
                         className="text-muted-foreground hover:text-foreground"
                       >
                         <X size={14} />
@@ -2245,9 +2430,26 @@ export default function GraphPage() {
                       >+</button>
                     )}
                   </div>
-                  {(searchQuery || filteredNodes.length < allVisibleNodes.length || nodeDisplayLimit < filteredNodes.length) && (
+                  {!showRelations && parentsLevels > 0 && (
+                    <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
+                      {(['TD', 'LR'] as const).map((dir, i) => (
+                        <button
+                          key={dir}
+                          onClick={() => setHierarchyDirection(dir)}
+                          className={cn(
+                            'px-3 py-1.5 text-xs',
+                            i > 0 && 'border-l',
+                            hierarchyDirection === dir
+                              ? 'bg-foreground text-background'
+                              : 'text-muted-foreground hover:text-foreground'
+                          )}
+                        >{dir}</button>
+                      ))}
+                    </div>
+                  )}
+                  {(searchQuery || filteredNodes.length < allVisibleNodes.length || nodeDisplayLimit < filteredNodes.length || (totalNodeCount !== null && totalNodeCount > nodes.length)) && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                      Showing {Math.min(nodeDisplayLimit, filteredNodes.length)} of {allVisibleNodes.length} nodes
+                      Showing {Math.min(nodeDisplayLimit, filteredNodes.length)} of {totalNodeCount ?? allVisibleNodes.length} nodes
                     </span>
                   )}
                 </div>
@@ -2320,14 +2522,15 @@ export default function GraphPage() {
                 ) : (
                   <>
                     <VisNetwork
-                      key={activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}
+                      key={`${loadedGraphKey || (activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default')}-${showRelations ? 'rel' : 'bucket'}-x${searchExitKey}`}
                       nodes={displayedNodes}
                       edges={displayedEdges}
                       selectedNodeId={selectedNodeId}
                       onNodeSelect={setSelectedNodeId}
                       onEdgeSelect={setSelectedEdgeId}
                       stabilizeKey={stabilizeKey}
-                      layoutDirection={showRelations ? undefined : 'LR'}
+                      layoutDirection={showRelations ? undefined : hierarchyDirection}
+                      physicsEnabled={showRelations && parentsLevels > 0}
                     />
                     {filteredNodes.length > 0 && (
                       <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-1.5 rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm w-52">
