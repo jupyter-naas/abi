@@ -687,7 +687,7 @@ export default function MarketplacePage() {
       name: app.name,
       description: app.description ?? '',
       icon: app.icon_emoji ? <span className="text-2xl">{app.icon_emoji}</span> : <ExternalLink size={22} />,
-      type: 'tools' as ArtifactType,
+      type: 'applications' as ArtifactType,
       status: 'available' as const,
       url: app.url,
     })),
