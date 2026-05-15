@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import {
   AppWindow, Bot, ExternalLink, Search, Globe,
-  ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, AlertTriangle,
+  ChevronLeft, ChevronRight, RefreshCw, AlertTriangle,
   Tag, Info, KeyRound, Copy, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -392,14 +392,6 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
     <div className="flex h-full flex-col">
       {/* Top bar */}
       <div className="flex h-12 flex-shrink-0 items-center gap-3 border-b border-border/50 px-4 bg-background">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft size={15} />
-          <span className="hidden sm:inline">Back</span>
-        </button>
-        <div className="h-4 w-px bg-border" />
         <span className="text-sm font-medium truncate flex-1">{name}</span>
         <button
           onClick={handleReload}
