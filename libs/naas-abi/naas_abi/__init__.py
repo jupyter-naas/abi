@@ -340,6 +340,8 @@ class NexusConfig(BaseModel):
         '<p><a href="{magic_link_url}">Sign in to {app_name}</a></p>'
         "<p>This link expires in {expire_minutes} minutes.</p>"
     )
+    email_from_address: EmailStr = "no-reply@nexus.example.com"
+    email_from_name: str = "NEXUS"
 
     rate_limit_enabled: bool = True
     rate_limit_login_attempts: int = 5
