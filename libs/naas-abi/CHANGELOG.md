@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.48.0 (2026-05-15)
+
+### Features
+
+- **auth**: Enforce dynamic rendering for login page
+  ([`9ef540e`](https://github.com/jupyter-naas/abi/commit/9ef540e81294ef6abf6447de19f461a414d1378c))
+
+
 ## v1.47.1 (2026-05-15)
 
 ### Bug Fixes
