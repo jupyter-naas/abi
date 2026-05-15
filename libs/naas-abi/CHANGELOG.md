@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.49.1 (2026-05-15)
+
+### Bug Fixes
+
+- **nexus**: Expose email_from_address and email_from_name in NexusConfig
+  ([`80cb81b`](https://github.com/jupyter-naas/abi/commit/80cb81bce10d33fc80c60d6f2ec4474b8a946268))
+
+
 ## v1.49.0 (2026-05-15)
 
 ### Features
