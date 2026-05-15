@@ -59,12 +59,10 @@ function SectionContent({ section }: { section: SidebarSection }) {
 }
 
 export function SectionPanel() {
-  const { activePanelSection, setActivePanelSection, openAppModule } = useWorkspaceStore();
+  const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
   const isOpen = activePanelSection !== null;
 
-  const panelTitle = activePanelSection === 'apps' && openAppModule
-    ? openAppModule.name
-    : activePanelSection ? SECTION_LABELS[activePanelSection] : '';
+  const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
 
   return (
     <div
