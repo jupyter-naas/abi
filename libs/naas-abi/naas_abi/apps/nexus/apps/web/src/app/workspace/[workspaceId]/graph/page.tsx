@@ -510,6 +510,11 @@ export default function GraphPage() {
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
+  const [committedQuery, setCommittedQuery] = useState('');
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchNodes, setSearchNodes] = useState<GraphNode[]>([]);
+  const [searchEdges, setSearchEdges] = useState<GraphEdge[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
@@ -579,6 +584,8 @@ export default function GraphPage() {
 
   // Increment to trigger physics re-layout in VisNetwork
   const [stabilizeKey, setStabilizeKey] = useState(0);
+  // Increments each time search is cleared — forces VisNetwork to remount with a fresh layout
+  const [searchExitKey, setSearchExitKey] = useState(0);
   const {
     activeViewType,
     setActiveViewType,
@@ -855,6 +862,10 @@ export default function GraphPage() {
     }
   }, [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView]);
 
+  const loadFromApiRef = useRef(loadFromApi);
+  loadFromApiRef.current = loadFromApi;
+  const wasInSearchModeRef = useRef(false);
+
   const loadOverviewFromApi = useCallback(async (options?: { force?: boolean }) => {
     const forceRefresh = options?.force === true;
     if (pageMode !== 'graph' || activeViewType !== 'overview') {
@@ -972,6 +983,7 @@ export default function GraphPage() {
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setHierarchyByLevel([]);
+    wasInSearchModeRef.current = false;
 
     const saved = filterStateByGraphRef.current.get(graphKey);
     if (saved) {
@@ -1521,6 +1533,75 @@ export default function GraphPage() {
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
+  // Effective URI of the currently selected graph (used for backend search)
+  const effectiveGraphUri = useMemo(() => {
+    if (activeSavedView) return '';
+    const id = selectedGraphId ?? graphOptions[0]?.id ?? '';
+    return graphOptions.find((g) => g.id === id)?.uri ?? '';
+  }, [activeSavedView, graphOptions, selectedGraphId]);
+
+  // Backend search — fires when committedQuery changes (committed via Enter or X button)
+  useEffect(() => {
+    if (!committedQuery) {
+      wasInSearchModeRef.current = false;
+      setIsSearchMode(false);
+      setSearchNodes([]);
+      setSearchEdges([]);
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setParentsLevels(0);
+      setShowRelations(false);
+      setSearchExitKey((k) => k + 1);
+      loadFromApiRef.current();
+      return;
+    }
+    if (!effectiveGraphUri) return;
+
+    const controller = new AbortController();
+    // Clear all active filters only when first entering search mode for this session
+    if (!wasInSearchModeRef.current) {
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setParentsLevels(0);
+      setShowRelations(false);
+      wasInSearchModeRef.current = true;
+    }
+    setIsSearchMode(true);
+    setSearchLoading(true);
+    const run = async () => {
+      try {
+        const apiUrl = getApiUrl();
+        const params = new URLSearchParams({
+          workspace_id: workspaceId!,
+          graph_uri: effectiveGraphUri,
+          query: committedQuery,
+          limit: '200',
+        });
+        const res = await authFetch(`${apiUrl}/api/graph/network/search?${params}`, { signal: controller.signal });
+        if (!res.ok) throw new Error('search failed');
+        const data = await res.json();
+        const visNodes: GraphNode[] = (data.nodes ?? []).map((n: ApiNode) => ({
+          id: n.id, label: n.label, type: n.type, properties: n.properties || {},
+        }));
+        const visEdges: GraphEdge[] = (data.edges ?? []).map((e: ApiEdge) => ({
+          id: e.id, source: e.source_id, target: e.target_id,
+          sourceLabel: e.source_label, targetLabel: e.target_label,
+          type: e.type, label: e.type, properties: e.properties || {},
+        }));
+        setSearchNodes(visNodes);
+        setSearchEdges(visEdges);
+        setStabilizeKey((k) => k + 1);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setIsSearchMode(false);
+      } finally {
+        setSearchLoading(false);
+      }
+    };
+    void run();
+    return () => controller.abort();
+  }, [committedQuery, effectiveGraphUri, workspaceId]);
+
   // Parents: expand one level — detect individuals or classes and fetch their parents
   const handleExpandParents = useCallback(async () => {
     const nextLevel = parentsLevels + 1;
@@ -1593,10 +1674,11 @@ export default function GraphPage() {
     return result;
   }, [nodes, hierarchyByLevel, parentsLevels]);
 
-  // Nodes grouped by bucket for the BFO panel checkboxes
+  // Nodes grouped by bucket for the BFO panel checkboxes — recalculated from search results in search mode
   const nodesPerBucketForPanel = useMemo(() => {
+    const source = isSearchMode ? searchNodes : allVisibleNodes;
     const map = new Map<string, Array<{ id: string; label: string }>>();
-    for (const node of allVisibleNodes) {
+    for (const node of source) {
       const bucket = resolveGraphNodeBucket(node);
       const existing = map.get(bucket) ?? [];
       existing.push({ id: node.id, label: node.label });
@@ -1606,19 +1688,13 @@ export default function GraphPage() {
       bucketNodes.sort((a, b) => a.label.localeCompare(b.label));
     }
     return map;
-  }, [allVisibleNodes]);
+  }, [allVisibleNodes, isSearchMode, searchNodes]);
 
-  // Filter nodes: search + bucket + hidden
+  // Filter nodes: in search mode backend provides results with all filters OFF;
+  // otherwise apply bucket and hidden-node filters
   const filteredNodes = useMemo(() => {
+    if (isSearchMode) return searchNodes;
     let result = allVisibleNodes;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((node) =>
-        node.label.toLowerCase().includes(q) ||
-        node.type.toLowerCase().includes(q) ||
-        node.id.toLowerCase().includes(q)
-      );
-    }
     if (activeBuckets.size > 0) {
       result = result.filter((node) => activeBuckets.has(resolveGraphNodeBucket(node)));
     }
@@ -1626,11 +1702,17 @@ export default function GraphPage() {
       result = result.filter((node) => !hiddenNodeIds.has(node.id));
     }
     return result;
-  }, [allVisibleNodes, searchQuery, activeBuckets, hiddenNodeIds]);
+  }, [allVisibleNodes, isSearchMode, searchNodes, activeBuckets, hiddenNodeIds]);
 
-  // Filter edges: relations toggle + parents levels + constrain to visible nodes
+  // Filter edges: in search mode return backend edges; otherwise apply relations/parents toggles
   const filteredEdges = useMemo(() => {
     const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
+
+    if (isSearchMode) {
+      if (!showRelations) return [];
+      return searchEdges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+    }
+
     let result: GraphEdge[] = [];
 
     // Regular relation edges
@@ -1650,7 +1732,7 @@ export default function GraphPage() {
     }
 
     return result;
-  }, [edges, filteredNodes, showRelations, parentsLevels, hierarchyByLevel]);
+  }, [edges, filteredNodes, isSearchMode, searchEdges, showRelations, parentsLevels, hierarchyByLevel]);
 
   // Apply display limit — slice filteredNodes and constrain edges to those nodes
   const displayedNodes = useMemo(
@@ -2276,17 +2358,26 @@ export default function GraphPage() {
                 {/* Search + relation filters — left */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
                   <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
-                    <Search size={14} className="text-muted-foreground" />
+                    {searchLoading
+                      ? <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                      : <Search size={14} className="text-muted-foreground" />
+                    }
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search nodes..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const q = searchQuery.trim().toLowerCase();
+                          setCommittedQuery(q);
+                        }
+                      }}
+                      placeholder="Search nodes…"
                       className="w-48 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                     />
                     {searchQuery && (
                       <button
-                        onClick={() => setSearchQuery('')}
+                        onClick={() => { setSearchQuery(''); setCommittedQuery(''); }}
                         className="text-muted-foreground hover:text-foreground"
                       >
                         <X size={14} />
@@ -2431,7 +2522,7 @@ export default function GraphPage() {
                 ) : (
                   <>
                     <VisNetwork
-                      key={`${loadedGraphKey || (activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default')}-${showRelations ? 'rel' : 'bucket'}`}
+                      key={`${loadedGraphKey || (activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default')}-${showRelations ? 'rel' : 'bucket'}-x${searchExitKey}`}
                       nodes={displayedNodes}
                       edges={displayedEdges}
                       selectedNodeId={selectedNodeId}

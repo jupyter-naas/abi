@@ -189,6 +189,32 @@ async def get_graph_network(
     )
 
 
+@router.get("/network/search")
+async def search_graph_network(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
+    query: str = Query(..., min_length=1, description="Search term matched against node labels"),
+    limit: int = Query(default=200, le=2000),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphData:
+    """Search nodes by label within a graph. Returns matching individuals and their edges."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        result = await graph_service.search_network(
+            workspace_id=workspace_id,
+            graph_uri=graph_uri,
+            search_query=query,
+            limit=limit,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphData(
+        nodes=[_node_to_schema(n) for n in result.nodes],
+        edges=[_edge_to_schema(e) for e in result.edges],
+    )
+
+
 @router.get("/network/parents")
 async def get_network_parents(
     workspace_id: str = Query(..., description="Workspace ID"),
