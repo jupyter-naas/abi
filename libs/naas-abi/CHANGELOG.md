@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.49.0 (2026-05-15)
+
+### Features
+
+- **nexus**: Enhance NexusPlatformPipeline with AIModel and Capabilities support
+  ([`49c4a94`](https://github.com/jupyter-naas/abi/commit/49c4a9458f6b052a6593393f3486e4838c11cfe9))
+
+
 ## v1.48.0 (2026-05-15)
 
 ### Features
