@@ -18,7 +18,6 @@ Routers map 1:1 to BFO process types defined in wsr.ttl:
 
 from contextlib import asynccontextmanager
 
-import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

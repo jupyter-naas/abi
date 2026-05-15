@@ -1,0 +1,5 @@
+NAME = "World Situation Room"
+DESCRIPTION = "Real-time geospatial intelligence platform. Fuses live satellite orbits, commercial and military flight data, seismic activity, CCTV streams, and conflict-zone intelligence into a single 3D globe."
+AVATAR_URL = "https://assets.naas.ai/marketplace/wsr/logo.png"
+TIER = "community"
+MAINTAINER = "naas.ai"

@@ -38,7 +38,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # ─── wsr:AircraftPositionReport  (GDC — Information Content Entity) ──────────
 # domain.py: AircraftPositionReport  ·  wsr:hasICAO24 · wsr:hasCallsign
 #            wsr:hasLat · wsr:hasLon · wsr:hasAltitude · wsr:hasVelocity
