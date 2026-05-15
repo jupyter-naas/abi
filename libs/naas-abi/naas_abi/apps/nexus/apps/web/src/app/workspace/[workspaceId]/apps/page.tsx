@@ -337,6 +337,16 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
   const url = appEntryUrl(entry);
   const name = appEntryName(entry);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
+
+  // Collapse the left section panel while in embed view for maximum iframe space,
+  // then restore it when navigating back.
+  useEffect(() => {
+    const previous = activePanelSection;
+    setActivePanelSection(null);
+    return () => { setActivePanelSection(previous); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [blocked, setBlocked] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
