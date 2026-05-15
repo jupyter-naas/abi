@@ -193,6 +193,16 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
 
   // In detailOnly mode (SectionPanel), show the full dual-mode panel
   if (detailOnly) {
+    if (panelLoading) {
+      return (
+        <div className="space-y-1 px-2 py-1">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-7 w-full animate-pulse rounded-md bg-muted" />
+          ))}
+        </div>
+      );
+    }
+
     const openedApp = openParam ? apps.find(m => m.module_path === openParam) : null;
 
     if (openedApp) {
@@ -201,13 +211,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
 
     return (
       <div className="space-y-0.5">
-        {panelLoading ? (
-          <div className="space-y-1 px-2 py-1">
-            {[1, 2].map((i) => (
-              <div key={i} className="h-7 w-full animate-pulse rounded-md bg-muted" />
-            ))}
-          </div>
-        ) : apps.length > 0 ? (
+        {apps.length > 0 ? (
           apps.map((mod) => (
             <Link
               key={mod.module_path}
