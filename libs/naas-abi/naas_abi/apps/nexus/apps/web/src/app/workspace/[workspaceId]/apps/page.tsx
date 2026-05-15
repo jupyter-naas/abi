@@ -582,7 +582,7 @@ export default function AppsPage() {
           {/* Module apps */}
           {!loading && !error && filteredModules.length > 0 && (
             <section>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Module Apps</h2>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Apps</h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredModules.map((mod) => {
                   const url = mod.app_url ?? '';
