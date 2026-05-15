@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+## v1.19.2 (2026-05-15)
+
+### Bug Fixes
+
+- **agents**: Update model and provider declarations for AbiAgent, CodingAgent,
+  OntologyEngineerAgent
+  ([`bcc3288`](https://github.com/jupyter-naas/abi/commit/bcc3288fcf3969ad923f754b9cbbde6540e7901f))
+
+- **lockfiles**: Bump versions in uv.lock for naas-abi packages
+  ([`bcc3288`](https://github.com/jupyter-naas/abi/commit/bcc3288fcf3969ad923f754b9cbbde6540e7901f))
+
+
 ## v1.19.1 (2026-05-15)
 
 ### Bug Fixes
