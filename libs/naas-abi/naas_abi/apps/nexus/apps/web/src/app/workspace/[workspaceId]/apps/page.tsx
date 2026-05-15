@@ -213,19 +213,24 @@ function CopyField({ label, value, secret }: { label: string; value: string; sec
 
 function AppDetailPanel({
   entry,
+  apps,
   collapsed,
   onToggle,
+  onSwitch,
 }: {
   entry: AppEntry;
+  apps: ModuleInfo[];
   collapsed: boolean;
   onToggle: () => void;
+  onSwitch: (mod: ModuleInfo) => void;
 }) {
   const name = appEntryName(entry);
   const description = appEntryDescription(entry);
   const url = appEntryUrl(entry);
+  const activeModulePath = entry.kind === 'module' ? entry.data.module_path : null;
 
   return (
-    <div className={cn('flex flex-col border-r border-border/50 bg-background transition-all duration-300 flex-shrink-0', collapsed ? 'w-10' : 'w-72')}>
+    <div className={cn('flex flex-col border-r border-border/50 bg-background transition-all duration-300 flex-shrink-0', collapsed ? 'w-10' : 'w-64')}>
       {/* Toggle strip */}
       <button
         onClick={onToggle}
@@ -238,6 +243,30 @@ function AppDetailPanel({
       {/* Panel content */}
       {!collapsed && (
         <div className="flex-1 overflow-y-auto">
+          {/* App switcher nav */}
+          {apps.length > 1 && (
+            <div className="border-b border-border/50 p-2 space-y-0.5">
+              {apps.map((mod) => {
+                const isActive = mod.module_path === activeModulePath;
+                return (
+                  <button
+                    key={mod.module_path}
+                    onClick={() => onSwitch(mod)}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-left',
+                      isActive
+                        ? 'bg-muted text-foreground font-medium'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    <ModuleAvatar mod={mod} size="sm" />
+                    <span className="truncate">{mod.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Avatar + name */}
           <div className="flex flex-col items-center gap-3 px-4 py-6 border-b border-border/50 text-center">
             {entry.kind === 'module' ? (
@@ -333,14 +362,19 @@ function AppDetailPanel({
 // Embed view
 // ---------------------------------------------------------------------------
 
-function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
+function EmbedView({ entry, apps, onBack, onSwitch }: {
+  entry: AppEntry;
+  apps: ModuleInfo[];
+  onBack: () => void;
+  onSwitch: (mod: ModuleInfo) => void;
+}) {
   const url = appEntryUrl(entry);
   const name = appEntryName(entry);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
 
-  // Collapse the left section panel while in embed view for maximum iframe space,
-  // then restore it when navigating back.
+  // Merge the two left columns: close section panel while app is open,
+  // restore it when navigating back so nav returns to normal.
   useEffect(() => {
     const previous = activePanelSection;
     setActivePanelSection(null);
@@ -405,8 +439,10 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
       <div className="flex flex-1 overflow-hidden">
         <AppDetailPanel
           entry={entry}
+          apps={apps}
           collapsed={panelCollapsed}
           onToggle={() => setPanelCollapsed((v) => !v)}
+          onSwitch={onSwitch}
         />
 
         {/* Iframe area */}
@@ -557,7 +593,12 @@ export default function AppsPage() {
   if (activeApp) {
     return (
       <div className="flex h-full flex-col">
-        <EmbedView entry={activeApp} onBack={handleClose} />
+        <EmbedView
+          entry={activeApp}
+          apps={modules}
+          onBack={handleClose}
+          onSwitch={(mod) => mod.app_url && handleOpen({ kind: 'module', data: mod, url: mod.app_url })}
+        />
       </div>
     );
   }
