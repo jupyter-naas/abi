@@ -6,12 +6,14 @@ import { Header } from '@/components/shell/header';
 import {
   Search, Bot, X, Cpu, Tag, CheckCircle2, AlertTriangle,
   FileText, Presentation, Table2, Trello, Calendar, ExternalLink,
-  LayoutGrid, GitBranch, Network, Workflow, Download,
+  LayoutGrid, GitBranch, Network, Workflow, Download, AppWindow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
+import Link from 'next/link';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -524,7 +526,7 @@ function ExternalAppCard({ app }: { app: { name: string; url: string; descriptio
 // Agent ID Card panel
 // ---------------------------------------------------------------------------
 
-function AgentIdCard({ mod, onClose, cfg }: { mod: ModuleInfo; onClose: () => void; cfg: MarketplaceConfig }) {
+function AgentIdCard({ mod, onClose, cfg, workspaceId }: { mod: ModuleInfo; onClose: () => void; cfg: MarketplaceConfig; workspaceId: string | null }) {
   const isPortrait = mod.category === 'domain';
   const pricing = getModulePricing(mod, cfg);
 
@@ -624,6 +626,17 @@ function AgentIdCard({ mod, onClose, cfg }: { mod: ModuleInfo; onClose: () => vo
                 {pricing.cta}
               </button>
             )}
+
+            {/* Open in Apps — only for installed modules that have a launchable app */}
+            {mod.installed && mod.app_url && workspaceId && (
+              <Link
+                href={`/workspace/${workspaceId}/apps?open=${encodeURIComponent(mod.module_path)}`}
+                className="flex w-full items-center justify-center gap-2 py-2.5 text-sm font-semibold border border-workspace-accent/40 text-workspace-accent hover:bg-workspace-accent/10 transition-colors"
+              >
+                <AppWindow size={14} />
+                Open in Apps
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -640,6 +653,7 @@ const ALL_TYPES: ArtifactType[] = ['all', 'agents', 'applications', 'tools', 'on
 export default function MarketplacePage() {
   const searchParams = useSearchParams();
   const tenant = useTenant();
+  const { currentWorkspaceId } = useWorkspaceStore();
 
   const [typeFilter, setTypeFilter] = useState<ArtifactType>(() => {
     const t = searchParams?.get('type') as ArtifactType | null;
@@ -877,7 +891,7 @@ export default function MarketplacePage() {
       </div>
 
       {selectedMod && (
-        <AgentIdCard mod={selectedMod} onClose={() => setSelectedMod(null)} cfg={mktCfg} />
+        <AgentIdCard mod={selectedMod} onClose={() => setSelectedMod(null)} cfg={mktCfg} workspaceId={currentWorkspaceId} />
       )}
     </div>
   );

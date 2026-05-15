@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
@@ -20,7 +20,7 @@ interface ModuleInfo {
   app_url?: string | null;
 }
 
-const APP_CATEGORIES = new Set(['application', 'alpha']);
+import { APP_CATEGORIES } from '@/lib/app-constants';
 
 function ModuleIcon({ mod, size = 14 }: { mod: ModuleInfo; size?: number }) {
   const [failed, setFailed] = useState(false);
@@ -44,9 +44,12 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const basePath = getWorkspacePath(currentWorkspaceId, '/apps');
   const marketplacePath = getWorkspacePath(currentWorkspaceId, '/marketplace?type=applications');
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const openParam = searchParams?.get('open');
   const isOnApps = pathname?.includes('/apps');
 
   const [apps, setApps] = useState<ModuleInfo[]>([]);
+  const [panelLoading, setPanelLoading] = useState(true);
 
   useEffect(() => {
     const apiBase = getApiUrl();
@@ -59,7 +62,8 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
           ),
         );
       })
-      .catch(() => {/* fail silently — panel still shows fallback link */});
+      .catch(() => {/* fail silently — panel still shows fallback link */})
+      .finally(() => setPanelLoading(false));
   }, []);
 
   return (
@@ -72,28 +76,37 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
-      {apps.length > 0 ? (
-        apps.map((mod) => (
-          <Link
-            key={mod.module_path}
-            href={basePath}
-            className={cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              isOnApps
-                ? 'bg-muted text-foreground font-medium'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            <ModuleIcon mod={mod} size={14} />
-            <span className="truncate">{mod.name}</span>
-          </Link>
-        ))
+      {panelLoading ? (
+        <div className="space-y-1 px-2 py-1">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-7 w-full animate-pulse rounded-md bg-muted" />
+          ))}
+        </div>
+      ) : apps.length > 0 ? (
+        apps.map((mod) => {
+          const isActive = openParam === mod.module_path;
+          return (
+            <Link
+              key={mod.module_path}
+              href={`${basePath}?open=${encodeURIComponent(mod.module_path)}`}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                isActive
+                  ? 'bg-muted text-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <ModuleIcon mod={mod} size={14} />
+              <span className="truncate">{mod.name}</span>
+            </Link>
+          );
+        })
       ) : (
         <Link
           href={basePath}
           className={cn(
             'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-            isOnApps
+            isOnApps && !openParam
               ? 'bg-muted text-foreground font-medium'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground',
           )}
