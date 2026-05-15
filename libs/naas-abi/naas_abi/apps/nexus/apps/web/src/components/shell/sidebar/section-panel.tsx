@@ -11,7 +11,7 @@ import { FilesSection } from './files-section';
 import { LabSection } from './lab-section';
 import { OntologySection } from './ontology-section';
 import { KnowledgeGraphSection } from './knowledge-graph-section';
-import { AppsSection } from './apps-section';
+import { MarketplaceSection } from './marketplace-section';
 
 const SECTION_LABELS: Record<SidebarSection, string> = {
   search: 'Search',
@@ -20,7 +20,7 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   lab: 'Lab',
-  apps: 'App',
+  apps: 'Marketplace',
 };
 
 function SectionContent({ section }: { section: SidebarSection }) {
@@ -48,7 +48,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
     return <LabSection collapsed={false} detailOnly />;
   }
   if (section === 'apps' && canAgents) {
-    return <AppsSection collapsed={false} detailOnly />;
+    return <MarketplaceSection collapsed={false} detailOnly />;
   }
   return null;
 }
