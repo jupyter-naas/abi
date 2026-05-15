@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.36.0 (2026-05-15)
+
+### Bug Fixes
+
+- Update naas-abi and naas-abi-marketplace package versions in uv.lock
+  ([`500a752`](https://github.com/jupyter-naas/abi/commit/500a7526b012a8d58ac42a1e1a6279de0b4ea7fe))
+
+### Features
+
+- **nexus**: Enhance NexusPlatformPipeline with AIModel and Capabilities support
+  ([`49c4a94`](https://github.com/jupyter-naas/abi/commit/49c4a9458f6b052a6593393f3486e4838c11cfe9))
+
+
 ## v1.35.0 (2026-05-15)
 
 ### Bug Fixes
