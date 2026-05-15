@@ -80,11 +80,13 @@ function CopyButton({ value, secret }: { value: string; secret?: boolean }) {
 }
 
 function AppDetailView({ mod, basePath }: { mod: ModuleInfo; basePath: string }) {
+  const { setOpenAppModule } = useWorkspaceStore();
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {/* Back */}
       <Link
         href={basePath}
+        onClick={() => setOpenAppModule(null)}
         className="flex items-center gap-1.5 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors border-b border-border/50"
       >
         <ArrowLeft size={12} />
