@@ -203,7 +203,7 @@ class NexusConfig(BaseModel):
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
     redis_url: str = "redis://localhost:6379/0"
 
-    graph_base_uri: str = "http://ontology.naas.ai/graph/"
+    ontology_base_uri: str = "http://ontology.naas.ai/"
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
