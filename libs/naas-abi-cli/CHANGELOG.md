@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.35.0 (2026-05-15)
+
+### Bug Fixes
+
+- **Agent**: Disable markdown_pretty_display by default
+  ([`9bf481c`](https://github.com/jupyter-naas/abi/commit/9bf481c432727a3fba47779190850074ab1f7cb0))
+
+### Features
+
+- **chat**: Add message metadata update and export functionality
+  ([`1fc2d25`](https://github.com/jupyter-naas/abi/commit/1fc2d25ee000d6f4fe62bc2a416570a211a906eb))
+
+
 ## v1.34.1 (2026-05-14)
 
 ### Bug Fixes
