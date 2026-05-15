@@ -334,13 +334,16 @@ function computeHierarchicalPositions(
     });
   }
 
-  // ── 3. Roots — prefer BFO entity (BFO_0000001) first ─────────────────────
+  // ── 3. Roots — BFO entity first, then grouped by bucket, then alphabetically ─
   const roots = nodes
     .map((n) => n.id)
     .filter((id) => !parentOf.has(id))
     .sort((a, b) => {
       if (a.includes('BFO_0000001')) return -1;
       if (b.includes('BFO_0000001')) return 1;
+      const ba = bucketOf.get(a) ?? 'Unknown';
+      const bb = bucketOf.get(b) ?? 'Unknown';
+      if (ba !== bb) return ba.localeCompare(bb);
       return (nodesById.get(a)?.label ?? a).localeCompare(nodesById.get(b)?.label ?? b);
     });
 
@@ -807,6 +810,11 @@ export function VisNetwork({
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   /** Last `layoutDirection` from the nodes effect — used to detect leaving hierarchical layout. */
   const prevLayoutDirectionRef = useRef<'LR' | 'TD' | undefined>(undefined);
+  /** Latest edges prop — readable in the nodes effect without adding edges to deps. */
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
+  /** True once the canvas has been laid out with is_a edges (level 1 placed). */
+  const layoutHasIsaEdgesRef = useRef(false);
   /**
    * Mirror of the `physicsEnabled` prop, readable from inside async vis-network
    * event callbacks (`stabilizationIterationsDone`) where the closure-captured
@@ -848,28 +856,127 @@ export function VisNetwork({
     });
 
     try {
+    // Detect a complete node-set replacement (graph switch): no overlap between
+    // incoming nodes and the current dataset. Reset to fresh-load state so the
+    // next layout path gives a proper initial arrangement instead of an
+    // incremental update that clusters all new nodes together.
+    if (isStabilizedRef.current && uniqueNodes.length > 0) {
+      const existingSet = new Set(nodesDataRef.current.getIds() as string[]);
+      const hasOverlap = existingSet.size > 0 && uniqueNodes.some((n) => existingSet.has(n.id));
+      if (!hasOverlap) {
+        isStabilizedRef.current = false;
+        layoutHasIsaEdgesRef.current = false;
+        nodePositionsRef.current.clear();
+      }
+    }
+
     if (layoutDirection) {
-      // Hierarchical layout: positions are baked into toVisNode via hierarchicalPositions.
-      // Disable physics and fit the view to the positioned graph.
-      nodesDataRef.current.clear();
-      nodesDataRef.current.add(uniqueNodes.map(toVisNode));
-      if (networkRef.current && uniqueNodes.length > 0) {
-        networkRef.current.setOptions({ physics: { enabled: false } });
+      const net = networkRef.current;
+      if (net) net.setOptions({ physics: { enabled: false } });
+
+      const incomingHasIsa = edgesRef.current.some(
+        (e) => e.properties?.relation_kind === 'is_a'
+      );
+      const firstIsaIntroduction = incomingHasIsa && !layoutHasIsaEdgesRef.current;
+      const isaRemoved = !incomingHasIsa && layoutHasIsaEdgesRef.current;
+      const directionChanged =
+        prevLayoutDirectionRef.current !== undefined &&
+        prevLayoutDirectionRef.current !== layoutDirection;
+
+      if (!isStabilizedRef.current || directionChanged || firstIsaIntroduction || isaRemoved) {
+        // Full re-layout: initial flower load, LR↔TD switch, first/last parent level.
+        layoutHasIsaEdgesRef.current = incomingHasIsa;
+        nodesDataRef.current.clear();
+        nodesDataRef.current.add(uniqueNodes.map(toVisNode));
+        if (net && uniqueNodes.length > 0) {
+          if (pendingFilterViewportApplyRef.current) {
+            pendingFilterViewportApplyRef.current = false;
+            applySavedViewportOrFit({ fitDurationMs: 500 });
+          } else {
+            net.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+          }
+        }
+        isStabilizedRef.current = true;
+        return;
+      }
+
+      // Incremental update for subsequent parent levels: base nodes and previously
+      // placed parents keep their current canvas positions. New parent nodes are
+      // placed relative to their children's actual positions on the canvas.
+      layoutHasIsaEdgesRef.current = incomingHasIsa;
+      if (net) {
+        const existingIds = new Set(nodesDataRef.current.getIds() as string[]);
+        const incomingIds = new Set(uniqueNodes.map((n) => n.id));
+
+        const removedIds = [...existingIds].filter((id) => !incomingIds.has(id));
+        if (removedIds.length > 0) nodesDataRef.current.remove(removedIds);
+
+        const currentPositions = net.getPositions() as Record<string, { x: number; y: number }>;
+
+        // Build parent → children map from is_a edges (source = child, target = parent).
+        const childrenOf = new Map<string, string[]>();
+        for (const edge of edgesRef.current) {
+          if (edge.properties?.relation_kind !== 'is_a') continue;
+          const list = childrenOf.get(edge.target) ?? [];
+          list.push(edge.source);
+          childrenOf.set(edge.target, list);
+        }
+
+        const LEVEL_GAP = layoutDirection === 'LR' ? 260 : 180;
+
+        const toUpdate: Node[] = [];
+        const toAdd: Node[] = [];
+
+        for (const node of uniqueNodes) {
+          const base = toVisNode(node);
+          if (existingIds.has(node.id)) {
+            const pos = currentPositions[node.id];
+            toUpdate.push({ ...base, x: pos?.x, y: pos?.y });
+          } else {
+            // New parent: place relative to its children's current canvas positions.
+            const knownChildren = (childrenOf.get(node.id) ?? []).filter(
+              (id) => currentPositions[id]
+            );
+            if (knownChildren.length > 0) {
+              const avgX = knownChildren.reduce((s, id) => s + currentPositions[id].x, 0) / knownChildren.length;
+              const avgY = knownChildren.reduce((s, id) => s + currentPositions[id].y, 0) / knownChildren.length;
+              const minX = Math.min(...knownChildren.map((id) => currentPositions[id].x));
+              const minY = Math.min(...knownChildren.map((id) => currentPositions[id].y));
+              toAdd.push({
+                ...base,
+                x: layoutDirection === 'LR' ? minX - LEVEL_GAP : avgX,
+                y: layoutDirection === 'LR' ? avgY : minY - LEVEL_GAP,
+              });
+            } else {
+              // Fallback: place outside the current bounding box.
+              const xs = Object.values(currentPositions).map((p) => p.x);
+              const ys = Object.values(currentPositions).map((p) => p.y);
+              toAdd.push({
+                ...base,
+                x: layoutDirection === 'LR' ? (xs.length ? Math.min(...xs) - LEVEL_GAP : 0) : (xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : 0),
+                y: layoutDirection === 'LR' ? (ys.length ? ys.reduce((s, v) => s + v, 0) / ys.length : 0) : (ys.length ? Math.min(...ys) - LEVEL_GAP : 0),
+              });
+            }
+          }
+        }
+
+        if (toUpdate.length > 0) nodesDataRef.current.update(toUpdate);
+        if (toAdd.length > 0) {
+          nodesDataRef.current.add(toAdd);
+          net.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+        }
         if (pendingFilterViewportApplyRef.current) {
           pendingFilterViewportApplyRef.current = false;
-          applySavedViewportOrFit({ fitDurationMs: 500 });
-        } else {
-          networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+          applySavedViewportOrFit({ fitDurationMs: 300 });
         }
       }
-      isStabilizedRef.current = true;
       return;
     }
 
-    // SubclassOf / hierarchy layout turned off: force a fresh force-directed pass (physics was disabled above).
+    // Hierarchy layout turned off: reset state and force a fresh force-directed pass.
     if (exitedHierarchicalLayout && networkRef.current) {
       isStabilizedRef.current = false;
-      // Drop baked coordinates so ForceAtlas2 can lay out from scratch, not the hierarchy positions.
+      layoutHasIsaEdgesRef.current = false;
       nodePositionsRef.current.clear();
       networkRef.current.setOptions({ physics: { enabled: true } });
     }
