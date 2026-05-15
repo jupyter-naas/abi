@@ -145,6 +145,57 @@ const GRID_NODE_H       = 160;  // vertical node spacing within a zone
 const GRID_NODES_PER_ROW = 5;   // nodes per row inside a zone
 
 /**
+ * Physics-based bucket layout: place every node near its bucket zone centre so
+ * the force-directed engine compacts them into organic per-bucket clusters.
+ * Zones are arranged in a 3-column grid; nodes start in a tight sunflower
+ * spiral around the zone centre so avoidOverlap / repulsion can spread them.
+ */
+function computePhysicsBucketPositions(nodes: GraphNode[]): Map<string, { x: number; y: number }> {
+  const nodesById = new Map(nodes.map((n) => [n.id, n]));
+  const byBucket = new Map<string, string[]>();
+  for (const node of nodes) {
+    const bucket = resolveNodeBucketKey(node, nodesById);
+    const list = byBucket.get(bucket) ?? [];
+    list.push(node.id);
+    byBucket.set(bucket, list);
+  }
+
+  const ZONE_W = 1100;
+  const ZONE_H = 750;
+  const ZONE_COLS = 3;
+  const phi = Math.PI * (3 - Math.sqrt(5)); // golden angle
+
+  const activeBuckets = [
+    ...GRID_BUCKET_ORDER.filter((b) => byBucket.has(b)),
+    ...Array.from(byBucket.keys()).filter((b) => !GRID_BUCKET_ORDER.includes(b)),
+  ];
+
+  const positions = new Map<string, { x: number; y: number }>();
+  activeBuckets.forEach((bucket, zoneIdx) => {
+    const ids = byBucket.get(bucket) ?? [];
+    const zoneCol = zoneIdx % ZONE_COLS;
+    const zoneRow = Math.floor(zoneIdx / ZONE_COLS);
+    const cx = zoneCol * ZONE_W;
+    const cy = zoneRow * ZONE_H;
+    ids.forEach((id, i) => {
+      const r = 14 * Math.sqrt(i + 1);
+      const theta = i * phi;
+      positions.set(id, { x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) });
+    });
+  });
+
+  if (positions.size > 0) {
+    const xs = [...positions.values()].map((p) => p.x);
+    const ys = [...positions.values()].map((p) => p.y);
+    const midX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    for (const [id, pos] of positions) positions.set(id, { x: pos.x - midX, y: pos.y - midY });
+  }
+
+  return positions;
+}
+
+/**
  * 2-D bucket grid layout used when no is_a edges exist.
  * Zones are arranged in a GRID_ZONE_COLS-column grid; nodes within each zone
  * are arranged in rows of GRID_NODES_PER_ROW, sorted alphabetically.
@@ -252,9 +303,9 @@ function computeHierarchicalPositions(
   const nodeIds    = new Set(nodes.map((n) => n.id));
   const isaEdges   = edges.filter((e) => e.properties?.relation_kind === 'is_a');
 
-  // Flat case: no is_a edges → use the 2-D bucket grid instead of a 1-D tree row.
+  // Flat case: no is_a edges → sunflower spiral across the full canvas.
   if (isaEdges.length === 0) {
-    return computeBucketGridPositions(nodes, nodesById);
+    return computeSpreadPositions(nodes.map((n) => n.id), 180);
   }
 
   // ── 1. Build tree ──────────────────────────────────────────────────────────
@@ -471,6 +522,13 @@ interface VisNetworkProps {
    * (e.g. Restrictions / Object Properties).
    */
   physicsEnabled?: boolean;
+  /**
+   * When true, nodes are pre-positioned near their BFO bucket zone centre and
+   * physics compacts them into organic per-bucket clusters. Use when Relations
+   * are hidden so the canvas groups by ontology category instead of spreading
+   * nodes uniformly.
+   */
+  useBucketLayout?: boolean;
 }
 
 export function VisNetwork({
@@ -483,6 +541,7 @@ export function VisNetwork({
   layoutDirection,
   viewStateKey,
   physicsEnabled = false,
+  useBucketLayout = false,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -682,7 +741,14 @@ export function VisNetwork({
     physics: {
       enabled: true,
       solver: 'forceAtlas2Based',
-      forceAtlas2Based: {
+      forceAtlas2Based: useBucketLayout ? {
+        gravitationalConstant: -80,
+        centralGravity: 0.0005,
+        springLength: 200,
+        springConstant: 0.04,
+        damping: 0.5,
+        avoidOverlap: 1,
+      } : {
         gravitationalConstant: -120,
         centralGravity: 0.005,
         springLength: 250,
@@ -690,7 +756,7 @@ export function VisNetwork({
         damping: 0.5,
         avoidOverlap: 1,
       },
-      stabilization: { enabled: true, iterations: 200, updateInterval: 25 },
+      stabilization: { enabled: true, iterations: useBucketLayout ? 400 : 200, updateInterval: 25 },
       minVelocity: 0.75,
     },
     interaction: {
@@ -859,18 +925,26 @@ export function VisNetwork({
     }
 
     // Initial load — full clear + add, then let physics stabilize.
-    // Pre-spread nodes without a saved position using a sunflower spiral so
-    // physics starts from a distributed layout rather than piling up at the origin.
-    const unsavedIds = uniqueNodes
-      .filter((n) => !nodePositionsRef.current.has(n.id))
-      .map((n) => n.id);
-    const spreadPositions = computeSpreadPositions(unsavedIds);
+    // For bucket layout: pre-position nodes near their bucket zone centre so
+    // physics clusters them organically per bucket. Otherwise use a sunflower
+    // spiral so physics starts from a distributed layout.
+    let initPositions: Map<string, { x: number; y: number }>;
+    if (useBucketLayout) {
+      initPositions = computePhysicsBucketPositions(uniqueNodes);
+    } else {
+      const unsavedIds = uniqueNodes
+        .filter((n) => !nodePositionsRef.current.has(n.id))
+        .map((n) => n.id);
+      initPositions = computeSpreadPositions(unsavedIds);
+    }
 
     const visNodes = uniqueNodes.map((node) => {
       const baseNode = toVisNode(node);
-      const savedPos = nodePositionsRef.current.get(node.id);
-      if (savedPos) return { ...baseNode, x: savedPos.x, y: savedPos.y };
-      const initPos = spreadPositions.get(node.id);
+      if (!useBucketLayout) {
+        const savedPos = nodePositionsRef.current.get(node.id);
+        if (savedPos) return { ...baseNode, x: savedPos.x, y: savedPos.y };
+      }
+      const initPos = initPositions.get(node.id);
       if (initPos) return { ...baseNode, x: initPos.x, y: initPos.y };
       return baseNode;
     });
@@ -904,7 +978,7 @@ export function VisNetwork({
     } finally {
       prevLayoutDirectionRef.current = layoutDirection;
     }
-  }, [nodes, toVisNode, layoutDirection, applySavedViewportOrFit]);
+  }, [nodes, toVisNode, layoutDirection, applySavedViewportOrFit, useBucketLayout]);
 
   /**
    * If no code path consumes `pendingFilterViewportApplyRef` this frame (e.g. edges-only refresh),

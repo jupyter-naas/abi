@@ -544,6 +544,29 @@ export default function GraphPage() {
   // Relations filter — off by default
   const [showRelations, setShowRelations] = useState(false);
 
+  // Refs to read current filter state inside effects without stale closures
+  const showRelationsRef = useRef(showRelations);
+  const activeBucketsRef = useRef(activeBuckets);
+  const hiddenNodeIdsRef = useRef(hiddenNodeIds);
+  const nodeDisplayLimitRef = useRef(nodeDisplayLimit);
+  const parentsLevelsRef = useRef(parentsLevels);
+  showRelationsRef.current = showRelations;
+  activeBucketsRef.current = activeBuckets;
+  hiddenNodeIdsRef.current = hiddenNodeIds;
+  nodeDisplayLimitRef.current = nodeDisplayLimit;
+  parentsLevelsRef.current = parentsLevels;
+
+  // Per-graph/view filter state — keyed by activeSavedViewId ?? selectedGraphId
+  type PerGraphFilterState = {
+    showRelations: boolean;
+    activeBuckets: Set<string>;
+    hiddenNodeIds: Set<string>;
+    nodeDisplayLimit: number;
+    parentsLevels: number;
+  };
+  const filterStateByGraphRef = useRef<Map<string, PerGraphFilterState>>(new Map());
+  const prevGraphKeyRef = useRef<string | null>(null);
+
   // Increment to trigger physics re-layout in VisNetwork
   const [stabilizeKey, setStabilizeKey] = useState(0);
   const {
@@ -916,15 +939,40 @@ export default function GraphPage() {
     setViews(normalizedViews);
   }, [workspaceId, setViews]);
 
-  // Reset selection and filters when the active graph identity changes
+  // Save filters for the graph we're leaving, restore (or default) for the new one.
   useEffect(() => {
+    const graphKey = activeSavedViewId ?? selectedGraphId ?? '__default';
+    const prevKey = prevGraphKeyRef.current;
+
+    if (prevKey !== null && prevKey !== graphKey) {
+      filterStateByGraphRef.current.set(prevKey, {
+        showRelations: showRelationsRef.current,
+        activeBuckets: new Set(activeBucketsRef.current),
+        hiddenNodeIds: new Set(hiddenNodeIdsRef.current),
+        nodeDisplayLimit: nodeDisplayLimitRef.current,
+        parentsLevels: parentsLevelsRef.current,
+      });
+    }
+    prevGraphKeyRef.current = graphKey;
+
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
-    setParentsLevels(0);
     setHierarchyByLevel([]);
-    setShowRelations(true);
-    setHiddenNodeIds(new Set());
-    setNodeDisplayLimit(200);
+
+    const saved = filterStateByGraphRef.current.get(graphKey);
+    if (saved) {
+      setShowRelations(saved.showRelations);
+      setActiveBuckets(saved.activeBuckets);
+      setHiddenNodeIds(saved.hiddenNodeIds);
+      setNodeDisplayLimit(saved.nodeDisplayLimit);
+      setParentsLevels(saved.parentsLevels);
+    } else {
+      setShowRelations(false);
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setNodeDisplayLimit(200);
+      setParentsLevels(0);
+    }
   }, [selectedGraphId, activeSavedViewId]);
 
   // Load on mount and when workspace or visible graphs change
@@ -2350,7 +2398,7 @@ export default function GraphPage() {
                 ) : (
                   <>
                     <VisNetwork
-                      key={activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}
+                      key={`${activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}-${showRelations ? 'rel' : 'bucket'}`}
                       nodes={displayedNodes}
                       edges={displayedEdges}
                       selectedNodeId={selectedNodeId}
