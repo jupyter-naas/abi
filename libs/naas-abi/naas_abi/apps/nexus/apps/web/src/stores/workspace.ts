@@ -37,6 +37,7 @@ const throttledLocalStorage = () => {
 export type NavigationItem =
   | 'chat'
   | 'search'
+  | 'files'
   | 'lab'
   | 'ontology'
   | 'graph'
