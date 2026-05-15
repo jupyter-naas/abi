@@ -12,6 +12,7 @@ import { LabSection } from './lab-section';
 import { OntologySection } from './ontology-section';
 import { KnowledgeGraphSection } from './knowledge-graph-section';
 import { MarketplaceSection } from './marketplace-section';
+import { AppsSection } from './apps-section';
 
 const SECTION_LABELS: Record<SidebarSection, string> = {
   search: 'Search',
@@ -47,6 +48,9 @@ function SectionContent({ section }: { section: SidebarSection }) {
   }
   if (section === 'lab' && canAgents) {
     return <LabSection collapsed={false} detailOnly />;
+  }
+  if (section === 'apps' && canAgents) {
+    return <AppsSection collapsed={false} detailOnly />;
   }
   if (section === 'marketplace' && canAgents) {
     return <MarketplaceSection collapsed={false} detailOnly />;
