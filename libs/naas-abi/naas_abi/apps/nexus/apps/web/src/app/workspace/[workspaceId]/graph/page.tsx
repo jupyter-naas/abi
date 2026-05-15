@@ -465,7 +465,7 @@ const graphListCache = new Map<
   string,
   TimestampedCacheEntry<{
     graphOptions: GraphOption[];
-    normalized: Array<{ id: string; label?: string }>;
+    normalized: Array<{ id: string; label?: string; uri: string }>;
     defaultGraphName: string;
   }>
 >();
