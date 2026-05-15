@@ -85,10 +85,10 @@ Respond only based on what your available agents and tools can actually deliver.
             "disabled": True,
         },
         {
-            "label": "Browse Apps",
+            "label": "Browse Marketplace",
             "value": "",
             "description": "Discover and enable modules from the marketplace",
-            "cta": "/apps",
+            "cta": "/marketplace",
         },
     ]
 

@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
@@ -2229,6 +2229,11 @@ export function ChatInterface() {
   );
 }
 
+// Maps CTA paths to their corresponding SidebarSection IDs (route ≠ section id after renames).
+const CTA_SECTION_MAP: Record<string, SidebarSection> = {
+  '/marketplace': 'apps',
+};
+
 function EmptyState({
   selectedAgentName,
   logoUrl,
@@ -2269,7 +2274,10 @@ function EmptyState({
         {greeting} Pick a suggestion or type a message to get started.
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div className="flex w-full max-w-lg flex-col gap-1.5">
+        <div
+          className="flex w-full max-w-lg flex-col gap-1.5"
+          onMouseLeave={() => onSuggestionLeave?.()}
+        >
           {suggestions.map((suggestion) => {
             const baseClass = cn(
               'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
@@ -2300,12 +2308,12 @@ function EmptyState({
             );
 
             if (suggestion.cta && !suggestion.disabled) {
-              const sectionId = suggestion.cta.replace(/^\//, '') as Parameters<typeof setActivePanelSection>[0];
+              const sectionId = (CTA_SECTION_MAP[suggestion.cta] ?? suggestion.cta.replace(/^\//, '')) as SidebarSection;
               return (
                 <button
                   key={`${suggestion.label}:${suggestion.value}`}
                   onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
-                  onMouseLeave={() => onSuggestionLeave?.()}
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     setActivePanelSection(sectionId);
                     router.push(suggestion.cta!);
@@ -2321,7 +2329,7 @@ function EmptyState({
               <button
                 key={`${suggestion.label}:${suggestion.value}`}
                 onMouseEnter={() => !suggestion.disabled && onSuggestionHover?.(suggestion.value)}
-                onMouseLeave={() => onSuggestionLeave?.()}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
                 disabled={suggestion.disabled}
                 className={baseClass}
