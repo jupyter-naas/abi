@@ -32,6 +32,7 @@ interface ModuleInfo {
   tier: string | null;
   maintainer: string | null;
   stripe_url: string | null;
+  app_url: string | null;
 }
 
 interface ModulesResponse {
@@ -127,6 +128,7 @@ const MODULE_CATEGORY_TO_TYPE: Record<string, ArtifactType> = {
   ai: 'agents',
   domain: 'agents',
   application: 'applications',
+  alpha: 'applications',
   core: 'agents',
 };
 
