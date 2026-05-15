@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.47.1 (2026-05-15)
+
+### Bug Fixes
+
+- **web**: Import authFetch alongside useAuthStore in chat-interface.tsx
+  ([`d139637`](https://github.com/jupyter-naas/abi/commit/d13963799bbc9b35fc8d9a3aa5bc29929fb6eb76))
+
+
 ## v1.47.0 (2026-05-15)
 
 
