@@ -459,7 +459,7 @@ type TimestampedCacheEntry<T> = {
   expiresAt: number;
 };
 
-const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[] }>>();
+const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[]; totalNodeCount: number | null }>>();
 const overviewCache = new Map<string, TimestampedCacheEntry<ApiOverview | null>>();
 const graphListCache = new Map<
   string,
@@ -502,6 +502,7 @@ export default function GraphPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<ApiOverview | null>(null);
+  const [totalNodeCount, setTotalNodeCount] = useState<number | null>(null);
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -695,16 +696,20 @@ export default function GraphPage() {
       type NetworkRequest = { url: string; init?: RequestInit };
       let requestsToFetch: NetworkRequest[];
 
+      const NODE_LIMIT = 200;
+      let overviewUrl: string | null = null;
+
       if (activeSavedView) {
         const params = new URLSearchParams({
           workspace_id: workspaceId,
-          limit: '500',
+          limit: String(NODE_LIMIT),
         });
         requestsToFetch = [
           {
             url: `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/network?${params.toString()}`,
           },
         ];
+        overviewUrl = `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
       } else {
         const graphIdsToFetch =
           selectedGraphId
@@ -719,12 +724,15 @@ export default function GraphPage() {
           '';
         const params = new URLSearchParams({
           workspace_id: workspaceId,
-          limit: '500',
+          limit: String(NODE_LIMIT),
         });
         if (effectiveUri) params.set('graph_uri', effectiveUri);
         requestsToFetch = effectiveUri
           ? [{ url: `${apiUrl}/api/graph/network?${params.toString()}` }]
           : [];
+        if (effectiveUri) {
+          overviewUrl = `${apiUrl}/api/graph/overview?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(effectiveUri)}`;
+        }
       }
 
       const networkCacheKey = `network:${requestsToFetch.map(({ url }) => url).join('||')}`;
@@ -733,17 +741,25 @@ export default function GraphPage() {
         if (requestId === loadRequestIdRef.current) {
           setNodes(cachedNetwork.nodes);
           setEdges(cachedNetwork.edges);
+          setTotalNodeCount(cachedNetwork.totalNodeCount ?? null);
         }
         return;
       }
 
-      const responses = await Promise.all(
-        requestsToFetch.map(({ url, init }) =>
-          authFetch(url, init)
-            .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-            .catch(() => ({ nodes: [], edges: [] }))
-        )
-      );
+      const [responses, overviewData] = await Promise.all([
+        Promise.all(
+          requestsToFetch.map(({ url, init }) =>
+            authFetch(url, init)
+              .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
+              .catch(() => ({ nodes: [], edges: [] }))
+          )
+        ),
+        overviewUrl
+          ? authFetch(overviewUrl)
+              .then((res) => (res.ok ? res.json() : null))
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
       
       // Merge all graph data
       responses.forEach((data) => {
@@ -774,17 +790,22 @@ export default function GraphPage() {
         }
       });
       
-      // Deduplicate nodes and edges by ID
-      const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values());
-      const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values());
+      // Deduplicate nodes and edges by ID, then cap at NODE_LIMIT
+      const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values()).slice(0, NODE_LIMIT);
+      const nodeIds = new Set(uniqueNodes.map((n) => n.id));
+      const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values()).filter(
+        (e) => nodeIds.has(e.source) && nodeIds.has(e.target)
+      );
 
       if (requestId !== loadRequestIdRef.current) {
         return;
       }
 
+      const fetchedTotal: number | null = overviewData?.kpis?.total_instances ?? null;
+      setTotalNodeCount(fetchedTotal);
       setNodes(uniqueNodes);
       setEdges(uniqueEdges);
-      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges });
+      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges, totalNodeCount: fetchedTotal });
     } catch (err) {
       if (requestId !== loadRequestIdRef.current) {
         return;
@@ -2254,9 +2275,9 @@ export default function GraphPage() {
                       >+</button>
                     )}
                   </div>
-                  {(searchQuery || filteredNodes.length < allVisibleNodes.length || nodeDisplayLimit < filteredNodes.length) && (
+                  {(searchQuery || filteredNodes.length < allVisibleNodes.length || nodeDisplayLimit < filteredNodes.length || (totalNodeCount !== null && totalNodeCount > nodes.length)) && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                      Showing {Math.min(nodeDisplayLimit, filteredNodes.length)} of {allVisibleNodes.length} nodes
+                      Showing {Math.min(nodeDisplayLimit, filteredNodes.length)} of {totalNodeCount ?? allVisibleNodes.length} nodes
                     </span>
                   )}
                 </div>
