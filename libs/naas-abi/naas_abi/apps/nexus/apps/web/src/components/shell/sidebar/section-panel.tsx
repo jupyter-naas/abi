@@ -59,8 +59,12 @@ function SectionContent({ section }: { section: SidebarSection }) {
 }
 
 export function SectionPanel() {
-  const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
+  const { activePanelSection, setActivePanelSection, openAppModule } = useWorkspaceStore();
   const isOpen = activePanelSection !== null;
+
+  const panelTitle = activePanelSection === 'apps' && openAppModule
+    ? openAppModule.name
+    : activePanelSection ? SECTION_LABELS[activePanelSection] : '';
 
   return (
     <div
@@ -72,10 +76,10 @@ export function SectionPanel() {
       {isOpen && activePanelSection && (
         <>
           <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border/50 px-4">
-            <span className="text-sm font-semibold">{SECTION_LABELS[activePanelSection]}</span>
+            <span className="text-sm font-semibold truncate">{panelTitle}</span>
             <button
               onClick={() => setActivePanelSection(null)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title="Close panel"
             >
               <X size={14} />
