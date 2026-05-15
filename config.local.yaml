@@ -42,7 +42,7 @@ modules:
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
         redis_url: "redis://redis:6379/0"
-        graph_base_uri: "http://ontology.naas.ai/graph/"
+        ontology_base_uri: "http://ontology.naas.ai/"
         feature_flags:
           enabled_features:
             - chat

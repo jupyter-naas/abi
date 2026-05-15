@@ -28,7 +28,9 @@ from rdflib.query import ResultRow
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/graph")
 
-GRAPH_BASE_URI = URIRef(ABIModule.get_instance().configuration.nexus_config.graph_base_uri)
+GRAPH_BASE_URI = URIRef(
+    ABIModule.get_instance().configuration.nexus_config.ontology_base_uri + "graph/"
+)
 NEXUS_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/nexus")
 SCHEMA_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/schema")
 
