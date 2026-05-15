@@ -503,6 +503,10 @@ export default function GraphPage() {
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<ApiOverview | null>(null);
   const [totalNodeCount, setTotalNodeCount] = useState<number | null>(null);
+  // Tracks which graph's data is currently rendered — VisNetwork key is tied to this
+  // so it only remounts when correct data for the new graph has actually arrived,
+  // preventing the stale-data / nodes-packed-in-middle bug on rapid graph switches.
+  const [loadedGraphKey, setLoadedGraphKey] = useState('');
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -544,17 +548,22 @@ export default function GraphPage() {
   // Relations filter — off by default
   const [showRelations, setShowRelations] = useState(false);
 
+  // Hierarchy direction for parent tree layout (only visible when parents ON + relations OFF)
+  const [hierarchyDirection, setHierarchyDirection] = useState<'TD' | 'LR'>('TD');
+
   // Refs to read current filter state inside effects without stale closures
   const showRelationsRef = useRef(showRelations);
   const activeBucketsRef = useRef(activeBuckets);
   const hiddenNodeIdsRef = useRef(hiddenNodeIds);
   const nodeDisplayLimitRef = useRef(nodeDisplayLimit);
   const parentsLevelsRef = useRef(parentsLevels);
+  const hierarchyDirectionRef = useRef(hierarchyDirection);
   showRelationsRef.current = showRelations;
   activeBucketsRef.current = activeBuckets;
   hiddenNodeIdsRef.current = hiddenNodeIds;
   nodeDisplayLimitRef.current = nodeDisplayLimit;
   parentsLevelsRef.current = parentsLevels;
+  hierarchyDirectionRef.current = hierarchyDirection;
 
   // Per-graph/view filter state — keyed by activeSavedViewId ?? selectedGraphId
   type PerGraphFilterState = {
@@ -563,6 +572,7 @@ export default function GraphPage() {
     hiddenNodeIds: Set<string>;
     nodeDisplayLimit: number;
     parentsLevels: number;
+    hierarchyDirection: 'TD' | 'LR';
   };
   const filterStateByGraphRef = useRef<Map<string, PerGraphFilterState>>(new Map());
   const prevGraphKeyRef = useRef<string | null>(null);
@@ -638,6 +648,7 @@ export default function GraphPage() {
   const loadFromApi = useCallback(async (options?: { force?: boolean }) => {
     const forceRefresh = options?.force === true;
     const requestId = ++loadRequestIdRef.current;
+    const graphKey = activeSavedViewId ?? selectedGraphId ?? visibleGraphIds[0] ?? 'default';
     setLoading(true);
     setError(null);
 
@@ -765,6 +776,7 @@ export default function GraphPage() {
           setNodes(cachedNetwork.nodes);
           setEdges(cachedNetwork.edges);
           setTotalNodeCount(cachedNetwork.totalNodeCount ?? null);
+          setLoadedGraphKey(graphKey);
         }
         return;
       }
@@ -828,6 +840,7 @@ export default function GraphPage() {
       setTotalNodeCount(fetchedTotal);
       setNodes(uniqueNodes);
       setEdges(uniqueEdges);
+      setLoadedGraphKey(graphKey);
       writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges, totalNodeCount: fetchedTotal });
     } catch (err) {
       if (requestId !== loadRequestIdRef.current) {
@@ -951,6 +964,7 @@ export default function GraphPage() {
         hiddenNodeIds: new Set(hiddenNodeIdsRef.current),
         nodeDisplayLimit: nodeDisplayLimitRef.current,
         parentsLevels: parentsLevelsRef.current,
+        hierarchyDirection: hierarchyDirectionRef.current,
       });
     }
     prevGraphKeyRef.current = graphKey;
@@ -966,12 +980,14 @@ export default function GraphPage() {
       setHiddenNodeIds(saved.hiddenNodeIds);
       setNodeDisplayLimit(saved.nodeDisplayLimit);
       setParentsLevels(saved.parentsLevels);
+      setHierarchyDirection(saved.hierarchyDirection);
     } else {
       setShowRelations(false);
       setActiveBuckets(new Set());
       setHiddenNodeIds(new Set());
       setNodeDisplayLimit(200);
       setParentsLevels(0);
+      setHierarchyDirection('TD');
     }
   }, [selectedGraphId, activeSavedViewId]);
 
@@ -2323,6 +2339,23 @@ export default function GraphPage() {
                       >+</button>
                     )}
                   </div>
+                  {!showRelations && parentsLevels > 0 && (
+                    <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
+                      {(['TD', 'LR'] as const).map((dir, i) => (
+                        <button
+                          key={dir}
+                          onClick={() => setHierarchyDirection(dir)}
+                          className={cn(
+                            'px-3 py-1.5 text-xs',
+                            i > 0 && 'border-l',
+                            hierarchyDirection === dir
+                              ? 'bg-foreground text-background'
+                              : 'text-muted-foreground hover:text-foreground'
+                          )}
+                        >{dir}</button>
+                      ))}
+                    </div>
+                  )}
                   {(searchQuery || filteredNodes.length < allVisibleNodes.length || nodeDisplayLimit < filteredNodes.length || (totalNodeCount !== null && totalNodeCount > nodes.length)) && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
                       Showing {Math.min(nodeDisplayLimit, filteredNodes.length)} of {totalNodeCount ?? allVisibleNodes.length} nodes
@@ -2398,14 +2431,15 @@ export default function GraphPage() {
                 ) : (
                   <>
                     <VisNetwork
-                      key={`${activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}-${showRelations ? 'rel' : 'bucket'}`}
+                      key={`${loadedGraphKey || (activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default')}-${showRelations ? 'rel' : 'bucket'}`}
                       nodes={displayedNodes}
                       edges={displayedEdges}
                       selectedNodeId={selectedNodeId}
                       onNodeSelect={setSelectedNodeId}
                       onEdgeSelect={setSelectedEdgeId}
                       stabilizeKey={stabilizeKey}
-                      layoutDirection={showRelations ? undefined : 'LR'}
+                      layoutDirection={showRelations ? undefined : hierarchyDirection}
+                      physicsEnabled={showRelations && parentsLevels > 0}
                     />
                     {filteredNodes.length > 0 && (
                       <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-1.5 rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm w-52">
