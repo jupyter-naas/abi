@@ -1580,20 +1580,45 @@ export function ChatInterface() {
         }
         // Final: store full content with thinking duration
         const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
+        const executionTime = requestSentAt ? (Date.now() - requestSentAt) / 1000 : undefined;
         const finalBody = thinkingContent
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
         const finalContent = finalBody.trim();
         // Mark any still-running tool as done
         streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
+        const finalToolCalls = streamToolCalls.length > 0 ? [...streamToolCalls] : undefined;
         updateLastMessage(
           conversationId!,
           finalContent,
           thinkingDuration,
           streamSources.length > 0 ? streamSources : undefined,
           hasDetailedActivity ? streamActivityLine : null,
-          streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
+          finalToolCalls,
+          executionTime,
         );
+        // Persist execution metadata to backend
+        if (streamingMessageId && (finalToolCalls || executionTime !== undefined)) {
+          const apiUrl = getApiUrl();
+          authFetch(
+            `${apiUrl}/api/chat/conversations/${conversationId}/messages/${streamingMessageId}/metadata`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                execution_time: executionTime ?? null,
+                steps: (finalToolCalls ?? []).map((t) => ({
+                  tool_name: t.toolName,
+                  prefix: t.prefix,
+                  status: t.status,
+                  input: t.input ?? null,
+                  output: t.output ?? null,
+                })),
+                sources: streamSources,
+              }),
+            },
+          ).catch(() => { /* non-blocking */ });
+        }
       } catch (streamError) {
         // Gracefully handle user-initiated aborts
         if ((streamError as any)?.name === 'AbortError') {
@@ -1761,19 +1786,38 @@ export function ChatInterface() {
     }
 
     try {
-      // Import authFetch dynamically
       const { authFetch } = await import('@/stores/auth');
-      
-      // Call backend API for auditable export
+
+      // Build inline metadata from local Zustand state so it's always present
+      // regardless of whether the async PATCH has completed in the backend.
+      const messagesMetadata = activeConversation.messages
+        .filter((m) => m.role === 'assistant' && (m.toolCalls?.length || m.executionTime !== undefined))
+        .map((m) => ({
+          message_id: m.id,
+          execution_time: m.executionTime ?? null,
+          steps: (m.toolCalls ?? []).map((t) => ({
+            tool_name: t.toolName,
+            prefix: t.prefix,
+            status: t.status,
+            input: t.input ?? null,
+            output: t.output ?? null,
+          })),
+          sources: m.sources ?? [],
+        }));
+
       const response = await authFetch(
-        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export?format=txt`
+        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ format: 'txt', messages_metadata: messagesMetadata }),
+        }
       );
-      
+
       if (!response.ok) {
         throw new Error('Failed to export conversation');
       }
-      
-      // Download the file
+
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

@@ -36,7 +36,9 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     ChatResponse,
     Conversation,
     ConversationCreate,
+    ExportRequest,
     Message,
+    MessageMetadataUpdate,
     to_conversation,
     to_message,
 )
@@ -426,10 +428,37 @@ async def delete_conversation(
     return {"status": "deleted"}
 
 
-@router.get("/conversations/{conversation_id}/export")
+@router.patch("/conversations/{conversation_id}/messages/{message_id}/metadata")
+async def update_message_metadata(
+    conversation_id: str,
+    message_id: str,
+    payload: MessageMetadataUpdate,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    with bind_registry(db) as registry:
+        conv = await registry.chat.get_conversation_for_user(
+            context=request_context(current_user),
+            conversation_id=conversation_id,
+        )
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        await require_workspace_access(current_user.id, conv.workspace_id)
+        updated = await registry.chat.update_message_metadata(
+            context=request_context(current_user),
+            conversation_id=conversation_id,
+            message_id=message_id,
+            metadata=payload.model_dump(),
+        )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"status": "updated"}
+
+
+@router.post("/conversations/{conversation_id}/export")
 async def export_conversation(
     conversation_id: str,
-    format: str = Query(default="txt", pattern="^(txt|json|md)$"),
+    payload: ExportRequest,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ):
@@ -451,17 +480,23 @@ async def export_conversation(
         "📥 EXPORT: user=%s, conversation=%s, format=%s, messages=%s, workspace=%s",
         current_user.id,
         conversation_id,
-        format,
+        payload.format,
         len(messages),
         conv.workspace_id,
     )
 
+    messages_metadata = {
+        m.message_id: m.model_dump(exclude={"message_id"})
+        for m in payload.messages_metadata
+    } if payload.messages_metadata else None
+
     return export_conversation_as_response(
         conversation_id=conversation_id,
-        format=format,
+        format=payload.format,
         user_id=current_user.id,
         conversation=conv,
         messages=messages,
+        messages_metadata=messages_metadata,
     )
 
 
