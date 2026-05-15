@@ -91,6 +91,8 @@ Respond only based on what your available agents and tools can actually deliver.
             "cta": "/marketplace",
         },
     ]
+    model = "gpt-4.1-mini"
+    provider = "openai"
 
     # @staticmethod
     # def build_suggestions(cls: type) -> list[dict[str, str]]:
@@ -318,7 +320,9 @@ Respond only based on what your available agents and tools can actually deliver.
         return cls(
             name=cls.name,
             description=cls.description,
-            chat_model=cls.get_model(api_key=api_key),
+            chat_model=cls.get_model(
+                api_key=api_key, model_name=cls.model, provider=cls.provider
+            ),
             tools=tools,
             agents=agents,
             intents=intents,
