@@ -270,6 +270,10 @@ class ModulesService:
         abi_module = ABIModule.get_instance()
         engine = abi_module.engine
 
+        # Build the filesystem catalog first so we can cross-reference app_url
+        catalog = _build_catalog()
+        catalog_by_path = {m.module_path: m for m in catalog}
+
         # Installed: modules currently loaded by the engine
         installed_paths: set[str] = set(engine.modules.keys())
         installed: list[ModuleInfo] = []
@@ -288,6 +292,10 @@ class ModulesService:
             if not name:
                 name = _fallback_name(module_path.split(".")[-1])
 
+            # Pull app_url from the catalog entry (parsed from __init__.py / filesystem)
+            catalog_entry = catalog_by_path.get(module_path)
+            app_url: str | None = catalog_entry.app_url if catalog_entry else None
+
             # Read demo credentials from the module's runtime configuration.
             # This keeps credentials out of source code — they live in config.yaml.
             cfg = getattr(module_instance, "configuration", None)
@@ -302,13 +310,13 @@ class ModulesService:
                     logo_url=logo_url,
                     category=_get_category(module_path),
                     installed=True,
+                    app_url=app_url,
                     demo_login=demo_login,
                     demo_password=demo_password,
                 )
             )
 
         # Available: full filesystem catalog, flagged with installed status
-        catalog = _build_catalog()
         available: list[ModuleInfo] = [
             ModuleInfo(**{**m.model_dump(), "installed": m.module_path in installed_paths})
             for m in catalog
