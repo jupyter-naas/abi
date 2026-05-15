@@ -164,7 +164,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps';
+export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'launcher';
 
 interface WorkspaceState {
   // Navigation

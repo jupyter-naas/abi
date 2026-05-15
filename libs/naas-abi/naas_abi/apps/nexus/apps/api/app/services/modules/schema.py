@@ -18,6 +18,9 @@ class ModuleInfo(BaseModel):
     tier: str | None = None          # "community" | "enterprise"
     maintainer: str | None = None    # e.g. "Naas"
     stripe_url: str | None = None    # Stripe payment link for this agent
+    app_url: str | None = None       # Landing page / launch URL for the module's web app
+    demo_login: str | None = None    # Demo username / email for trying the app
+    demo_password: str | None = None # Demo password for trying the app
 
 
 class ModulesResponse(BaseModel):
