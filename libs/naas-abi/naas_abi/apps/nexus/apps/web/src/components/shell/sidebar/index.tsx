@@ -107,6 +107,12 @@ export function Sidebar() {
   };
 
   const handleSectionClick = (section: SectionDef) => {
+    // 'launcher' is a full-page section — just navigate, no panel
+    if (section.id === 'launcher') {
+      setActivePanelSection(null);
+      router.push(getDefaultPath(section.id));
+      return;
+    }
     if (activePanelSection === section.id) {
       setActivePanelSection(null);
       return;
