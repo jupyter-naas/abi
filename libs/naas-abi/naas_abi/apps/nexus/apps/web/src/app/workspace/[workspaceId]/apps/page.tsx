@@ -362,25 +362,9 @@ function AppDetailPanel({
 // Embed view
 // ---------------------------------------------------------------------------
 
-function EmbedView({ entry, apps, onBack, onSwitch }: {
-  entry: AppEntry;
-  apps: ModuleInfo[];
-  onBack: () => void;
-  onSwitch: (mod: ModuleInfo) => void;
-}) {
+function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
   const url = appEntryUrl(entry);
   const name = appEntryName(entry);
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
-  const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
-
-  // Merge the two left columns: close section panel while app is open,
-  // restore it when navigating back so nav returns to normal.
-  useEffect(() => {
-    const previous = activePanelSection;
-    setActivePanelSection(null);
-    return () => { setActivePanelSection(previous); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const [blocked, setBlocked] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -435,18 +419,8 @@ function EmbedView({ entry, apps, onBack, onSwitch }: {
         </a>
       </div>
 
-      {/* Body: detail panel + iframe */}
-      <div className="flex flex-1 overflow-hidden">
-        <AppDetailPanel
-          entry={entry}
-          apps={apps}
-          collapsed={panelCollapsed}
-          onToggle={() => setPanelCollapsed((v) => !v)}
-          onSwitch={onSwitch}
-        />
-
-        {/* Iframe area */}
-        <div className="relative flex-1 overflow-hidden bg-muted/20">
+      {/* Body: full-width iframe — detail is in the left section panel */}
+      <div className="relative flex-1 overflow-hidden bg-muted/20">
           {blocked ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 text-center p-8">
               <AlertTriangle size={36} className="text-amber-500" />
@@ -480,7 +454,6 @@ function EmbedView({ entry, apps, onBack, onSwitch }: {
             />
           )}
         </div>
-      </div>
     </div>
   );
 }
@@ -593,12 +566,7 @@ export default function AppsPage() {
   if (activeApp) {
     return (
       <div className="flex h-full flex-col">
-        <EmbedView
-          entry={activeApp}
-          apps={modules}
-          onBack={handleClose}
-          onSwitch={(mod) => mod.app_url && handleOpen({ kind: 'module', data: mod, url: mod.app_url })}
-        />
+        <EmbedView entry={activeApp} onBack={handleClose} />
       </div>
     );
   }
