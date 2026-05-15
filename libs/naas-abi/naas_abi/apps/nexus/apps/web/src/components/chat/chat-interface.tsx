@@ -2296,9 +2296,6 @@ export function ChatInterface() {
   );
 }
 
-// Full-page sections that should not open the SectionPanel when navigated to.
-const FULL_PAGE_SECTIONS = new Set<SidebarSection>(['apps']);
-
 // Maps CTA paths to their corresponding SidebarSection IDs.
 const CTA_SECTION_MAP: Record<string, SidebarSection> = {
   '/marketplace': 'marketplace',
@@ -2385,11 +2382,7 @@ function EmptyState({
                   key={`${suggestion.label}:${suggestion.value}`}
                   onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
                   onClick={() => {
-                    if (!FULL_PAGE_SECTIONS.has(sectionId)) {
-                      setActivePanelSection(sectionId);
-                    } else {
-                      setActivePanelSection(null);
-                    }
+                    setActivePanelSection(sectionId);
                     router.push(suggestion.cta!);
                   }}
                   className={baseClass}

@@ -29,7 +29,7 @@ export function MarketplaceSection({ collapsed, detailOnly }: { collapsed: boole
 
   return (
     <CollapsibleSection
-      id="apps"
+      id="marketplace"
       icon={<Store size={18} />}
       label="Marketplace"
       description="Agents, apps, tools and more"
