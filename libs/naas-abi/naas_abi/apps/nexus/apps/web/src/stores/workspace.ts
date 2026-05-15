@@ -40,7 +40,8 @@ export type NavigationItem =
   | 'lab'
   | 'ontology'
   | 'graph'
-  | 'apps';
+  | 'apps'
+  | 'marketplace';
 
 // AgentType is now a string to support dynamic agents
 export type AgentType = string;
@@ -164,7 +165,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'launcher';
+export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace';
 
 interface WorkspaceState {
   // Navigation

@@ -29,8 +29,8 @@ const SECTIONS: SectionDef[] = [
   { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'knowledge' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
-  { id: 'launcher', icon: <AppWindow size={18} />,    label: 'Apps',           href: '/apps',        feature: 'agents' },
-  { id: 'apps',     icon: <Store size={18} />,        label: 'Marketplace',    href: '/marketplace', feature: 'agents' },
+  { id: 'apps',        icon: <AppWindow size={18} />,    label: 'Apps',        href: '/apps',        feature: 'agents' },
+  { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'agents' },
 ];
 
 export function Sidebar() {
@@ -101,14 +101,14 @@ export function Sidebar() {
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
-      case 'launcher': return getWorkspacePath(currentWorkspaceId, '/apps');
-      case 'apps':     return getWorkspacePath(currentWorkspaceId, '/marketplace');
+      case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
+      case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
     }
   };
 
   const handleSectionClick = (section: SectionDef) => {
-    // 'launcher' is a full-page section — just navigate, no panel
-    if (section.id === 'launcher') {
+    // 'apps' is a full-page section — just navigate, no panel
+    if (section.id === 'apps') {
       setActivePanelSection(null);
       router.push(getDefaultPath(section.id));
       return;

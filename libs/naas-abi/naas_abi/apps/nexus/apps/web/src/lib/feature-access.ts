@@ -70,7 +70,6 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
     firstSegment === 'lab' ||
     firstSegment === 'apps' ||
     firstSegment === 'marketplace' ||
-    firstSegment === 'launcher' ||
     (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents')
   ) {
     return 'agents';

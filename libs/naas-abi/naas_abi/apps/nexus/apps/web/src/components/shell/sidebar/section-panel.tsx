@@ -20,8 +20,8 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   lab: 'Lab',
-  launcher: 'Apps',
-  apps: 'Marketplace',
+  apps: 'Apps',
+  marketplace: 'Marketplace',
 };
 
 function SectionContent({ section }: { section: SidebarSection }) {
@@ -48,7 +48,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'lab' && canAgents) {
     return <LabSection collapsed={false} detailOnly />;
   }
-  if (section === 'apps' && canAgents) {
+  if (section === 'marketplace' && canAgents) {
     return <MarketplaceSection collapsed={false} detailOnly />;
   }
   return null;
