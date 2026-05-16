@@ -1,6 +1,6 @@
 'use client';
 
-import { Store, Bot, ExternalLink, FileText, Network, Workflow, GitBranch } from 'lucide-react';
+import { Store, Bot, AppWindow, FileText, Network, Workflow, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
@@ -11,7 +11,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 const TYPE_LINKS = [
   { type: 'all', label: 'All', icon: <Store size={14} /> },
   { type: 'agents', label: 'Agents', icon: <Bot size={14} /> },
-  { type: 'applications', label: 'Applications', icon: <ExternalLink size={14} /> },
+  { type: 'applications', label: 'Applications', icon: <AppWindow size={14} /> },
   { type: 'tools', label: 'Tools', icon: <FileText size={14} /> },
   { type: 'ontologies', label: 'Ontologies', icon: <Network size={14} /> },
   { type: 'workflows', label: 'Workflows', icon: <Workflow size={14} /> },
@@ -29,7 +29,7 @@ export function MarketplaceSection({ collapsed, detailOnly }: { collapsed: boole
 
   return (
     <CollapsibleSection
-      id="apps"
+      id="marketplace"
       icon={<Store size={18} />}
       label="Marketplace"
       description="Agents, apps, tools and more"

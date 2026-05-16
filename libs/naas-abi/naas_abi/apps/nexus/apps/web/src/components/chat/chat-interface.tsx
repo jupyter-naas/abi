@@ -2296,9 +2296,10 @@ export function ChatInterface() {
   );
 }
 
-// Maps CTA paths to their corresponding SidebarSection IDs (route ≠ section id after renames).
+// Maps CTA paths to their corresponding SidebarSection IDs.
 const CTA_SECTION_MAP: Record<string, SidebarSection> = {
-  '/marketplace': 'apps',
+  '/marketplace': 'marketplace',
+  '/apps': 'apps',
 };
 
 function EmptyState({
