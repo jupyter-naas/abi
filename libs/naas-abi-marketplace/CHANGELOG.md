@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v1.20.0 (2026-05-16)
+
+### Chores
+
+- **wsr**: Remove Cesium vendor assets from git
+  ([`a2db948`](https://github.com/jupyter-naas/abi/commit/a2db9488dbe223de5197e20451041b641994465e))
+
+### Documentation
+
+- Add comprehensive WSR Agent
+  ([`8cc09a1`](https://github.com/jupyter-naas/abi/commit/8cc09a1cd1c59390bdf84639d732708a1f55f340))
+
+### Features
+
+- Add initial documentation and frontend setup for WSR/worldview project
+  ([`5662047`](https://github.com/jupyter-naas/abi/commit/5662047c419adfc8c415cb40be4c255bd4b1fac3))
+
+- **nexus**: Add Apps launcher page with embedded iframe and demo access
+  ([`4bed913`](https://github.com/jupyter-naas/abi/commit/4bed913bce370f5fcc211eddeb4ff1f85f69b0df))
+
+- **wsr**: Restructure module, add app URL and demo credentials
+  ([`54199f1`](https://github.com/jupyter-naas/abi/commit/54199f1b29606282995af9485836a9211d7e0247))
+
+### Refactoring
+
+- Remove outdated architecture and API files, add new WSR architecture documentation
+  ([`e3d2b35`](https://github.com/jupyter-naas/abi/commit/e3d2b350deea3a21232b38350478892df361bcd0))
+
+- **wsr**: Make WSR a proper ABI module
+  ([`f26aed6`](https://github.com/jupyter-naas/abi/commit/f26aed6b16c9fae773832b4637471e8713d8bbc5))
+
+
 ## v1.19.2 (2026-05-15)
 
 ### Bug Fixes
