@@ -6,12 +6,14 @@ import { Header } from '@/components/shell/header';
 import {
   Search, Bot, X, Cpu, Tag, CheckCircle2, AlertTriangle,
   FileText, Presentation, Table2, Trello, Calendar, ExternalLink,
-  LayoutGrid, GitBranch, Network, Workflow, Download,
+  LayoutGrid, GitBranch, Network, Workflow, Download, AppWindow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
+import Link from 'next/link';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,6 +34,7 @@ interface ModuleInfo {
   tier: string | null;
   maintainer: string | null;
   stripe_url: string | null;
+  app_url: string | null;
 }
 
 interface ModulesResponse {
@@ -127,6 +130,7 @@ const MODULE_CATEGORY_TO_TYPE: Record<string, ArtifactType> = {
   ai: 'agents',
   domain: 'agents',
   application: 'applications',
+  alpha: 'applications',
   core: 'agents',
 };
 
@@ -346,11 +350,11 @@ interface StaticArtifact {
 }
 
 const STATIC_ARTIFACTS: StaticArtifact[] = [
-  { id: 'docs', name: 'Docs', description: 'Rich text editor for documentation, notes, and runbooks with agent assistance.', icon: <FileText size={22} />, type: 'tools', status: 'coming-soon' },
-  { id: 'slides', name: 'Slides', description: 'Build and narrate presentations driven by your knowledge graph.', icon: <Presentation size={22} />, type: 'tools', status: 'coming-soon' },
-  { id: 'sheets', name: 'Sheets', description: 'Intelligent spreadsheets with formula support and live data connectors.', icon: <Table2 size={22} />, type: 'tools', status: 'coming-soon' },
-  { id: 'board', name: 'Board', description: 'Kanban boards and whiteboards to manage tasks and visual workflows.', icon: <Trello size={22} />, type: 'tools', status: 'coming-soon' },
-  { id: 'calendar', name: 'Calendar', description: 'Schedule and timeline management synced with your agents.', icon: <Calendar size={22} />, type: 'tools', status: 'coming-soon' },
+  { id: 'docs', name: 'Docs', description: 'Rich text editor for documentation, notes, and runbooks with agent assistance.', icon: <FileText size={22} />, type: 'applications', status: 'coming-soon' },
+  { id: 'slides', name: 'Slides', description: 'Build and narrate presentations driven by your knowledge graph.', icon: <Presentation size={22} />, type: 'applications', status: 'coming-soon' },
+  { id: 'sheets', name: 'Sheets', description: 'Intelligent spreadsheets with formula support and live data connectors.', icon: <Table2 size={22} />, type: 'applications', status: 'coming-soon' },
+  { id: 'board', name: 'Board', description: 'Kanban boards and whiteboards to manage tasks and visual workflows.', icon: <Trello size={22} />, type: 'applications', status: 'coming-soon' },
+  { id: 'calendar', name: 'Calendar', description: 'Schedule and timeline management synced with your agents.', icon: <Calendar size={22} />, type: 'applications', status: 'coming-soon' },
   { id: 'ontologies-community', name: 'Community Ontologies', description: 'Browse and install shared ontology modules contributed by the ABI community.', icon: <Network size={22} />, type: 'ontologies', status: 'coming-soon' },
   { id: 'workflows-templates', name: 'Workflow Templates', description: 'Reusable multi-step agent workflows for common business and data processes.', icon: <Workflow size={22} />, type: 'workflows', status: 'coming-soon' },
   { id: 'pipelines-blueprints', name: 'Pipeline Blueprints', description: 'Pre-built data ingestion and transformation pipelines ready to configure.', icon: <GitBranch size={22} />, type: 'pipelines', status: 'coming-soon' },
@@ -522,7 +526,7 @@ function ExternalAppCard({ app }: { app: { name: string; url: string; descriptio
 // Agent ID Card panel
 // ---------------------------------------------------------------------------
 
-function AgentIdCard({ mod, onClose, cfg }: { mod: ModuleInfo; onClose: () => void; cfg: MarketplaceConfig }) {
+function AgentIdCard({ mod, onClose, cfg, workspaceId }: { mod: ModuleInfo; onClose: () => void; cfg: MarketplaceConfig; workspaceId: string | null }) {
   const isPortrait = mod.category === 'domain';
   const pricing = getModulePricing(mod, cfg);
 
@@ -622,6 +626,17 @@ function AgentIdCard({ mod, onClose, cfg }: { mod: ModuleInfo; onClose: () => vo
                 {pricing.cta}
               </button>
             )}
+
+            {/* Open in Apps — only for installed modules that have a launchable app */}
+            {mod.installed && mod.app_url && workspaceId && (
+              <Link
+                href={`/workspace/${workspaceId}/apps?open=${encodeURIComponent(mod.module_path)}`}
+                className="flex w-full items-center justify-center gap-2 py-2.5 text-sm font-semibold border border-workspace-accent/40 text-workspace-accent hover:bg-workspace-accent/10 transition-colors"
+              >
+                <AppWindow size={14} />
+                Open in Apps
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -638,6 +653,7 @@ const ALL_TYPES: ArtifactType[] = ['all', 'agents', 'applications', 'tools', 'on
 export default function MarketplacePage() {
   const searchParams = useSearchParams();
   const tenant = useTenant();
+  const { currentWorkspaceId } = useWorkspaceStore();
 
   const [typeFilter, setTypeFilter] = useState<ArtifactType>(() => {
     const t = searchParams?.get('type') as ArtifactType | null;
@@ -685,7 +701,7 @@ export default function MarketplacePage() {
       name: app.name,
       description: app.description ?? '',
       icon: app.icon_emoji ? <span className="text-2xl">{app.icon_emoji}</span> : <ExternalLink size={22} />,
-      type: 'tools' as ArtifactType,
+      type: 'applications' as ArtifactType,
       status: 'available' as const,
       url: app.url,
     })),
@@ -875,7 +891,7 @@ export default function MarketplacePage() {
       </div>
 
       {selectedMod && (
-        <AgentIdCard mod={selectedMod} onClose={() => setSelectedMod(null)} cfg={mktCfg} />
+        <AgentIdCard mod={selectedMod} onClose={() => setSelectedMod(null)} cfg={mktCfg} workspaceId={currentWorkspaceId} />
       )}
     </div>
   );
