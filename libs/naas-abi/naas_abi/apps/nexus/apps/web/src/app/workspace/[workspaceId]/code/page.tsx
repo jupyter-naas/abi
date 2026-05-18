@@ -13,6 +13,7 @@ import { usePrompt } from '@/components/ui/dialogs';
 import { Header } from '@/components/shell/header';
 import Editor from '@monaco-editor/react';
 import { getApiUrl } from '@/lib/config';
+import { useAuthStore } from '@/stores/auth';
 
 function getLanguage(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase();
@@ -71,7 +72,17 @@ const XTERM_THEME = {
 
 // ── PTY terminal (xterm.js connected to /api/terminal/ws) ─────────────────
 
-function XTerminalContent() {
+// ── Shared xterm component ────────────────────────────────────────────────
+
+interface XTermProps {
+  wsPath: string;          // e.g. /api/terminal/ws or /api/logs/ws
+  readonly?: boolean;
+  scrollback?: number;
+  onData?: (ws: WebSocket, data: string) => void;
+  onMessage?: (term: import('@xterm/xterm').Terminal, e: MessageEvent) => void;
+}
+
+function XTermComponent({ wsPath, readonly = false, scrollback = 1000, onData, onMessage }: XTermProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -87,9 +98,13 @@ function XTerminalContent() {
       if (!containerRef.current) return;
 
       term = new Terminal({
-        cursorBlink: true,
+        cursorBlink: !readonly,
+        disableStdin: readonly,
         fontFamily: '"JetBrains Mono", Menlo, Monaco, Consolas, monospace',
-        fontSize: 13, lineHeight: 1.4, theme: XTERM_THEME,
+        fontSize: readonly ? 12 : 13,
+        lineHeight: readonly ? 1.35 : 1.4,
+        scrollback,
+        theme: XTERM_THEME,
       });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
@@ -97,69 +112,53 @@ function XTerminalContent() {
       term.open(containerRef.current);
       fitAddon.fit();
 
+      const token = useAuthStore.getState().token ?? '';
       const wsBase = getApiUrl().replace(/^http/, 'ws');
-      ws = new WebSocket(`${wsBase}/api/terminal/ws`);
+      ws = new WebSocket(`${wsBase}${wsPath}?token=${encodeURIComponent(token)}`);
       ws.binaryType = 'arraybuffer';
-      ws.onopen = () => ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-      ws.onmessage = (e) => term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : String(e.data));
+
+      ws.onopen = () => {
+        if (!readonly) ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      };
+      ws.onmessage = onMessage
+        ? (e) => onMessage(term, e)
+        : (e) => term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : String(e.data));
       ws.onclose = () => term.write('\r\n\x1b[2mConnection closed\x1b[0m\r\n');
-      ws.onerror = () => term.write('\r\n\x1b[31mTerminal connection failed\x1b[0m\r\n');
-      term.onData((d) => { if (ws.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(d)); });
-      term.onResize(({ cols, rows }) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows })); });
+      ws.onerror = () => term.write('\r\n\x1b[31mConnection failed\x1b[0m\r\n');
+
+      if (!readonly) {
+        term.onData((d) => {
+          if (onData) { onData(ws, d); }
+          else if (ws.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(d));
+        });
+        term.onResize(({ cols, rows }) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+        });
+      }
 
       ro = new ResizeObserver(() => { try { fitAddon.fit(); } catch { /* ignore */ } });
       ro.observe(containerRef.current!);
     };
     init();
     return () => { ro?.disconnect(); ws?.close(); term?.dispose(); };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
 }
 
-// ── Log viewer (xterm.js connected to /api/logs/ws, read-only) ────────────
+function XTerminalContent() {
+  return <XTermComponent wsPath="/api/terminal/ws" />;
+}
 
 function LogsContent() {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    let term: import('@xterm/xterm').Terminal;
-    let ws: WebSocket;
-    let ro: ResizeObserver;
-
-    const init = async () => {
-      const { Terminal } = await import('@xterm/xterm');
-      const { FitAddon } = await import('@xterm/addon-fit');
-      const { WebLinksAddon } = await import('@xterm/addon-web-links');
-      if (!containerRef.current) return;
-
-      term = new Terminal({
-        cursorBlink: false, disableStdin: true,
-        fontFamily: '"JetBrains Mono", Menlo, Monaco, Consolas, monospace',
-        fontSize: 12, lineHeight: 1.35, theme: XTERM_THEME,
-        scrollback: 5000,
-      });
-      const fitAddon = new FitAddon();
-      term.loadAddon(fitAddon);
-      term.loadAddon(new WebLinksAddon());
-      term.open(containerRef.current);
-      fitAddon.fit();
-
-      const wsBase = getApiUrl().replace(/^http/, 'ws');
-      ws = new WebSocket(`${wsBase}/api/logs/ws`);
-      ws.onmessage = (e) => { if (e.data) term.write(String(e.data)); };
-      ws.onclose = () => term.write('\r\n\x1b[2m— log stream closed —\x1b[0m\r\n');
-      ws.onerror = () => term.write('\r\n\x1b[31mLog stream connection failed\x1b[0m\r\n');
-
-      ro = new ResizeObserver(() => { try { fitAddon.fit(); } catch { /* ignore */ } });
-      ro.observe(containerRef.current!);
-    };
-    init();
-    return () => { ro?.disconnect(); ws?.close(); term?.dispose(); };
-  }, []);
-
-  return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+  return (
+    <XTermComponent
+      wsPath="/api/logs/ws"
+      readonly
+      scrollback={5000}
+      onMessage={(term, e) => { if (e.data) term.write(String(e.data)); }}
+    />
+  );
 }
 
 // ── Panel with Terminal / Logs tabs ──────────────────────────────────────

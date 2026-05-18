@@ -12,9 +12,29 @@ import asyncio
 import logging
 from collections import deque
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
+    AuthSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 
 router = APIRouter()
+
+
+# ─── WebSocket auth helper ────────────────────────────────────────────────────
+
+async def _auth_ws(websocket: WebSocket, token: str) -> bool:
+    """Validate Bearer token for WebSocket (browsers can't send Authorization headers)."""
+    async for db in get_db():
+        service = AuthService(adapter=AuthSecondaryAdapterPostgres(db=db))
+        user = await service.get_user_from_access_token(token)
+        if user is None:
+            await websocket.close(code=4001, reason="Unauthorized")
+            return False
+        return True
+    return False
+
 
 # ─── In-process log capture ───────────────────────────────────────────────────
 
@@ -40,7 +60,7 @@ class _BroadcastHandler(logging.Handler):
 
 
 _fmt = logging.Formatter(
-    "%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
+    "%(asctime)s  %(levelname)-8s  %(name)s - %(message)s",
     datefmt="%H:%M:%S",
 )
 
@@ -55,7 +75,12 @@ logging.getLogger().addHandler(_handler)
 # ─── WebSocket endpoint ───────────────────────────────────────────────────────
 
 @router.websocket("/ws")
-async def logs_ws(websocket: WebSocket) -> None:
+async def logs_ws(
+    websocket: WebSocket,
+    token: str = Query(..., description="Bearer access token"),
+) -> None:
+    if not await _auth_ws(websocket, token):
+        return
     await websocket.accept()
 
     queue: asyncio.Queue[str] = asyncio.Queue(maxsize=200)
@@ -71,7 +96,6 @@ async def logs_ws(websocket: WebSocket) -> None:
                 line = await asyncio.wait_for(queue.get(), timeout=20.0)
                 await websocket.send_text(line + "\r\n")
             except TimeoutError:
-                # Send a keep-alive ping so the browser doesn't close the socket.
                 try:
                     await websocket.send_text("")
                 except Exception:

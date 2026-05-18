@@ -19,11 +19,12 @@ import os
 from collections.abc import AsyncIterator
 from threading import Lock
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 # ─── Agent singleton ──────────────────────────────────────────────────────────
 
@@ -120,7 +121,7 @@ async def chat(body: OpencodeChatRequest):
     agent = _get_agent()
 
     # start() is sync/blocking; run in a thread to keep the event loop free
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def _stream() -> AsyncIterator[dict]:
         try:

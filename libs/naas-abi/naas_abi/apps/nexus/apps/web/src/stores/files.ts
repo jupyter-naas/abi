@@ -105,6 +105,8 @@ interface FilesState {
   fsActiveFile: string | null;
   fsFileContents: Record<string, string>;
   fsUnsavedChanges: Record<string, boolean>;
+  // Sandbox root path (relative to FILESYSTEM_ROOT) where writes are allowed
+  fsSandboxRoot: string;
   // Diff decorations from opencode session.diff events
   fsDiffs: Record<string, { additions: number; deletions: number; status: string }>;
   // Increments on every refreshFsFiles so FileNode can react and re-fetch children
@@ -179,6 +181,7 @@ interface FilesState {
   createFsFile: (path: string, content?: string) => Promise<boolean>;
   createFsFolder: (path: string) => Promise<boolean>;
   deleteFsFile: (path: string) => Promise<boolean>;
+  renameFsFile: (oldPath: string, newPath: string) => Promise<boolean>;
   setFsDiffs: (diffs: Array<{ file: string; additions: number; deletions: number; status: string }>) => void;
   clearFsDiffs: () => void;
 }
@@ -220,6 +223,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   fsActiveFile: null,
   fsFileContents: {},
   fsUnsavedChanges: {},
+  fsSandboxRoot: 'sandbox',
   fsDiffs: {},
   fsTreeVersion: 0,
   
@@ -932,7 +936,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       );
       if (!response.ok) throw new Error('Failed to fetch filesystem files');
       const data = await response.json();
-      set({ fsFiles: data.files as FileInfo[], fsLoading: false });
+      set({
+        fsFiles: data.files as FileInfo[],
+        fsLoading: false,
+        ...(data.sandbox_root ? { fsSandboxRoot: data.sandbox_root as string } : {}),
+      });
     } catch (error) {
       console.error('Error fetching filesystem files:', error);
       set({ fsLoading: false });
@@ -1046,8 +1054,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         }
       );
       if (!response.ok) throw new Error('Failed to create file');
-      set((state) => ({ fsFolderContents: {} })); // Bust cache
-      await get().fetchFsFiles();
+      await get().refreshFsFiles(); // bumps fsTreeVersion so expanded nodes re-fetch
       return true;
     } catch (error) {
       console.error('Error creating fs file:', error);
@@ -1062,8 +1069,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         { method: 'POST' }
       );
       if (!response.ok) throw new Error('Failed to create folder');
-      set(() => ({ fsFolderContents: {} })); // Bust cache
-      await get().fetchFsFiles();
+      await get().refreshFsFiles();
       return true;
     } catch (error) {
       console.error('Error creating fs folder:', error);
@@ -1078,14 +1084,45 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         { method: 'DELETE' }
       );
       if (!response.ok) throw new Error('Failed to delete');
-      set(() => ({ fsFolderContents: {} }));
-      // Close if open
       const { fsOpenFiles } = get();
       if (fsOpenFiles.includes(path)) get().closeFsFile(path);
-      await get().fetchFsFiles();
+      await get().refreshFsFiles();
       return true;
     } catch (error) {
       console.error('Error deleting fs path:', error);
+      return false;
+    }
+  },
+
+  renameFsFile: async (oldPath, newPath) => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/filesystem/rename?path=${encodeURIComponent(oldPath)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_path: newPath }),
+        }
+      );
+      if (!response.ok) throw new Error('Failed to rename');
+      // Update open tabs if the renamed file was open
+      const { fsOpenFiles, fsActiveFile, fsFileContents, fsUnsavedChanges } = get();
+      if (fsOpenFiles.includes(oldPath)) {
+        const newContents = { ...fsFileContents, [newPath]: fsFileContents[oldPath] };
+        delete newContents[oldPath];
+        const newUnsaved = { ...fsUnsavedChanges, [newPath]: fsUnsavedChanges[oldPath] };
+        delete newUnsaved[oldPath];
+        set({
+          fsOpenFiles: fsOpenFiles.map((p) => (p === oldPath ? newPath : p)),
+          fsActiveFile: fsActiveFile === oldPath ? newPath : fsActiveFile,
+          fsFileContents: newContents,
+          fsUnsavedChanges: newUnsaved,
+        });
+      }
+      await get().refreshFsFiles();
+      return true;
+    } catch (error) {
+      console.error('Error renaming fs path:', error);
       return false;
     }
   },

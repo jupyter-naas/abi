@@ -3,137 +3,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Terminal, ChevronRight, Folder, FileCode, MoreVertical,
-  FolderPlus, RefreshCw, ChevronsDownUp, GitBranch, Check,
-  ChevronDown, Plus, Trash2, FolderOpen, Pencil, PackagePlus,
-  BookOpen, Code2,
+  FolderPlus, RefreshCw, Plus, Trash2, Pencil, PackagePlus,
+  Code2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFilesStore, type FileInfo } from '@/stores/files';
-import { useWorkspaceStore, type WorkspaceBranch } from '@/stores/workspace';
-import { useCodeStore } from '@/stores/code';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 
-// ─── Sessions ─────────────────────────────────────────────────────────────────
-
-function SessionsPanel() {
-  const { sessions, activeSessionId, createSession, deleteSession, setActiveSession } = useCodeStore();
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newPath, setNewPath] = useState('');
-  const nameRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (creating) setTimeout(() => nameRef.current?.focus(), 50);
-  }, [creating]);
-
-  const handleCreate = () => {
-    createSession(newName.trim() || 'Untitled', newPath.trim() || '/');
-    setNewName(''); setNewPath(''); setCreating(false);
-  };
-
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleCreate();
-    if (e.key === 'Escape') { setCreating(false); setNewName(''); setNewPath(''); }
-  };
-
-  return (
-    <div className="px-2 pb-2">
-      <div className="mb-1 flex items-center justify-between px-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sessions</p>
-        <button onClick={() => setCreating(true)} className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground" title="New session">
-          <Plus size={11} />
-        </button>
-      </div>
-      <div className="space-y-0.5">
-        {sessions.map((s) => (
-          <div key={s.id} onClick={() => setActiveSession(s.id)}
-            className={cn('group flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs cursor-pointer transition-colors',
-              activeSessionId === s.id ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            <FolderOpen size={11} className="flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="truncate font-medium">{s.name}</p>
-              <p className="truncate text-[10px] opacity-60">{s.rootPath}</p>
-            </div>
-            <button onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }} className="hidden h-4 w-4 items-center justify-center rounded text-muted-foreground hover:text-destructive group-hover:flex" title="Delete">
-              <Trash2 size={10} />
-            </button>
-          </div>
-        ))}
-        {sessions.length === 0 && !creating && (
-          <p className="px-1 py-1 text-[11px] text-muted-foreground italic">No sessions yet</p>
-        )}
-      </div>
-      {creating && (
-        <div className="mt-1 space-y-1 rounded-md border border-border/60 bg-muted/30 p-2">
-          <input ref={nameRef} type="text" placeholder="Session name" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={onKey}
-            className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary/30" />
-          <input type="text" placeholder="Root path (e.g. /app/libs/naas-abi)" value={newPath} onChange={(e) => setNewPath(e.target.value)} onKeyDown={onKey}
-            className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary/30" />
-          <div className="flex gap-1">
-            <button onClick={handleCreate} className="flex-1 rounded bg-workspace-accent px-2 py-1 text-[11px] font-medium text-white hover:opacity-90">Create</button>
-            <button onClick={() => { setCreating(false); setNewName(''); setNewPath(''); }} className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted">Cancel</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Branch selector ──────────────────────────────────────────────────────────
-
-function getBranchColor(branch: WorkspaceBranch) {
-  if (branch.name === 'main') return 'text-green-500';
-  if (branch.name === 'demo') return 'text-purple-500';
-  if (branch.name === 'development') return 'text-blue-500';
-  if (branch.name.startsWith('feature/')) return 'text-cyan-500';
-  if (branch.name.startsWith('hotfix/')) return 'text-red-500';
-  return 'text-muted-foreground';
-}
-
-function BranchSelector() {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const { getCurrentBranch, getBranches, checkoutBranch } = useWorkspaceStore();
-  const current = getCurrentBranch();
-  const branches = getBranches();
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-
-  return (
-    <div ref={ref} className="relative px-2 pb-2">
-      <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Branch</p>
-      <button onClick={() => setOpen((v) => !v)}
-        className={cn('flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors hover:bg-muted', open && 'border-primary bg-muted')}
-      >
-        <GitBranch size={11} className={current ? getBranchColor(current) : 'text-muted-foreground'} />
-        <span className="flex-1 truncate text-left font-medium">{current?.name || 'main'}</span>
-        <ChevronDown size={11} className="flex-shrink-0 text-muted-foreground" />
-      </button>
-      {open && (
-        <div className="glass-card absolute left-2 right-2 top-full z-[300] mt-1 py-1 shadow-lg">
-          {branches.map((b) => (
-            <button key={b.id} onClick={() => { checkoutBranch(b.id); setOpen(false); }}
-              className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-primary/10', current?.id === b.id && 'bg-primary/5')}
-            >
-              <GitBranch size={11} className={getBranchColor(b)} />
-              <span className="flex-1 truncate text-left">{b.name}</span>
-              {current?.id === b.id && <Check size={11} className="text-primary" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Generic file tree node ───────────────────────────────────────────────────
 
@@ -285,7 +165,8 @@ const FileNode = React.memo(function FileNode({
             children.map((c) => (
               <FileNode key={c.path} file={c} activeFile={activeFile} selectedPath={selectedPath}
                 onFileClick={onFileClick} onSelect={onSelect} onRename={onRename} onDelete={onDelete}
-                depth={depth + 1} fetchFolderContents={fetchFolderContents} readOnly={readOnly}
+                depth={depth + 1} fetchFolderContents={fetchFolderContents}
+                readOnly={readOnly}
                 diffs={diffs} treeVersion={treeVersion} />
             ))
           ) : (
@@ -301,8 +182,8 @@ const FileNode = React.memo(function FileNode({
 
 function TreePanel({
   label, icon, files, loading, activeFile, selectedPath, onFileClick, onSelect,
-  onRename, onDelete, fetchFolderContents, readOnly = false,
-  onNewFile, onNewFolder, onRefresh, onNewModule, diffs, treeVersion,
+  onRename, onDelete, fetchFolderContents,
+  onNewFile, onNewFolder, onRefresh, onNewModule, diffs, treeVersion, sandboxRoot,
 }: {
   label: string;
   icon: React.ReactNode;
@@ -315,13 +196,13 @@ function TreePanel({
   onRename: (oldPath: string, newPath: string) => void;
   onDelete: (path: string) => void;
   fetchFolderContents?: (path: string) => Promise<FileInfo[]>;
-  readOnly?: boolean;
   onNewFile?: () => void;
   onNewFolder?: () => void;
   onRefresh?: () => void;
   onNewModule?: () => void;
   diffs?: Record<string, DiffInfo>;
   treeVersion?: number;
+  sandboxRoot?: string;  // paths outside this prefix are read-only
 }) {
   const [open, setOpen] = useState(true);
 
@@ -335,7 +216,6 @@ function TreePanel({
         >
           <ChevronRight size={10} className={cn('flex-shrink-0 transition-transform', open && 'rotate-90')} />
           <span className="flex items-center gap-1 truncate">{icon}{label}</span>
-          {readOnly && <span className="ml-1 flex-shrink-0 rounded bg-muted px-1 py-px text-[9px] normal-case tracking-normal">read-only</span>}
         </button>
         <div className="ml-auto flex flex-shrink-0 items-center gap-0.5">
           {onNewModule && (
@@ -367,12 +247,13 @@ function TreePanel({
             files.map((f) => (
               <FileNode key={f.path} file={f} activeFile={activeFile} selectedPath={selectedPath}
                 onFileClick={onFileClick} onSelect={(p) => onSelect(p)} onRename={onRename} onDelete={onDelete}
-                depth={0} fetchFolderContents={fetchFolderContents} readOnly={readOnly}
+                depth={0} fetchFolderContents={fetchFolderContents}
+                readOnly={sandboxRoot ? !f.path.startsWith(sandboxRoot) : false}
                 diffs={diffs} treeVersion={treeVersion} />
             ))
           ) : (
             <p className="px-2 py-1 text-[11px] text-muted-foreground italic">
-              {loading ? 'Loading...' : readOnly ? 'Empty' : 'No files yet — create your first module'}
+              {loading ? 'Loading...' : 'No files yet — create your first module'}
             </p>
           )}
         </div>
@@ -386,8 +267,8 @@ function TreePanel({
 export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [sandboxRoot, setSandboxRoot] = useState<string>('sandbox');
   const { currentWorkspaceId } = useWorkspaceStore();
-  const { getActiveSession } = useCodeStore();
   const {
     fsFiles, fsLoading, fsActiveFile, fsFolderContents,
     fetchFsFiles, fetchFsFolderContents, refreshFsFiles,
@@ -395,11 +276,15 @@ export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; det
     fsDiffs, fsTreeVersion,
   } = useFilesStore();
   const { prompt, dialog: promptDialog } = usePrompt();
-  const activeSession = getActiveSession();
 
-  // Load filesystem root on first mount
+  // Load filesystem root on first mount; capture sandbox_root from response
   useEffect(() => {
-    if (fsFiles.length === 0 && !fsLoading) fetchFsFiles();
+    if (fsFiles.length === 0 && !fsLoading) {
+      fetchFsFiles().then(() => {
+        const sr = useFilesStore.getState().fsSandboxRoot;
+        if (sr) setSandboxRoot(sr);
+      });
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const navigateToCode = () => router.push(getWorkspacePath(currentWorkspaceId, '/code'));
@@ -468,36 +353,28 @@ export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; det
         collapsed={collapsed}
         detailOnly={detailOnly}
       >
-        <SessionsPanel />
-        <BranchSelector />
-
-        <div className="border-t border-border/40 pt-2">
-          <TreePanel
-            label={activeSession?.name || 'Explorer'}
-            icon={<Code2 size={10} />}
-            files={fsFiles}
-            loading={fsLoading}
-            activeFile={fsActiveFile}
-            selectedPath={selectedPath}
-            onFileClick={(path) => { openFsFile(path); navigateToCode(); }}
-            onSelect={(p) => setSelectedPath(p)}
-            onRename={async (oldPath, newPath) => {
-              // Rename by reading the old file, writing to new path, deleting old
-              const content = await useFilesStore.getState().readFsFile(oldPath) ?? '';
-              await createFsFile(newPath, content);
-              await deleteFsFile(oldPath);
-              await refreshFsFiles();
-            }}
-            onDelete={async (p) => { await deleteFsFile(p); }}
-            fetchFolderContents={fetchFolderContents}
-            onNewFile={handleNewFile}
-            onNewFolder={handleNewFolder}
-            onRefresh={refreshFsFiles}
-            onNewModule={handleNewModule}
-            diffs={fsDiffs}
-            treeVersion={fsTreeVersion}
-          />
-        </div>
+        <TreePanel
+          label="Explorer"
+          icon={<Code2 size={10} />}
+          files={fsFiles}
+          loading={fsLoading}
+          activeFile={fsActiveFile}
+          selectedPath={selectedPath}
+          onFileClick={(path) => { openFsFile(path); navigateToCode(); }}
+          onSelect={(p) => setSelectedPath(p)}
+          onRename={async (oldPath, newPath) => {
+            await useFilesStore.getState().renameFsFile(oldPath, newPath);
+          }}
+          onDelete={async (p) => { await deleteFsFile(p); }}
+          fetchFolderContents={fetchFolderContents}
+          onNewFile={handleNewFile}
+          onNewFolder={handleNewFolder}
+          onRefresh={refreshFsFiles}
+          onNewModule={handleNewModule}
+          diffs={fsDiffs}
+          treeVersion={fsTreeVersion}
+          sandboxRoot={sandboxRoot}
+        />
       </CollapsibleSection>
     </>
   );

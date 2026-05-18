@@ -20,9 +20,26 @@ import select
 import struct
 import termios
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
+    AuthSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 
 router = APIRouter()
+
+
+async def _auth_ws(websocket: WebSocket, token: str) -> bool:
+    """Validate Bearer token for WebSocket (browsers can't send Authorization headers)."""
+    async for db in get_db():
+        service = AuthService(adapter=AuthSecondaryAdapterPostgres(db=db))
+        user = await service.get_user_from_access_token(token)
+        if user is None:
+            await websocket.close(code=4001, reason="Unauthorized")
+            return False
+        return True
+    return False
 
 SHELL = os.environ.get("SHELL", "/bin/bash")
 WORKDIR = os.environ.get("FILESYSTEM_ROOT", "/app")
@@ -43,7 +60,12 @@ def _read_master(fd: int, timeout: float = 0.05) -> bytes:
 
 
 @router.websocket("/ws")
-async def terminal_ws(websocket: WebSocket) -> None:
+async def terminal_ws(
+    websocket: WebSocket,
+    token: str = Query(..., description="Bearer access token"),
+) -> None:
+    if not await _auth_ws(websocket, token):
+        return
     await websocket.accept()
 
     master_fd, slave_fd = pty.openpty()
