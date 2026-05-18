@@ -26,6 +26,9 @@ import {
   BookOpen,
   CheckCircle2,
   Circle,
+  Paperclip,
+  ChevronRight,
+  Folder,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -147,6 +150,9 @@ export function AIPane() {
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showAgentMenu, setShowAgentMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+  const filePickerRef = useRef<HTMLDivElement>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   // opencode thread ID — kept across messages so opencode has full conversation context
@@ -160,7 +166,7 @@ export function AIPane() {
   const { agents, getAgent } = useAgentsStore();
   const { providers } = useIntegrationsStore();
   const { getSecretByKey } = useSecretsStore();
-  const { activeFile, fileContents, fsActiveFile, refreshFsFiles, readFsFile, setFsDiffs, clearFsDiffs } = useFilesStore();
+  const { activeFile, fileContents, fsActiveFile, refreshFsFiles, readFsFile, setFsDiffs, clearFsDiffs, fsFiles, fsFolderContents, fetchFsFolderContents } = useFilesStore();
 
   const isOpencode = paneAgent === OPENCODE_AGENT_ID;
   const currentAgent = mounted
@@ -229,10 +235,29 @@ export function AIPane() {
       if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
         setShowAgentMenu(false);
       }
+      if (filePickerRef.current && !filePickerRef.current.contains(e.target as Node)) {
+        setShowFilePicker(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Read file content for attachments (uses the filesystem API)
+  const readAttachmentContent = async (path: string): Promise<string> => {
+    try {
+      const content = await readFsFile(path);
+      return content ?? '';
+    } catch {
+      return '';
+    }
+  };
+
+  const toggleAttachment = (path: string) => {
+    setAttachedFiles((prev) =>
+      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
+    );
+  };
 
   // Chat session management
   const handleNewChat = () => {
@@ -304,6 +329,20 @@ export function AIPane() {
 
     clearFsDiffs();
 
+    // Prepend attached file contents as fenced code blocks
+    let messageWithAttachments = userContent;
+    if (attachedFiles.length > 0) {
+      const blocks = await Promise.all(
+        attachedFiles.map(async (path) => {
+          const content = await readAttachmentContent(path);
+          const ext = path.split('.').pop() ?? '';
+          return `[Attached file: ${path}]\n\`\`\`${ext}\n${content}\n\`\`\``;
+        })
+      );
+      messageWithAttachments = blocks.join('\n\n') + '\n\n' + userContent;
+      setAttachedFiles([]);
+    }
+
     setMessages((prev) => [
       ...prev,
       { id: assistantId, role: 'assistant', content: '', toolEvents: [], isOpencode: true },
@@ -316,7 +355,7 @@ export function AIPane() {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message: userContent, session_id: opencodeSessionId }),
+      body: JSON.stringify({ message: messageWithAttachments, session_id: opencodeSessionId }),
     });
 
     if (!response.ok) {
@@ -689,6 +728,21 @@ export function AIPane() {
       {/* Input area */}
       <div className="border-t p-3">
         <form onSubmit={handleSubmit}>
+          {/* Attached file chips */}
+          {attachedFiles.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {attachedFiles.map((path) => (
+                <span key={path} className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
+                  <FileCode size={10} className="flex-shrink-0 text-primary" />
+                  <span className="max-w-[140px] truncate">{path.split('/').pop()}</span>
+                  <button type="button" onClick={() => toggleAttachment(path)} className="ml-0.5 rounded-full hover:text-destructive">
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
           <textarea
             ref={inputRef}
             value={input}
@@ -820,21 +874,158 @@ export function AIPane() {
               </div>
             </div>
 
-            {/* Send button */}
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
-                'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
+            <div className="flex items-center gap-1">
+              {/* Attach file button — opencode only */}
+              {isOpencode && (
+                <div ref={filePickerRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowFilePicker((v) => !v)}
+                    title="Attach file"
+                    className={cn(
+                      'flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                      (showFilePicker || attachedFiles.length > 0) && 'text-primary'
+                    )}
+                  >
+                    <Paperclip size={14} />
+                  </button>
+
+                  {showFilePicker && (
+                    <div className="absolute bottom-full right-0 mb-2 w-64 rounded-lg border bg-background shadow-lg">
+                      <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">Attach from sandbox</div>
+                      <div className="max-h-56 overflow-y-auto py-1">
+                        <FileBrowserTree
+                          files={fsFiles}
+                          fetchChildren={fetchFsFolderContents}
+                          attached={attachedFiles}
+                          onToggle={toggleAttachment}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-            >
-              <Send size={14} />
-            </button>
+
+              {/* Send button */}
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
+                  'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
+                )}
+              >
+                <Send size={14} />
+              </button>
+            </div>
           </div>
         </form>
       </div>
     </aside>
+  );
+}
+
+// ─── Inline file browser for attachment picker ────────────────────────────────
+
+import type { FileInfo } from '@/stores/files';
+
+function FileBrowserTree({
+  files, fetchChildren, attached, onToggle, depth = 0,
+}: {
+  files: FileInfo[];
+  fetchChildren: (path: string) => Promise<FileInfo[]>;
+  attached: string[];
+  onToggle: (path: string) => void;
+  depth?: number;
+}) {
+  if (files.length === 0) {
+    return (
+      <p className="px-3 py-2 text-[11px] italic text-muted-foreground">
+        {depth === 0 ? 'Sandbox is empty' : 'Empty folder'}
+      </p>
+    );
+  }
+  return (
+    <>
+      {files.map((f) => (
+        <FileBrowserNode
+          key={f.path}
+          file={f}
+          fetchChildren={fetchChildren}
+          attached={attached}
+          onToggle={onToggle}
+          depth={depth}
+        />
+      ))}
+    </>
+  );
+}
+
+function FileBrowserNode({
+  file, fetchChildren, attached, onToggle, depth,
+}: {
+  file: FileInfo;
+  fetchChildren: (path: string) => Promise<FileInfo[]>;
+  attached: string[];
+  onToggle: (path: string) => void;
+  depth: number;
+}) {
+  const isFolder = file.type === 'folder';
+  const isAttached = attached.includes(file.path);
+  const [expanded, setExpanded] = useState(false);
+  const [children, setChildren] = useState<FileInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    if (isFolder) {
+      if (!expanded && children.length === 0) {
+        setLoading(true);
+        const data = await fetchChildren(file.path);
+        setChildren(data);
+        setLoading(false);
+      }
+      setExpanded((v) => !v);
+    } else {
+      onToggle(file.path);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className={cn(
+          'flex w-full items-center gap-1.5 px-2 py-1 text-[11px] transition-colors hover:bg-muted',
+          isAttached && 'bg-primary/10 text-primary'
+        )}
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      >
+        {isFolder ? (
+          <>
+            <ChevronRight size={10} className={cn('flex-shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-90', loading && 'animate-pulse')} />
+            <Folder size={11} className="flex-shrink-0 text-muted-foreground" />
+          </>
+        ) : (
+          <>
+            <span className="w-2.5 flex-shrink-0" />
+            <FileCode size={11} className={cn('flex-shrink-0', isAttached ? 'text-primary' : 'text-muted-foreground')} />
+          </>
+        )}
+        <span className={cn('flex-1 truncate text-left font-mono', isAttached && 'font-medium')}>{file.name}</span>
+        {isAttached && <Check size={10} className="flex-shrink-0 text-primary" />}
+      </button>
+
+      {isFolder && expanded && (
+        <FileBrowserTree
+          files={children}
+          fetchChildren={fetchChildren}
+          attached={attached}
+          onToggle={onToggle}
+          depth={depth + 1}
+        />
+      )}
+    </div>
   );
 }
 
