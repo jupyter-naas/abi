@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+import uuid
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
@@ -101,13 +102,13 @@ def _get_bfo_parent_for_class(triple_store: TripleStoreService, class_uri: str) 
     return None
 
 
-@_cache(
-    lambda triple_store, workspace_id, graph_names, graph_filters: (
-        f"list_individuals_{str(triple_store)}_{workspace_id}_{str(graph_names)}_{str(graph_filters)}"
-    ),
-    DataType.PICKLE,
-    ttl=timedelta(days=1),
-)
+# @_cache(
+#     lambda triple_store, workspace_id, graph_names, graph_filters: (
+#         f"list_individuals_{str(triple_store)}_{workspace_id}_{str(graph_names)}_{str(graph_filters)}"
+#     ),
+#     DataType.PICKLE,
+#     ttl=timedelta(days=1),
+# )
 def _list_individuals(
     triple_store: TripleStoreService,
     workspace_id: str,
@@ -560,37 +561,98 @@ class GraphService:
             raise GraphProtectedError("Schema or Nexus graph cannot be cleared.")
         self._get_triple_store().clear_graph(uri)
 
+    def _remove_subject_and_object_triples(
+        self,
+        store: TripleStoreService,
+        uri: URIRef,
+        named_graph: URIRef,
+    ) -> None:
+        """Remove every triple in *named_graph* where *uri* appears as subject or object."""
+        triples = Graph()
+        forward_query = f"""
+        SELECT ?p ?o
+        WHERE {{
+            GRAPH <{named_graph}> {{
+                <{uri}> ?p ?o .
+            }}
+        }}
+        """
+        for row in store.query(forward_query):
+            assert isinstance(row, ResultRow)
+            triples.add((uri, row.p, row.o))
+        inverse_query = f"""
+        SELECT ?s ?p
+        WHERE {{
+            GRAPH <{named_graph}> {{
+                ?s ?p <{uri}> .
+            }}
+        }}
+        """
+        for row in store.query(inverse_query):
+            assert isinstance(row, ResultRow)
+            triples.add((row.s, row.p, uri))
+        if len(triples) > 0:
+            store.remove(triples, graph_name=named_graph)
+
     async def delete_graph(self, workspace_id: str, graph_uri: str) -> None:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be deleted.")
         store = self._get_triple_store()
         store.drop_graph(uri)
-        metadata = Graph()
-        forward_query = f"""
-        SELECT ?p ?o
-        WHERE {{
-            GRAPH <{NEXUS_GRAPH_URI}> {{
-                <{graph_uri}> ?p ?o .
-            }}
-        }}
-        """
-        for row in store.query(forward_query):
-            assert isinstance(row, ResultRow)
-            metadata.add((uri, row.p, row.o))
-        inverse_query = f"""
-        SELECT ?s ?p
-        WHERE {{
-            GRAPH <{NEXUS_GRAPH_URI}> {{
-                ?s ?p <{graph_uri}> .
-            }}
-        }}
-        """
-        for row in store.query(inverse_query):
-            assert isinstance(row, ResultRow)
-            metadata.add((row.s, row.p, uri))
-        if len(metadata) > 0:
-            store.remove(metadata, graph_name=NEXUS_GRAPH_URI)
+        self._remove_subject_and_object_triples(store, uri, NEXUS_GRAPH_URI)
+
+    async def create_individual(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        label: str,
+        class_uri: str | None,
+    ) -> GraphNodeData:
+        normalized_label = label.strip()
+        if not normalized_label:
+            raise ValueError("Individual label must not be empty.")
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Individuals cannot be inserted into the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        slug = _slugify(normalized_label) or "individual"
+        suffix = uuid.uuid4().hex[:12]
+        individual_uri = URIRef(f"{graph_uri.rstrip('/')}/{slug}-{suffix}")
+        triples = Graph()
+        triples.add((individual_uri, RDF.type, OWL.NamedIndividual))
+        if class_uri:
+            triples.add((individual_uri, RDF.type, URIRef(class_uri)))
+        triples.add((individual_uri, RDFS.label, Literal(normalized_label)))
+        store.insert(triples, graph_name=target_graph)
+        type_label = _get_ontology_label(store, class_uri) if class_uri else "owl:NamedIndividual"
+        return GraphNodeData(
+            id=str(individual_uri),
+            workspace_id=workspace_id,
+            type=type_label,
+            label=normalized_label,
+            properties={},
+        )
+
+    async def delete_individual(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+    ) -> None:
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Individuals cannot be deleted from the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        self._remove_subject_and_object_triples(
+            store=store,
+            uri=URIRef(individual_uri),
+            named_graph=target_graph,
+        )
 
     async def get_graph_overview(
         self, workspace_id: str, graph_uri: str, limit: int = 500
