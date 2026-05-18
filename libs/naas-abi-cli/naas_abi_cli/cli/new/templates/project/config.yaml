@@ -30,6 +30,28 @@ modules:
     config:
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
+        # Dev convenience: enable password login + seed an admin user. The
+        # bootstrap password is auto-generated on first boot and written to
+        # `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
+        auth_password_enabled: true
+        magic_link_allow_signup: false
+        users:
+          - email: "admin@example.com"
+            name: "Dev Admin"
+        organizations:
+          - name: "Dev"
+            slug: "dev"
+            owner_email: "admin@example.com"
+            members:
+              - email: "admin@example.com"
+                role: "owner"
+            workspaces:
+              - name: "Default"
+                slug: "default"
+                owner_email: "admin@example.com"
+                members:
+                  - email: "admin@example.com"
+                    role: "owner"
 
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
