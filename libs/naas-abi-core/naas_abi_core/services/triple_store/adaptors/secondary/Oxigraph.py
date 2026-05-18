@@ -34,6 +34,7 @@ License: MIT
 """
 
 import logging
+import os
 from typing import Tuple, Union
 
 import rdflib
@@ -102,12 +103,16 @@ class Oxigraph(ITripleStorePort):
 
         Args:
             oxigraph_url (str): Base URL of the Oxigraph instance.
-                Defaults to "http://localhost:7878"
+                Defaults to "http://localhost:7878".
+                Overridden by the ``OXIGRAPH_URL`` env var when set — this
+                lets ``abi dev`` inject a per-worktree URL without rewriting
+                the config file.
             timeout (int): Request timeout in seconds. Defaults to 60
 
         Raises:
             requests.exceptions.ConnectionError: If Oxigraph is not accessible
         """
+        oxigraph_url = os.environ.get("OXIGRAPH_URL", oxigraph_url)
         self.oxigraph_url = oxigraph_url.rstrip("/")
         self.query_endpoint = f"{self.oxigraph_url}/query"
         self.update_endpoint = f"{self.oxigraph_url}/update"

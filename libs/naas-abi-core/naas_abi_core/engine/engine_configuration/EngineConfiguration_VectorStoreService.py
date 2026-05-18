@@ -47,8 +47,29 @@ class VectorStoreAdapterQdrantInMemoryConfiguration(BaseModel):
     timeout: int = 300
 
 
+class VectorStoreAdapterSqliteVecConfiguration(BaseModel):
+    """SQLite + sqlite-vec vector store adapter configuration.
+
+    File-backed, multi-process safe via SQLite WAL. Used as the dev default
+    so api and dagster can share the store without a server.
+
+    vector_store_adapter:
+      adapter: "sqlite_vec"
+      config:
+        persistence_path: "storage/vectorstore/vectors.sqlite3"
+        journal_mode: "WAL"
+        busy_timeout_ms: 5000
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    persistence_path: str
+    journal_mode: str = "WAL"
+    busy_timeout_ms: int = 5000
+
+
 class VectorStoreAdapterConfiguration(GenericLoader):
-    adapter: Literal["qdrant", "qdrant_in_memory", "custom"]
+    adapter: Literal["qdrant", "qdrant_in_memory", "sqlite_vec", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -72,6 +93,13 @@ class VectorStoreAdapterConfiguration(GenericLoader):
                 "Invalid configuration for services.vector_store.vector_store_adapter 'qdrant_in_memory' adapter",
             )
 
+        if self.adapter == "sqlite_vec":
+            pydantic_model_validator(
+                VectorStoreAdapterSqliteVecConfiguration,
+                self.config,
+                "Invalid configuration for services.vector_store.vector_store_adapter 'sqlite_vec' adapter",
+            )
+
         return self
 
     def load(self) -> IVectorStorePort:
@@ -93,6 +121,12 @@ class VectorStoreAdapterConfiguration(GenericLoader):
                 )
 
                 return QdrantInMemoryAdapter(**self.config)
+            elif self.adapter == "sqlite_vec":
+                from naas_abi_core.services.vector_store.adapters.SqliteVecAdapter import (
+                    SqliteVecAdapter,
+                )
+
+                return SqliteVecAdapter(**self.config)
             else:
                 raise ValueError(f"Unknown adapter: {self.adapter}")
         else:
