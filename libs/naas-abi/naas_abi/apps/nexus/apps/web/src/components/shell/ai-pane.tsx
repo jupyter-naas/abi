@@ -841,44 +841,6 @@ export function AIPane() {
 function PaneMessage({ message }: { message: Message }) {
   const isUser = message.role === 'user';
 
-  // Opencode assistant message with tool activity
-  if (!isUser && message.isOpencode) {
-    const isStreaming = !message.content || message.content.endsWith('▌');
-    return (
-      <div className="mr-6 space-y-1.5">
-        {/* Tool events */}
-        {(message.toolEvents ?? []).length > 0 && (
-          <div className="space-y-0.5">
-            {(message.toolEvents ?? []).map((ev) => (
-              <ToolEventCard key={ev.callId} event={ev} />
-            ))}
-          </div>
-        )}
-        {/* Text response */}
-        {message.content ? (
-          <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
-            {isStreaming ? (
-              <span className="inline-flex items-center gap-0.5">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
-              </span>
-            ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-            )}
-          </div>
-        ) : (message.toolEvents ?? []).length === 0 ? (
-          <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-            <span className="inline-flex items-center gap-0.5">
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
-            </span>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
   const [showThinking, setShowThinking] = useState(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -932,6 +894,45 @@ function PaneMessage({ message }: { message: Message }) {
       return () => clearTimeout(timer);
     }
   }, [isStillProcessing, autoCollapsed]);
+
+  // Opencode assistant message with tool activity
+  if (!isUser && message.isOpencode) {
+    const isStreaming = !message.content || message.content.endsWith('▌');
+    return (
+      <div className="mr-6 space-y-1.5">
+        {/* Tool events */}
+        {(message.toolEvents ?? []).length > 0 && (
+          <div className="space-y-0.5">
+            {(message.toolEvents ?? []).map((ev) => (
+              <ToolEventCard key={ev.callId} event={ev} />
+            ))}
+          </div>
+        )}
+        {/* Text response */}
+        {message.content ? (
+          <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
+            {isStreaming ? (
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
+              </span>
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            )}
+          </div>
+        ) : (message.toolEvents ?? []).length === 0 ? (
+          <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
+            </span>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   const formatDuration = (seconds: number) => {
     if (seconds < 1) return '<1s';

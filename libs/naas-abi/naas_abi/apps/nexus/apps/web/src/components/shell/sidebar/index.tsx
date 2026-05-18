@@ -103,6 +103,7 @@ export function Sidebar() {
       case 'code':     return getWorkspacePath(currentWorkspaceId, '/code');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
+      case 'lab':          return getWorkspacePath(currentWorkspaceId, '/lab');
     }
   };
 

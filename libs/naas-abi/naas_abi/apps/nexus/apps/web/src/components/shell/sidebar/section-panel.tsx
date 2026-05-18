@@ -20,6 +20,7 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   code: 'Code',
+  lab: 'Lab',
   apps: 'Apps',
   marketplace: 'Marketplace',
 };
