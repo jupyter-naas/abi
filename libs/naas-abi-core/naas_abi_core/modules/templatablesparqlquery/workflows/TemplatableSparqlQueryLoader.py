@@ -23,8 +23,13 @@ def asyncio_thread_job(jobs):
 class TemplatableSparqlQueryLoader:
     triple_store_service: TripleStoreService
 
-    def __init__(self, triple_store_service: TripleStoreService):
+    def __init__(
+        self,
+        triple_store_service: TripleStoreService,
+        graph_name: str = "http://ontology.naas.ai/graph/schema",
+    ):
         self.triple_store_service = triple_store_service
+        self.graph_name = graph_name
 
     def templatable_queries(self):
         results = self.triple_store_service.query("""
@@ -32,11 +37,13 @@ class TemplatableSparqlQueryLoader:
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             SELECT ?query ?label ?description ?sparqlTemplate ?hasArgument
             WHERE {
-                ?query a intentMapping:TemplatableSparqlQuery ;
-                    intentMapping:intentDescription ?description ;
-                    intentMapping:sparqlTemplate ?sparqlTemplate ;
-                    intentMapping:hasArgument ?hasArgument ;
-                    rdfs:label ?label .
+                GRAPH <""" + self.graph_name + """> {
+                    ?query a intentMapping:TemplatableSparqlQuery ;
+                        intentMapping:intentDescription ?description ;
+                        intentMapping:sparqlTemplate ?sparqlTemplate ;
+                        intentMapping:hasArgument ?hasArgument ;
+                        rdfs:label ?label .
+                }
             }
         """)
 
@@ -61,14 +68,16 @@ class TemplatableSparqlQueryLoader:
         )
         results = self.triple_store_service.query("""
                     PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
-                    
+
                     SELECT ?argument ?name ?description ?validationPattern ?validationFormat
                     WHERE {
-                        ?argument a intentMapping:QueryArgument ;
-                            intentMapping:argumentName ?name ;
-                            intentMapping:argumentDescription ?description ;
-                            intentMapping:validationPattern ?validationPattern ;
-                            intentMapping:validationFormat ?validationFormat .
+                        GRAPH <""" + self.graph_name + """> {
+                            ?argument a intentMapping:QueryArgument ;
+                                intentMapping:argumentName ?name ;
+                                intentMapping:argumentDescription ?description ;
+                                intentMapping:validationPattern ?validationPattern ;
+                                intentMapping:validationFormat ?validationFormat .
+                        }
                     }
                 """)
 
