@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.39.1 (2026-05-18)
+
+### Bug Fixes
+
+- **cli**: Install libgl1 and libglib2.0-0 in deploy templates
+  ([`46307dc`](https://github.com/jupyter-naas/abi/commit/46307dce10979f400241d347677e284885322a0c))
+
+
 ## v1.39.0 (2026-05-18)
 
 
