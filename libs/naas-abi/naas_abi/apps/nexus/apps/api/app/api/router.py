@@ -7,6 +7,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     abi,
     filesystem,
     graph,
+    logs,
     ontology,
     opencode,
     organizations,
@@ -48,6 +49,7 @@ api_router.include_router(files_router, prefix="/files", tags=["files"])
 api_router.include_router(filesystem.router, prefix="/filesystem", tags=["filesystem"])
 api_router.include_router(opencode.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(terminal.router, prefix="/terminal", tags=["terminal"])
+api_router.include_router(logs.router, prefix="/logs", tags=["logs"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers_router, prefix="/providers", tags=["providers"])
 api_router.include_router(websocket.router, prefix="/websocket", tags=["websocket"])

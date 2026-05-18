@@ -56,6 +56,14 @@ async def terminal_ws(websocket: WebSocket) -> None:
         "LANG": os.environ.get("LANG", "en_US.UTF-8"),
     }
 
+    # Make the slave fd the controlling terminal of a new session so bash
+    # can enable job control without the "cannot set terminal process group"
+    # warning.
+    def _set_controlling_tty() -> None:
+        os.setsid()
+        if hasattr(termios, "TIOCSCTTY"):
+            fcntl.ioctl(0, termios.TIOCSCTTY, 0)  # fd 0 == slave_fd (stdin)
+
     proc = await asyncio.create_subprocess_exec(
         SHELL, "--login", "-i",
         stdin=slave_fd,
@@ -64,6 +72,7 @@ async def terminal_ws(websocket: WebSocket) -> None:
         close_fds=True,
         cwd=WORKDIR,
         env=env,
+        preexec_fn=_set_controlling_tty,
     )
     os.close(slave_fd)
 

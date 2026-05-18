@@ -50,18 +50,32 @@ function HtmlPreview({ content }: { content: string }) {
   );
 }
 
-// ─── Resizable terminal ───────────────────────────────────────────────────────
+// ─── Resizable terminal / logs panel ─────────────────────────────────────────
 
 const MIN_H = 28;
 const DEFAULT_H = 200;
 const MAX_H = 600;
+
+const XTERM_THEME = {
+  background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#d4d4d4',
+  selectionBackground: '#264f78',
+  black: '#1e1e1e',    brightBlack: '#808080',
+  red: '#f44747',      brightRed: '#f44747',
+  green: '#6a9955',    brightGreen: '#b5cea8',
+  yellow: '#d7ba7d',   brightYellow: '#d7ba7d',
+  blue: '#569cd6',     brightBlue: '#569cd6',
+  magenta: '#c586c0',  brightMagenta: '#c586c0',
+  cyan: '#4ec9b0',     brightCyan: '#4ec9b0',
+  white: '#d4d4d4',    brightWhite: '#ffffff',
+};
+
+// ── PTY terminal (xterm.js connected to /api/terminal/ws) ─────────────────
 
 function XTerminalContent() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     let term: import('@xterm/xterm').Terminal;
     let ws: WebSocket;
     let ro: ResizeObserver;
@@ -70,87 +84,93 @@ function XTerminalContent() {
       const { Terminal } = await import('@xterm/xterm');
       const { FitAddon } = await import('@xterm/addon-fit');
       const { WebLinksAddon } = await import('@xterm/addon-web-links');
-
-
       if (!containerRef.current) return;
 
       term = new Terminal({
         cursorBlink: true,
         fontFamily: '"JetBrains Mono", Menlo, Monaco, Consolas, monospace',
-        fontSize: 13,
-        lineHeight: 1.4,
-        theme: {
-          background: '#1e1e1e',
-          foreground: '#d4d4d4',
-          cursor: '#d4d4d4',
-          selectionBackground: '#264f78',
-          black: '#1e1e1e',      brightBlack: '#808080',
-          red: '#f44747',        brightRed: '#f44747',
-          green: '#6a9955',      brightGreen: '#b5cea8',
-          yellow: '#d7ba7d',     brightYellow: '#d7ba7d',
-          blue: '#569cd6',       brightBlue: '#569cd6',
-          magenta: '#c586c0',    brightMagenta: '#c586c0',
-          cyan: '#4ec9b0',       brightCyan: '#4ec9b0',
-          white: '#d4d4d4',      brightWhite: '#ffffff',
-        },
+        fontSize: 13, lineHeight: 1.4, theme: XTERM_THEME,
       });
-
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
       term.loadAddon(new WebLinksAddon());
       term.open(containerRef.current);
       fitAddon.fit();
 
-      const apiBase = getApiUrl();
-      const wsBase = apiBase.replace(/^http/, 'ws');
+      const wsBase = getApiUrl().replace(/^http/, 'ws');
       ws = new WebSocket(`${wsBase}/api/terminal/ws`);
       ws.binaryType = 'arraybuffer';
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-      };
-      ws.onmessage = (e) => {
-        if (e.data instanceof ArrayBuffer) {
-          term.write(new Uint8Array(e.data));
-        } else {
-          term.write(String(e.data));
-        }
-      };
-      ws.onclose = () => {
-        term.write('\r\n\x1b[2mConnection closed — reload to reconnect\x1b[0m\r\n');
-      };
-      ws.onerror = () => {
-        term.write('\r\n\x1b[31mTerminal connection failed\x1b[0m\r\n');
-      };
-
-      term.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(data));
-      });
-      term.onResize(({ cols, rows }) => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }));
-      });
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      ws.onmessage = (e) => term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : String(e.data));
+      ws.onclose = () => term.write('\r\n\x1b[2mConnection closed\x1b[0m\r\n');
+      ws.onerror = () => term.write('\r\n\x1b[31mTerminal connection failed\x1b[0m\r\n');
+      term.onData((d) => { if (ws.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(d)); });
+      term.onResize(({ cols, rows }) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows })); });
 
       ro = new ResizeObserver(() => { try { fitAddon.fit(); } catch { /* ignore */ } });
       ro.observe(containerRef.current!);
     };
-
     init();
-
-    return () => {
-      ro?.disconnect();
-      ws?.close();
-      term?.dispose();
-    };
+    return () => { ro?.disconnect(); ws?.close(); term?.dispose(); };
   }, []);
 
   return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
 }
 
+// ── Log viewer (xterm.js connected to /api/logs/ws, read-only) ────────────
+
+function LogsContent() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    let term: import('@xterm/xterm').Terminal;
+    let ws: WebSocket;
+    let ro: ResizeObserver;
+
+    const init = async () => {
+      const { Terminal } = await import('@xterm/xterm');
+      const { FitAddon } = await import('@xterm/addon-fit');
+      const { WebLinksAddon } = await import('@xterm/addon-web-links');
+      if (!containerRef.current) return;
+
+      term = new Terminal({
+        cursorBlink: false, disableStdin: true,
+        fontFamily: '"JetBrains Mono", Menlo, Monaco, Consolas, monospace',
+        fontSize: 12, lineHeight: 1.35, theme: XTERM_THEME,
+        scrollback: 5000,
+      });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.loadAddon(new WebLinksAddon());
+      term.open(containerRef.current);
+      fitAddon.fit();
+
+      const wsBase = getApiUrl().replace(/^http/, 'ws');
+      ws = new WebSocket(`${wsBase}/api/logs/ws`);
+      ws.onmessage = (e) => { if (e.data) term.write(String(e.data)); };
+      ws.onclose = () => term.write('\r\n\x1b[2m— log stream closed —\x1b[0m\r\n');
+      ws.onerror = () => term.write('\r\n\x1b[31mLog stream connection failed\x1b[0m\r\n');
+
+      ro = new ResizeObserver(() => { try { fitAddon.fit(); } catch { /* ignore */ } });
+      ro.observe(containerRef.current!);
+    };
+    init();
+    return () => { ro?.disconnect(); ws?.close(); term?.dispose(); };
+  }, []);
+
+  return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+}
+
+// ── Panel with Terminal / Logs tabs ──────────────────────────────────────
+
+type PanelTab = 'terminal' | 'logs';
+
 function TerminalPanel({ height, onResize }: { height: number; onResize: (h: number) => void }) {
   const dragging = useRef(false);
   const startY = useRef(0);
   const startH = useRef(0);
-  const [expanded, setExpanded] = useState(true);
+  const [tab, setTab] = useState<PanelTab>('terminal');
 
   const onMouseDown = (e: React.MouseEvent) => {
     dragging.current = true;
@@ -162,8 +182,7 @@ function TerminalPanel({ height, onResize }: { height: number; onResize: (h: num
   useEffect(() => {
     const move = (e: MouseEvent) => {
       if (!dragging.current) return;
-      const newH = startH.current + (startY.current - e.clientY);
-      onResize(Math.min(MAX_H, Math.max(MIN_H, newH)));
+      onResize(Math.min(MAX_H, Math.max(MIN_H, startH.current + (startY.current - e.clientY))));
     };
     const up = () => { dragging.current = false; };
     window.addEventListener('mousemove', move);
@@ -173,26 +192,35 @@ function TerminalPanel({ height, onResize }: { height: number; onResize: (h: num
 
   return (
     <div className="flex flex-col border-t border-border/50 bg-[#1e1e1e]" style={{ height }}>
+      {/* Title bar / drag handle */}
       <div
         onMouseDown={onMouseDown}
-        className="flex h-7 flex-shrink-0 cursor-row-resize items-center justify-between border-b border-border/40 bg-[#252526] px-3 select-none"
+        className="flex h-7 flex-shrink-0 cursor-row-resize items-center gap-0 border-b border-border/40 bg-[#252526] select-none"
       >
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <Terminal size={12} />
-          <span className="font-medium">Terminal</span>
-        </div>
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="flex h-4 w-4 items-center justify-center rounded text-zinc-500 hover:text-zinc-300"
-          title={expanded ? 'Collapse' : 'Expand'}
-        >
-          <GripHorizontal size={12} />
-        </button>
+        {/* Tabs */}
+        {([['terminal', Terminal, 'Terminal'], ['logs', Terminal, 'Logs']] as const).map(([id, , label]) => (
+          <button
+            key={id}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => setTab(id)}
+            className={cn(
+              'flex h-full items-center gap-1.5 border-r border-border/30 px-3 text-[11px] transition-colors',
+              tab === id
+                ? 'bg-[#1e1e1e] text-zinc-200'
+                : 'text-zinc-500 hover:bg-[#2d2d2d] hover:text-zinc-300',
+            )}
+          >
+            <Terminal size={11} />
+            {label}
+          </button>
+        ))}
+        <div className="flex-1" />
+        <GripHorizontal size={12} className="mr-3 text-zinc-600" />
       </div>
 
       {height > MIN_H && (
         <div className="flex-1 overflow-hidden p-1">
-          <XTerminalContent />
+          {tab === 'terminal' ? <XTerminalContent /> : <LogsContent />}
         </div>
       )}
     </div>
