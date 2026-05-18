@@ -67,7 +67,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
 
     def __refresh_credentials(self) -> None:
         response = requests.post(
-            f"{NAAS_API_URL}/workspace/{self.__workspace_id}/storage/credentials/",
+            f"{NAAS_API_URL}workspace/{self.__workspace_id}/storage/credentials/",
             headers={"Authorization": f"Bearer {self.__naas_api_key}"},
             json={
                 "name": self.__storage_name,
