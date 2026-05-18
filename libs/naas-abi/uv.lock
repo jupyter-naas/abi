@@ -2236,7 +2236,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "1.55.1"
+version = "1.55.2"
 source = { virtual = "." }
 dependencies = [
     { name = "aiosqlite" },
