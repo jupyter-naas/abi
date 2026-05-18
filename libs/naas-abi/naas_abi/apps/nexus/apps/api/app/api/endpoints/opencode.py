@@ -112,27 +112,42 @@ async def health():
         return {"healthy": False, "error": str(exc)}
 
 
+def _ensure_session_dir(session_id: str) -> str:
+    """Create sandbox/{session_id}/ on the host and return the absolute path."""
+    base = os.environ.get("OPENCODE_WORKDIR") or os.environ.get("FILESYSTEM_ROOT", "/app")
+    session_dir = os.path.join(base, session_id)
+    os.makedirs(session_dir, exist_ok=True)
+    return session_dir
+
+
 @router.post("/chat")
 async def chat(body: OpencodeChatRequest):
     """
     Stream opencode events to the frontend.
 
-    Uses OpencodeAgent.astream_robust() — identical to astream() but waits
-    up to 3 s for the prompt task after session.idle, fixing the race where
-    session.idle arrives before the HTTP POST response.
+    Each session_id gets its own subdirectory under OPENCODE_WORKDIR so that
+    concurrent chat sessions don't clobber each other's files.
     """
     agent = _get_agent()
-
-    # start() is sync/blocking; run in a thread to keep the event loop free
     loop = asyncio.get_running_loop()
+
+    # Resolve (and create) the per-session working directory
+    session_id = body.session_id or "default"
+    session_dir = _ensure_session_dir(session_id)
+
+    # Prepend the working directory so the model knows where to write files
+    message_with_ctx = (
+        f"[Session working directory: {session_dir}]\n\n"
+        f"{body.message}"
+    )
 
     async def _stream() -> AsyncIterator[dict]:
         try:
             await loop.run_in_executor(None, agent.start)
 
             async for raw_event in agent.astream(
-                message=body.message,
-                thread_id=body.session_id or None,
+                message=message_with_ctx,
+                thread_id=session_id,
             ):
                 yield {"data": raw_event}
 
