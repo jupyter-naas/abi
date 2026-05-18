@@ -1,8 +1,15 @@
 FROM python:3.11
 WORKDIR /app
 
-# Install CA certificates
-RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
+# Install CA certificates and runtime libs required by opencv (libGL, libglib),
+# which is pulled in transitively by docling for PDF conversion pipelines.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libgl1 \
+        libglib2.0-0 \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN pip install uv
 

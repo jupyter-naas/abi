@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     token_hash TEXT NOT NULL UNIQUE, -- SHA-256 hash of the refresh token
     access_token_jti TEXT, -- JTI (JWT ID) of the associated access token
     expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_used_at TIMESTAMP,
     revoked_at TIMESTAMP,
     revoked_reason TEXT,
@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens(expires_
 CREATE TABLE IF NOT EXISTS revoked_tokens (
     jti TEXT PRIMARY KEY, -- JWT ID
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    revoked_at TIMESTAMP NOT NULL DEFAULT (NOW()),
+    revoked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     revoked_reason TEXT,
     expires_at TIMESTAMP NOT NULL -- Keep until token would naturally expire
 );
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     ip_address TEXT,
     user_agent TEXT,
     success BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS rate_limit_events (
     id TEXT PRIMARY KEY,
     identifier TEXT NOT NULL, -- IP address or user_id
     endpoint TEXT NOT NULL, -- '/api/auth/login', '/api/auth/register', etc.
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_rate_limit_identifier ON rate_limit_events(identifier, endpoint, created_at DESC);
@@ -76,7 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_rate_limit_identifier ON rate_limit_events(identi
 CREATE TABLE IF NOT EXISTS password_changes (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    changed_at TIMESTAMP NOT NULL DEFAULT (NOW()),
+    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ip_address TEXT,
     user_agent TEXT
 );

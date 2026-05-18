@@ -24,13 +24,15 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@latest --activate
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
 
       - name: Install frontend dependencies
         run: cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm install --frozen-lockfile

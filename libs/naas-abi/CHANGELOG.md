@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v1.55.2 (2026-05-18)
+
+
+## v1.55.1 (2026-05-18)
+
+### Bug Fixes
+
+- **nexus**: System drive shows full object storage root
+  ([`d3a03f9`](https://github.com/jupyter-naas/abi/commit/d3a03f9a7de1ed92dd0606ac1606d23c13e76662))
+
+
+## v1.55.0 (2026-05-18)
+
+### Bug Fixes
+
+- **auth**: Route magic-link email through engine email service
+  ([`658848f`](https://github.com/jupyter-naas/abi/commit/658848fede535486c7e083519cdf8963a20d6e5a))
+
+### Features
+
+- **dev**: Dockerless dev mode via `abi dev` + SQLite Nexus
+  ([`7f42bff`](https://github.com/jupyter-naas/abi/commit/7f42bffcf8dc2be1455e53c0d763389bdf72142a))
+
+- **vector-store**: SQLite + sqlite-vec adapter for dev
+  ([`eb6b571`](https://github.com/jupyter-naas/abi/commit/eb6b5716b6f041b7f97258efb6b1a63e5158985c))
+
+
 ## v1.54.0 (2026-05-18)
 
 ### Features

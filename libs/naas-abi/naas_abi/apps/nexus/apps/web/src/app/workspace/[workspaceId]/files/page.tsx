@@ -196,7 +196,7 @@ export default function FilesPage() {
       : activeSource === 'platform-drive'
         ? 'naas_abi/platform-drive'
         : activeSource === 'system-drive'
-          ? 'naas_abi'
+          ? ''
           : workspaceId
             ? `naas_abi/workspace-drive/${workspaceId}`
             : '';
