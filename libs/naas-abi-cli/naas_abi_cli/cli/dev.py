@@ -746,7 +746,7 @@ def _build_hint(
         for letter, name in open_map.items():
             style = _SERVICE_STYLES.get(name, "white")
             out.append(f" {letter}={name}", style=style)
-    out.append("    q or Ctrl+C: stop", style="dim")
+    out.append("    r=restart  •  q or Ctrl+C: stop", style="dim")
     return out
 
 
@@ -757,8 +757,12 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
     which service streams; 0 returns to interleaved.
     """
     console = Console()
-    stop_event = threading.Event()
-    threads: list[threading.Thread] = []
+    outer_stop_event = threading.Event()           # keyboard + probe + main loop
+    threads: list[threading.Thread] = []           # health probe
+    log_threads: list[threading.Thread] = []       # streamer threads (per session)
+    # Streamers share this event; restarting the stack swaps it for a fresh one
+    # so the new generation of streamers doesn't inherit a set() event.
+    session_stop_holder: dict[str, threading.Event] = {"value": threading.Event()}
 
     buffers: dict[str, collections.deque] = {
         spec.name: collections.deque(maxlen=LOG_BUFFER_LINES) for spec in started
@@ -773,6 +777,14 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
     focus_lock = threading.Lock()
     index_to_name = {i + 1: spec.name for i, spec in enumerate(started)}
     open_letters = _open_letter_map(started)
+
+    # Remember which services this session manages so restart can re-spawn
+    # the exact same set after stopping them all.
+    selected_names = [spec.name for spec in started]
+
+    # Restart guard: hitting `r` rapidly should not start parallel restarts.
+    restart_lock = threading.Lock()
+    restart_in_progress = {"value": False}
 
     live_holder: dict[str, Live | None] = {"value": None}
 
@@ -825,12 +837,108 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
         except Exception as exc:  # pragma: no cover - best-effort
             console.print(Text(f"   failed to open browser: {exc}", style="red"))
 
+    def _spawn_streamers() -> None:
+        """Start one log streamer per currently-started service.
+
+        Uses the current `session_stop_holder["value"]` event so restart can
+        atomically kill the previous generation by `set()`ing its event then
+        installing a fresh one before this call.
+        """
+        event = session_stop_holder["value"]
+        for spec in started:
+            t = threading.Thread(
+                target=_stream_log_to_console,
+                args=(
+                    spec,
+                    buffers[spec.name],
+                    focus_state,
+                    focus_lock,
+                    console,
+                    event,
+                ),
+                daemon=True,
+                name=f"log-{spec.name}",
+            )
+            t.start()
+            log_threads.append(t)
+
+    def restart_services() -> None:
+        """Stop everything and start it back up. Meant to run in a thread."""
+        with restart_lock:
+            if restart_in_progress["value"]:
+                return
+            restart_in_progress["value"] = True
+        try:
+            console.print(
+                Text("── restarting services... ──", style="bold yellow")
+            )
+
+            # 1. Kill streamer threads. New event will be installed below so
+            #    later streamers don't inherit this one (already set).
+            session_stop_holder["value"].set()
+            for t in log_threads:
+                t.join(timeout=1.5)
+            log_threads.clear()
+
+            # 2. Stop the service processes (reverse order: api/dagster
+            #    before oxigraph so they don't get cranky losing the store).
+            for spec in reversed(started):
+                _stop_service(spec.name, ports[spec.name])
+
+            # 3. Reset per-service state.
+            for buf in buffers.values():
+                buf.clear()
+            with health_lock:
+                for name in health_state:
+                    health_state[name] = {
+                        "pid": None, "alive": False, "ready": False,
+                    }
+
+            # 4. Re-spawn services in the original order.
+            started.clear()
+            for name in selected_names:
+                spec = _start_service(name, ports)
+                started.append(spec)
+                # Same boot-dependency wait as the initial `dev_up`.
+                if name == "oxigraph" and any(
+                    n in selected_names for n in ("api", "dagster")
+                ):
+                    if not _wait_until_ready(
+                        spec.port, max_wait=15.0, path="/health"
+                    ):
+                        console.print(Text(
+                            "⚠ oxigraph not ready in 15s; continuing anyway",
+                            style="yellow",
+                        ))
+
+            # 5. Fresh event, fresh streamers.
+            session_stop_holder["value"] = threading.Event()
+            _spawn_streamers()
+
+            console.print(
+                Text("── restart complete ──", style="bold green")
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            console.print(Text(f"restart failed: {exc}", style="red"))
+        finally:
+            restart_in_progress["value"] = False
+
     def on_key(ch: str) -> None:
         if ch in ("q", "Q", "\x03"):
             os.kill(os.getpid(), signal.SIGINT)
             return
+        if ch in ("r", "R"):
+            # Restart in a worker thread so the UI / keyboard stays live
+            # during the (~few-second) stop-start cycle.
+            threading.Thread(
+                target=restart_services, daemon=True, name="restart"
+            ).start()
+            return
         lower = ch.lower()
-        if lower in open_letters and lower not in ("q",):
+        # Reserve r/q (already handled above) from the open-letter map so
+        # a service whose name happens to start with those letters can't
+        # shadow the global hotkey.
+        if lower in open_letters and lower not in ("q", "r"):
             open_service(open_letters[lower])
             return
         if ch == "0":
@@ -874,26 +982,11 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
         ) as live:
             live_holder["value"] = live
 
-            for spec in started:
-                t = threading.Thread(
-                    target=_stream_log_to_console,
-                    args=(
-                        spec,
-                        buffers[spec.name],
-                        focus_state,
-                        focus_lock,
-                        console,
-                        stop_event,
-                    ),
-                    daemon=True,
-                    name=f"log-{spec.name}",
-                )
-                t.start()
-                threads.append(t)
+            _spawn_streamers()
 
             probe_thread = threading.Thread(
                 target=_health_probe_loop,
-                args=(started, ports, health_state, health_lock, stop_event),
+                args=(started, ports, health_state, health_lock, outer_stop_event),
                 daemon=True,
                 name="health-probe",
             )
@@ -904,6 +997,10 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
                 while True:
                     time.sleep(0.25)
                     live.update(render())
+                    # Don't auto-exit if a restart is in flight — health
+                    # legitimately drops to all-dead between stop and spawn.
+                    if restart_in_progress["value"]:
+                        continue
                     with health_lock:
                         any_alive = any(
                             v.get("alive", False) for v in health_state.values()
@@ -918,11 +1015,12 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
     finally:
         live_holder["value"] = None
         keyboard.stop()
-        stop_event.set()
+        outer_stop_event.set()
+        session_stop_holder["value"].set()
         console.print(Text("── stopping services ──", style="dim"))
         for spec in reversed(started):
             _stop_service(spec.name, ports[spec.name])
-        for t in threads:
+        for t in threads + log_threads:
             t.join(timeout=1.0)
 
 
