@@ -27,14 +27,9 @@ class GenericWorkflow(Generic[T]):
         try:
             from jinja2 import Template
 
-            graph_names = " ".join(
-                f"<{g}>" for g in self.triple_store_service.list_graphs()
-            )
-
             template = Template(self.sparql_template)
             sparql_query = template.render(
                 **parameters.model_dump(),
-                graph_names=graph_names,
             )
             print(sparql_query)
             results = self.triple_store_service.query(sparql_query)
