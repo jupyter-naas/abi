@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronRight, Folder, HardDrive } from 'lucide-react';
+import { ChevronRight, Folder, HardDrive, Server } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFilesStore } from '@/stores/files';
@@ -15,6 +15,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const platformDriveEnabled = Boolean(currentWorkspace?.platformDriveEnabled);
+  const workspaceRole = currentWorkspace?.currentUserRole;
+  const isWorkspaceAdmin = workspaceRole === 'owner' || workspaceRole === 'admin';
   const {
     expandedCategories: fileExpandedCategories,
     toggleCategory: toggleFileCategory,
@@ -45,7 +47,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
             className={cn('transition-transform', fileExpandedCategories.includes('local') && 'rotate-90')}
           />
           <span className="flex-1 truncate text-left">Local</span>
-          <span className="text-[10px]">{(platformDriveEnabled ? 3 : 2) + syncedFolders.length}</span>
+          <span className="text-[10px]">{2 + (platformDriveEnabled ? 1 : 0) + (isWorkspaceAdmin ? 1 : 0) + syncedFolders.length}</span>
         </button>
         {fileExpandedCategories.includes('local') && (
           <div className="ml-3 space-y-0.5">
@@ -94,6 +96,24 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
               >
                 <HardDrive size={12} className="text-muted-foreground" />
                 <span className="flex-1 truncate text-left">Platform Drive</span>
+              </button>
+            )}
+
+            {isWorkspaceAdmin && (
+              <button
+                onClick={() => {
+                  setActiveSource('system-drive');
+                  router.push(getWorkspacePath(currentWorkspaceId, '/files'));
+                }}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                  'hover:bg-workspace-accent-10',
+                  activeSource === 'system-drive' && 'bg-workspace-accent-15 text-workspace-accent'
+                )}
+                title="Full object storage tree — visible to workspace owners and admins"
+              >
+                <Server size={12} className="text-muted-foreground" />
+                <span className="flex-1 truncate text-left">System Drive</span>
               </button>
             )}
 

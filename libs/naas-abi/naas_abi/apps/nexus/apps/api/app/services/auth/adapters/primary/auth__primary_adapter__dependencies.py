@@ -126,6 +126,22 @@ async def require_workspace_platform_drive(user_id: str, workspace_id: str) -> N
         )
 
 
+async def require_workspace_admin(user_id: str, workspace_id: str) -> None:
+    """Authorize access to admin-only workspace capabilities.
+
+    Used for actions that should be restricted to workspace owners and
+    admins, such as inspecting the system drive (the full object storage
+    tree).
+    """
+    await require_workspace_access(user_id=user_id, workspace_id=workspace_id)
+    role = await get_workspace_role(user_id=user_id, workspace_id=workspace_id)
+    if role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Workspace admin role required",
+        )
+
+
 __all__ = [
     "decode_token",
     "get_auth_service",
@@ -134,6 +150,7 @@ __all__ = [
     "get_workspace_role",
     "oauth2_scheme",
     "require_workspace_access",
+    "require_workspace_admin",
     "require_workspace_platform_drive",
     "to_user_schema",
 ]
