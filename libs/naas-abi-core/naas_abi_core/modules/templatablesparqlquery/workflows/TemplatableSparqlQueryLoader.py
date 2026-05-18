@@ -32,12 +32,15 @@ class TemplatableSparqlQueryLoader:
         self.graph_name = graph_name
 
     def templatable_queries(self):
-        results = self.triple_store_service.query("""
+        results = self.triple_store_service.query(
+            """
             PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             SELECT ?query ?label ?description ?sparqlTemplate ?hasArgument
             WHERE {
-                GRAPH <""" + self.graph_name + """> {
+                GRAPH <"""
+            + self.graph_name
+            + """> {
                     ?query a intentMapping:TemplatableSparqlQuery ;
                         intentMapping:intentDescription ?description ;
                         intentMapping:sparqlTemplate ?sparqlTemplate ;
@@ -45,7 +48,8 @@ class TemplatableSparqlQueryLoader:
                         rdfs:label ?label .
                 }
             }
-        """)
+        """
+        )
 
         queries = {}
 
@@ -66,12 +70,15 @@ class TemplatableSparqlQueryLoader:
         argument_graph.bind(
             "intentMapping", URIRef("http://ontology.naas.ai/intentMapping/")
         )
-        results = self.triple_store_service.query("""
+        results = self.triple_store_service.query(
+            """
                     PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
 
                     SELECT ?argument ?name ?description ?validationPattern ?validationFormat
                     WHERE {
-                        GRAPH <""" + self.graph_name + """> {
+                        GRAPH <"""
+            + self.graph_name
+            + """> {
                             ?argument a intentMapping:QueryArgument ;
                                 intentMapping:argumentName ?name ;
                                 intentMapping:argumentDescription ?description ;
@@ -79,7 +86,8 @@ class TemplatableSparqlQueryLoader:
                                 intentMapping:validationFormat ?validationFormat .
                         }
                     }
-                """)
+                """
+        )
 
         for argument, name, description, validationPattern, validationFormat in results:
             argument_graph.add(
@@ -127,14 +135,18 @@ class TemplatableSparqlQueryLoader:
                     
                     SELECT ?argument ?name ?description ?validationPattern ?validationFormat
                     WHERE {
-                        BIND(<"""
+                        GRAPH <"""
+                    + self.graph_name
+                    + """> {
+                            BIND(<"""
                     + str(argument)
                     + """> AS ?argument)
-                        ?argument a intentMapping:QueryArgument ;
-                            intentMapping:argumentName ?name ;
-                            intentMapping:argumentDescription ?description ;
-                            intentMapping:validationPattern ?validationPattern ;
-                            intentMapping:validationFormat ?validationFormat .
+                            ?argument a intentMapping:QueryArgument ;
+                                intentMapping:argumentName ?name ;
+                                intentMapping:argumentDescription ?description ;
+                                intentMapping:validationPattern ?validationPattern ;
+                                intentMapping:validationFormat ?validationFormat .
+                        }
                     }
                 """
                 )
