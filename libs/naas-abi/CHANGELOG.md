@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.52.1 (2026-05-18)
+
+### Bug Fixes
+
+- **templatablesparqlquery**: Remove unused graph_names rendering in GenericWorkflow
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+### Chores
+
+- Update uv.lock version bumps
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+### Refactoring
+
+- **web**: Update types and imports in apps-section component
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+
 ## v1.52.0 (2026-05-18)
 
 
