@@ -3377,6 +3377,49 @@ LIMIT 100`}
         )}
       </div>
       {confirmDialog}
+
+      {/* Export progress log */}
+      {showExportLog && (
+        <div className="fixed bottom-4 right-4 z-50 w-96 rounded-lg border bg-card shadow-lg">
+          <div className="flex items-center justify-between border-b px-4 py-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Download size={14} />
+              Export Progress
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowExportLog(false)}
+              className="rounded p-1 text-muted-foreground hover:bg-muted"
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="max-h-48 overflow-y-auto p-4 font-mono text-xs">
+            {exportMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'py-0.5',
+                  msg.startsWith('Error')
+                    ? 'text-red-500'
+                    : msg.startsWith('Export complete')
+                    ? 'text-green-500'
+                    : 'text-muted-foreground'
+                )}
+              >
+                {msg}
+              </div>
+            ))}
+            {exporting && (
+              <div className="flex items-center gap-1 py-0.5 text-muted-foreground">
+                <Loader2 size={10} className="animate-spin" />
+                Processing...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3741,49 +3784,6 @@ function IndividualsSplitView({
           </div>
         )}
       </div>
-
-      {/* Export progress log */}
-      {showExportLog && (
-        <div className="fixed bottom-4 right-4 z-50 w-96 rounded-lg border bg-card shadow-lg">
-          <div className="flex items-center justify-between border-b px-4 py-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Download size={14} />
-              Export Progress
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowExportLog(false)}
-              className="rounded p-1 text-muted-foreground hover:bg-muted"
-              title="Close"
-            >
-              <X size={14} />
-            </button>
-          </div>
-          <div className="max-h-48 overflow-y-auto p-4 font-mono text-xs">
-            {exportMessages.map((msg, i) => (
-              <div
-                key={i}
-                className={cn(
-                  'py-0.5',
-                  msg.startsWith('Error')
-                    ? 'text-red-500'
-                    : msg.startsWith('Export complete')
-                    ? 'text-green-500'
-                    : 'text-muted-foreground'
-                )}
-              >
-                {msg}
-              </div>
-            ))}
-            {exporting && (
-              <div className="flex items-center gap-1 py-0.5 text-muted-foreground">
-                <Loader2 size={10} className="animate-spin" />
-                Processing...
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
