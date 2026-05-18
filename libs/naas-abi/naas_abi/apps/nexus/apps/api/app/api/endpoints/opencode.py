@@ -48,7 +48,10 @@ def _get_agent():
         )
 
         port = None
-        workdir = os.environ.get("FILESYSTEM_ROOT", "/app")
+        # OPENCODE_WORKDIR is the host-side path for opencode (which runs on the host,
+        # not inside the container). FILESYSTEM_ROOT is the container path — passing
+        # that to opencode would be wrong since it doesn't know about /app on the host.
+        workdir = os.environ.get("OPENCODE_WORKDIR") or os.environ.get("FILESYSTEM_ROOT", "/app")
         model = None
 
         try:
