@@ -577,7 +577,7 @@ export function AIPane() {
   const contextFile = isCodeSection ? fsActiveFile : activeFile;
 
   return (
-    <aside className="flex h-full w-80 flex-col border-l border-border/50 bg-background">
+    <aside className={cn('flex h-full flex-col border-l border-border/50 bg-background', isCodeSection ? 'w-96' : 'w-80')}>
       {/* Active file context pill */}
       {contextFile && (
         <div className="flex items-center gap-1.5 border-b bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
@@ -899,7 +899,7 @@ function PaneMessage({ message }: { message: Message }) {
   if (!isUser && message.isOpencode) {
     const isStreaming = !message.content || message.content.endsWith('▌');
     return (
-      <div className="mr-6 space-y-1.5">
+      <div className="space-y-1.5">
         {/* Tool events */}
         {(message.toolEvents ?? []).length > 0 && (
           <div className="space-y-0.5">
@@ -910,7 +910,7 @@ function PaneMessage({ message }: { message: Message }) {
         )}
         {/* Text response */}
         {message.content ? (
-          <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
+          <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_pre]:overflow-x-auto">
             {isStreaming ? (
               <span className="inline-flex items-center gap-0.5">
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
@@ -946,14 +946,16 @@ function PaneMessage({ message }: { message: Message }) {
 
   if (isUser) {
     return (
-      <div className="ml-6 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
-        <p className="whitespace-pre-wrap">{message.content}</p>
+      <div className="flex justify-end">
+        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
+          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mr-6 space-y-1">
+    <div className="space-y-1">
       {/* Processing / Processed indicator */}
       {hasThinkingSection && (
         <div>
@@ -988,8 +990,8 @@ function PaneMessage({ message }: { message: Message }) {
         </div>
       )}
 
-      {/* Response bubble */}
-      <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
+      {/* Response bubble — full width, no indent, matches opencode style */}
+      <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_pre]:overflow-x-auto">
         {isStillProcessing ? (
           <span className="inline-flex items-center gap-0.5">
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
