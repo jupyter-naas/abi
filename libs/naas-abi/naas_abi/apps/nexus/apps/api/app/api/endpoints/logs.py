@@ -12,9 +12,10 @@ import asyncio
 import logging
 from collections import deque
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 # ─── In-process log capture ───────────────────────────────────────────────────
 
