@@ -10,6 +10,20 @@ from pathlib import Path
 HASH_LEN = 64  # SHA-256 hex length
 TS_DIGITS = 20  # zero-padded nanosecond timestamp
 DEFAULT_BRANCH = "main"
+MERGE_SIDECAR_SUFFIX = ".merge"
+"""Suffix appended to a revision filename to form its merge sidecar.
+
+A merge revision is a normal revision file with prev_hash pointing at its
+first parent (the prior tip on the same branch). The sidecar — same path
+plus this suffix — contains the second parent's content_hash, identifying
+the cross-branch ancestor that was incorporated."""
+
+BRANCHES_DIRNAME = "__branches__"
+"""Subdirectory under ``data/`` holding per-branch metadata sidecars.
+
+Each branch X has a sidecar ``data/__branches__/X.json`` describing its
+parent, fork timestamp, and creation time. This lets ``rebuild_index``
+fully reconstruct the branch DAG from the filesystem alone."""
 
 
 @dataclass(frozen=True)
@@ -26,6 +40,9 @@ class Revision:
 
     ``prev_hash`` is the content_hash of the previous revision for this uid on
     this branch, or ``"0" * 64`` (GENESIS) for the first revision on the branch.
+    Multi-parent (merge) revisions carry their second parent in a sidecar
+    file named ``<filename>.merge``; the ``prev_hash`` of a merge revision
+    still points at the prior tip on the same branch (its first parent).
     """
 
     uid: str
@@ -51,13 +68,22 @@ class Revision:
         """Read the payload bytes from disk."""
         return self.path.read_bytes()
 
+    @property
+    def merge_sidecar_path(self) -> Path:
+        """Path to this revision's ``.merge`` sidecar (may not exist)."""
+        return self.path.parent / (self.path.name + MERGE_SIDECAR_SUFFIX)
+
     @classmethod
     def parse_filename(cls, uid: str, filename: str, dir_path: Path) -> "Revision":
-        """Parse a revision filename. Raises ValueError if malformed.
+        """Parse a revision filename. Raises ``ValueError`` if malformed.
 
-        Accepts both the legacy 3-part form (defaults to ``main``) and the
-        4-part form ``ts.prev.content.branch``.
+        Accepts the 3-part form ``ts.prev.content`` (defaults to ``main``)
+        and the 4-part form ``ts.prev.content.branch``. Merge sidecar
+        files (suffix ``.merge``) raise ``ValueError`` here; callers
+        detect them with ``is_merge_sidecar`` first.
         """
+        if is_merge_sidecar(filename):
+            raise ValueError(f"Not a revision (merge sidecar): {filename!r}")
         parts = filename.split(".")
         if len(parts) == 3:
             ts_str, prev_hash, content_hash = parts
@@ -80,3 +106,15 @@ class Revision:
             path=dir_path / filename,
             branch=branch,
         )
+
+
+def is_merge_sidecar(filename: str) -> bool:
+    """True if ``filename`` is a merge sidecar (``…<revision>.merge``)."""
+    return filename.endswith(MERGE_SIDECAR_SUFFIX)
+
+
+def revision_filename_for_sidecar(sidecar_filename: str) -> str:
+    """Strip the ``.merge`` suffix to recover the paired revision filename."""
+    if not is_merge_sidecar(sidecar_filename):
+        raise ValueError(f"Not a merge sidecar: {sidecar_filename!r}")
+    return sidecar_filename[: -len(MERGE_SIDECAR_SUFFIX)]

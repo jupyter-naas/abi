@@ -33,22 +33,32 @@ Public API:
 from .revision import DEFAULT_BRANCH, Revision
 from .registry import StoreRegistry
 from .store import (
+    BranchDiff,
     BranchNotFoundError,
     ConcurrencyConflict,
+    ConflictResolver,
     DURABILITY_FAST,
     DURABILITY_FULL,
     GENESIS,
+    MergeConflict,
+    MergeResult,
+    MergeStrategy,
     Store,
 )
 from .uuid7 import uuid7
 
 __all__ = [
+    "BranchDiff",
     "BranchNotFoundError",
     "ConcurrencyConflict",
+    "ConflictResolver",
     "DEFAULT_BRANCH",
     "DURABILITY_FAST",
     "DURABILITY_FULL",
     "GENESIS",
+    "MergeConflict",
+    "MergeResult",
+    "MergeStrategy",
     "Revision",
     "Store",
     "StoreRegistry",
