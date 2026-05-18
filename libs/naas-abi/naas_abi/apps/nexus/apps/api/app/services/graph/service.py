@@ -23,7 +23,7 @@ from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.SPARQL import SPARQLUtils
-from rdflib import OWL, RDF, RDFS, Literal, URIRef
+from rdflib import OWL, RDF, RDFS, Graph, Literal, URIRef
 from rdflib.query import ResultRow
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/graph")
@@ -564,7 +564,33 @@ class GraphService:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be deleted.")
-        self._get_triple_store().drop_graph(uri)
+        store = self._get_triple_store()
+        store.drop_graph(uri)
+        metadata = Graph()
+        forward_query = f"""
+        SELECT ?p ?o
+        WHERE {{
+            GRAPH <{NEXUS_GRAPH_URI}> {{
+                <{graph_uri}> ?p ?o .
+            }}
+        }}
+        """
+        for row in store.query(forward_query):
+            assert isinstance(row, ResultRow)
+            metadata.add((uri, row.p, row.o))
+        inverse_query = f"""
+        SELECT ?s ?p
+        WHERE {{
+            GRAPH <{NEXUS_GRAPH_URI}> {{
+                ?s ?p <{graph_uri}> .
+            }}
+        }}
+        """
+        for row in store.query(inverse_query):
+            assert isinstance(row, ResultRow)
+            metadata.add((row.s, row.p, uri))
+        if len(metadata) > 0:
+            store.remove(metadata, graph_name=NEXUS_GRAPH_URI)
 
     async def get_graph_overview(
         self, workspace_id: str, graph_uri: str, limit: int = 500
