@@ -19,6 +19,7 @@ import errno
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -146,6 +147,33 @@ def _port_in_use(port: int) -> bool:
         except OSError as exc:
             return exc.errno in (errno.EADDRINUSE, errno.EACCES)
     return False
+
+
+def _find_free_port(service: str, preferred: int) -> int:
+    """Return `preferred` if it's free, else walk the service's port range.
+
+    Each service has a 900-port window starting at its `SERVICE_PORT_BASES`
+    entry. We start at `preferred` (the deterministic per-worktree
+    allocation), then scan forward inside the window. If the whole window
+    is busy we wrap to the start. Returns the first free port found, or
+    raises if nothing is available.
+    """
+    if not _port_in_use(preferred):
+        return preferred
+    base = SERVICE_PORT_BASES[service]
+    end = base + PORT_OFFSET_RANGE
+    # Start one above `preferred` and wrap.
+    start = preferred + 1 if base <= preferred < end else base
+    for offset in range(PORT_OFFSET_RANGE):
+        candidate = base + ((start - base + offset) % PORT_OFFSET_RANGE)
+        if candidate == preferred:
+            continue
+        if not _port_in_use(candidate):
+            return candidate
+    raise click.ClickException(
+        f"No free port in {service}'s range "
+        f"({base}..{base + PORT_OFFSET_RANGE - 1})."
+    )
 
 
 def _read_pid(spec: ServiceSpec) -> int | None:
@@ -340,18 +368,33 @@ SERVICE_READY_PATHS = {
 
 
 def _start_service(name: str, ports: dict[str, int]) -> ServiceSpec:
-    spec = _service_spec(name, ports[name])
+    existing_spec = _service_spec(name, ports[name])
 
-    existing_pid = _read_pid(spec)
+    existing_pid = _read_pid(existing_spec)
     if existing_pid and _pid_alive(existing_pid):
         click.echo(f"{name}: already running (pid {existing_pid})")
-        return spec
+        return existing_spec
 
-    if _port_in_use(spec.port):
-        raise click.ClickException(
-            f"{name}: port {spec.port} is in use. Stop the conflicting "
-            f"process or delete {_instance_path()} to re-allocate."
+    # If our preferred port is busy (stale process, another worktree on
+    # this machine, …), pick the next free port in the service's range
+    # and persist it so subsequent commands stay aligned.
+    preferred = ports[name]
+    actual = _find_free_port(name, preferred)
+    if actual != preferred:
+        click.echo(
+            f"{name}: port {preferred} busy, "
+            f"using {actual} instead",
         )
+        ports[name] = actual
+        # Update instance.json so `status`, `logs`, `down`, etc. see the
+        # same port we actually bound.
+        path = _instance_path()
+        if path.exists():
+            data = json.loads(path.read_text())
+            data.setdefault("ports", {})[name] = actual
+            path.write_text(json.dumps(data, indent=2) + "\n")
+
+    spec = _service_spec(name, actual)
 
     if name == "oxigraph":
         pid = _launch_oxigraph(spec)
@@ -368,7 +411,16 @@ def _start_service(name: str, ports: dict[str, int]) -> ServiceSpec:
     return spec
 
 
-def _stop_service(name: str, port: int) -> None:
+def _stop_service(name: str, port: int, force: bool = False) -> None:
+    """Stop a service.
+
+    Default: SIGTERM the process group, wait up to 10s, escalate to
+    SIGKILL only if it doesn't die in time (graceful shutdown lets
+    uvicorn/dagster flush logs and release sockets cleanly).
+
+    With ``force=True``: send SIGKILL immediately. No grace period. Used
+    by the `Q` hotkey when you want out *now*.
+    """
     spec = _service_spec(name, port)
     pid = _read_pid(spec)
     if pid is None:
@@ -376,6 +428,16 @@ def _stop_service(name: str, port: int) -> None:
     if not _pid_alive(pid):
         _pid_path(spec).unlink(missing_ok=True)
         return
+
+    if force:
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        _pid_path(spec).unlink(missing_ok=True)
+        click.echo(f"{name}: killed (pid {pid}, SIGKILL)")
+        return
+
     try:
         os.killpg(os.getpgid(pid), signal.SIGTERM)
     except ProcessLookupError:
@@ -659,6 +721,53 @@ class _KeyboardReader:
 
 RECENT_DUMP_LINES = 30
 
+# Dev convenience: seeded admin credentials written to .env on first
+# `abi dev up`. The Nexus user seed reads
+# NEXUS_USER_<EMAIL_PREFIX>_{EMAIL,PASSWORD} from the secret adapter
+# (dotenv) — pre-populating those skips the random-password path.
+DEFAULT_ADMIN_EMAIL = "admin@example.com"
+DEFAULT_ADMIN_PASSWORD = "admin"  # nosec B105 - dev-only, fixed local creds
+
+
+def _ensure_default_admin_env() -> tuple[str, str]:
+    """Write the dev admin credentials to `.env` if not already set.
+
+    Returns `(email, password)` so callers can display them. The Nexus seed
+    will pick these up via the dotenv secret adapter on first boot.
+    """
+    email_prefix = re.sub(r"[^A-Z0-9]", "_", DEFAULT_ADMIN_EMAIL.upper())
+    email_key = f"NEXUS_USER_{email_prefix}_EMAIL"
+    pw_key = f"NEXUS_USER_{email_prefix}_PASSWORD"
+
+    env_path = _project_root() / ".env"
+    existing: dict[str, str] = {}
+    if env_path.exists():
+        for raw in env_path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            existing[k.strip()] = v.strip()
+
+    appended: list[str] = []
+    if email_key not in existing:
+        appended.append(f"{email_key}={DEFAULT_ADMIN_EMAIL}")
+    if pw_key not in existing:
+        appended.append(f"{pw_key}={DEFAULT_ADMIN_PASSWORD}")
+
+    if appended:
+        with env_path.open("a", encoding="utf-8") as fh:
+            if env_path.stat().st_size > 0 and not env_path.read_text().endswith("\n"):
+                fh.write("\n")
+            fh.write("\n# `abi dev` default admin credentials (local-only)\n")
+            for line in appended:
+                fh.write(line + "\n")
+
+    return (
+        existing.get(email_key, DEFAULT_ADMIN_EMAIL),
+        existing.get(pw_key, DEFAULT_ADMIN_PASSWORD),
+    )
+
 
 def _stream_log_to_console(
     spec: ServiceSpec,
@@ -753,7 +862,7 @@ def _build_hint(
         for letter, name in open_map.items():
             style = _SERVICE_STYLES.get(name, "white")
             out.append(f" {letter}={name}", style=style)
-    out.append("    r=restart  •  q or Ctrl+C: stop", style="dim")
+    out.append("    r=restart  •  q=stop  •  Q=kill (SIGKILL)", style="dim")
     return out
 
 
@@ -792,6 +901,11 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
     # Restart guard: hitting `r` rapidly should not start parallel restarts.
     restart_lock = threading.Lock()
     restart_in_progress = {"value": False}
+
+    # Set by the `Q` hotkey to ask the finally cleanup for SIGKILL instead
+    # of the default SIGTERM-then-wait. Plain `q` (lowercase) leaves this
+    # False and gets the graceful shutdown.
+    force_quit = {"value": False}
 
     live_holder: dict[str, Live | None] = {"value": None}
 
@@ -931,7 +1045,20 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
             restart_in_progress["value"] = False
 
     def on_key(ch: str) -> None:
-        if ch in ("q", "Q", "\x03"):
+        if ch in ("q", "\x03"):
+            # Graceful: SIGTERM, wait 10s, escalate to SIGKILL on holdouts.
+            os.kill(os.getpid(), signal.SIGINT)
+            return
+        if ch == "Q":
+            # Forceful: SIGKILL the whole tree immediately. For when you're
+            # done waiting.
+            force_quit["value"] = True
+            console.print(
+                Text(
+                    "── Q pressed: killing services immediately (SIGKILL) ──",
+                    style="bold red",
+                )
+            )
             os.kill(os.getpid(), signal.SIGINT)
             return
         if ch in ("r", "R"):
@@ -1024,11 +1151,15 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
         keyboard.stop()
         outer_stop_event.set()
         session_stop_holder["value"].set()
-        console.print(Text("── stopping services ──", style="dim"))
+        force = force_quit["value"]
+        if force:
+            console.print(Text("── force-killing services ──", style="bold red"))
+        else:
+            console.print(Text("── stopping services ──", style="dim"))
         for spec in reversed(started):
-            _stop_service(spec.name, ports[spec.name])
+            _stop_service(spec.name, ports[spec.name], force=force)
         for t in threads + log_threads:
-            t.join(timeout=1.0)
+            t.join(timeout=0.5 if force else 1.0)
 
 
 # =============================================================================
@@ -1079,6 +1210,10 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
     instance = _load_or_create_instance()
     ports: dict[str, int] = instance["ports"]
     _ensure_storage_layout()
+    # Pre-populate `.env` with the default admin credentials so the Nexus
+    # seed adopts them instead of generating a random password. Done before
+    # the api process spawns and reads .env via the dotenv adapter.
+    admin_email, admin_password = _ensure_default_admin_env()
 
     started: list[ServiceSpec] = []
     try:
@@ -1114,8 +1249,21 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
         for spec in started:
             click.echo(f"  {spec.name:<10} http://127.0.0.1:{spec.port}")
         click.echo()
+        click.echo(f"Login: {admin_email} / {admin_password}")
         click.echo("Logs: `abi dev logs <service> -f`   Stop: `abi dev down`")
         return
+
+    # Print the dev login one-liner before handing control to the live UI
+    # so it survives in the terminal scrollback after the pinned panel
+    # erases (on Ctrl+C / q).
+    Console().print(
+        Text.assemble(
+            ("Login: ", "dim"),
+            (admin_email, "bold"),
+            (" / ", "dim"),
+            (admin_password, "bold"),
+        )
+    )
 
     _follow_until_interrupt(started, ports)
 
@@ -1209,3 +1357,152 @@ def dev_ports() -> None:
     instance = _load_or_create_instance()
     for name in ALL_SERVICES:
         click.echo(f"{name:<12} {instance['ports'][name]}")
+
+
+# =============================================================================
+# nuke — wipe all dev runtime state for this worktree
+# =============================================================================
+
+# What `abi dev nuke` removes. Paths are relative to project root.
+_NUKE_TARGETS: tuple[str, ...] = (
+    "storage",       # SQLite DBs, oxigraph store, vector store, kv, bus, email
+    ".dagster",      # Dagster home (run history, logs)
+    ".abi/dev/logs", # Per-session log files
+)
+
+
+def _running_services(ports: dict[str, int]) -> list[str]:
+    """Names of services with a live PID."""
+    alive: list[str] = []
+    for name in ALL_SERVICES:
+        port = ports.get(name)
+        if port is None:
+            continue
+        spec = _service_spec(name, port)
+        pid = _read_pid(spec)
+        if pid is not None and _pid_alive(pid):
+            alive.append(name)
+    return alive
+
+
+@dev.command("nuke")
+@click.option(
+    "-y", "--yes",
+    is_flag=True,
+    default=False,
+    help="Skip the confirmation prompt.",
+)
+@click.option(
+    "--start",
+    is_flag=True,
+    default=False,
+    help="After wiping, immediately `abi dev up` again.",
+)
+@click.option(
+    "--reset-env",
+    is_flag=True,
+    default=False,
+    help=(
+        "Also remove the seeded admin credentials from .env. Default keeps "
+        "them so the next `up` boots with the same login."
+    ),
+)
+def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
+    """Wipe all persistent dev state for this worktree.
+
+    Removes the SQLite databases (nexus, kv, bus, vector store), the
+    oxigraph triple store, Dagster's run history, and stale log files.
+    Refuses to run while any managed service is alive — stop first with
+    `abi dev down`.
+
+    Preserved by default:
+      • `.abi/dev/instance.json`   (so allocated ports stay stable)
+      • `.env`                     (your secrets + admin credentials)
+      • `node_modules`             (expensive to reinstall)
+    """
+    root = _project_root()
+
+    # Refuse to wipe state out from under live processes.
+    instance_file = _instance_path()
+    if instance_file.exists():
+        ports = json.loads(instance_file.read_text()).get("ports", {})
+        alive = _running_services(ports)
+        if alive:
+            raise click.ClickException(
+                f"Services still running: {', '.join(alive)}. "
+                "Stop them first with `abi dev down`."
+            )
+
+    targets: list[Path] = []
+    for rel in _NUKE_TARGETS:
+        path = root / rel
+        if path.exists():
+            targets.append(path)
+
+    env_admin_lines: list[str] = []
+    env_path = root / ".env"
+    if reset_env and env_path.exists():
+        # Find any NEXUS_USER_*_{EMAIL,PASSWORD} lines and the comment we
+        # appended in `_ensure_default_admin_env`.
+        kept: list[str] = []
+        drop_marker = "# `abi dev` default admin credentials"
+        dropping = False
+        for raw in env_path.read_text().splitlines():
+            stripped = raw.strip()
+            if drop_marker in stripped:
+                dropping = True
+                env_admin_lines.append(raw)
+                continue
+            if dropping and stripped == "":
+                # Blank line after the comment ends the block.
+                dropping = False
+                continue
+            if dropping or re.match(r"NEXUS_USER_[A-Z0-9_]+_(EMAIL|PASSWORD)=", stripped):
+                env_admin_lines.append(raw)
+                continue
+            kept.append(raw)
+        if env_admin_lines:
+            # Stage but don't write yet — actual write below after confirm.
+            pass
+        else:
+            env_path = None  # type: ignore[assignment]
+
+    if not targets and not env_admin_lines:
+        click.echo("Nothing to nuke — state is already clean.")
+        if start:
+            click.echo("Starting services...")
+            ctx = click.get_current_context()
+            ctx.invoke(dev_up, services=(), detach=False)
+        return
+
+    click.echo("About to remove:")
+    for path in targets:
+        click.echo(f"  - {path.relative_to(root)}")
+    if env_admin_lines:
+        click.echo(f"  - admin credential lines in {env_path.relative_to(root)}")
+    click.echo()
+
+    if not yes:
+        if not click.confirm("Continue?", default=False):
+            click.echo("Aborted.")
+            return
+
+    for path in targets:
+        shutil.rmtree(path, ignore_errors=True)
+        click.echo(f"removed {path.relative_to(root)}")
+
+    if env_admin_lines and env_path is not None:
+        # Re-read kept (in case the file changed between scan and write).
+        new_body = "\n".join(
+            line for line in env_path.read_text().splitlines()
+            if line not in env_admin_lines
+        ).rstrip() + "\n"
+        env_path.write_text(new_body)
+        click.echo(f"removed admin credentials from {env_path.relative_to(root)}")
+
+    click.echo("Done.")
+
+    if start:
+        click.echo()
+        ctx = click.get_current_context()
+        ctx.invoke(dev_up, services=(), detach=False)
