@@ -1981,7 +1981,7 @@ export default function GraphPage() {
   const handleExportGraph = async () => {
     const uri = graphOptions.find((g) => g.id === selectedGraphId)?.uri ?? '';
     if (!uri || exporting) return;
-    const graphLabel = graphOptions.find((g) => g.id === selectedGraphId)?.label ?? selectedGraphId ?? 'graph';
+    const graphLabel = graphOptions.find((g) => g.id === selectedGraphId)?.name ?? selectedGraphId ?? 'graph';
 
     setExporting(true);
     setShowExportLog(true);
@@ -2141,7 +2141,7 @@ export default function GraphPage() {
                       <div>
                         <h2 className="text-lg font-semibold">Import Graph</h2>
                         <p className="text-sm text-muted-foreground">
-                          Target: <span className="font-medium text-foreground">{graphOptions.find((g) => g.id === selectedGraphId)?.label ?? selectedGraphId}</span>
+                          Target: <span className="font-medium text-foreground">{graphOptions.find((g) => g.id === selectedGraphId)?.name ?? selectedGraphId}</span>
                         </p>
                       </div>
                     </div>
@@ -2265,7 +2265,7 @@ export default function GraphPage() {
                           <p className="text-sm text-muted-foreground">
                             {importAnalysis.named_individuals_subjects === 0
                               ? 'No OWL Named Individuals found in this file.'
-                              : `Ready to add ${importAnalysis.named_individuals_triples.toLocaleString()} triples (${importAnalysis.named_individuals_subjects.toLocaleString()} individuals) to "${graphOptions.find((g) => g.id === selectedGraphId)?.label ?? selectedGraphId}".`}
+                              : `Ready to add ${importAnalysis.named_individuals_triples.toLocaleString()} triples (${importAnalysis.named_individuals_subjects.toLocaleString()} individuals) to "${graphOptions.find((g) => g.id === selectedGraphId)?.name ?? selectedGraphId}".`}
                           </p>
                           <button
                             type="button"
