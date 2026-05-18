@@ -10,6 +10,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
     require_workspace_access,
+    require_workspace_admin,
     require_workspace_platform_drive,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
@@ -28,6 +29,8 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import (
     SCOPE_MY_DRIVE,
     SCOPE_PATTERN,
     SCOPE_PLATFORM_DRIVE,
+    SCOPE_SYSTEM_DRIVE,
+    SYSTEM_DRIVE_ROOT,
     my_drive_root,
     workspace_drive_root,
 )
@@ -142,6 +145,10 @@ def _resolve_platform_drive_scoped_path(path: str) -> str:
     return _scope_to_path(PLATFORM_DRIVE_ROOT, path)
 
 
+def _resolve_system_drive_scoped_path(path: str) -> str:
+    return _scope_to_path(SYSTEM_DRIVE_ROOT, path)
+
+
 async def _authorize_workspace_path(
     current_user: User,
     path: str,
@@ -183,6 +190,21 @@ async def _authorize_platform_drive_path(
     return _resolve_platform_drive_scoped_path(path)
 
 
+async def _authorize_system_drive_path(
+    current_user: User,
+    path: str,
+    workspace_id: str | None,
+) -> str:
+    if not workspace_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="workspace_id is required for system drive access",
+        )
+    normalized_workspace = _normalize_workspace_id(workspace_id)
+    await require_workspace_admin(current_user.id, normalized_workspace)
+    return _resolve_system_drive_scoped_path(path)
+
+
 async def _authorize_path(
     current_user: User,
     path: str,
@@ -198,6 +220,12 @@ async def _authorize_path(
         )
     if scope == SCOPE_PLATFORM_DRIVE:
         return await _authorize_platform_drive_path(
+            current_user=current_user,
+            path=path,
+            workspace_id=workspace_id,
+        )
+    if scope == SCOPE_SYSTEM_DRIVE:
+        return await _authorize_system_drive_path(
             current_user=current_user,
             path=path,
             workspace_id=workspace_id,
