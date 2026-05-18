@@ -317,7 +317,6 @@ class NexusConfig(BaseModel):
     websocket_path: str = "/ws/socket.io"
 
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
-    redis_url: str = "redis://localhost:6379/0"
 
     ontology_base_uri: str = "http://ontology.naas.ai/"
 
@@ -451,7 +450,6 @@ class ABIModule(BaseModule):
             nexus_config:
                 # All settings accepted by app.core.config.Settings
                 database_url: "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
-                redis_url: "redis://localhost:6379/0"
                 api_url: "http://localhost:9879"
                 frontend_url: "http://localhost:3042"
                 websocket_path: "/ws/socket.io"
@@ -567,8 +565,10 @@ class ABIModule(BaseModule):
         app.state.secret_service = self.engine.services.secret
         # Expose ABI triple store to Nexus graph routes.
         app.state.triple_store = self.engine.services.triple_store
-        # Expose Email service so Nexus auth routes can honor the engine's
-        # configured adapter (filesystem in dev, SMTP in prod, etc.).
+        # Expose the configured email adapter so Nexus magic-link sends use
+        # whichever transport the engine config picked (e.g. `filesystem`
+        # in dev, `smtp` in prod) instead of always constructing an SMTP
+        # client inline.
         app.state.email_service = self.engine.services.email
 
         from naas_abi.apps.nexus.apps.api.app.main import create_app

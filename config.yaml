@@ -36,14 +36,36 @@ modules:
     enabled: true
     config:
       nexus_config:
-        database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@localhost:5432/nexus"
-        redis_url: "redis://localhost:6379/0"
+        database_url: "sqlite+aiosqlite:///./storage/nexus.db"
+        # Dev convenience: enable password login so the seeded admin user
+        # below can actually sign in. The bootstrap password is auto-
+        # generated on first boot and written to `.env` as
+        # `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
+        auth_password_enabled: true
+        magic_link_allow_signup: false
         marketplace:
           pricing:
             maintenance_standard_usd: 499
             maintenance_early_access_usd: 299
             cta_url: "https://naas.ai/enterprise"
             enterprise_categories: ["domain"]
+        users:
+          - email: "admin@example.com"
+            name: "Dev Admin"
+        organizations:
+          - name: "Dev"
+            slug: "dev"
+            owner_email: "admin@example.com"
+            members:
+              - email: "admin@example.com"
+                role: "owner"
+            workspaces:
+              - name: "Default"
+                slug: "default"
+                owner_email: "admin@example.com"
+                members:
+                  - email: "admin@example.com"
+                    role: "owner"
   
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
@@ -91,7 +113,14 @@ modules:
 
   - module: naas_abi_marketplace.domains.document
     enabled: true
-  
+    config:
+      document_agent:
+        model_id: "text-embedding-3-small"
+        dimension: 1536
+        api_key: "{{ secret.OPENAI_API_KEY }}"
+      markdowntovector_pipelines:
+        - api_key: "{{ secret.OPENAI_API_KEY }}"
+
   - module: naas_abi_marketplace.domains.support
     enabled: true
     config:
@@ -116,16 +145,25 @@ services:
         base_path: "storage/datastore"
   triple_store:
     triple_store_adapter:
-      adapter: "oxigraph_embedded"
+      # Default to the HTTP-backed oxigraph adapter so multiple processes
+      # (api + dagster + …) can share the store concurrently. `abi dev`
+      # spawns a local oxigraph server (see naas_abi_core.services
+      # .triple_store.oxigraph_server) and injects OXIGRAPH_URL into each
+      # consumer's environment, which overrides this value.
+      adapter: "oxigraph"
       config:
-        store_path: "storage/triplestore/oxigraph"
-        graph_base_iri: "http://ontology.naas.ai/graph/default"
+        oxigraph_url: "http://127.0.0.1:7878"
+        timeout: 60
   vector_store:
+    # File-backed SQLite + sqlite-vec store. Multi-process safe via WAL,
+    # so api and dagster can share it without a server. For prod, switch
+    # to the "qdrant" HTTP adapter (see config.local.yaml / config.remote.yaml).
     vector_store_adapter:
-      adapter: "qdrant_in_memory"
+      adapter: "sqlite_vec"
       config:
-        storage_path: "storage/vectorstore/qdrant"
-        timeout: 300
+        persistence_path: "storage/vectorstore/vectors.sqlite3"
+        journal_mode: "WAL"
+        busy_timeout_ms: 5000
   bus:
     bus_adapter:
       adapter: "python_queue"
