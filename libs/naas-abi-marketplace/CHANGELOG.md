@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.22.0 (2026-05-18)
+
+### Bug Fixes
+
+- Update dependencies versions in uv.lock files
+  ([`c0cc78c`](https://github.com/jupyter-naas/abi/commit/c0cc78c80dcddf7d3a4f0ec1e1c816b7388a0a0a))
+
+### Chores
+
+- Bump versions in uv.lock files for naas-abi and naas-abi-core to 1.53.1 and 1.40.0 respectively
+  ([`24fb100`](https://github.com/jupyter-naas/abi/commit/24fb100f3659f285e4d1d7aec02eddbfa93073f7))
+
+### Features
+
+- **storage-utils**: Add HTML and PDF file handling methods
+  ([`d8702a0`](https://github.com/jupyter-naas/abi/commit/d8702a0748aa476fe636c46c68e1ecd7e3472eba))
+
+### Refactoring
+
+- **string-utils**: Improve normalize function
+  ([`d8702a0`](https://github.com/jupyter-naas/abi/commit/d8702a0748aa476fe636c46c68e1ecd7e3472eba))
+
+
 ## v1.21.0 (2026-05-18)
 
 ### Features
