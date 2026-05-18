@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v1.51.0 (2026-05-18)
+
+### Bug Fixes
+
+- **api**: Deduplicate graph items by name in KnowledgeGraphSection
+  ([`00be951`](https://github.com/jupyter-naas/abi/commit/00be95108b62367d2dd8d9529f2fd4c3324de3b1))
+
+- **graph-service**: Improve type check when determining total instances count
+  ([`0721ab1`](https://github.com/jupyter-naas/abi/commit/0721ab1f9311d7e1e085b278b3d2b80b1faca5d3))
+
+### Features
+
+- **graph**: Add API endpoints and UI integration for creating and deleting individuals
+  ([`9d75ea3`](https://github.com/jupyter-naas/abi/commit/9d75ea3f154d29eb885812c4f84b387a45b9bc67))
+
+- **graph**: Add RDF file analysis and import endpoints and UI enhancements
+  ([`a0ed608`](https://github.com/jupyter-naas/abi/commit/a0ed60881528beb04df9b6f45854478519a5b7bb))
+
+- **graph-service**: Add endpoint to export graphs as TTL
+  ([`921e0cc`](https://github.com/jupyter-naas/abi/commit/921e0ccefc87f74942d14c537122e067e6c191c0))
+
+- **graph-service**: Enhance drop_graph to remove graph metadata from Nexus graph
+  ([`da95de4`](https://github.com/jupyter-naas/abi/commit/da95de48bcada621ac8646bffc6a4254709e1bc0))
+
+
 ## v1.50.0 (2026-05-16)
 
 ### Bug Fixes
