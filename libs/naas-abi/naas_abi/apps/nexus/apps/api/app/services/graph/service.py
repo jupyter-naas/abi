@@ -23,7 +23,7 @@ from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.SPARQL import SPARQLUtils
-from rdflib import OWL, RDF, RDFS, Graph, Literal, URIRef
+from rdflib import OWL, RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 from rdflib.query import ResultRow
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/graph")
@@ -643,6 +643,65 @@ class GraphService:
             limit=limit,
             depth=2,
         )
+
+    async def export_graph_as_ttl(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        batch_size: int = 10000,
+    ) -> tuple[str, int]:
+        """Export all triples from *graph_uri* as Turtle with bound namespaces.
+
+        Fetches triples in batches of *batch_size*, incrementing OFFSET until
+        fewer than *batch_size* triples are returned (end of graph).
+
+        Returns (ttl_content, total_triple_count).
+        """
+        store = self._get_triple_store()
+        g = Graph()
+        g.bind("rdf", RDF)
+        g.bind("rdfs", RDFS)
+        g.bind("owl", OWL)
+        g.bind("xsd", XSD)
+        g.bind("bfo", Namespace("http://purl.obolibrary.org/obo/"))
+
+        try:
+            base_uri = ABIModule.get_instance().configuration.nexus_config.ontology_base_uri
+            g.bind("abi", Namespace(base_uri))
+        except Exception:
+            pass
+
+        total_count = 0
+        offset = 0
+
+        while True:
+            query = f"""
+            CONSTRUCT {{ ?s ?p ?o }}
+            WHERE {{
+                GRAPH <{graph_uri}> {{
+                    ?s ?p ?o .
+                }}
+            }}
+            LIMIT {int(batch_size)}
+            OFFSET {int(offset)}
+            """
+            result = store.query(query)
+            batch_count = 0
+            if isinstance(result, Graph):
+                for triple in result:
+                    g.add(triple)  # type: ignore[arg-type]
+                    batch_count += 1
+            else:
+                for triple in result:
+                    g.add(triple)  # type: ignore[arg-type]
+                    batch_count += 1
+
+            total_count += batch_count
+            if batch_count < batch_size:
+                break
+            offset += batch_size
+
+        return g.serialize(format="turtle"), total_count
 
     async def get_network_parents(
         self,

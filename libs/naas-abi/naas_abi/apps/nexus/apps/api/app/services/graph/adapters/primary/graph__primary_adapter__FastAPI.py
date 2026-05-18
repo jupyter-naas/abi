@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -212,6 +215,41 @@ async def search_graph_network(
     return GraphData(
         nodes=[_node_to_schema(n) for n in result.nodes],
         edges=[_edge_to_schema(e) for e in result.edges],
+    )
+
+
+@router.get("/export")
+async def export_graph(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI to export"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> StreamingResponse:
+    """Export all triples from a named graph as a TTL (Turtle) file.
+
+    Fetches triples in batches of 10 000 and loops until the graph is fully
+    exhausted, then returns the merged Turtle document with bound namespaces.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        ttl_content, triple_count = await graph_service.export_graph_as_ttl(
+            workspace_id=workspace_id,
+            graph_uri=graph_uri,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    graph_name = graph_uri.rstrip("/").split("/")[-1] or "graph"
+    filename = f"{graph_name}.ttl"
+
+    return StreamingResponse(
+        io.BytesIO(ttl_content.encode("utf-8")),
+        media_type="text/turtle",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Triple-Count": str(triple_count),
+            "Access-Control-Expose-Headers": "X-Triple-Count, Content-Disposition",
+        },
     )
 
 
