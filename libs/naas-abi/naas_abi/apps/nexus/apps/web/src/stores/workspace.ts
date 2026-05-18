@@ -37,10 +37,12 @@ const throttledLocalStorage = () => {
 export type NavigationItem =
   | 'chat'
   | 'search'
+  | 'files'
   | 'lab'
   | 'ontology'
   | 'graph'
-  | 'apps';
+  | 'apps'
+  | 'marketplace';
 
 // AgentType is now a string to support dynamic agents
 export type AgentType = string;
@@ -164,7 +166,20 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps';
+export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace';
+
+export interface OpenAppModule {
+  module_path: string;
+  name: string;
+  description?: string;
+  logo_url: string | null;
+  category: string;
+  app_url?: string | null;
+  demo_login?: string | null;
+  demo_password?: string | null;
+  maintainer?: string | null;
+  tier?: string | null;
+}
 
 interface WorkspaceState {
   // Navigation
@@ -178,6 +193,11 @@ interface WorkspaceState {
   toggleSection: (section: SidebarSection) => void;
   activePanelSection: SidebarSection | null;
   setActivePanelSection: (section: SidebarSection | null) => void;
+  lastActivePanelSection: SidebarSection | null;
+
+  // Currently open app (for Apps section panel detail view)
+  openAppModule: OpenAppModule | null;
+  setOpenAppModule: (mod: OpenAppModule | null) => void;
 
   // Context panel
   contextPanelOpen: boolean;
@@ -308,7 +328,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         : [...state.expandedSections, section],
     })),
   activePanelSection: null,
-  setActivePanelSection: (section) => set({ activePanelSection: section }),
+  setActivePanelSection: (section) => set((state) => ({
+    activePanelSection: section,
+    lastActivePanelSection: section ?? state.lastActivePanelSection,
+  })),
+  lastActivePanelSection: null,
+
+  openAppModule: null,
+  setOpenAppModule: (mod) => set({ openAppModule: mod }),
 
   // Context panel
   contextPanelOpen: false,

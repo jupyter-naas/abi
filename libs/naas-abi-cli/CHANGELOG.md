@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.37.0 (2026-05-18)
+
+### Features
+
+- **workspace/[workspaceId]/graph**: Add export progress log UI
+  ([`7e30caf`](https://github.com/jupyter-naas/abi/commit/7e30cafe067c386f56b4aea49911f1b6f86f40e5))
+
+
+## v1.36.1 (2026-05-16)
+
+### Bug Fixes
+
+- **config**: Replace Jinja2-evaluated secret.X comments with backtick syntax
+  ([`68540b9`](https://github.com/jupyter-naas/abi/commit/68540b9c958e5204105f0d316facc27b6bebc25d))
+
+
 ## v1.36.0 (2026-05-15)
 
 ### Bug Fixes

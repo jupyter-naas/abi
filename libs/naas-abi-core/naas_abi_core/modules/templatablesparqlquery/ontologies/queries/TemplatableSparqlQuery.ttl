@@ -1,0 +1,177 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+#################################################################
+#  Nexus Platform Queries (NexusPlatformPipeline)
+#  Data: GRAPH <http://ontology.naas.ai/graph/nexus>
+#################################################################
+
+intentMapping:listNexusKnowledgeGraphsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_nexus_knowledge_graphs"@en ;
+    intentMapping:intentDescription "List all KnowledgeGraph instances registered in the Nexus graph by NexusPlatformPipeline" ;
+    intentMapping:sparqlTemplate """
+        PREFIX nexus: <http://ontology.naas.ai/nexus/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+        SELECT DISTINCT ?uri ?label ?description ?role ?roleLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/nexus> {
+            ?uri rdf:type <http://ontology.naas.ai/nexus/KnowledgeGraph> .
+            OPTIONAL { ?uri rdfs:label ?label . }
+            OPTIONAL { ?uri nexus:description ?description . }
+            OPTIONAL {
+              ?uri nexus:hasKnowledgeGraphRole ?role .
+              ?role rdfs:label ?roleLabel .
+            }
+          }
+        }
+        ORDER BY ?label
+    """ .
+
+intentMapping:listNexusAgentsWithClassPathQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_nexus_agents_with_class_path"@en ;
+    intentMapping:intentDescription "List all Agent instances in the Nexus graph including their class_path (used by NexusPlatformPipeline to detect already-registered agents)" ;
+    intentMapping:sparqlTemplate """
+        PREFIX nexus: <http://ontology.naas.ai/nexus/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+        SELECT DISTINCT ?uri ?label ?classPath
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/nexus> {
+            ?uri rdf:type <http://ontology.naas.ai/nexus/Agent> .
+            OPTIONAL { ?uri rdfs:label ?label . }
+            OPTIONAL { ?uri nexus:class_path ?classPath . }
+          }
+        }
+        ORDER BY ?label
+    """ .
+
+intentMapping:listNexusAIProvidersQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_nexus_ai_providers"@en ;
+    intentMapping:intentDescription "List all AI provider Organization instances (cco:ont00001180) registered in the Nexus graph" ;
+    intentMapping:sparqlTemplate """
+        PREFIX nexus: <http://ontology.naas.ai/nexus/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+
+        SELECT DISTINCT ?uri ?label ?capabilities
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/nexus> {
+            ?uri rdf:type cco:ont00001180 .
+            OPTIONAL { ?uri rdfs:label ?label . }
+            OPTIONAL { ?uri nexus:hasCapabilities ?capabilities . }
+          }
+        }
+        ORDER BY ?label
+    """ .
+
+intentMapping:listNexusAIModelsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_nexus_ai_models"@en ;
+    intentMapping:intentDescription "List all AIModel instances registered in the Nexus graph" ;
+    intentMapping:sparqlTemplate """
+        PREFIX nexus: <http://ontology.naas.ai/nexus/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+        SELECT DISTINCT ?uri ?label ?modelId ?provider ?providerLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/nexus> {
+            ?uri rdf:type <http://ontology.naas.ai/nexus/AIModel> .
+            OPTIONAL { ?uri rdfs:label ?label . }
+            OPTIONAL { ?uri nexus:model_id ?modelId . }
+            OPTIONAL {
+              ?uri nexus:hasProvider ?provider .
+              OPTIONAL { ?provider rdfs:label ?providerLabel . }
+            }
+          }
+        }
+        ORDER BY ?providerLabel ?label
+    """ .
+
+intentMapping:listNexusGraphViewsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_nexus_graph_views"@en ;
+    intentMapping:intentDescription "List all GraphView instances registered in the Nexus graph by NexusPlatformPipeline" ;
+    intentMapping:sparqlTemplate """
+        PREFIX nexus: <http://ontology.naas.ai/nexus/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+        SELECT DISTINCT ?uri ?label ?description ?filter ?filterLabel ?knowledgeGraph ?graphLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/nexus> {
+            ?uri rdf:type <http://ontology.naas.ai/nexus/GraphView> .
+            OPTIONAL { ?uri rdfs:label ?label . }
+            OPTIONAL { ?uri nexus:description ?description . }
+            OPTIONAL {
+              ?uri nexus:hasGraphFilter ?filter .
+              OPTIONAL { ?filter rdfs:label ?filterLabel . }
+            }
+            OPTIONAL {
+              ?uri nexus:includesKnowledgeGraph ?knowledgeGraph .
+              OPTIONAL { ?knowledgeGraph rdfs:label ?graphLabel . }
+            }
+          }
+        }
+        ORDER BY ?label
+    """ .
+
+#################################################################
+#  Subject Graph Query
+#################################################################
+
+intentMapping:getSubjectGraphQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_subject_graph"@en ;
+    intentMapping:intentDescription "Get all triples from a subject URI with configurable traversal depth (default 2: direct properties and one level of object properties)" ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+
+        {% if depth and depth|int == 1 %}
+        CONSTRUCT {
+          <{{ subject_uri }}> ?p0 ?o0 .
+        }
+        WHERE {
+          <{{ subject_uri }}> ?p0 ?o0 .
+        }
+        {% else %}
+        CONSTRUCT {
+          <{{ subject_uri }}> ?p0 ?o0 .
+          ?o0 ?p1 ?o1 .
+        }
+        WHERE {
+          <{{ subject_uri }}> ?p0 ?o0 .
+          OPTIONAL { ?o0 ?p1 ?o1 . FILTER(isURI(?o0)) }
+        }
+        {% endif %}
+    """ ;
+    intentMapping:hasArgument intentMapping:subjectUriArg, intentMapping:depthArg .
+
+#################################################################
+#  Query Arguments
+#################################################################
+
+intentMapping:subjectUriArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "subject_uri" ;
+    intentMapping:argumentDescription "The URI of the subject to retrieve triples for" ;
+    intentMapping:validationPattern "^https?://.+$" ;
+    intentMapping:validationFormat "uri" .
+
+intentMapping:depthArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "depth" ;
+    intentMapping:argumentDescription "Traversal depth: 1 = direct properties only, 2 = include one level of object properties. Default: 2" ;
+    intentMapping:validationPattern "^[12]$" ;
+    intentMapping:validationFormat "integer" .
