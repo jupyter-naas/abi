@@ -342,6 +342,75 @@ class StorageUtils:
             logger.error(f"Error saving triples to {dir_path}: {e}")
             return dir_path, file_name
 
+    def get_html(
+        self, dir_path: str, file_name: str, encoding: str = "utf-8"
+    ) -> str | None:
+        """
+        Get an HTML file from storage.
+        """
+        try:
+            content = self.__storage_service.get_object(dir_path, file_name)
+            return content.decode(encoding)
+        except Exception as e:
+            logger.warning(f"Error getting HTML from {dir_path}: {e}")
+            return None
+
+    def save_html(
+        self,
+        html: str,
+        dir_path: str,
+        file_name: str,
+        encoding: str = "utf-8",
+        copy: bool = True,
+    ) -> Tuple[str, str]:
+        """
+        Save an HTML file to storage.
+        """
+        try:
+            content = html.encode(encoding)
+            self.__storage_service.put_object(
+                prefix=dir_path, key=file_name, content=content
+            )
+            if copy:
+                self.__make_copy(dir_path, file_name, content)
+            logger.debug(
+                f"[save_html] File successfully written to storage: {dir_path}/{file_name}"
+            )
+            return dir_path, file_name
+        except Exception as e:
+            logger.error(f"Error saving HTML to {dir_path}: {e}")
+            return dir_path, file_name
+
+    def get_pdf(self, dir_path: str, file_name: str) -> bytes | None:
+        """
+        Get a PDF file from storage.
+        """
+        try:
+            return self.__storage_service.get_object(dir_path, file_name)
+        except Exception as e:
+            logger.warning(f"Error getting PDF from {dir_path}: {e}")
+            return None
+
+    def save_pdf(
+        self, pdf: bytes, dir_path: str, file_name: str, copy: bool = True
+    ) -> Tuple[str, str]:
+        """
+        Save a PDF file to storage.
+        """
+        try:
+            self.__storage_service.put_object(
+                prefix=dir_path, key=file_name, content=pdf
+            )
+            if copy:
+                self.__make_copy(dir_path, file_name, pdf)
+            logger.debug(
+                f"[save_pdf] File successfully written to storage: {dir_path}/{file_name}"
+            )
+            return dir_path, file_name
+        except Exception as e:
+            logger.error(f"Error saving PDF to {dir_path}: {e}")
+            return dir_path, file_name
+
     def get_powerpoint_presentation(self, dir_path: str, file_name: str) -> BytesIO:
         """
         Get a PowerPoint presentation from storage.
