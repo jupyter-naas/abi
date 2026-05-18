@@ -12,6 +12,8 @@ RUN apt-get update \
         libreoffice-impress \
         fonts-dejavu \
         fonts-liberation \
+        libgl1 \
+        libglib2.0-0 \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
