@@ -120,6 +120,10 @@ function isLoginRequiredDomain(url: string): boolean {
   }
 }
 
+// Module-level cache so URL validity is checked at most twice (CORS GET → no-cors HEAD)
+// and the result is reused across re-renders and component instances.
+const urlValidityCache = new Map<string, boolean>();
+
 /** Right-side preview panel.
  *  Loads the URL directly in an iframe.
  *  If the site blocks embedding (empty contentDocument on load), closes the
@@ -2871,13 +2875,22 @@ const MessageBubble = React.memo(function MessageBubble({
   //   1. CORS GET → real HTTP status + parse HTML <title> for "not found" text
   //   2. If CORS blocked → no-cors HEAD → basic reachability only
   //   3. If network error at either step → mark unreachable
+  // Results are stored in urlValidityCache (module-level) so each URL is
+  // probed at most twice (the two steps above) across all renders/instances.
   useEffect(() => {
     if (contentUrls.length === 0) return;
     let cancelled = false;
     const controllers: AbortController[] = [];
 
     contentUrls.forEach(async url => {
+      // Serve from cache — skip network entirely for already-probed URLs.
+      if (urlValidityCache.has(url)) {
+        setUrlExists(prev => ({ ...prev, [url]: urlValidityCache.get(url)! }));
+        return;
+      }
+
       if (isLoginRequiredDomain(url)) {
+        urlValidityCache.set(url, true);
         setUrlExists(prev => ({ ...prev, [url]: true }));
         return;
       }
@@ -2893,6 +2906,7 @@ const MessageBubble = React.memo(function MessageBubble({
         if (cancelled) return;
 
         if (!response.ok) {
+          urlValidityCache.set(url, false);
           setUrlExists(prev => ({ ...prev, [url]: false }));
           return;
         }
@@ -2904,8 +2918,10 @@ const MessageBubble = React.memo(function MessageBubble({
           if (cancelled) return;
           const doc = new DOMParser().parseFromString(text, 'text/html');
           const valid = !NOT_FOUND_TITLE_RE.test(doc.title);
+          urlValidityCache.set(url, valid);
           setUrlExists(prev => ({ ...prev, [url]: valid }));
         } else {
+          urlValidityCache.set(url, true);
           setUrlExists(prev => ({ ...prev, [url]: true }));
         }
       } catch {
@@ -2919,9 +2935,15 @@ const MessageBubble = React.memo(function MessageBubble({
           const t2 = setTimeout(() => ctrl2.abort(), 5000);
           await fetch(url, { method: 'HEAD', mode: 'no-cors', signal: ctrl2.signal });
           clearTimeout(t2);
-          if (!cancelled) setUrlExists(prev => ({ ...prev, [url]: true }));
+          if (!cancelled) {
+            urlValidityCache.set(url, true);
+            setUrlExists(prev => ({ ...prev, [url]: true }));
+          }
         } catch {
-          if (!cancelled) setUrlExists(prev => ({ ...prev, [url]: false }));
+          if (!cancelled) {
+            urlValidityCache.set(url, false);
+            setUrlExists(prev => ({ ...prev, [url]: false }));
+          }
         }
       }
     });
