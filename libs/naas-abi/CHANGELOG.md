@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.54.0 (2026-05-18)
+
+### Features
+
+- **nexus**: Add System Drive for workspace admins
+  ([`d39b1c9`](https://github.com/jupyter-naas/abi/commit/d39b1c9ebb85abfdfbaf9adcc0db4ea2a37f8ba5))
+
+
 ## v1.53.1 (2026-05-18)
 
 
