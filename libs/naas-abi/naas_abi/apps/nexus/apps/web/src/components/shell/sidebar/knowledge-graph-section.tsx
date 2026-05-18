@@ -273,18 +273,28 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
         const namesData = await namesRes.json();
         const parsed = Array.isArray(namesData) ? namesData : [];
         const isPackedResponse = parsed.every(isGraphPackApiItem);
+        const dedupeByName = (items: GraphItem[]): GraphItem[] => {
+          const seen = new Set<string>();
+          return items.filter((item) => {
+            if (seen.has(item.name)) return false;
+            seen.add(item.name);
+            return true;
+          });
+        };
         if (isPackedResponse) {
           graphPacks = parsed
             .map((pack) => {
-              const graphs = pack.graphs
-                .filter(isGraphApiItem)
-                .map((g) => ({
-                  id: g.id,
-                  name: g.label ?? g.id,
-                  type: 'workspace' as const,
-                  uri: g.uri,
-                }))
-                .sort((a, b) => a.name.localeCompare(b.name));
+              const graphs = dedupeByName(
+                pack.graphs
+                  .filter(isGraphApiItem)
+                  .map((g) => ({
+                    id: g.id,
+                    name: g.label ?? g.id,
+                    type: 'workspace' as const,
+                    uri: g.uri,
+                  }))
+                  .sort((a, b) => a.name.localeCompare(b.name))
+              );
               return {
                 roleLabel: (pack.role_label ?? 'unknown').toString(),
                 graphs,
@@ -293,15 +303,17 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             .filter((pack) => pack.graphs.length > 0)
             .sort((a, b) => a.roleLabel.localeCompare(b.roleLabel));
         } else {
-          const graphs = parsed
-            .filter(isGraphApiItem)
-            .map((g) => ({
-              id: g.id,
-              name: g.label ?? g.id,
-              type: 'workspace' as const,
-              uri: g.uri,
-            }))
-            .sort((a, b) => a.name.localeCompare(b.name));
+          const graphs = dedupeByName(
+            parsed
+              .filter(isGraphApiItem)
+              .map((g) => ({
+                id: g.id,
+                name: g.label ?? g.id,
+                type: 'workspace' as const,
+                uri: g.uri,
+              }))
+              .sort((a, b) => a.name.localeCompare(b.name))
+          );
           graphPacks = graphs.length > 0 ? [{ roleLabel: 'unknown', graphs }] : [];
         }
       }

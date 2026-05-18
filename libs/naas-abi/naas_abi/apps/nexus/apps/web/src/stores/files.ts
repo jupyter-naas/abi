@@ -41,6 +41,7 @@ export const defaultStorageSources: StorageSource[] = [
   { id: 'my-drive', name: 'My Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Personal files shared across workspaces' },
   { id: 'workspace', name: 'Workspace Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Workspace files (create, edit, upload)' },
   { id: 'platform-drive', name: 'Platform Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Files shared across every workspace where platform drive is enabled' },
+  { id: 'system-drive', name: 'System Drive', icon: 'server', category: 'local', enabled: true, connected: true, description: 'Full object storage tree (workspace admins only)' },
   
   // Cloud sources - third-party cloud storage
   { id: 'google-drive', name: 'Google Drive', icon: 'cloud', category: 'cloud', enabled: false, connected: false, description: 'Sync with Google Drive' },
@@ -186,9 +187,10 @@ import { getApiUrl } from '@/lib/config';
 
 const getApiBase = () => getApiUrl();
 
-const getFilesScope = (activeSource: string): 'workspace' | 'my_drive' | 'platform_drive' => {
+const getFilesScope = (activeSource: string): 'workspace' | 'my_drive' | 'platform_drive' | 'system_drive' => {
   if (activeSource === 'my-drive') return 'my_drive';
   if (activeSource === 'platform-drive') return 'platform_drive';
+  if (activeSource === 'system-drive') return 'system_drive';
   return 'workspace';
 };
 
