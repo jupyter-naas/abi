@@ -22,11 +22,16 @@ MODULE_ROOT = "naas_abi"
 MY_DRIVE_ROOT = f"{MODULE_ROOT}/my-drive"
 WORKSPACE_DRIVE_ROOT = f"{MODULE_ROOT}/workspace-drive"
 PLATFORM_DRIVE_ROOT = f"{MODULE_ROOT}/platform-drive"
+# The system drive exposes the full module storage tree — every drive sits
+# below this root. Reserved for workspace admins/owners to inspect and
+# manage object storage across all users and workspaces.
+SYSTEM_DRIVE_ROOT = MODULE_ROOT
 
 SCOPE_WORKSPACE = "workspace"
 SCOPE_MY_DRIVE = "my_drive"
 SCOPE_PLATFORM_DRIVE = "platform_drive"
-SCOPE_PATTERN = r"^(workspace|my_drive|platform_drive)$"
+SCOPE_SYSTEM_DRIVE = "system_drive"
+SCOPE_PATTERN = r"^(workspace|my_drive|platform_drive|system_drive)$"
 
 
 def my_drive_root(user_id: str) -> str:
@@ -39,3 +44,7 @@ def workspace_drive_root(workspace_id: str) -> str:
 
 def platform_drive_root() -> str:
     return PLATFORM_DRIVE_ROOT
+
+
+def system_drive_root() -> str:
+    return SYSTEM_DRIVE_ROOT

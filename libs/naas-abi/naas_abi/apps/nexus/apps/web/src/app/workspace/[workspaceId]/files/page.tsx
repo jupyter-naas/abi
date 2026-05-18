@@ -174,12 +174,14 @@ export default function FilesPage() {
   const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
   const isLocalFolder = !!activeSyncedFolder;
   // Source-aware scope param to match how file ops are routed in the store.
-  const filesScope: 'workspace' | 'my_drive' | 'platform_drive' =
+  const filesScope: 'workspace' | 'my_drive' | 'platform_drive' | 'system_drive' =
     activeSource === 'my-drive'
       ? 'my_drive'
       : activeSource === 'platform-drive'
         ? 'platform_drive'
-        : 'workspace';
+        : activeSource === 'system-drive'
+          ? 'system_drive'
+          : 'workspace';
   const fileQueryParams = `workspace_id=${encodeURIComponent(workspaceId)}&scope=${filesScope}`;
 
   // Compute the drive's storage root and a user-facing label. The breadcrumb
@@ -193,16 +195,20 @@ export default function FilesPage() {
         : ''
       : activeSource === 'platform-drive'
         ? 'naas_abi/platform-drive'
-        : workspaceId
-          ? `naas_abi/workspace-drive/${workspaceId}`
-          : '';
+        : activeSource === 'system-drive'
+          ? 'naas_abi'
+          : workspaceId
+            ? `naas_abi/workspace-drive/${workspaceId}`
+            : '';
   const driveLabel = isLocalFolder
     ? activeSyncedFolder?.name || 'Drive'
     : activeSource === 'my-drive'
       ? 'My Drive'
       : activeSource === 'platform-drive'
         ? 'Platform Drive'
-        : 'Workspace Drive';
+        : activeSource === 'system-drive'
+          ? 'System Drive'
+          : 'Workspace Drive';
 
   // Strip the drive root (and the legacy bare-workspace-id root, for backwards
   // compatibility) from the current path so the breadcrumb only shows what's
