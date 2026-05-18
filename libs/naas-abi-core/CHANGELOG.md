@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.39.0 (2026-05-18)
+
+### Features
+
+- **templatablesparqlquery**: Enhance query templating with graph names
+  ([`1c5947d`](https://github.com/jupyter-naas/abi/commit/1c5947d166e8ba62fa374045cc02115a1efecb6a))
+
+
 ## v1.38.0 (2026-05-18)
 
 ### Features
