@@ -126,10 +126,10 @@ export default function FilesPage() {
   const [textViewerError, setTextViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Helper to open file in Lab
+  // Helper to open file in Code
   const handleOpenInLab = (file: FileInfo) => {
     openFile(file.path);
-    router.push(`/workspace/${workspaceId}/lab`);
+    router.push(`/workspace/${workspaceId}/code`);
   };
   
   // Close context menu when clicking outside
