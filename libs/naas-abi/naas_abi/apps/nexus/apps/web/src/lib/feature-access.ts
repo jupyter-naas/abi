@@ -14,7 +14,7 @@ const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   chat: '/chat',
   files: '/files',
-  agents: '/lab',
+  agents: '/code',
   knowledge: '/search',
   settings: '/settings',
 };
@@ -67,6 +67,7 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
     return 'knowledge';
   }
   if (
+    firstSegment === 'code' ||
     firstSegment === 'lab' ||
     firstSegment === 'apps' ||
     firstSegment === 'marketplace' ||

@@ -38,7 +38,7 @@ export type NavigationItem =
   | 'chat'
   | 'search'
   | 'files'
-  | 'lab'
+  | 'code'
   | 'ontology'
   | 'graph'
   | 'apps'
@@ -166,7 +166,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace';
+export type SidebarSection = 'chat' | 'search' | 'files' | 'code' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace';
 
 export interface OpenAppModule {
   module_path: string;
@@ -202,6 +202,7 @@ interface WorkspaceState {
   // Context panel
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
+  setContextPanelOpen: (open: boolean) => void;
 
   // Chat state
   conversations: Conversation[];
@@ -340,6 +341,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Context panel
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  setContextPanelOpen: (open) => set({ contextPanelOpen: open }),
 
   // Chat state
   conversations: [],

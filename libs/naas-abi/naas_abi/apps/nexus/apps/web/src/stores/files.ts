@@ -96,6 +96,19 @@ interface FilesState {
   activeFile: string | null;
   fileContents: Record<string, string>;  // path -> content
   unsavedChanges: Record<string, boolean>;  // path -> hasUnsavedChanges
+
+  // Filesystem state (Code section — real OS filesystem under FILESYSTEM_ROOT)
+  fsFiles: FileInfo[];
+  fsFolderContents: Record<string, FileInfo[]>;
+  fsLoading: boolean;
+  fsOpenFiles: string[];
+  fsActiveFile: string | null;
+  fsFileContents: Record<string, string>;
+  fsUnsavedChanges: Record<string, boolean>;
+  // Diff decorations from opencode session.diff events
+  fsDiffs: Record<string, { additions: number; deletions: number; status: string }>;
+  // Increments on every refreshFsFiles so FileNode can react and re-fetch children
+  fsTreeVersion: number;
   
   // Storage sources
   storageSources: StorageSource[];
@@ -152,6 +165,22 @@ interface FilesState {
   refreshLabFiles: () => Promise<void>;  // Refreshes Lab's file tree
   readFile: (path: string) => Promise<string | null>;
   saveFile: (path: string) => Promise<boolean>;
+
+  // Filesystem actions (real OS filesystem under FILESYSTEM_ROOT)
+  fetchFsFiles: (path?: string) => Promise<void>;
+  fetchFsFolderContents: (folderPath: string) => Promise<FileInfo[]>;
+  refreshFsFiles: () => Promise<void>;
+  openFsFile: (path: string) => void;
+  closeFsFile: (path: string) => void;
+  setFsActiveFile: (path: string | null) => void;
+  setFsFileContent: (path: string, content: string) => void;
+  readFsFile: (path: string) => Promise<string | null>;
+  saveFsFile: (path: string) => Promise<boolean>;
+  createFsFile: (path: string, content?: string) => Promise<boolean>;
+  createFsFolder: (path: string) => Promise<boolean>;
+  deleteFsFile: (path: string) => Promise<boolean>;
+  setFsDiffs: (diffs: Array<{ file: string; additions: number; deletions: number; status: string }>) => void;
+  clearFsDiffs: () => void;
 }
 
 import { getApiUrl } from '@/lib/config';
@@ -182,6 +211,17 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   activeFile: null,
   fileContents: {},
   unsavedChanges: {},
+
+  // Filesystem state
+  fsFiles: [],
+  fsFolderContents: {},
+  fsLoading: false,
+  fsOpenFiles: [],
+  fsActiveFile: null,
+  fsFileContents: {},
+  fsUnsavedChanges: {},
+  fsDiffs: {},
+  fsTreeVersion: 0,
   
   // Storage sources
   storageSources: defaultStorageSources,
@@ -881,4 +921,183 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       return false;
     }
   },
+
+  // ─── Filesystem actions ────────────────────────────────────────────────────
+
+  fetchFsFiles: async (path = '') => {
+    set({ fsLoading: true });
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/filesystem/?path=${encodeURIComponent(path)}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch filesystem files');
+      const data = await response.json();
+      set({ fsFiles: data.files as FileInfo[], fsLoading: false });
+    } catch (error) {
+      console.error('Error fetching filesystem files:', error);
+      set({ fsLoading: false });
+    }
+  },
+
+  fetchFsFolderContents: async (folderPath: string) => {
+    const cached = get().fsFolderContents[folderPath];
+    if (cached) return cached;
+
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/filesystem/?path=${encodeURIComponent(folderPath)}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch folder');
+      const data = await response.json();
+      const files = data.files as FileInfo[];
+      set((state) => ({
+        fsFolderContents: { ...state.fsFolderContents, [folderPath]: files },
+      }));
+      return files;
+    } catch (error) {
+      console.error('Error fetching fs folder:', error);
+      return [];
+    }
+  },
+
+  refreshFsFiles: async () => {
+    set((state) => ({ fsFolderContents: {}, fsTreeVersion: state.fsTreeVersion + 1 }));
+    await get().fetchFsFiles();
+  },
+
+  openFsFile: (path) => {
+    const { fsOpenFiles } = get();
+    if (!fsOpenFiles.includes(path)) {
+      set({ fsOpenFiles: [...fsOpenFiles, path], fsActiveFile: path });
+      get().readFsFile(path);
+    } else {
+      set({ fsActiveFile: path });
+    }
+  },
+
+  closeFsFile: (path) => {
+    const { fsOpenFiles, fsActiveFile, fsFileContents, fsUnsavedChanges } = get();
+    const newOpen = fsOpenFiles.filter((p) => p !== path);
+    const newActive = fsActiveFile === path
+      ? (newOpen.length > 0 ? newOpen[newOpen.length - 1] : null)
+      : fsActiveFile;
+    const newContents = { ...fsFileContents };
+    delete newContents[path];
+    const newUnsaved = { ...fsUnsavedChanges };
+    delete newUnsaved[path];
+    set({ fsOpenFiles: newOpen, fsActiveFile: newActive, fsFileContents: newContents, fsUnsavedChanges: newUnsaved });
+  },
+
+  setFsActiveFile: (fsActiveFile) => set({ fsActiveFile }),
+
+  setFsFileContent: (path, content) => {
+    const { fsFileContents, fsUnsavedChanges } = get();
+    set({
+      fsFileContents: { ...fsFileContents, [path]: content },
+      fsUnsavedChanges: { ...fsUnsavedChanges, [path]: true },
+    });
+  },
+
+  readFsFile: async (path) => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/filesystem/content?path=${encodeURIComponent(path)}`
+      );
+      if (!response.ok) throw new Error('Failed to read file');
+      const content = await response.text();
+      set((state) => ({ fsFileContents: { ...state.fsFileContents, [path]: content } }));
+      return content;
+    } catch (error) {
+      console.error('Error reading fs file:', error);
+      return null;
+    }
+  },
+
+  saveFsFile: async (path) => {
+    const { fsFileContents, fsUnsavedChanges } = get();
+    const content = fsFileContents[path];
+    if (content === undefined) return false;
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/filesystem/content?path=${encodeURIComponent(path)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        }
+      );
+      if (!response.ok) throw new Error('Failed to save file');
+      set({ fsUnsavedChanges: { ...fsUnsavedChanges, [path]: false } });
+      return true;
+    } catch (error) {
+      console.error('Error saving fs file:', error);
+      return false;
+    }
+  },
+
+  createFsFile: async (path, content = '') => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/filesystem/content?path=${encodeURIComponent(path)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        }
+      );
+      if (!response.ok) throw new Error('Failed to create file');
+      set((state) => ({ fsFolderContents: {} })); // Bust cache
+      await get().fetchFsFiles();
+      return true;
+    } catch (error) {
+      console.error('Error creating fs file:', error);
+      return false;
+    }
+  },
+
+  createFsFolder: async (path) => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/filesystem/folder?path=${encodeURIComponent(path)}`,
+        { method: 'POST' }
+      );
+      if (!response.ok) throw new Error('Failed to create folder');
+      set(() => ({ fsFolderContents: {} })); // Bust cache
+      await get().fetchFsFiles();
+      return true;
+    } catch (error) {
+      console.error('Error creating fs folder:', error);
+      return false;
+    }
+  },
+
+  deleteFsFile: async (path) => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/filesystem/content?path=${encodeURIComponent(path)}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) throw new Error('Failed to delete');
+      set(() => ({ fsFolderContents: {} }));
+      // Close if open
+      const { fsOpenFiles } = get();
+      if (fsOpenFiles.includes(path)) get().closeFsFile(path);
+      await get().fetchFsFiles();
+      return true;
+    } catch (error) {
+      console.error('Error deleting fs path:', error);
+      return false;
+    }
+  },
+
+  setFsDiffs: (diffs) => {
+    set((state) => ({
+      fsDiffs: {
+        ...state.fsDiffs,
+        ...Object.fromEntries(diffs.map((d) => [d.file, { additions: d.additions, deletions: d.deletions, status: d.status }])),
+      },
+    }));
+  },
+
+  clearFsDiffs: () => set({ fsDiffs: {} }),
 }));

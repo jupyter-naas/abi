@@ -150,11 +150,13 @@ help:
 	@echo "  oxigraph-up              Start Oxigraph knowledge graph database"
 	@echo "  oxigraph-down            Stop Oxigraph database"
 	@echo "  oxigraph-status          Check Oxigraph container status"
-	@echo "  local-up                 Start all local development services"
+	@echo "  local-up                 Start all local development services (includes opencode)"
 	@echo "  local-logs               View logs from all local services"
 	@echo "  local-stop               Stop all local services without removing containers"
 	@echo "  local-down               Stop and remove all local service containers"
 	@echo "  local-reload             Stop and remove all local service containers and restart them"
+	@echo "  opencode-up              Start opencode coding agent on host (port 4005)"
+	@echo "  opencode-down            Stop opencode coding agent"
 	@echo "  container-up             Start ABI in container mode"
 	@echo "  container-down           Stop ABI container"
 	@echo "  model-up                 Start Docker model for airgap AI operation"
@@ -795,6 +797,28 @@ oxigraph-status: check-docker
 	@docker compose --profile local ps oxigraph
 
 # Start all local development services
+OPENCODE_BIN ?= /Users/jrvmac/.opencode/bin/opencode
+OPENCODE_PORT ?= 4005
+OPENCODE_LOG  ?= /tmp/opencode-serve.log
+
+opencode-up:
+	@OPENCODE_PORT=$${OPENCODE_PORT:-$(OPENCODE_PORT)}; \
+	if curl -sf "http://127.0.0.1:$$OPENCODE_PORT/global/health" 2>/dev/null | grep -q '"healthy":true'; then \
+		echo "✓ opencode already running on port $$OPENCODE_PORT"; \
+	elif [ -x "$(OPENCODE_BIN)" ]; then \
+		echo "🤖 Starting opencode on port $$OPENCODE_PORT..."; \
+		(set -a; [ -f .env ] && . ./.env; set +a; \
+		 "$(OPENCODE_BIN)" serve --port "$$OPENCODE_PORT" >> "$(OPENCODE_LOG)" 2>&1) & \
+		sleep 2 && curl -sf "http://127.0.0.1:$$OPENCODE_PORT/global/health" >/dev/null 2>&1 \
+			&& echo "✓ opencode ready (logs: $(OPENCODE_LOG))" \
+			|| echo "⚠️  opencode may still be starting (logs: $(OPENCODE_LOG))"; \
+	else \
+		echo "⚠️  opencode not found at $(OPENCODE_BIN) - skipping (install: https://opencode.ai)"; \
+	fi
+
+opencode-down:
+	@pkill -f "opencode serve" 2>/dev/null && echo "✓ opencode stopped" || echo "opencode was not running"
+
 local-up: check-docker
 	@echo "🚀 Starting local services..."
 	@if ! docker compose --profile local up -d --timeout 60; then \
@@ -804,6 +828,7 @@ local-up: check-docker
 		docker compose --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
 	fi
 	@echo "✓ Local containers started"
+	@$(MAKE) opencode-up
 	@echo ""
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
@@ -812,6 +837,7 @@ local-up: check-docker
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
 	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"
+	@echo "  - opencode (AI coding): http://localhost:$(OPENCODE_PORT)"
 
 # View logs from all local services
 local-logs: check-docker
@@ -1020,4 +1046,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
+.PHONY: test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean opencode-up opencode-down
