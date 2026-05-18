@@ -43,6 +43,12 @@ modules:
         # `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
         auth_password_enabled: true
         magic_link_allow_signup: false
+        marketplace:
+          pricing:
+            maintenance_standard_usd: 499
+            maintenance_early_access_usd: 299
+            cta_url: "https://naas.ai/enterprise"
+            enterprise_categories: ["domain"]
         users:
           - email: "admin@example.com"
             name: "Dev Admin"
@@ -96,6 +102,14 @@ modules:
         - "openai/gpt-5.2"
         - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
+
+  - module: naas_abi_marketplace.alpha.wsr
+    enabled: true
+    config:
+      opensky_client_id: "{{ secret.OPENSKY_CLIENT_ID }}"
+      opensky_client_secret: "{{ secret.OPENSKY_CLIENT_SECRET }}"
+      tfl_app_key: "{{ secret.TFL_APP_KEY }}"
+      openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
 
   - module: naas_abi_marketplace.domains.document
     enabled: true

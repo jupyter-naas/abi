@@ -131,6 +131,7 @@ help:
 	@echo "  check                    Run all code quality checks (core, custom, marketplace)"
 	@echo "  check-core               Run code quality checks for core modules"
 	@echo "  check-marketplace        Run code quality checks for marketplace modules"
+	@echo "  check-nexus              Build the Nexus web app to catch frontend errors"
 	@echo "  fmt                      Format code using ruff"
 	@echo "  bandit                   Run security scanning with bandit"
 	@echo "  trivy-container-scan     Run container security scanning with trivy"
@@ -605,7 +606,19 @@ hello:
 # =============================================================================
 
 # Master check target - runs all code quality checks
-check: deps check-core check-marketplace
+check: deps check-core check-marketplace check-nexus
+
+# Build Nexus web app to catch frontend build errors before commit
+check-nexus: deps
+	@echo ""
+	@echo "  _____ _____ _____ _____ _____ "
+	@echo " |     |     |     |     |     |"
+	@echo " |  N  |  E  |  X  |  U  |  S  |"
+	@echo " |_____|_____|_____|_____|_____|"
+	@echo ""
+	@echo "\033[1;4m🔨 Building Nexus web app...\033[0m\n"
+	@cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm build
+	@echo "\n✅ NEXUS build passed!"
 
 # Code quality checks for core modules
 check-core: deps
@@ -646,6 +659,7 @@ check-marketplace: deps
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/domains \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/__demo__ \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/sandbox \
+		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/alpha \
 		--exclude "**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
@@ -653,6 +667,7 @@ check-marketplace: deps
 		--exclude 'naas_abi_marketplace/domains' \
 		--exclude 'naas_abi_marketplace/__demo__' \
 		--exclude 'naas_abi_marketplace/sandbox' \
+		--exclude 'naas_abi_marketplace/alpha' \
 		--exclude 'naas_abi_marketplace/.*/sandbox' \
 		--exclude '.*sandbox.*' \
 		--follow-untyped-imports

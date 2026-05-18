@@ -212,6 +212,10 @@ nexus:Agent a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty nexus:isSubAgentOf ;
           owl:allValuesFrom nexus:Agent
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:usesModel ;
+          owl:allValuesFrom nexus:AIModel
         ] .
 
 nexus:AgentTool a owl:Class ;
@@ -612,6 +616,40 @@ nexus:MarketplaceAppRole a owl:Class ;
           owl:onProperty nexus:isMarketplaceAppRoleOf ;
           owl:allValuesFrom nexus:MarketplaceApps
         ] .
+
+nexus:AIModel a owl:Class ;
+    rdfs:label "AI Model"@en ;
+    skos:definition "A generically dependent continuant representing an AI language model used by an agent in the Nexus platform."@en ;
+    skos:example "gpt-4.1-mini", "claude-sonnet-4-6", "gemini-1.5-pro"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasProvider ;
+          owl:someValuesFrom cco:ont00001180
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasProvider ;
+          owl:allValuesFrom cco:ont00001180
+        ] .
+
+nexus:Capabilities a owl:Class ;
+    rdfs:label "Capabilities"@en ;
+    skos:definition "A disposition inhering in an organization, representing a capability it possesses."@en ;
+    skos:example "AI Model Provider capability", "Search Provider capability"@en ;
+    rdfs:subClassOf bfo:BFO_0000016 ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000197 ;
+          owl:someValuesFrom cco:ont00001180
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000197 ;
+          owl:allValuesFrom cco:ont00001180
+        ] .
+
+cco:ont00001180 rdfs:subClassOf
+    [ a owl:Restriction ;
+      owl:onProperty nexus:hasCapabilities ;
+      owl:allValuesFrom nexus:Capabilities
+    ] .
 
 #################################################################
 #    Object Properties
@@ -1053,6 +1091,45 @@ nexus:isMarketplaceAppRoleOf a owl:ObjectProperty ;
     rdfs:domain nexus:MarketplaceAppRole ;
     rdfs:range nexus:MarketplaceApps .
 
+nexus:usesModel a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isModelOf ;
+    rdfs:label "uses model"@en ;
+    skos:definition "Relates an agent to the AI model it uses."@en ;
+    rdfs:domain nexus:Agent ;
+    rdfs:range nexus:AIModel .
+
+nexus:isModelOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:usesModel ;
+    rdfs:label "is model of"@en ;
+    skos:definition "Relates an AI model to the agent that uses it."@en ;
+    rdfs:domain nexus:AIModel ;
+    rdfs:range nexus:Agent .
+
+nexus:hasProvider a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:label "has provider"@en ;
+    skos:definition "Relates an AI model to the organization that provides it."@en ;
+    rdfs:domain nexus:AIModel ;
+    rdfs:range cco:ont00001180 .
+
+nexus:hasCapabilities a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000196 ;
+    owl:inverseOf nexus:isCapabilitiesOf ;
+    rdfs:label "has capabilities"@en ;
+    skos:definition "Relates an organization to a capability it possesses."@en ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range nexus:Capabilities .
+
+nexus:isCapabilitiesOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000197 ;
+    owl:inverseOf nexus:hasCapabilities ;
+    rdfs:label "is capabilities of"@en ;
+    skos:definition "Relates a capability to the organization in which it inheres."@en ;
+    rdfs:domain nexus:Capabilities ;
+    rdfs:range cco:ont00001180 .
+
 
 #################################################################
 #    Data Properties
@@ -1148,3 +1225,10 @@ nexus:intent_scope a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "The scope of the intent."@en ;
     skos:example "DIRECT", "INDIRECT" .
+
+nexus:model_id a owl:DatatypeProperty ;
+    rdfs:label "model id"@en ;
+    rdfs:domain nexus:AIModel ;
+    rdfs:range xsd:string ;
+    skos:definition "The identifier of the AI model."@en ;
+    skos:example "gpt-4.1-mini", "claude-sonnet-4-6" .

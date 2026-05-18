@@ -4,14 +4,15 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffe
 import { createPortal } from 'react-dom';
 import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy } from 'lucide-react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { AgentSelector } from './agent-selector';
 import { TypingIndicator } from '@/components/typing-indicator';
@@ -294,6 +295,8 @@ export function ChatInterface() {
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [requestSentAt, setRequestSentAt] = useState<number | null>(null);
+  const isSubmittingRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const streamControllerRef = useRef<AbortController | null>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -1148,8 +1151,10 @@ export function ChatInterface() {
     conversationIdOverride?: string
   ) => {
     e?.preventDefault();
+    if (isSubmittingRef.current) return;
     const sourceText = messageOverride !== undefined ? messageOverride : input;
     if ((!sourceText.trim() && attachedImages.length === 0) || isLoading) return;
+    isSubmittingRef.current = true;
     const effectiveAgent = agentOverride ?? selectedAgent;
 
     const latestActiveConversationId = useWorkspaceStore.getState().activeConversationId;
@@ -1182,6 +1187,7 @@ export function ChatInterface() {
     setAttachedImages([]); // Clear attached images after adding to message
     setImageError(null);
     // setSearchEnabled(false); // Reset search toggle after sending
+    setRequestSentAt(Date.now());
     setIsLoading(true);
 
     try {
@@ -1269,6 +1275,8 @@ export function ChatInterface() {
         let streamActivityLine: string | undefined = 'Processing...';
         let streamToolCalls: ToolCall[] = [];
         let hasDetailedActivity = false;
+        let firstCallModelSeen = false;
+        let lastEventWasToolResponse = false;
 
         const singleLine = (value: string) => value.replace(/\s+/g, ' ').trim();
         const truncateLine = (value: string, max = 140) =>
@@ -1283,10 +1291,13 @@ export function ChatInterface() {
             .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
 
-        const formatToolLabel = (raw: string): { prefix: 'Tool'; name: string } => ({
-          prefix: 'Tool',
-          name: formatToolName(raw),
-        });
+        const formatToolLabel = (raw: string): { prefix: 'Tool' | 'Routing to'; name: string } => {
+          if (raw.startsWith('transfer_to')) {
+            const target = raw.slice('transfer_to'.length).replace(/^_/, '');
+            return { prefix: 'Routing to', name: formatToolName(target || raw) };
+          }
+          return { prefix: 'Tool', name: formatToolName(raw) };
+        };
 
         const handleToolStartEvent = (rawTool: string, input?: string) => {
           const { prefix, name } = formatToolLabel(rawTool);
@@ -1306,7 +1317,7 @@ export function ChatInterface() {
             status: 'running',
             ...(input ? { input } : {}),
           });
-          streamActivityLine = `${prefix}: ${name}`;
+          streamActivityLine = prefix === 'Routing to' ? `${prefix} ${name}` : name;
           hasDetailedActivity = true;
         };
 
@@ -1334,13 +1345,14 @@ export function ChatInterface() {
         const handleAgentStepEvent = (
           stepType: 'agent_routing' | 'call_model',
           rawAgent: string,
+          labelOverride?: string,
         ) => {
           const stepName = formatToolName(rawAgent);
           if (!stepName) return;
 
-          const label = stepType === 'call_model'
-            ? `Calling ${stepName}`
-            : `Routing to ${stepName}`;
+          const label = labelOverride ?? (stepType === 'call_model'
+            ? 'Thinking'
+            : `Routing to ${stepName}`);
 
           const last = streamToolCalls[streamToolCalls.length - 1];
           if (last && last.status === 'running') {
@@ -1377,13 +1389,14 @@ export function ChatInterface() {
               if (!rawTool) return false;
               const input = getStringValue(payload.input, payload.data) || undefined;
               handleToolStartEvent(rawTool, input);
-              streamActivityLine = `Tool: ${formatToolName(rawTool)}`;
+              streamActivityLine = formatToolName(rawTool);
               hasDetailedActivity = true;
               return true;
             }
             case 'tool_response': {
               const output = getStringValue(payload.output, payload.content, payload.data);
               handleToolResponseEvent(output);
+              lastEventWasToolResponse = true;
               return true;
             }
             case 'agent.question': {
@@ -1397,10 +1410,19 @@ export function ChatInterface() {
             case 'agent_calling': {
               const rawAgent = getStringValue(payload.agent, payload.data);
               if (!rawAgent) return false;
-              const agentName = formatToolName(rawAgent);
-              if (!agentName) return false;
-              handleAgentStepEvent('call_model', rawAgent);
-              streamActivityLine = `Calling ${agentName}`;
+              if (!formatToolName(rawAgent)) return false;
+              // Skip the very first call_model — fires before any tool use
+              if (!firstCallModelSeen) {
+                firstCallModelSeen = true;
+                lastEventWasToolResponse = false;
+                return true;
+              }
+              const callModelLabel = lastEventWasToolResponse
+                ? 'Processing Tool Response'
+                : 'Thinking';
+              lastEventWasToolResponse = false;
+              handleAgentStepEvent('call_model', rawAgent, callModelLabel);
+              streamActivityLine = callModelLabel;
               hasDetailedActivity = true;
               return true;
             }
@@ -1561,20 +1583,45 @@ export function ChatInterface() {
         }
         // Final: store full content with thinking duration
         const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
+        const executionTime = requestSentAt ? (Date.now() - requestSentAt) / 1000 : undefined;
         const finalBody = thinkingContent
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
         const finalContent = finalBody.trim();
         // Mark any still-running tool as done
         streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
+        const finalToolCalls = streamToolCalls.length > 0 ? [...streamToolCalls] : undefined;
         updateLastMessage(
           conversationId!,
           finalContent,
           thinkingDuration,
           streamSources.length > 0 ? streamSources : undefined,
           hasDetailedActivity ? streamActivityLine : null,
-          streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
+          finalToolCalls,
+          executionTime,
         );
+        // Persist execution metadata to backend
+        if (streamingMessageId && (finalToolCalls || executionTime !== undefined)) {
+          const apiUrl = getApiUrl();
+          authFetch(
+            `${apiUrl}/api/chat/conversations/${conversationId}/messages/${streamingMessageId}/metadata`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                execution_time: executionTime ?? null,
+                steps: (finalToolCalls ?? []).map((t) => ({
+                  tool_name: t.toolName,
+                  prefix: t.prefix,
+                  status: t.status,
+                  input: t.input ?? null,
+                  output: t.output ?? null,
+                })),
+                sources: streamSources,
+              }),
+            },
+          ).catch(() => { /* non-blocking */ });
+        }
       } catch (streamError) {
         // Gracefully handle user-initiated aborts
         if ((streamError as any)?.name === 'AbortError') {
@@ -1732,6 +1779,7 @@ export function ChatInterface() {
     } finally {
       setIsLoading(false);
       setIsStreaming(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -1742,19 +1790,38 @@ export function ChatInterface() {
     }
 
     try {
-      // Import authFetch dynamically
       const { authFetch } = await import('@/stores/auth');
-      
-      // Call backend API for auditable export
+
+      // Build inline metadata from local Zustand state so it's always present
+      // regardless of whether the async PATCH has completed in the backend.
+      const messagesMetadata = activeConversation.messages
+        .filter((m) => m.role === 'assistant' && (m.toolCalls?.length || m.executionTime !== undefined))
+        .map((m) => ({
+          message_id: m.id,
+          execution_time: m.executionTime ?? null,
+          steps: (m.toolCalls ?? []).map((t) => ({
+            tool_name: t.toolName,
+            prefix: t.prefix,
+            status: t.status,
+            input: t.input ?? null,
+            output: t.output ?? null,
+          })),
+          sources: m.sources ?? [],
+        }));
+
       const response = await authFetch(
-        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export?format=txt`
+        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ format: 'txt', messages_metadata: messagesMetadata }),
+        }
       );
-      
+
       if (!response.ok) {
         throw new Error('Failed to export conversation');
       }
-      
-      // Download the file
+
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -1781,7 +1848,9 @@ export function ChatInterface() {
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
             suggestions={selectedAgentData?.suggestions}
-            onSuggestionClick={(prompt) => { setInput(prompt); focusChatInput(); }}
+            onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
+            onSuggestionHover={(value) => setInput(value)}
+            onSuggestionLeave={() => setInput('')}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -1796,6 +1865,7 @@ export function ChatInterface() {
                   streamControllerRef.current?.abort();
                 }}
                 onPreviewUrl={setPreviewUrl}
+                requestSentAt={requestSentAt}
               />
             ))}
             {isLoading && !isStreaming && (
@@ -2226,21 +2296,37 @@ export function ChatInterface() {
   );
 }
 
+// Maps CTA paths to their corresponding SidebarSection IDs.
+const CTA_SECTION_MAP: Record<string, SidebarSection> = {
+  '/marketplace': 'marketplace',
+  '/apps': 'apps',
+};
+
 function EmptyState({
   selectedAgentName,
   logoUrl,
   suggestions,
   onSuggestionClick,
+  onSuggestionHover,
+  onSuggestionLeave,
 }: {
   selectedAgentName: string;
   logoUrl?: string | null;
-  suggestions?: Array<{ label: string; value: string }>;
+  suggestions?: Array<{ label: string; value: string; description?: string; disabled?: boolean; cta?: string }>;
   onSuggestionClick: (prompt: string) => void;
+  onSuggestionHover?: (value: string) => void;
+  onSuggestionLeave?: () => void;
 }) {
+  const router = useRouter();
+  const { setActivePanelSection } = useWorkspaceStore();
+  const { user } = useAuthStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
+
+  const firstName = user?.name?.split(' ')[0];
+  const greeting = firstName ? `Hello, ${firstName}.` : 'Hello.';
   return (
-    <div className="flex h-full flex-col items-center justify-center">
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-workspace-accent-10 overflow-hidden">
+    <div className="flex h-full flex-col items-center justify-center px-4">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
         {resolvedLogoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -2249,28 +2335,73 @@ function EmptyState({
             className="h-full w-full object-contain p-1"
           />
         ) : (
-          <Bot size={32} className="text-workspace-accent" />
+          <Bot size={24} className="text-workspace-accent" />
         )}
       </div>
-      <p className="mb-8 max-w-md text-center text-muted-foreground">
-        Start a conversation with {selectedAgentName}. Ask questions, explore your data, or get
-        help with tasks.
+      <p className="mb-6 text-center text-muted-foreground">
+        {greeting} Pick a suggestion or type a message to get started.
       </p>
       {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div className="grid w-full max-w-xl grid-cols-2 gap-3">
-          {suggestions.map((suggestion, index) => {
-            const isOddLastItem = suggestions.length % 2 === 1 && index === suggestions.length - 1;
+        <div
+          className="flex w-full max-w-lg flex-col gap-1.5"
+          onMouseLeave={() => onSuggestionLeave?.()}
+        >
+          {suggestions.map((suggestion) => {
+            const baseClass = cn(
+              'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
+              suggestion.disabled
+                ? 'opacity-40 cursor-not-allowed'
+                : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
+            );
+
+            const content = (
+              <>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium leading-tight">{suggestion.label}</span>
+                  {suggestion.description && (
+                    <span className="block truncate text-xs text-muted-foreground leading-snug">
+                      {suggestion.description}
+                    </span>
+                  )}
+                  {suggestion.disabled && (
+                    <span className="block text-xs text-muted-foreground/60 italic">
+                      Coming soon
+                    </span>
+                  )}
+                </div>
+                {!suggestion.disabled && (
+                  <span className="ml-3 shrink-0 text-muted-foreground/40">›</span>
+                )}
+              </>
+            );
+
+            if (suggestion.cta && !suggestion.disabled) {
+              const sectionId = (CTA_SECTION_MAP[suggestion.cta] ?? suggestion.cta.replace(/^\//, '')) as SidebarSection;
+              return (
+                <button
+                  key={`${suggestion.label}:${suggestion.value}`}
+                  onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
+                  onClick={() => {
+                    setActivePanelSection(sectionId);
+                    router.push(suggestion.cta!);
+                  }}
+                  className={baseClass}
+                >
+                  {content}
+                </button>
+              );
+            }
+
             return (
-            <button
-              key={`${suggestion.label}:${suggestion.value}`}
-              onClick={() => onSuggestionClick(suggestion.value)}
-              className={cn(
-                'glass-card p-4 text-center text-sm transition-all hover:border-primary/30 hover:glow-primary-sm',
-                isOddLastItem && 'col-span-2 w-full max-w-[calc(50%-0.375rem)] justify-self-center'
-              )}
-            >
-              {suggestion.label}
-            </button>
+              <button
+                key={`${suggestion.label}:${suggestion.value}`}
+                onMouseEnter={() => !suggestion.disabled && onSuggestionHover?.(suggestion.value)}
+                onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
+                disabled={suggestion.disabled}
+                className={baseClass}
+              >
+                {content}
+              </button>
             );
           })}
         </div>
@@ -2301,7 +2432,9 @@ function TypingDots() {
 
 function formatToolCallLabel(prefix: string, name: string): string {
   if (prefix === 'Agent') return name;
-  return prefix === 'Handoff to' ? `${prefix} ${name}` : `${prefix}: ${name}`;
+  if (prefix === 'Tool') return name;
+  if (prefix === 'Routing to' || prefix === 'Handoff to') return `${prefix} ${name}`;
+  return `${prefix}: ${name}`;
 }
 
 function ToolCallsDropdown({
@@ -2309,11 +2442,13 @@ function ToolCallsDropdown({
   isProcessing,
   showStop,
   onStop,
+  startTime,
 }: {
   toolCalls: ToolCall[];
   isProcessing: boolean;
   showStop: boolean;
   onStop: () => void;
+  startTime?: number | null;
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
@@ -2334,8 +2469,8 @@ function ToolCallsDropdown({
     if (isProcessing) {
       wasProcessingRef.current = true;
       if (processingStartRef.current === null) {
-        processingStartRef.current = Date.now();
-        setElapsedSeconds(0);
+        processingStartRef.current = startTime ?? Date.now();
+        setElapsedSeconds(Math.floor((Date.now() - processingStartRef.current) / 1000));
       }
       if (autoCollapsed) {
         setIsOpen(true);
@@ -2348,7 +2483,7 @@ function ToolCallsDropdown({
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [isProcessing, autoCollapsed]);
+  }, [isProcessing, autoCollapsed, startTime]);
 
   useEffect(() => {
     if (!isProcessing) {
@@ -2545,6 +2680,7 @@ const MessageBubble = React.memo(function MessageBubble({
   showStop,
   onStop,
   onPreviewUrl,
+  requestSentAt,
 }: {
   message: Message;
   currentSelectedAgent: string;
@@ -2552,6 +2688,7 @@ const MessageBubble = React.memo(function MessageBubble({
   showStop: boolean;
   onStop: () => void;
   onPreviewUrl?: (url: string) => void;
+  requestSentAt?: number | null;
 }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
@@ -2626,12 +2763,12 @@ const MessageBubble = React.memo(function MessageBubble({
     (thinking !== null ? (!response || endsWithCaret) : (response === '▌'))
   );
   
-  // Live elapsed timer while processing
+  // Live elapsed timer while processing — starts from requestSentAt if provided
   useEffect(() => {
     if (isStillProcessing) {
       if (processingStartRef.current === null) {
-        processingStartRef.current = Date.now();
-        setElapsedSeconds(0);
+        processingStartRef.current = requestSentAt ?? Date.now();
+        setElapsedSeconds(Math.floor((Date.now() - processingStartRef.current) / 1000));
       }
       const interval = setInterval(() => {
         setElapsedSeconds(Math.floor((Date.now() - (processingStartRef.current ?? Date.now())) / 1000));
@@ -2640,7 +2777,7 @@ const MessageBubble = React.memo(function MessageBubble({
     } else {
       processingStartRef.current = null;
     }
-  }, [isStillProcessing]);
+  }, [isStillProcessing, requestSentAt]);
 
   // Auto-close thinking 3s after processing finishes
   useEffect(() => {
@@ -2988,6 +3125,7 @@ const MessageBubble = React.memo(function MessageBubble({
               isProcessing={isStillProcessing}
               showStop={showStop}
               onStop={onStop}
+              startTime={requestSentAt}
             />
           )}
           {!isUser && !message.toolCalls && (activityLine || (isStillProcessing && showStop)) && (

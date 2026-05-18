@@ -21,6 +21,8 @@ Always read existing files before changing code.
 Keep changes minimal and focused.
 """.strip()
     logo_url: str = "naas_abi/assets/public/opencode.png"
+    model = "gpt-5.3-codex"
+    provider = "opencode"
 
     @classmethod
     def New(
@@ -33,10 +35,6 @@ Keep changes minimal and focused.
         module_root = Path(__file__).resolve().parents[1]
         raw_port = os.getenv("NAAS_ABI_CODING_AGENT_PORT", "").strip()
         port = int(raw_port) if raw_port else None
-        model = (
-            os.getenv("NAAS_ABI_CODING_AGENT_MODEL", "openai/gpt-5.3-codex").strip()
-            or "openai/gpt-5.3-codex"
-        )
 
         return cls(
             configuration=OpencodeAgentConfiguration(
@@ -44,7 +42,7 @@ Keep changes minimal and focused.
                 port=port,
                 name=cls.name,
                 description=cls.description,
-                model=model,
+                model=cls.model,
                 system_prompt=cls.system_prompt,
             ),
             agent_shared_state=agent_shared_state,

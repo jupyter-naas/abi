@@ -214,6 +214,15 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         await self.db.flush()
         return True
 
+    async def update_message_metadata(self, message_id: str, metadata: str) -> bool:
+        result = await self.db.execute(select(MessageModel).where(MessageModel.id == message_id))
+        row = result.scalar_one_or_none()
+        if row is None:
+            return False
+        row.metadata_ = metadata
+        await self.db.flush()
+        return True
+
     async def get_agent_by_id(self, agent_id: str) -> ChatAgentRecord | None:
         result = await self.db.execute(
             select(AgentConfigModel).where(AgentConfigModel.id == agent_id)

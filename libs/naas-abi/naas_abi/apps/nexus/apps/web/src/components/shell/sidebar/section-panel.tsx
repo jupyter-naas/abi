@@ -1,6 +1,5 @@
 'use client';
 
-import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
@@ -11,6 +10,7 @@ import { FilesSection } from './files-section';
 import { LabSection } from './lab-section';
 import { OntologySection } from './ontology-section';
 import { KnowledgeGraphSection } from './knowledge-graph-section';
+import { MarketplaceSection } from './marketplace-section';
 import { AppsSection } from './apps-section';
 
 const SECTION_LABELS: Record<SidebarSection, string> = {
@@ -20,7 +20,8 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   lab: 'Lab',
-  apps: 'App',
+  apps: 'Apps',
+  marketplace: 'Marketplace',
 };
 
 function SectionContent({ section }: { section: SidebarSection }) {
@@ -29,33 +30,21 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canAgents = useFeature('agents');
   const canKnowledge = useFeature('knowledge');
 
-  if (section === 'search' && canKnowledge) {
-    return <SearchSection collapsed={false} detailOnly />;
-  }
-  if (section === 'chat' && canChat) {
-    return <ChatSection collapsed={false} detailOnly />;
-  }
-  if (section === 'ontology' && canKnowledge) {
-    return <OntologySection collapsed={false} detailOnly />;
-  }
-  if (section === 'graph' && canKnowledge) {
-    return <KnowledgeGraphSection collapsed={false} detailOnly />;
-  }
-  if (section === 'files' && canFiles) {
-    return <FilesSection collapsed={false} detailOnly />;
-  }
-  if (section === 'lab' && canAgents) {
-    return <LabSection collapsed={false} detailOnly />;
-  }
-  if (section === 'apps' && canAgents) {
-    return <AppsSection collapsed={false} detailOnly />;
-  }
+  if (section === 'search' && canKnowledge) return <SearchSection collapsed={false} detailOnly />;
+  if (section === 'chat' && canChat) return <ChatSection collapsed={false} detailOnly />;
+  if (section === 'ontology' && canKnowledge) return <OntologySection collapsed={false} detailOnly />;
+  if (section === 'graph' && canKnowledge) return <KnowledgeGraphSection collapsed={false} detailOnly />;
+  if (section === 'files' && canFiles) return <FilesSection collapsed={false} detailOnly />;
+  if (section === 'lab' && canAgents) return <LabSection collapsed={false} detailOnly />;
+  if (section === 'apps' && canAgents) return <AppsSection collapsed={false} detailOnly />;
+  if (section === 'marketplace' && canAgents) return <MarketplaceSection collapsed={false} detailOnly />;
   return null;
 }
 
 export function SectionPanel() {
-  const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
+  const { activePanelSection } = useWorkspaceStore();
   const isOpen = activePanelSection !== null;
+  const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
 
   return (
     <div
@@ -66,15 +55,8 @@ export function SectionPanel() {
     >
       {isOpen && activePanelSection && (
         <>
-          <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border/50 px-4">
-            <span className="text-sm font-semibold">{SECTION_LABELS[activePanelSection]}</span>
-            <button
-              onClick={() => setActivePanelSection(null)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title="Close panel"
-            >
-              <X size={14} />
-            </button>
+          <div className="flex h-14 flex-shrink-0 items-center border-b border-border/50 px-4">
+            <span className="text-sm font-semibold">{panelTitle}</span>
           </div>
           <nav className="flex-1 overflow-y-auto p-2">
             <SectionContent section={activePanelSection} />

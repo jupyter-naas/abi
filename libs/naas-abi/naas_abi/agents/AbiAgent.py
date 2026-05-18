@@ -67,12 +67,32 @@ Respond only based on what your available agents and tools can actually deliver.
 - Keep responses concise and factual.
 </constraints>
 """
-    suggestions: list[dict[str, str]] = [
+    suggestions: list[dict] = [
         {
-            "label": "Chat with a specific agent",
-            "value": "Chat with {{Agent Name}}",
+            "label": "What can you do?",
+            "value": "What can you do?",
+            "description": "Get an overview of all available agents and their capabilities",
+        },
+        {
+            "label": "Find the right agent",
+            "value": "Find the best agent for my task",
+            "description": "Let Abi recommend the right agent for your request",
+        },
+        {
+            "label": "Explore my knowledge graph",
+            "value": "",
+            "description": "Browse entities and relationships in your data",
+            "disabled": True,
+        },
+        {
+            "label": "Browse Marketplace",
+            "value": "",
+            "description": "Discover and enable modules from the marketplace",
+            "cta": "/marketplace",
         },
     ]
+    model = "gpt-4.1-mini"
+    provider = "openai"
 
     # @staticmethod
     # def build_suggestions(cls: type) -> list[dict[str, str]]:
@@ -300,7 +320,9 @@ Respond only based on what your available agents and tools can actually deliver.
         return cls(
             name=cls.name,
             description=cls.description,
-            chat_model=cls.get_model(api_key=api_key),
+            chat_model=cls.get_model(
+                api_key=api_key, model_name=cls.model, provider=cls.provider
+            ),
             tools=tools,
             agents=agents,
             intents=intents,

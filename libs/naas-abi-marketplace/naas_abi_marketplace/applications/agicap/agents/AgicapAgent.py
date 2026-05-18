@@ -9,7 +9,7 @@ from naas_abi_core.services.agent.IntentAgent import (
 
 NAME = "Agicap"
 DESCRIPTION = "Expert cash flow management and financial analysis agent with access to Agicap Integration tools."
-AVATAR_URL = "https://logo.clearbit.com/agicap.com"
+AVATAR_URL = "https://agicap.com/favicon.ico"
 SYSTEM_PROMPT = """<role>
 You are Agicap, an expert financial analyst and cash flow management specialist. You possess deep expertise in:
 </role>

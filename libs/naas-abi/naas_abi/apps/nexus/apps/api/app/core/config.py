@@ -45,7 +45,7 @@ class TenantConfig(BaseModel):
     login_border_radius: str = "0"
     login_bg_image_url: str | None = None
     show_terms_footer: bool = False
-    show_powered_by: bool = True
+    show_powered_by: bool = False
     login_footer_text: str | None = None
     apps: list["ExternalAppConfig"] = Field(default_factory=list)
 
@@ -59,6 +59,98 @@ class ExternalAppConfig(BaseModel):
     url: str
     description: str | None = None
     icon_emoji: str | None = None
+
+
+class ModelPricingEntry(BaseModel):
+    """LLM token cost for one model (USD per 1M tokens, May 2026 rates)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_per_million: float
+    output_per_million: float
+    label: str
+
+
+class MarketplaceUsageTier(BaseModel):
+    """A concrete usage scenario used to estimate monthly LLM token costs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    interactions: int
+    avg_tokens: int
+    description: str
+
+
+class MarketplacePricingConfig(BaseModel):
+    """
+    Maintenance fee configuration for Enterprise-tier marketplace agents.
+
+    These are expert retainer fees — not software licenses. They fund the
+    AI engineers doing continuous domain knowledge curation, model migration,
+    ontology updates, and integration patching for each agent.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Standard rate (live, fully maintained agents)
+    maintenance_standard_usd: int = 499
+    # Early-access rate (preview agents, introductory pricing)
+    maintenance_early_access_usd: int = 299
+    # CTA URL for Subscribe / Early Access buttons
+    cta_url: str = "https://naas.ai/enterprise"
+    # Module categories considered Enterprise-maintained
+    enterprise_categories: list[str] = Field(default_factory=lambda: ["domain"])
+    # Token split between input (system prompt + context) and output (answer)
+    input_output_ratio: float = 0.6
+
+
+class MarketplaceConfig(BaseModel):
+    """Full marketplace configuration surfaced to the frontend via /api/modules/config."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pricing: MarketplacePricingConfig = Field(default_factory=MarketplacePricingConfig)
+
+    usage_tiers: list[MarketplaceUsageTier] = Field(
+        default_factory=lambda: [
+            MarketplaceUsageTier(
+                label="Starter",
+                interactions=50,
+                avg_tokens=2_000,
+                description="~2 queries/day",
+            ),
+            MarketplaceUsageTier(
+                label="Professional",
+                interactions=300,
+                avg_tokens=5_000,
+                description="~10 queries/day",
+            ),
+            MarketplaceUsageTier(
+                label="Scale",
+                interactions=2_000,
+                avg_tokens=10_000,
+                description="~65 queries/day, team use",
+            ),
+        ]
+    )
+
+    # Prices in USD per 1M tokens (May 2026 rates).
+    model_pricing: dict[str, ModelPricingEntry] = Field(
+        default_factory=lambda: {
+            "gpt-4o":           ModelPricingEntry(input_per_million=2.50,  output_per_million=10.00, label="GPT-4o"),
+            "gpt-4o-mini":      ModelPricingEntry(input_per_million=0.15,  output_per_million=0.60,  label="GPT-4o mini"),
+            "gpt-4":            ModelPricingEntry(input_per_million=30.00, output_per_million=60.00, label="GPT-4"),
+            "gpt-3.5-turbo":    ModelPricingEntry(input_per_million=0.50,  output_per_million=1.50,  label="GPT-3.5 Turbo"),
+            "o1":               ModelPricingEntry(input_per_million=15.00, output_per_million=60.00, label="o1"),
+            "o3-mini":          ModelPricingEntry(input_per_million=1.10,  output_per_million=4.40,  label="o3-mini"),
+            "claude-opus":      ModelPricingEntry(input_per_million=15.00, output_per_million=75.00, label="Claude Opus"),
+            "claude-sonnet":    ModelPricingEntry(input_per_million=3.00,  output_per_million=15.00, label="Claude Sonnet"),
+            "claude-haiku":     ModelPricingEntry(input_per_million=0.25,  output_per_million=1.25,  label="Claude Haiku"),
+            "gemini-1.5-pro":   ModelPricingEntry(input_per_million=3.50,  output_per_million=10.50, label="Gemini 1.5 Pro"),
+            "gemini-1.5-flash": ModelPricingEntry(input_per_million=0.075, output_per_million=0.30,  label="Gemini Flash"),
+        }
+    )
 
 
 FeatureKey = Literal["chat", "files", "agents", "knowledge", "settings"]
@@ -162,7 +254,7 @@ class OrganizationSeedConfig(BaseModel):
     login_border_radius: str | None = None
     login_bg_image_url: str | None = None
     show_terms_footer: bool = True
-    show_powered_by: bool = True
+    show_powered_by: bool = False
     login_footer_text: str | None = None
     secondary_logo_url: str | None = None
     show_logo_separator: bool = False
@@ -184,6 +276,9 @@ class Settings(BaseSettings):
 
     # Feature access policy consumed by workspace bootstrap responses
     feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
+
+    # Marketplace pricing, usage tiers, and model token costs
+    marketplace: MarketplaceConfig = Field(default_factory=MarketplaceConfig)
 
     # User seed configs (upserted by email on startup)
     users: list[UserSeedConfig] = Field(default_factory=list)
@@ -228,25 +323,15 @@ class Settings(BaseSettings):
         "<p>This link expires in {expire_minutes} minutes.</p>"
     )
 
-    # SMTP (magic link delivery)
-    smtp_enabled: bool = False
-    smtp_host: str = "localhost"
-    smtp_port: int = 1025
-    smtp_username: str | None = None
-    smtp_password: str | None = None
-    smtp_use_tls: bool = False
-    smtp_use_ssl: bool = False
-    smtp_from_email: EmailStr = "no-reply@nexus.example.com"
-    smtp_from_name: str = "NEXUS"
+    # Outgoing email "From" metadata. Transport details (host, credentials,
+    # adapter type) live in the engine config under `services.email`.
+    email_from_address: EmailStr = "no-reply@nexus.example.com"
+    email_from_name: str = "NEXUS"
 
     # Rate Limiting
     rate_limit_enabled: bool = True
     rate_limit_login_attempts: int = 5  # Max login attempts per window
     rate_limit_window_seconds: int = 300  # 5-minute window
-
-    # Demo data seeding (idempotent startup check)
-    # When enabled, startup seeds demo data only if users table is empty.
-    auto_seed_demo_data: bool = False
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
@@ -258,7 +343,6 @@ class Settings(BaseSettings):
         # - Force OFF unless environment is development or nexus_env is local
         if not (self.environment == "development" or self.nexus_env == "local"):
             self.enable_ollama_autostart = False
-            self.auto_seed_demo_data = False
 
     # Security Headers
     enable_security_headers: bool = True

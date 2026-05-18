@@ -2,6 +2,481 @@
 
 <!-- version list -->
 
+## v1.53.1 (2026-05-18)
+
+
+## v1.53.0 (2026-05-18)
+
+
+## v1.52.1 (2026-05-18)
+
+### Bug Fixes
+
+- **templatablesparqlquery**: Remove unused graph_names rendering in GenericWorkflow
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+### Chores
+
+- Update uv.lock version bumps
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+### Refactoring
+
+- **web**: Update types and imports in apps-section component
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+
+## v1.52.0 (2026-05-18)
+
+
+## v1.51.1 (2026-05-18)
+
+
+## v1.51.0 (2026-05-18)
+
+### Bug Fixes
+
+- **api**: Deduplicate graph items by name in KnowledgeGraphSection
+  ([`00be951`](https://github.com/jupyter-naas/abi/commit/00be95108b62367d2dd8d9529f2fd4c3324de3b1))
+
+- **graph-service**: Improve type check when determining total instances count
+  ([`0721ab1`](https://github.com/jupyter-naas/abi/commit/0721ab1f9311d7e1e085b278b3d2b80b1faca5d3))
+
+### Features
+
+- **graph**: Add API endpoints and UI integration for creating and deleting individuals
+  ([`9d75ea3`](https://github.com/jupyter-naas/abi/commit/9d75ea3f154d29eb885812c4f84b387a45b9bc67))
+
+- **graph**: Add RDF file analysis and import endpoints and UI enhancements
+  ([`a0ed608`](https://github.com/jupyter-naas/abi/commit/a0ed60881528beb04df9b6f45854478519a5b7bb))
+
+- **graph-service**: Add endpoint to export graphs as TTL
+  ([`921e0cc`](https://github.com/jupyter-naas/abi/commit/921e0ccefc87f74942d14c537122e067e6c191c0))
+
+- **graph-service**: Enhance drop_graph to remove graph metadata from Nexus graph
+  ([`da95de4`](https://github.com/jupyter-naas/abi/commit/da95de48bcada621ac8646bffc6a4254709e1bc0))
+
+
+## v1.50.0 (2026-05-16)
+
+### Bug Fixes
+
+- **nexus**: Add nav items to AppsSection panel so it isn't empty
+  ([`137818c`](https://github.com/jupyter-naas/abi/commit/137818ca10a26291e02d244a4abc9382556d743e))
+
+- **nexus**: Auto-collapse section panel in embed view, restore on back
+  ([`c9f6f1a`](https://github.com/jupyter-naas/abi/commit/c9f6f1a7bc6ca32c5fec25d4ba9b657b4f4ff2ed))
+
+- **nexus**: Back link clears store, panel header shows app name
+  ([`0283c1e`](https://github.com/jupyter-naas/abi/commit/0283c1e87cca6de79d35368369185e14f9aca834))
+
+- **nexus**: Browse Marketplace switches panel section instead of embedding
+  ([`0ada10a`](https://github.com/jupyter-naas/abi/commit/0ada10a2bd20595ce5ef3a14b5275d3a8f9ffdfc))
+
+- **nexus**: Keep panel header as 'Apps' regardless of open app
+  ([`ebcbd57`](https://github.com/jupyter-naas/abi/commit/ebcbd57741ee20d01dd4e9950b53789d1564040c))
+
+- **nexus**: Prevent empty panel when chat CTA navigates to Apps page
+  ([`473c9d2`](https://github.com/jupyter-naas/abi/commit/473c9d268c891e9eb48ab9d57ba919f27e887992))
+
+- **nexus**: Prevent empty side panel when clicking Apps launcher
+  ([`3fc8f2d`](https://github.com/jupyter-naas/abi/commit/3fc8f2d96fe5952ef23765661bf9b10ec47fc054))
+
+- **nexus**: Reclassify Docs/Slides/Sheets/Board/Calendar as applications
+  ([`b1e5fa6`](https://github.com/jupyter-naas/abi/commit/b1e5fa63471d3c8e4b72794cee0ed56baef6d498))
+
+- **nexus**: Reclassify tenant apps as applications, not tools
+  ([`bfcdbcb`](https://github.com/jupyter-naas/abi/commit/bfcdbcb6567facbe893842b1aa9d370b67fe73f0))
+
+- **nexus**: Remove redundant back button from embed top bar
+  ([`9ac18d7`](https://github.com/jupyter-naas/abi/commit/9ac18d7280d6c6db75d3a3ff5df61a77b9bd7dbc))
+
+- **nexus**: Remove stale openParam reference, fix syntax error in AppsSection
+  ([`db3d996`](https://github.com/jupyter-naas/abi/commit/db3d9967947cedc6b1006abbcd897a99de2f41b4))
+
+- **nexus**: Remove useRouter from AppsSection to fix hooks count error
+  ([`c8bf8ae`](https://github.com/jupyter-naas/abi/commit/c8bf8aed4a235d40e4acb38d05b64b596fc1743c))
+
+- **nexus**: Rename 'Module Apps' section label to 'Apps'
+  ([`c858e0c`](https://github.com/jupyter-naas/abi/commit/c858e0cf67a01eef3e5ff044310ffded9c6ae1a7))
+
+- **nexus**: Rename back button label from 'Apps' to 'Back' in embed view
+  ([`cf38d9b`](https://github.com/jupyter-naas/abi/commit/cf38d9bbe47f0f5b99ee12011460c5e7b12463b2))
+
+- **nexus**: Use LayoutGrid icon for Apps section instead of AppWindow
+  ([`e5f41cd`](https://github.com/jupyter-naas/abi/commit/e5f41cdbffe76f5cf9046893237a64add8716307))
+
+- **nexus**: Use Zustand store for openAppModule so panel reacts instantly
+  ([`37465f1`](https://github.com/jupyter-naas/abi/commit/37465f1784f36b605239e1c98015a5721498b34f))
+
+- **nexus**: UX polish on Apps and Marketplace sections
+  ([`5a36278`](https://github.com/jupyter-naas/abi/commit/5a362789a44ea792886060f22acef79ff88a7faf))
+
+- **nexus**: Wait for apps fetch before resolving openParam in panel
+  ([`c70ce16`](https://github.com/jupyter-naas/abi/commit/c70ce16a936f6f0b50afe568f94abf636c0c4b9e))
+
+- **nexus/apps**: Include app_url and demo creds in installed modules API response
+  ([`5efd6cc`](https://github.com/jupyter-naas/abi/commit/5efd6ccc6398e44a92a4fe0f13f1f455f757d6a1))
+
+- **nexus/apps**: Open panel and set module on deep-link restore
+  ([`f76fed5`](https://github.com/jupyter-naas/abi/commit/f76fed5a60ccee30c5f39af97a9962b00932e29a))
+
+### Features
+
+- **nexus**: Add Apps launcher page with embedded iframe and demo access
+  ([`4bed913`](https://github.com/jupyter-naas/abi/commit/4bed913bce370f5fcc211eddeb4ff1f85f69b0df))
+
+- **nexus**: Add AppsSection panel matching Marketplace layout
+  ([`3c4e56d`](https://github.com/jupyter-naas/abi/commit/3c4e56d3d28889b1cbb99fb7b1f4221a55227721))
+
+- **nexus**: Add minimalist re-open tab to section panel when collapsed
+  ([`379e548`](https://github.com/jupyter-naas/abi/commit/379e548b864130fe0dafc51ee5f2b3e4bbd2bc21))
+
+- **nexus**: Deep-link apps, Open button in Marketplace, panel polish
+  ([`74bf3e1`](https://github.com/jupyter-naas/abi/commit/74bf3e18b0a7b7675cddf0d3ffd2658971a033e9))
+
+- **nexus**: Merge section panel + detail panel into one in embed view
+  ([`29a73d1`](https://github.com/jupyter-naas/abi/commit/29a73d1972ed41d23e3ab8dff6d77c2e73023c0b))
+
+- **nexus**: Show real module logo and name in Apps panel nav
+  ([`853c1cf`](https://github.com/jupyter-naas/abi/commit/853c1cf4c958e5bab9f0a5fb2aae8a24edb03c4e))
+
+- **nexus/apps**: Add PanelLeft toggle in embed top bar and clean up section panel
+  ([`a118ccb`](https://github.com/jupyter-naas/abi/commit/a118ccb3a990ce2a0f8c18d0e62eeff49b7baedd))
+
+### Refactoring
+
+- **nexus**: Rename sidebar sections launcher→apps and apps→marketplace
+  ([`1c46a5a`](https://github.com/jupyter-naas/abi/commit/1c46a5a77edd7fb85b0a9f204922c79644347a7c))
+
+- **nexus**: Unify Apps into single panel — remove AppDetailPanel
+  ([`6eeccd0`](https://github.com/jupyter-naas/abi/commit/6eeccd07ba3a72f52eeac7ad1392ed411df28de3))
+
+- **wsr**: Make WSR a proper ABI module
+  ([`f26aed6`](https://github.com/jupyter-naas/abi/commit/f26aed6b16c9fae773832b4637471e8713d8bbc5))
+
+
+## v1.49.1 (2026-05-15)
+
+### Bug Fixes
+
+- **nexus**: Expose email_from_address and email_from_name in NexusConfig
+  ([`80cb81b`](https://github.com/jupyter-naas/abi/commit/80cb81bce10d33fc80c60d6f2ec4474b8a946268))
+
+
+## v1.49.0 (2026-05-15)
+
+### Features
+
+- **nexus**: Enhance NexusPlatformPipeline with AIModel and Capabilities support
+  ([`49c4a94`](https://github.com/jupyter-naas/abi/commit/49c4a9458f6b052a6593393f3486e4838c11cfe9))
+
+
+## v1.48.0 (2026-05-15)
+
+### Features
+
+- **auth**: Enforce dynamic rendering for login page
+  ([`9ef540e`](https://github.com/jupyter-naas/abi/commit/9ef540e81294ef6abf6447de19f461a414d1378c))
+
+
+## v1.47.1 (2026-05-15)
+
+### Bug Fixes
+
+- **web**: Import authFetch alongside useAuthStore in chat-interface.tsx
+  ([`d139637`](https://github.com/jupyter-naas/abi/commit/d13963799bbc9b35fc8d9a3aa5bc29929fb6eb76))
+
+
+## v1.47.0 (2026-05-15)
+
+
+## v1.46.0 (2026-05-15)
+
+### Bug Fixes
+
+- **agents**: Prevent duplicate agent seeding via ON CONFLICT DO NOTHING
+  ([`bcd452d`](https://github.com/jupyter-naas/abi/commit/bcd452da649d9e913447f052062fadb2a76426af))
+
+- **apps**: Show Bot fallback icon when module logo fails to load
+  ([`30b939a`](https://github.com/jupyter-naas/abi/commit/30b939a84d1d0b03939e071ce897d26e446480a9))
+
+- **chat**: Prevent double-send on suggestion click via isSubmittingRef guard
+  ([`82aa443`](https://github.com/jupyter-naas/abi/commit/82aa44399299007b5cac4f3497ac5fac1984a5ad))
+
+- **marketplace**: Add MarketplaceConfig to NexusConfig to allow yaml override
+  ([`109ebb2`](https://github.com/jupyter-naas/abi/commit/109ebb206e63996c290072f88f977171f11e61ce))
+
+- **marketplace**: Show model cost on preview cards, whole card is clickable
+  ([`ad24a95`](https://github.com/jupyter-naas/abi/commit/ad24a95f14d7dac0765ed723763766858c3922bb))
+
+- **modules**: Correct auth import path for get_current_user_required
+  ([`bc842fe`](https://github.com/jupyter-naas/abi/commit/bc842fe713769207d8196eb68b1825ab9d11294d))
+
+- **modules**: Extract AVATAR_URL/NAME/DESCRIPTION module-level constants from agents
+  ([`612cc81`](https://github.com/jupyter-naas/abi/commit/612cc817e5c308883ed3ce853fbe5e8976992500))
+
+- **modules**: Handle namespace package — use __path__ instead of __file__
+  ([`d7bd6db`](https://github.com/jupyter-naas/abi/commit/d7bd6db70e3a851413c97618e39c9ac09c21910c))
+
+- **modules**: Include domain modules without __init__.py in catalog scan
+  ([`f0d3ad5`](https://github.com/jupyter-naas/abi/commit/f0d3ad5d201b7d51cd3747a4dfb8afef327a982b))
+
+- **modules**: Match multi-line logo_url/description regex in agent files
+  ([`9e78124`](https://github.com/jupyter-naas/abi/commit/9e78124abad8d865d9da9cc8d23a9ed45523e07e))
+
+- **sidebar**: Use Store icon for Marketplace nav item instead of LayoutGrid
+  ([`fc94f8d`](https://github.com/jupyter-naas/abi/commit/fc94f8d54b8e69c9935bebd96072f304dff0f652))
+
+- **suggestions**: Click sends message directly, matching Claude UX
+  ([`058a5da`](https://github.com/jupyter-naas/abi/commit/058a5da4ccaa1bae9b4b27b054f0fbf90426c5ff))
+
+- **suggestions**: Update Browse Marketplace cta + fix hover/click input clearing
+  ([`8d5ad60`](https://github.com/jupyter-naas/abi/commit/8d5ad60be24d93030fb9f56caca5ad5f09fc21dc))
+
+### Chores
+
+- **cleanup**: Remove legacy /apps route after rename to /marketplace
+  ([`2aef5c7`](https://github.com/jupyter-naas/abi/commit/2aef5c757c7bb698b61fef221ca6b7c3d5752791))
+
+### Features
+
+- **apps**: Add Tools tab with workspace productivity roadmap cards
+  ([`4fe9d0c`](https://github.com/jupyter-naas/abi/commit/4fe9d0c91d43c8d95b5ca915a65bc1ae32dd69f5))
+
+- **apps**: Agent ID card panel with enriched metadata
+  ([`85d34dc`](https://github.com/jupyter-naas/abi/commit/85d34dce891a1516752ed0dfb9d289b0887d6b01))
+
+- **apps**: Rebuild Apps section as a real marketplace
+  ([`9cdc8f2`](https://github.com/jupyter-naas/abi/commit/9cdc8f2c832ab805e8e061cc9ba6b3a21b0e5476))
+
+- **apps**: Redesign module cards with prominent hero image area
+  ([`24d087f`](https://github.com/jupyter-naas/abi/commit/24d087f549d14f3ab3c93726418104b67df8bf7b))
+
+- **marketplace**: Add enterprise value proposition to agent id card
+  ([`e7437bc`](https://github.com/jupyter-naas/abi/commit/e7437bc2622a5a9e570bf50a78b2f23016515a85))
+
+- **marketplace**: Add TCO column to usage tier table (maintenance + LLM)
+  ([`00eff80`](https://github.com/jupyter-naas/abi/commit/00eff8085c41bf8342290b1a5d76f333615cd55a))
+
+- **marketplace**: Community vs enterprise pricing model
+  ([`4a0f048`](https://github.com/jupyter-naas/abi/commit/4a0f04887a5d031d57c92fb063b4fc49d8ee458f))
+
+- **marketplace**: Credible enterprise pricing — $79/mo standard, $49/mo early access
+  ([`8a7524f`](https://github.com/jupyter-naas/abi/commit/8a7524fa7a5bce450fb164ad9657ed00e65863c4))
+
+- **marketplace**: Make pricing data-driven via config.yaml + API
+  ([`2e05316`](https://github.com/jupyter-naas/abi/commit/2e05316e6cb792c824e273f7c4a926a69f4b339f))
+
+- **marketplace**: Rename /apps route to /marketplace
+  ([`30b1b42`](https://github.com/jupyter-naas/abi/commit/30b1b424c8c3ae707f0733562813bd31d69ec727))
+
+- **marketplace**: Reprice to $199/mo standard, $99/mo early access
+  ([`1319477`](https://github.com/jupyter-naas/abi/commit/1319477e49aaf8bf0595a4e0bd793d8ca44e3880))
+
+- **marketplace**: Reprice to expert retainer model — $499/mo standard, $299/mo early access
+  ([`de4165e`](https://github.com/jupyter-naas/abi/commit/de4165e015748e3836a4e4d78f578a4e14acb44b))
+
+- **marketplace**: Separate maintenance fee from LLM token costs in TCO
+  ([`9de7b20`](https://github.com/jupyter-naas/abi/commit/9de7b20d65c6573c867adb4308e3e2145cae1a21))
+
+- **marketplace**: Sharp corners, pricing badges, and CTA buttons
+  ([`4102056`](https://github.com/jupyter-naas/abi/commit/4102056ac8a34fc467f015af16e5fcb4c55d8b7b))
+
+- **marketplace**: TCO estimate and model-based pricing on cards
+  ([`5656441`](https://github.com/jupyter-naas/abi/commit/565644156c95f581159f2fba56bff0e007c487e9))
+
+- **marketplace**: Unify marketplace — type filter pills, no tabs
+  ([`380e206`](https://github.com/jupyter-naas/abi/commit/380e2060e8e63d124e3df4cb1632de74fb678f2d))
+
+### Performance Improvements
+
+- **modules**: Fast filesystem catalog scan + sidebar sub-nav restore
+  ([`1c1a0d3`](https://github.com/jupyter-naas/abi/commit/1c1a0d34b3ea973586f6143ef4458b897c64989a))
+
+
+## v1.45.1 (2026-05-15)
+
+
+## v1.45.0 (2026-05-15)
+
+### Bug Fixes
+
+- Update ontology base URI in config and service
+  ([`1f3aec8`](https://github.com/jupyter-naas/abi/commit/1f3aec8318a992b92d475713483f302cd6df82b6))
+
+- **graph**: Reduce default limit, add total instance count for graph overview
+  ([`9ddd7e1`](https://github.com/jupyter-naas/abi/commit/9ddd7e12805093f9f21e9a4cb3aa13f55a7cc705))
+
+- **workspace**: Correct default and toggle for layout direction in OntologyNetworkView
+  ([`e722341`](https://github.com/jupyter-naas/abi/commit/e7223412ebe6b92285f93434979763404fcb8af5))
+
+### Features
+
+- **graph**: Add hierarchy direction control for parent tree layout in graph page
+  ([`1a2179c`](https://github.com/jupyter-naas/abi/commit/1a2179c18b1472d14f696702b2ebc19c540b8a63))
+
+- **graph**: Add physics-based bucket layout for graph nodes
+  ([`3675218`](https://github.com/jupyter-naas/abi/commit/36752180574507b0859209c526c2670d36c8b314))
+
+- **graph**: Add search API endpoint and backend search support in graph UI
+  ([`4bd35c1`](https://github.com/jupyter-naas/abi/commit/4bd35c1d63605c6be6ab4d2018beef3c264ec66f))
+
+- **graph**: Preserve per-graph filter state and restore on graph switch
+  ([`3675218`](https://github.com/jupyter-naas/abi/commit/36752180574507b0859209c526c2670d36c8b314))
+
+- **graph**: Support graph URIs parameter and base URI configuration
+  ([`bbbb9c5`](https://github.com/jupyter-naas/abi/commit/bbbb9c5057518d4e31d7244dedadf6705ca65724))
+
+
+## v1.44.0 (2026-05-14)
+
+### Bug Fixes
+
+- **chat**: Merge greeting and hint into single line
+  ([`537d799`](https://github.com/jupyter-naas/abi/commit/537d7999ecd964b278781e4eaaafafdb35ede3f5))
+
+- **chat**: Revert greeting size, tune suggestion rows to max-w-lg
+  ([`8911d2e`](https://github.com/jupyter-naas/abi/commit/8911d2e7109df467d161044fa7c36f663e8040a3))
+
+- **suggestions**: Activate sidebar panel section on cta card click
+  ([`2596b3e`](https://github.com/jupyter-naas/abi/commit/2596b3eb67b4125e484f2e0eacbdb4e98366b7c8))
+
+- **suggestions**: Move router and setActivePanelSection into EmptyState component
+  ([`ff51c0e`](https://github.com/jupyter-naas/abi/commit/ff51c0ed9b17a8644e7aaa14c7cfb15a1f0e3944))
+
+- **suggestions**: Restore rich fields after rebase, swap disabled states, rename App to Apps
+  ([`9395da1`](https://github.com/jupyter-naas/abi/commit/9395da1c14f11451e8996c3393604189633f7f9f))
+
+- **suggestions**: Tighten card font size and padding to match sidebar scale
+  ([`4974170`](https://github.com/jupyter-naas/abi/commit/497417002b09e45ad7d29f17a47fc8c94f228eca))
+
+### Features
+
+- **chat**: Match suggestion width to input bar, enlarge greeting heading
+  ([`d14e79c`](https://github.com/jupyter-naas/abi/commit/d14e79c3a0040afbd14dda8011add4a4bc57df32))
+
+- **chat**: Replace static subtitle with time-aware greeting using user name
+  ([`81eea7a`](https://github.com/jupyter-naas/abi/commit/81eea7a66e164d221ec8d13f746afcf5843e8490))
+
+- **chat**: Restore onboarding hint below greeting
+  ([`c30d26e`](https://github.com/jupyter-naas/abi/commit/c30d26e227f4542680219ecad8c22bdcb7399165))
+
+- **chat**: Simplify greeting to Hello name with short onboarding hint
+  ([`bf631b8`](https://github.com/jupyter-naas/abi/commit/bf631b855940df4fce8bfd596b95e0b5d823b45d))
+
+- **suggestions**: Hover prefills input bar, click sends — remove tooltip
+  ([`603c6bc`](https://github.com/jupyter-naas/abi/commit/603c6bc69a7374cec1fd61971e2d82a8ff348bf2))
+
+- **suggestions**: Navigate to knowledge graph section on card click
+  ([`ba6375b`](https://github.com/jupyter-naas/abi/commit/ba6375b771b160f284270cbf0d5bdb63fee2f6af))
+
+- **suggestions**: Switch from 2x2 grid to single-column rows
+  ([`914d162`](https://github.com/jupyter-naas/abi/commit/914d162b2c567cf134c7b07373ddf55b2c1c9bbf))
+
+- **suggestions**: Truncate overflow text, add hover tooltip, fix mobile width
+  ([`a8c1bf9`](https://github.com/jupyter-naas/abi/commit/a8c1bf96c18643cada7531cb16ddcadea788a27c))
+
+
+## v1.43.2 (2026-05-14)
+
+### Bug Fixes
+
+- Refactor chat interface tool call labels
+  ([`1e27dd0`](https://github.com/jupyter-naas/abi/commit/1e27dd07edbdbc0cd470050bafce765a7d722b2a))
+
+
+## v1.43.1 (2026-05-14)
+
+### Bug Fixes
+
+- **engine**: Declare EmailService dependency in ABIModule
+  ([`199c306`](https://github.com/jupyter-naas/abi/commit/199c3063a304877f9059a4f8d79e3fe76b1efe7a))
+
+
+## v1.43.0 (2026-05-14)
+
+### Bug Fixes
+
+- **abi-agent**: Comment out chat-with-agent suggestion instead of deleting
+  ([`75c9c6e`](https://github.com/jupyter-naas/abi/commit/75c9c6eea595bbc377e214d107e21081fdd10cf4))
+
+- **abi-agent**: Remove stale chat-with-agent suggestion
+  ([`fbbb89f`](https://github.com/jupyter-naas/abi/commit/fbbb89fbb7e30aa97f6d85261f596bdf8acfb71a))
+
+- **auth**: Redirect to actual workspace ID after login instead of slug fallback
+  ([`9fe43b1`](https://github.com/jupyter-naas/abi/commit/9fe43b12bdbf4e64d4c17606896fdd2d4b513a2b))
+
+- **auth**: Restore tenant branding and clean up login page regressions
+  ([`ff3bfc5`](https://github.com/jupyter-naas/abi/commit/ff3bfc57575ed7d965bc9def3aef083becb46c66))
+
+- **auth**: Route magic-link email through engine email service
+  ([`124f23d`](https://github.com/jupyter-naas/abi/commit/124f23d2da946cc826f609afb2b596bf623522c4))
+
+- **header**: Fix user menu and branch menu blocked by sidebar overlay
+  ([`a23f751`](https://github.com/jupyter-naas/abi/commit/a23f751ba3d4ff4cdc6374f261bd7d42b0ed1d1e))
+
+- **middleware**: Make post-login default workspace configurable
+  ([`88a1362`](https://github.com/jupyter-naas/abi/commit/88a136234c110dea6a238e2b2ffb2ba36f2fd86c))
+
+- **middleware**: Update stale fallback comment to match code
+  ([`d31da10`](https://github.com/jupyter-naas/abi/commit/d31da108b59e8faa1f21cf4e10372caeb475d017))
+
+- **nexus**: Default show_powered_by to false for self-hosted deployments
+  ([`f53f769`](https://github.com/jupyter-naas/abi/commit/f53f769379f75b0a3718144e6e2fca7c3bba8e57))
+
+- **nexus**: Remove orphaned auto_seed_demo_data block from startup
+  ([`14c6a4d`](https://github.com/jupyter-naas/abi/commit/14c6a4d006dd42438a5fd8f5dbfe9e4b5c0df7ad))
+
+- **pr-audit**: Fix three issues found in code review
+  ([`8a1f477`](https://github.com/jupyter-naas/abi/commit/8a1f4772b17f4a1fe7b9fba8827a9cc66fd40739))
+
+- **web**: Cookie SameSite, stable workspace ordering, login render
+  ([`b6350ec`](https://github.com/jupyter-naas/abi/commit/b6350ec8d1cddfdcf13d358ec9a231d112ef3651))
+
+### Chores
+
+- **nexus**: Remove legacy demo seed script and fake data
+  ([`5f06cfc`](https://github.com/jupyter-naas/abi/commit/5f06cfce4f392f2e38de09bfca95c46abe6da86a))
+
+### Documentation
+
+- **nexus**: Remove demo seed references and update credentials
+  ([`e34bd31`](https://github.com/jupyter-naas/abi/commit/e34bd31022205eb57fcf7b45fae74eee4eb92ac0))
+
+### Features
+
+- **auth**: Enable password login for local development
+  ([`bf182cc`](https://github.com/jupyter-naas/abi/commit/bf182cc1d2ffd0f9049e9976a960fa35346d8432))
+
+- **ux**: Pre-fill login email from NEXUS_USER_ADMIN_EMAIL on local stack start
+  ([`92d1fb9`](https://github.com/jupyter-naas/abi/commit/92d1fb90bb4240739a24d777855d67764d315a4d))
+
+### Refactoring
+
+- **middleware**: Replace NEXT_PUBLIC_DEFAULT_WORKSPACE with runtime cookie + server-side env var
+  ([`9affadc`](https://github.com/jupyter-naas/abi/commit/9affadcc4e75e567e7a8673a9779427b246e1a50))
+
+- **middleware**: Strip noise comments, remove dead publicRoutes var
+  ([`28b0b00`](https://github.com/jupyter-naas/abi/commit/28b0b00dbc3e365ca42f38f14940440247a2df1d))
+
+
+## v1.42.1 (2026-05-14)
+
+### Bug Fixes
+
+- **pipelines**: Add type assertions and improve label formatting in NexusPlatformPipeline
+  ([`a12778a`](https://github.com/jupyter-naas/abi/commit/a12778a9320fd529604dcaceaaa5756c8d26d55d))
+
+
+## v1.42.0 (2026-05-14)
+
+### Features
+
+- **nexus**: Support folder drag-and-drop upload with progress UI
+  ([`eb7ccba`](https://github.com/jupyter-naas/abi/commit/eb7ccbadaade4844c517528874207d9ca7ac8e6c))
+
+
 ## v1.41.0 (2026-05-13)
 
 ### Bug Fixes

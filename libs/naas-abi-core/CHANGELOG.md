@@ -2,6 +2,54 @@
 
 <!-- version list -->
 
+## v1.40.1 (2026-05-18)
+
+
+## v1.40.0 (2026-05-18)
+
+
+## v1.39.1 (2026-05-18)
+
+### Bug Fixes
+
+- **templatablesparqlquery**: Remove unused graph_names rendering in GenericWorkflow
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+### Chores
+
+- Update uv.lock version bumps
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+### Refactoring
+
+- **web**: Update types and imports in apps-section component
+  ([`425abda`](https://github.com/jupyter-naas/abi/commit/425abdad7d6423dda3f792ee5dcd77abcb00c360))
+
+
+## v1.39.0 (2026-05-18)
+
+### Features
+
+- **templatablesparqlquery**: Enhance query templating with graph names
+  ([`1c5947d`](https://github.com/jupyter-naas/abi/commit/1c5947d166e8ba62fa374045cc02115a1efecb6a))
+
+
+## v1.38.0 (2026-05-18)
+
+### Features
+
+- **TemplatableSparqlQueryLoader**: Add graph_name parameter to support custom graph querying
+  ([`4b9db29`](https://github.com/jupyter-naas/abi/commit/4b9db29d39f1d1d33740d74924724729a6ab905f))
+
+
+## v1.37.1 (2026-05-15)
+
+### Bug Fixes
+
+- **Agent**: Disable markdown_pretty_display by default
+  ([`9bf481c`](https://github.com/jupyter-naas/abi/commit/9bf481c432727a3fba47779190850074ab1f7cb0))
+
+
 ## v1.37.0 (2026-05-13)
 
 ### Features

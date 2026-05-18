@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.handlers import router as 
 from naas_abi.apps.nexus.apps.api.app.services.auth.handlers import router as auth_router
 from naas_abi.apps.nexus.apps.api.app.services.chat.handlers import router as chat_router
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
+from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.providers.handlers import router as providers_router
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,
@@ -39,6 +40,7 @@ api_router.include_router(ontology.router, prefix="/ontology", tags=["ontology"]
 api_router.include_router(graph.router, prefix="/graph", tags=["graph"])
 api_router.include_router(view.router, prefix="/view", tags=["view"])
 api_router.include_router(agents_router, prefix="/agents", tags=["agents"])
+api_router.include_router(modules_router, prefix="/modules", tags=["modules"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers_router, prefix="/providers", tags=["providers"])

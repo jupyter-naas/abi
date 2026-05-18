@@ -424,6 +424,24 @@ class ChatService:
         )
         return created.id
 
+    async def update_message_metadata(
+        self,
+        context: RequestContext,
+        conversation_id: str,
+        message_id: str,
+        metadata: dict,
+    ) -> bool:
+        import json
+        await self._ensure_conversation_access(
+            context,
+            conversation_id,
+            action="chat.message.update",
+        )
+        return await self.adapter.update_message_metadata(
+            message_id=message_id,
+            metadata=json.dumps(metadata),
+        )
+
     async def create_message(
         self,
         context: RequestContext,

@@ -74,6 +74,8 @@ Use the following ontology as the primary grounding source:
 - If uncertainty remains, ask a focused clarification question before generating ontology artifacts.
 </constraints>
 """
+    model = "gpt-5.1"
+    provider = "openai"
 
     @staticmethod
     def get_model(
@@ -140,7 +142,9 @@ Use the following ontology as the primary grounding source:
         return cls(
             name=cls.name,
             description=cls.description,
-            chat_model=cls.get_model(api_key=api_key),
+            chat_model=cls.get_model(
+                api_key=api_key, model_name=cls.model, provider=cls.provider
+            ),
             tools=[],
             agents=[],
             intents=[],
