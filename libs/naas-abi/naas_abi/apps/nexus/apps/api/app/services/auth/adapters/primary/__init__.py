@@ -5,6 +5,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     get_workspace_role,
     oauth2_scheme,
     require_workspace_access,
+    require_workspace_admin,
     require_workspace_platform_drive,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (  # noqa: E501
@@ -84,6 +85,7 @@ __all__ = [
     "register",
     "remove_avatar",
     "require_workspace_access",
+    "require_workspace_admin",
     "require_workspace_platform_drive",
     "reset_password",
     "router",
