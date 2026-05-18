@@ -969,8 +969,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   refreshFsFiles: async () => {
+    const sandboxRoot = get().fsSandboxRoot || 'sandbox';
     set((state) => ({ fsFolderContents: {}, fsTreeVersion: state.fsTreeVersion + 1 }));
-    await get().fetchFsFiles();
+    await get().fetchFsFiles(sandboxRoot);
   },
 
   openFsFile: (path) => {

@@ -277,22 +277,22 @@ export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; det
   } = useFilesStore();
   const { prompt, dialog: promptDialog } = usePrompt();
 
-  // Load filesystem root on first mount; capture sandbox_root from response
+  // Load the sandbox subtree on first mount — we only expose the writable sandbox
   useEffect(() => {
     if (fsFiles.length === 0 && !fsLoading) {
-      fetchFsFiles().then(() => {
-        const sr = useFilesStore.getState().fsSandboxRoot;
-        if (sr) setSandboxRoot(sr);
-      });
+      const sr = useFilesStore.getState().fsSandboxRoot || 'sandbox';
+      setSandboxRoot(sr);
+      fetchFsFiles(sr);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const navigateToCode = () => router.push(getWorkspacePath(currentWorkspaceId, '/code'));
 
-  // Resolve target path for new file/folder relative to current selection
+  // Resolve target path for new file/folder relative to current selection.
+  // Falls back to sandbox root so new items always land in the writable area.
   const resolveTarget = useCallback((name: string) => {
-    if (!selectedPath) return name;
-    // Find if selected is a folder anywhere in the cached tree
+    const base = sandboxRoot || 'sandbox';
+    if (!selectedPath) return `${base}/${name}`;
     const allFiles = [
       ...fsFiles,
       ...Object.values(fsFolderContents).flat(),
@@ -300,8 +300,8 @@ export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; det
     const item = allFiles.find((f) => f.path === selectedPath);
     if (item?.type === 'folder') return `${selectedPath}/${name}`;
     const parent = selectedPath.substring(0, selectedPath.lastIndexOf('/'));
-    return parent ? `${parent}/${name}` : name;
-  }, [selectedPath, fsFiles, fsFolderContents]);
+    return parent ? `${parent}/${name}` : `${base}/${name}`;
+  }, [selectedPath, fsFiles, fsFolderContents, sandboxRoot]);
 
   // fetchFsFolderContents receives the full path from FileNode (no stripping needed)
   const fetchFolderContents = useCallback(
