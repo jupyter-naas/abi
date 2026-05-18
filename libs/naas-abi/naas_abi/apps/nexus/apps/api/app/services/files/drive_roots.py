@@ -22,10 +22,12 @@ MODULE_ROOT = "naas_abi"
 MY_DRIVE_ROOT = f"{MODULE_ROOT}/my-drive"
 WORKSPACE_DRIVE_ROOT = f"{MODULE_ROOT}/workspace-drive"
 PLATFORM_DRIVE_ROOT = f"{MODULE_ROOT}/platform-drive"
-# The system drive exposes the full module storage tree — every drive sits
-# below this root. Reserved for workspace admins/owners to inspect and
-# manage object storage across all users and workspaces.
-SYSTEM_DRIVE_ROOT = MODULE_ROOT
+# The system drive exposes the full object-storage tree — not just the
+# ``naas_abi`` module root, but everything stored alongside it. Reserved for
+# workspace admins/owners to inspect and manage object storage across all
+# users and workspaces. An empty root means "no prefix": paths are resolved
+# directly against the underlying object storage.
+SYSTEM_DRIVE_ROOT = ""
 
 SCOPE_WORKSPACE = "workspace"
 SCOPE_MY_DRIVE = "my_drive"
