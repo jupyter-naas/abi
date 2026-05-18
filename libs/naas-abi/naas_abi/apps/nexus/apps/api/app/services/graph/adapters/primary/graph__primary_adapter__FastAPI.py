@@ -24,6 +24,8 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     GraphNode,
     GraphOverview,
     GraphPack,
+    IndividualCreate,
+    IndividualDelete,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
@@ -141,6 +143,51 @@ async def delete_graph(
     await require_workspace_access(current_user.id, payload.workspace_id)
     try:
         await graph_service.delete_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "deleted"}
+
+
+@router.post("/nodes")
+async def create_individual(
+    payload: IndividualCreate,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphNode:
+    """Insert a new individual into the given named graph."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        node = await graph_service.create_individual(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            label=payload.label,
+            class_uri=payload.class_uri,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return _node_to_schema(node)
+
+
+@router.post("/nodes/delete")
+async def delete_individual(
+    payload: IndividualDelete,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Delete an individual: remove every triple where it is subject or object in the graph."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.delete_individual(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+        )
     except GraphProtectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GraphServiceUnavailableError as exc:

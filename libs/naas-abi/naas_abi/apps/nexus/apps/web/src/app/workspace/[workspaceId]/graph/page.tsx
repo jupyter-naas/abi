@@ -41,6 +41,7 @@ import {
   type GraphView,
 } from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
+import { useConfirm } from '@/components/ui/dialogs';
 
 // Dynamically import vis-network to avoid SSR issues
 const VisNetwork = dynamic(
@@ -599,6 +600,7 @@ export default function GraphPage() {
     setActiveSavedView,
     setViews,
   } = useKnowledgeGraphStore();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [zoomLevel, setZoomLevel] = useState(1);
   const [currentQuery, setCurrentQuery] = useState('');
   const [queryResults, setQueryResults] = useState<Record<string, string>[] | null>(null);
@@ -1503,20 +1505,20 @@ export default function GraphPage() {
       selectGraph(selectedIndividualGraphId);
       setVisibleGraphs([selectedIndividualGraphId]);
       const selectedClass = availableClasses.find((item) => item.id === selectedClassId);
+      const graphUri = graphOptions.find((g) => g.id === selectedIndividualGraphId)?.uri ?? '';
+      if (!graphUri) {
+        setCreateError('Selected graph could not be resolved. Please reload and try again.');
+        return;
+      }
       const apiUrl = getApiUrl();
       const response = await authFetch(`${apiUrl}/api/graph/nodes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspace_id: workspaceId,
-          type: 'Individual',
+          graph_uri: graphUri,
           label: normalizedLabel,
-          properties: selectedClass
-            ? {
-              class_id: selectedClass.id,
-              class_label: selectedClass.name,
-            }
-            : {},
+          class_uri: selectedClass?.id ?? null,
         }),
       });
 
@@ -2997,21 +2999,39 @@ LIMIT 100`}
                 >
                   Edit
                 </button>
-                <button 
+                <button
                   onClick={async () => {
-                    if (confirm(`Delete node "${selectedNode.label}"?`)) {
-                      try {
-                        const { authFetch } = await import('@/stores/auth');
-                        await authFetch(`/api/graph/nodes/${selectedNode.id}`, {
-                          method: 'DELETE',
-                        });
-                        setSelectedNodeId(null);
-                        // Refresh graph data
-                        window.location.reload();
-                      } catch (error) {
-                        console.error('Failed to delete node:', error);
-                        alert('Failed to delete node');
+                    const ok = await confirm({
+                      title: `Delete node "${selectedNode.label}"?`,
+                      description:
+                        'This will remove all triples in the current graph where this node appears as subject or object. This action cannot be undone.',
+                      confirmLabel: 'Delete Node',
+                      destructive: true,
+                    });
+                    if (!ok) return;
+                    if (!effectiveGraphUri) {
+                      console.error('Cannot delete node: no graph selected.');
+                      return;
+                    }
+                    try {
+                      const apiUrl = getApiUrl();
+                      const response = await authFetch(`${apiUrl}/api/graph/nodes/delete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          workspace_id: workspaceId,
+                          graph_uri: effectiveGraphUri,
+                          individual_uri: selectedNode.id,
+                        }),
+                      });
+                      if (!response.ok) {
+                        throw new Error(`Failed with status ${response.status}`);
                       }
+                      setSelectedNodeId(null);
+                      clearGraphPageCaches();
+                      await loadFromApi({ force: true });
+                    } catch (error) {
+                      console.error('Failed to delete node:', error);
                     }
                   }}
                   className="rounded border px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -3023,6 +3043,7 @@ LIMIT 100`}
           </div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }

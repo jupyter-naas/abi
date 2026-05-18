@@ -34,6 +34,19 @@ class GraphDelete(BaseModel):
     uri: str = Field(..., min_length=1)
 
 
+class IndividualCreate(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    label: str = Field(..., min_length=1, max_length=500)
+    class_uri: str | None = Field(default=None, min_length=1)
+
+
+class IndividualDelete(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+
+
 class GraphOverview(BaseModel):
     kpis: dict[str, Any]
     instances_by_class: list[dict[str, Any]]
