@@ -7,7 +7,7 @@ import { useFeature } from '@/hooks/use-feature';
 import { ChatSection } from './chat-section';
 import { SearchSection } from './search-section';
 import { FilesSection } from './files-section';
-import { LabSection } from './lab-section';
+import { CodeSection } from './code-section';
 import { OntologySection } from './ontology-section';
 import { KnowledgeGraphSection } from './knowledge-graph-section';
 import { MarketplaceSection } from './marketplace-section';
@@ -19,7 +19,7 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   ontology: 'Ontology',
   graph: 'Knowledge Graph',
   files: 'Files',
-  lab: 'Lab',
+  code: 'Code',
   apps: 'Apps',
   marketplace: 'Marketplace',
 };
@@ -35,7 +35,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'ontology' && canKnowledge) return <OntologySection collapsed={false} detailOnly />;
   if (section === 'graph' && canKnowledge) return <KnowledgeGraphSection collapsed={false} detailOnly />;
   if (section === 'files' && canFiles) return <FilesSection collapsed={false} detailOnly />;
-  if (section === 'lab' && canAgents) return <LabSection collapsed={false} detailOnly />;
+  if (section === 'code' && canAgents) return <CodeSection collapsed={false} detailOnly />;
   if (section === 'apps' && canAgents) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canAgents) return <MarketplaceSection collapsed={false} detailOnly />;
   return null;

@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   X,
   Send,
-  Sparkles,
   Bot,
   Loader2,
   ChevronDown,
@@ -20,6 +19,13 @@ import {
   History,
   Download,
   Trash2,
+  Terminal,
+  FileCode,
+  FileEdit,
+  Play,
+  BookOpen,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -27,6 +33,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore } from '@/stores/auth';
+import { useFilesStore } from '@/stores/files';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
@@ -41,11 +48,24 @@ const modes: { id: Mode; label: string; icon: React.ElementType; shortcut?: stri
   { id: 'ask', label: 'Ask', icon: MessageSquare, description: 'Only answers questions' },
 ];
 
+// ─── Opencode event types ────────────────────────────────────────────────────
+
+interface ToolEvent {
+  callId: string;
+  tool: string;  // read | write | edit | bash
+  path?: string;
+  command?: string;
+  status: 'running' | 'completed';
+  output?: string;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   thinkingDuration?: number;
+  toolEvents?: ToolEvent[];  // opencode tool activity
+  isOpencode?: boolean;      // rendered differently
 }
 
 interface ChatSession {
@@ -55,8 +75,70 @@ interface ChatSession {
   createdAt: Date;
 }
 
+
+// ─── Opencode tool event card ─────────────────────────────────────────────────
+
+const TOOL_ICONS: Record<string, React.ElementType> = {
+  read: BookOpen,
+  write: FileCode,
+  edit: FileEdit,
+  bash: Play,
+};
+
+function ToolEventCard({ event }: { event: ToolEvent }) {
+  const Icon = TOOL_ICONS[event.tool] ?? Terminal;
+  const label = event.path ?? event.command ?? event.tool;
+  const done = event.status === 'completed';
+  return (
+    <div className={cn(
+      'flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors',
+      done
+        ? 'border-border/30 bg-muted/20 text-muted-foreground'
+        : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'
+    )}>
+      {done
+        ? <CheckCircle2 size={11} className="flex-shrink-0 text-emerald-500" />
+        : <Circle size={11} className="flex-shrink-0 animate-pulse" />
+      }
+      <Icon size={11} className="flex-shrink-0" />
+      <span className="font-medium capitalize">{event.tool}</span>
+      <span className="flex-1 truncate font-mono opacity-70">{label}</span>
+    </div>
+  );
+}
+
+// ─── Code suggestions (above input, fills the textarea on click) ─────────────
+
+const CODE_SUGGESTIONS = [
+  'Create a hello world HTML page with a gradient design',
+  'Create a Python script that prints Fibonacci numbers',
+  'Create a README.md for this module',
+];
+
+function CodeSuggestions({ onSuggest }: { onSuggest: (text: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1 border-t px-3 pt-2 pb-1">
+      {CODE_SUGGESTIONS.map((s) => (
+        <button
+          key={s}
+          onClick={() => onSuggest(s)}
+          className={cn(
+            'w-full rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-left text-xs transition-all',
+            'hover:border-primary/50 hover:bg-primary/5 hover:text-primary'
+          )}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const OPENCODE_AGENT_ID = 'opencode';
+
 export function AIPane() {
-  const router = useRouter();
+  const pathname = usePathname();
+  const isCodeSection = pathname?.includes('/code') ?? false;
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -67,6 +149,8 @@ export function AIPane() {
   const [showHistory, setShowHistory] = useState(false);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  // opencode thread ID — kept across messages so opencode has full conversation context
+  const [opencodeSessionId, setOpencodeSessionId] = useState<string>(() => `nexus-${Date.now()}`);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
@@ -76,8 +160,21 @@ export function AIPane() {
   const { agents, getAgent } = useAgentsStore();
   const { providers } = useIntegrationsStore();
   const { getSecretByKey } = useSecretsStore();
-  
-  const currentAgent = mounted ? agents.find((a) => a.id === paneAgent) || agents.find((a) => a.id === 'abi') || agents[0] : null;
+  const { activeFile, fileContents, fsActiveFile, refreshFsFiles, readFsFile, setFsDiffs, clearFsDiffs } = useFilesStore();
+
+  const isOpencode = paneAgent === OPENCODE_AGENT_ID;
+  const currentAgent = mounted
+    ? isOpencode
+      ? null  // opencode is not in the agents store
+      : agents.find((a) => a.id === paneAgent) || agents.find((a) => a.id === 'abi') || agents[0]
+    : null;
+
+  // Auto-select opencode when entering the Code section
+  useEffect(() => {
+    if (isCodeSection && paneAgent !== OPENCODE_AGENT_ID) {
+      setPaneAgent(OPENCODE_AGENT_ID);
+    }
+  }, [isCodeSection]); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Get provider for agent with resolved secrets
   const getProviderForAgent = (agentId: string) => {
@@ -139,7 +236,6 @@ export function AIPane() {
 
   // Chat session management
   const handleNewChat = () => {
-    // Save current session if it has messages
     if (messages.length > 0) {
       const newSession: ChatSession = {
         id: currentSessionId || Date.now().toString(),
@@ -149,15 +245,14 @@ export function AIPane() {
       };
       setChatSessions((prev) => {
         const existing = prev.find((s) => s.id === newSession.id);
-        if (existing) {
-          return prev.map((s) => (s.id === newSession.id ? newSession : s));
-        }
+        if (existing) return prev.map((s) => (s.id === newSession.id ? newSession : s));
         return [newSession, ...prev];
       });
     }
-    // Start fresh
     setMessages([]);
     setCurrentSessionId(Date.now().toString());
+    // New opencode session for each new chat
+    setOpencodeSessionId(`nexus-${Date.now()}`);
     setShowHistory(false);
     inputRef.current?.focus();
   };
@@ -201,6 +296,146 @@ export function AIPane() {
     URL.revokeObjectURL(url);
   };
 
+  // ─── Opencode submit (used on /code route) ────────────────────────────────
+
+  const handleOpencodeSubmit = async (userContent: string) => {
+    const assistantId = (Date.now() + 1).toString();
+    const textParts: Record<string, string> = {};
+
+    clearFsDiffs();
+
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantId, role: 'assistant', content: '', toolEvents: [], isOpencode: true },
+    ]);
+
+    const token = useAuthStore.getState().token;
+    const response = await fetch(`${getApiBase()}/api/opencode/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ message: userContent, session_id: opencodeSessionId }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`opencode API error: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      console.error('[opencode] no response body reader');
+      return;
+    }
+
+    let buffer = '';
+
+    outer: while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+
+        let event: Record<string, unknown>;
+        try {
+          event = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          console.warn('[opencode] failed to parse event:', raw.slice(0, 120));
+          continue;
+        }
+
+        const eventType = event.type as string;
+        const props = (event.properties ?? {}) as Record<string, unknown>;
+
+        // ── Done / error ──────────────────────────────────────────────
+        if (eventType === 'done' || eventType === 'error') {
+          if (eventType === 'error') {
+            const msg = (event.message as string) ?? 'opencode error';
+            console.error('[opencode] stream error:', msg);
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, content: `Error: ${msg}` } : m))
+            );
+          }
+          break outer;
+        }
+
+        if (eventType === 'session.idle') { break outer; }
+
+        // ── session.diff — live filesystem refresh ────────────────────
+        if (eventType === 'session.diff') {
+          const diff = (props.diff ?? []) as Array<{ file: string; additions: number; deletions: number; status: string }>;
+          if (diff.length > 0) {
+            setFsDiffs(diff);
+            // Fire-and-forget: refresh tree and reload active file if changed
+            refreshFsFiles().then(() => {
+              const currentActive = useFilesStore.getState().fsActiveFile;
+              if (currentActive && diff.some((d) => currentActive.endsWith(d.file))) {
+                readFsFile(currentActive);
+              }
+            });
+          }
+          continue;
+        }
+
+        if (eventType !== 'message.part.updated') continue;
+
+        const part = (props.part ?? {}) as Record<string, unknown>;
+        const partType = part.type as string;
+
+        // ── Text parts ────────────────────────────────────────────────
+        if (partType === 'text') {
+          const partId = (part.id as string) ?? 'default';
+          textParts[partId] = (part.text as string) ?? '';
+          const fullText = Object.values(textParts).join('');
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: fullText } : m))
+          );
+        }
+
+        // ── Tool parts ────────────────────────────────────────────────
+        if (partType === 'tool') {
+          const callId = (part.callID as string) ?? String(Date.now());
+          const toolName = (part.tool as string) ?? 'tool';
+          // opencode nests the input inside state: state.input.filePath
+          const state = (part.state ?? {}) as Record<string, unknown>;
+          const stateInput = (state.input ?? {}) as Record<string, unknown>;
+          const filePath =
+            (stateInput.filePath as string) ??
+            (stateInput.path as string) ??
+            undefined;
+          const command = (stateInput.command as string) ?? undefined;
+          const output = (state.output as string) ?? undefined;
+          const status = (state.status as string) === 'completed' ? 'completed' : 'running';
+
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== assistantId) return m;
+              const existing = (m.toolEvents ?? []).find((t) => t.callId === callId);
+              const updated: ToolEvent = existing
+                ? { ...existing, status, output }
+                : { callId, tool: toolName, path: filePath, command, status, output };
+              const toolEvents = existing
+                ? (m.toolEvents ?? []).map((t) => (t.callId === callId ? updated : t))
+                : [...(m.toolEvents ?? []), updated];
+              return { ...m, toolEvents };
+            })
+          );
+        }
+      }
+    }
+  };
+
+  // ─── Regular chat submit ───────────────────────────────────────────────────
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -216,10 +451,14 @@ export function AIPane() {
     setIsLoading(true);
 
     try {
-      // Get provider for current agent (AI Pane uses paneAgent)
+      // ── Route to opencode when opencode agent is selected ───────────────
+      if (isOpencode) {
+        await handleOpencodeSubmit(userContent);
+        return;
+      }
+
+      // ── Regular Nexus chat ──────────────────────────────────────────────
       const provider = getProviderForAgent(paneAgent);
-      
-      // Build provider payload (may be null if no provider, API will fallback to Ollama)
       const providerPayload = provider ? {
         id: provider.id,
         name: provider.name,
@@ -231,27 +470,28 @@ export function AIPane() {
         model: provider.model,
       } : null;
 
-      // Get agent's system prompt
       const agentData = getAgent(paneAgent);
-      const systemPrompt = agentData?.systemPrompt || null;
-      
-      // Build message history for the API (must include the current user message)
-      // Note: React setState is async, so `messages` doesn't have userMessage yet.
-      // We manually append it, matching how chat-interface uses getState() for fresh data.
-      const fullHistory = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
+      let systemPrompt = agentData?.systemPrompt || null;
+      if (activeFile) {
+        const content = fileContents[activeFile];
+        const fileContext = content !== undefined
+          ? `\n\nCurrent open file: ${activeFile}\n\`\`\`\n${content.slice(0, 8000)}\n\`\`\``
+          : `\n\nCurrent open file: ${activeFile} (not yet loaded)`;
+        systemPrompt = (systemPrompt || 'You are a helpful coding assistant.') + fileContext;
+      }
 
-      // Add placeholder for streaming response
+      const fullHistory = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
       const assistantId = (Date.now() + 1).toString();
       const thinkingStartTime = Date.now();
       setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '▌' }]);
-      setIsLoading(false); // Stop loading indicator, streaming will show the cursor
+      setIsLoading(false);
 
       const token = useAuthStore.getState().token;
       const response = await fetch(`${getApiBase()}/api/chat/stream`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           workspace_id: currentWorkspaceId,
@@ -263,9 +503,7 @@ export function AIPane() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -277,81 +515,39 @@ export function AIPane() {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-
           const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  const token = parsed.content as string;
-                  
-                  // Track <think> tags
-                  if (token.includes('<think>')) {
-                    isInThinking = true;
-                    const assembled = `<think>${thinkingContent}</think>`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  if (token.includes('</think>')) {
-                    isInThinking = false;
-                    const assembled = `<think>${thinkingContent}</think>\n\n▌`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  if (isInThinking) {
-                    thinkingContent += token;
-                    const assembled = `<think>${thinkingContent}</think>`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  // Regular response content
-                  responseContent += token;
-                  const assembled = thinkingContent
-                    ? `<think>${thinkingContent}</think>\n\n${responseContent}▌`
-                    : `${responseContent}▌`;
-                  setMessages((prev) => 
-                    prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                  );
+          for (const line of chunk.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                const tok = parsed.content as string;
+                if (tok.includes('<think>')) { isInThinking = true; continue; }
+                if (tok.includes('</think>')) {
+                  isInThinking = false;
+                  setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: `<think>${thinkingContent}</think>\n\n▌` } : m));
+                  continue;
                 }
-                if (parsed.error) {
-                  const errContent = `Error: ${parsed.error}`;
-                  setMessages((prev) => 
-                    prev.map((m) => m.id === assistantId ? { ...m, content: errContent } : m)
-                  );
-                  throw new Error(parsed.error);
+                if (isInThinking) {
+                  thinkingContent += tok;
+                  setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: `<think>${thinkingContent}</think>` } : m));
+                  continue;
                 }
-              } catch (parseError) {
-                // Only swallow JSON parsing failures for partial SSE chunks
-                if (!(parseError instanceof SyntaxError)) {
-                  throw parseError;
-                }
+                responseContent += tok;
+                const assembled = thinkingContent ? `<think>${thinkingContent}</think>\n\n${responseContent}▌` : `${responseContent}▌`;
+                setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m));
               }
+              if (parsed.error) throw new Error(parsed.error);
+            } catch (parseError) {
+              if (!(parseError instanceof SyntaxError)) throw parseError;
             }
           }
         }
-        // Final: store full content with thinking duration
         const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
-        const finalContent = thinkingContent
-          ? `<think>${thinkingContent}</think>\n\n${responseContent}`
-          : responseContent;
-        setMessages((prev) => 
-          prev.map((m) => m.id === assistantId ? { ...m, content: finalContent, thinkingDuration } : m)
-        );
+        const finalContent = thinkingContent ? `<think>${thinkingContent}</think>\n\n${responseContent}` : responseContent;
+        setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: finalContent, thinkingDuration } : m));
       }
     } catch (error) {
       console.error('AI Pane API error:', error);
@@ -378,8 +574,18 @@ export function AIPane() {
 
   if (!mounted || !contextPanelOpen) return null;
 
+  const contextFile = isCodeSection ? fsActiveFile : activeFile;
+
   return (
     <aside className="flex h-full w-80 flex-col border-l border-border/50 bg-background">
+      {/* Active file context pill */}
+      {contextFile && (
+        <div className="flex items-center gap-1.5 border-b bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+          <FileCode size={10} className="flex-shrink-0" />
+          <span className="flex-1 truncate font-mono">{contextFile.split('/').pop()}</span>
+          <span className="flex-shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">in context</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b px-3">
         <div className="flex items-center gap-1">
@@ -475,6 +681,11 @@ export function AIPane() {
         )}
       </div>
 
+      {/* Suggestions — shown when opencode is selected and chat is empty */}
+      {isOpencode && messages.length === 0 && (
+        <CodeSuggestions onSuggest={(text) => { setInput(text); setTimeout(() => inputRef.current?.focus(), 50); }} />
+      )}
+
       {/* Input area */}
       <div className="border-t p-3">
         <form onSubmit={handleSubmit}>
@@ -549,7 +760,7 @@ export function AIPane() {
                 )}
               </div>
 
-              {/* Agent selector (AI Pane has its own selection, defaults to SupervisorAgent) */}
+              {/* Agent selector */}
               <div ref={modelMenuRef} className="relative">
                 <button
                   type="button"
@@ -560,31 +771,48 @@ export function AIPane() {
                     showAgentMenu && 'bg-muted'
                   )}
                 >
-                  <span>{currentAgent?.name || 'SupervisorAgent'}</span>
+                  {isOpencode && <Terminal size={12} className="text-emerald-500" />}
+                  <span className={cn(isOpencode && 'text-emerald-600 dark:text-emerald-400 font-medium')}>
+                    {isOpencode ? 'opencode' : (currentAgent?.name || 'Agent')}
+                  </span>
                   <ChevronDown size={12} className="text-muted-foreground" />
                 </button>
-                
+
                 {showAgentMenu && (
-                  <div className="absolute bottom-full left-0 mb-1 w-48 rounded-lg border bg-background py-1 shadow-lg">
-                    <div className="px-3 py-1.5 text-xs text-muted-foreground">
-                      Select agent
-                    </div>
-                    {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
+                  <div className="absolute bottom-full left-0 mb-1 w-52 rounded-lg border bg-background py-1 shadow-lg">
+                    <div className="px-3 py-1.5 text-xs text-muted-foreground">Select agent</div>
+
+                    {/* opencode — always available, pinned at top */}
+                    <button
+                      type="button"
+                      onClick={() => { setPaneAgent(OPENCODE_AGENT_ID); setShowAgentMenu(false); }}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
+                        isOpencode && 'bg-muted'
+                      )}
+                    >
+                      <Terminal size={13} className="text-emerald-500 flex-shrink-0" />
+                      <span className="flex-1 text-left">opencode</span>
+                      <span className="text-[10px] text-muted-foreground">coding agent</span>
+                      {isOpencode && <Check size={12} className="flex-shrink-0" />}
+                    </button>
+
+                    {/* Separator */}
+                    <div className="my-1 border-t border-border/50" />
+
+                    {/* Regular agents */}
+                    {agents.filter(a => a.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
                       <button
                         key={agent.id}
                         type="button"
-                        onClick={() => {
-                          setPaneAgent(agent.id);
-                          setShowAgentMenu(false);
-                        }}
+                        onClick={() => { setPaneAgent(agent.id); setShowAgentMenu(false); }}
                         className={cn(
-                          'flex w-full items-center gap-2 px-3 py-1.5 text-sm',
-                          'hover:bg-muted',
+                          'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
                           paneAgent === agent.id && 'bg-muted'
                         )}
                       >
                         <span className="flex-1 text-left">{agent.name}</span>
-                        {paneAgent === agent.id && <Check size={12} />}
+                        {paneAgent === agent.id && <Check size={12} className="flex-shrink-0" />}
                       </button>
                     ))}
                   </div>
@@ -612,6 +840,45 @@ export function AIPane() {
 
 function PaneMessage({ message }: { message: Message }) {
   const isUser = message.role === 'user';
+
+  // Opencode assistant message with tool activity
+  if (!isUser && message.isOpencode) {
+    const isStreaming = !message.content || message.content.endsWith('▌');
+    return (
+      <div className="mr-6 space-y-1.5">
+        {/* Tool events */}
+        {(message.toolEvents ?? []).length > 0 && (
+          <div className="space-y-0.5">
+            {(message.toolEvents ?? []).map((ev) => (
+              <ToolEventCard key={ev.callId} event={ev} />
+            ))}
+          </div>
+        )}
+        {/* Text response */}
+        {message.content ? (
+          <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
+            {isStreaming ? (
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
+              </span>
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            )}
+          </div>
+        ) : (message.toolEvents ?? []).length === 0 ? (
+          <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
+            </span>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   const [showThinking, setShowThinking] = useState(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
