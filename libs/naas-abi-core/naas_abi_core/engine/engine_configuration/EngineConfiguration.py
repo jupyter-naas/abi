@@ -214,6 +214,16 @@ class GlobalConfig(BaseModel):
     public_api_host: str = "localhost:9879"
 
 
+# Process-wide cache of the parsed configuration. Without this, every
+# caller (api.py at import, Engine.__init__, etc.) constructs a fresh
+# Pydantic tree, so runtime mutations (e.g. CORS env injection in api.py)
+# only affect one branch and quietly fail to propagate to
+# `engine.api_configuration.cors_origins` consumers (Nexus middleware,
+# Socket.IO). Module-level rather than a class attr so pydantic doesn't
+# claim it as a private model field.
+_cached_configuration: "EngineConfiguration | None" = None
+
+
 class EngineConfiguration(BaseModel):
     api: ApiConfiguration
 
@@ -377,12 +387,22 @@ class EngineConfiguration(BaseModel):
         return cls(**data)
 
     @classmethod
+    def reset_configuration_cache(cls) -> None:
+        """Forget the cached configuration. Intended for tests."""
+        global _cached_configuration
+        _cached_configuration = None
+
+    @classmethod
     def load_configuration(
         cls, configuration_yaml: str | None = None
     ) -> "EngineConfiguration":
-        # This is useful for testing.
+        # Inline content is for tests — bypass and never cache.
         if configuration_yaml is not None:
             return cls.from_yaml_content(configuration_yaml)
+
+        global _cached_configuration
+        if _cached_configuration is not None:
+            return _cached_configuration
 
         env = os.getenv("ENV")
         if not env and os.path.exists("config.yaml"):
@@ -410,7 +430,9 @@ class EngineConfiguration(BaseModel):
 
         logger.debug(f"Loading configuration from {config_file}")
 
-        return cls.from_yaml(config_file)
+        loaded = cls.from_yaml(config_file)
+        _cached_configuration = loaded
+        return loaded
 
 
 if __name__ == "__main__":

@@ -240,11 +240,18 @@ def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env["ABI_HOST"] = env.get("ABI_HOST", "127.0.0.1")
     # Point the triple-store adapter at the worktree-local oxigraph server.
     env["OXIGRAPH_URL"] = _oxigraph_url(ports)
-    nexus_url = f"http://127.0.0.1:{ports['nexus-web']}"
+    # Browsers treat 127.0.0.1 and localhost as distinct origins for CORS;
+    # we don't know which one the user opened, so allow both.
+    nexus_port = ports["nexus-web"]
+    nexus_origins = [
+        f"http://127.0.0.1:{nexus_port}",
+        f"http://localhost:{nexus_port}",
+    ]
     extra = env.get("ABI_CORS_EXTRA_ORIGINS", "")
     extra_list = [o for o in extra.split(",") if o.strip()]
-    if nexus_url not in extra_list:
-        extra_list.append(nexus_url)
+    for origin in nexus_origins:
+        if origin not in extra_list:
+            extra_list.append(origin)
     env["ABI_CORS_EXTRA_ORIGINS"] = ",".join(extra_list)
     cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
     return _spawn(spec, cmd, _project_root(), env)
