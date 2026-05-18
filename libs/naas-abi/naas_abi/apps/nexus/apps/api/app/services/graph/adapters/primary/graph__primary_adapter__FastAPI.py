@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     get_graph_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
+    GraphAnalysis,
     GraphClear,
     GraphCreate,
     GraphData,
@@ -31,7 +32,10 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
+from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
+    GraphService,
+    _detect_rdf_format,
+)
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -298,6 +302,72 @@ async def export_graph(
             "Access-Control-Expose-Headers": "X-Triple-Count, Content-Disposition",
         },
     )
+
+
+@router.post("/analyze")
+async def analyze_graph_file(
+    workspace_id: str = Form(..., description="Workspace ID"),
+    file: UploadFile = File(..., description="RDF file to analyse (.ttl, .owl, .rdf, .nt, .n3)"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphAnalysis:
+    """Parse an uploaded RDF file and return triple counts broken down by OWL type category.
+
+    No data is persisted. The file is analysed in-memory only.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+    content = await file.read()
+    fmt = _detect_rdf_format(file.filename or "")
+    try:
+        analysis = await graph_service.analyze_graph_file(content=content, fmt=fmt)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}") from exc
+    return GraphAnalysis(
+        total_triples=analysis.total_triples,
+        total_subjects=analysis.total_subjects,
+        named_individuals_subjects=analysis.named_individuals_subjects,
+        named_individuals_triples=analysis.named_individuals_triples,
+        classes_subjects=analysis.classes_subjects,
+        classes_triples=analysis.classes_triples,
+        object_properties_subjects=analysis.object_properties_subjects,
+        object_properties_triples=analysis.object_properties_triples,
+        datatype_properties_subjects=analysis.datatype_properties_subjects,
+        datatype_properties_triples=analysis.datatype_properties_triples,
+        restrictions_subjects=analysis.restrictions_subjects,
+        restrictions_triples=analysis.restrictions_triples,
+        unknown_subjects=analysis.unknown_subjects,
+        unknown_triples=analysis.unknown_triples,
+    )
+
+
+@router.post("/import")
+async def import_graph_file(
+    workspace_id: str = Form(..., description="Workspace ID"),
+    graph_uri: str = Form(..., description="Target named graph URI"),
+    file: UploadFile = File(..., description="RDF file to import (.ttl, .owl, .rdf, .nt, .n3)"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, object]:
+    """Import OWL NamedIndividual triples from an uploaded RDF file into *graph_uri*.
+
+    Only triples whose subject is declared as ``owl:NamedIndividual`` are inserted.
+    Returns ``{"status": "imported", "count": N}`` where N is the number of triples inserted.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+    content = await file.read()
+    fmt = _detect_rdf_format(file.filename or "")
+    try:
+        count = await graph_service.import_individuals_to_graph(
+            workspace_id=workspace_id,
+            content=content,
+            fmt=fmt,
+            graph_uri=graph_uri,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to import file: {exc}") from exc
+    return {"status": "imported", "count": count}
 
 
 @router.get("/network/parents")

@@ -10,6 +10,7 @@ from typing import Any
 
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
+    GraphAnalysisData,
     GraphEdgeData,
     GraphInfoData,
     GraphNetworkData,
@@ -36,6 +37,38 @@ NEXUS_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/nexus")
 SCHEMA_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/schema")
 
 _PROTECTED_URIS = {SCHEMA_GRAPH_URI, NEXUS_GRAPH_URI}
+
+_OWL_TYPE_MAP: dict[str, str] = {
+    str(OWL.NamedIndividual): "named_individual",
+    str(OWL.Class): "class",
+    str(OWL.ObjectProperty): "object_property",
+    str(OWL.DatatypeProperty): "datatype_property",
+    str(OWL.Restriction): "restriction",
+}
+_TYPE_PRIORITY: dict[str, int] = {
+    "named_individual": 5,
+    "class": 4,
+    "object_property": 3,
+    "datatype_property": 3,
+    "restriction": 2,
+    "unknown": 0,
+}
+
+
+def _detect_rdf_format(filename: str) -> str:
+    fname = filename.lower()
+    if fname.endswith(".ttl"):
+        return "turtle"
+    if fname.endswith(".owl") or fname.endswith(".rdf"):
+        return "xml"
+    if fname.endswith(".nt"):
+        return "nt"
+    if fname.endswith(".n3"):
+        return "n3"
+    if fname.endswith(".jsonld") or fname.endswith(".json"):
+        return "json-ld"
+    return "turtle"
+
 
 _BFO_BUCKET_ROOTS_VALUES = " ".join(
     f"<http://purl.obolibrary.org/obo/{bfo_id}>"
@@ -764,6 +797,85 @@ class GraphService:
             offset += batch_size
 
         return g.serialize(format="turtle"), total_count
+
+    async def analyze_graph_file(
+        self,
+        content: bytes,
+        fmt: str,
+    ) -> GraphAnalysisData:
+        """Parse *content* as an RDF file and count subjects + triples per OWL type category.
+
+        Each subject is assigned to exactly one category based on its highest-priority
+        rdf:type (NamedIndividual > Class > Object/DatatypeProperty > Restriction > Unknown).
+        The sum of all per-category triple counts equals total_triples; likewise for subjects.
+        """
+        g = Graph()
+        g.parse(data=content, format=fmt)
+
+        # First pass: determine each subject's primary OWL category from rdf:type triples
+        subject_category: dict[str, str] = {}
+        for s, p, o in g:
+            if p == RDF.type:
+                s_str = str(s)
+                new_cat = _OWL_TYPE_MAP.get(str(o), "unknown")
+                current = subject_category.get(s_str, "unknown")
+                if _TYPE_PRIORITY.get(new_cat, 0) > _TYPE_PRIORITY.get(current, 0):
+                    subject_category[s_str] = new_cat
+
+        # Second pass: accumulate triples and collect unique subject sets per category
+        _cats = ("named_individual", "class", "object_property", "datatype_property", "restriction", "unknown")
+        triple_counts: dict[str, int] = dict.fromkeys(_cats, 0)
+        subject_sets: dict[str, set[str]] = {c: set() for c in _cats}
+
+        for s, _p, _o in g:
+            cat = subject_category.get(str(s), "unknown")
+            triple_counts[cat] += 1
+            subject_sets[cat].add(str(s))
+
+        return GraphAnalysisData(
+            total_triples=len(g),
+            total_subjects=sum(len(v) for v in subject_sets.values()),
+            named_individuals_subjects=len(subject_sets["named_individual"]),
+            named_individuals_triples=triple_counts["named_individual"],
+            classes_subjects=len(subject_sets["class"]),
+            classes_triples=triple_counts["class"],
+            object_properties_subjects=len(subject_sets["object_property"]),
+            object_properties_triples=triple_counts["object_property"],
+            datatype_properties_subjects=len(subject_sets["datatype_property"]),
+            datatype_properties_triples=triple_counts["datatype_property"],
+            restrictions_subjects=len(subject_sets["restriction"]),
+            restrictions_triples=triple_counts["restriction"],
+            unknown_subjects=len(subject_sets["unknown"]),
+            unknown_triples=triple_counts["unknown"],
+        )
+
+    async def import_individuals_to_graph(
+        self,
+        workspace_id: str,
+        content: bytes,
+        fmt: str,
+        graph_uri: str,
+    ) -> int:
+        """Parse *content* and insert all OWL NamedIndividual triples into *graph_uri*.
+
+        Returns the number of triples inserted.
+        """
+        g = Graph()
+        g.parse(data=content, format=fmt)
+
+        individual_subjects: set[URIRef] = set()
+        for s, p, o in g:
+            if p == RDF.type and o == OWL.NamedIndividual and isinstance(s, URIRef):
+                individual_subjects.add(s)
+
+        individual_graph = Graph()
+        for s, p, o in g:
+            if isinstance(s, URIRef) and s in individual_subjects:
+                individual_graph.add((s, p, o))
+
+        store = self._get_triple_store()
+        store.insert(individual_graph, graph_name=URIRef(graph_uri))
+        return len(individual_graph)
 
     async def get_network_parents(
         self,

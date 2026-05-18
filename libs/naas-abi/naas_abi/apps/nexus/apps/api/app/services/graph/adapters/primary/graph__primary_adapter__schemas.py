@@ -78,3 +78,20 @@ class GraphEdge(BaseModel):
 class GraphData(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+
+class GraphAnalysis(BaseModel):
+    total_triples: int
+    total_subjects: int
+    named_individuals_subjects: int
+    named_individuals_triples: int
+    classes_subjects: int
+    classes_triples: int
+    object_properties_subjects: int
+    object_properties_triples: int
+    datatype_properties_subjects: int
+    datatype_properties_triples: int
+    restrictions_subjects: int
+    restrictions_triples: int
+    unknown_subjects: int
+    unknown_triples: int
