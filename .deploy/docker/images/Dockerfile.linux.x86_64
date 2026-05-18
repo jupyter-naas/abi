@@ -42,7 +42,11 @@ RUN --mount=type=cache,target=/app/.cache/ chmod -R 777 /app/.cache/ && su abi /
 # Final stage
 FROM ubuntu:24.04
 
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/cache/apt/*
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # Create the same user in the final image
 RUN useradd -m -s /bin/bash -G sudo -u 1001 abi -d /app
