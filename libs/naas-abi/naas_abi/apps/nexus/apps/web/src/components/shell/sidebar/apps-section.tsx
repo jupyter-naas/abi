@@ -6,7 +6,7 @@ import {
   Info, KeyRound, Copy, Check, Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceStore, OpenAppModule } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 import { usePathname } from 'next/navigation';
@@ -36,7 +36,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   core:        'bg-workspace-accent/10 text-workspace-accent',
 };
 
-function ModuleIcon({ mod, size = 14 }: { mod: ModuleInfo; size?: number }) {
+function ModuleIcon({ mod, size = 14 }: { mod: Pick<ModuleInfo, 'logo_url' | 'name'>; size?: number }) {
   const [failed, setFailed] = useState(false);
   if (mod.logo_url && !failed) {
     return (
@@ -79,7 +79,7 @@ function CopyButton({ value, secret }: { value: string; secret?: boolean }) {
   );
 }
 
-function AppDetailView({ mod, basePath }: { mod: ModuleInfo; basePath: string }) {
+function AppDetailView({ mod, basePath }: { mod: OpenAppModule; basePath: string }) {
   const { setOpenAppModule } = useWorkspaceStore();
   return (
     <div className="flex flex-col h-full overflow-y-auto">
