@@ -145,6 +145,116 @@ abi/
 └── docker-compose.yml         # Local stack definition
 ```
 
+## Working on ABI (development)
+
+`abi dev` is a no-docker dev runtime for hacking on the project itself. It spawns API, Dagster, Nexus web, and a bundled Oxigraph SPARQL server as native processes, sharing one terminal. Parallel branches (git worktrees) get their own deterministic ports automatically — no collisions, no `docker compose` shuffling.
+
+### One-time setup
+
+```bash
+git clone https://github.com/jupyter-naas/abi.git
+cd abi
+
+# uv + Python toolchain (skip if you already have uv globally)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Node toolchain for the Nexus web app
+brew install pnpm        # or: npm install -g pnpm
+
+# Install all libs in editable mode
+uv sync
+
+# Install the CLI from this repo (editable, picks up your changes)
+uv tool install --editable libs/naas-abi-cli --force --upgrade
+```
+
+### Start the dev stack
+
+```bash
+abi dev up
+```
+
+You'll see a status table pinned at the bottom of the terminal with live health for each service:
+
+```
+oxigraph   http://127.0.0.1:7878   ● ready
+api        http://127.0.0.1:9879   ● ready
+dagster    http://127.0.0.1:11000  ● ready
+nexus-web  http://127.0.0.1:12000  ● ready
+
+Login: admin@example.com / admin
+```
+
+The default admin credentials (`admin@example.com` / `admin`) are written to `.env` on first boot and picked up by the Nexus seed.
+
+### Hotkeys
+
+While `abi dev up` is running:
+
+| Key | Action |
+|---|---|
+| `1` / `2` / `3` / `4` | Filter logs to one service (other services still log to files) |
+| `0` | Back to interleaved output |
+| `o` / `a` / `d` / `n` | Open Oxigraph / API / Dagster / Nexus web in the browser |
+| `r` | Restart the whole stack in place (no need to quit) |
+| `q` / `Ctrl+C` | Graceful stop (SIGTERM, 10s grace, then SIGKILL) |
+| `Q` | Force kill (SIGKILL immediately) |
+
+You can also detach with `abi dev up -d` and use `abi dev logs <service> -f`, `abi dev status`, `abi dev down`.
+
+### Reset / wipe state
+
+When the local DB or triple store gets into a weird state:
+
+```bash
+abi dev down
+abi dev nuke              # wipes storage/, .dagster/, .abi/dev/logs/, with prompt
+abi dev nuke -y --start   # nuke + immediate restart, no prompt
+abi dev nuke --reset-env  # also strip the seeded admin credentials from .env
+```
+
+`abi dev nuke` keeps `.env` and `node_modules` by default, and keeps the port allocation stable across nukes.
+
+### Parallel worktrees
+
+Each git worktree gets a deterministic per-path port offset, so you can run `abi dev up` in three branches at the same time without port conflicts:
+
+```bash
+git worktree add ../abi-feat-x feature-x
+cd ../abi-feat-x && abi dev up   # different ports automatically
+```
+
+If the deterministic port is busy (stale process, three-way collision), the CLI walks the service's 900-port window to find the next free one and persists it in `.abi/dev/instance.json`.
+
+### Dev vs production parity
+
+`abi dev up` swaps the heavy-weight services for file-based equivalents so it works without Docker:
+
+| Service | Production | Dev (`abi dev up`) |
+|---|---|---|
+| Nexus DB | PostgreSQL | SQLite (WAL) |
+| Triple store | Apache Jena Fuseki | Bundled Oxigraph HTTP server (`pyoxigraph`) |
+| Vector store | Qdrant server | SQLite + `sqlite-vec` extension |
+| Key-value | Redis | SQLite (WAL) |
+| Message bus | RabbitMQ | SQLite (WAL) |
+| Object storage | MinIO / S3 | Local filesystem (`storage/datastore/`) |
+| Email | SMTP | Filesystem (`storage/email/*.eml`) |
+
+All adapters are interface-compatible — `config.yaml` selects which one. For changes touching schema, concurrency, or filter semantics, also run `abi start` (the full docker stack) before opening a PR.
+
+### Logs
+
+Live, written to disk regardless of foreground/background mode:
+
+```
+.abi/dev/logs/api.log
+.abi/dev/logs/dagster.log
+.abi/dev/logs/nexus-web.log
+.abi/dev/logs/oxigraph.log
+```
+
+`abi dev logs <service> -f` follows one of them.
+
 ## Production Deployment
 
 ### Self-Hosted

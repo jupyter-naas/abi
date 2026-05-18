@@ -46,7 +46,6 @@ modules:
         # A: Use Docker service hostnames -- they only resolve inside the Docker network.
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
-        redis_url: "redis://redis:6379/0"
 
         # Q: What URL namespace should the knowledge graph use?
         # A: Every entity and relationship in the graph is prefixed with this URI.

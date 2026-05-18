@@ -301,9 +301,6 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only
 
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
-
     # Authentication
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
