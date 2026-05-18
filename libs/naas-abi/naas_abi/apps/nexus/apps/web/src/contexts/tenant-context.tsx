@@ -14,6 +14,9 @@ interface TenantConfig {
   tab_title: string;
   favicon_url: string | null;
   logo_url?: string | null;
+  og_title?: string | null;
+  og_description?: string | null;
+  og_image_url?: string | null;
   logo_rectangle_url?: string | null;
   logo_emoji?: string | null;
   primary_color: string;
@@ -38,6 +41,9 @@ const DEFAULT_TENANT: TenantConfig = {
   tab_title: 'ABI Nexus | naas.ai',
   favicon_url: null,
   logo_url: null,
+  og_title: null,
+  og_description: null,
+  og_image_url: null,
   logo_rectangle_url: null,
   logo_emoji: null,
   primary_color: '#34D399',

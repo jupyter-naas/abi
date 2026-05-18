@@ -104,6 +104,8 @@ services:
       - NEXT_PUBLIC_NEXUS_ENV=local
       - NEXUS_API_URL=${NEXUS_API_URL}
       - NEXT_PUBLIC_API_URL=${NEXUS_API_URL}
+      - NEXUS_INTERNAL_API_URL=http://abi:9879
+      - NEXT_PUBLIC_SITE_URL=https://${PUBLIC_WEB_HOST}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
     networks:
       - abi-network
