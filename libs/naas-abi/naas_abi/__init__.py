@@ -435,6 +435,11 @@ class ABIModule(BaseModule):
         app.state.secret_service = self.engine.services.secret
         # Expose ABI triple store to Nexus graph routes.
         app.state.triple_store = self.engine.services.triple_store
+        # Expose the configured email adapter so Nexus magic-link sends use
+        # whichever transport the engine config picked (e.g. `filesystem`
+        # in dev, `smtp` in prod) instead of always constructing an SMTP
+        # client inline.
+        app.state.email_service = self.engine.services.email
 
         from naas_abi.apps.nexus.apps.api.app.main import create_app
 
