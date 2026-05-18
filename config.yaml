@@ -118,11 +118,15 @@ services:
         oxigraph_url: "http://127.0.0.1:7878"
         timeout: 60
   vector_store:
+    # File-backed SQLite + sqlite-vec store. Multi-process safe via WAL,
+    # so api and dagster can share it without a server. For prod, switch
+    # to the "qdrant" HTTP adapter (see config.local.yaml / config.remote.yaml).
     vector_store_adapter:
-      adapter: "qdrant_in_memory"
+      adapter: "sqlite_vec"
       config:
-        storage_path: "storage/vectorstore/qdrant"
-        timeout: 300
+        persistence_path: "storage/vectorstore/vectors.sqlite3"
+        journal_mode: "WAL"
+        busy_timeout_ms: 5000
   bus:
     bus_adapter:
       adapter: "python_queue"
