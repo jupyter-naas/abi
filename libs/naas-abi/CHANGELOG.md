@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.55.1 (2026-05-18)
+
+### Bug Fixes
+
+- **nexus**: System drive shows full object storage root
+  ([`d3a03f9`](https://github.com/jupyter-naas/abi/commit/d3a03f9a7de1ed92dd0606ac1606d23c13e76662))
+
+
 ## v1.55.0 (2026-05-18)
 
 ### Bug Fixes

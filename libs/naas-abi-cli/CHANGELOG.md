@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.40.0 (2026-05-18)
+
+### Features
+
+- **cli**: Add --modules flag to `abi config validate`
+  ([`8633114`](https://github.com/jupyter-naas/abi/commit/86331146e210343d6eb33198b6a4d168f28af518))
+
+
 ## v1.39.1 (2026-05-18)
 
 ### Bug Fixes
