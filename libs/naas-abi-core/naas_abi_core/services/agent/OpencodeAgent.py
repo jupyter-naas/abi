@@ -64,6 +64,7 @@ class OpencodeAgentConfiguration:
     opencode_bin: str = "opencode"
     startup_timeout: int = 15
     request_timeout: float | None = None
+    host: str = "127.0.0.1"  # override to host.docker.internal when API runs in Docker
 
 
 class OpencodeCompletionQuery(BaseModel):
@@ -129,7 +130,7 @@ class OpencodeAgent(Expose):
     def _base_url(self) -> str:
         if self.conf.port is None:
             raise OpencodeStartupError("opencode port is not initialized")
-        return f"http://127.0.0.1:{self.conf.port}"
+        return f"http://{self.conf.host}:{self.conf.port}"
 
     @property
     def _health_url(self) -> str:
@@ -145,6 +146,21 @@ class OpencodeAgent(Expose):
 
         if self.conf.port is None:
             raise OpencodeStartupError("opencode port is not initialized")
+
+        # When connecting to a remote host (e.g. host.docker.internal from Docker),
+        # we cannot spawn a local process — just verify the remote is reachable.
+        if self.conf.host != "127.0.0.1":
+            try:
+                response = httpx.get(self._health_url, timeout=2.0)
+                if self._is_healthy(response):
+                    return
+            except Exception:
+                pass
+            raise OpencodeStartupError(
+                f"opencode is not reachable at {self._base_url}. "
+                "Start it on the host with: opencode serve --port "
+                f"{self.conf.port}"
+            )
 
         if not self._is_port_available(self.conf.port):
             try:
@@ -596,8 +612,18 @@ class OpencodeAgent(Expose):
                         if (
                             event.get("type") == "session.idle"
                             and properties.get("sessionID") == session_id
-                            and prompt_task.done()
                         ):
+                            # Wait for the prompt HTTP response if it hasn't
+                            # arrived yet. Without this, session.idle can fire
+                            # before prompt_task.done() is true, causing the
+                            # stream to never break.
+                            if not prompt_task.done():
+                                with contextlib.suppress(
+                                    asyncio.TimeoutError, Exception
+                                ):
+                                    await asyncio.wait_for(
+                                        asyncio.shield(prompt_task), timeout=3.0
+                                    )
                             break
 
                 payload = await prompt_task
