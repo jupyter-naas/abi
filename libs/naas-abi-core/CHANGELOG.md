@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.38.0 (2026-05-18)
+
+### Features
+
+- **TemplatableSparqlQueryLoader**: Add graph_name parameter to support custom graph querying
+  ([`4b9db29`](https://github.com/jupyter-naas/abi/commit/4b9db29d39f1d1d33740d74924724729a6ab905f))
+
+
 ## v1.37.1 (2026-05-15)
 
 ### Bug Fixes
