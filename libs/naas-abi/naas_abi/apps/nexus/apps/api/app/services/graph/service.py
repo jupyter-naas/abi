@@ -452,7 +452,11 @@ def _build_graph_overview(
     }}
     """
     count_rows = list(triple_store.query(count_query))
-    total_instances = int(count_rows[0].total) if count_rows else len(nodes)  # type: ignore[attr-defined]
+    total_instances = (
+        int(count_rows[0].total)
+        if count_rows and isinstance(count_rows[0], ResultRow)
+        else len(nodes)
+    )
 
     kpis: dict[str, Any] = {
         "total_instances": total_instances,
