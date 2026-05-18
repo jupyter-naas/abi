@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v1.38.0 (2026-05-18)
+
+### Bug Fixes
+
+- **cors**: Share one ApiConfiguration across api + Nexus + Socket.IO
+  ([`8d59cca`](https://github.com/jupyter-naas/abi/commit/8d59cca81d1369e4f943a7b91cb448c71007b362))
+
+### Chores
+
+- Bump versions in uv.lock files for naas-abi and naas-abi-core to 1.53.1 and 1.40.0 respectively
+  ([`24fb100`](https://github.com/jupyter-naas/abi/commit/24fb100f3659f285e4d1d7aec02eddbfa93073f7))
+
+- **deps**: Refresh naas-abi-cli uv.lock for aiosqlite
+  ([`0fc7c91`](https://github.com/jupyter-naas/abi/commit/0fc7c9113e6580f80e6103b5940f2cf97a0d67fb))
+
+### Features
+
+- **dev**: `r` hotkey to restart the stack without leaving `abi dev up`
+  ([`f7ff5ba`](https://github.com/jupyter-naas/abi/commit/f7ff5ba170926322008deec5436f046e84de9659))
+
+- **dev**: Bundled oxigraph HTTP server for concurrent triple-store access
+  ([`e8a5d3d`](https://github.com/jupyter-naas/abi/commit/e8a5d3dc37c3c39cf571fd2b03e715ae32f264e8))
+
+- **dev**: Dockerless dev mode via `abi dev` + SQLite Nexus
+  ([`7f42bff`](https://github.com/jupyter-naas/abi/commit/7f42bffcf8dc2be1455e53c0d763389bdf72142a))
+
+- **dev**: Seed a default admin user in the dockerless config
+  ([`f7eeb3b`](https://github.com/jupyter-naas/abi/commit/f7eeb3bdb28f4f29274dee8556e5c5073bb13e6d))
+
+- **vector-store**: SQLite + sqlite-vec adapter for dev
+  ([`eb6b571`](https://github.com/jupyter-naas/abi/commit/eb6b5716b6f041b7f97258efb6b1a63e5158985c))
+
+
 ## v1.37.0 (2026-05-18)
 
 ### Features
