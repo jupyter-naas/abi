@@ -5,6 +5,8 @@ import {
   FileCode, Plus, Terminal, X, Save, GripHorizontal,
   Code, Eye, Columns2,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { useFilesStore } from '@/stores/files';
 import { useCodeStore } from '@/stores/code';
@@ -28,7 +30,7 @@ function getLanguage(filename: string): string {
   return map[ext || ''] || 'plaintext';
 }
 
-// ─── HTML preview ─────────────────────────────────────────────────────────────
+// ─── Previews ─────────────────────────────────────────────────────────────────
 
 type ViewMode = 'code' | 'preview' | 'split';
 
@@ -48,6 +50,30 @@ function HtmlPreview({ content }: { content: string }) {
       sandbox="allow-scripts allow-same-origin"
       title="HTML preview"
     />
+  );
+}
+
+function MarkdownPreview({ content }: { content: string }) {
+  return (
+    <div className="h-full w-full overflow-auto bg-background px-8 py-6">
+      <article className="prose prose-sm dark:prose-invert max-w-3xl mx-auto
+        [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-4 [&_h1]:mt-0
+        [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-3 [&_h2]:mt-6
+        [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4
+        [&_p]:leading-relaxed [&_p]:mb-3
+        [&_ul]:mb-3 [&_ol]:mb-3 [&_li]:mb-1
+        [&_blockquote]:border-l-4 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground
+        [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono
+        [&_pre]:bg-muted [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:overflow-x-auto
+        [&_pre_code]:bg-transparent [&_pre_code]:p-0
+        [&_table]:w-full [&_table]:border-collapse
+        [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-sm
+        [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-1.5 [&_td]:text-sm
+        [&_hr]:border-border [&_hr]:my-6
+        [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      </article>
+    </div>
   );
 }
 
@@ -266,13 +292,16 @@ export default function CodePage() {
   const activeContent = fsActiveFile ? fsFileContents[fsActiveFile] : undefined;
   const hasUnsaved = fsActiveFile ? fsUnsavedChanges[fsActiveFile] : false;
   const language = fsActiveFile ? getLanguage(fsActiveFile) : 'plaintext';
-  const isHtml = fsActiveFile?.toLowerCase().endsWith('.html') ?? false;
+  const ext = fsActiveFile?.split('.').pop()?.toLowerCase() ?? '';
+  const isHtml = ext === 'html' || ext === 'htm';
+  const isMarkdown = ext === 'md' || ext === 'mdx';
+  const hasPreview = isHtml || isMarkdown;
 
-  // Auto-switch to split when opening an HTML file
+  // Auto-switch to split when opening a previewable file
   useEffect(() => {
-    if (isHtml) setViewMode('split');
+    if (hasPreview) setViewMode('split');
     else setViewMode('code');
-  }, [isHtml]);
+  }, [hasPreview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-open the AI pane when entering Code
   useEffect(() => {
@@ -335,8 +364,8 @@ export default function CodePage() {
             );
           })}
 
-          {/* View mode toggle — only for HTML files */}
-          {isHtml && fsActiveFile && (
+          {/* View mode toggle — for HTML and Markdown files */}
+          {hasPreview && fsActiveFile && (
             <div className="ml-2 flex items-center gap-0.5 rounded-md border border-border/60 bg-background p-0.5">
               {([['code', Code, 'Code'], ['split', Columns2, 'Split'], ['preview', Eye, 'Preview']] as const).map(([mode, Icon, label]) => (
                 <button key={mode} onClick={() => setViewMode(mode)}
@@ -410,9 +439,12 @@ export default function CodePage() {
                 )}
 
                 {/* Preview — shown in preview or split mode */}
-                {isHtml && viewMode !== 'code' && (
-                  <div className={cn('overflow-hidden bg-white', viewMode === 'split' ? 'w-1/2' : 'flex-1')}>
-                    <HtmlPreview content={activeContent} />
+                {hasPreview && viewMode !== 'code' && (
+                  <div className={cn('overflow-hidden', viewMode === 'split' ? 'w-1/2' : 'flex-1', isHtml ? 'bg-white' : 'bg-background')}>
+                    {isHtml
+                      ? <HtmlPreview content={activeContent} />
+                      : <MarkdownPreview content={activeContent} />
+                    }
                   </div>
                 )}
               </div>
