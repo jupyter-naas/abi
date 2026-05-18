@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v1.41.0 (2026-05-18)
+
+### Bug Fixes
+
+- **cors**: Share one ApiConfiguration across api + Nexus + Socket.IO
+  ([`8d59cca`](https://github.com/jupyter-naas/abi/commit/8d59cca81d1369e4f943a7b91cb448c71007b362))
+
+- **dev**: Accept GET /query and form-encoded /query|/update in oxigraph server
+  ([`0777bc8`](https://github.com/jupyter-naas/abi/commit/0777bc8b22d89c11419787e6ce06d63f2708d1a8))
+
+### Features
+
+- **dev**: Bundled oxigraph HTTP server for concurrent triple-store access
+  ([`e8a5d3d`](https://github.com/jupyter-naas/abi/commit/e8a5d3dc37c3c39cf571fd2b03e715ae32f264e8))
+
+- **dev**: Dockerless dev mode via `abi dev` + SQLite Nexus
+  ([`7f42bff`](https://github.com/jupyter-naas/abi/commit/7f42bffcf8dc2be1455e53c0d763389bdf72142a))
+
+- **vector-store**: SQLite + sqlite-vec adapter for dev
+  ([`eb6b571`](https://github.com/jupyter-naas/abi/commit/eb6b5716b6f041b7f97258efb6b1a63e5158985c))
+
+
 ## v1.40.2 (2026-05-18)
 
 ### Bug Fixes
