@@ -83,20 +83,11 @@ def create_app(store_path: str) -> FastAPI:
     # ------------------------------------------------------------------
     # SPARQL query (SELECT/CONSTRUCT/ASK/DESCRIBE)
     # ------------------------------------------------------------------
-    @app.post("/query")
-    async def query(request: Request) -> Response:
-        body = (await request.body()).decode("utf-8")
-        if not body:
-            # Some clients pass the query as a URL-encoded form param.
-            form = await request.form()
-            raw = form.get("query")
-            body = raw.strip() if isinstance(raw, str) else ""
-        if not body:
+    async def _run_query(query_str: str, accept: str) -> Response:
+        if not query_str:
             raise HTTPException(status_code=400, detail="empty SPARQL query")
-
-        accept = request.headers.get("accept", "")
         try:
-            result = store.query(body)
+            result = store.query(query_str)
         except SyntaxError as exc:
             raise HTTPException(status_code=400, detail=f"SPARQL syntax: {exc}")
         except Exception as exc:  # pragma: no cover - bubble unexpected
@@ -113,12 +104,43 @@ def create_app(store_path: str) -> FastAPI:
             payload = result.serialize(format=res_fmt)
         return Response(content=payload, media_type=media)
 
+    @app.get("/query")
+    async def query_get(request: Request) -> Response:
+        """SPARQL 1.1 protocol: GET /query?query=...  (URL-encoded)."""
+        query_str = (request.query_params.get("query") or "").strip()
+        accept = request.headers.get("accept", "")
+        return await _run_query(query_str, accept)
+
+    @app.post("/query")
+    async def query_post(request: Request) -> Response:
+        """SPARQL 1.1 protocol: POST /query.
+
+        Accepts either ``application/sparql-query`` with the query in the
+        raw body, or ``application/x-www-form-urlencoded`` with
+        ``query=...``.
+        """
+        content_type = request.headers.get("content-type", "")
+        if "application/x-www-form-urlencoded" in content_type:
+            form = await request.form()
+            raw = form.get("query")
+            query_str = raw.strip() if isinstance(raw, str) else ""
+        else:
+            query_str = (await request.body()).decode("utf-8").strip()
+        accept = request.headers.get("accept", "")
+        return await _run_query(query_str, accept)
+
     # ------------------------------------------------------------------
     # SPARQL update (INSERT/DELETE/CREATE/DROP/...)
     # ------------------------------------------------------------------
     @app.post("/update")
     async def update(request: Request) -> Response:
-        body = (await request.body()).decode("utf-8")
+        content_type = request.headers.get("content-type", "")
+        if "application/x-www-form-urlencoded" in content_type:
+            form = await request.form()
+            raw = form.get("update")
+            body = raw.strip() if isinstance(raw, str) else ""
+        else:
+            body = (await request.body()).decode("utf-8").strip()
         if not body:
             raise HTTPException(status_code=400, detail="empty SPARQL update")
         try:
