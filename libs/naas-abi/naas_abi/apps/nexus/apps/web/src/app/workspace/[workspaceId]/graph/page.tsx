@@ -7,6 +7,7 @@ import { Header } from '@/components/shell/header';
 import {
   Database,
   Download,
+  Upload,
   Filter,
   Search,
   Eye,
@@ -31,6 +32,9 @@ import {
   Users,
   Hash,
   ChevronRight,
+  FileUp,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -149,7 +153,24 @@ function isSystemGraph(option: GraphOption): boolean {
 const isGraphViewType = (value: string): value is GraphViewType =>
   GRAPH_VIEW_TYPES.some((view) => view.id === value);
 
-type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'create-graph' | 'sparql';
+type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'create-graph' | 'sparql' | 'import';
+
+type GraphImportAnalysis = {
+  total_triples: number;
+  total_subjects: number;
+  named_individuals_subjects: number;
+  named_individuals_triples: number;
+  classes_subjects: number;
+  classes_triples: number;
+  object_properties_subjects: number;
+  object_properties_triples: number;
+  datatype_properties_subjects: number;
+  datatype_properties_triples: number;
+  restrictions_subjects: number;
+  restrictions_triples: number;
+  unknown_subjects: number;
+  unknown_triples: number;
+};
 
 interface OntologyClassOption {
   id: string;
@@ -640,6 +661,12 @@ export default function GraphPage() {
   const [exporting, setExporting] = useState(false);
   const [exportMessages, setExportMessages] = useState<string[]>([]);
   const [showExportLog, setShowExportLog] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importAnalysis, setImportAnalysis] = useState<GraphImportAnalysis | null>(null);
+  const [importAnalyzing, setImportAnalyzing] = useState(false);
+  const [importingFile, setImportingFile] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   const loadRequestIdRef = useRef(0);
   const overviewRequestIdRef = useRef(0);
   const viewFilterOptionsRequestIdRef = useRef(0);
@@ -851,6 +878,7 @@ export default function GraphPage() {
 
       const fetchedTotal: number | null = overviewData?.kpis?.total_instances ?? null;
       setTotalNodeCount(fetchedTotal);
+      if (overviewData) setOverview(overviewData as ApiOverview);
       setNodes(uniqueNodes);
       setEdges(uniqueEdges);
       setLoadedGraphKey(graphKey);
@@ -1887,6 +1915,69 @@ export default function GraphPage() {
     setZoomLevel(Math.max(0.1, Math.min(3, level)));
   }, []);
 
+  const closeImportForm = () => {
+    setPageMode('graph');
+    setImportFile(null);
+    setImportAnalysis(null);
+    setImportError(null);
+  };
+
+  const analyzeFile = async (file: File) => {
+    setImportAnalyzing(true);
+    setImportError(null);
+    setImportAnalysis(null);
+    try {
+      const formData = new FormData();
+      formData.append('workspace_id', workspaceId);
+      formData.append('file', file);
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/graph/analyze`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Analysis failed: ${response.status}`);
+      }
+      const data: GraphImportAnalysis = await response.json();
+      setImportAnalysis(data);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Analysis failed');
+    } finally {
+      setImportAnalyzing(false);
+    }
+  };
+
+  const handleImportIndividuals = async () => {
+    if (!importFile || !selectedGraphId || importingFile) return;
+    const uri = graphOptions.find((g) => g.id === selectedGraphId)?.uri ?? '';
+    if (!uri) return;
+    setImportingFile(true);
+    setImportError(null);
+    try {
+      const formData = new FormData();
+      formData.append('workspace_id', workspaceId);
+      formData.append('graph_uri', uri);
+      formData.append('file', importFile);
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/graph/import`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Import failed: ${response.status}`);
+      }
+      clearGraphPageCaches();
+      await loadFromApi({ force: true });
+      closeImportForm();
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Import failed');
+    } finally {
+      setImportingFile(false);
+    }
+  };
+
   const handleExportGraph = async () => {
     const uri = graphOptions.find((g) => g.id === selectedGraphId)?.uri ?? '';
     if (!uri || exporting) return;
@@ -1972,7 +2063,25 @@ export default function GraphPage() {
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportFile(null);
+                      setImportAnalysis(null);
+                      setImportError(null);
+                      setPageMode('import');
+                    }}
+                    disabled={!selectedGraphId}
+                    className={cn(
+                      'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+                      !selectedGraphId && 'cursor-not-allowed opacity-50'
+                    )}
+                    title={!selectedGraphId ? 'Select a graph to import into' : 'Import RDF file into graph'}
+                  >
+                    <Upload size={14} />
+                    Import
+                  </button>
                   <button
                     type="button"
                     onClick={handleExportGraph}
@@ -1992,6 +2101,11 @@ export default function GraphPage() {
                   </button>
                 </div>
               </>
+            ) : pageMode === 'import' ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Upload size={14} />
+                Import Graph
+              </div>
             ) : pageMode === 'sparql' ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Code size={14} />
@@ -2017,6 +2131,168 @@ export default function GraphPage() {
 
           {/* Content based on view type */}
           <div className="flex flex-1 overflow-hidden">
+            {pageMode === 'import' && (
+              <div className="flex flex-1 flex-col overflow-y-auto bg-card p-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  {/* Header */}
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <FileUp size={24} className="text-workspace-accent" />
+                      <div>
+                        <h2 className="text-lg font-semibold">Import Graph</h2>
+                        <p className="text-sm text-muted-foreground">
+                          Target: <span className="font-medium text-foreground">{graphOptions.find((g) => g.id === selectedGraphId)?.label ?? selectedGraphId}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeImportForm}
+                      className="rounded p-2 text-muted-foreground hover:bg-muted"
+                      title="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* File picker */}
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Select file</label>
+                      <div
+                        className={cn(
+                          'flex cursor-pointer items-center gap-3 rounded-lg border bg-background px-4 py-2.5 text-sm hover:bg-muted/50',
+                          importFile && 'border-workspace-accent/50'
+                        )}
+                        onClick={() => importFileInputRef.current?.click()}
+                      >
+                        {importAnalyzing ? (
+                          <Loader2 size={16} className="shrink-0 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Upload size={16} className="shrink-0 text-muted-foreground" />
+                        )}
+                        <span className={cn('truncate', importFile ? 'text-foreground' : 'text-muted-foreground')}>
+                          {importAnalyzing
+                            ? 'Analysing…'
+                            : importFile
+                            ? importFile.name
+                            : 'Choose a file…'}
+                        </span>
+                        {importFile && !importAnalyzing && (
+                          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                            {(importFile.size / 1024).toFixed(1)} KB
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        ref={importFileInputRef}
+                        type="file"
+                        accept=".ttl,.owl,.rdf,.nt,.n3,.jsonld"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          setImportFile(f);
+                          setImportAnalysis(null);
+                          setImportError(null);
+                          if (f) void analyzeFile(f);
+                        }}
+                      />
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        Supported: .ttl (Turtle), .owl / .rdf (OWL XML), .nt (N-Triples), .n3
+                      </p>
+                    </div>
+
+                    {/* Error */}
+                    {importError && (
+                      <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                        {importError}
+                      </div>
+                    )}
+
+                    {/* Analysis results */}
+                    {importAnalysis && (
+                      <div className="space-y-4">
+                        <div className="rounded-lg border bg-muted/30 p-4">
+                          <div className="mb-3 flex items-center gap-2">
+                            <CheckCircle2 size={16} className="text-green-500" />
+                            <p className="text-sm font-semibold">Analysis complete</p>
+                          </div>
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="pb-2 text-left text-xs font-medium text-muted-foreground" />
+                                <th className="pb-2 text-right text-xs font-medium text-muted-foreground">Subjects</th>
+                                <th className="pb-2 text-right text-xs font-medium text-muted-foreground">Triples</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b font-medium">
+                                <td className="py-2">Total</td>
+                                <td className="py-2 text-right font-mono">
+                                  {importAnalysis.total_subjects.toLocaleString()}
+                                </td>
+                                <td className="py-2 text-right font-mono">
+                                  {importAnalysis.total_triples.toLocaleString()}
+                                </td>
+                              </tr>
+                              {([
+                                { label: 'OWL Named Individuals', s: importAnalysis.named_individuals_subjects, t: importAnalysis.named_individuals_triples, highlight: true },
+                                { label: 'OWL Classes',           s: importAnalysis.classes_subjects,           t: importAnalysis.classes_triples,           highlight: false },
+                                { label: 'OWL Object Properties', s: importAnalysis.object_properties_subjects, t: importAnalysis.object_properties_triples, highlight: false },
+                                { label: 'OWL Datatype Properties',s: importAnalysis.datatype_properties_subjects,t: importAnalysis.datatype_properties_triples,highlight: false },
+                                { label: 'OWL Restrictions',      s: importAnalysis.restrictions_subjects,      t: importAnalysis.restrictions_triples,      highlight: false },
+                                { label: 'Unknown',               s: importAnalysis.unknown_subjects,           t: importAnalysis.unknown_triples,           highlight: false },
+                              ] as const).map(({ label, s, t, highlight }) => (
+                                <tr key={label} className="border-b last:border-0">
+                                  <td className={cn('py-1.5 pl-3 text-muted-foreground', highlight && 'font-medium text-foreground')}>
+                                    {label}
+                                  </td>
+                                  <td className={cn('py-1.5 text-right font-mono', highlight && 'font-semibold text-workspace-accent')}>
+                                    {s.toLocaleString()}
+                                  </td>
+                                  <td className={cn('py-1.5 text-right font-mono', highlight && 'font-semibold text-workspace-accent')}>
+                                    {t.toLocaleString()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Import action */}
+                        <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
+                          <p className="text-sm text-muted-foreground">
+                            {importAnalysis.named_individuals_subjects === 0
+                              ? 'No OWL Named Individuals found in this file.'
+                              : `Ready to add ${importAnalysis.named_individuals_triples.toLocaleString()} triples (${importAnalysis.named_individuals_subjects.toLocaleString()} individuals) to "${graphOptions.find((g) => g.id === selectedGraphId)?.label ?? selectedGraphId}".`}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleImportIndividuals}
+                            disabled={importAnalysis.named_individuals_subjects === 0 || importingFile}
+                            className={cn(
+                              'ml-4 flex shrink-0 items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                              'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                            )}
+                          >
+                            {importingFile ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <FileUp size={16} />
+                            )}
+                            {importingFile
+                              ? 'Importing…'
+                              : `Import ${importAnalysis.named_individuals_subjects.toLocaleString()} Named Individuals`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {pageMode === 'create-individual' && (
               <div className="flex flex-1 flex-col overflow-y-auto bg-card p-6">
                 <div className="mx-auto w-full max-w-2xl">
@@ -2572,24 +2848,81 @@ export default function GraphPage() {
                     </div>
                   </div>
                 ) : nodes.length === 0 ? (
-                  <div className="flex h-full items-center justify-center">
-                    <div className="text-center">
+                  <div className="flex h-full overflow-y-auto">
+                    <div className="mx-auto w-full max-w-md p-8">
                       <div className="mb-4 flex justify-center">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white dark:bg-zinc-800 shadow-sm">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
                           <Network size={32} className="text-muted-foreground" />
                         </div>
                       </div>
-                      <h2 className="mb-2 text-lg font-semibold">No Nodes in Graph</h2>
-                      <p className="mb-4 max-w-md text-muted-foreground">
-                        This workspace has no graph nodes yet. Seed the database:
+                      <h2 className="mb-2 text-center text-lg font-semibold">No individuals found in graph</h2>
+                      <p className="mb-6 text-center text-sm text-muted-foreground">
+                        The selected graph contains no OWL Named Individuals.
                       </p>
-                      <code className="rounded bg-muted px-3 py-2 text-sm">
-                        cd apps/api && python seed.py --reset
-                      </code>
-                      <div className="mt-4">
+
+                      {/* Stats by rdf:type */}
+                      {overview && (
+                        <div className="mb-6 rounded-lg border bg-card p-4">
+                          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Graph statistics
+                          </p>
+                          <div className="mb-4 grid grid-cols-2 gap-3">
+                            <div className="rounded-md bg-muted/50 px-3 py-2">
+                              <p className="text-xs text-muted-foreground">Instances</p>
+                              <p className="text-lg font-semibold tabular-nums">
+                                {overview.kpis.total_instances.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="rounded-md bg-muted/50 px-3 py-2">
+                              <p className="text-xs text-muted-foreground">Relationships</p>
+                              <p className="text-lg font-semibold tabular-nums">
+                                {overview.kpis.total_relationships.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          {overview.instances_by_class.length > 0 ? (
+                            <div>
+                              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                                By rdf:type
+                              </p>
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="pb-1.5 text-left text-xs font-medium text-muted-foreground">
+                                      Type
+                                    </th>
+                                    <th className="pb-1.5 text-right text-xs font-medium text-muted-foreground">
+                                      Count
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {overview.instances_by_class.map(({ type, count }) => (
+                                    <tr key={type} className="border-b last:border-0">
+                                      <td
+                                        className="max-w-[220px] truncate py-1.5 text-muted-foreground"
+                                        title={type}
+                                      >
+                                        {type}
+                                      </td>
+                                      <td className="py-1.5 text-right font-mono font-medium tabular-nums">
+                                        {count.toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No type breakdown available.</p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex justify-center">
                         <button
                           onClick={() => void loadFromApi()}
-                          className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 mx-auto"
+                          className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
                         >
                           <RefreshCw size={16} />
                           Refresh
