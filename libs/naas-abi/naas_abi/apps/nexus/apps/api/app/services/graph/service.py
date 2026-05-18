@@ -4,12 +4,14 @@ import asyncio
 import hashlib
 import re
 import unicodedata
+import uuid
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
+    GraphAnalysisData,
     GraphEdgeData,
     GraphInfoData,
     GraphNetworkData,
@@ -23,7 +25,7 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from rdflib import OWL, RDF, RDFS, Graph, Literal, URIRef
+from rdflib import OWL, RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 from rdflib.query import ResultRow
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/graph")
@@ -35,6 +37,38 @@ NEXUS_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/nexus")
 SCHEMA_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/schema")
 
 _PROTECTED_URIS = {SCHEMA_GRAPH_URI, NEXUS_GRAPH_URI}
+
+_OWL_TYPE_MAP: dict[str, str] = {
+    str(OWL.NamedIndividual): "named_individual",
+    str(OWL.Class): "class",
+    str(OWL.ObjectProperty): "object_property",
+    str(OWL.DatatypeProperty): "datatype_property",
+    str(OWL.Restriction): "restriction",
+}
+_TYPE_PRIORITY: dict[str, int] = {
+    "named_individual": 5,
+    "class": 4,
+    "object_property": 3,
+    "datatype_property": 3,
+    "restriction": 2,
+    "unknown": 0,
+}
+
+
+def _detect_rdf_format(filename: str) -> str:
+    fname = filename.lower()
+    if fname.endswith(".ttl"):
+        return "turtle"
+    if fname.endswith(".owl") or fname.endswith(".rdf"):
+        return "xml"
+    if fname.endswith(".nt"):
+        return "nt"
+    if fname.endswith(".n3"):
+        return "n3"
+    if fname.endswith(".jsonld") or fname.endswith(".json"):
+        return "json-ld"
+    return "turtle"
+
 
 _BFO_BUCKET_ROOTS_VALUES = " ".join(
     f"<http://purl.obolibrary.org/obo/{bfo_id}>"
@@ -259,13 +293,13 @@ def _build_network_from_subject_graph(
     return GraphNetworkData(nodes=graph_nodes, edges=graph_edges)
 
 
-@_cache(
-    lambda triple_store, workspace_id, graph_names, graph_filters: (
-        f"list_individuals_{str(triple_store)}_{workspace_id}_{str(graph_names)}_{str(graph_filters)}"
-    ),
-    DataType.PICKLE,
-    ttl=timedelta(days=1),
-)
+# @_cache(
+#     lambda triple_store, workspace_id, graph_names, graph_filters: (
+#         f"list_individuals_{str(triple_store)}_{workspace_id}_{str(graph_names)}_{str(graph_filters)}"
+#     ),
+#     DataType.PICKLE,
+#     ttl=timedelta(days=1),
+# )
 def _list_individuals(
     triple_store: TripleStoreService,
     workspace_id: str,
@@ -430,7 +464,11 @@ def _build_graph_overview(
     }}
     """
     count_rows = list(triple_store.query(count_query))
-    total_instances = int(count_rows[0].total) if count_rows else len(nodes)  # type: ignore[attr-defined]
+    total_instances = (
+        int(count_rows[0].total)
+        if count_rows and isinstance(count_rows[0], ResultRow)
+        else len(nodes)
+    )
 
     kpis: dict[str, Any] = {
         "total_instances": total_instances,
@@ -534,11 +572,98 @@ class GraphService:
             raise GraphProtectedError("Schema or Nexus graph cannot be cleared.")
         self._get_triple_store().clear_graph(uri)
 
+    def _remove_subject_and_object_triples(
+        self,
+        store: TripleStoreService,
+        uri: URIRef,
+        named_graph: URIRef,
+    ) -> None:
+        """Remove every triple in *named_graph* where *uri* appears as subject or object."""
+        triples = Graph()
+        forward_query = f"""
+        SELECT ?p ?o
+        WHERE {{
+            GRAPH <{named_graph}> {{
+                <{uri}> ?p ?o .
+            }}
+        }}
+        """
+        for row in store.query(forward_query):
+            assert isinstance(row, ResultRow)
+            triples.add((uri, row.p, row.o))
+        inverse_query = f"""
+        SELECT ?s ?p
+        WHERE {{
+            GRAPH <{named_graph}> {{
+                ?s ?p <{uri}> .
+            }}
+        }}
+        """
+        for row in store.query(inverse_query):
+            assert isinstance(row, ResultRow)
+            triples.add((row.s, row.p, uri))
+        if len(triples) > 0:
+            store.remove(triples, graph_name=named_graph)
+
     async def delete_graph(self, workspace_id: str, graph_uri: str) -> None:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be deleted.")
-        self._get_triple_store().drop_graph(uri)
+        store = self._get_triple_store()
+        store.drop_graph(uri)
+        self._remove_subject_and_object_triples(store, uri, NEXUS_GRAPH_URI)
+
+    async def create_individual(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        label: str,
+        class_uri: str | None,
+    ) -> GraphNodeData:
+        normalized_label = label.strip()
+        if not normalized_label:
+            raise ValueError("Individual label must not be empty.")
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Individuals cannot be inserted into the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        slug = _slugify(normalized_label) or "individual"
+        suffix = uuid.uuid4().hex[:12]
+        individual_uri = URIRef(f"{graph_uri.rstrip('/')}/{slug}-{suffix}")
+        triples = Graph()
+        triples.add((individual_uri, RDF.type, OWL.NamedIndividual))
+        if class_uri:
+            triples.add((individual_uri, RDF.type, URIRef(class_uri)))
+        triples.add((individual_uri, RDFS.label, Literal(normalized_label)))
+        store.insert(triples, graph_name=target_graph)
+        type_label = _get_ontology_label(store, class_uri) if class_uri else "owl:NamedIndividual"
+        return GraphNodeData(
+            id=str(individual_uri),
+            workspace_id=workspace_id,
+            type=type_label,
+            label=normalized_label,
+            properties={},
+        )
+
+    async def delete_individual(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+    ) -> None:
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Individuals cannot be deleted from the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        self._remove_subject_and_object_triples(
+            store=store,
+            uri=URIRef(individual_uri),
+            named_graph=target_graph,
+        )
 
     async def get_graph_overview(
         self, workspace_id: str, graph_uri: str, limit: int = 500
@@ -596,6 +721,144 @@ class GraphService:
             limit=limit,
             depth=2,
         )
+
+    async def export_graph_as_ttl(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        batch_size: int = 10000,
+    ) -> tuple[str, int]:
+        """Export all triples from *graph_uri* as Turtle with bound namespaces.
+
+        Fetches triples in batches of *batch_size*, incrementing OFFSET until
+        fewer than *batch_size* triples are returned (end of graph).
+
+        Returns (ttl_content, total_triple_count).
+        """
+        store = self._get_triple_store()
+        g = Graph()
+        g.bind("rdf", RDF)
+        g.bind("rdfs", RDFS)
+        g.bind("owl", OWL)
+        g.bind("xsd", XSD)
+        g.bind("bfo", Namespace("http://purl.obolibrary.org/obo/"))
+
+        try:
+            base_uri = ABIModule.get_instance().configuration.nexus_config.ontology_base_uri
+            g.bind("abi", Namespace(base_uri))
+        except Exception:
+            pass
+
+        total_count = 0
+        offset = 0
+
+        while True:
+            query = f"""
+            CONSTRUCT {{ ?s ?p ?o }}
+            WHERE {{
+                GRAPH <{graph_uri}> {{
+                    ?s ?p ?o .
+                }}
+            }}
+            LIMIT {int(batch_size)}
+            OFFSET {int(offset)}
+            """
+            result = store.query(query)
+            batch_count = 0
+            if isinstance(result, Graph):
+                for triple in result:
+                    g.add(triple)  # type: ignore[arg-type]
+                    batch_count += 1
+            else:
+                for triple in result:
+                    g.add(triple)  # type: ignore[arg-type]
+                    batch_count += 1
+
+            total_count += batch_count
+            if batch_count < batch_size:
+                break
+            offset += batch_size
+
+        return g.serialize(format="turtle"), total_count
+
+    async def analyze_graph_file(
+        self,
+        content: bytes,
+        fmt: str,
+    ) -> GraphAnalysisData:
+        """Parse *content* as an RDF file and count subjects + triples per OWL type category.
+
+        Each subject is assigned to exactly one category based on its highest-priority
+        rdf:type (NamedIndividual > Class > Object/DatatypeProperty > Restriction > Unknown).
+        The sum of all per-category triple counts equals total_triples; likewise for subjects.
+        """
+        g = Graph()
+        g.parse(data=content, format=fmt)
+
+        # First pass: determine each subject's primary OWL category from rdf:type triples
+        subject_category: dict[str, str] = {}
+        for s, p, o in g:
+            if p == RDF.type:
+                s_str = str(s)
+                new_cat = _OWL_TYPE_MAP.get(str(o), "unknown")
+                current = subject_category.get(s_str, "unknown")
+                if _TYPE_PRIORITY.get(new_cat, 0) > _TYPE_PRIORITY.get(current, 0):
+                    subject_category[s_str] = new_cat
+
+        # Second pass: accumulate triples and collect unique subject sets per category
+        _cats = ("named_individual", "class", "object_property", "datatype_property", "restriction", "unknown")
+        triple_counts: dict[str, int] = dict.fromkeys(_cats, 0)
+        subject_sets: dict[str, set[str]] = {c: set() for c in _cats}
+
+        for s, _p, _o in g:
+            cat = subject_category.get(str(s), "unknown")
+            triple_counts[cat] += 1
+            subject_sets[cat].add(str(s))
+
+        return GraphAnalysisData(
+            total_triples=len(g),
+            total_subjects=sum(len(v) for v in subject_sets.values()),
+            named_individuals_subjects=len(subject_sets["named_individual"]),
+            named_individuals_triples=triple_counts["named_individual"],
+            classes_subjects=len(subject_sets["class"]),
+            classes_triples=triple_counts["class"],
+            object_properties_subjects=len(subject_sets["object_property"]),
+            object_properties_triples=triple_counts["object_property"],
+            datatype_properties_subjects=len(subject_sets["datatype_property"]),
+            datatype_properties_triples=triple_counts["datatype_property"],
+            restrictions_subjects=len(subject_sets["restriction"]),
+            restrictions_triples=triple_counts["restriction"],
+            unknown_subjects=len(subject_sets["unknown"]),
+            unknown_triples=triple_counts["unknown"],
+        )
+
+    async def import_individuals_to_graph(
+        self,
+        workspace_id: str,
+        content: bytes,
+        fmt: str,
+        graph_uri: str,
+    ) -> int:
+        """Parse *content* and insert all OWL NamedIndividual triples into *graph_uri*.
+
+        Returns the number of triples inserted.
+        """
+        g = Graph()
+        g.parse(data=content, format=fmt)
+
+        individual_subjects: set[URIRef] = set()
+        for s, p, o in g:
+            if p == RDF.type and o == OWL.NamedIndividual and isinstance(s, URIRef):
+                individual_subjects.add(s)
+
+        individual_graph = Graph()
+        for s, p, o in g:
+            if isinstance(s, URIRef) and s in individual_subjects:
+                individual_graph.add((s, p, o))
+
+        store = self._get_triple_store()
+        store.insert(individual_graph, graph_name=URIRef(graph_uri))
+        return len(individual_graph)
 
     async def get_network_parents(
         self,

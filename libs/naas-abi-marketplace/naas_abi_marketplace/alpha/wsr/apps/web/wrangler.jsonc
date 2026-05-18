@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "wsr-web",
+  "main": ".open-next/worker.js",
+  // Must be >= 2024-09-23 for nodejs_compat (required by @opennextjs/cloudflare)
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  // Static assets (JS chunks, Cesium files, images) served from Workers Assets.
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  // Set NEXT_PUBLIC_API_BASE_URL to your deployed wsr-api Worker URL.
+  // Replace the placeholder below before deploying.
+  // Example: "https://wsr-api.YOUR_ACCOUNT.workers.dev"
+  "vars": {
+    "NEXT_PUBLIC_API_BASE_URL": ""
+  }
+}

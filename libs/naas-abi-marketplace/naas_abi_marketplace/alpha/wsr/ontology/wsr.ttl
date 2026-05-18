@@ -1,0 +1,642 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2000/01/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix wsr:    <http://ontology.naas.ai/wsr/> .
+
+#################################################################
+# Ontology Declaration
+#################################################################
+
+wsr:WSROntology a owl:Ontology ;
+  dc:title "WSR Domain Ontology"@en ;
+  dc:description "BFO-grounded ontology for the WSR geospatial intelligence platform. Encodes processes, sites, material entities, generically dependent continuants, qualities, roles, and dispositions for real-time theater monitoring."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://purl.obolibrary.org/obo/bfo.owl> ;
+  owl:versionInfo "0.1.0" ;
+  dc11:contributor "Jeremy Ravenel", "Florent Ravenel", "Maxime Jublou" ;
+  dc11:date "2026-02-28"^^xsd:date .
+
+#################################################################
+# BFO_0000029 — SITE (WHERE)
+# Three-dimensional immaterial regions bounded by material entities.
+#################################################################
+
+wsr:GeographicSite a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000029 ;
+  rdfs:label "Geographic Site"@en ;
+  skos:definition "A site defined by geographic coordinates occupying a bounded three-dimensional region of the Earth's surface or atmosphere."@en .
+
+wsr:ConflictZone a owl:Class ;
+  rdfs:subClassOf wsr:GeographicSite ;
+  rdfs:label "Conflict Zone"@en ;
+  skos:definition "A geographic site in which armed conflict, military operations, or active hostilities are occurring or are anticipated."@en ;
+  skos:example "The Middle East theater of operations, active from 2024–present."@en .
+
+wsr:NuclearFacilitySite a owl:Class ;
+  rdfs:subClassOf wsr:GeographicSite ;
+  rdfs:label "Nuclear Facility Site"@en ;
+  skos:definition "A geographic site that is the location of a nuclear enrichment, production, or power facility. Subject to IAEA safeguards or equivalent monitoring regimes."@en ;
+  skos:example "Natanz Enrichment Complex; Fordow Fuel Enrichment Plant."@en .
+
+wsr:MilitaryBaseSite a owl:Class ;
+  rdfs:subClassOf wsr:GeographicSite ;
+  rdfs:label "Military Base Site"@en ;
+  skos:definition "A geographic site occupied by military materiel and personnel, hosting logistical, combat, or command functions."@en ;
+  skos:example "Al Udeid Air Base, Qatar; Nevatim Air Base, Israel."@en .
+
+wsr:NavalOperatingArea a owl:Class ;
+  rdfs:subClassOf wsr:GeographicSite ;
+  rdfs:label "Naval Operating Area"@en ;
+  skos:definition "A maritime geographic site designated as an operating area for naval forces, including carrier strike groups and patrol vessels."@en ;
+  skos:example "Persian Gulf carrier strike group operating area; Strait of Hormuz transit corridor."@en .
+
+wsr:UrbanSite a owl:Class ;
+  rdfs:subClassOf wsr:GeographicSite ;
+  rdfs:label "Urban Site"@en ;
+  skos:definition "A geographic site coinciding with a city or densely populated area, relevant as a civilian population center or political capital."@en .
+
+wsr:AirspaceRegion a owl:Class ;
+  rdfs:subClassOf wsr:GeographicSite ;
+  rdfs:label "Airspace Region"@en ;
+  skos:definition "A three-dimensional site extending vertically above a geographic area, within which aircraft operate and airspace regulations apply."@en ;
+  skos:example "Iranian Flight Information Region; Israeli Defense Airspace."@en .
+
+wsr:OrbitalShell a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000029 ;
+  rdfs:label "Orbital Shell"@en ;
+  skos:definition "A site in the near-Earth orbital environment, defined by altitude band and inclination, within which satellites propagate."@en ;
+  skos:example "Low Earth Orbit (200–2000 km); Geostationary orbit (35,786 km)."@en .
+
+#################################################################
+# BFO_0000040 — MATERIAL ENTITY (WHO)
+# Physical objects that have matter as a continuant part.
+#################################################################
+
+wsr:Satellite a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000040 ;
+  rdfs:label "Satellite"@en ;
+  skos:definition "A material entity in Earth orbit, carrying instruments for communication, reconnaissance, navigation, or scientific purposes. Tracked via TLE data."@en .
+
+wsr:Aircraft a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000040 ;
+  rdfs:label "Aircraft"@en ;
+  skos:definition "A material entity capable of atmospheric flight. Position tracked via ADS-B transponder signals."@en .
+
+wsr:MilitaryAircraft a owl:Class ;
+  rdfs:subClassOf wsr:Aircraft ;
+  rdfs:label "Military Aircraft"@en ;
+  skos:definition "An aircraft operated by or assigned to a military organization. Flagged via ADSB.lol military tag or ICAO military hex code range."@en .
+
+wsr:CivilAircraft a owl:Class ;
+  rdfs:subClassOf wsr:Aircraft ;
+  rdfs:label "Civil Aircraft"@en ;
+  skos:definition "An aircraft operated under civil aviation authority, including commercial and general aviation."@en .
+
+wsr:AerialRefuelingAircraft a owl:Class ;
+  rdfs:subClassOf wsr:MilitaryAircraft ;
+  rdfs:label "Aerial Refueling Aircraft"@en ;
+  skos:definition "Military aircraft (KC-135, KC-46) whose presence in a theater is an indicator of planned extended-range strike operations."@en .
+
+wsr:NavalVessel a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000040 ;
+  rdfs:label "Naval Vessel"@en ;
+  skos:definition "A waterborne material entity operated by naval forces, including carriers, destroyers, and patrol vessels."@en .
+
+wsr:GroundSensorStation a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000040 ;
+  rdfs:label "Ground Sensor Station"@en ;
+  skos:definition "A physical installation housing surveillance sensors. Superclass of camera stations, seismic sensors, and signals intelligence nodes."@en .
+
+wsr:CCTVCameraUnit a owl:Class ;
+  rdfs:subClassOf wsr:GroundSensorStation ;
+  rdfs:label "CCTV Camera Unit"@en ;
+  skos:definition "A physical camera unit generating a continuous video stream of its field of view. Located at a specific geographic site."@en .
+
+wsr:SeismographStation a owl:Class ;
+  rdfs:subClassOf wsr:GroundSensorStation ;
+  rdfs:label "Seismograph Station"@en ;
+  skos:definition "A physical instrument that measures ground motion. Data aggregated by USGS into earthquake event records."@en .
+
+wsr:ComputeInfrastructure a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000040 ;
+  rdfs:label "Compute Infrastructure"@en ;
+  skos:definition "Server hardware and network infrastructure on which the WSR application and its API processes execute."@en .
+
+wsr:DataSourceEndpoint a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000040 ;
+  rdfs:label "Data Source Endpoint"@en ;
+  skos:definition "A material endpoint (server/service) that produces structured data consumed by the WSR system. The physical bearer of information content entities."@en .
+
+#################################################################
+# BFO_0000031 — GENERICALLY DEPENDENT CONTINUANT / ICE (HOW WE KNOW)
+# Information content entities that can exist in multiple copies.
+#################################################################
+
+wsr:InformationContentEntity a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000031 ;
+  rdfs:label "Information Content Entity"@en ;
+  skos:definition "A generically dependent continuant whose content is information about the world. Generically depends on a DataSourceEndpoint or ComputeInfrastructure."@en .
+
+wsr:TLERecord a owl:Class ;
+  rdfs:subClassOf wsr:InformationContentEntity ;
+  rdfs:label "TLE Record"@en ;
+  skos:definition "A Two-Line Element set encoding a satellite's orbital parameters at a reference epoch. Concretized by the satellite.js propagation process."@en ;
+  skos:example "ISS (ZARYA) TLE as fetched from CelesTrak NORAD GP endpoint."@en .
+
+wsr:AircraftPositionReport a owl:Class ;
+  rdfs:subClassOf wsr:InformationContentEntity ;
+  rdfs:label "Aircraft Position Report"@en ;
+  skos:definition "A timestamped record of an aircraft's ICAO24 identifier, geographic coordinates, altitude, velocity, and heading. Derived from ADS-B transponder broadcasts."@en .
+
+wsr:MilitaryAircraftReport a owl:Class ;
+  rdfs:subClassOf wsr:AircraftPositionReport ;
+  rdfs:label "Military Aircraft Report"@en ;
+  skos:definition "An aircraft position report for an aircraft tagged as military by ADSB.lol or airplanes.live."@en .
+
+wsr:EarthquakeEventRecord a owl:Class ;
+  rdfs:subClassOf wsr:InformationContentEntity ;
+  rdfs:label "Earthquake Event Record"@en ;
+  skos:definition "A record describing a seismic event, including magnitude, depth, geographic coordinates, and USGS identifier."@en .
+
+wsr:NewsArticle a owl:Class ;
+  rdfs:subClassOf wsr:InformationContentEntity ;
+  rdfs:label "News Article"@en ;
+  skos:definition "An information content entity produced by a news organization, carrying a title, publication timestamp, source URL, and theater-relevance severity classification."@en .
+
+wsr:BreakingNewsArticle a owl:Class ;
+  rdfs:subClassOf wsr:NewsArticle ;
+  rdfs:label "Breaking News Article"@en ;
+  skos:definition "A news article whose title contains one or more escalation keywords (strike, attack, retaliation, missile, explosion) indicating an imminent or occurring event."@en .
+
+wsr:AlertNewsArticle a owl:Class ;
+  rdfs:subClassOf wsr:NewsArticle ;
+  rdfs:label "Alert News Article"@en ;
+  skos:definition "A news article classified at the alert level, containing military/threat/nuclear keywords without direct escalation indicators."@en .
+
+wsr:ConflictSiteRecord a owl:Class ;
+  rdfs:subClassOf wsr:InformationContentEntity ;
+  rdfs:label "Conflict Site Record"@en ;
+  skos:definition "A structured information content entity describing a conflict-relevant geographic site — its name, type, coordinates, country, and assessed severity. Derived from OSINT, IAEA, and US DoD public records."@en .
+
+wsr:VideoStream a owl:Class ;
+  rdfs:subClassOf wsr:InformationContentEntity ;
+  rdfs:label "Video Stream"@en ;
+  skos:definition "A generically dependent continuant whose content is a continuous sequence of video frames. Concretized by a physical camera unit. Delivered via HLS, MJPEG, MP4, or iframe embed."@en .
+
+wsr:GeospatialVisualizationState a owl:Class ;
+  rdfs:subClassOf wsr:InformationContentEntity ;
+  rdfs:label "Geospatial Visualization State"@en ;
+  skos:definition "The current state of the globe viewer, including camera position, active layers, shader mode, and tracked entities. A generically dependent continuant concretized by the WSR rendering process."@en .
+
+wsr:RSSFeed a owl:Class ;
+  rdfs:subClassOf wsr:InformationContentEntity ;
+  rdfs:label "RSS Feed"@en ;
+  skos:definition "A machine-readable syndication document generically dependent on a news organization's publishing infrastructure. Concretized as NewsArticle instances after parsing."@en .
+
+#################################################################
+# BFO_0000019 — QUALITY (HOW IT IS)
+# Specifically dependent continuants that require no further process to be realized.
+#################################################################
+
+wsr:GeographicCoordinate a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "Geographic Coordinate"@en ;
+  skos:definition "A quality of a geographic site or material entity, expressed as latitude and longitude in WGS84."@en .
+
+wsr:AltitudeQuality a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "Altitude Quality"@en ;
+  skos:definition "The vertical distance of an aircraft or satellite above a reference ellipsoid or mean sea level, expressed in meters."@en .
+
+wsr:VelocityQuality a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "Velocity Quality"@en ;
+  skos:definition "The ground speed of a moving material entity, expressed in meters per second."@en .
+
+wsr:HeadingQuality a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "Heading Quality"@en ;
+  skos:definition "The directional track of a moving material entity, measured in degrees clockwise from true north."@en .
+
+wsr:EarthquakeMagnitude a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "Earthquake Magnitude"@en ;
+  skos:definition "A quality of a seismic event representing the logarithmic measure of energy released, expressed on the Richter or moment magnitude scale."@en .
+
+wsr:ThreatSeverityLevel a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "Threat Severity Level"@en ;
+  skos:definition "A quality inhering in a conflict zone or news article, representing the assessed intensity of threat. Values: MONITORING, ELEVATED, HIGH, IMMINENT."@en .
+
+wsr:NewsSeverityClass a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "News Severity Class"@en ;
+  skos:definition "A quality of a news article representing its escalation significance. Values: breaking, alert, update."@en .
+
+wsr:CacheDuration a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "Cache Duration"@en ;
+  skos:definition "The temporal quality of an API response's validity window, expressed in seconds."@en .
+
+#################################################################
+# BFO_0000023 — ROLE (WHY — externally grounded)
+# Realizable entities that exist because of social/institutional context.
+#################################################################
+
+wsr:SurveillanceSourceRole a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000023 ;
+  rdfs:label "Surveillance Source Role"@en ;
+  skos:definition "A role borne by a physical camera unit or sensor station in virtue of its institutional function of providing observation data to an intelligence consumer."@en .
+
+wsr:IntelligenceSourceRole a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000023 ;
+  rdfs:label "Intelligence Source Role"@en ;
+  skos:definition "A role borne by a data source endpoint (news service, ADS-B network, seismic network) in virtue of its function as a supplier of structured intelligence content."@en .
+
+wsr:TrackingTargetRole a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000023 ;
+  rdfs:label "Tracking Target Role"@en ;
+  skos:definition "A role borne by a material entity (satellite, aircraft, vessel) when it becomes the subject of active positional tracking within the WSR system."@en .
+
+wsr:TheaterActorRole a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000023 ;
+  rdfs:label "Theater Actor Role"@en ;
+  skos:definition "A role borne by a material entity operating within an active conflict zone, distinguishing it from routine non-theater activity."@en .
+
+wsr:AnalystRole a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000023 ;
+  rdfs:label "Analyst Role"@en ;
+  skos:definition "A role borne by a human participant who interacts with the WSR system to assess intelligence, track entities, and draw situational awareness conclusions."@en .
+
+#################################################################
+# BFO_0000016 — DISPOSITION (WHY — internally grounded)
+# Realizable entities grounded in the physical makeup of the bearer.
+#################################################################
+
+wsr:StreamingDisposition a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000016 ;
+  rdfs:label "Streaming Disposition"@en ;
+  skos:definition "A disposition borne by a camera unit or server infrastructure, grounded in its network connectivity and encoding hardware, to produce a continuous video stream."@en .
+
+wsr:ADSBTransponderDisposition a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000016 ;
+  rdfs:label "ADS-B Transponder Disposition"@en ;
+  skos:definition "A disposition borne by an aircraft's transponder hardware to broadcast its ICAO24 identifier, position, altitude, and velocity to ground receivers."@en .
+
+wsr:OrbitalPropagationDisposition a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000016 ;
+  rdfs:label "Orbital Propagation Disposition"@en ;
+  skos:definition "A disposition borne by a satellite in virtue of its mass, velocity, and orbital parameters that allows its future position to be computed by SGP4/SDP4 propagation models."@en .
+
+wsr:SeismicSignatureDisposition a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000016 ;
+  rdfs:label "Seismic Signature Disposition"@en ;
+  skos:definition "A disposition borne by a seismic event in virtue of its energy release to produce detectable ground motion at seismograph stations."@en .
+
+wsr:NuclearProductionDisposition a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000016 ;
+  rdfs:label "Nuclear Production Disposition"@en ;
+  skos:definition "A disposition borne by a nuclear facility, in virtue of its physical infrastructure, to enrich uranium, produce plutonium, or generate nuclear power."@en .
+
+#################################################################
+# BFO_0000015 — PROCESS (WHAT)
+# Occurrents that unfold over time and have material participants.
+#################################################################
+
+wsr:GeospatialIntelligenceProcess a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000015 ;
+  rdfs:label "Geospatial Intelligence Process"@en ;
+  skos:definition "A process in which geospatial data is acquired, integrated, and rendered to support situational awareness and decision-making."@en .
+
+wsr:SatelliteTrackingProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Satellite Tracking Process"@en ;
+  skos:definition "A process in which TLE records are fetched from CelesTrak, parsed into satellite.js SatRec objects, and propagated using SGP4 every 3 seconds to compute current orbital positions."@en .
+
+wsr:FlightTrackingProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Flight Tracking Process"@en ;
+  skos:definition "A process in which aircraft position reports are fetched from the OpenSky Network every 30 seconds and rendered as billboard icons on the globe."@en .
+
+wsr:TheaterAircraftMonitoringProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Theater Aircraft Monitoring Process"@en ;
+  skos:definition "A process in which aircraft position reports for the Middle East theater are fetched from airplanes.live every 45 seconds, covering Iranian, Levant, and Persian Gulf airspace regions."@en .
+
+wsr:EarthquakeMonitoringProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Earthquake Monitoring Process"@en ;
+  skos:definition "A process in which seismic event records are fetched from the USGS every 5 minutes and rendered as magnitude-scaled ellipses on the globe."@en .
+
+wsr:NewsAggregationProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "News Aggregation Process"@en ;
+  skos:definition "A process in which RSS feeds from BBC, Al Jazeera, and Reuters are fetched every 3 minutes, parsed, filtered for theater relevance, severity-classified, and surfaced in the IntelPanel."@en .
+
+wsr:ThreatAssessmentProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Threat Assessment Process"@en ;
+  skos:definition "A process in which breaking and alert news counts are aggregated to compute a composite threat level (MONITORING/ELEVATED/HIGH/IMMINENT) for the active theater."@en .
+
+wsr:CCTVStreamingProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "CCTV Streaming Process"@en ;
+  skos:definition "A process in which a video stream is resolved from a CCTV camera unit, proxied through the Next.js API, and rendered in the CCTVPanel for analyst viewing."@en .
+
+wsr:GlobeRenderingProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Globe Rendering Process"@en ;
+  skos:definition "A process in which Cesium WebGL renders the 3D Earth globe, applies imagery layers, post-processing shaders, billboard primitives, and entity labels to produce the analyst's geospatial visualization state."@en .
+
+wsr:GeocodingProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Geocoding Process"@en ;
+  skos:definition "A process in which a place name query is resolved to geographic coordinates via the Nominatim API, followed by a camera flyTo animation."@en .
+
+wsr:ConflictZoneLoadingProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Conflict Zone Loading Process"@en ;
+  skos:definition "A process in which static conflict site records are fetched from /api/conflict-events and rendered as ellipse markers with severity-coded colors and labels."@en .
+
+wsr:OrbitalPropagationProcess a owl:Class ;
+  rdfs:subClassOf wsr:SatelliteTrackingProcess ;
+  rdfs:label "Orbital Propagation Process"@en ;
+  skos:definition "The subprocess of satellite tracking in which satellite.js computes a satellite's ECI position from its TLE record using the SGP4 model, then converts to geodetic coordinates."@en .
+
+wsr:DataCachingProcess a owl:Class ;
+  rdfs:subClassOf wsr:GeospatialIntelligenceProcess ;
+  rdfs:label "Data Caching Process"@en ;
+  skos:definition "A process in which API responses are stored in server-side memory with a TTL quality, reducing load on external data sources and improving response latency."@en .
+
+#################################################################
+# Domain-specific object properties
+#################################################################
+
+wsr:occursInTheater a owl:ObjectProperty ;
+  rdfs:subPropertyOf bfo:BFO_0000066 ;
+  rdfs:domain wsr:GeospatialIntelligenceProcess ;
+  rdfs:range wsr:ConflictZone ;
+  rdfs:label "occurs in theater"@en ;
+  skos:definition "Relates a geospatial intelligence process to the conflict zone in which it monitors."@en .
+
+wsr:hasSourceEndpoint a owl:ObjectProperty ;
+  rdfs:domain wsr:InformationContentEntity ;
+  rdfs:range wsr:DataSourceEndpoint ;
+  rdfs:label "has source endpoint"@en ;
+  skos:definition "Relates an information content entity to the data source endpoint that produced it."@en .
+
+wsr:hasSeverity a owl:ObjectProperty ;
+  rdfs:domain [ owl:unionOf ( wsr:NewsArticle wsr:ConflictSiteRecord ) ] ;
+  rdfs:range wsr:ThreatSeverityLevel ;
+  rdfs:label "has severity"@en ;
+  skos:definition "Relates a news article or conflict site record to its assessed threat severity level."@en .
+
+wsr:monitorsSite a owl:ObjectProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range wsr:GeographicSite ;
+  rdfs:label "monitors site"@en ;
+  skos:definition "Relates a physical camera unit to the geographic site within its field of view."@en .
+
+wsr:locatedAtSite a owl:ObjectProperty ;
+  rdfs:subPropertyOf bfo:BFO_0000171 ;
+  rdfs:domain [ owl:unionOf ( wsr:Aircraft wsr:Satellite wsr:NavalVessel wsr:CCTVCameraUnit ) ] ;
+  rdfs:range wsr:GeographicSite ;
+  rdfs:label "located at site"@en ;
+  skos:definition "Relates a material entity to the geographic site where it is currently located."@en .
+
+wsr:hasRefreshInterval a owl:DatatypeProperty ;
+  rdfs:domain wsr:GeospatialIntelligenceProcess ;
+  rdfs:range xsd:integer ;
+  rdfs:label "has refresh interval (seconds)"@en ;
+  skos:definition "The polling interval in seconds at which a geospatial intelligence process re-fetches its data source."@en .
+
+wsr:hasCacheTTL a owl:DatatypeProperty ;
+  rdfs:domain wsr:InformationContentEntity ;
+  rdfs:range xsd:integer ;
+  rdfs:label "has cache TTL (seconds)"@en ;
+  skos:definition "The server-side cache duration in seconds before an information content entity is considered stale and re-fetched."@en .
+
+wsr:hasICAO24 a owl:DatatypeProperty ;
+  rdfs:domain wsr:Aircraft ;
+  rdfs:range xsd:string ;
+  rdfs:label "has ICAO24"@en ;
+  skos:definition "The unique 24-bit ICAO Mode S transponder identifier assigned to an aircraft."@en .
+
+wsr:hasCallsign a owl:DatatypeProperty ;
+  rdfs:domain wsr:Aircraft ;
+  rdfs:range xsd:string ;
+  rdfs:label "has callsign"@en .
+
+wsr:hasTLELine1 a owl:DatatypeProperty ;
+  rdfs:domain wsr:TLERecord ;
+  rdfs:range xsd:string ;
+  rdfs:label "has TLE line 1"@en .
+
+wsr:hasTLELine2 a owl:DatatypeProperty ;
+  rdfs:domain wsr:TLERecord ;
+  rdfs:range xsd:string ;
+  rdfs:label "has TLE line 2"@en .
+
+wsr:hasLatitude a owl:DatatypeProperty ;
+  rdfs:domain wsr:GeographicCoordinate ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has latitude (WGS84 decimal degrees)"@en .
+
+wsr:hasLongitude a owl:DatatypeProperty ;
+  rdfs:domain wsr:GeographicCoordinate ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has longitude (WGS84 decimal degrees)"@en .
+
+wsr:hasPublicationDate a owl:DatatypeProperty ;
+  rdfs:domain wsr:NewsArticle ;
+  rdfs:range xsd:dateTime ;
+  rdfs:label "has publication date"@en .
+
+wsr:hasSourceURL a owl:DatatypeProperty ;
+  rdfs:domain wsr:InformationContentEntity ;
+  rdfs:range xsd:anyURI ;
+  rdfs:label "has source URL"@en .
+
+# ── Aircraft position properties ───────────────────────────────────────────────
+
+wsr:hasLat a owl:DatatypeProperty ;
+  rdfs:domain [ owl:unionOf ( wsr:Aircraft wsr:Satellite wsr:NavalVessel wsr:CCTVCameraUnit wsr:GeographicSite ) ] ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has lat"@en ;
+  skos:definition "WGS84 decimal latitude of the entity's current or fixed position."@en .
+
+wsr:hasLon a owl:DatatypeProperty ;
+  rdfs:domain [ owl:unionOf ( wsr:Aircraft wsr:Satellite wsr:NavalVessel wsr:CCTVCameraUnit wsr:GeographicSite ) ] ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has lon"@en ;
+  skos:definition "WGS84 decimal longitude of the entity's current or fixed position."@en .
+
+wsr:hasAltitude a owl:DatatypeProperty ;
+  rdfs:domain [ owl:unionOf ( wsr:Aircraft wsr:Satellite ) ] ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has altitude"@en ;
+  skos:definition "Barometric or geometric altitude of the entity above mean sea level, in meters."@en .
+
+wsr:hasVelocity a owl:DatatypeProperty ;
+  rdfs:domain [ owl:unionOf ( wsr:Aircraft wsr:Satellite ) ] ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has velocity"@en ;
+  skos:definition "Ground speed of the entity in meters per second."@en .
+
+wsr:hasHeading a owl:DatatypeProperty ;
+  rdfs:domain [ owl:unionOf ( wsr:Aircraft wsr:Satellite ) ] ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has heading"@en ;
+  skos:definition "Track bearing of the entity in degrees clockwise from true north."@en .
+
+wsr:isOnGround a owl:DatatypeProperty ;
+  rdfs:domain wsr:Aircraft ;
+  rdfs:range xsd:boolean ;
+  rdfs:label "is on ground"@en ;
+  skos:definition "True when the aircraft's ADS-B report indicates a surface position."@en .
+
+wsr:isMilitary a owl:DatatypeProperty ;
+  rdfs:domain wsr:Aircraft ;
+  rdfs:range xsd:boolean ;
+  rdfs:label "is military"@en ;
+  skos:definition "True when the aircraft is flagged as military by ADSB.lol or via ICAO hex range."@en .
+
+# ── Earthquake event properties ────────────────────────────────────────────────
+
+wsr:hasMagnitude a owl:DatatypeProperty ;
+  rdfs:domain wsr:EarthquakeEventRecord ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has magnitude"@en ;
+  skos:definition "Moment magnitude (Mw) of the seismic event."@en .
+
+wsr:hasPlace a owl:DatatypeProperty ;
+  rdfs:domain wsr:EarthquakeEventRecord ;
+  rdfs:range xsd:string ;
+  rdfs:label "has place"@en ;
+  skos:definition "Human-readable USGS place description for the earthquake (e.g. '10km NE of Ridgecrest, CA')."@en .
+
+wsr:hasDepth a owl:DatatypeProperty ;
+  rdfs:domain wsr:EarthquakeEventRecord ;
+  rdfs:range xsd:decimal ;
+  rdfs:label "has depth"@en ;
+  skos:definition "Hypocentral depth of the seismic event in kilometers."@en .
+
+wsr:hasEventTime a owl:DatatypeProperty ;
+  rdfs:domain wsr:EarthquakeEventRecord ;
+  rdfs:range xsd:integer ;
+  rdfs:label "has event time"@en ;
+  skos:definition "USGS event origin time as a Unix epoch millisecond timestamp."@en .
+
+# ── News article properties ────────────────────────────────────────────────────
+
+wsr:hasTitle a owl:DatatypeProperty ;
+  rdfs:domain wsr:NewsArticle ;
+  rdfs:range xsd:string ;
+  rdfs:label "has title"@en ;
+  skos:definition "The headline or title string of the news article."@en .
+
+wsr:hasNewsSource a owl:DatatypeProperty ;
+  rdfs:domain wsr:NewsArticle ;
+  rdfs:range xsd:string ;
+  rdfs:label "has news source"@en ;
+  skos:definition "The news organization label (e.g. 'BBC', 'Al Jazeera', 'Reuters')."@en .
+
+wsr:hasPubDate a owl:DatatypeProperty ;
+  rdfs:domain wsr:NewsArticle ;
+  rdfs:range xsd:integer ;
+  rdfs:label "has pub date"@en ;
+  skos:definition "Publication timestamp of the news article as a Unix epoch millisecond integer."@en .
+
+wsr:hasSeverityClass a owl:DatatypeProperty ;
+  rdfs:domain wsr:NewsArticle ;
+  rdfs:range xsd:string ;
+  rdfs:label "has severity class"@en ;
+  skos:definition "Escalation severity classification of the article. Allowed values: breaking | alert | update."@en .
+
+# ── CCTV camera unit properties ────────────────────────────────────────────────
+
+wsr:hasCameraName a owl:DatatypeProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range xsd:string ;
+  rdfs:label "has camera name"@en ;
+  skos:definition "Human-readable name of the camera installation (e.g. 'A4 Colnbrook/Stanwell Moor Rd')."@en .
+
+wsr:hasCity a owl:DatatypeProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range xsd:string ;
+  rdfs:label "has city"@en ;
+  skos:definition "City in which the camera is physically installed."@en .
+
+wsr:hasCountry a owl:DatatypeProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range xsd:string ;
+  rdfs:label "has country"@en ;
+  skos:definition "Country in which the camera is physically installed."@en .
+
+wsr:hasImageURL a owl:DatatypeProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range xsd:anyURI ;
+  rdfs:label "has image URL"@en ;
+  skos:definition "URL of a static JPEG snapshot of the camera's field of view."@en .
+
+wsr:hasVideoURL a owl:DatatypeProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range xsd:anyURI ;
+  rdfs:label "has video URL"@en ;
+  skos:definition "URL of the live video stream (HLS m3u8, MP4, or YouTube embed)."@en .
+
+wsr:hasStreamType a owl:DatatypeProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range xsd:string ;
+  rdfs:label "has stream type"@en ;
+  skos:definition "Encoding protocol of the video stream. Allowed values: hls | mp4 | youtube."@en .
+
+wsr:hasCameraSource a owl:DatatypeProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range xsd:string ;
+  rdfs:label "has camera source"@en ;
+  skos:definition "Data provider identifier for the camera. Allowed values: nyc | london | openwebcamdb."@en .
+
+wsr:hasSlug a owl:DatatypeProperty ;
+  rdfs:domain wsr:CCTVCameraUnit ;
+  rdfs:range xsd:string ;
+  rdfs:label "has slug"@en ;
+  skos:definition "OpenWebcamDB slug used to resolve the on-demand stream URL."@en .
+
+# ── Conflict site record properties ───────────────────────────────────────────
+
+wsr:hasConflictSiteName a owl:DatatypeProperty ;
+  rdfs:domain wsr:ConflictSiteRecord ;
+  rdfs:range xsd:string ;
+  rdfs:label "has conflict site name"@en ;
+  skos:definition "Human-readable name of the conflict-relevant geographic site."@en .
+
+wsr:hasSiteType a owl:DatatypeProperty ;
+  rdfs:domain wsr:ConflictSiteRecord ;
+  rdfs:range xsd:string ;
+  rdfs:label "has site type"@en ;
+  skos:definition "Functional classification of the site. Values: nuclear | base | capital | naval | zone."@en .
+
+wsr:hasSiteCountry a owl:DatatypeProperty ;
+  rdfs:domain wsr:ConflictSiteRecord ;
+  rdfs:range xsd:string ;
+  rdfs:label "has site country"@en ;
+  skos:definition "Country or jurisdiction in which the conflict site is located."@en .
+
+wsr:hasSiteDescription a owl:DatatypeProperty ;
+  rdfs:domain wsr:ConflictSiteRecord ;
+  rdfs:range xsd:string ;
+  rdfs:label "has site description"@en ;
+  skos:definition "OSINT-sourced analytical description of the site's strategic significance."@en .
+
+wsr:hasThreatSeverity a owl:DatatypeProperty ;
+  rdfs:domain wsr:ConflictSiteRecord ;
+  rdfs:range xsd:string ;
+  rdfs:label "has threat severity"@en ;
+  skos:definition "Assessed threat severity of the site. Values: critical | high | medium | low."@en .

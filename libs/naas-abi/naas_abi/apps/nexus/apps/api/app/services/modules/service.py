@@ -24,6 +24,7 @@ _CATEGORY_MAP = {
     "ai": "ai",
     "applications": "application",
     "domains": "domain",
+    "alpha": "alpha",
 }
 
 # Regex patterns to extract metadata from agent source files.
@@ -70,6 +71,7 @@ _NOT_FUNCTIONAL_RE = re.compile(r'NOT FUNCTIONAL', re.IGNORECASE)
 _RE_TIER = re.compile(r'^TIER\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
 _RE_MAINTAINER = re.compile(r'^MAINTAINER\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
 _RE_STRIPE_URL = re.compile(r'^STRIPE_URL\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+_RE_APP_URL = re.compile(r'^APP_URL\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
 
 _SYSTEM_PROMPT_PREVIEW_LEN = 280
 
@@ -108,6 +110,7 @@ AgentMeta = tuple[
     str | None,  # tier
     str | None,  # maintainer
     str | None,  # stripe_url
+    str | None,  # app_url
 ]
 
 
@@ -116,7 +119,7 @@ def _scan_agent_file(path: Path) -> AgentMeta:
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
-        return None, None, None, None, None, None, None, True, None, None, None
+        return None, None, None, None, None, None, None, True, None, None, None, None
 
     def _m(pattern: re.Pattern[str]) -> str | None:
         m = pattern.search(text)
@@ -135,6 +138,7 @@ def _scan_agent_file(path: Path) -> AgentMeta:
         _m(_RE_TIER),
         _m(_RE_MAINTAINER),
         _m(_RE_STRIPE_URL),
+        _m(_RE_APP_URL),
     )
 
 
@@ -175,13 +179,14 @@ def _build_catalog() -> list[ModuleInfo]:
         for mod_dir in sorted(cat_dir.iterdir()):
             if not mod_dir.is_dir() or mod_dir.name.startswith("_"):
                 continue
-            # Accept both proper Python packages (__init__.py) and
-            # non-identifier dirs (e.g. "account-executive") that still
-            # contain an agents/ subdir or a top-level *Agent.py file.
+            # Accept proper Python packages (__init__.py), modules with an
+            # agents/ subdir or top-level *Agent.py, and full-stack app
+            # modules that ship an apps/web or apps/api directory (e.g. WSR).
             has_agents_dir = (mod_dir / "agents").is_dir()
             has_agent_file = any(mod_dir.glob("*Agent.py"))
             has_init = (mod_dir / "__init__.py").exists()
-            if not (has_init or has_agents_dir or has_agent_file):
+            has_apps_dir = (mod_dir / "apps").is_dir()
+            if not (has_init or has_agents_dir or has_agent_file or has_apps_dir):
                 continue
 
             module_path = f"naas_abi_marketplace.{cat_dir.name}.{mod_dir.name}"
@@ -198,6 +203,7 @@ def _build_catalog() -> list[ModuleInfo]:
             tier: str | None = None
             maintainer: str | None = None
             stripe_url: str | None = None
+            app_url: str | None = None
 
             agent_candidates = list((mod_dir / "agents").glob("*.py")) if (mod_dir / "agents").is_dir() else []
             agent_candidates += list(mod_dir.glob("*Agent.py"))
@@ -205,13 +211,21 @@ def _build_catalog() -> list[ModuleInfo]:
             for agent_file in agent_candidates:
                 if agent_file.name.startswith("_"):
                     continue
-                n, d, lurl, mdl, slg, atype, spp, func, tr, maint, surl = _scan_agent_file(agent_file)
+                n, d, lurl, mdl, slg, atype, spp, func, tr, maint, surl, aurl = _scan_agent_file(agent_file)
                 if n:
                     name, description, logo_url = n, d, lurl
                     model, slug, agent_type = mdl, slg, atype
                     system_prompt_preview, functional = spp, func
                     tier, maintainer, stripe_url = tr, maint, surl
+                    app_url = aurl
                     break
+
+            # Also scan __init__.py for module-level APP_URL (e.g. WSR)
+            if app_url is None:
+                init_file = mod_dir / "__init__.py"
+                if init_file.exists():
+                    _, _, _, _, _, _, _, _, _, _, _, init_app_url = _scan_agent_file(init_file)
+                    app_url = init_app_url
 
             catalog.append(
                 ModuleInfo(
@@ -229,6 +243,7 @@ def _build_catalog() -> list[ModuleInfo]:
                     tier=tier,
                     maintainer=maintainer,
                     stripe_url=stripe_url,
+                    app_url=app_url,
                 )
             )
 
@@ -255,6 +270,10 @@ class ModulesService:
         abi_module = ABIModule.get_instance()
         engine = abi_module.engine
 
+        # Build the filesystem catalog first so we can cross-reference app_url
+        catalog = _build_catalog()
+        catalog_by_path = {m.module_path: m for m in catalog}
+
         # Installed: modules currently loaded by the engine
         installed_paths: set[str] = set(engine.modules.keys())
         installed: list[ModuleInfo] = []
@@ -273,6 +292,16 @@ class ModulesService:
             if not name:
                 name = _fallback_name(module_path.split(".")[-1])
 
+            # Pull app_url from the catalog entry (parsed from __init__.py / filesystem)
+            catalog_entry = catalog_by_path.get(module_path)
+            app_url: str | None = catalog_entry.app_url if catalog_entry else None
+
+            # Read demo credentials from the module's runtime configuration.
+            # This keeps credentials out of source code — they live in config.yaml.
+            cfg = getattr(module_instance, "configuration", None)
+            demo_login: str | None = getattr(cfg, "demo_login", None) or None
+            demo_password: str | None = getattr(cfg, "demo_password", None) or None
+
             installed.append(
                 ModuleInfo(
                     module_path=module_path,
@@ -281,11 +310,13 @@ class ModulesService:
                     logo_url=logo_url,
                     category=_get_category(module_path),
                     installed=True,
+                    app_url=app_url,
+                    demo_login=demo_login,
+                    demo_password=demo_password,
                 )
             )
 
         # Available: full filesystem catalog, flagged with installed status
-        catalog = _build_catalog()
         available: list[ModuleInfo] = [
             ModuleInfo(**{**m.model_dump(), "installed": m.module_path in installed_paths})
             for m in catalog
