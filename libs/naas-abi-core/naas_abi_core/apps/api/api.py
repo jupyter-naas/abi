@@ -68,8 +68,18 @@ logo_name = os.path.basename(logo_path)
 favicon_path = api_runtime_configuration.favicon_path
 favicon_name = os.path.basename(favicon_path)
 
-origins = api_runtime_configuration.cors_origins
+# Allow callers (e.g. `abi dev`) to inject additional origins at runtime so
+# the config file does not need to know about dynamically-allocated dev ports.
+# We mutate the shared Pydantic object — not just a local copy — so downstream
+# consumers (Nexus CORSMiddleware, Socket.IO) which read
+# `app.state.abi_cors_origins = engine.api_configuration.cors_origins`
+# see the same expanded list.
+_extra_origins_env = os.environ.get("ABI_CORS_EXTRA_ORIGINS", "")
+for _extra in (o.strip() for o in _extra_origins_env.split(",")):
+    if _extra and _extra not in api_runtime_configuration.cors_origins:
+        api_runtime_configuration.cors_origins.append(_extra)
 
+origins = list(api_runtime_configuration.cors_origins)
 logger.debug(f"CORS origins: {origins}")
 
 app.add_middleware(
@@ -289,10 +299,12 @@ def api():
     import uvicorn
 
     reload_enabled = api_runtime_configuration.reload
+    host = os.environ.get("ABI_HOST", api_runtime_configuration.host)
+    port = int(os.environ.get("ABI_PORT", api_runtime_configuration.port))
 
     run_kwargs: dict = {
-        "host": "0.0.0.0",  # nosec B104 - intentional; server must bind all interfaces to accept external connections
-        "port": 9879,
+        "host": host,  # nosec B104 - default binds all interfaces per configuration
+        "port": port,
         "reload": reload_enabled,
         "proxy_headers": True,
         "forwarded_allow_ips": "*",

@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-core"
-version = "1.40.2"
+version = "1.41.0"
 description = "Abi framework allowing you to build your AI system."
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 requires-python = ">=3.11,<4"
@@ -58,11 +58,15 @@ aws = [
 qdrant = [
     "qdrant-client>=1.14.3",
 ]
+sqlite-vec = [
+    "sqlite-vec>=0.1.9",
+]
 
 all = [
     "naas-abi-core[ssh]",
     "naas-abi-core[aws]",
     "naas-abi-core[qdrant]",
+    "naas-abi-core[sqlite-vec]",
     "naas-abi-core[openrouter]",
     "naas-abi-core[dagster]",
     "naas-abi-core[redis]",
