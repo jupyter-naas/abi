@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 import unicodedata
@@ -24,7 +25,6 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_core.utils.SPARQL import SPARQLUtils
 from rdflib import OWL, RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 from rdflib.query import ResultRow
 
@@ -95,6 +95,11 @@ def _slugify(value: str) -> str:
     return re.sub(r"[-\s]+", "-", cleaned)
 
 
+@_cache(
+    lambda triple_store, uri: f"ontology_label_{uri}",
+    DataType.JSON,
+    ttl=timedelta(days=1),
+)
 def _get_ontology_label(triple_store: TripleStoreService, uri: str) -> str:
     query = f"""
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -135,6 +140,159 @@ def _get_bfo_parent_for_class(triple_store: TripleStoreService, class_uri: str) 
     return None
 
 
+def _get_subjects_graph_batch(
+    triple_store: TripleStoreService,
+    subject_uris: list[str],
+    graph_names: list[str],
+    depth: int = 2,
+) -> Graph:
+    """Fetch all triples for a batch of subjects in a single CONSTRUCT query.
+
+    Equivalent to calling SPARQLUtils.get_subject_graph once per URI, but in one
+    round-trip to the triple store. With depth=2 also follows IRI objects to
+    pull their labels/types.
+    """
+    graph = Graph()
+    if not subject_uris or depth <= 0:
+        return graph
+
+    values_subjects = " ".join(f"<{u}>" for u in subject_uris)
+    values_graphs = " ".join(f"<{g}>" for g in graph_names)
+
+    construct_clauses: list[str] = []
+    where_clauses: list[str] = []
+    for i in range(depth):
+        if i == 0:
+            construct_clauses.append("?s ?p0 ?o0 .")
+            where_clauses.append("?s ?p0 ?o0 .")
+        else:
+            construct_clauses.append(f"?o{i - 1} ?p{i} ?o{i} .")
+            where_clauses.append(
+                f"OPTIONAL {{ ?o{i - 1} ?p{i} ?o{i} . FILTER(isIRI(?o{i - 1})) }}"
+            )
+
+    sparql = f"""
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    CONSTRUCT {{ {" ".join(construct_clauses)} }}
+    WHERE {{
+        VALUES ?s {{ {values_subjects} }}
+        VALUES ?g {{ {values_graphs} }}
+        GRAPH ?g {{
+            {" ".join(where_clauses)}
+        }}
+    }}
+    """
+    for triple in triple_store.query(sparql):
+        graph.add(triple)  # type: ignore[arg-type]
+    return graph
+
+
+def _build_network_from_subject_graph(
+    triple_store: TripleStoreService,
+    workspace_id: str,
+    subject_graph: Graph,
+    limit: int,
+) -> GraphNetworkData:
+    """Walk a pre-fetched subject graph and build the GraphNetworkData payload.
+
+    Replaces the per-row inner loop that previously triggered N+1 SPARQL
+    queries — assumes all triples needed for nodes/edges are already in
+    ``subject_graph``.
+    """
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: dict[str, dict[str, Any]] = {}
+
+    for s, p, o in subject_graph:
+        subject_uri = str(s)
+        subject_label_value = subject_graph.value(URIRef(subject_uri), RDFS.label)
+        subject_label = str(subject_label_value) if subject_label_value else subject_uri
+        subject_types = list(subject_graph.objects(URIRef(subject_uri), RDF.type))
+        if OWL.NamedIndividual not in subject_types:
+            continue
+        if o == OWL.NamedIndividual or p == RDFS.label:
+            continue
+        if subject_uri not in nodes:
+            nodes[subject_uri] = {"uri": subject_uri, "label": subject_label}
+        if "type" not in nodes[subject_uri]:
+            class_type = next(
+                (
+                    str(subject_type)
+                    for subject_type in subject_types
+                    if subject_type not in {OWL.NamedIndividual, OWL.Class}
+                ),
+                None,
+            )
+            if class_type:
+                nodes[subject_uri]["type"] = class_type
+                nodes[subject_uri]["type_label"] = _get_ontology_label(triple_store, class_type)
+                bfo_parent = _get_bfo_parent_for_class(triple_store, class_type)
+                nodes[subject_uri]["bfo_parent_iri"] = bfo_parent or ""
+        if isinstance(o, Literal):
+            nodes[subject_uri][_get_ontology_label(triple_store, str(p))] = str(o)
+        elif isinstance(o, URIRef) and p != RDF.type:
+            object_uri = str(o)
+            edge_id = hashlib.sha256(
+                f"{subject_uri}|{str(p)}|{object_uri}".encode()
+            ).hexdigest()
+            if edge_id not in edges:
+                object_label_value = subject_graph.value(URIRef(object_uri), RDFS.label)
+                object_label = str(object_label_value) if object_label_value else object_uri
+                edges[edge_id] = {
+                    "id": edge_id,
+                    "label": _get_ontology_label(triple_store, str(p)),
+                    "source_id": subject_uri,
+                    "source_label": subject_label,
+                    "target_id": object_uri,
+                    "target_label": object_label,
+                }
+
+    graph_nodes: list[GraphNodeData] = []
+    graph_edges: list[GraphEdgeData] = []
+
+    for node_data in list(nodes.values())[: int(limit)]:
+        node_id = str(node_data.get("uri", "") or "").strip()
+        if not node_id:
+            continue
+        _excluded = {"uri", "label", "type", "type_label"}
+        graph_nodes.append(
+            GraphNodeData(
+                id=node_id,
+                workspace_id=workspace_id,
+                type=str(node_data.get("type_label") or node_data.get("type") or "unknown"),
+                label=str(node_data.get("label") or node_id),
+                properties={
+                    key.split("/")[-1]: value
+                    for key, value in node_data.items()
+                    if key not in _excluded and (value != "unknown" or key == "bfo_parent_iri")
+                },
+            )
+        )
+
+    for edge_data in list(edges.values())[: int(limit)]:
+        source_id = str(edge_data.get("source_id", "") or "").strip()
+        target_id = str(edge_data.get("target_id", "") or "").strip()
+        if not source_id or not target_id:
+            continue
+        graph_edges.append(
+            GraphEdgeData(
+                id=str(
+                    edge_data.get("id") or f"{source_id}|{edge_data.get('label', '')}|{target_id}"
+                ),
+                workspace_id=workspace_id,
+                source_id=source_id,
+                target_id=target_id,
+                source_label=str(edge_data.get("source_label") or source_id),
+                target_label=str(edge_data.get("target_label") or target_id),
+                type=str(edge_data.get("label") or "related"),
+                properties={},
+            )
+        )
+
+    return GraphNetworkData(nodes=graph_nodes, edges=graph_edges)
+
+
 # @_cache(
 #     lambda triple_store, workspace_id, graph_names, graph_filters: (
 #         f"list_individuals_{str(triple_store)}_{workspace_id}_{str(graph_names)}_{str(graph_filters)}"
@@ -150,7 +308,6 @@ def _list_individuals(
     limit: int = 200,
     depth: int = 2,
 ) -> GraphNetworkData:
-    sparql_utils = SPARQLUtils(triple_store)
     values = " ".join(f"<{name}>" for name in graph_names)
     filter_clauses: list[str] = []
     for filter_item in graph_filters:
@@ -183,108 +340,19 @@ def _list_individuals(
     }}
     LIMIT {int(limit)}
     """
-    rows = triple_store.query(query)
-    nodes: dict[str, dict[str, Any]] = {}
-    edges: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        assert isinstance(row, ResultRow)
-        row_uri = str(row.uri)
-        subject_graph = sparql_utils.get_subject_graph(
-            row_uri, depth=depth, graph_names=graph_names
-        )
-        for s, p, o in subject_graph:
-            subject_uri = str(s)
-            subject_label = (
-                subject_graph.value(URIRef(subject_uri), RDFS.label)
-                if subject_graph.value(URIRef(subject_uri), RDFS.label)
-                else subject_uri
-            )
-            subject_types = list(subject_graph.objects(URIRef(subject_uri), RDF.type))
-            if OWL.NamedIndividual not in subject_types:
-                continue
-            if o == OWL.NamedIndividual or p == RDFS.label:
-                continue
-            if subject_uri not in nodes:
-                nodes[subject_uri] = {"uri": subject_uri, "label": str(subject_label)}
-            if "type" not in nodes[subject_uri]:
-                class_type = next(
-                    (
-                        str(subject_type)
-                        for subject_type in subject_types
-                        if subject_type not in {OWL.NamedIndividual, OWL.Class}
-                    ),
-                    None,
-                )
-                if class_type:
-                    nodes[subject_uri]["type"] = class_type
-                    nodes[subject_uri]["type_label"] = _get_ontology_label(triple_store, class_type)
-                    bfo_parent = _get_bfo_parent_for_class(triple_store, class_type)
-                    nodes[subject_uri]["bfo_parent_iri"] = bfo_parent or ""
-            if isinstance(o, Literal):
-                nodes[subject_uri][_get_ontology_label(triple_store, str(p))] = str(o)
-            elif isinstance(o, URIRef) and p != RDF.type:
-                object_uri = str(o)
-                edge_id = hashlib.sha256(
-                    f"{subject_uri}|{str(p)}|{object_uri}".encode()
-                ).hexdigest()
-                if edge_id not in edges:
-                    object_label = (
-                        subject_graph.value(URIRef(object_uri), RDFS.label)
-                        if subject_graph.value(URIRef(object_uri), RDFS.label)
-                        else object_uri
-                    )
-                    edges[edge_id] = {
-                        "id": edge_id,
-                        "label": _get_ontology_label(triple_store, str(p)),
-                        "source_id": subject_uri,
-                        "source_label": str(subject_label),
-                        "target_id": object_uri,
-                        "target_label": str(object_label),
-                    }
-
-    graph_nodes: list[GraphNodeData] = []
-    graph_edges: list[GraphEdgeData] = []
-
-    for node_data in list(nodes.values())[: int(limit)]:
-        node_id = str(node_data.get("uri", "") or "").strip()
-        if not node_id:
-            continue
-        _excluded = {"uri", "label", "type", "type_label"}
-        graph_nodes.append(
-            GraphNodeData(
-                id=node_id,
-                workspace_id=workspace_id,
-                type=str(node_data.get("type_label") or node_data.get("type") or "unknown"),
-                label=str(node_data.get("label") or node_id),
-                properties={
-                    key.split("/")[-1]: value
-                    for key, value in node_data.items()
-                    if key not in _excluded and (value != "unknown" or key == "bfo_parent_iri")
-                },
-            )
-        )
-
-    for edge_data in list(edges.values())[: int(limit)]:
-        source_id = str(edge_data.get("source_id", "") or "").strip()
-        target_id = str(edge_data.get("target_id", "") or "").strip()
-        if not source_id or not target_id:
-            continue
-        graph_edges.append(
-            GraphEdgeData(
-                id=str(
-                    edge_data.get("id") or f"{source_id}|{edge_data.get('label', '')}|{target_id}"
-                ),
-                workspace_id=workspace_id,
-                source_id=source_id,
-                target_id=target_id,
-                source_label=str(edge_data.get("source_label") or source_id),
-                target_label=str(edge_data.get("target_label") or target_id),
-                type=str(edge_data.get("label") or "related"),
-                properties={},
-            )
-        )
-
-    return GraphNetworkData(nodes=graph_nodes, edges=graph_edges)
+    subject_uris = [str(row.uri) for row in triple_store.query(query) if isinstance(row, ResultRow)]
+    subject_graph = _get_subjects_graph_batch(
+        triple_store=triple_store,
+        subject_uris=subject_uris,
+        graph_names=graph_names,
+        depth=depth,
+    )
+    return _build_network_from_subject_graph(
+        triple_store=triple_store,
+        workspace_id=workspace_id,
+        subject_graph=subject_graph,
+        limit=limit,
+    )
 
 
 def _search_individuals(
@@ -295,7 +363,6 @@ def _search_individuals(
     limit: int = 200,
     depth: int = 2,
 ) -> GraphNetworkData:
-    sparql_utils = SPARQLUtils(triple_store)
     values = " ".join(f"<{name}>" for name in graph_names)
     escaped = _escape_sparql_string(search_query)
 
@@ -314,108 +381,19 @@ def _search_individuals(
     }}
     LIMIT {int(limit)}
     """
-    rows = triple_store.query(query)
-    nodes: dict[str, dict[str, Any]] = {}
-    edges: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        assert isinstance(row, ResultRow)
-        row_uri = str(row.uri)
-        subject_graph = sparql_utils.get_subject_graph(
-            row_uri, depth=depth, graph_names=graph_names
-        )
-        for s, p, o in subject_graph:
-            subject_uri = str(s)
-            subject_label = (
-                subject_graph.value(URIRef(subject_uri), RDFS.label)
-                if subject_graph.value(URIRef(subject_uri), RDFS.label)
-                else subject_uri
-            )
-            subject_types = list(subject_graph.objects(URIRef(subject_uri), RDF.type))
-            if OWL.NamedIndividual not in subject_types:
-                continue
-            if o == OWL.NamedIndividual or p == RDFS.label:
-                continue
-            if subject_uri not in nodes:
-                nodes[subject_uri] = {"uri": subject_uri, "label": str(subject_label)}
-            if "type" not in nodes[subject_uri]:
-                class_type = next(
-                    (
-                        str(subject_type)
-                        for subject_type in subject_types
-                        if subject_type not in {OWL.NamedIndividual, OWL.Class}
-                    ),
-                    None,
-                )
-                if class_type:
-                    nodes[subject_uri]["type"] = class_type
-                    nodes[subject_uri]["type_label"] = _get_ontology_label(triple_store, class_type)
-                    bfo_parent = _get_bfo_parent_for_class(triple_store, class_type)
-                    nodes[subject_uri]["bfo_parent_iri"] = bfo_parent or ""
-            if isinstance(o, Literal):
-                nodes[subject_uri][_get_ontology_label(triple_store, str(p))] = str(o)
-            elif isinstance(o, URIRef) and p != RDF.type:
-                object_uri = str(o)
-                edge_id = hashlib.sha256(
-                    f"{subject_uri}|{str(p)}|{object_uri}".encode()
-                ).hexdigest()
-                if edge_id not in edges:
-                    object_label = (
-                        subject_graph.value(URIRef(object_uri), RDFS.label)
-                        if subject_graph.value(URIRef(object_uri), RDFS.label)
-                        else object_uri
-                    )
-                    edges[edge_id] = {
-                        "id": edge_id,
-                        "label": _get_ontology_label(triple_store, str(p)),
-                        "source_id": subject_uri,
-                        "source_label": str(subject_label),
-                        "target_id": object_uri,
-                        "target_label": str(object_label),
-                    }
-
-    graph_nodes: list[GraphNodeData] = []
-    graph_edges: list[GraphEdgeData] = []
-
-    for node_data in list(nodes.values())[: int(limit)]:
-        node_id = str(node_data.get("uri", "") or "").strip()
-        if not node_id:
-            continue
-        _excluded = {"uri", "label", "type", "type_label"}
-        graph_nodes.append(
-            GraphNodeData(
-                id=node_id,
-                workspace_id=workspace_id,
-                type=str(node_data.get("type_label") or node_data.get("type") or "unknown"),
-                label=str(node_data.get("label") or node_id),
-                properties={
-                    key.split("/")[-1]: value
-                    for key, value in node_data.items()
-                    if key not in _excluded and (value != "unknown" or key == "bfo_parent_iri")
-                },
-            )
-        )
-
-    for edge_data in list(edges.values())[: int(limit)]:
-        source_id = str(edge_data.get("source_id", "") or "").strip()
-        target_id = str(edge_data.get("target_id", "") or "").strip()
-        if not source_id or not target_id:
-            continue
-        graph_edges.append(
-            GraphEdgeData(
-                id=str(
-                    edge_data.get("id") or f"{source_id}|{edge_data.get('label', '')}|{target_id}"
-                ),
-                workspace_id=workspace_id,
-                source_id=source_id,
-                target_id=target_id,
-                source_label=str(edge_data.get("source_label") or source_id),
-                target_label=str(edge_data.get("target_label") or target_id),
-                type=str(edge_data.get("label") or "related"),
-                properties={},
-            )
-        )
-
-    return GraphNetworkData(nodes=graph_nodes, edges=graph_edges)
+    subject_uris = [str(row.uri) for row in triple_store.query(query) if isinstance(row, ResultRow)]
+    subject_graph = _get_subjects_graph_batch(
+        triple_store=triple_store,
+        subject_uris=subject_uris,
+        graph_names=graph_names,
+        depth=depth,
+    )
+    return _build_network_from_subject_graph(
+        triple_store=triple_store,
+        workspace_id=workspace_id,
+        subject_graph=subject_graph,
+        limit=limit,
+    )
 
 
 def _build_graph_overview(
@@ -691,13 +669,16 @@ class GraphService:
         self, workspace_id: str, graph_uri: str, limit: int = 500
     ) -> GraphOverviewData:
         store = self._get_triple_store()
-        return _build_graph_overview(triple_store=store, graph_uri=URIRef(graph_uri), limit=limit)
+        return await asyncio.to_thread(
+            _build_graph_overview, triple_store=store, graph_uri=URIRef(graph_uri), limit=limit
+        )
 
     async def get_graph_network(
         self, workspace_id: str, graph_uri: str, limit: int = 200
     ) -> GraphNetworkData:
         store = self._get_triple_store()
-        return _list_individuals(
+        return await asyncio.to_thread(
+            _list_individuals,
             triple_store=store,
             workspace_id=workspace_id,
             graph_names=[graph_uri],
@@ -714,7 +695,8 @@ class GraphService:
         limit: int = 200,
         depth: int = 2,
     ) -> GraphNetworkData:
-        return _list_individuals(
+        return await asyncio.to_thread(
+            _list_individuals,
             triple_store=self._get_triple_store(),
             workspace_id=workspace_id,
             graph_names=graph_names,
@@ -730,7 +712,8 @@ class GraphService:
         search_query: str,
         limit: int = 200,
     ) -> GraphNetworkData:
-        return _search_individuals(
+        return await asyncio.to_thread(
+            _search_individuals,
             triple_store=self._get_triple_store(),
             workspace_id=workspace_id,
             graph_names=[graph_uri],
@@ -891,9 +874,19 @@ class GraphService:
 
         One call per progressive level; the frontend advances the frontier.
         """
-        store = self._get_triple_store()
         if not node_iris:
             return GraphNetworkData(nodes=[], edges=[])
+        return await asyncio.to_thread(
+            self._get_network_parents_sync, workspace_id, graph_names, node_iris
+        )
+
+    def _get_network_parents_sync(
+        self,
+        workspace_id: str,
+        graph_names: list[str],
+        node_iris: list[str],
+    ) -> GraphNetworkData:
+        store = self._get_triple_store()
 
         iris_values = " ".join(f"<{iri}>" for iri in node_iris)
         graph_values = " ".join(f"<{name}>" for name in graph_names)
