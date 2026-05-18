@@ -26,12 +26,25 @@ class GraphCreate(BaseModel):
 
 class GraphClear(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
-    id: str = Field(..., min_length=1, max_length=200)
+    uri: str = Field(..., min_length=1)
 
 
 class GraphDelete(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
-    id: str = Field(..., min_length=1, max_length=200)
+    uri: str = Field(..., min_length=1)
+
+
+class IndividualCreate(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    label: str = Field(..., min_length=1, max_length=500)
+    class_uri: str | None = Field(default=None, min_length=1)
+
+
+class IndividualDelete(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
 
 
 class GraphOverview(BaseModel):
@@ -65,3 +78,20 @@ class GraphEdge(BaseModel):
 class GraphData(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+
+class GraphAnalysis(BaseModel):
+    total_triples: int
+    total_subjects: int
+    named_individuals_subjects: int
+    named_individuals_triples: int
+    classes_subjects: int
+    classes_triples: int
+    object_properties_subjects: int
+    object_properties_triples: int
+    datatype_properties_subjects: int
+    datatype_properties_triples: int
+    restrictions_subjects: int
+    restrictions_triples: int
+    unknown_subjects: int
+    unknown_triples: int

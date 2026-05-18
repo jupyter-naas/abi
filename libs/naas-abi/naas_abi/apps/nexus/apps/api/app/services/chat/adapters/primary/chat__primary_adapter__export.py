@@ -8,12 +8,27 @@ from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 
 
+def _parse_metadata(msg: Any, override: dict | None = None) -> dict:
+    if override:
+        return override
+    raw = getattr(msg, "metadata_", None) or getattr(msg, "metadata", None)
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    return {}
+
+
 def export_conversation_as_response(
     conversation_id: str,
     format: str,
     user_id: str,
     conversation: Any,
     messages: list[Any],
+    messages_metadata: dict[str, dict] | None = None,
 ) -> StreamingResponse:
     timestamp = datetime.now(UTC).isoformat()
     title = conversation.title or "Untitled Conversation"
@@ -34,6 +49,14 @@ def export_conversation_as_response(
 
             content += f"[{role}]\n"
             content += f"Timestamp: {msg.created_at.isoformat()}\n"
+            meta = _parse_metadata(msg, (messages_metadata or {}).get(msg.id))
+            if meta.get("execution_time") is not None:
+                content += f"Execution time: {meta['execution_time']:.1f}s\n"
+            steps = meta.get("steps", [])
+            if steps:
+                content += f"Steps ({len(steps)}): " + ", ".join(
+                    s.get("tool_name", "") for s in steps
+                ) + "\n"
             content += f"{msg.content}\n"
             content += f"\n{'-' * 80}\n\n"
 
@@ -66,6 +89,7 @@ def export_conversation_as_response(
                     "content": msg.content,
                     "agent": msg.agent,
                     "created_at": msg.created_at.isoformat(),
+                    **_parse_metadata(msg, (messages_metadata or {}).get(msg.id)),
                 }
                 for msg in messages
             ],
@@ -96,6 +120,14 @@ def export_conversation_as_response(
             content += f"## 🤖 Assistant{agent_info}\n\n"
 
         content += f"*{msg.created_at.isoformat()}*\n\n"
+        meta = _parse_metadata(msg, (messages_metadata or {}).get(msg.id))
+        if meta.get("execution_time") is not None:
+            content += f"⏱ **Execution time:** {meta['execution_time']:.1f}s\n\n"
+        steps = meta.get("steps", [])
+        if steps:
+            content += f"🔧 **Steps ({len(steps)}):** " + ", ".join(
+                s.get("tool_name", "") for s in steps
+            ) + "\n\n"
         content += f"{msg.content}\n\n"
         content += "---\n\n"
 

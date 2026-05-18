@@ -437,7 +437,7 @@ class Agent(Expose):
         event_queue: Queue | None = None,
         native_tools: list[dict] = [],
         enable_default_tools: bool = True,
-        markdown_pretty_display: bool = True,
+        markdown_pretty_display: bool = False,
     ):
         """Initialize a new Agent instance.
 

@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 351f64234dcd207ec02af982bd329416d35461862b95d4e9bb332c8f659011a6
+# onto2py-source-sha256: 1aa85be99547d7926643a8b23cf3f0b681ed9ae1346167c5a223211a664964f5
 from __future__ import annotations
 
 import datetime
@@ -738,6 +738,7 @@ class Agent(RDFEntity):
         "logo_url": "http://ontology.naas.ai/nexus/logo_url",
         "module_path": "http://ontology.naas.ai/nexus/module_path",
         "system_prompt": "http://ontology.naas.ai/nexus/system_prompt",
+        "uses_model": "http://ontology.naas.ai/nexus/usesModel",
     }
     _object_properties: ClassVar[set[str]] = {
         "has_agent_role",
@@ -745,6 +746,7 @@ class Agent(RDFEntity):
         "has_subagent",
         "has_tool",
         "is_subagent_of",
+        "uses_model",
     }
 
     # Data properties
@@ -824,6 +826,12 @@ class Agent(RDFEntity):
             Field(
                 description="Relates a sub-agent to the supervisor agent that orchestrates it within the Nexus platform."
             ),
+        ]
+    ] = None
+    uses_model: Optional[
+        Annotated[
+            List[Union[AIModel, URIRef, str]],
+            Field(description="Relates an agent to the AI model it uses."),
         ]
     ] = None
 
@@ -1986,6 +1994,91 @@ class MarketplaceAppRole(RDFEntity):
     ] = None
 
 
+class AIModel(RDFEntity):
+    """
+    AI Model
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/AIModel"
+    _name: ClassVar[str] = "AI Model"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_provider": "http://ontology.naas.ai/nexus/hasProvider",
+        "is_model_of": "http://ontology.naas.ai/nexus/isModelOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "model_id": "http://ontology.naas.ai/nexus/model_id",
+    }
+    _object_properties: ClassVar[set[str]] = {"has_provider", "is_model_of"}
+
+    # Data properties
+    model_id: Optional[
+        Annotated[str, Field(description="The identifier of the AI model.")]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    has_provider: Optional[
+        Annotated[
+            List[Union[URIRef, str]],
+            Field(
+                description="Relates an AI model to the organization that provides it."
+            ),
+        ]
+    ] = None
+    is_model_of: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(description="Relates an AI model to the agent that uses it."),
+        ]
+    ] = None
+
+
+class Capabilities(RDFEntity):
+    """
+    Capabilities
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Capabilities"
+    _name: ClassVar[str] = "Capabilities"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "is_capabilities_of": "http://ontology.naas.ai/nexus/isCapabilitiesOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"is_capabilities_of"}
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    is_capabilities_of: Optional[
+        Annotated[
+            List[Union[URIRef, str]],
+            Field(
+                description="Relates a capability to the organization in which it inheres."
+            ),
+        ]
+    ] = None
+
+
 # Rebuild models to resolve forward references
 Tenant.model_rebuild()
 Server.model_rebuild()
@@ -2024,3 +2117,5 @@ GraphFilterRole.model_rebuild()
 FileRole.model_rebuild()
 FileSystemRole.model_rebuild()
 MarketplaceAppRole.model_rebuild()
+AIModel.model_rebuild()
+Capabilities.model_rebuild()

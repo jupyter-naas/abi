@@ -9,6 +9,8 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import (
     AgentIntent,
     AgentRole,
     AgentTool,
+    AIModel,
+    Capabilities,
     GraphFilter,
     GraphView,
     KnowledgeGraph,
@@ -16,14 +18,25 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import (
 )
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.utils.SPARQL import SPARQLUtils
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from rdflib import RDF, Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDFS
+from rdflib.query import ResultRow
 
 # Bump when the schema of what the pipeline writes changes (so old signatures
 # from older code versions trigger a rebuild even if inputs look identical).
 _SIGNATURE_VERSION = "1"
+
+_CCO = Namespace("https://www.commoncoreontologies.org/")
+_CCO_ORGANIZATION = _CCO["ont00001180"]
+_NEXUS_HAS_CAPABILITIES = URIRef("http://ontology.naas.ai/nexus/hasCapabilities")
+_NEXUS_AI_MODEL_PROVIDER = URIRef("http://ontology.naas.ai/nexus/AIModelProvider")
 
 
 def _module_name_from_module_path(module_path: str | None) -> str | None:
@@ -52,6 +65,8 @@ class NexusPlatformPipelineConfiguration(PipelineConfiguration):
     """Configuration for NexusPlatformPipeline."""
 
     triple_store: TripleStoreService
+    object_storage: ObjectStorageService
+    datastore_path: str = "naas_abi/nexus"
     nexus_namespace: Namespace = Namespace("http://ontology.naas.ai/nexus/")
     nexus_graph_uri: URIRef = URIRef("http://ontology.naas.ai/graph/nexus")
     # When True, always clear + rebuild the nexus graph. When False (default),
@@ -76,6 +91,8 @@ class NexusPlatformPipeline(Pipeline):
     __force_update: bool
     __triple_store: TripleStoreService
     __sparql_utils: SPARQLUtils
+    __object_storage: ObjectStorageService
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: NexusPlatformPipelineConfiguration):
         super().__init__(configuration)
@@ -89,6 +106,8 @@ class NexusPlatformPipeline(Pipeline):
         # merely *constructing* the pipeline destructive. We've moved that
         # into run() so we can check the signature first and skip the rebuild
         # entirely when nothing has changed.
+        self.__object_storage = configuration.object_storage
+        self.__storage_utils = StorageUtils(self.__object_storage)
 
     # ------------------------------------------------------------------
     # Signature-based fast path
@@ -181,6 +200,7 @@ class NexusPlatformPipeline(Pipeline):
             """
         )
         for row in results:
+            assert isinstance(row, ResultRow)
             return str(row[0])
         return None
 
@@ -199,13 +219,10 @@ class NexusPlatformPipeline(Pipeline):
         )
         old_graph = Graph()
         for row in old_results:
-            old_graph.add(
-                (self._bootstrap_uri(), self._signature_predicate(), row[0])
-            )
+            assert isinstance(row, ResultRow)
+            old_graph.add((self._bootstrap_uri(), self._signature_predicate(), row[0]))
         if len(old_graph) > 0:
-            self.__triple_store.remove(
-                old_graph, graph_name=self.__nexus_graph_uri
-            )
+            self.__triple_store.remove(old_graph, graph_name=self.__nexus_graph_uri)
 
         new_graph = Graph()
         new_graph.add(
@@ -267,26 +284,36 @@ class NexusPlatformPipeline(Pipeline):
     def create_graph_to_nexus_graph(
         self,
         uri: URIRef,
+        admin_role: KnowledgeGraphRole | None = None,
+        unknown_role: KnowledgeGraphRole | None = None,
     ) -> tuple[KnowledgeGraph, KnowledgeGraphRole]:
-        role_label = (
-            "Admin"
-            if any(token in str(uri).lower() for token in {"schema", "nexus"})
-            else "unknown"
+        is_admin = any(token in str(uri).lower() for token in {"schema", "nexus"})
+        if is_admin:
+            knowledge_graph_role = admin_role or KnowledgeGraphRole(label="Admin")
+        else:
+            knowledge_graph_role = unknown_role or KnowledgeGraphRole(label="unknown")
+
+        label = " ".join(
+            word.capitalize()
+            for word in uri.split("/")[-1].split("#")[-1].replace("_", " ").split()
         )
-        knowledge_graph_role = KnowledgeGraphRole(
-            label=role_label,
-            is_knowledge_graph_role_of=[uri],
-        )
+
         knowledge_graph = KnowledgeGraph(
             _uri=uri,
-            label=uri.split("/")[-1].split("#")[-1].capitalize(),
+            label=label,
             has_knowledge_graph_role=[knowledge_graph_role],
         )
         return knowledge_graph, knowledge_graph_role
 
-    def initialize_nexus_graphs(self) -> Graph:
+    def initialize_nexus_graphs(self, _dry_run: bool = False) -> Graph:
         """Ensure the Nexus graph is populated with KnowledgeGraph instances."""
         inserted_graph = Graph()
+
+        # Shared roles — created once so all graphs reference the same role URI.
+        admin_role = KnowledgeGraphRole(label="Admin")
+        inserted_graph += admin_role.rdf()
+        unknown_role = KnowledgeGraphRole(label="unknown")
+        inserted_graph += unknown_role.rdf()
 
         # Add graphs instances to nexus graph
         nexus_graphs = self.list_nexus_graphs()
@@ -299,17 +326,25 @@ class NexusPlatformPipeline(Pipeline):
         for graph_uri in graph_uris:
             if str(graph_uri) not in nexus_graph_uris:
                 logger.debug(f"🟢 Graph {str(graph_uri)} added to nexus graph")
-                knowledge_graph, knowledge_graph_role = (
-                    self.create_graph_to_nexus_graph(graph_uri)
+                knowledge_graph, _ = self.create_graph_to_nexus_graph(
+                    graph_uri, admin_role=admin_role, unknown_role=unknown_role
                 )
-                inserted_graph += knowledge_graph_role.rdf()
                 inserted_graph += knowledge_graph.rdf()
 
-        self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
+        if not _dry_run:
+            self.__triple_store.insert(
+                inserted_graph, graph_name=self.__nexus_graph_uri
+            )
         return inserted_graph
 
     def list_nexus_agents(self, metadata: dict[str, URIRef] = {}) -> List[Dict]:
         return self._query_nexus_instances(URIRef(Agent._class_uri), metadata)
+
+    def list_nexus_ai_providers(self) -> List[Dict]:
+        return self._query_nexus_instances(_CCO_ORGANIZATION)
+
+    def list_nexus_ai_models(self) -> List[Dict]:
+        return self._query_nexus_instances(URIRef(AIModel._class_uri))
 
     def create_agent_to_nexus_graph(
         self,
@@ -324,6 +359,7 @@ class NexusPlatformPipeline(Pipeline):
         has_tool: list[AgentTool | URIRef | str] | None = None,
         has_agent_role: list[AgentRole | URIRef | str] | None = None,
         has_subagent: list[Agent | URIRef | str] | None = None,
+        uses_model: list[AIModel | URIRef | str] | None = None,
     ) -> Agent:
         agent = Agent(label=label)
         if description is not None:
@@ -346,9 +382,11 @@ class NexusPlatformPipeline(Pipeline):
             agent.has_agent_role = has_agent_role
         if has_subagent is not None:
             agent.has_subagent = has_subagent
+        if uses_model is not None:
+            agent.uses_model = uses_model
         return agent
 
-    def initialize_nexus_agents(self) -> Graph:
+    def initialize_nexus_agents(self, _dry_run: bool = False) -> Graph:
         """Ensure the Nexus graph is populated with Agent instances."""
         inserted_graph = Graph()
 
@@ -409,6 +447,26 @@ class NexusPlatformPipeline(Pipeline):
 
         abi_agent_object: Agent | None = None
         sub_nexus_agents: list[Agent] = []
+
+        # Create the unique AIModelProvider capability individual once.
+        ai_model_provider_capability = Capabilities(
+            _uri=str(_NEXUS_AI_MODEL_PROVIDER),
+            label="AI Model Provider",
+        )
+        inserted_graph += ai_model_provider_capability.rdf()
+
+        # Build label→URI lookup from already-persisted providers and models
+        # so we reuse existing nodes instead of creating duplicates.
+        provider_by_label: dict[str, URIRef] = {
+            str(row["label"]): URIRef(str(row["uri"]))
+            for row in self.list_nexus_ai_providers()
+            if row.get("label") and row.get("uri")
+        }
+        model_by_label: dict[str, URIRef] = {
+            str(row["label"]): URIRef(str(row["uri"]))
+            for row in self.list_nexus_ai_models()
+            if row.get("label") and row.get("uri")
+        }
 
         for agent_cls in agents:
             module_name = str(agent_cls.__module__)
@@ -492,6 +550,38 @@ class NexusPlatformPipeline(Pipeline):
                 elif "naas_abi_marketplace.domains." in module_name:
                     agent_roles.append(domain_role)
 
+            # Add AI provider (cco:ont00001180 instance) to nexus graph if not seen yet
+            provider_name = getattr(agent_cls, "provider", None)
+            org_uri: URIRef | None = None
+            if isinstance(provider_name, str) and provider_name:
+                if provider_name in provider_by_label:
+                    org_uri = provider_by_label[provider_name]
+                else:
+                    import uuid as _uuid
+                    new_org_uri = URIRef(f"http://ontology.naas.ai/abi/{_uuid.uuid4()}")
+                    inserted_graph.add((new_org_uri, RDF.type, _CCO_ORGANIZATION))
+                    inserted_graph.add((new_org_uri, RDF.type, OWL.NamedIndividual))
+                    inserted_graph.add((new_org_uri, RDFS.label, Literal(provider_name)))
+                    inserted_graph.add((new_org_uri, _NEXUS_HAS_CAPABILITIES, _NEXUS_AI_MODEL_PROVIDER))
+                    provider_by_label[provider_name] = new_org_uri
+                    org_uri = new_org_uri
+
+            # Add AI model to nexus graph if not seen yet
+            model_id = getattr(agent_cls, "model", None)
+            agent_model: AIModel | URIRef | None = None
+            if isinstance(model_id, str) and model_id:
+                if model_id in model_by_label:
+                    agent_model = model_by_label[model_id]
+                else:
+                    new_model = AIModel(
+                        label=model_id,
+                        model_id=model_id,
+                        has_provider=[org_uri] if org_uri else None,
+                    )
+                    inserted_graph += new_model.rdf()
+                    model_by_label[model_id] = URIRef(new_model._uri)
+                    agent_model = new_model
+
             agent = self.create_agent_to_nexus_graph(
                 label=name,
                 description=description,
@@ -503,6 +593,7 @@ class NexusPlatformPipeline(Pipeline):
                 has_intent=agent_intents,
                 has_tool=agent_tools,
                 has_agent_role=agent_roles or None,
+                uses_model=[agent_model] if agent_model else None,
             )
 
             if is_abi_agent:
@@ -524,7 +615,10 @@ class NexusPlatformPipeline(Pipeline):
         for agent in all_nexus_agents:
             inserted_graph += agent.rdf()
 
-        self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
+        if not _dry_run:
+            self.__triple_store.insert(
+                inserted_graph, graph_name=self.__nexus_graph_uri
+            )
         return inserted_graph
 
     def list_nexus_graph_views(self, metadata: dict[str, URIRef] = {}) -> List[Dict]:
@@ -543,7 +637,7 @@ class NexusPlatformPipeline(Pipeline):
         )
         return graph_view
 
-    def initialize_nexus_graph_views(self) -> Graph:
+    def initialize_nexus_graph_views(self, _dry_run: bool = False) -> Graph:
         """Ensure the Nexus graph is populated with GraphView instances."""
         inserted_graph = Graph()
 
@@ -580,8 +674,40 @@ class NexusPlatformPipeline(Pipeline):
         # )
         # inserted_graph += graph_view.rdf()
 
-        self.__triple_store.insert(inserted_graph, graph_name=self.__nexus_graph_uri)
+        if not _dry_run:
+            self.__triple_store.insert(
+                inserted_graph, graph_name=self.__nexus_graph_uri
+            )
         return inserted_graph
+
+    def dry_run(self) -> Graph:
+        """Build the full Nexus graph without touching the triple store.
+
+        Saves the resulting triples to object storage at naas_abi/nexus/nexus.ttl
+        so the output can be inspected without side-effects.
+        """
+        from rdflib.namespace import OWL, RDF, RDFS, XSD
+
+        graph = Graph()
+        graph.bind("rdf", RDF)
+        graph.bind("rdfs", RDFS)
+        graph.bind("owl", OWL)
+        graph.bind("xsd", XSD)
+        graph.bind("nexus", self.__nexus_namespace)
+
+        graph += self.initialize_nexus_graphs(_dry_run=True)
+        graph += self.initialize_nexus_agents(_dry_run=True)
+        graph += self.initialize_nexus_graph_views(_dry_run=True)
+
+        self.__storage_utils.save_triples(
+            graph=graph,
+            dir_path="naas_abi/nexus",
+            file_name="nexus.ttl",
+        )
+        logger.debug(
+            f"[dry_run] Nexus graph ({len(graph)} triples) saved to naas_abi/nexus/nexus.ttl"
+        )
+        return graph
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, NexusPlatformPipelineParameters):
@@ -599,9 +725,7 @@ class NexusPlatformPipeline(Pipeline):
         if not self.__force_update:
             stored_signature = self._read_stored_signature()
             if stored_signature is not None and stored_signature == current_signature:
-                logger.debug(
-                    "Nexus platform signature unchanged; skipping rebuild."
-                )
+                logger.debug("Nexus platform signature unchanged; skipping rebuild.")
                 return Graph()
 
         # Ensure the nexus graph exists, then clear it so removed agents
@@ -651,10 +775,11 @@ if __name__ == "__main__":
     engine = Engine()
     engine.load(module_names=["naas_abi"])
     triple_store = engine.services.triple_store
-
-    store = triple_store
+    object_storage = engine.services.object_storage
 
     pipeline = NexusPlatformPipeline(
-        NexusPlatformPipelineConfiguration(triple_store=store)
+        NexusPlatformPipelineConfiguration(
+            triple_store=triple_store, object_storage=object_storage
+        )
     )
     pipeline.run(NexusPlatformPipelineParameters())

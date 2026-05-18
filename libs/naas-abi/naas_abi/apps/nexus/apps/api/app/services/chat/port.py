@@ -137,6 +137,10 @@ class ChatPersistencePort(ABC):
         pass
 
     @abstractmethod
+    async def update_message_metadata(self, message_id: str, metadata: str) -> bool:
+        pass
+
+    @abstractmethod
     async def get_agent_by_id(self, agent_id: str) -> ChatAgentRecord | None:
         pass
 

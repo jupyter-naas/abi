@@ -165,7 +165,41 @@ def unsupported_method(self, arg: str) -> None:
 **Problem:** Frontend won't start (`next: command not found`)  
 **Solution:** Run `pnpm install` in `libs/naas-abi/naas_abi/apps/nexus/apps/web`
 
-### Stack Management
+### Local Access
+
+After `abi stack start`, the web UI is at `http://localhost:3042`.
+
+Default admin credentials:
+
+| Email | Password |
+|---|---|
+| `admin@example.com` | `Admin1234!` |
+
+Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
+
+**How the password is set:** On first boot, the seeder looks for `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env`. If found, it uses that value. If missing, it generates a random password and writes it back to `.env`. The `.env` in this repo ships with `Admin1234!` pre-set, so all teammates get the same password as long as they don't delete that line.
+
+If you see "Incorrect email or password":
+
+**Option A (no data to keep):** Wipe and reseed.
+```bash
+docker volume rm abi_postgres_data
+abi stack start
+```
+
+**Option B (keep existing data):** The user already exists with a mismatched hash. Add the missing key to `.env` then force-update the hash:
+```bash
+# 1. Add to .env if missing:
+echo "NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL=admin@example.com" >> .env
+echo "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!" >> .env
+
+# 2. Reset the hash in Postgres directly:
+HASH=$(docker exec abi-abi-1 python3 -c "import bcrypt; print(bcrypt.hashpw(b'Admin1234!', bcrypt.gensalt()).decode())")
+docker exec abi-postgres-1 psql -U abi -d nexus -c "UPDATE users SET hashed_password='$HASH' WHERE email='admin@example.com';"
+docker compose restart abi
+```
+
+## Stack Management
 
 ```bash
 # Start full stack (requires RabbitMQ, Redis, Qdrant, MinIO)

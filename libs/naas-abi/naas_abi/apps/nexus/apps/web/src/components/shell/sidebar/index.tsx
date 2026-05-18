@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid,
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -28,8 +28,9 @@ const SECTIONS: SectionDef[] = [
   { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'knowledge' },
   { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'knowledge' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
-  { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',      feature: 'agents' },
-  { id: 'apps',     icon: <LayoutGrid size={18} />,    label: 'App',            href: '/apps',     feature: 'agents' },
+  { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
+  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'agents' },
+  { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'agents' },
 ];
 
 export function Sidebar() {
@@ -100,7 +101,8 @@ export function Sidebar() {
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
-      case 'apps':     return getWorkspacePath(currentWorkspaceId, '/apps');
+      case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
+      case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
     }
   };
 

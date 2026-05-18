@@ -2,6 +2,77 @@
 
 <!-- version list -->
 
+## v1.37.0 (2026-05-18)
+
+### Features
+
+- **workspace/[workspaceId]/graph**: Add export progress log UI
+  ([`7e30caf`](https://github.com/jupyter-naas/abi/commit/7e30cafe067c386f56b4aea49911f1b6f86f40e5))
+
+
+## v1.36.1 (2026-05-16)
+
+### Bug Fixes
+
+- **config**: Replace Jinja2-evaluated secret.X comments with backtick syntax
+  ([`68540b9`](https://github.com/jupyter-naas/abi/commit/68540b9c958e5204105f0d316facc27b6bebc25d))
+
+
+## v1.36.0 (2026-05-15)
+
+### Bug Fixes
+
+- Update naas-abi and naas-abi-marketplace package versions in uv.lock
+  ([`500a752`](https://github.com/jupyter-naas/abi/commit/500a7526b012a8d58ac42a1e1a6279de0b4ea7fe))
+
+### Features
+
+- **nexus**: Enhance NexusPlatformPipeline with AIModel and Capabilities support
+  ([`49c4a94`](https://github.com/jupyter-naas/abi/commit/49c4a9458f6b052a6593393f3486e4838c11cfe9))
+
+
+## v1.35.0 (2026-05-15)
+
+### Bug Fixes
+
+- **Agent**: Disable markdown_pretty_display by default
+  ([`9bf481c`](https://github.com/jupyter-naas/abi/commit/9bf481c432727a3fba47779190850074ab1f7cb0))
+
+### Features
+
+- **chat**: Add message metadata update and export functionality
+  ([`1fc2d25`](https://github.com/jupyter-naas/abi/commit/1fc2d25ee000d6f4fe62bc2a416570a211a906eb))
+
+
+## v1.34.1 (2026-05-14)
+
+### Bug Fixes
+
+- **suggestions**: Restore rich fields after rebase, swap disabled states, rename App to Apps
+  ([`9395da1`](https://github.com/jupyter-naas/abi/commit/9395da1c14f11451e8996c3393604189633f7f9f))
+
+
+## v1.34.0 (2026-05-14)
+
+### Bug Fixes
+
+- **cli**: Align deploy templates + drop dead .env.example
+  ([`58b6b4a`](https://github.com/jupyter-naas/abi/commit/58b6b4ad9c9f861b60ac1eb746f9581a97f2122e))
+
+### Chores
+
+- Remove unused matrix/element services and stale comment refs
+  ([`2acbbb0`](https://github.com/jupyter-naas/abi/commit/2acbbb0725a736fa9d01fc23f9f6e1e76daa33da))
+
+### Features
+
+- **cli**: Open Nexus web app on stack start instead of service portal
+  ([`9eae875`](https://github.com/jupyter-naas/abi/commit/9eae875c531fb014c8f543b089161cf57221fa13))
+
+- **ux**: Pre-fill login email from NEXUS_USER_ADMIN_EMAIL on local stack start
+  ([`92d1fb9`](https://github.com/jupyter-naas/abi/commit/92d1fb90bb4240739a24d777855d67764d315a4d))
+
+
 ## v1.33.0 (2026-05-13)
 
 ### Features

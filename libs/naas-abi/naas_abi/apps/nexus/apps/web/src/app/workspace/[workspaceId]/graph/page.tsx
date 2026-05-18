@@ -6,6 +6,8 @@ import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
   Database,
+  Download,
+  Upload,
   Filter,
   Search,
   Eye,
@@ -30,6 +32,9 @@ import {
   Users,
   Hash,
   ChevronRight,
+  FileUp,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -40,6 +45,7 @@ import {
   type GraphView,
 } from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
+import { useConfirm } from '@/components/ui/dialogs';
 
 // Dynamically import vis-network to avoid SSR issues
 const VisNetwork = dynamic(
@@ -147,7 +153,24 @@ function isSystemGraph(option: GraphOption): boolean {
 const isGraphViewType = (value: string): value is GraphViewType =>
   GRAPH_VIEW_TYPES.some((view) => view.id === value);
 
-type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'create-graph' | 'sparql';
+type GraphPageMode = 'graph' | 'create-individual' | 'create-view' | 'create-graph' | 'sparql' | 'import';
+
+type GraphImportAnalysis = {
+  total_triples: number;
+  total_subjects: number;
+  named_individuals_subjects: number;
+  named_individuals_triples: number;
+  classes_subjects: number;
+  classes_triples: number;
+  object_properties_subjects: number;
+  object_properties_triples: number;
+  datatype_properties_subjects: number;
+  datatype_properties_triples: number;
+  restrictions_subjects: number;
+  restrictions_triples: number;
+  unknown_subjects: number;
+  unknown_triples: number;
+};
 
 interface OntologyClassOption {
   id: string;
@@ -158,6 +181,7 @@ interface OntologyClassOption {
 interface GraphOption {
   id: string;
   name: string;
+  uri: string;
 }
 
 interface FilterOption {
@@ -458,13 +482,13 @@ type TimestampedCacheEntry<T> = {
   expiresAt: number;
 };
 
-const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[] }>>();
+const networkCache = new Map<string, TimestampedCacheEntry<{ nodes: GraphNode[]; edges: GraphEdge[]; totalNodeCount: number | null }>>();
 const overviewCache = new Map<string, TimestampedCacheEntry<ApiOverview | null>>();
 const graphListCache = new Map<
   string,
   TimestampedCacheEntry<{
     graphOptions: GraphOption[];
-    normalized: Array<{ id: string; label?: string }>;
+    normalized: Array<{ id: string; label?: string; uri: string }>;
     defaultGraphName: string;
   }>
 >();
@@ -501,9 +525,19 @@ export default function GraphPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<ApiOverview | null>(null);
+  const [totalNodeCount, setTotalNodeCount] = useState<number | null>(null);
+  // Tracks which graph's data is currently rendered — VisNetwork key is tied to this
+  // so it only remounts when correct data for the new graph has actually arrived,
+  // preventing the stale-data / nodes-packed-in-middle bug on rapid graph switches.
+  const [loadedGraphKey, setLoadedGraphKey] = useState('');
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
+  const [committedQuery, setCommittedQuery] = useState('');
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchNodes, setSearchNodes] = useState<GraphNode[]>([]);
+  const [searchEdges, setSearchEdges] = useState<GraphEdge[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
@@ -542,8 +576,39 @@ export default function GraphPage() {
   // Relations filter — off by default
   const [showRelations, setShowRelations] = useState(false);
 
+  // Hierarchy direction for parent tree layout (only visible when parents ON + relations OFF)
+  const [hierarchyDirection, setHierarchyDirection] = useState<'TD' | 'LR'>('TD');
+
+  // Refs to read current filter state inside effects without stale closures
+  const showRelationsRef = useRef(showRelations);
+  const activeBucketsRef = useRef(activeBuckets);
+  const hiddenNodeIdsRef = useRef(hiddenNodeIds);
+  const nodeDisplayLimitRef = useRef(nodeDisplayLimit);
+  const parentsLevelsRef = useRef(parentsLevels);
+  const hierarchyDirectionRef = useRef(hierarchyDirection);
+  showRelationsRef.current = showRelations;
+  activeBucketsRef.current = activeBuckets;
+  hiddenNodeIdsRef.current = hiddenNodeIds;
+  nodeDisplayLimitRef.current = nodeDisplayLimit;
+  parentsLevelsRef.current = parentsLevels;
+  hierarchyDirectionRef.current = hierarchyDirection;
+
+  // Per-graph/view filter state — keyed by activeSavedViewId ?? selectedGraphId
+  type PerGraphFilterState = {
+    showRelations: boolean;
+    activeBuckets: Set<string>;
+    hiddenNodeIds: Set<string>;
+    nodeDisplayLimit: number;
+    parentsLevels: number;
+    hierarchyDirection: 'TD' | 'LR';
+  };
+  const filterStateByGraphRef = useRef<Map<string, PerGraphFilterState>>(new Map());
+  const prevGraphKeyRef = useRef<string | null>(null);
+
   // Increment to trigger physics re-layout in VisNetwork
   const [stabilizeKey, setStabilizeKey] = useState(0);
+  // Increments each time search is cleared — forces VisNetwork to remount with a fresh layout
+  const [searchExitKey, setSearchExitKey] = useState(0);
   const {
     activeViewType,
     setActiveViewType,
@@ -556,6 +621,7 @@ export default function GraphPage() {
     setActiveSavedView,
     setViews,
   } = useKnowledgeGraphStore();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [zoomLevel, setZoomLevel] = useState(1);
   const [currentQuery, setCurrentQuery] = useState('');
   const [queryResults, setQueryResults] = useState<Record<string, string>[] | null>(null);
@@ -592,6 +658,15 @@ export default function GraphPage() {
   const [graphDescription, setGraphDescription] = useState('');
   const [graphFormError, setGraphFormError] = useState<string | null>(null);
   const [creatingGraph, setCreatingGraph] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportMessages, setExportMessages] = useState<string[]>([]);
+  const [showExportLog, setShowExportLog] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importAnalysis, setImportAnalysis] = useState<GraphImportAnalysis | null>(null);
+  const [importAnalyzing, setImportAnalyzing] = useState(false);
+  const [importingFile, setImportingFile] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   const loadRequestIdRef = useRef(0);
   const overviewRequestIdRef = useRef(0);
   const viewFilterOptionsRequestIdRef = useRef(0);
@@ -613,6 +688,7 @@ export default function GraphPage() {
   const loadFromApi = useCallback(async (options?: { force?: boolean }) => {
     const forceRefresh = options?.force === true;
     const requestId = ++loadRequestIdRef.current;
+    const graphKey = activeSavedViewId ?? selectedGraphId ?? visibleGraphIds[0] ?? 'default';
     setLoading(true);
     setError(null);
 
@@ -621,7 +697,7 @@ export default function GraphPage() {
       const allNodes: GraphNode[] = [];
       const allEdges: GraphEdge[] = [];
       let defaultGraphName = '';
-      let normalized: { id: string; label?: string }[] = [];
+      let normalized: { id: string; label?: string; uri: string }[] = [];
 
       try {
         const listCacheKey = `graph-list:${workspaceId}`;
@@ -655,24 +731,27 @@ export default function GraphPage() {
                 ? namesData.graphs
                 : [];
 
-            // Proper type guard: id AND label must be string
+            // Proper type guard: id, label, and uri must be string
             normalized = graphs.filter(
-              (g: unknown): g is { id: string; label: string } =>
+              (g: unknown): g is { id: string; label: string; uri: string } =>
                 typeof g === "object" &&
                 g !== null &&
                 "id" in g &&
                 "label" in g &&
+                "uri" in g &&
                 typeof (g as any).id === "string" &&
-                typeof (g as any).label === "string"
+                typeof (g as any).label === "string" &&
+                typeof (g as any).uri === "string"
             );
 
             if (normalized.length === 0) {
               setGraphOptions([]);
             } else {
               defaultGraphName = normalized[0].id;
-              const optionsToCache = normalized.map((g: { id: string; label?: string }) => ({
+              const optionsToCache = normalized.map((g: { id: string; label?: string; uri: string }) => ({
                 id: g.id,
                 name: g.label ?? g.id,
+                uri: g.uri,
               }));
               setGraphOptions(optionsToCache);
               writeCache(graphListCache, listCacheKey, {
@@ -691,16 +770,20 @@ export default function GraphPage() {
       type NetworkRequest = { url: string; init?: RequestInit };
       let requestsToFetch: NetworkRequest[];
 
+      const NODE_LIMIT = 200;
+      let overviewUrl: string | null = null;
+
       if (activeSavedView) {
         const params = new URLSearchParams({
           workspace_id: workspaceId,
-          limit: '500',
+          limit: String(NODE_LIMIT),
         });
         requestsToFetch = [
           {
             url: `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/network?${params.toString()}`,
           },
         ];
+        overviewUrl = `${apiUrl}/api/view/${encodeURIComponent(activeSavedView.id)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
       } else {
         const graphIdsToFetch =
           selectedGraphId
@@ -709,13 +792,21 @@ export default function GraphPage() {
             ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
             : normalized.map((graph) => graph.id);
         const effectiveGraphId = graphIdsToFetch[0] ?? defaultGraphName ?? '';
+        const effectiveUri =
+          normalized.find((g) => g.id === effectiveGraphId)?.uri ??
+          graphOptions.find((g) => g.id === effectiveGraphId)?.uri ??
+          '';
         const params = new URLSearchParams({
           workspace_id: workspaceId,
-          limit: '500',
+          limit: String(NODE_LIMIT),
         });
-        requestsToFetch = effectiveGraphId
-          ? [{ url: `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/network?${params.toString()}` }]
+        if (effectiveUri) params.set('graph_uri', effectiveUri);
+        requestsToFetch = effectiveUri
+          ? [{ url: `${apiUrl}/api/graph/network?${params.toString()}` }]
           : [];
+        if (effectiveUri) {
+          overviewUrl = `${apiUrl}/api/graph/overview?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(effectiveUri)}`;
+        }
       }
 
       const networkCacheKey = `network:${requestsToFetch.map(({ url }) => url).join('||')}`;
@@ -724,17 +815,26 @@ export default function GraphPage() {
         if (requestId === loadRequestIdRef.current) {
           setNodes(cachedNetwork.nodes);
           setEdges(cachedNetwork.edges);
+          setTotalNodeCount(cachedNetwork.totalNodeCount ?? null);
+          setLoadedGraphKey(graphKey);
         }
         return;
       }
 
-      const responses = await Promise.all(
-        requestsToFetch.map(({ url, init }) =>
-          authFetch(url, init)
-            .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
-            .catch(() => ({ nodes: [], edges: [] }))
-        )
-      );
+      const [responses, overviewData] = await Promise.all([
+        Promise.all(
+          requestsToFetch.map(({ url, init }) =>
+            authFetch(url, init)
+              .then((res) => (res.ok ? res.json() : { nodes: [], edges: [] }))
+              .catch(() => ({ nodes: [], edges: [] }))
+          )
+        ),
+        overviewUrl
+          ? authFetch(overviewUrl)
+              .then((res) => (res.ok ? res.json() : null))
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
       
       // Merge all graph data
       responses.forEach((data) => {
@@ -765,17 +865,24 @@ export default function GraphPage() {
         }
       });
       
-      // Deduplicate nodes and edges by ID
-      const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values());
-      const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values());
+      // Deduplicate nodes and edges by ID, then cap at NODE_LIMIT
+      const uniqueNodes = Array.from(new Map(allNodes.map((n) => [n.id, n])).values()).slice(0, NODE_LIMIT);
+      const nodeIds = new Set(uniqueNodes.map((n) => n.id));
+      const uniqueEdges = Array.from(new Map(allEdges.map((e) => [e.id, e])).values()).filter(
+        (e) => nodeIds.has(e.source) && nodeIds.has(e.target)
+      );
 
       if (requestId !== loadRequestIdRef.current) {
         return;
       }
 
+      const fetchedTotal: number | null = overviewData?.kpis?.total_instances ?? null;
+      setTotalNodeCount(fetchedTotal);
+      if (overviewData) setOverview(overviewData as ApiOverview);
       setNodes(uniqueNodes);
       setEdges(uniqueEdges);
-      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges });
+      setLoadedGraphKey(graphKey);
+      writeCache(networkCache, networkCacheKey, { nodes: uniqueNodes, edges: uniqueEdges, totalNodeCount: fetchedTotal });
     } catch (err) {
       if (requestId !== loadRequestIdRef.current) {
         return;
@@ -788,6 +895,10 @@ export default function GraphPage() {
       }
     }
   }, [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView]);
+
+  const loadFromApiRef = useRef(loadFromApi);
+  loadFromApiRef.current = loadFromApi;
+  const wasInSearchModeRef = useRef(false);
 
   const loadOverviewFromApi = useCallback(async (options?: { force?: boolean }) => {
     const forceRefresh = options?.force === true;
@@ -809,8 +920,9 @@ export default function GraphPage() {
           ? visibleGraphIds.filter((id: string) => !id.includes('#layer='))
           : graphOptions.map((graph) => graph.id);
       const effectiveGraphId = graphIdsToFetch[0] ?? '';
-      if (effectiveGraphId) {
-        overviewUrl = `${apiUrl}/api/graph/${encodeURIComponent(effectiveGraphId)}/overview?workspace_id=${encodeURIComponent(workspaceId)}`;
+      const effectiveUri = graphOptions.find((g) => g.id === effectiveGraphId)?.uri ?? '';
+      if (effectiveUri) {
+        overviewUrl = `${apiUrl}/api/graph/overview?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(effectiveUri)}`;
       }
     }
 
@@ -885,15 +997,44 @@ export default function GraphPage() {
     setViews(normalizedViews);
   }, [workspaceId, setViews]);
 
-  // Reset selection and filters when the active graph identity changes
+  // Save filters for the graph we're leaving, restore (or default) for the new one.
   useEffect(() => {
+    const graphKey = activeSavedViewId ?? selectedGraphId ?? '__default';
+    const prevKey = prevGraphKeyRef.current;
+
+    if (prevKey !== null && prevKey !== graphKey) {
+      filterStateByGraphRef.current.set(prevKey, {
+        showRelations: showRelationsRef.current,
+        activeBuckets: new Set(activeBucketsRef.current),
+        hiddenNodeIds: new Set(hiddenNodeIdsRef.current),
+        nodeDisplayLimit: nodeDisplayLimitRef.current,
+        parentsLevels: parentsLevelsRef.current,
+        hierarchyDirection: hierarchyDirectionRef.current,
+      });
+    }
+    prevGraphKeyRef.current = graphKey;
+
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
-    setParentsLevels(0);
     setHierarchyByLevel([]);
-    setShowRelations(true);
-    setHiddenNodeIds(new Set());
-    setNodeDisplayLimit(200);
+    wasInSearchModeRef.current = false;
+
+    const saved = filterStateByGraphRef.current.get(graphKey);
+    if (saved) {
+      setShowRelations(saved.showRelations);
+      setActiveBuckets(saved.activeBuckets);
+      setHiddenNodeIds(saved.hiddenNodeIds);
+      setNodeDisplayLimit(saved.nodeDisplayLimit);
+      setParentsLevels(saved.parentsLevels);
+      setHierarchyDirection(saved.hierarchyDirection);
+    } else {
+      setShowRelations(false);
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setNodeDisplayLimit(200);
+      setParentsLevels(0);
+      setHierarchyDirection('TD');
+    }
   }, [selectedGraphId, activeSavedViewId]);
 
   // Load on mount and when workspace or visible graphs change
@@ -1392,20 +1533,20 @@ export default function GraphPage() {
       selectGraph(selectedIndividualGraphId);
       setVisibleGraphs([selectedIndividualGraphId]);
       const selectedClass = availableClasses.find((item) => item.id === selectedClassId);
+      const graphUri = graphOptions.find((g) => g.id === selectedIndividualGraphId)?.uri ?? '';
+      if (!graphUri) {
+        setCreateError('Selected graph could not be resolved. Please reload and try again.');
+        return;
+      }
       const apiUrl = getApiUrl();
       const response = await authFetch(`${apiUrl}/api/graph/nodes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspace_id: workspaceId,
-          type: 'Individual',
+          graph_uri: graphUri,
           label: normalizedLabel,
-          properties: selectedClass
-            ? {
-              class_id: selectedClass.id,
-              class_label: selectedClass.name,
-            }
-            : {},
+          class_uri: selectedClass?.id ?? null,
         }),
       });
 
@@ -1425,6 +1566,75 @@ export default function GraphPage() {
   };
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+
+  // Effective URI of the currently selected graph (used for backend search)
+  const effectiveGraphUri = useMemo(() => {
+    if (activeSavedView) return '';
+    const id = selectedGraphId ?? graphOptions[0]?.id ?? '';
+    return graphOptions.find((g) => g.id === id)?.uri ?? '';
+  }, [activeSavedView, graphOptions, selectedGraphId]);
+
+  // Backend search — fires when committedQuery changes (committed via Enter or X button)
+  useEffect(() => {
+    if (!committedQuery) {
+      wasInSearchModeRef.current = false;
+      setIsSearchMode(false);
+      setSearchNodes([]);
+      setSearchEdges([]);
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setParentsLevels(0);
+      setShowRelations(false);
+      setSearchExitKey((k) => k + 1);
+      loadFromApiRef.current();
+      return;
+    }
+    if (!effectiveGraphUri) return;
+
+    const controller = new AbortController();
+    // Clear all active filters only when first entering search mode for this session
+    if (!wasInSearchModeRef.current) {
+      setActiveBuckets(new Set());
+      setHiddenNodeIds(new Set());
+      setParentsLevels(0);
+      setShowRelations(false);
+      wasInSearchModeRef.current = true;
+    }
+    setIsSearchMode(true);
+    setSearchLoading(true);
+    const run = async () => {
+      try {
+        const apiUrl = getApiUrl();
+        const params = new URLSearchParams({
+          workspace_id: workspaceId!,
+          graph_uri: effectiveGraphUri,
+          query: committedQuery,
+          limit: '200',
+        });
+        const res = await authFetch(`${apiUrl}/api/graph/network/search?${params}`, { signal: controller.signal });
+        if (!res.ok) throw new Error('search failed');
+        const data = await res.json();
+        const visNodes: GraphNode[] = (data.nodes ?? []).map((n: ApiNode) => ({
+          id: n.id, label: n.label, type: n.type, properties: n.properties || {},
+        }));
+        const visEdges: GraphEdge[] = (data.edges ?? []).map((e: ApiEdge) => ({
+          id: e.id, source: e.source_id, target: e.target_id,
+          sourceLabel: e.source_label, targetLabel: e.target_label,
+          type: e.type, label: e.type, properties: e.properties || {},
+        }));
+        setSearchNodes(visNodes);
+        setSearchEdges(visEdges);
+        setStabilizeKey((k) => k + 1);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setIsSearchMode(false);
+      } finally {
+        setSearchLoading(false);
+      }
+    };
+    void run();
+    return () => controller.abort();
+  }, [committedQuery, effectiveGraphUri, workspaceId]);
 
   // Parents: expand one level — detect individuals or classes and fetch their parents
   const handleExpandParents = useCallback(async () => {
@@ -1447,7 +1657,9 @@ export default function GraphPage() {
       const graphIdsForParents = selectedGraphId
         ? [selectedGraphId]
         : visibleGraphIds.filter((id) => !id.includes('#layer='));
-      const graphNamesForParents = graphIdsForParents.map((id) => `http://ontology.naas.ai/graph/${id}`);
+      const graphNamesForParents = graphIdsForParents.map(
+        (id) => graphOptions.find((g) => g.id === id)?.uri ?? `http://ontology.naas.ai/graph/${id}`
+      );
       const params = new URLSearchParams({ workspace_id: workspaceId! });
       graphNamesForParents.forEach((n) => params.append('graph_names', n));
       frontier.forEach((n) => params.append('node_iris', n.id));
@@ -1496,10 +1708,11 @@ export default function GraphPage() {
     return result;
   }, [nodes, hierarchyByLevel, parentsLevels]);
 
-  // Nodes grouped by bucket for the BFO panel checkboxes
+  // Nodes grouped by bucket for the BFO panel checkboxes — recalculated from search results in search mode
   const nodesPerBucketForPanel = useMemo(() => {
+    const source = isSearchMode ? searchNodes : allVisibleNodes;
     const map = new Map<string, Array<{ id: string; label: string }>>();
-    for (const node of allVisibleNodes) {
+    for (const node of source) {
       const bucket = resolveGraphNodeBucket(node);
       const existing = map.get(bucket) ?? [];
       existing.push({ id: node.id, label: node.label });
@@ -1509,19 +1722,13 @@ export default function GraphPage() {
       bucketNodes.sort((a, b) => a.label.localeCompare(b.label));
     }
     return map;
-  }, [allVisibleNodes]);
+  }, [allVisibleNodes, isSearchMode, searchNodes]);
 
-  // Filter nodes: search + bucket + hidden
+  // Filter nodes: in search mode backend provides results with all filters OFF;
+  // otherwise apply bucket and hidden-node filters
   const filteredNodes = useMemo(() => {
+    if (isSearchMode) return searchNodes;
     let result = allVisibleNodes;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((node) =>
-        node.label.toLowerCase().includes(q) ||
-        node.type.toLowerCase().includes(q) ||
-        node.id.toLowerCase().includes(q)
-      );
-    }
     if (activeBuckets.size > 0) {
       result = result.filter((node) => activeBuckets.has(resolveGraphNodeBucket(node)));
     }
@@ -1529,11 +1736,17 @@ export default function GraphPage() {
       result = result.filter((node) => !hiddenNodeIds.has(node.id));
     }
     return result;
-  }, [allVisibleNodes, searchQuery, activeBuckets, hiddenNodeIds]);
+  }, [allVisibleNodes, isSearchMode, searchNodes, activeBuckets, hiddenNodeIds]);
 
-  // Filter edges: relations toggle + parents levels + constrain to visible nodes
+  // Filter edges: in search mode return backend edges; otherwise apply relations/parents toggles
   const filteredEdges = useMemo(() => {
     const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
+
+    if (isSearchMode) {
+      if (!showRelations) return [];
+      return searchEdges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+    }
+
     let result: GraphEdge[] = [];
 
     // Regular relation edges
@@ -1553,7 +1766,7 @@ export default function GraphPage() {
     }
 
     return result;
-  }, [edges, filteredNodes, showRelations, parentsLevels, hierarchyByLevel]);
+  }, [edges, filteredNodes, isSearchMode, searchEdges, showRelations, parentsLevels, hierarchyByLevel]);
 
   // Apply display limit — slice filteredNodes and constrain edges to those nodes
   const displayedNodes = useMemo(
@@ -1702,6 +1915,123 @@ export default function GraphPage() {
     setZoomLevel(Math.max(0.1, Math.min(3, level)));
   }, []);
 
+  const closeImportForm = () => {
+    setPageMode('graph');
+    setImportFile(null);
+    setImportAnalysis(null);
+    setImportError(null);
+  };
+
+  const analyzeFile = async (file: File) => {
+    setImportAnalyzing(true);
+    setImportError(null);
+    setImportAnalysis(null);
+    try {
+      const formData = new FormData();
+      formData.append('workspace_id', workspaceId);
+      formData.append('file', file);
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/graph/analyze`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Analysis failed: ${response.status}`);
+      }
+      const data: GraphImportAnalysis = await response.json();
+      setImportAnalysis(data);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Analysis failed');
+    } finally {
+      setImportAnalyzing(false);
+    }
+  };
+
+  const handleImportIndividuals = async () => {
+    if (!importFile || !selectedGraphId || importingFile) return;
+    const uri = graphOptions.find((g) => g.id === selectedGraphId)?.uri ?? '';
+    if (!uri) return;
+    setImportingFile(true);
+    setImportError(null);
+    try {
+      const formData = new FormData();
+      formData.append('workspace_id', workspaceId);
+      formData.append('graph_uri', uri);
+      formData.append('file', importFile);
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/graph/import`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Import failed: ${response.status}`);
+      }
+      clearGraphPageCaches();
+      await loadFromApi({ force: true });
+      closeImportForm();
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Import failed');
+    } finally {
+      setImportingFile(false);
+    }
+  };
+
+  const handleExportGraph = async () => {
+    const uri = graphOptions.find((g) => g.id === selectedGraphId)?.uri ?? '';
+    if (!uri || exporting) return;
+    const graphLabel = graphOptions.find((g) => g.id === selectedGraphId)?.name ?? selectedGraphId ?? 'graph';
+
+    setExporting(true);
+    setShowExportLog(true);
+    setExportMessages([`Starting export of graph "${graphLabel}"...`]);
+
+    try {
+      const apiUrl = getApiUrl();
+      setExportMessages((prev) => [...prev, 'Fetching triples in batches of 10,000...']);
+
+      const response = await authFetch(
+        `${apiUrl}/api/graph/export?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(uri)}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Export failed with status ${response.status}`);
+      }
+
+      const tripleCount = response.headers.get('X-Triple-Count');
+      if (tripleCount) {
+        setExportMessages((prev) => [
+          ...prev,
+          `Fetched ${parseInt(tripleCount, 10).toLocaleString()} triples total.`,
+        ]);
+      }
+
+      setExportMessages((prev) => [...prev, 'Generating TTL file with namespace bindings...']);
+
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get('content-disposition') ?? '';
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+      const filename = filenameMatch?.[1] ?? `${graphLabel}.ttl`;
+
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+
+      setExportMessages((prev) => [...prev, `Export complete. Downloaded: ${filename}`]);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      setExportMessages((prev) => [...prev, `Error: ${msg}`]);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <Header />
@@ -1733,8 +2063,49 @@ export default function GraphPage() {
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-2" />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportFile(null);
+                      setImportAnalysis(null);
+                      setImportError(null);
+                      setPageMode('import');
+                    }}
+                    disabled={!selectedGraphId}
+                    className={cn(
+                      'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+                      !selectedGraphId && 'cursor-not-allowed opacity-50'
+                    )}
+                    title={!selectedGraphId ? 'Select a graph to import into' : 'Import RDF file into graph'}
+                  >
+                    <Upload size={14} />
+                    Import
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportGraph}
+                    disabled={!selectedGraphId || exporting}
+                    className={cn(
+                      'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+                      (!selectedGraphId || exporting) && 'cursor-not-allowed opacity-50'
+                    )}
+                    title={!selectedGraphId ? 'Select a graph to export' : 'Export graph as TTL'}
+                  >
+                    {exporting ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Download size={14} />
+                    )}
+                    {exporting ? 'Exporting...' : 'Export'}
+                  </button>
+                </div>
               </>
+            ) : pageMode === 'import' ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Upload size={14} />
+                Import Graph
+              </div>
             ) : pageMode === 'sparql' ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Code size={14} />
@@ -1760,6 +2131,168 @@ export default function GraphPage() {
 
           {/* Content based on view type */}
           <div className="flex flex-1 overflow-hidden">
+            {pageMode === 'import' && (
+              <div className="flex flex-1 flex-col overflow-y-auto bg-card p-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  {/* Header */}
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <FileUp size={24} className="text-workspace-accent" />
+                      <div>
+                        <h2 className="text-lg font-semibold">Import Graph</h2>
+                        <p className="text-sm text-muted-foreground">
+                          Target: <span className="font-medium text-foreground">{graphOptions.find((g) => g.id === selectedGraphId)?.name ?? selectedGraphId}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeImportForm}
+                      className="rounded p-2 text-muted-foreground hover:bg-muted"
+                      title="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* File picker */}
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">Select file</label>
+                      <div
+                        className={cn(
+                          'flex cursor-pointer items-center gap-3 rounded-lg border bg-background px-4 py-2.5 text-sm hover:bg-muted/50',
+                          importFile && 'border-workspace-accent/50'
+                        )}
+                        onClick={() => importFileInputRef.current?.click()}
+                      >
+                        {importAnalyzing ? (
+                          <Loader2 size={16} className="shrink-0 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Upload size={16} className="shrink-0 text-muted-foreground" />
+                        )}
+                        <span className={cn('truncate', importFile ? 'text-foreground' : 'text-muted-foreground')}>
+                          {importAnalyzing
+                            ? 'Analysing…'
+                            : importFile
+                            ? importFile.name
+                            : 'Choose a file…'}
+                        </span>
+                        {importFile && !importAnalyzing && (
+                          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                            {(importFile.size / 1024).toFixed(1)} KB
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        ref={importFileInputRef}
+                        type="file"
+                        accept=".ttl,.owl,.rdf,.nt,.n3,.jsonld"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          setImportFile(f);
+                          setImportAnalysis(null);
+                          setImportError(null);
+                          if (f) void analyzeFile(f);
+                        }}
+                      />
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        Supported: .ttl (Turtle), .owl / .rdf (OWL XML), .nt (N-Triples), .n3
+                      </p>
+                    </div>
+
+                    {/* Error */}
+                    {importError && (
+                      <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                        {importError}
+                      </div>
+                    )}
+
+                    {/* Analysis results */}
+                    {importAnalysis && (
+                      <div className="space-y-4">
+                        <div className="rounded-lg border bg-muted/30 p-4">
+                          <div className="mb-3 flex items-center gap-2">
+                            <CheckCircle2 size={16} className="text-green-500" />
+                            <p className="text-sm font-semibold">Analysis complete</p>
+                          </div>
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="pb-2 text-left text-xs font-medium text-muted-foreground" />
+                                <th className="pb-2 text-right text-xs font-medium text-muted-foreground">Subjects</th>
+                                <th className="pb-2 text-right text-xs font-medium text-muted-foreground">Triples</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b font-medium">
+                                <td className="py-2">Total</td>
+                                <td className="py-2 text-right font-mono">
+                                  {importAnalysis.total_subjects.toLocaleString()}
+                                </td>
+                                <td className="py-2 text-right font-mono">
+                                  {importAnalysis.total_triples.toLocaleString()}
+                                </td>
+                              </tr>
+                              {([
+                                { label: 'OWL Named Individuals', s: importAnalysis.named_individuals_subjects, t: importAnalysis.named_individuals_triples, highlight: true },
+                                { label: 'OWL Classes',           s: importAnalysis.classes_subjects,           t: importAnalysis.classes_triples,           highlight: false },
+                                { label: 'OWL Object Properties', s: importAnalysis.object_properties_subjects, t: importAnalysis.object_properties_triples, highlight: false },
+                                { label: 'OWL Datatype Properties',s: importAnalysis.datatype_properties_subjects,t: importAnalysis.datatype_properties_triples,highlight: false },
+                                { label: 'OWL Restrictions',      s: importAnalysis.restrictions_subjects,      t: importAnalysis.restrictions_triples,      highlight: false },
+                                { label: 'Unknown',               s: importAnalysis.unknown_subjects,           t: importAnalysis.unknown_triples,           highlight: false },
+                              ] as const).map(({ label, s, t, highlight }) => (
+                                <tr key={label} className="border-b last:border-0">
+                                  <td className={cn('py-1.5 pl-3 text-muted-foreground', highlight && 'font-medium text-foreground')}>
+                                    {label}
+                                  </td>
+                                  <td className={cn('py-1.5 text-right font-mono', highlight && 'font-semibold text-workspace-accent')}>
+                                    {s.toLocaleString()}
+                                  </td>
+                                  <td className={cn('py-1.5 text-right font-mono', highlight && 'font-semibold text-workspace-accent')}>
+                                    {t.toLocaleString()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Import action */}
+                        <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
+                          <p className="text-sm text-muted-foreground">
+                            {importAnalysis.named_individuals_subjects === 0
+                              ? 'No OWL Named Individuals found in this file.'
+                              : `Ready to add ${importAnalysis.named_individuals_triples.toLocaleString()} triples (${importAnalysis.named_individuals_subjects.toLocaleString()} individuals) to "${graphOptions.find((g) => g.id === selectedGraphId)?.name ?? selectedGraphId}".`}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleImportIndividuals}
+                            disabled={importAnalysis.named_individuals_subjects === 0 || importingFile}
+                            className={cn(
+                              'ml-4 flex shrink-0 items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                              'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+                            )}
+                          >
+                            {importingFile ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <FileUp size={16} />
+                            )}
+                            {importingFile
+                              ? 'Importing…'
+                              : `Import ${importAnalysis.named_individuals_subjects.toLocaleString()} Named Individuals`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {pageMode === 'create-individual' && (
               <div className="flex flex-1 flex-col overflow-y-auto bg-card p-6">
                 <div className="mx-auto w-full max-w-2xl">
@@ -2179,17 +2712,26 @@ export default function GraphPage() {
                 {/* Search + relation filters — left */}
                 <div className="absolute left-4 top-4 z-10 flex gap-2">
                   <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
-                    <Search size={14} className="text-muted-foreground" />
+                    {searchLoading
+                      ? <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                      : <Search size={14} className="text-muted-foreground" />
+                    }
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search nodes..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const q = searchQuery.trim().toLowerCase();
+                          setCommittedQuery(q);
+                        }
+                      }}
+                      placeholder="Search nodes…"
                       className="w-48 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                     />
                     {searchQuery && (
                       <button
-                        onClick={() => setSearchQuery('')}
+                        onClick={() => { setSearchQuery(''); setCommittedQuery(''); }}
                         className="text-muted-foreground hover:text-foreground"
                       >
                         <X size={14} />
@@ -2242,9 +2784,26 @@ export default function GraphPage() {
                       >+</button>
                     )}
                   </div>
-                  {(searchQuery || filteredNodes.length < allVisibleNodes.length || nodeDisplayLimit < filteredNodes.length) && (
+                  {!showRelations && parentsLevels > 0 && (
+                    <div className="flex items-center rounded-lg border bg-card shadow-sm overflow-hidden">
+                      {(['TD', 'LR'] as const).map((dir, i) => (
+                        <button
+                          key={dir}
+                          onClick={() => setHierarchyDirection(dir)}
+                          className={cn(
+                            'px-3 py-1.5 text-xs',
+                            i > 0 && 'border-l',
+                            hierarchyDirection === dir
+                              ? 'bg-foreground text-background'
+                              : 'text-muted-foreground hover:text-foreground'
+                          )}
+                        >{dir}</button>
+                      ))}
+                    </div>
+                  )}
+                  {(searchQuery || filteredNodes.length < allVisibleNodes.length || nodeDisplayLimit < filteredNodes.length || (totalNodeCount !== null && totalNodeCount > nodes.length)) && (
                     <span className="flex items-center rounded-lg border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                      Showing {Math.min(nodeDisplayLimit, filteredNodes.length)} of {allVisibleNodes.length} nodes
+                      Showing {Math.min(nodeDisplayLimit, filteredNodes.length)} of {totalNodeCount ?? allVisibleNodes.length} nodes
                     </span>
                   )}
                 </div>
@@ -2289,24 +2848,81 @@ export default function GraphPage() {
                     </div>
                   </div>
                 ) : nodes.length === 0 ? (
-                  <div className="flex h-full items-center justify-center">
-                    <div className="text-center">
+                  <div className="flex h-full overflow-y-auto">
+                    <div className="mx-auto w-full max-w-md p-8">
                       <div className="mb-4 flex justify-center">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white dark:bg-zinc-800 shadow-sm">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
                           <Network size={32} className="text-muted-foreground" />
                         </div>
                       </div>
-                      <h2 className="mb-2 text-lg font-semibold">No Nodes in Graph</h2>
-                      <p className="mb-4 max-w-md text-muted-foreground">
-                        This workspace has no graph nodes yet. Seed the database:
+                      <h2 className="mb-2 text-center text-lg font-semibold">No individuals found in graph</h2>
+                      <p className="mb-6 text-center text-sm text-muted-foreground">
+                        The selected graph contains no OWL Named Individuals.
                       </p>
-                      <code className="rounded bg-muted px-3 py-2 text-sm">
-                        cd apps/api && python seed.py --reset
-                      </code>
-                      <div className="mt-4">
+
+                      {/* Stats by rdf:type */}
+                      {overview && (
+                        <div className="mb-6 rounded-lg border bg-card p-4">
+                          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Graph statistics
+                          </p>
+                          <div className="mb-4 grid grid-cols-2 gap-3">
+                            <div className="rounded-md bg-muted/50 px-3 py-2">
+                              <p className="text-xs text-muted-foreground">Instances</p>
+                              <p className="text-lg font-semibold tabular-nums">
+                                {overview.kpis.total_instances.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="rounded-md bg-muted/50 px-3 py-2">
+                              <p className="text-xs text-muted-foreground">Relationships</p>
+                              <p className="text-lg font-semibold tabular-nums">
+                                {overview.kpis.total_relationships.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          {overview.instances_by_class.length > 0 ? (
+                            <div>
+                              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                                By rdf:type
+                              </p>
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="pb-1.5 text-left text-xs font-medium text-muted-foreground">
+                                      Type
+                                    </th>
+                                    <th className="pb-1.5 text-right text-xs font-medium text-muted-foreground">
+                                      Count
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {overview.instances_by_class.map(({ type, count }) => (
+                                    <tr key={type} className="border-b last:border-0">
+                                      <td
+                                        className="max-w-[220px] truncate py-1.5 text-muted-foreground"
+                                        title={type}
+                                      >
+                                        {type}
+                                      </td>
+                                      <td className="py-1.5 text-right font-mono font-medium tabular-nums">
+                                        {count.toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No type breakdown available.</p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex justify-center">
                         <button
                           onClick={() => void loadFromApi()}
-                          className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 mx-auto"
+                          className="flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
                         >
                           <RefreshCw size={16} />
                           Refresh
@@ -2317,14 +2933,15 @@ export default function GraphPage() {
                 ) : (
                   <>
                     <VisNetwork
-                      key={activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default'}
+                      key={`${loadedGraphKey || (activeSavedViewId ?? selectedGraphId ?? visibleGraphIds.join(',') ?? 'default')}-${showRelations ? 'rel' : 'bucket'}-x${searchExitKey}`}
                       nodes={displayedNodes}
                       edges={displayedEdges}
                       selectedNodeId={selectedNodeId}
                       onNodeSelect={setSelectedNodeId}
                       onEdgeSelect={setSelectedEdgeId}
                       stabilizeKey={stabilizeKey}
-                      layoutDirection={showRelations ? undefined : 'LR'}
+                      layoutDirection={showRelations ? undefined : hierarchyDirection}
+                      physicsEnabled={showRelations && parentsLevels > 0}
                     />
                     {filteredNodes.length > 0 && (
                       <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-1.5 rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm w-52">
@@ -2715,21 +3332,39 @@ LIMIT 100`}
                 >
                   Edit
                 </button>
-                <button 
+                <button
                   onClick={async () => {
-                    if (confirm(`Delete node "${selectedNode.label}"?`)) {
-                      try {
-                        const { authFetch } = await import('@/stores/auth');
-                        await authFetch(`/api/graph/nodes/${selectedNode.id}`, {
-                          method: 'DELETE',
-                        });
-                        setSelectedNodeId(null);
-                        // Refresh graph data
-                        window.location.reload();
-                      } catch (error) {
-                        console.error('Failed to delete node:', error);
-                        alert('Failed to delete node');
+                    const ok = await confirm({
+                      title: `Delete node "${selectedNode.label}"?`,
+                      description:
+                        'This will remove all triples in the current graph where this node appears as subject or object. This action cannot be undone.',
+                      confirmLabel: 'Delete Node',
+                      destructive: true,
+                    });
+                    if (!ok) return;
+                    if (!effectiveGraphUri) {
+                      console.error('Cannot delete node: no graph selected.');
+                      return;
+                    }
+                    try {
+                      const apiUrl = getApiUrl();
+                      const response = await authFetch(`${apiUrl}/api/graph/nodes/delete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          workspace_id: workspaceId,
+                          graph_uri: effectiveGraphUri,
+                          individual_uri: selectedNode.id,
+                        }),
+                      });
+                      if (!response.ok) {
+                        throw new Error(`Failed with status ${response.status}`);
                       }
+                      setSelectedNodeId(null);
+                      clearGraphPageCaches();
+                      await loadFromApi({ force: true });
+                    } catch (error) {
+                      console.error('Failed to delete node:', error);
                     }
                   }}
                   className="rounded border px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -2741,6 +3376,50 @@ LIMIT 100`}
           </div>
         )}
       </div>
+      {confirmDialog}
+
+      {/* Export progress log */}
+      {showExportLog && (
+        <div className="fixed bottom-4 right-4 z-50 w-96 rounded-lg border bg-card shadow-lg">
+          <div className="flex items-center justify-between border-b px-4 py-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Download size={14} />
+              Export Progress
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowExportLog(false)}
+              className="rounded p-1 text-muted-foreground hover:bg-muted"
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="max-h-48 overflow-y-auto p-4 font-mono text-xs">
+            {exportMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'py-0.5',
+                  msg.startsWith('Error')
+                    ? 'text-red-500'
+                    : msg.startsWith('Export complete')
+                    ? 'text-green-500'
+                    : 'text-muted-foreground'
+                )}
+              >
+                {msg}
+              </div>
+            ))}
+            {exporting && (
+              <div className="flex items-center gap-1 py-0.5 text-muted-foreground">
+                <Loader2 size={10} className="animate-spin" />
+                Processing...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

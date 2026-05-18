@@ -9,7 +9,7 @@ NAME = "Pennylane"
 DESCRIPTION = "A Pennylane Agent for managing accounting and financial operations."
 MODEL = "o3-mini"
 TEMPERATURE = 1
-AVATAR_URL = "https://logo.clearbit.com/pennylane.tech"
+AVATAR_URL = "https://www.pennylane.tech/favicon.ico"
 SYSTEM_PROMPT = """Tu es un agent Pennylane avec accès aux outils d'intégration Pennylane.
 Si tu n'as pas accès aux outils, demande à l'utilisateur de configurer son PENNYLANE_API_TOKEN dans le fichier .env.
 Sois toujours clair et professionnel dans ta communication en aidant les utilisateurs à gérer leurs données comptables.

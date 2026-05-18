@@ -101,15 +101,6 @@ db-migrate: ## Run database migrations
 	@cd apps/api && uv run python -c "import asyncio; from app.core.database import init_db; asyncio.run(init_db())"
 	@echo "$(GREEN)✓ Migrations complete$(NC)"
 
-db-seed: ## Seed database with demo data
-	@echo "$(BLUE)Seeding database...$(NC)"
-	@cd apps/api && uv run python seed.py
-	@echo "$(GREEN)✓ Database seeded$(NC)"
-
-db-seed-reset: ## Reset demo tables and reseed (destructive)
-	@echo "$(RED)WARNING: This will TRUNCATE demo tables and reseed$(NC)"
-	@cd apps/api && uv run python seed.py --reset
-	@echo "$(GREEN)✓ Demo tables reset and reseeded$(NC)"
 
 # =============================================================================
 # Development Servers (updated)

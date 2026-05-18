@@ -37,10 +37,12 @@ const throttledLocalStorage = () => {
 export type NavigationItem =
   | 'chat'
   | 'search'
+  | 'files'
   | 'lab'
   | 'ontology'
   | 'graph'
-  | 'apps';
+  | 'apps'
+  | 'marketplace';
 
 // AgentType is now a string to support dynamic agents
 export type AgentType = string;
@@ -48,7 +50,7 @@ export type AgentType = string;
 export interface ToolCall {
   id: string;
   toolName: string;
-  prefix: 'Tool' | 'Agent' | 'Handoff to';
+  prefix: 'Tool' | 'Agent' | 'Handoff to' | 'Routing to';
   rawName: string;
   status: 'running' | 'done';
   input?: string;
@@ -65,6 +67,7 @@ export interface Message {
   toolCalls?: ToolCall[]; // Ordered list of tool invocations for this message
   images?: string[]; // Base64-encoded images for multimodal chat
   thinkingDuration?: number; // Duration in seconds the AI spent "thinking"
+  executionTime?: number; // Total seconds from request sent to response complete
   sources?: string[]; // filenames of RAG documents used to answer
   // Author attribution (preserved across sessions and users)
   authorId?: string;
@@ -163,7 +166,20 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps';
+export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace';
+
+export interface OpenAppModule {
+  module_path: string;
+  name: string;
+  description?: string;
+  logo_url: string | null;
+  category: string;
+  app_url?: string | null;
+  demo_login?: string | null;
+  demo_password?: string | null;
+  maintainer?: string | null;
+  tier?: string | null;
+}
 
 interface WorkspaceState {
   // Navigation
@@ -177,6 +193,11 @@ interface WorkspaceState {
   toggleSection: (section: SidebarSection) => void;
   activePanelSection: SidebarSection | null;
   setActivePanelSection: (section: SidebarSection | null) => void;
+  lastActivePanelSection: SidebarSection | null;
+
+  // Currently open app (for Apps section panel detail view)
+  openAppModule: OpenAppModule | null;
+  setOpenAppModule: (mod: OpenAppModule | null) => void;
 
   // Context panel
   contextPanelOpen: boolean;
@@ -199,6 +220,7 @@ interface WorkspaceState {
     sources?: string[],
     activityLine?: string | null,
     toolCalls?: ToolCall[] | null,
+    executionTime?: number,
   ) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
@@ -306,7 +328,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         : [...state.expandedSections, section],
     })),
   activePanelSection: null,
-  setActivePanelSection: (section) => set({ activePanelSection: section }),
+  setActivePanelSection: (section) => set((state) => ({
+    activePanelSection: section,
+    lastActivePanelSection: section ?? state.lastActivePanelSection,
+  })),
+  lastActivePanelSection: null,
+
+  openAppModule: null,
+  setOpenAppModule: (mod) => set({ openAppModule: mod }),
 
   // Context panel
   contextPanelOpen: false,
@@ -376,7 +405,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }));
   },
 
-  updateLastMessage: (conversationId, content, thinkingDuration, sources, activityLine, toolCalls) => {
+  updateLastMessage: (conversationId, content, thinkingDuration, sources, activityLine, toolCalls, executionTime) => {
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
@@ -391,6 +420,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                       ...(sources !== undefined && { sources }),
                       ...(activityLine !== undefined && { activityLine: activityLine || undefined }),
                       ...(toolCalls !== undefined && { toolCalls: toolCalls || undefined }),
+                      ...(executionTime !== undefined && { executionTime }),
                     }
                   : msg
               ),

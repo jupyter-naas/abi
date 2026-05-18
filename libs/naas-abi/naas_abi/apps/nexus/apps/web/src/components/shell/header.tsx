@@ -43,6 +43,9 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
     getCurrentBranch,
     getBranches,
     checkoutBranch,
+    activePanelSection,
+    setActivePanelSection,
+    lastActivePanelSection,
   } = useWorkspaceStore();
   
   // Use authenticated user from auth store (not the hardcoded workspace store user)
@@ -95,9 +98,9 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
 
 
   return (
-    <header className="glass-nav flex h-14 items-center justify-between border-b border-border/50 px-4">
-      {/* Left side - show expand button when sidebar is collapsed */}
-      <div className="flex items-center">
+    <header className="glass-nav relative z-[200] flex h-14 items-center justify-between border-b border-border/50 pl-2 pr-4">
+      {/* Left side */}
+      <div className="flex items-center gap-1">
         {!sidebarOpen && (
           <button
             onClick={toggleSidebar}
@@ -106,6 +109,21 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
               'hover:bg-muted hover:text-foreground text-muted-foreground'
             )}
             title="Expand sidebar"
+          >
+            <PanelLeft size={16} />
+          </button>
+        )}
+
+        {/* Section panel toggle — visible whenever a panel section has been opened */}
+        {mounted && lastActivePanelSection && (
+          <button
+            onClick={() => setActivePanelSection(activePanelSection ? null : lastActivePanelSection)}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-md transition-all',
+              'hover:bg-muted hover:text-foreground',
+              activePanelSection ? 'text-foreground bg-muted' : 'text-muted-foreground'
+            )}
+            title={activePanelSection ? 'Close panel' : 'Open panel'}
           >
             <PanelLeft size={16} />
           </button>
@@ -133,7 +151,7 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
           </button>
 
           {branchMenuOpen && (
-            <div className="glass-card absolute right-0 top-full z-50 mt-2 w-56 py-1">
+            <div className="glass-card absolute right-0 top-full z-[300] mt-2 w-56 py-1">
               {branches.map((branch) => (
                 <button
                   key={branch.id}
@@ -204,7 +222,7 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
           </button>
 
           {userMenuOpen && (
-            <div className="absolute right-0 top-full z-50 mt-2 min-w-56 w-64 rounded-lg border bg-card shadow-lg p-2">
+            <div className="absolute right-0 top-full z-[300] mt-2 min-w-56 w-64 rounded-lg border bg-card shadow-lg p-2">
               {/* User info */}
               <div className="border-b border-border/50 px-4 py-3">
                 <p className="truncate font-medium" title={displayUser?.name || 'User'}>

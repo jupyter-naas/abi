@@ -1,46 +1,59 @@
-deploy:
-  workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
-  space_name: "abi-api"
-  naas_api_key: "{{ secret.NAAS_API_KEY }}"
-  env:
-    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
-    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
-    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
+# =============================================================================
+#
+#        db         888888b.   8888888
+#       d88b        888  "88b    888
+#      d8P88b       888  .88P    888
+#     d8P 88b       8888888K.    888
+#    d8P  88b       888  "Y88b   888
+#   d88   88b       888    888   888
+#  d8888888888b     888   d88P   888
+# d8P      88b    8888888P"    8888888
+#
+#  A G E N T I C   B R A I N   I N F R A S T R U C T U R E
+# -----------------------------------------------------------------------------
+#  config.local.yaml         local Docker Compose stack
+# =============================================================================
+#
+# Your open-source AI Operating System. One config file, one stack,
+# every data and AI module your organization needs -- all data stays yours.
+#
+# `secret.X`  read from .env at startup. Never hardcode credentials here.
+# config.remote.yaml  the twin of this file for cloud/production deployments.
+# =============================================================================
 
-api:
-  title: "ABI API"
-  description: "API for ABI"
-  logo_path: "assets/logo.png"
-  favicon_path: "assets/favicon.ico"
-  cors_origins:
-    - "http://localhost:9879"
-    - "http://localhost:3042"
-    - "http://127.0.0.1:9879"
-    - "http://127.0.0.1:3042"
-    - "https://nexus.localhost"
-    - "http://localhost"
 
+# 1. GLOBAL: affects every module and service below
+# Q: Should the AI call external APIs or run on this machine?
+# A: "cloud" uses external providers (OpenAI etc.). "local" uses a model running here.
 global_config:
   ai_mode: "cloud"
   public_api_host: "{{ secret.NEXUS_API_URL }}"
 
-opencode:
-  auth_file_path: "~/.local/share/opencode/auth.json"
-  providers:
-    - id: "openrouter"
-      key: "{{ secret.OPENROUTER_API_KEY }}"
-      type: "api"
-    - id: "openai"
-      key: "{{ secret.OPENAI_API_KEY }}"
-      type: "api"
 
+# 2. MODULES: what the system does
+# Q: Which modules do you want to load at startup?
+# A: Set enabled: true to turn one on, false to turn it off without deleting its config.
 modules:
+
+  # Q: How do I configure the core web app (login, chat, agents, files, knowledge)?
+  # A: Connect it to the database and cache, then define who can access what.
   - module: naas_abi
     enabled: true
     config:
       nexus_config:
+
+        # Q: Where are the web app, database, and cache running?
+        # A: Use Docker service hostnames -- they only resolve inside the Docker network.
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
+
+        # Q: What URL namespace should the knowledge graph use?
+        # A: Every entity and relationship in the graph is prefixed with this URI.
+        ontology_base_uri: "http://ontology.naas.ai/"
+
+        # Q: Which features are on, and who gets access to each?
+        # A: List active features, then set the default access per role.
+        #    owner/admin = everything | member = chat + files | viewer = chat + files
         feature_flags:
           enabled_features:
             - chat
@@ -49,16 +62,26 @@ modules:
             - knowledge
             - settings
           role_baseline:
-            owner: [chat, files, agents, knowledge, settings]
-            admin: [chat, files, agents, knowledge, settings]
+            owner:  [chat, files, agents, knowledge, settings]
+            admin:  [chat, files, agents, knowledge, settings]
             member: [chat, files]
             viewer: [chat, files]
           workspace_overrides: {}
+
+        # Q: How do users sign in?
+        # A: Password login is on. Magic link is on but restricted to pre-seeded users only.
+        auth_password_enabled: true
         magic_link_allow_signup: false
+
+        # Q: What do the passwordless sign-in emails say?
+        # A: Set the app name and templates -- {app_name}, {magic_link_url}, {expire_minutes} are auto-filled.
         magic_link_email_app_name: "ABI Platform"
         magic_link_email_subject_template: "Your {app_name} sign-in link"
         magic_link_email_text_template: "Use this link to sign in to {app_name}:\n\n{magic_link_url}\n\nThis link expires in {expire_minutes} minutes."
         magic_link_email_html_template: "<p>Use this link to sign in to {app_name}:</p><p><a href=\"{magic_link_url}\">Sign in</a></p><p>This link expires in {expire_minutes} minutes.</p>"
+
+        # Q: What name, colors, and logo should the UI show?
+        # A: Set the brand identity here -- workspaces can override these defaults.
         tenant:
           tab_title: "ABI AI Platform | Naas.ai"
           favicon_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
@@ -71,79 +94,56 @@ modules:
           login_border_radius: "0"
           show_terms_footer: false
           show_powered_by: false
-          login_footer_text: "© ABI AI Platform (Beta)| Naas.ai"
+          login_footer_text: "© ABI AI Platform (Beta) | Naas.ai"
+
+        # Q: Who gets an account created automatically on first boot?
+        # A: List seed users here. Password comes from NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD in .env (default: Admin1234!)
         users:
-          - email: "maxime@naas.ai"
-            name: "Maxime Jublou"
-          - email: "jeremy@naas.ai"
-            name: "Jeremy Ravenel"
-          - email: "florent@naas.ai"
-            name: "Florent Ravenel"
+          - email: "admin@example.com"
+            name: "Local Admin"
+
+        # Q: How is the organization structured into workspaces and roles?
+        # A: Define orgs, their workspaces, and who belongs to each with what role.
+        #    role: owner | admin | member | viewer
         organizations:
-          - name: "Naas.ai"
-            slug: "naas-ai"
-            owner_email: "florent@naas.ai"
-            logo_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
-            logo_rectangle_url: "https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-core/assets/logo.png"
+          - name: "ABI"
+            slug: "abi"
+            owner_email: "admin@example.com"
             primary_color: "#34D399"
             accent_color: "#34D399"
-            login_footer_text: "© Naas.ai"
-            show_powered_by: false
             members:
-              - email: "maxime@naas.ai"
-                role: "owner"
-              - email: "jeremy@naas.ai"
-                role: "owner"
-              - email: "florent@naas.ai"
+              - email: "admin@example.com"
                 role: "owner"
             workspaces:
-              - name: "Naas.ai"
-                slug: "naas-ai"
-                owner_email: "florent@naas.ai"
+              - name: "Primary"
+                slug: "primary"
+                owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
                 members:
-                  - email: "maxime@naas.ai"
+                  - email: "admin@example.com"
                     role: "owner"
-                  - email: "jeremy@naas.ai"
-                    role: "owner"
-                  - email: "florent@naas.ai"
-                    role: "owner"
-              - name: "Maxime"
-                slug: "maxime"
-                owner_email: "maxime@naas.ai"
+              - name: "Secondary"
+                slug: "secondary"
+                owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
                 members:
-                  - email: "maxime@naas.ai"
-                    role: "owner"
-              - name: "Jeremy"
-                slug: "jeremy"
-                owner_email: "jeremy@naas.ai"
-                primary_color: "#34D399"
-                accent_color: "#34D399"
-                members:
-                  - email: "jeremy@naas.ai"
-                    role: "owner"
-              - name: "Florent"
-                slug: "florent"
-                owner_email: "florent@naas.ai"
-                primary_color: "#34D399"
-                accent_color: "#34D399"
-                members:
-                  - email: "florent@naas.ai"
-                    role: "owner"
+                  - email: "admin@example.com"
+                    role: "member"
 
+
+  # Q: How do I add ChatGPT (OpenAI) as an AI provider?
+  # A: Enable the module and give it your OpenAI API key.
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
-  - module: naas_abi_marketplace.applications.github
-    enabled: true
-    config:
-      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
 
+  # Q: Which AI models should users be able to pick in the chat UI?
+  # A: Enable OpenRouter and list the model slugs you want to expose.
+  #    Find slugs at openrouter.ai/models -- format: "provider/model-name"
   - module: naas_abi_marketplace.applications.openrouter
     enabled: true
     config:
@@ -159,18 +159,24 @@ modules:
         - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
 
-  - module: naas_abi_marketplace.domains.support
+
+  # Q: How do I connect the WSR module to live real-world data feeds?
+  # A: Provide API keys for each source. Leave blank to skip that source gracefully.
+  #    OpenSky: flight tracking | TfL: Transport for London | OpenWebcamDB: public webcams
+  - module: naas_abi_marketplace.alpha.wsr
     enabled: true
     config:
-        default_repository: "jupyter-naas/abi"
-        github_project_id: 12
-        project_node_id: "PVT_kwDOBESWNM4AKRt3"
-        iteration_field_id: "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
-        status_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
-        status_option_id: "97363483"
-        priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
-        priority_option_id: "4fb76f2d"
+      opensky_client_id: ""
+      opensky_client_secret: ""
+      tfl_app_key: ""
+      openwebcamdb_api_key: ""
+      demo_login: "demo@naas.ai"
+      demo_password: "demo1234"
 
+
+  # Q: How do I make documents searchable by meaning, not just keywords?
+  # A: Pick an embedding model -- the pipeline converts text to vectors automatically.
+  #    dimension 1536 is fixed for text-embedding-3-small, do not change it.
   - module: naas_abi_marketplace.domains.document
     enabled: true
     config:
@@ -181,11 +187,26 @@ modules:
       markdowntovector_pipelines:
         - api_key: "{{ secret.OPENAI_API_KEY }}"
 
+
+# 3. SERVICES: what the modules run on
+# Q: Which technology does each service use?
+# A: Each entry has one adapter. Change the adapter name to swap the technology.
+#    Lighter options that need no extra Docker container:
+#      bus          -> "python_queue"   (in-memory)
+#      triple_store -> "fs"             (files on disk)
+#      vector_store -> "python"         (in-memory)
+#      kv           -> "python"         (in-memory)
 services:
+
+  # Q: How does the app read secret values at startup?
+  # A: The dotenv adapter reads every `secret.X` from your .env file.
   secret:
     secret_adapters:
       - adapter: "dotenv"
         config: {}
+
+  # Q: Where are uploaded files and attachments stored?
+  # A: MinIO runs as a local S3-compatible file server inside Docker.
   object_storage:
     object_storage_adapter:
       adapter: "s3"
@@ -195,6 +216,9 @@ services:
         access_key_id: "{{ secret.MINIO_ROOT_USER }}"
         secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
         endpoint_url: "http://minio:9000"
+
+  # Q: Where does the AI store knowledge as a graph of facts and relationships?
+  # A: Apache Jena Fuseki (TDB2) persists the RDF graph. Swap to "fs" for no-server local dev.
   triple_store:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
@@ -205,30 +229,80 @@ services:
             adapter: "redis"
             config:
               redis_url: "redis://redis:6379"
+
+  # Q: Where are the vectors stored that power semantic search?
+  # A: Qdrant holds them. Swap to "python" for in-memory storage (lost on restart).
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
       config:
         host: "qdrant"
         port: 6333
+
+  # Q: How do background tasks get queued between services?
+  # A: RabbitMQ acts as the message broker. Swap to "python_queue" for no-server local dev.
   bus:
     bus_adapter:
       adapter: "rabbitmq"
       config:
         rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@rabbitmq:5672"
+
+  # Q: Where is temporary data kept (sessions, caches, locks)?
+  # A: Redis handles it. Swap to "python" for an in-memory dict with no Redis container.
   kv:
     kv_adapter:
       adapter: "redis"
       config:
         redis_url: "redis://redis:6379"
+
+  # Q: How are emails sent (magic links, notifications)?
+  # A: "filesystem" writes them as files to the path below -- no email server needed locally.
   email:
     email_adapter:
-      adapter: "smtp"
+      adapter: "filesystem"
       config:
-        host: "{{ secret.SMTP_HOST }}"
-        port: "{{ secret.SMTP_PORT }}"
-        username: "{{ secret.SMTP_USERNAME }}"
-        password: "{{ secret.SMTP_PASSWORD }}"
-        use_tls: true
-        use_ssl: false
-        timeout: 10
+        directory: "/tmp/abi-emails"
+
+
+# 4. API: presentation details
+# Q: How is the API identified, and which browsers are allowed to call it?
+# A: Give it a title and logo, then list every origin the browser should trust.
+api:
+  title: "ABI API"
+  description: "API for ABI"
+  logo_path: "assets/logo.png"
+  favicon_path: "assets/favicon.ico"
+  cors_origins:
+    - "http://localhost:9879"       # ABI core API (backend)
+    - "http://localhost:3042"       # Nexus web app (frontend)
+    - "http://127.0.0.1:9879"
+    - "http://127.0.0.1:3042"
+    - "https://nexus.localhost"     # local reverse proxy with TLS
+    - "http://localhost"
+
+
+# 5. OPENCODE: dev tool, secondary
+# Q: How does the OpenCode coding assistant connect to AI providers?
+# A: Give it an API key per provider; it tries them in the order listed.
+opencode:
+  auth_file_path: "~/.local/share/opencode/auth.json"
+  providers:
+    - id: "openrouter"
+      key: "{{ secret.OPENROUTER_API_KEY }}"
+      type: "api"
+    - id: "openai"
+      key: "{{ secret.OPENAI_API_KEY }}"
+      type: "api"
+
+
+# 6. DEPLOY: cloud only, touch once
+# Q: How do I deploy this stack to the Naas cloud?
+# A: Point it to your Naas workspace and pass the API keys the container needs.
+deploy:
+  workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
+  space_name: "abi-api"
+  naas_api_key: "{{ secret.NAAS_API_KEY }}"
+  env:
+    NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
+    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
+    ABI_API_KEY: "{{ secret.ABI_API_KEY }}"

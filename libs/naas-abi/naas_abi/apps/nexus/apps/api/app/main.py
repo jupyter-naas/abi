@@ -4,10 +4,9 @@ NEXUS API - Main Application Entry Point
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import cast
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
@@ -26,6 +25,25 @@ from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
 from naas_abi.apps.nexus.apps.api.app.services.ollama import ensure_ollama_ready, get_ollama_status
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
+
+
+async def _prefetch_modules_catalog() -> None:
+    """Warm up the marketplace module catalog in a thread-pool worker.
+
+    The catalog scans naas_abi_marketplace via filesystem I/O which is
+    synchronous.  Running it via run_in_executor keeps the event loop free.
+    """
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.modules.service import (
+            _build_catalog,
+        )
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _build_catalog)
+        _log.info("✓ Marketplace catalog pre-populated at startup")
+    except Exception:
+        _log.exception("Background modules catalog pre-fetch failed (non-fatal)")
 
 
 async def _prefetch_agent_class_registry() -> None:
@@ -71,13 +89,6 @@ async def _startup(app: FastAPI) -> None:
         print("  API will not start without database connection.")
         raise
 
-    if bool(getattr(settings, "auto_seed_demo_data", True)):
-        from naas_abi.apps.nexus.apps.api import seed as seed_module
-
-        ensure_seed_fn = getattr(seed_module, "ensure_seed_data", None)
-        if callable(ensure_seed_fn):
-            await cast(Callable[[], Awaitable[bool]], ensure_seed_fn)()
-
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
 
@@ -92,6 +103,9 @@ async def _startup(app: FastAPI) -> None:
     # GET /agents/ request returns instantly from cache instead of waiting
     # for all agent modules to be imported.  create_task returns immediately.
     asyncio.create_task(_prefetch_agent_class_registry())
+
+    # Pre-populate the marketplace catalog so first GET /modules/ is instant.
+    asyncio.create_task(_prefetch_modules_catalog())
 
     # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
     # print("Checking Ollama status...")

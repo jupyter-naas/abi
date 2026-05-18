@@ -61,9 +61,8 @@ make install
 # 3. Start PostgreSQL
 make db-up
 
-# 4. Run migrations and seed demo data
+# 4. Run migrations
 make db-migrate
-make db-seed
 
 # 5. Start dev servers
 make up

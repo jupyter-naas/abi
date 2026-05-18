@@ -10,6 +10,32 @@ from pydantic import BaseModel, Field
 VALID_PROVIDER_TYPES = get_all_provider_names() + ["custom", "abi"]
 
 
+class MessageStep(BaseModel):
+    tool_name: str
+    prefix: str
+    status: str
+    input: str | None = None
+    output: str | None = None
+
+
+class MessageMetadataUpdate(BaseModel):
+    execution_time: float | None = None
+    steps: list[MessageStep] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+
+
+class ExportMessageMetadata(BaseModel):
+    message_id: str
+    execution_time: float | None = None
+    steps: list[MessageStep] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+
+
+class ExportRequest(BaseModel):
+    format: str = Field(default="txt", pattern="^(txt|json|md)$")
+    messages_metadata: list[ExportMessageMetadata] = Field(default_factory=list)
+
+
 class Message(BaseModel):
     id: str
     conversation_id: str | None = None
