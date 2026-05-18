@@ -21,7 +21,6 @@
 # config.remote.yaml  the twin of this file for cloud/production deployments.
 # =============================================================================
 
-
 # 1. GLOBAL: affects every module and service below
 # Q: Should the AI call external APIs or run on this machine?
 # A: "cloud" uses external providers (OpenAI etc.). "local" uses a model running here.
@@ -29,19 +28,16 @@ global_config:
   ai_mode: "cloud"
   public_api_host: "{{ secret.NEXUS_API_URL }}"
 
-
 # 2. MODULES: what the system does
 # Q: Which modules do you want to load at startup?
 # A: Set enabled: true to turn one on, false to turn it off without deleting its config.
 modules:
-
   # Q: How do I configure the core web app (login, chat, agents, files, knowledge)?
   # A: Connect it to the database and cache, then define who can access what.
   - module: naas_abi
     enabled: true
     config:
       nexus_config:
-
         # Q: Where are the web app, database, and cache running?
         # A: Use Docker service hostnames -- they only resolve inside the Docker network.
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
@@ -62,8 +58,8 @@ modules:
             - knowledge
             - settings
           role_baseline:
-            owner:  [chat, files, agents, knowledge, settings]
-            admin:  [chat, files, agents, knowledge, settings]
+            owner: [chat, files, agents, knowledge, settings]
+            admin: [chat, files, agents, knowledge, settings]
             member: [chat, files]
             viewer: [chat, files]
           workspace_overrides: {}
@@ -78,7 +74,7 @@ modules:
         magic_link_email_app_name: "ABI Platform"
         magic_link_email_subject_template: "Your {app_name} sign-in link"
         magic_link_email_text_template: "Use this link to sign in to {app_name}:\n\n{magic_link_url}\n\nThis link expires in {expire_minutes} minutes."
-        magic_link_email_html_template: "<p>Use this link to sign in to {app_name}:</p><p><a href=\"{magic_link_url}\">Sign in</a></p><p>This link expires in {expire_minutes} minutes.</p>"
+        magic_link_email_html_template: '<p>Use this link to sign in to {app_name}:</p><p><a href="{magic_link_url}">Sign in</a></p><p>This link expires in {expire_minutes} minutes.</p>'
 
         # Q: What name, colors, and logo should the UI show?
         # A: Set the brand identity here -- workspaces can override these defaults.
@@ -86,6 +82,11 @@ modules:
           tab_title: "ABI AI Platform | Naas.ai"
           favicon_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
           logo_url: "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
+          # Social sharing preview - shown when the platform URL is shared in
+          # Slack, Twitter/X, iMessage, LinkedIn, etc.
+          og_title: "ABI AI Platform"
+          og_description: "Your AI Operating System: agents, knowledge, and data in one place."
+          og_image_url: "https://repository-images.githubusercontent.com/704324955/444d3ad8-befb-446f-9723-6453aad2c336"
           primary_color: "#34D399"
           accent_color: "#34D399"
           background_color: "#FFFFFF"
@@ -132,14 +133,12 @@ modules:
                   - email: "admin@example.com"
                     role: "member"
 
-
   # Q: How do I add ChatGPT (OpenAI) as an AI provider?
   # A: Enable the module and give it your OpenAI API key.
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-
 
   # Q: Which AI models should users be able to pick in the chat UI?
   # A: Enable OpenRouter and list the model slugs you want to expose.
@@ -159,7 +158,6 @@ modules:
         - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
 
-
   # Q: How do I connect the WSR module to live real-world data feeds?
   # A: Provide API keys for each source. Leave blank to skip that source gracefully.
   #    OpenSky: flight tracking | TfL: Transport for London | OpenWebcamDB: public webcams
@@ -172,7 +170,6 @@ modules:
       openwebcamdb_api_key: ""
       demo_login: "demo@naas.ai"
       demo_password: "demo1234"
-
 
   # Q: How do I make documents searchable by meaning, not just keywords?
   # A: Pick an embedding model -- the pipeline converts text to vectors automatically.
@@ -187,7 +184,6 @@ modules:
       markdowntovector_pipelines:
         - api_key: "{{ secret.OPENAI_API_KEY }}"
 
-
 # 3. SERVICES: what the modules run on
 # Q: Which technology does each service use?
 # A: Each entry has one adapter. Change the adapter name to swap the technology.
@@ -197,7 +193,6 @@ modules:
 #      vector_store -> "python"         (in-memory)
 #      kv           -> "python"         (in-memory)
 services:
-
   # Q: How does the app read secret values at startup?
   # A: The dotenv adapter reads every `secret.X` from your .env file.
   secret:
@@ -263,7 +258,6 @@ services:
       config:
         directory: "/tmp/abi-emails"
 
-
 # 4. API: presentation details
 # Q: How is the API identified, and which browsers are allowed to call it?
 # A: Give it a title and logo, then list every origin the browser should trust.
@@ -273,13 +267,12 @@ api:
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
   cors_origins:
-    - "http://localhost:9879"       # ABI core API (backend)
-    - "http://localhost:3042"       # Nexus web app (frontend)
+    - "http://localhost:9879" # ABI core API (backend)
+    - "http://localhost:3042" # Nexus web app (frontend)
     - "http://127.0.0.1:9879"
     - "http://127.0.0.1:3042"
-    - "https://nexus.localhost"     # local reverse proxy with TLS
+    - "https://nexus.localhost" # local reverse proxy with TLS
     - "http://localhost"
-
 
 # 5. OPENCODE: dev tool, secondary
 # Q: How does the OpenCode coding assistant connect to AI providers?
@@ -293,7 +286,6 @@ opencode:
     - id: "openai"
       key: "{{ secret.OPENAI_API_KEY }}"
       type: "api"
-
 
 # 6. DEPLOY: cloud only, touch once
 # Q: How do I deploy this stack to the Naas cloud?
