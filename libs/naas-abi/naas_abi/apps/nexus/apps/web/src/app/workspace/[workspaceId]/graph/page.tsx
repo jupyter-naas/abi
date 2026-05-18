@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
   Database,
+  Download,
   Filter,
   Search,
   Eye,
@@ -634,6 +635,9 @@ export default function GraphPage() {
   const [graphDescription, setGraphDescription] = useState('');
   const [graphFormError, setGraphFormError] = useState<string | null>(null);
   const [creatingGraph, setCreatingGraph] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportMessages, setExportMessages] = useState<string[]>([]);
+  const [showExportLog, setShowExportLog] = useState(false);
   const loadRequestIdRef = useRef(0);
   const overviewRequestIdRef = useRef(0);
   const viewFilterOptionsRequestIdRef = useRef(0);
@@ -1881,6 +1885,60 @@ export default function GraphPage() {
     setZoomLevel(Math.max(0.1, Math.min(3, level)));
   }, []);
 
+  const handleExportGraph = async () => {
+    const uri = graphOptions.find((g) => g.id === selectedGraphId)?.uri ?? '';
+    if (!uri || exporting) return;
+    const graphLabel = graphOptions.find((g) => g.id === selectedGraphId)?.label ?? selectedGraphId ?? 'graph';
+
+    setExporting(true);
+    setShowExportLog(true);
+    setExportMessages([`Starting export of graph "${graphLabel}"...`]);
+
+    try {
+      const apiUrl = getApiUrl();
+      setExportMessages((prev) => [...prev, 'Fetching triples in batches of 10,000...']);
+
+      const response = await authFetch(
+        `${apiUrl}/api/graph/export?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(uri)}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Export failed with status ${response.status}`);
+      }
+
+      const tripleCount = response.headers.get('X-Triple-Count');
+      if (tripleCount) {
+        setExportMessages((prev) => [
+          ...prev,
+          `Fetched ${parseInt(tripleCount, 10).toLocaleString()} triples total.`,
+        ]);
+      }
+
+      setExportMessages((prev) => [...prev, 'Generating TTL file with namespace bindings...']);
+
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get('content-disposition') ?? '';
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+      const filename = filenameMatch?.[1] ?? `${graphLabel}.ttl`;
+
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+
+      setExportMessages((prev) => [...prev, `Export complete. Downloaded: ${filename}`]);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      setExportMessages((prev) => [...prev, `Error: ${msg}`]);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <Header />
@@ -1912,7 +1970,25 @@ export default function GraphPage() {
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-2" />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleExportGraph}
+                    disabled={!selectedGraphId || exporting}
+                    className={cn(
+                      'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+                      (!selectedGraphId || exporting) && 'cursor-not-allowed opacity-50'
+                    )}
+                    title={!selectedGraphId ? 'Select a graph to export' : 'Export graph as TTL'}
+                  >
+                    {exporting ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Download size={14} />
+                    )}
+                    {exporting ? 'Exporting...' : 'Export'}
+                  </button>
+                </div>
               </>
             ) : pageMode === 'sparql' ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -3311,6 +3387,49 @@ function IndividualsSplitView({
           </div>
         )}
       </div>
+
+      {/* Export progress log */}
+      {showExportLog && (
+        <div className="fixed bottom-4 right-4 z-50 w-96 rounded-lg border bg-card shadow-lg">
+          <div className="flex items-center justify-between border-b px-4 py-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Download size={14} />
+              Export Progress
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowExportLog(false)}
+              className="rounded p-1 text-muted-foreground hover:bg-muted"
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="max-h-48 overflow-y-auto p-4 font-mono text-xs">
+            {exportMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'py-0.5',
+                  msg.startsWith('Error')
+                    ? 'text-red-500'
+                    : msg.startsWith('Export complete')
+                    ? 'text-green-500'
+                    : 'text-muted-foreground'
+                )}
+              >
+                {msg}
+              </div>
+            ))}
+            {exporting && (
+              <div className="flex items-center gap-1 py-0.5 text-muted-foreground">
+                <Loader2 size={10} className="animate-spin" />
+                Processing...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
