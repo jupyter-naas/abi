@@ -1,3 +1,10 @@
+# ruff: noqa: E402
+import sys
+import time
+
+_BOOT_T0 = time.monotonic()
+print(f"[abi-boot] api module import started (pid={__import__('os').getpid()})", file=sys.stderr, flush=True)
+
 import os
 import subprocess
 from importlib.resources import files
@@ -16,7 +23,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.security.oauth2 import OAuth2
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
+print(f"[abi-boot] heavy imports starting (+{time.monotonic() - _BOOT_T0:.2f}s)", file=sys.stderr, flush=True)
 from naas_abi_core import logger
+print(f"[abi-boot] naas_abi_core imported (+{time.monotonic() - _BOOT_T0:.2f}s)", file=sys.stderr, flush=True)
 
 # Docs
 from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML
@@ -296,6 +305,7 @@ def get_app() -> FastAPI:
 
 
 def api():
+    print(f"[abi-boot] api() entered, starting uvicorn (+{time.monotonic() - _BOOT_T0:.2f}s)", file=sys.stderr, flush=True)
     import uvicorn
 
     reload_enabled = api_runtime_configuration.reload

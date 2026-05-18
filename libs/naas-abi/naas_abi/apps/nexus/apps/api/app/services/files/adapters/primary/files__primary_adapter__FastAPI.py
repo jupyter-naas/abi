@@ -100,8 +100,12 @@ def _normalize_user_id(user_id: str) -> str:
 
 def _scope_to_path(root: str, path: str) -> str:
     """Anchor ``path`` under ``root`` regardless of whether the caller already
-    prefixed it. Accepts an empty path (returns the root itself)."""
+    prefixed it. Accepts an empty path (returns the root itself). An empty
+    ``root`` means "no prefix" — paths are returned as-is, resolving against
+    the underlying object-storage root."""
     normalized_path = FilesService.normalize_relative_path(path, allow_empty=True)
+    if not root:
+        return normalized_path
     if not normalized_path:
         return root
     if normalized_path == root or normalized_path.startswith(f"{root}/"):
