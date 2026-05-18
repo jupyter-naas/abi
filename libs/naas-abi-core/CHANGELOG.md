@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.40.2 (2026-05-18)
+
+### Bug Fixes
+
+- URL formatting in __refresh_credentials method
+  ([`dc7f9f1`](https://github.com/jupyter-naas/abi/commit/dc7f9f18fffa7b82ccc5057a6158fdae4b87b506))
+
+
 ## v1.40.1 (2026-05-18)
 
 
