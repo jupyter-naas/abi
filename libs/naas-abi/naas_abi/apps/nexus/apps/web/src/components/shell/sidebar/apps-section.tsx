@@ -203,6 +203,8 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
       );
     }
 
+    const activeModulePath = openAppModule?.module_path;
+
     if (openAppModule) {
       return <AppDetailView mod={openAppModule} basePath={basePath} />;
     }
@@ -216,7 +218,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
               href={`${basePath}?open=${encodeURIComponent(mod.module_path)}`}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-                openAppModule?.module_path === mod.module_path
+                activeModulePath === mod.module_path
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
