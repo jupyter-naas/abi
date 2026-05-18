@@ -47,6 +47,7 @@ PORT_OFFSET_RANGE = 900  # ~3-digit per-worktree offset
 
 # Per-service port bases — chosen so that base + offset ranges never overlap.
 SERVICE_PORT_BASES = {
+    "oxigraph": 7878,   # 7878..8777
     "api": 9879,        # 9879..10778
     "dagster": 11000,   # 11000..11899
     "nexus-web": 12000, # 12000..12899
@@ -55,7 +56,10 @@ SERVICE_PORT_BASES = {
 NEXUS_ROOT = Path("libs/naas-abi/naas_abi/apps/nexus")
 NEXUS_WEB_DIR = NEXUS_ROOT / "apps" / "web"
 
-ALL_SERVICES = ("api", "dagster", "nexus-web")
+# Order matters: oxigraph must come up before api/dagster, since they connect
+# to it on boot. nexus-web is independent of oxigraph but ordered last so
+# the API URL is available when Next.js starts polling it.
+ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
 
 
 @dataclass(frozen=True)
@@ -208,10 +212,34 @@ def _wait_until_ready(port: int, max_wait: float = 90.0, path: str = "/") -> boo
 # Per-service launchers
 # =============================================================================
 
+def _oxigraph_url(ports: dict[str, int]) -> str:
+    return f"http://127.0.0.1:{ports['oxigraph']}"
+
+
+def _launch_oxigraph(spec: ServiceSpec) -> int:
+    store_path = _project_root() / "storage" / "triplestore" / "oxigraph"
+    store_path.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    cmd = [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "naas_abi_core.services.triple_store.oxigraph_server",
+        "--location",
+        str(store_path),
+        "--bind",
+        f"127.0.0.1:{spec.port}",
+    ]
+    return _spawn(spec, cmd, _project_root(), env)
+
+
 def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env = os.environ.copy()
     env["ABI_PORT"] = str(spec.port)
     env["ABI_HOST"] = env.get("ABI_HOST", "127.0.0.1")
+    # Point the triple-store adapter at the worktree-local oxigraph server.
+    env["OXIGRAPH_URL"] = _oxigraph_url(ports)
     nexus_url = f"http://127.0.0.1:{ports['nexus-web']}"
     extra = env.get("ABI_CORS_EXTRA_ORIGINS", "")
     extra_list = [o for o in extra.split(",") if o.strip()]
@@ -222,10 +250,11 @@ def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
     return _spawn(spec, cmd, _project_root(), env)
 
 
-def _launch_dagster(spec: ServiceSpec) -> int:
+def _launch_dagster(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env = os.environ.copy()
     env.setdefault("DAGSTER_HOME", str(_project_root() / ".dagster"))
     Path(env["DAGSTER_HOME"]).mkdir(parents=True, exist_ok=True)
+    env["OXIGRAPH_URL"] = _oxigraph_url(ports)
     cmd = [
         "uv",
         "run",
@@ -296,6 +325,7 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
 
 # Readiness paths per service. Empty string == skip probing.
 SERVICE_READY_PATHS = {
+    "oxigraph": "/health",
     "api": "/",
     "dagster": "/",
     "nexus-web": "/",
@@ -316,12 +346,14 @@ def _start_service(name: str, ports: dict[str, int]) -> ServiceSpec:
             f"process or delete {_instance_path()} to re-allocate."
         )
 
-    if name == "api":
+    if name == "oxigraph":
+        pid = _launch_oxigraph(spec)
+    elif name == "api":
         pid = _launch_api(spec, ports)
     elif name == "nexus-web":
         pid = _launch_nexus_web(spec, ports)
     elif name == "dagster":
-        pid = _launch_dagster(spec)
+        pid = _launch_dagster(spec, ports)
     else:
         raise click.ClickException(f"Unknown service: {name}")
     _pid_path(spec).write_text(f"{pid}\n")
@@ -364,6 +396,7 @@ def _stop_service(name: str, port: int) -> None:
 
 # Per-service color used in log prefixes and the status panel.
 _SERVICE_STYLES = {
+    "oxigraph": "cyan",
     "api": "green",
     "dagster": "blue",
     "nexus-web": "magenta",
@@ -945,7 +978,21 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
     started: list[ServiceSpec] = []
     try:
         for name in selected:
-            started.append(_start_service(name, ports))
+            spec = _start_service(name, ports)
+            started.append(spec)
+            # api & dagster connect to the oxigraph HTTP endpoint at engine
+            # boot; block briefly until it answers so they don't race-crash.
+            if name == "oxigraph" and any(
+                n in selected for n in ("api", "dagster")
+            ):
+                click.echo("oxigraph: waiting for readiness...")
+                if not _wait_until_ready(spec.port, max_wait=15.0, path="/health"):
+                    click.echo(
+                        "⚠ oxigraph did not become ready in 15s — "
+                        "downstream services may fail to start. "
+                        "Check `.abi/dev/logs/oxigraph.log`.",
+                        err=True,
+                    )
     except Exception:
         if started:
             click.echo(

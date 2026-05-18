@@ -54,10 +54,14 @@ services:
         base_path: "storage/datastore"
   triple_store:
     triple_store_adapter:
-      adapter: "oxigraph_embedded"
+      # HTTP-backed adapter so multiple processes (api + dagster + …) can
+      # share the store. `abi dev` spawns a local oxigraph server (see
+      # naas_abi_core.services.triple_store.oxigraph_server) and injects
+      # OXIGRAPH_URL into each consumer's environment, which overrides this.
+      adapter: "oxigraph"
       config:
-        store_path: "storage/triplestore/oxigraph"
-        graph_base_iri: "http://ontology.naas.ai/graph/default"
+        oxigraph_url: "http://127.0.0.1:7878"
+        timeout: 60
   vector_store:
     vector_store_adapter:
       adapter: "qdrant_in_memory"
