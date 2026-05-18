@@ -132,21 +132,17 @@ class TemplatableSparqlQueryLoader:
                 q = (
                     """
                     PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
-                    
+
                     SELECT ?argument ?name ?description ?validationPattern ?validationFormat
                     WHERE {
-                        GRAPH <"""
-                    + self.graph_name
-                    + """> {
-                            BIND(<"""
+                        BIND(<"""
                     + str(argument)
                     + """> AS ?argument)
-                            ?argument a intentMapping:QueryArgument ;
-                                intentMapping:argumentName ?name ;
-                                intentMapping:argumentDescription ?description ;
-                                intentMapping:validationPattern ?validationPattern ;
-                                intentMapping:validationFormat ?validationFormat .
-                        }
+                        ?argument a intentMapping:QueryArgument ;
+                            intentMapping:argumentName ?name ;
+                            intentMapping:argumentDescription ?description ;
+                            intentMapping:validationPattern ?validationPattern ;
+                            intentMapping:validationFormat ?validationFormat .
                     }
                 """
                 )
