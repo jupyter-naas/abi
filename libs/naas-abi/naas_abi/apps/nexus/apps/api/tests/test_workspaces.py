@@ -142,6 +142,10 @@ class TestWorkspaceFeatureFlags:
             "chat": True,
             "files": True,
             "agents": True,
-            "knowledge": True,
+            "apps": True,
+            "marketplace": True,
+            "search": True,
+            "ontology": True,
+            "graph": True,
             "settings": True,
         }

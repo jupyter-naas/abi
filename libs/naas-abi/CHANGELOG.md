@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.1.0 (2026-05-19)
+
+### Features
+
+- **nexus**: Split feature flags per sidebar section
+  ([`29c1a29`](https://github.com/jupyter-naas/abi/commit/29c1a299ea641ec456081dcc25c00453f26ce6e2))
+
+
 ## v2.0.0 (2026-05-19)
 
 ### Bug Fixes
