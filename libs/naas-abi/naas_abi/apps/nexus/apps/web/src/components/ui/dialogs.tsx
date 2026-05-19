@@ -161,10 +161,10 @@ export function PromptDialog({
 
   return (
     <ModalBackdrop open={open} onClose={onCancel}>
-      <div className="rounded-xl border border-border bg-background p-6 shadow-2xl">
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+      <div className="rounded-md border border-border bg-background p-5 shadow-2xl">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         )}
         <input
           ref={inputRef}
@@ -179,8 +179,8 @@ export function PromptDialog({
           }}
           placeholder={placeholder}
           className={cn(
-            'mt-4 w-full rounded-lg border bg-muted/50 px-3 py-2 text-sm text-foreground',
-            'outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2',
+            'mt-3 w-full rounded border bg-muted/50 px-3 py-1.5 text-sm text-foreground font-mono',
+            'outline-none ring-offset-background focus-visible:ring-1 focus-visible:ring-workspace-accent focus-visible:ring-offset-1',
             error ? 'border-red-500' : 'border-border'
           )}
           autoFocus
@@ -191,13 +191,13 @@ export function PromptDialog({
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             {cancelLabel}
           </button>
           <button
             onClick={handleSubmit}
-            className="rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90"
+            className="rounded bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-workspace-accent/90"
           >
             {confirmLabel}
           </button>
@@ -232,22 +232,22 @@ export function ConfirmDialog({
 }) {
   return (
     <ModalBackdrop open={open} onClose={onCancel}>
-      <div className="rounded-xl border border-border bg-background p-6 shadow-2xl">
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+      <div className="rounded-md border border-border bg-background p-5 shadow-2xl">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">{description}</p>
         )}
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
             className={cn(
-              'rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors',
+              'rounded px-3 py-1.5 text-xs font-medium text-white transition-colors',
               destructive
                 ? 'bg-red-600 hover:bg-red-700'
                 : 'bg-workspace-accent hover:bg-workspace-accent/90'
