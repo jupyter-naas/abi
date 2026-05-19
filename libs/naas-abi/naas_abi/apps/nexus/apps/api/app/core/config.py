@@ -153,7 +153,17 @@ class MarketplaceConfig(BaseModel):
     )
 
 
-FeatureKey = Literal["chat", "files", "agents", "knowledge", "settings"]
+FeatureKey = Literal[
+    "chat",
+    "files",
+    "agents",
+    "apps",
+    "marketplace",
+    "search",
+    "ontology",
+    "graph",
+    "settings",
+]
 
 
 class FeatureFlagsConfig(BaseModel):
@@ -162,12 +172,42 @@ class FeatureFlagsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled_features: list[FeatureKey] = Field(
-        default_factory=lambda: ["chat", "files", "agents", "knowledge", "settings"]
+        default_factory=lambda: [
+            "chat",
+            "files",
+            "agents",
+            "apps",
+            "marketplace",
+            "search",
+            "ontology",
+            "graph",
+            "settings",
+        ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
         default_factory=lambda: {
-            "owner": ["chat", "files", "agents", "knowledge", "settings"],
-            "admin": ["chat", "files", "agents", "knowledge", "settings"],
+            "owner": [
+                "chat",
+                "files",
+                "agents",
+                "apps",
+                "marketplace",
+                "search",
+                "ontology",
+                "graph",
+                "settings",
+            ],
+            "admin": [
+                "chat",
+                "files",
+                "agents",
+                "apps",
+                "marketplace",
+                "search",
+                "ontology",
+                "graph",
+                "settings",
+            ],
             "member": ["chat", "files"],
             "viewer": ["chat", "files"],
         }
