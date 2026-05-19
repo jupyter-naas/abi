@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store,
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,12 @@ const SECTIONS: SectionDef[] = [
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
 ];
+
+const BOTTOM_SECTIONS: SectionDef[] = [
+  { id: 'settings', icon: <Settings size={18} />, label: 'Settings', href: '/settings' },
+];
+
+const ALL_SECTIONS: SectionDef[] = [...SECTIONS, ...BOTTOM_SECTIONS];
 
 export function Sidebar() {
   const [mounted, setMounted] = useState(false);
@@ -71,7 +77,7 @@ export function Sidebar() {
   // Derive active panel section from the current URL if none is persisted
   useEffect(() => {
     if (activePanelSection !== null) return;
-    const matched = SECTIONS.find((s) => {
+    const matched = ALL_SECTIONS.find((s) => {
       const base = getWorkspacePath(currentWorkspaceId, s.href);
       return pathname.startsWith(base);
     });
@@ -122,6 +128,7 @@ export function Sidebar() {
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
+      case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
     }
   };
 
@@ -195,6 +202,35 @@ export function Sidebar() {
         )}
       >
         {SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
+          const active = isSectionActive(section);
+          return (
+            <button
+              key={section.id}
+              onClick={() => handleSectionClick(section)}
+              title={!expanded ? section.label : undefined}
+              className={cn(
+                'flex items-center rounded-lg transition-all',
+                'hover:bg-workspace-accent-10 hover:text-workspace-accent',
+                active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
+                expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+              )}
+            >
+              <span className="flex-shrink-0">{section.icon}</span>
+              {expanded && <span className="truncate text-sm font-medium">{section.label}</span>}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Bottom-pinned sections (e.g. Settings) */}
+      <nav
+        onClick={handleAsideClick}
+        className={cn(
+          'flex flex-shrink-0 flex-col gap-1 border-t border-border/50 py-3',
+          expanded ? 'px-2' : 'items-center px-2'
+        )}
+      >
+        {BOTTOM_SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
           const active = isSectionActive(section);
           return (
             <button
