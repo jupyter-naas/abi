@@ -218,10 +218,39 @@ async def chat(body: OpencodeChatRequest):
             if f.endswith((".py", ".sh", ".ts", ".js")) and not f.startswith("_")
         ]
         if skill_files:
+            skill_entries: list[str] = []
+            for fname in sorted(skill_files):
+                fpath = os.path.join(skills_dir, fname)
+                description = ""
+                try:
+                    with open(fpath, encoding="utf-8", errors="ignore") as _sf:
+                        in_docstring = False
+                        for line in _sf:
+                            stripped = line.strip()
+                            if not in_docstring:
+                                if stripped.startswith('"""') or stripped.startswith("'''"):
+                                    inner = stripped.strip("\"' ")
+                                    if inner:
+                                        # inline: """Description."""
+                                        description = inner.rstrip('"\'').strip()
+                                        break
+                                    else:
+                                        # opening triple-quote on its own line
+                                        in_docstring = True
+                                elif stripped and not stripped.startswith("#!") and not stripped.startswith("#"):
+                                    break
+                            else:
+                                if stripped and not stripped.startswith('"""') and not stripped.startswith("'''"):
+                                    description = stripped
+                                break
+                except OSError:
+                    pass
+                entry = fname if not description else f"{fname} ({description})"
+                skill_entries.append(entry)
             skills_note = (
-                "\n[Reusable skills available in sandbox/skills/: "
-                + ", ".join(sorted(skill_files))
-                + " — run any with bash when relevant]"
+                "\n[Skills in sandbox/skills/ — invoke with bash when the user's request matches: "
+                + "; ".join(skill_entries)
+                + "]"
             )
 
     message_with_ctx = (
