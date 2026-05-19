@@ -206,9 +206,12 @@ async def chat(body: OpencodeChatRequest):
     session_id = body.session_id or "default"
     session_dir = _ensure_session_dir(session_id)
 
-    # Inject skills manifest when sandbox/skills/ has executable scripts
+    # Inject skills manifest when sandbox/skills/ has executable scripts.
+    # Always use the container-internal FILESYSTEM_ROOT path for reading; OPENCODE_WORKDIR
+    # is the host-side path used only by the opencode process itself.
     skills_dir = os.path.join(
-        os.environ.get("OPENCODE_WORKDIR") or os.environ.get("FILESYSTEM_ROOT", "/app"),
+        os.environ.get("FILESYSTEM_ROOT", "/app"),
+        "sandbox",
         "skills",
     )
     skills_note = ""
