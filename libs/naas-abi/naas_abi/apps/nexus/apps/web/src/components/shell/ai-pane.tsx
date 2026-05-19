@@ -10,9 +10,6 @@ import {
   Bot,
   Loader2,
   ChevronDown,
-  Infinity,
-  ListTree,
-  Bug,
   MessageSquare,
   Check,
   Plus,
@@ -37,22 +34,12 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore } from '@/stores/auth';
 import { useFilesStore } from '@/stores/files';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
 const getApiBase = () => getApiUrl();
-
-type Mode = 'agent' | 'plan' | 'debug' | 'ask';
-
-const modes: { id: Mode; label: string; icon: React.ElementType; shortcut?: string; description: string }[] = [
-  { id: 'agent', label: 'Agent', icon: Infinity, shortcut: '⌘I', description: 'Can perform actions' },
-  { id: 'plan', label: 'Plan', icon: ListTree, description: 'Proposes plans' },
-  { id: 'debug', label: 'Debug', icon: Bug, description: 'Helps debug issues' },
-  { id: 'ask', label: 'Ask', icon: MessageSquare, description: 'Only answers questions' },
-];
 
 // ─── Opencode event types ────────────────────────────────────────────────────
 
@@ -161,8 +148,6 @@ export function AIPane() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [mode, setMode] = useState<Mode>('agent');
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const [showAgentMenu, setShowAgentMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFilePicker, setShowFilePicker] = useState(false);
@@ -181,14 +166,12 @@ export function AIPane() {
   const streamReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const modeMenuRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
 
   const { contextPanelOpen, toggleContextPanel, currentWorkspaceId, paneAgent, setPaneAgent } = useWorkspaceStore();
   const { agents, getAgent } = useAgentsStore();
   const { providers } = useIntegrationsStore();
-  const { getSecretByKey } = useSecretsStore();
-  const { activeFile, fileContents, fsActiveFile, refreshFsFiles, readFsFile, setFsDiffs, clearFsDiffs, fsFiles, fsFolderContents, fetchFsFolderContents } = useFilesStore();
+  const { activeFile, fileContents, fsActiveFile, refreshFsFiles, readFsFile, setFsDiffs, clearFsDiffs, fsFiles, fetchFsFolderContents } = useFilesStore();
 
   const isOpencode = paneAgent === OPENCODE_AGENT_ID;
   const currentAgent = mounted
@@ -251,9 +234,6 @@ export function AIPane() {
   // Close menus on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (modeMenuRef.current && !modeMenuRef.current.contains(e.target as Node)) {
-        setShowModeMenu(false);
-      }
       if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
         setShowAgentMenu(false);
       }
@@ -772,9 +752,6 @@ export function AIPane() {
     }
   };
 
-  const currentMode = modes.find((m) => m.id === mode) || modes[0];
-  const ModeIcon = currentMode.icon;
-
   if (!mounted || !contextPanelOpen) return null;
 
   const contextFile = isCodeSection ? fsActiveFile : activeFile;
@@ -922,62 +899,9 @@ export function AIPane() {
             disabled={isLoading}
           />
           
-          {/* Bottom bar with mode and model selectors */}
+          {/* Bottom bar: agent/model selectors + actions */}
           <div className="mt-2 flex items-center justify-between">
             <div className="flex items-center gap-1">
-              {/* Mode selector */}
-              <div ref={modeMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowModeMenu(!showModeMenu)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
-                    'hover:bg-muted',
-                    showModeMenu && 'bg-muted'
-                  )}
-                >
-                  <ModeIcon size={14} />
-                  <span>{currentMode.label}</span>
-                  {currentMode.shortcut && (
-                    <kbd className="ml-1 rounded border bg-background px-1 text-[10px] text-muted-foreground">
-                      {currentMode.shortcut}
-                    </kbd>
-                  )}
-                </button>
-                
-                {showModeMenu && (
-                  <div className="absolute bottom-full left-0 mb-1 w-36 rounded-lg border bg-background py-1 shadow-lg">
-                    {modes.map((m) => {
-                      const Icon = m.icon;
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => {
-                            setMode(m.id);
-                            setShowModeMenu(false);
-                          }}
-                          className={cn(
-                            'flex w-full items-center gap-2 px-3 py-1.5 text-sm',
-                            'hover:bg-muted',
-                            mode === m.id && 'bg-muted'
-                          )}
-                        >
-                          <Icon size={14} />
-                          <span className="flex-1 text-left">{m.label}</span>
-                          {m.shortcut && (
-                            <kbd className="rounded border bg-background px-1 text-[10px] text-muted-foreground">
-                              {m.shortcut}
-                            </kbd>
-                          )}
-                          {mode === m.id && <Check size={12} />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
               {/* Agent selector */}
               <div ref={modelMenuRef} className="relative">
                 <button
