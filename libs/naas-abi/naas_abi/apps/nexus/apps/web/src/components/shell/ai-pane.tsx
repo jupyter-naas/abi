@@ -312,7 +312,6 @@ export function AIPane() {
     }
     setMessages([]);
     setCurrentSessionId(Date.now().toString());
-    // New opencode session for each new chat
     setOpencodeSessionId(`nexus-${Date.now()}`);
     setShowHistory(false);
     inputRef.current?.focus();

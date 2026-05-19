@@ -206,8 +206,26 @@ async def chat(body: OpencodeChatRequest):
     session_id = body.session_id or "default"
     session_dir = _ensure_session_dir(session_id)
 
+    # Inject skills manifest when sandbox/skills/ has executable scripts
+    skills_dir = os.path.join(
+        os.environ.get("OPENCODE_WORKDIR") or os.environ.get("FILESYSTEM_ROOT", "/app"),
+        "skills",
+    )
+    skills_note = ""
+    if os.path.isdir(skills_dir):
+        skill_files = [
+            f for f in os.listdir(skills_dir)
+            if f.endswith((".py", ".sh", ".ts", ".js")) and not f.startswith("_")
+        ]
+        if skill_files:
+            skills_note = (
+                "\n[Reusable skills available in sandbox/skills/: "
+                + ", ".join(sorted(skill_files))
+                + " — run any with bash when relevant]"
+            )
+
     message_with_ctx = (
-        f"[Session working directory: {session_dir}]\n\n"
+        f"[Session working directory: {session_dir}]{skills_note}\n\n"
         f"{body.message}"
     )
 
