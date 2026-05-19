@@ -18,19 +18,19 @@ type SectionDef = {
   icon: React.ReactNode;
   label: string;
   href: string;
-  feature?: 'chat' | 'files' | 'agents' | 'knowledge';
+  feature?: 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
-  { id: 'search',   icon: <Search size={18} />,      label: 'Search',          href: '/search',   feature: 'knowledge' },
+  { id: 'search',   icon: <Search size={18} />,      label: 'Search',          href: '/search',   feature: 'search' },
   { id: 'chat',     icon: <MessageSquare size={18} />, label: 'Chat',           href: '/chat',     feature: 'chat' },
-  { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'knowledge' },
-  { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'knowledge' },
+  { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'ontology' },
+  { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'graph' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
-  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'agents' },
-  { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'agents' },
+  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
+  { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
 ];
 
 export function Sidebar() {
@@ -56,13 +56,17 @@ export function Sidebar() {
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canAgents = useFeature('agents');
-  const canKnowledge = useFeature('knowledge');
+  const canApps = useFeature('apps');
+  const canMarketplace = useFeature('marketplace');
+  const canSearch = useFeature('search');
+  const canOntology = useFeature('ontology');
+  const canGraph = useFeature('graph');
 
   useEffect(() => {
     setMounted(true);
     if (canFiles) { fetchFiles(); fetchLabFiles(); }
-    if (canKnowledge) { fetchOntology(); }
-  }, [canFiles, canKnowledge, fetchFiles, fetchLabFiles, fetchOntology]);
+    if (canOntology) { fetchOntology(); }
+  }, [canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
 
   // Derive active panel section from the current URL if none is persisted
   useEffect(() => {
@@ -83,7 +87,11 @@ export function Sidebar() {
     if (feature === 'chat') return !!canChat;
     if (feature === 'files') return !!canFiles;
     if (feature === 'agents') return !!canAgents;
-    if (feature === 'knowledge') return !!canKnowledge;
+    if (feature === 'apps') return !!canApps;
+    if (feature === 'marketplace') return !!canMarketplace;
+    if (feature === 'search') return !!canSearch;
+    if (feature === 'ontology') return !!canOntology;
+    if (feature === 'graph') return !!canGraph;
     return true;
   };
 
