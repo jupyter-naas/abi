@@ -120,6 +120,20 @@ function isLoginRequiredDomain(url: string): boolean {
   }
 }
 
+// Paths and extensions that reliably serve binary/download content.
+// Iframing these URLs triggers a browser download dialog, so we skip the probe.
+const FILE_PATH_RE = /\/asset\/[^/]+\/object\b|\/download\/|\/export\/|\/file\/[^/?#]+(?:[?#]|$)/i;
+const FILE_EXT_RE = /\.(pdf|xlsx?|docx?|pptx?|zip|tar\.gz|gz|csv|tsv|mp4|mp3|wav|png|jpe?g|gif|svg|webp|ico|json|xml|ttl|rdf|owl)(?:[?#]|$)/i;
+
+function isLikelyFileUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return FILE_PATH_RE.test(url) || FILE_EXT_RE.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 // Module-level cache so URL validity is checked at most twice (CORS GET → no-cors HEAD)
 // and the result is reused across re-renders and component instances.
 const urlValidityCache = new Map<string, boolean>();
@@ -2829,7 +2843,7 @@ const MessageBubble = React.memo(function MessageBubble({
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     contentUrls.forEach(url => {
-      if (isLoginRequiredDomain(url)) {
+      if (isLoginRequiredDomain(url) || isLikelyFileUrl(url)) {
         setUrlEmbeddability(prev => ({ ...prev, [url]: false }));
         return;
       }
@@ -2900,21 +2914,37 @@ const MessageBubble = React.memo(function MessageBubble({
       const timer = setTimeout(() => ctrl.abort(), 8000);
 
       try {
-        // Step 1: try a CORS fetch to get status + HTML title
-        const response = await fetch(url, { method: 'GET', mode: 'cors', signal: ctrl.signal });
+        // Step 1: HEAD request to get status + headers without downloading the body.
+        // This avoids triggering a browser download for binary/attachment URLs.
+        const headResp = await fetch(url, { method: 'HEAD', mode: 'cors', signal: ctrl.signal });
         clearTimeout(timer);
         if (cancelled) return;
 
-        if (!response.ok) {
+        if (!headResp.ok) {
           urlValidityCache.set(url, false);
           setUrlExists(prev => ({ ...prev, [url]: false }));
           return;
         }
 
-        // For HTML responses, parse the <title> for soft-404 patterns
-        const ct = response.headers.get('content-type') ?? '';
+        const ct = headResp.headers.get('content-type') ?? '';
+        const cd = headResp.headers.get('content-disposition') ?? '';
+
+        // File attachment: exists but never embed in an iframe
+        if (cd.toLowerCase().includes('attachment')) {
+          urlValidityCache.set(url, true);
+          setUrlExists(prev => ({ ...prev, [url]: true }));
+          return;
+        }
+
+        // For HTML responses, do a GET to parse the <title> for soft-404 patterns
         if (ct.includes('text/html')) {
-          const text = await response.text();
+          const ctrl2 = new AbortController();
+          controllers.push(ctrl2);
+          const t2 = setTimeout(() => ctrl2.abort(), 8000);
+          const getResp = await fetch(url, { method: 'GET', mode: 'cors', signal: ctrl2.signal });
+          clearTimeout(t2);
+          if (cancelled) return;
+          const text = await getResp.text();
           if (cancelled) return;
           const doc = new DOMParser().parseFromString(text, 'text/html');
           const valid = !NOT_FOUND_TITLE_RE.test(doc.title);
