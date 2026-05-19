@@ -285,7 +285,7 @@ export default function CodePage() {
   const { getActiveSession } = useCodeStore();
   const { setContextPanelOpen } = useWorkspaceStore();
   const { prompt, dialog: promptDialog } = usePrompt();
-  const [terminalH, setTerminalH] = useState(DEFAULT_H);
+  const [terminalH, setTerminalH] = useState(MIN_H);
   const [viewMode, setViewMode] = useState<ViewMode>('code');
 
   const activeSession = getActiveSession();
@@ -364,22 +364,6 @@ export default function CodePage() {
             );
           })}
 
-          {/* View mode toggle — for HTML and Markdown files */}
-          {hasPreview && fsActiveFile && (
-            <div className="ml-2 flex items-center gap-0.5 rounded-md border border-border/60 bg-background p-0.5">
-              {([['code', Code, 'Code'], ['split', Columns2, 'Split'], ['preview', Eye, 'Preview']] as const).map(([mode, Icon, label]) => (
-                <button key={mode} onClick={() => setViewMode(mode)}
-                  title={label}
-                  className={cn(
-                    'flex h-5 w-5 items-center justify-center rounded text-[10px] transition-colors',
-                    viewMode === mode ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
-                  )}>
-                  <Icon size={11} />
-                </button>
-              ))}
-            </div>
-          )}
-
           <button onClick={handleNewFile}
             className="ml-auto mr-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
             title="New file">
@@ -394,12 +378,28 @@ export default function CodePage() {
               {/* Breadcrumb + save */}
               <div className="flex h-6 flex-shrink-0 items-center justify-between border-b border-border/30 bg-muted/10 px-4">
                 <span className="text-[11px] text-muted-foreground">{fsActiveFile}</span>
-                {hasUnsaved && (
-                  <button onClick={() => saveFsFile(fsActiveFile)}
-                    className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-amber-500 hover:bg-muted">
-                    <Save size={10} /> Save
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {hasUnsaved && (
+                    <button onClick={() => saveFsFile(fsActiveFile)}
+                      className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-amber-500 hover:bg-muted">
+                      <Save size={10} /> Save
+                    </button>
+                  )}
+                  {hasPreview && (
+                    <div className="flex items-center gap-0.5 rounded-md border border-border/60 bg-background p-0.5">
+                      {([['code', Code, 'Code'], ['split', Columns2, 'Split'], ['preview', Eye, 'Preview']] as const).map(([mode, Icon, label]) => (
+                        <button key={mode} onClick={() => setViewMode(mode)}
+                          title={label}
+                          className={cn(
+                            'flex h-5 w-5 items-center justify-center rounded text-[10px] transition-colors',
+                            viewMode === mode ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
+                          )}>
+                          <Icon size={11} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Content pane */}
