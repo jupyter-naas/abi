@@ -169,13 +169,27 @@ class ExternalAppConfig(BaseModel):
     icon_emoji: str | None = None
 
 
-FeatureKey = Literal["chat", "files", "agents", "knowledge", "settings"]
+FeatureKey = Literal[
+    "chat",
+    "files",
+    "agents",
+    "apps",
+    "marketplace",
+    "search",
+    "ontology",
+    "graph",
+    "settings",
+]
 
 _ALL_FEATURES: list[FeatureKey] = [
     "chat",
     "files",
     "agents",
-    "knowledge",
+    "apps",
+    "marketplace",
+    "search",
+    "ontology",
+    "graph",
     "settings",
 ]
 
