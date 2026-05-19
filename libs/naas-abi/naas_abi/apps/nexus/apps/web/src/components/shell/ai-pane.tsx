@@ -277,7 +277,21 @@ export function AIPane() {
       });
       if (!r.ok) return;
       const data = await r.json();
-      const list: OcProvider[] = Array.isArray(data) ? data : (data.providers ?? []);
+      // opencode returns { providers: [{ id, name, models: { modelId: {...} } }] }
+      // Normalize models dict -> array
+      const rawList: Array<{ id: string; name?: string; models?: Record<string, { id?: string; name?: string }> | Array<{ id?: string; name?: string }> }> =
+        Array.isArray(data) ? data : (data.providers ?? []);
+      const list: OcProvider[] = rawList
+        .filter((p) => p.id)
+        .map((p) => ({
+          id: p.id,
+          name: p.name ?? p.id,
+          models: Array.isArray(p.models)
+            ? p.models.map((m) => ({ providerID: p.id, modelID: m.id ?? '', name: m.name ?? m.id ?? '' }))
+            : Object.values(p.models ?? {}).map((m) => ({ providerID: p.id, modelID: m.id ?? '', name: m.name ?? m.id ?? '' })),
+        }))
+        // Only show providers with at least one usable model
+        .filter((p) => p.models.length > 0);
       setOpencodeProviders(list);
     } catch { /* opencode not available */ }
   }, []);
