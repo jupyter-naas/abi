@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -29,6 +29,9 @@ import {
   Paperclip,
   ChevronRight,
   Folder,
+  StopCircle,
+  Undo2,
+  Cpu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -76,6 +79,18 @@ interface ChatSession {
   title: string;
   messages: Message[];
   createdAt: Date;
+}
+
+interface OcModel {
+  providerID: string;
+  modelID: string;
+  name: string;
+}
+
+interface OcProvider {
+  id: string;
+  name: string;
+  models: OcModel[];
 }
 
 
@@ -157,6 +172,13 @@ export function AIPane() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   // opencode thread ID — kept across messages so opencode has full conversation context
   const [opencodeSessionId, setOpencodeSessionId] = useState<string>(() => `nexus-${Date.now()}`);
+  // Model picker (opencode only)
+  const [opencodeProviders, setOpencodeProviders] = useState<OcProvider[]>([]);
+  const [selectedOcModel, setSelectedOcModel] = useState<OcModel | null>(null);
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
+  // Abort support
+  const streamReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
@@ -238,10 +260,56 @@ export function AIPane() {
       if (filePickerRef.current && !filePickerRef.current.contains(e.target as Node)) {
         setShowFilePicker(false);
       }
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Fetch opencode providers when opencode is active
+  const fetchOcProviders = useCallback(async () => {
+    try {
+      const token = useAuthStore.getState().token;
+      const r = await fetch(`${getApiBase()}/api/opencode/providers`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!r.ok) return;
+      const data = await r.json();
+      const list: OcProvider[] = Array.isArray(data) ? data : (data.providers ?? []);
+      setOpencodeProviders(list);
+    } catch { /* opencode not available */ }
+  }, []);
+
+  useEffect(() => {
+    if (isOpencode && mounted) fetchOcProviders();
+  }, [isOpencode, mounted, fetchOcProviders]);
+
+  // Fetch real opencode sessions when history panel opens
+  const fetchOcSessions = useCallback(async () => {
+    try {
+      const token = useAuthStore.getState().token;
+      const r = await fetch(`${getApiBase()}/api/opencode/sessions`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!r.ok) return;
+      const data = await r.json();
+      const sessions = (Array.isArray(data) ? data : []) as Array<{ id: string; title?: string; updatedAt?: string }>;
+      setChatSessions(
+        sessions.map((s) => ({
+          id: s.id,
+          title: s.title ?? s.id.slice(0, 24),
+          messages: [],
+          createdAt: new Date(s.updatedAt ?? Date.now()),
+        }))
+      );
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (showHistory && isOpencode) fetchOcSessions();
+  }, [showHistory, isOpencode, fetchOcSessions]);
 
   // Read file content for attachments (uses the filesystem API)
   const readAttachmentContent = async (path: string): Promise<string> => {
@@ -282,13 +350,35 @@ export function AIPane() {
     inputRef.current?.focus();
   };
 
-  const handleLoadSession = (session: ChatSession) => {
-    // Save current first
+  const handleLoadSession = async (session: ChatSession) => {
+    if (isOpencode) {
+      try {
+        const token = useAuthStore.getState().token;
+        const r = await fetch(`${getApiBase()}/api/opencode/sessions/${session.id}/messages`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+        if (r.ok) {
+          const raw = await r.json() as Array<{ id?: string; role?: string; parts?: Array<{ type: string; text?: string }> }>;
+          const converted: Message[] = raw.flatMap((m) => {
+            const role = (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant';
+            const text = (m.parts ?? [])
+              .filter((p) => p.type === 'text')
+              .map((p) => p.text ?? '')
+              .join('');
+            if (!text) return [];
+            return [{ id: m.id ?? String(Date.now()), role, content: text, isOpencode: role === 'assistant' }];
+          });
+          setMessages(converted);
+          setOpencodeSessionId(session.id);
+          setCurrentSessionId(session.id);
+          setShowHistory(false);
+          return;
+        }
+      } catch { /* fall through to in-memory */ }
+    }
     if (messages.length > 0 && currentSessionId) {
       setChatSessions((prev) =>
-        prev.map((s) =>
-          s.id === currentSessionId ? { ...s, messages: [...messages] } : s
-        )
+        prev.map((s) => (s.id === currentSessionId ? { ...s, messages: [...messages] } : s))
       );
     }
     setMessages(session.messages);
@@ -296,8 +386,17 @@ export function AIPane() {
     setShowHistory(false);
   };
 
-  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isOpencode) {
+      try {
+        const token = useAuthStore.getState().token;
+        await fetch(`${getApiBase()}/api/opencode/sessions/${sessionId}`, {
+          method: 'DELETE',
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+      } catch { /* ignore */ }
+    }
     setChatSessions((prev) => prev.filter((s) => s.id !== sessionId));
     if (currentSessionId === sessionId) {
       setMessages([]);
@@ -320,6 +419,50 @@ export function AIPane() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  // ─── Abort (stop mid-stream) ───────────────────────────────────────────────
+
+  const handleAbort = useCallback(async () => {
+    try {
+      if (streamReaderRef.current) {
+        await streamReaderRef.current.cancel();
+        streamReaderRef.current = null;
+      }
+      const token = useAuthStore.getState().token;
+      await fetch(`${getApiBase()}/api/opencode/sessions/${opencodeSessionId}/abort`, {
+        method: 'POST',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+    } catch { /* ignore */ } finally {
+      setIsLoading(false);
+    }
+  }, [opencodeSessionId]);
+
+  // ─── Revert (undo last exchange) ──────────────────────────────────────────
+
+  const handleRevert = useCallback(async () => {
+    try {
+      const token = useAuthStore.getState().token;
+      await fetch(`${getApiBase()}/api/opencode/sessions/${opencodeSessionId}/revert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({}),
+      });
+    } catch { /* ignore */ }
+    // Remove last assistant + its preceding user message from local state
+    setMessages((prev) => {
+      const lastAssIdx = [...prev].reverse().findIndex((m) => m.role === 'assistant');
+      if (lastAssIdx === -1) return prev;
+      const trimAt = prev.length - 1 - lastAssIdx;
+      const before = prev.slice(0, trimAt);
+      const lastUserIdx = [...before].reverse().findIndex((m) => m.role === 'user');
+      if (lastUserIdx === -1) return before;
+      return before.slice(0, before.length - 1 - lastUserIdx);
+    });
+  }, [opencodeSessionId]);
 
   // ─── Opencode submit (used on /code route) ────────────────────────────────
 
@@ -349,13 +492,18 @@ export function AIPane() {
     ]);
 
     const token = useAuthStore.getState().token;
+    const chatBody: Record<string, unknown> = { message: messageWithAttachments, session_id: opencodeSessionId };
+    if (selectedOcModel) {
+      chatBody.model_provider_id = selectedOcModel.providerID;
+      chatBody.model_id = selectedOcModel.modelID;
+    }
     const response = await fetch(`${getApiBase()}/api/opencode/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message: messageWithAttachments, session_id: opencodeSessionId }),
+      body: JSON.stringify(chatBody),
     });
 
     if (!response.ok) {
@@ -369,6 +517,7 @@ export function AIPane() {
       console.error('[opencode] no response body reader');
       return;
     }
+    streamReaderRef.current = reader;
 
     let buffer = '';
 
@@ -404,10 +553,11 @@ export function AIPane() {
               prev.map((m) => (m.id === assistantId ? { ...m, content: `Error: ${msg}` } : m))
             );
           }
+          streamReaderRef.current = null;
           break outer;
         }
 
-        if (eventType === 'session.idle') { break outer; }
+        if (eventType === 'session.idle') { streamReaderRef.current = null; break outer; }
 
         // ── session.diff — live filesystem refresh ────────────────────
         if (eventType === 'session.diff') {
@@ -872,9 +1022,79 @@ export function AIPane() {
                   </div>
                 )}
               </div>
+
+              {/* Model picker — opencode only */}
+              {isOpencode && opencodeProviders.length > 0 && (
+                <div ref={modelPickerRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowModelPicker((v) => !v)}
+                    title="Select model"
+                    className={cn(
+                      'flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                      (showModelPicker || selectedOcModel) && 'text-foreground'
+                    )}
+                  >
+                    <Cpu size={11} />
+                    <span className="max-w-[80px] truncate">
+                      {selectedOcModel ? selectedOcModel.name || selectedOcModel.modelID : 'default'}
+                    </span>
+                    <ChevronDown size={10} />
+                  </button>
+
+                  {showModelPicker && (
+                    <div className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border bg-background py-1 shadow-lg max-h-64 overflow-y-auto">
+                      <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Model</div>
+                      {/* Default (use EngineConfiguration model) */}
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedOcModel(null); setShowModelPicker(false); }}
+                        className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted', !selectedOcModel && 'bg-muted')}
+                      >
+                        <span className="flex-1 text-left text-muted-foreground italic">Default (from config)</span>
+                        {!selectedOcModel && <Check size={11} />}
+                      </button>
+                      <div className="my-1 border-t border-border/40" />
+                      {opencodeProviders.map((prov) => (
+                        <div key={prov.id}>
+                          <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                            {prov.name || prov.id}
+                          </div>
+                          {(prov.models ?? []).map((m) => {
+                            const isSelected = selectedOcModel?.providerID === prov.id && selectedOcModel?.modelID === m.modelID;
+                            return (
+                              <button
+                                key={m.modelID}
+                                type="button"
+                                onClick={() => { setSelectedOcModel({ ...m, providerID: prov.id }); setShowModelPicker(false); }}
+                                className={cn('flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-muted', isSelected && 'bg-muted')}
+                              >
+                                <span className="flex-1 truncate text-left font-mono">{m.name || m.modelID}</span>
+                                {isSelected && <Check size={10} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-1">
+              {/* Revert last exchange — opencode only, when there are messages */}
+              {isOpencode && !isLoading && messages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRevert}
+                  title="Undo last exchange"
+                  className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Undo2 size={14} />
+                </button>
+              )}
+
               {/* Attach file button — opencode only */}
               {isOpencode && (
                 <div ref={filePickerRef} className="relative">
@@ -906,17 +1126,28 @@ export function AIPane() {
                 </div>
               )}
 
-              {/* Send button */}
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
-                  'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
-                )}
-              >
-                <Send size={14} />
-              </button>
+              {/* Abort button (while streaming) or Send button */}
+              {isOpencode && isLoading ? (
+                <button
+                  type="button"
+                  onClick={handleAbort}
+                  title="Stop generation"
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive/80 text-destructive-foreground transition-colors hover:bg-destructive"
+                >
+                  <StopCircle size={14} />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim() || isLoading}
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
+                    'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
+                  )}
+                >
+                  <Send size={14} />
+                </button>
+              )}
             </div>
           </div>
         </form>
