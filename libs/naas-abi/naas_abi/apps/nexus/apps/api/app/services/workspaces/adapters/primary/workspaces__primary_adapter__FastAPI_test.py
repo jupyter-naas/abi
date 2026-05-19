@@ -12,7 +12,9 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
     settings.feature_flags = FeatureFlagsConfig(
         workspace_overrides={
             "demo": {
-                "knowledge": True,
+                "search": True,
+                "ontology": True,
+                "graph": True,
             }
         }
     )
@@ -33,7 +35,11 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
             "chat": True,
             "files": True,
             "agents": False,
-            "knowledge": True,
+            "apps": False,
+            "marketplace": False,
+            "search": True,
+            "ontology": True,
+            "graph": True,
             "settings": False,
         }
     finally:
