@@ -6,6 +6,11 @@ from typing import List
 import yaml
 from jinja2 import Template
 from naas_abi_core import logger
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ActivityLogService import (
+    ActivityLogAdapterConfiguration,
+    ActivityLogAdapterSqliteConfiguration,
+    ActivityLogServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
     BusAdapterConfiguration,
     BusAdapterPythonQueueConfiguration,
@@ -125,6 +130,12 @@ class ServicesConfiguration(BaseModel):
                 port=1025,
                 timeout=10,
             ).model_dump(),
+        )
+    )
+    activity_log: ActivityLogServiceConfiguration = ActivityLogServiceConfiguration(
+        activity_log_adapter=ActivityLogAdapterConfiguration(
+            adapter="sqlite",
+            config=ActivityLogAdapterSqliteConfiguration().model_dump(),
         )
     )
     cache: CacheServiceConfiguration = CacheServiceConfiguration(
