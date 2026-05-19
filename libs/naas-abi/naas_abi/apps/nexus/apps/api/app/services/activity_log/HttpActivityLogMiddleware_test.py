@@ -5,8 +5,8 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.activity_log.HttpActivityLogMiddleware import (
-    HttpActivityLogMiddleware,
     REDACTED,
+    HttpActivityLogMiddleware,
 )
 from naas_abi_core.services.activity_log.ActivityLogFactory import ActivityLogFactory
 
