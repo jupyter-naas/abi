@@ -1207,6 +1207,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         expandedSections: state.expandedSections,
         selectedAgent: state.selectedAgent,
         paneAgent: state.paneAgent,
+        activePanelSection: state.activePanelSection,
       }),
       onRehydrateStorage: () => (state) => {
         // After hydration completes, fetch workspaces from API
