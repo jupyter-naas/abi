@@ -244,6 +244,7 @@ class WorkspaceModel(Base):
 
     # Drive-scope feature flags
     platform_drive_enabled = Column(Boolean, nullable=False, default=False)
+    system_drive_enabled = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
