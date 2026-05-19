@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-05-19)
+
+### Chores
+
+- **activity_log**: Apply ruff import sort + collections.abc.Iterable
+  ([`9ce4738`](https://github.com/jupyter-naas/abi/commit/9ce4738c4152135448690e0259f8b1a7b6362a4b))
+
+### Features
+
+- **activity_log**: Per-actor SQLite activity ledger + Nexus HTTP middleware
+  ([`fd7c558`](https://github.com/jupyter-naas/abi/commit/fd7c5585e8936967c66cdafc593ab4a036aac239))
+
+- **activity_log**: Pure-ASGI middleware with request body + query capture
+  ([`820c044`](https://github.com/jupyter-naas/abi/commit/820c0447f7a1d3f1adbe0b79113f7a29290425c3))
+
+
 ## v2.1.1 (2026-05-19)
 
 ### Bug Fixes
