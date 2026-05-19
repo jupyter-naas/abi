@@ -27,6 +27,7 @@ def get_api_key():
 async def transcribe_audio(
     audio: UploadFile = File(...),
     conversation_id: str | None = Form(default=None, alias="conversation_id"),
+    language: str | None = Form(default=None, alias="language"),
 ) -> JSONResponse:
     if not audio.filename:
         filename = "recording.webm"
@@ -52,7 +53,11 @@ async def transcribe_audio(
             response = await client.post(
                 OPENAI_TRANSCRIBE_URL,
                 headers={"Authorization": f"Bearer {api_key}"},
-                data={"model": TRANSCRIBE_MODEL, "response_format": "json"},
+                data={
+                    "model": TRANSCRIBE_MODEL,
+                    "response_format": "json",
+                    **({"language": language} if language else {}),
+                },
                 files={
                     "file": (
                         filename,

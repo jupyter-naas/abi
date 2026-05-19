@@ -1031,6 +1031,10 @@ export function ChatInterface() {
       if (currentConversationId) {
         formData.append('conversation_id', currentConversationId);
       }
+      // Hint the transcription model with the browser language; fall back to 'en'.
+      const browserLang = navigator.language?.toLowerCase() ?? '';
+      const transcribeLang = browserLang.startsWith('fr') ? 'fr' : 'en';
+      formData.append('language', transcribeLang);
 
       const response = await fetch(`${getApiBase()}/api/transcribe`, {
         method: 'POST',

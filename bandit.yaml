@@ -9,6 +9,7 @@ exclude_dirs:
   - node_modules
   - libs/naas-abi-cli/naas_abi_cli/cli/new/templates
   - libs/naas-abi-marketplace/naas_abi_marketplace/__demo__
+  - libs/naas-abi-core/naas_abi_core/utils/sandbox
   - libs/naas-abi-marketplace/naas_abi_marketplace/sandbox
   - libs/naas-abi/naas_abi/apps/nexus/apps/web
 

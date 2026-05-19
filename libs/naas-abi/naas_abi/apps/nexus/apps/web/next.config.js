@@ -3,6 +3,11 @@ const path = require('path');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Prevent socket.io-client / ws from being bundled into server chunks.
+  // ws is a Node.js-native WebSocket library; when Next.js tries to create a
+  // vendor chunk for it (vendor-chunks/ws@x.y.z.js) the file may be absent in
+  // the production container, causing "Cannot find module" at runtime.
+  serverExternalPackages: ['ws', 'bufferutil', 'utf-8-validate'],
   transpilePackages: ['@nexus/ui', '@embedpdf/snippet'],
   webpack(config) {
     // pnpm's strict package isolation stops webpack from resolving this ESM-only
