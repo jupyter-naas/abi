@@ -64,6 +64,17 @@ export function Sidebar() {
     if (canKnowledge) { fetchOntology(); }
   }, [canFiles, canKnowledge, fetchFiles, fetchLabFiles, fetchOntology]);
 
+  // Derive active panel section from the current URL if none is persisted
+  useEffect(() => {
+    if (activePanelSection !== null) return;
+    const matched = SECTIONS.find((s) => {
+      const base = getWorkspacePath(currentWorkspaceId, s.href);
+      return pathname.startsWith(base);
+    });
+    if (matched) setActivePanelSection(matched.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, currentWorkspaceId]);
+
   const currentWorkspace = mounted ? workspaces.find((w) => w.id === currentWorkspaceId) || null : null;
   const displayWorkspaces = mounted ? workspaces : [];
 
