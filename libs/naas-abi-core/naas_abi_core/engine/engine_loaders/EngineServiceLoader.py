@@ -6,6 +6,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 )
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import ModuleDependencies
+from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
@@ -74,6 +75,9 @@ class EngineServiceLoader:
             else None,
             cache=self.__configuration.services.cache.load()
             if self._should_load_service(CacheService, services_to_load)
+            else None,
+            activity_log=self.__configuration.services.activity_log.load()
+            if self._should_load_service(ActivityLogService, services_to_load)
             else None,
         )
         services.wire_services()
