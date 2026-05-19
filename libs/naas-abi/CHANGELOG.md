@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.1.1 (2026-05-19)
+
+### Bug Fixes
+
+- **nexus**: Align outer FeatureKey literal with new flag set
+  ([`d1e0c46`](https://github.com/jupyter-naas/abi/commit/d1e0c46c676775b006a2ac763049bdfda572056d))
+
+
 ## v2.1.0 (2026-05-19)
 
 ### Features
