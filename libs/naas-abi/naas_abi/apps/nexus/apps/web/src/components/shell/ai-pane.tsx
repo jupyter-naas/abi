@@ -815,8 +815,8 @@ export function AIPane() {
       <div className="flex-1 overflow-auto p-3">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <Bot size={40} className="mb-3 text-muted-foreground/20" />
-            <p className="text-sm text-muted-foreground">How can I help you?</p>
+            <Bot size={32} className="mb-3 text-muted-foreground/20" />
+            <p className="text-xs text-muted-foreground">How can I help you?</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -824,8 +824,8 @@ export function AIPane() {
               <PaneMessage key={message.id} message={message} />
             ))}
             {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
-              <div className="mr-6 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
-                <Loader2 size={14} className="animate-spin" />
+              <div className="mr-6 flex items-center gap-2 rounded bg-muted px-2.5 py-1.5 text-xs">
+                <Loader2 size={12} className="animate-spin" />
                 <span className="text-muted-foreground">Processing...</span>
               </div>
             )}
@@ -860,7 +860,7 @@ export function AIPane() {
             placeholder="Ask anything..."
             rows={3}
             className={cn(
-              'w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none',
+              'w-full resize-none rounded border bg-background px-2.5 py-1.5 text-xs outline-none',
               'placeholder:text-muted-foreground/50',
               'focus:ring-1 focus:ring-primary/30'
             )}
@@ -1238,19 +1238,19 @@ function PaneMessage({ message }: { message: Message }) {
         )}
         {/* Text response */}
         {message.content ? (
-          <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_pre]:overflow-x-auto">
+          <div className="rounded bg-muted px-2.5 py-1.5 text-xs prose dark:prose-invert max-w-none [&_p]:my-0.5 [&_p]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_li]:text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-[11px] [&_pre]:overflow-x-auto [&_pre]:text-[11px]">
             {isStreaming ? (
               <span className="inline-flex items-center gap-0.5">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
               </span>
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
             )}
           </div>
         ) : (message.toolEvents ?? []).length === 0 ? (
-          <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+          <div className="rounded bg-muted px-2.5 py-1.5 text-xs">
             <span className="inline-flex items-center gap-0.5">
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
@@ -1275,7 +1275,7 @@ function PaneMessage({ message }: { message: Message }) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
+        <div className="max-w-[85%] rounded bg-primary px-2.5 py-1.5 text-xs text-primary-foreground">
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
       </div>
@@ -1319,7 +1319,7 @@ function PaneMessage({ message }: { message: Message }) {
       )}
 
       {/* Response bubble — full width, no indent, matches opencode style */}
-      <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_pre]:overflow-x-auto">
+      <div className="rounded bg-muted px-2.5 py-1.5 text-xs prose dark:prose-invert max-w-none [&_p]:my-0.5 [&_p]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_li]:text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-[11px] [&_pre]:overflow-x-auto [&_pre]:text-[11px]">
         {isStillProcessing ? (
           <span className="inline-flex items-center gap-0.5">
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
