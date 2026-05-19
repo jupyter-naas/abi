@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v2.0.0 (2026-05-19)
+
+### Bug Fixes
+
+- Error dl url
+  ([`6dae0a4`](https://github.com/jupyter-naas/abi/commit/6dae0a498ae7eb0dafabaf20d1e873d48e9c6270))
+
+### Features
+
+- **sidebar**: Derive active panel section from URL if no persisted value
+  ([`957200b`](https://github.com/jupyter-naas/abi/commit/957200bf44ff80512ca22aa27b4a0a7b6c80b9e0))
+
+### Breaking Changes
+
+- **sidebar**: Workspace store rehydrate state now includes activePanelSection
+
+
 ## v1.55.2 (2026-05-18)
 
 
