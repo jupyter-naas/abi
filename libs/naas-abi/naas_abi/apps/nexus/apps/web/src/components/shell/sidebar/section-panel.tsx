@@ -28,16 +28,20 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canAgents = useFeature('agents');
-  const canKnowledge = useFeature('knowledge');
+  const canApps = useFeature('apps');
+  const canMarketplace = useFeature('marketplace');
+  const canSearch = useFeature('search');
+  const canOntology = useFeature('ontology');
+  const canGraph = useFeature('graph');
 
-  if (section === 'search' && canKnowledge) return <SearchSection collapsed={false} detailOnly />;
+  if (section === 'search' && canSearch) return <SearchSection collapsed={false} detailOnly />;
   if (section === 'chat' && canChat) return <ChatSection collapsed={false} detailOnly />;
-  if (section === 'ontology' && canKnowledge) return <OntologySection collapsed={false} detailOnly />;
-  if (section === 'graph' && canKnowledge) return <KnowledgeGraphSection collapsed={false} detailOnly />;
+  if (section === 'ontology' && canOntology) return <OntologySection collapsed={false} detailOnly />;
+  if (section === 'graph' && canGraph) return <KnowledgeGraphSection collapsed={false} detailOnly />;
   if (section === 'files' && canFiles) return <FilesSection collapsed={false} detailOnly />;
   if (section === 'lab' && canAgents) return <LabSection collapsed={false} detailOnly />;
-  if (section === 'apps' && canAgents) return <AppsSection collapsed={false} detailOnly />;
-  if (section === 'marketplace' && canAgents) return <MarketplaceSection collapsed={false} detailOnly />;
+  if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
+  if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   return null;
 }
 

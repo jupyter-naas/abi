@@ -36,11 +36,15 @@ modules:
             - chat
             - files
             - agents
-            - knowledge
+            - apps
+            - marketplace
+            - search
+            - ontology
+            - graph
             - settings
           role_baseline:
-            owner: [chat, files, agents, knowledge, settings]
-            admin: [chat, files, agents, knowledge, settings]
+            owner: [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
+            admin: [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
             member: [chat, files]
             viewer: [chat, files]
           workspace_overrides: {}

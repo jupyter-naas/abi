@@ -17,7 +17,11 @@ class TestBuildFeatureFlags:
             "chat": True,
             "files": True,
             "agents": False,
-            "knowledge": False,
+            "apps": False,
+            "marketplace": False,
+            "search": False,
+            "ontology": False,
+            "graph": False,
             "settings": False,
         }
 
@@ -25,7 +29,9 @@ class TestBuildFeatureFlags:
         config = FeatureFlagsConfig(
             workspace_overrides={
                 "demo": {
-                    "knowledge": True,
+                    "search": True,
+                    "apps": True,
+                    "marketplace": True,
                     "chat": False,
                 }
             }
@@ -38,7 +44,9 @@ class TestBuildFeatureFlags:
             workspace_id="ws-1",
         )
 
-        assert flags["knowledge"] is True
+        assert flags["search"] is True
+        assert flags["apps"] is True
+        assert flags["marketplace"] is True
         assert flags["chat"] is False
         assert flags["files"] is True
 

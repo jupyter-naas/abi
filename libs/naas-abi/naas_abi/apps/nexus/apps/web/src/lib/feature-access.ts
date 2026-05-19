@@ -1,8 +1,27 @@
-export type FeatureKey = 'chat' | 'files' | 'agents' | 'knowledge' | 'settings';
+export type FeatureKey =
+  | 'chat'
+  | 'files'
+  | 'agents'
+  | 'apps'
+  | 'marketplace'
+  | 'search'
+  | 'ontology'
+  | 'graph'
+  | 'settings';
 
 export type WorkspaceFeatureFlags = Partial<Record<FeatureKey, boolean>>;
 
-export const FEATURE_KEYS: FeatureKey[] = ['chat', 'files', 'agents', 'knowledge', 'settings'];
+export const FEATURE_KEYS: FeatureKey[] = [
+  'chat',
+  'files',
+  'agents',
+  'apps',
+  'marketplace',
+  'search',
+  'ontology',
+  'graph',
+  'settings',
+];
 
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: [...FEATURE_KEYS],
@@ -15,7 +34,11 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   chat: '/chat',
   files: '/files',
   agents: '/lab',
-  knowledge: '/search',
+  apps: '/apps',
+  marketplace: '/marketplace',
+  search: '/search',
+  ontology: '/ontology',
+  graph: '/graph',
   settings: '/settings',
 };
 
@@ -63,13 +86,23 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'files') {
     return 'files';
   }
-  if (firstSegment === 'search' || firstSegment === 'ontology' || firstSegment === 'graph') {
-    return 'knowledge';
+  if (firstSegment === 'search') {
+    return 'search';
+  }
+  if (firstSegment === 'ontology') {
+    return 'ontology';
+  }
+  if (firstSegment === 'graph') {
+    return 'graph';
+  }
+  if (firstSegment === 'apps') {
+    return 'apps';
+  }
+  if (firstSegment === 'marketplace') {
+    return 'marketplace';
   }
   if (
     firstSegment === 'lab' ||
-    firstSegment === 'apps' ||
-    firstSegment === 'marketplace' ||
     (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents')
   ) {
     return 'agents';
@@ -103,7 +136,7 @@ export function getFirstAllowedWorkspacePath(params: {
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
   const resolved = mergeFeatureFlags(params.role, params.workspaceFlags);
-  const priority: FeatureKey[] = ['chat', 'files', 'knowledge', 'agents', 'settings'];
+  const priority: FeatureKey[] = ['chat', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings'];
 
   for (const feature of priority) {
     if (resolved[feature]) {
