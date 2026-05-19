@@ -172,17 +172,6 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
             </div>
           )}
         </div>
-        {/* Settings */}
-        <Link
-          href={getWorkspacePath('/settings')}
-          className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-all',
-            'hover:bg-muted hover:text-foreground'
-          )}
-          title="Settings"
-        >
-          <Settings size={16} />
-        </Link>
 
         {/* AI Pane toggle */}
         <button
