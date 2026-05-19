@@ -6,6 +6,7 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
@@ -434,6 +435,7 @@ class ABIModule(BaseModule):
             BusService,
             CacheService,
             EmailService,
+            ActivityLogService,
         ],
     )
 
@@ -570,6 +572,10 @@ class ABIModule(BaseModule):
         # in dev, `smtp` in prod) instead of always constructing an SMTP
         # client inline.
         app.state.email_service = self.engine.services.email
+        # Expose ABI activity-log service so the Nexus middleware can
+        # record one event per HTTP request.
+        if self.engine.services.activity_log_available():
+            app.state.activity_log_service = self.engine.services.activity_log
 
         from naas_abi.apps.nexus.apps.api.app.main import create_app
 
