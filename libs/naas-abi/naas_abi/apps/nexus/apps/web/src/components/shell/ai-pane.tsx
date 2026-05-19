@@ -112,32 +112,6 @@ function ToolEventCard({ event }: { event: ToolEvent }) {
   );
 }
 
-// ─── Code suggestions (above input, fills the textarea on click) ─────────────
-
-const CODE_SUGGESTIONS = [
-  'Create a hello world HTML page with a gradient design',
-  'Create a Python script that prints Fibonacci numbers',
-  'Create a README.md for this module',
-];
-
-function CodeSuggestions({ onSuggest }: { onSuggest: (text: string) => void }) {
-  return (
-    <div className="flex flex-col gap-1 border-t px-3 pt-2 pb-1">
-      {CODE_SUGGESTIONS.map((s) => (
-        <button
-          key={s}
-          onClick={() => onSuggest(s)}
-          className={cn(
-            'w-full rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-left text-xs transition-all',
-            'hover:border-primary/50 hover:bg-primary/5 hover:text-primary'
-          )}
-        >
-          {s}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 const OPENCODE_AGENT_ID = 'opencode';
 
@@ -860,11 +834,6 @@ export function AIPane() {
           </div>
         )}
       </div>
-
-      {/* Suggestions — shown when opencode is selected and chat is empty */}
-      {isOpencode && messages.length === 0 && (
-        <CodeSuggestions onSuggest={(text) => { setInput(text); setTimeout(() => inputRef.current?.focus(), 50); }} />
-      )}
 
       {/* Input area */}
       <div className="border-t p-3">
