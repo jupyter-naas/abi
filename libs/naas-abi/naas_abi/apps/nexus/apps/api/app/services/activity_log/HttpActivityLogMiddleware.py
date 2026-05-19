@@ -17,14 +17,14 @@ from __future__ import annotations
 import base64
 import json
 import time
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 from urllib.parse import parse_qsl
 
 from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
-
 
 # Sentry-style denylist. Keys are matched case-insensitively against any
 # JSON object key, form key, or query parameter name.
