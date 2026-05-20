@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings,
@@ -74,16 +74,26 @@ export function Sidebar() {
     if (canOntology) { fetchOntology(); }
   }, [canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
 
-  // Derive active panel section from the current URL if none is persisted
-  useEffect(() => {
-    if (activePanelSection !== null) return;
-    const matched = ALL_SECTIONS.find((s) => {
+  // Resolve the section that owns the current URL — single source of truth
+  // for the highlighted icon, the sub-panel, and the browser tab title.
+  const urlSection = useMemo(() => {
+    return ALL_SECTIONS.find((s) => {
       const base = getWorkspacePath(currentWorkspaceId, s.href);
       return pathname.startsWith(base);
-    });
-    if (matched) setActivePanelSection(matched.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    }) ?? null;
   }, [pathname, currentWorkspaceId]);
+
+  // Reconcile activePanelSection with the URL whenever the URL changes
+  // (incl. initial mount after rehydration). Without this, a persisted
+  // activePanelSection can disagree with the page being rendered.
+  const lastReconciledPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!urlSection) return;
+    if (lastReconciledPathRef.current === pathname) return;
+    lastReconciledPathRef.current = pathname;
+    setActivePanelSection(urlSection.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, urlSection]);
 
   const currentWorkspace = mounted ? workspaces.find((w) => w.id === currentWorkspaceId) || null : null;
   const displayWorkspaces = mounted ? workspaces : [];
@@ -101,8 +111,9 @@ export function Sidebar() {
     return true;
   };
 
+  // Icon highlight follows the URL only. activePanelSection drives the
+  // sub-panel, but the icon must always match the page being rendered.
   const isSectionActive = (section: SectionDef) => {
-    if (activePanelSection === section.id) return true;
     const base = getWorkspacePath(currentWorkspaceId, section.href);
     if (pathname.startsWith(base)) return true;
     if (section.extraHref) {
