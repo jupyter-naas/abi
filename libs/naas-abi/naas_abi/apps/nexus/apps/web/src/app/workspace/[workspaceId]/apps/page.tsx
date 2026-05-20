@@ -6,7 +6,7 @@ import { Header } from '@/components/shell/header';
 import {
   AppWindow, Bot, ExternalLink, Search, Globe,
   ChevronLeft, ChevronRight, RefreshCw, AlertTriangle,
-  Tag, Info, KeyRound, Copy, Check, PanelLeft,
+  Tag, Info, KeyRound, Copy, Check, PanelLeft, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -19,23 +19,29 @@ import { useWorkspaceStore } from '@/stores/workspace';
 // Types
 // ---------------------------------------------------------------------------
 
-interface ModuleInfo {
+interface AppInfo {
   module_path: string;
+  app_name: string;
+  app_id: string;
+  category: string;
   name: string;
   description: string;
-  logo_url: string | null;
-  category: string;
-  installed: boolean;
-  app_url?: string | null;
-  maintainer?: string | null;
-  tier?: string | null;
+  url?: string | null;
+  avatar_url?: string | null;
+  icon_emoji?: string | null;
   demo_login?: string | null;
   demo_password?: string | null;
+  version?: string | null;
+  author?: string | null;
+  license?: string | null;
+  keywords?: string[];
+  tier?: string | null;
+  maintainer?: string | null;
+  installed: boolean;
 }
 
-interface ModulesResponse {
-  installed: ModuleInfo[];
-  available: ModuleInfo[];
+interface AppsResponse {
+  apps: AppInfo[];
 }
 
 type TenantApp = {
@@ -47,24 +53,38 @@ type TenantApp = {
 
 // Unified app entry used in the embed view
 type AppEntry =
-  | { kind: 'module'; data: ModuleInfo; url: string }
+  | { kind: 'app'; data: AppInfo; url: string }
   | { kind: 'tenant'; data: TenantApp };
 
 function appEntryUrl(entry: AppEntry): string {
-  return entry.kind === 'module' ? entry.url : entry.data.url;
+  return entry.kind === 'app' ? entry.url : entry.data.url;
 }
 function appEntryName(entry: AppEntry): string {
-  return entry.kind === 'module' ? entry.data.name : entry.data.name;
+  return entry.data.name;
 }
 function appEntryDescription(entry: AppEntry): string | null {
-  return entry.kind === 'module' ? entry.data.description : (entry.data.description ?? null);
+  return entry.kind === 'app' ? entry.data.description : (entry.data.description ?? null);
+}
+
+// Translate AppInfo → the shared OpenAppModule shape consumed by the sidebar.
+function appInfoToOpenModule(app: AppInfo) {
+  return {
+    module_path: app.module_path,
+    name: app.name,
+    description: app.description,
+    logo_url: app.avatar_url ?? null,
+    category: app.category,
+    app_url: app.url ?? null,
+    demo_login: app.demo_login ?? null,
+    demo_password: app.demo_password ?? null,
+    maintainer: app.maintainer ?? null,
+    tier: app.tier ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-import { APP_CATEGORIES, hasApp } from '@/lib/app-constants';
 
 const CATEGORY_COLORS: Record<string, string> = {
   application: 'bg-purple-500/10 text-purple-500',
@@ -78,20 +98,28 @@ const CATEGORY_COLORS: Record<string, string> = {
 // Module avatar
 // ---------------------------------------------------------------------------
 
-function ModuleAvatar({ mod, size = 'md' }: { mod: ModuleInfo; size?: 'sm' | 'md' | 'lg' }) {
+function AppAvatar({ app, size = 'md' }: { app: AppInfo; size?: 'sm' | 'md' | 'lg' }) {
   const [failed, setFailed] = useState(false);
   const dims = size === 'lg' ? 'h-16 w-16' : size === 'sm' ? 'h-8 w-8' : 'h-12 w-12';
   const iconSize = size === 'lg' ? 32 : size === 'sm' ? 16 : 24;
+  const emojiSize = size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-base' : 'text-2xl';
 
-  if (mod.logo_url && !failed) {
+  if (app.avatar_url && !failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={mod.logo_url}
-        alt={mod.name}
+        src={app.avatar_url}
+        alt={app.name}
         className={cn(dims, 'rounded-lg object-cover flex-shrink-0')}
         onError={() => setFailed(true)}
       />
+    );
+  }
+  if (app.icon_emoji) {
+    return (
+      <div className={cn(dims, emojiSize, 'flex flex-shrink-0 items-center justify-center rounded-lg bg-workspace-accent/10')}>
+        {app.icon_emoji}
+      </div>
     );
   }
   return (
@@ -120,8 +148,8 @@ function AppCard({ entry, onSelect }: { entry: AppEntry; onSelect: () => void })
     >
       {/* Header */}
       <div className="flex items-start gap-3">
-        {entry.kind === 'module' ? (
-          <ModuleAvatar mod={entry.data} />
+        {entry.kind === 'app' ? (
+          <AppAvatar app={entry.data} />
         ) : (
           <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-workspace-accent/10 text-2xl">
             {entry.data.icon_emoji ?? <Globe size={24} className="text-workspace-accent" />}
@@ -129,7 +157,7 @@ function AppCard({ entry, onSelect }: { entry: AppEntry; onSelect: () => void })
         )}
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold leading-tight truncate">{name}</h3>
-          {entry.kind === 'module' ? (
+          {entry.kind === 'app' ? (
             <span className={cn('mt-1 inline-block px-2 py-0.5 text-xs font-medium', CATEGORY_COLORS[entry.data.category] ?? 'bg-muted text-muted-foreground')}>
               {entry.data.category}
             </span>
@@ -146,7 +174,7 @@ function AppCard({ entry, onSelect }: { entry: AppEntry; onSelect: () => void })
 
       {/* Footer */}
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50">
-        {entry.kind === 'module' ? (
+        {entry.kind === 'app' ? (
           <span className="text-xs text-muted-foreground truncate max-w-[140px]">
             {entry.data.maintainer ?? entry.data.category}
           </span>
@@ -219,15 +247,15 @@ function AppDetailPanel({
   onSwitch,
 }: {
   entry: AppEntry;
-  apps: ModuleInfo[];
+  apps: AppInfo[];
   collapsed: boolean;
   onToggle: () => void;
-  onSwitch: (mod: ModuleInfo) => void;
+  onSwitch: (app: AppInfo) => void;
 }) {
   const name = appEntryName(entry);
   const description = appEntryDescription(entry);
   const url = appEntryUrl(entry);
-  const activeModulePath = entry.kind === 'module' ? entry.data.module_path : null;
+  const activeAppId = entry.kind === 'app' ? entry.data.app_id : null;
 
   return (
     <div className={cn('flex flex-col border-r border-border/50 bg-background transition-all duration-300 flex-shrink-0', collapsed ? 'w-10' : 'w-64')}>
@@ -246,12 +274,12 @@ function AppDetailPanel({
           {/* App switcher nav */}
           {apps.length > 1 && (
             <div className="border-b border-border/50 p-2 space-y-0.5">
-              {apps.map((mod) => {
-                const isActive = mod.module_path === activeModulePath;
+              {apps.map((app) => {
+                const isActive = app.app_id === activeAppId;
                 return (
                   <button
-                    key={mod.module_path}
-                    onClick={() => onSwitch(mod)}
+                    key={app.app_id}
+                    onClick={() => onSwitch(app)}
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-left',
                       isActive
@@ -259,8 +287,8 @@ function AppDetailPanel({
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
                   >
-                    <ModuleAvatar mod={mod} size="sm" />
-                    <span className="truncate">{mod.name}</span>
+                    <AppAvatar app={app} size="sm" />
+                    <span className="truncate">{app.name}</span>
                   </button>
                 );
               })}
@@ -269,8 +297,8 @@ function AppDetailPanel({
 
           {/* Avatar + name */}
           <div className="flex flex-col items-center gap-3 px-4 py-6 border-b border-border/50 text-center">
-            {entry.kind === 'module' ? (
-              <ModuleAvatar mod={entry.data} size="lg" />
+            {entry.kind === 'app' ? (
+              <AppAvatar app={entry.data} size="lg" />
             ) : (
               <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-workspace-accent/10 text-3xl">
                 {entry.data.icon_emoji ?? <Globe size={32} className="text-workspace-accent" />}
@@ -278,7 +306,7 @@ function AppDetailPanel({
             )}
             <div>
               <h2 className="font-bold text-base leading-tight">{name}</h2>
-              {entry.kind === 'module' && (
+              {entry.kind === 'app' && (
                 <span className={cn('mt-1.5 inline-block px-2 py-0.5 text-xs font-medium', CATEGORY_COLORS[entry.data.category] ?? 'bg-muted text-muted-foreground')}>
                   <Tag size={9} className="mr-1 inline" />
                   {entry.data.category}
@@ -299,7 +327,7 @@ function AppDetailPanel({
             )}
 
             {/* Demo credentials */}
-            {entry.kind === 'module' && (entry.data.demo_login || entry.data.demo_password) && (
+            {entry.kind === 'app' && (entry.data.demo_login || entry.data.demo_password) && (
               <div className="border border-workspace-accent/20 bg-workspace-accent/5 p-3 space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-workspace-accent flex items-center gap-1.5">
                   <KeyRound size={11} /> Demo access
@@ -313,8 +341,8 @@ function AppDetailPanel({
               </div>
             )}
 
-            {/* Module details */}
-            {entry.kind === 'module' && (
+            {/* App details */}
+            {entry.kind === 'app' && (
               <>
                 {entry.data.maintainer && (
                   <div className="border bg-muted/30 p-3 space-y-1">
@@ -422,6 +450,13 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
         >
           <ExternalLink size={13} />
         </a>
+        <button
+          onClick={onBack}
+          title="Close app"
+          className="p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground rounded transition-colors"
+        >
+          <X size={14} />
+        </button>
       </div>
 
       {/* Body: full-width iframe — detail is in the left section panel */}
@@ -501,7 +536,7 @@ export default function AppsPage() {
   const router = useRouter();
 
   const [search, setSearch] = useState('');
-  const [modules, setModules] = useState<ModuleInfo[]>([]);
+  const [apps, setApps] = useState<AppInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeApp, setActiveApp] = useState<AppEntry | null>(null);
@@ -514,38 +549,42 @@ export default function AppsPage() {
   useEffect(() => {
     const apiBase = getApiUrl();
     setLoading(true);
-    authFetch(`${apiBase}/api/modules/`)
+    authFetch(`${apiBase}/api/apps/`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
-      .then((data: ModulesResponse) => {
-        const map = new Map<string, ModuleInfo>();
-        for (const m of data.available) map.set(m.module_path, m);
-        // Spread available first (has app_url from catalog), then installed (has demo_login/demo_password)
-        for (const m of data.installed) {
-          const base = map.get(m.module_path) ?? {};
-          map.set(m.module_path, { ...base, ...m, installed: true });
-        }
-        const installed = Array.from(map.values()).filter((m) => m.installed && hasApp(m));
-        setModules(installed);
-
-        // Auto-open from ?open= deep-link
-        const openParam = searchParams?.get('open');
-        if (openParam) {
-          const mod = installed.find((m) => m.module_path === openParam);
-          if (mod?.app_url) {
-            setActiveApp({ kind: 'module', data: mod, url: mod.app_url });
-            setOpenAppModule(mod);
-            setActivePanelSection('apps');
-          } else {
-            // Try tenant apps by URL
-            const tenantApp = tenant.apps.find((a) => a.url === openParam);
-            if (tenantApp) setActiveApp({ kind: 'tenant', data: tenantApp });
-          }
-        }
+      .then((data: AppsResponse) => {
+        setApps(data.apps.filter((a) => a.installed && a.url));
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync activeApp with ?open= so navigating back to the gallery (without the
+  // query param) clears the embed view.
+  useEffect(() => {
+    const openParam = searchParams?.get('open');
+    if (!openParam) {
+      setActiveApp(null);
+      setOpenAppModule(null);
+      return;
+    }
+    const app =
+      apps.find((a) => a.app_id === openParam) ??
+      apps.find((a) => a.module_path === openParam);
+    if (app?.url) {
+      setActiveApp({ kind: 'app', data: app, url: app.url });
+      setOpenAppModule(appInfoToOpenModule(app));
+      setActivePanelSection('apps');
+      return;
+    }
+    const tenantApp = tenant.apps.find((a) => a.url === openParam);
+    if (tenantApp) {
+      setActiveApp({ kind: 'tenant', data: tenantApp });
+      setOpenAppModule(null);
+      setActivePanelSection('apps');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, apps, tenant.apps]);
 
   const handleClose = () => {
     setActiveApp(null);
@@ -556,19 +595,19 @@ export default function AppsPage() {
 
   const handleOpen = (entry: AppEntry) => {
     setActiveApp(entry);
-    if (entry.kind === 'module') setOpenAppModule(entry.data);
+    if (entry.kind === 'app') setOpenAppModule(appInfoToOpenModule(entry.data));
     else setOpenAppModule(null);
     setActivePanelSection('apps');
-    const param = entry.kind === 'module' ? entry.data.module_path : entry.data.url;
+    const param = entry.kind === 'app' ? entry.data.app_id : entry.data.url;
     const base = `/workspace/${currentWorkspaceId}/apps`;
     router.replace(`${base}?open=${encodeURIComponent(param)}`);
   };
 
-  const filteredModules = useMemo(() => {
-    if (!search) return modules;
+  const filteredApps = useMemo(() => {
+    if (!search) return apps;
     const q = search.toLowerCase();
-    return modules.filter((m) => m.name.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q));
-  }, [modules, search]);
+    return apps.filter((a) => a.name.toLowerCase().includes(q) || a.description?.toLowerCase().includes(q));
+  }, [apps, search]);
 
   const filteredTenantApps = useMemo(() => {
     if (!search) return tenant.apps;
@@ -576,7 +615,7 @@ export default function AppsPage() {
     return tenant.apps.filter((a) => a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q));
   }, [tenant.apps, search]);
 
-  const totalCount = filteredModules.length + filteredTenantApps.length;
+  const totalCount = filteredApps.length + filteredTenantApps.length;
   const isEmpty = !loading && !error && totalCount === 0;
 
   // Embed view: replaces the entire page body
@@ -646,18 +685,18 @@ export default function AppsPage() {
           )}
 
           {/* Module apps */}
-          {!loading && !error && filteredModules.length > 0 && (
+          {!loading && !error && filteredApps.length > 0 && (
             <section>
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Apps</h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredModules.map((mod) => {
-                  const url = mod.app_url ?? '';
+                {filteredApps.map((app) => {
+                  const url = app.url ?? '';
                   if (!url) return null;
                   return (
                     <AppCard
-                      key={mod.module_path}
-                      entry={{ kind: 'module', data: mod, url }}
-                      onSelect={() => handleOpen({ kind: 'module', data: mod, url })}
+                      key={app.app_id}
+                      entry={{ kind: 'app', data: app, url }}
+                      onSelect={() => handleOpen({ kind: 'app', data: app, url })}
                     />
                   );
                 })}
