@@ -71,6 +71,7 @@ const WORKSPACE_SEGMENT_TITLE: Record<string, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   lab: 'Lab',
+  apps: 'Apps',
   marketplace: 'Marketplace',
   help: 'Help',
   settings: 'Workspace Settings',
@@ -83,12 +84,7 @@ function getPageTitle(pathname: string, tabTitle: string): string {
   if (pathname.startsWith('/auth/') || pathname.startsWith('/org/')) {
     return tabTitle;
   }
-  // First page (workspace chat root): use config title only
-  const workspaceChatMatch = pathname.match(/^\/workspace\/[^/]+\/chat\/?$/);
-  if (workspaceChatMatch) {
-    return tabTitle;
-  }
-  // Other workspace routes: "Nav item | Config title"
+  // Workspace routes: "Nav item | Config title"
   const workspaceMatch = pathname.match(/^\/workspace\/[^/]+\/([^/]+)/);
   if (workspaceMatch) {
     const segment = workspaceMatch[1].toLowerCase();
