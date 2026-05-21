@@ -1,55 +1,247 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, FolderKanban, Settings, Users, BarChart3 } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
+import {
+  ExternalLink,
+  FolderKanban,
+  Pencil,
+  Plus,
+  Search,
+  Settings,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
+import { authFetch } from '@/stores/auth';
 
 interface OrgWorkspace {
   id: string;
   name: string;
   slug: string;
   owner_id: string;
-  organization_id: string;
+  organization_id: string | null;
   created_at: string;
   updated_at: string;
-  // Branding from API
   logo_url?: string | null;
   logo_emoji?: string | null;
+  primary_color?: string | null;
+  accent_color?: string | null;
+  background_color?: string | null;
+  sidebar_color?: string | null;
+  font_family?: string | null;
+  platform_drive_enabled?: boolean;
+  system_drive_enabled?: boolean;
   organization_logo_url?: string | null;
   organization_logo_rectangle_url?: string | null;
 }
 
+const slugify = (value: string): string =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const formatDate = (iso: string | null | undefined): string => {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString();
+  } catch {
+    return '—';
+  }
+};
+
+type FormState = {
+  name: string;
+  slug: string;
+  logo_emoji: string;
+  logo_url: string;
+  primary_color: string;
+};
+
+const EMPTY_FORM: FormState = {
+  name: '',
+  slug: '',
+  logo_emoji: '📁',
+  logo_url: '',
+  primary_color: '#22c55e',
+};
+
 export default function OrganizationWorkspacesPage() {
   const params = useParams();
   const orgId = params.orgId as string;
-  
+
   const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [createForm, setCreateForm] = useState<FormState>(EMPTY_FORM);
+  const [creating, setCreating] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<FormState>(EMPTY_FORM);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const fetchWorkspaces = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const response = await authFetch(`/api/organizations/${orgId}/workspaces`);
+      if (response.ok) {
+        const data: OrgWorkspace[] = await response.json();
+        setWorkspaces(data);
+        setError(null);
+      } else {
+        setError(`Failed to load workspaces (${response.status})`);
+      }
+    } catch (err) {
+      console.error('Failed to fetch org workspaces:', err);
+      setError('Failed to load workspaces');
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId]);
 
   useEffect(() => {
-    const fetchWorkspaces = async () => {
-      if (!orgId) return;
-      try {
-        const { authFetch } = await import('@/stores/auth');
-        const response = await authFetch(`/api/organizations/${orgId}/workspaces`);
-        if (response.ok) {
-          const data: OrgWorkspace[] = await response.json();
-          setWorkspaces(data);
-        } else {
-          console.error('Failed to fetch workspaces:', response.status);
-        }
-      } catch (error) {
-        console.error('Failed to fetch org workspaces:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    void fetchWorkspaces();
+  }, [fetchWorkspaces]);
 
-    fetchWorkspaces();
-  }, [orgId]);
+  const filtered = searchQuery.trim()
+    ? workspaces.filter(
+        (w) =>
+          w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          w.slug.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : workspaces;
+
+  const resetCreate = () => {
+    setShowAddForm(false);
+    setCreateForm(EMPTY_FORM);
+  };
+
+  const handleCreate = async () => {
+    if (!createForm.name.trim() || !createForm.slug.trim()) return;
+    setCreating(true);
+    try {
+      const response = await authFetch(`/api/organizations/${orgId}/workspaces`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: createForm.name.trim(),
+          slug: createForm.slug.trim(),
+          logo_emoji: createForm.logo_emoji || null,
+          logo_url: createForm.logo_url || null,
+          primary_color: createForm.primary_color || '#22c55e',
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        alert(detail?.detail || `Failed to create workspace (${response.status})`);
+        return;
+      }
+      const created: OrgWorkspace = await response.json();
+      setWorkspaces((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      resetCreate();
+    } catch (err) {
+      console.error('Failed to create workspace:', err);
+      alert('Failed to create workspace');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (ws: OrgWorkspace) => {
+    setEditingId(ws.id);
+    setEditForm({
+      name: ws.name,
+      slug: ws.slug,
+      logo_emoji: ws.logo_emoji || '',
+      logo_url: ws.logo_url || '',
+      primary_color: ws.primary_color || '#22c55e',
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm(EMPTY_FORM);
+  };
+
+  const handleUpdate = async (workspaceId: string) => {
+    setSavingId(workspaceId);
+    try {
+      const response = await authFetch(`/api/organizations/${orgId}/workspaces/${workspaceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim() || null,
+          logo_emoji: editForm.logo_emoji || null,
+          logo_url: editForm.logo_url || null,
+          primary_color: editForm.primary_color || null,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        alert(detail?.detail || `Failed to update workspace (${response.status})`);
+        return;
+      }
+      const updated: OrgWorkspace = await response.json();
+      setWorkspaces((prev) => prev.map((w) => (w.id === workspaceId ? updated : w)));
+      cancelEdit();
+    } catch (err) {
+      console.error('Failed to update workspace:', err);
+      alert('Failed to update workspace');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleDelete = async (workspaceId: string, name: string) => {
+    if (!confirm(`Delete workspace "${name}"? This action cannot be undone.`)) return;
+    try {
+      const response = await authFetch(`/api/organizations/${orgId}/workspaces/${workspaceId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        alert(detail?.detail || `Failed to delete workspace (${response.status})`);
+        return;
+      }
+      setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+      if (editingId === workspaceId) cancelEdit();
+    } catch (err) {
+      console.error('Failed to delete workspace:', err);
+      alert('Failed to delete workspace');
+    }
+  };
+
+  const renderLogo = (ws: OrgWorkspace) => {
+    const API_BASE = getApiUrl();
+    const normalize = (url?: string | null) =>
+      url && url.startsWith('/') ? `${API_BASE}${url}` : url || undefined;
+    const logo =
+      normalize(ws.logo_url) ||
+      normalize(ws.organization_logo_url) ||
+      normalize(ws.organization_logo_rectangle_url);
+    const bg = ws.primary_color ? `${ws.primary_color}20` : '#22c55e20';
+    return (
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg overflow-hidden text-lg"
+        style={{ backgroundColor: bg }}
+      >
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={ws.name} className="h-full w-full object-contain p-0.5" />
+        ) : (
+          <span>{ws.logo_emoji || '📁'}</span>
+        )}
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -60,99 +252,371 @@ export default function OrganizationWorkspacesPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Workspaces</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Workspaces</h2>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+              {filtered.length}
+            </span>
+          </div>
           <p className="text-sm text-muted-foreground">
             Manage workspaces belonging to this organization
           </p>
         </div>
-        <button className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 transition-colors">
+        <button
+          onClick={() => setShowAddForm((v) => !v)}
+          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
           <Plus size={16} />
-          Create Workspace
+          Add Workspace
         </button>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-500">
+          {error}
+        </div>
+      )}
+
+      {showAddForm && (
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <h3 className="mb-4 font-medium">Create New Workspace</h3>
+          <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Name *</label>
+                <input
+                  type="text"
+                  value={createForm.name}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({
+                      ...f,
+                      name: e.target.value,
+                      slug: f.slug || slugify(e.target.value),
+                    }))
+                  }
+                  placeholder="Workspace name"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Slug *</label>
+                <input
+                  type="text"
+                  value={createForm.slug}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, slug: slugify(e.target.value) }))}
+                  placeholder="workspace-slug"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Emoji</label>
+                <input
+                  type="text"
+                  value={createForm.logo_emoji}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, logo_emoji: e.target.value }))}
+                  placeholder="📁"
+                  maxLength={4}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="mb-1 block text-sm font-medium">Logo URL (optional)</label>
+                <input
+                  type="text"
+                  value={createForm.logo_url}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, logo_url: e.target.value }))}
+                  placeholder="https://..."
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Primary Color</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={createForm.primary_color}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, primary_color: e.target.value }))
+                  }
+                  className="h-9 w-12 cursor-pointer rounded border bg-background"
+                />
+                <input
+                  type="text"
+                  value={createForm.primary_color}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, primary_color: e.target.value }))
+                  }
+                  className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={resetCreate}
+                className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
+                disabled={creating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={creating || !createForm.name.trim() || !createForm.slug.trim()}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {creating ? 'Creating...' : 'Create Workspace'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {workspaces.length === 0 ? (
-        <div className="rounded-xl border border-dashed bg-card p-12 text-center">
-          <FolderKanban size={48} className="mx-auto mb-4 text-muted-foreground" />
-          <h3 className="mb-2 text-lg font-semibold">No workspaces yet</h3>
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+          <FolderKanban size={48} className="mb-4 text-muted-foreground/30" />
+          <h3 className="mb-2 font-medium">No workspaces yet</h3>
           <p className="mb-4 text-sm text-muted-foreground">
             Create your first workspace to get started
           </p>
-          <button className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 transition-colors">
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
             <Plus size={16} />
-            Create Workspace
+            Add Workspace
           </button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {workspaces.map((workspace) => {
-            const API_BASE = getApiUrl();
-            const normalize = (url?: string | null) => (url && url.startsWith('/') ? `${API_BASE}${url}` : url || undefined);
-            const logo = normalize(workspace.logo_url) 
-              || normalize(workspace.organization_logo_url)
-              || normalize(workspace.organization_logo_rectangle_url);
-            return (
-            <div
-              key={workspace.id}
-              className="group rounded-xl border bg-card p-6 transition-all hover:border-blue-500/50 hover:shadow-md"
-            >
-              <div className="mb-4 flex items-start justify-between">
-                {logo ? (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-transparent">
-                    <img src={logo} alt={workspace.name} className="h-12 w-12 rounded-xl object-contain" />
-                  </div>
+        <div>
+          <div className="mb-4 relative">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              type="text"
+              placeholder="Search workspaces..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-lg border bg-background pl-10 pr-10 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50 text-left text-sm">
+                  <th className="p-3 font-medium">Workspace</th>
+                  <th className="p-3 font-medium">Slug</th>
+                  <th className="p-3 font-medium">Created</th>
+                  <th className="p-3 font-medium w-48">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                      {searchQuery ? `No workspaces match "${searchQuery}"` : 'No workspaces'}
+                    </td>
+                  </tr>
                 ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl" style={{ backgroundColor: '#22c55e20' }}>
-                    📁
-                  </div>
+                  filtered.map((ws) => (
+                    <Fragment key={ws.id}>
+                      <tr
+                        className={cn(
+                          'border-b transition-colors',
+                          editingId === ws.id ? 'bg-muted/20' : 'hover:bg-muted/30'
+                        )}
+                      >
+                        <td className="p-3 align-top">
+                          <div className="flex items-center gap-3 min-h-[2.5rem]">
+                            {renderLogo(ws)}
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium">{ws.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {ws.id}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3 align-middle">
+                          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                            /{ws.slug}
+                          </code>
+                        </td>
+                        <td className="p-3 align-middle text-sm text-muted-foreground">
+                          {formatDate(ws.created_at)}
+                        </td>
+                        <td className="p-3 align-middle">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() =>
+                                editingId === ws.id ? cancelEdit() : startEdit(ws)
+                              }
+                              className={cn(
+                                'rounded p-1.5 hover:bg-muted',
+                                editingId === ws.id
+                                  ? 'bg-primary/10 text-primary'
+                                  : 'text-muted-foreground'
+                              )}
+                              title={editingId === ws.id ? 'Cancel edit' : 'Edit'}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <Link
+                              href={`/workspace/${ws.id}/settings`}
+                              className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                              title="Open workspace settings"
+                            >
+                              <Settings size={14} />
+                            </Link>
+                            <Link
+                              href={`/workspace/${ws.id}/chat`}
+                              className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                              title="Open workspace"
+                            >
+                              <ExternalLink size={14} />
+                            </Link>
+                            <button
+                              onClick={() => handleDelete(ws.id, ws.name)}
+                              className="rounded p-1.5 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {editingId === ws.id && (
+                        <tr className="border-b bg-muted/10">
+                          <td colSpan={4} className="p-4">
+                            <div className="grid gap-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="mb-1 block text-xs font-medium">Name</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.name}
+                                    onChange={(e) =>
+                                      setEditForm((f) => ({ ...f, name: e.target.value }))
+                                    }
+                                    className="w-full rounded-lg border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-xs font-medium">
+                                    Slug (read-only)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editForm.slug}
+                                    disabled
+                                    className="w-full rounded-lg border bg-muted px-3 py-1.5 text-sm text-muted-foreground"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                  <label className="mb-1 block text-xs font-medium">Emoji</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.logo_emoji}
+                                    onChange={(e) =>
+                                      setEditForm((f) => ({ ...f, logo_emoji: e.target.value }))
+                                    }
+                                    maxLength={4}
+                                    className="w-full rounded-lg border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                                  />
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="mb-1 block text-xs font-medium">Logo URL</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.logo_url}
+                                    onChange={(e) =>
+                                      setEditForm((f) => ({ ...f, logo_url: e.target.value }))
+                                    }
+                                    placeholder="https://..."
+                                    className="w-full rounded-lg border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs font-medium">
+                                  Primary Color
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="color"
+                                    value={editForm.primary_color}
+                                    onChange={(e) =>
+                                      setEditForm((f) => ({
+                                        ...f,
+                                        primary_color: e.target.value,
+                                      }))
+                                    }
+                                    className="h-8 w-12 cursor-pointer rounded border bg-background"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editForm.primary_color}
+                                    onChange={(e) =>
+                                      setEditForm((f) => ({
+                                        ...f,
+                                        primary_color: e.target.value,
+                                      }))
+                                    }
+                                    className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={cancelEdit}
+                                  className="rounded-lg border px-3 py-1.5 text-sm hover:bg-muted"
+                                  disabled={savingId === ws.id}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => handleUpdate(ws.id)}
+                                  disabled={savingId === ws.id || !editForm.name.trim()}
+                                  className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                >
+                                  {savingId === ws.id ? 'Saving...' : 'Save'}
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))
                 )}
-                <button className="opacity-0 transition-opacity group-hover:opacity-100 rounded-lg p-1 hover:bg-muted">
-                  <Settings size={16} className="text-muted-foreground" />
-                </button>
-              </div>
-
-              <h3 className="mb-1 font-semibold">{workspace.name}</h3>
-              <p className="mb-4 text-xs text-muted-foreground">
-                /{workspace.slug}
-              </p>
-
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <Users size={14} />
-                  <span>5</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <BarChart3 size={14} />
-                  <span>24</span>
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <Link
-                  href={`/workspace/${workspace.id}/chat`}
-                  className="flex-1 rounded-lg border px-3 py-2 text-center text-xs font-medium transition-colors hover:bg-muted"
-                >
-                  Open
-                </Link>
-                <Link
-                  href={`/workspace/${workspace.id}/settings`}
-                  className="flex-1 rounded-lg border px-3 py-2 text-center text-xs font-medium transition-colors hover:bg-muted"
-                >
-                  Settings
-                </Link>
-              </div>
-            </div>
-            );
-          })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       <div className="rounded-lg border border-border bg-muted/30 p-4">
         <p className="text-sm text-muted-foreground">
-          Workspaces inherit branding from the organization but can customize their own themes.
+          Workspaces inherit branding from the organization but can customize their own themes. Use{' '}
+          <Users size={12} className="inline" /> the workspace settings link for full configuration
+          including members, drives, and integrations.
         </p>
       </div>
     </div>

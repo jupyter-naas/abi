@@ -154,6 +154,9 @@ class OrganizationService:
     async def list_workspaces(self, org_id: str, user_id: str) -> list[OrganizationWorkspaceRecord]:
         return await self.adapter.list_workspaces_for_org_and_user(org_id=org_id, user_id=user_id)
 
+    async def list_all_workspaces(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
+        return await self.adapter.list_all_workspaces_for_org(org_id=org_id)
+
     async def list_members(self, org_id: str) -> list[OrganizationMemberRecord]:
         return await self.adapter.list_organization_members(org_id=org_id)
 

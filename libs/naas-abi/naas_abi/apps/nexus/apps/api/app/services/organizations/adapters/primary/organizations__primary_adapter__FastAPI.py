@@ -23,6 +23,17 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
+    WorkspaceSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
+    WorkspaceCreateInput,
+    WorkspaceUpdateInput,
+)
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
+    WorkspaceService,
+    WorkspaceSlugAlreadyExistsError,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -433,35 +444,186 @@ async def upload_org_logo_rectangle(
     return {"logo_rectangle_url": updated.logo_rectangle_url}
 
 
+def get_workspace_service_for_org(db: AsyncSession = Depends(get_db)) -> WorkspaceService:
+    return WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+
+
+class OrgWorkspaceCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    slug: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$")
+    logo_url: str | None = None
+    logo_emoji: str | None = None
+    primary_color: str | None = "#22c55e"
+    accent_color: str | None = None
+    background_color: str | None = None
+    sidebar_color: str | None = None
+    font_family: str | None = None
+
+
+class OrgWorkspaceUpdate(BaseModel):
+    name: str | None = None
+    logo_url: str | None = None
+    logo_emoji: str | None = None
+    primary_color: str | None = None
+    accent_color: str | None = None
+    background_color: str | None = None
+    sidebar_color: str | None = None
+    font_family: str | None = None
+    platform_drive_enabled: bool | None = None
+    system_drive_enabled: bool | None = None
+
+
+def _serialize_workspace(ws, org_logo_url: str | None, org_logo_rect_url: str | None) -> dict:
+    return {
+        "id": ws.id,
+        "name": ws.name,
+        "slug": ws.slug,
+        "owner_id": ws.owner_id,
+        "organization_id": ws.organization_id,
+        "created_at": ws.created_at,
+        "updated_at": ws.updated_at,
+        "logo_url": ws.logo_url,
+        "logo_emoji": ws.logo_emoji,
+        "primary_color": getattr(ws, "primary_color", None),
+        "accent_color": getattr(ws, "accent_color", None),
+        "background_color": getattr(ws, "background_color", None),
+        "sidebar_color": getattr(ws, "sidebar_color", None),
+        "font_family": getattr(ws, "font_family", None),
+        "platform_drive_enabled": getattr(ws, "platform_drive_enabled", False),
+        "system_drive_enabled": getattr(ws, "system_drive_enabled", False),
+        "organization_logo_url": org_logo_url,
+        "organization_logo_rectangle_url": org_logo_rect_url,
+    }
+
+
 @router.get("/{org_id}/workspaces")
 async def list_org_workspaces(
     org_id: str,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[dict]:
-    await require_org_access(current_user.id, org_id, service)
+    role = await require_org_access(current_user.id, org_id, service)
 
     org = await service.get_organization(org_id=org_id)
     org_logo_url = org.logo_url if org else None
     org_logo_rect_url = org.logo_rectangle_url if org else None
 
-    workspaces = await service.list_workspaces(org_id=org_id, user_id=current_user.id)
-    return [
-        {
-            "id": ws.id,
-            "name": ws.name,
-            "slug": ws.slug,
-            "owner_id": ws.owner_id,
-            "organization_id": ws.organization_id,
-            "created_at": ws.created_at,
-            "updated_at": ws.updated_at,
-            "logo_url": ws.logo_url,
-            "logo_emoji": ws.logo_emoji,
-            "organization_logo_url": org_logo_url,
-            "organization_logo_rectangle_url": org_logo_rect_url,
-        }
-        for ws in workspaces
-    ]
+    if role in ("owner", "admin"):
+        workspaces = await service.list_all_workspaces(org_id=org_id)
+    else:
+        workspaces = await service.list_workspaces(org_id=org_id, user_id=current_user.id)
+    return [_serialize_workspace(ws, org_logo_url, org_logo_rect_url) for ws in workspaces]
+
+
+@router.get("/{org_id}/workspaces/{workspace_id}")
+async def get_org_workspace(
+    org_id: str,
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org),
+) -> dict:
+    await require_org_access(current_user.id, org_id, service)
+    ws = await workspace_service.get_workspace(workspace_id=workspace_id)
+    if ws is None or ws.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Workspace not found in this organization")
+    org = await service.get_organization(org_id=org_id)
+    return _serialize_workspace(
+        ws,
+        org.logo_url if org else None,
+        org.logo_rectangle_url if org else None,
+    )
+
+
+@router.post("/{org_id}/workspaces")
+async def create_org_workspace(
+    org_id: str,
+    workspace: OrgWorkspaceCreate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org),
+) -> dict:
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only org admins can create workspaces")
+
+    try:
+        record = await workspace_service.create_workspace(
+            WorkspaceCreateInput(
+                name=workspace.name,
+                slug=workspace.slug,
+                owner_id=current_user.id,
+                organization_id=org_id,
+                logo_url=workspace.logo_url,
+                logo_emoji=workspace.logo_emoji,
+                primary_color=workspace.primary_color,
+                accent_color=workspace.accent_color,
+                background_color=workspace.background_color,
+                sidebar_color=workspace.sidebar_color,
+                font_family=workspace.font_family,
+            )
+        )
+    except WorkspaceSlugAlreadyExistsError as exc:
+        raise HTTPException(status_code=400, detail="Slug already exists") from exc
+    org = await service.get_organization(org_id=org_id)
+    return _serialize_workspace(
+        record,
+        org.logo_url if org else None,
+        org.logo_rectangle_url if org else None,
+    )
+
+
+@router.patch("/{org_id}/workspaces/{workspace_id}")
+async def update_org_workspace(
+    org_id: str,
+    workspace_id: str,
+    updates: OrgWorkspaceUpdate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org),
+) -> dict:
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only org admins can update workspaces")
+
+    existing = await workspace_service.get_workspace(workspace_id=workspace_id)
+    if existing is None or existing.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Workspace not found in this organization")
+
+    record = await workspace_service.update_workspace(
+        workspace_id=workspace_id,
+        updates=WorkspaceUpdateInput(**updates.model_dump(exclude_unset=True)),
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    org = await service.get_organization(org_id=org_id)
+    return _serialize_workspace(
+        record,
+        org.logo_url if org else None,
+        org.logo_rectangle_url if org else None,
+    )
+
+
+@router.delete("/{org_id}/workspaces/{workspace_id}")
+async def delete_org_workspace(
+    org_id: str,
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org),
+) -> dict[str, str]:
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only org admins can delete workspaces")
+
+    existing = await workspace_service.get_workspace(workspace_id=workspace_id)
+    if existing is None or existing.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Workspace not found in this organization")
+
+    deleted = await workspace_service.delete_workspace(workspace_id=workspace_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return {"status": "deleted"}
 
 
 @router.get("/{org_id}/members")

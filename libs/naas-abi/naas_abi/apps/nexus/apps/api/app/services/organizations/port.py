@@ -187,6 +187,12 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def list_all_workspaces_for_org(
+        self, org_id: str
+    ) -> list[OrganizationWorkspaceRecord]:
+        raise NotImplementedError
+
+    @abstractmethod
     async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:
         raise NotImplementedError
 
