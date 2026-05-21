@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.22.1 (2026-05-21)
+
+### Bug Fixes
+
+- **git**: Enhance git_push to pull before pushing if remote branch exists
+  ([`46125c5`](https://github.com/jupyter-naas/abi/commit/46125c56faf87987e23506bf18ed83a2faab9498))
+
+### Refactoring
+
+- Move app files in dashboard folder and create manifest.json
+  ([`a315d38`](https://github.com/jupyter-naas/abi/commit/a315d38e47c6ffc2f1a997c46d0a27d91d3a701d))
+
+
 ## v1.22.0 (2026-05-18)
 
 ### Bug Fixes
