@@ -1,9 +1,9 @@
 """Apps FastAPI primary adapter.
 
-Discovers apps shipped by marketplace + built-in modules, hydrates each
-result with the workspace's enable state (via ``AppsService``), and exposes
-both the catalog and a CRUD surface for per-workspace app configuration
-over HTTP.
+Discovers apps shipped by every module the engine has loaded, hydrates
+each result with the workspace's enable state (via ``AppsService``), and
+exposes both the catalog and a CRUD surface for per-workspace app
+configuration over HTTP.
 
 Routes
 ------
@@ -14,18 +14,23 @@ Routes
 * ``PATCH  /api/apps/{ws}/{app_id:path}``      — update / enable / disable
 * ``DELETE /api/apps/{ws}/{app_id:path}``      — delete (reverts to default)
 
-The filesystem-level catalog discovery lives here (rather than in the
-service) because it shapes the HTTP response; the service itself only
-owns per-workspace persistence.
+Discovery mirrors the pattern used by the agents adapter
+(``agents__primary_adapter__FastAPI._get_agent_class_registry``): we walk
+every module loaded by ``ABIModule.get_instance().engine`` (plus the root
+``ABIModule`` itself) and read each module's ``apps/<app_name>/manifest.json``
+files. The ``category`` field is sourced from the manifest — there is no
+hard-coded category map.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from dataclasses import asdict
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
@@ -58,31 +63,8 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 
 # ---------------------------------------------------------------------------
-# Catalog discovery (marketplace + built-in apps)
+# Catalog discovery (driven by loaded engine modules)
 # ---------------------------------------------------------------------------
-
-_CATEGORY_MAP = {
-    "ai": "ai",
-    "applications": "application",
-    "domains": "domain",
-    "alpha": "alpha",
-}
-
-# Built-in apps shipped with naas_abi itself (not via the marketplace).
-# These are always considered installed.
-_BUILTIN_APPS_PACKAGE = "naas_abi"
-_BUILTIN_APPS_SUBPATH = "apps"
-
-
-def _get_category(module_path: str) -> str:
-    parts = module_path.split(".")
-    if parts[0] == "naas_abi_marketplace":
-        if len(parts) >= 3:
-            return _CATEGORY_MAP.get(parts[1], parts[1])
-        return "core"
-    if parts[0] == "naas_abi":
-        return "core"
-    return "core"
 
 
 def _fallback_name(dir_name: str) -> str:
@@ -116,7 +98,7 @@ def _build_app_info(
         module_name=_module_name_from_path(module_path),
         app_name=app_dir.name,
         app_id=f"{module_path}:{app_dir.name}",
-        category=_get_category(module_path),
+        category=manifest.get("category", "unknown"),
         name=manifest.get("name") or _fallback_name(app_dir.name),
         description=manifest.get("description") or "",
         url=manifest.get("url"),
@@ -135,68 +117,33 @@ def _build_app_info(
     )
 
 
-def _scan_marketplace_apps() -> list[AppInfo]:
-    """Scan ``naas_abi_marketplace`` for ``apps/<app_name>/manifest.json`` files."""
-    try:
-        import naas_abi_marketplace
+def _iter_loaded_modules() -> Iterator[Any]:
+    """Yield every module the engine has loaded, starting with the root ABIModule.
 
-        pkg_paths = list(naas_abi_marketplace.__path__)
-        if not pkg_paths:
-            _log.warning("naas_abi_marketplace.__path__ is empty")
-            return []
-        base = Path(pkg_paths[0])
-    except (ImportError, AttributeError):
-        _log.warning("naas_abi_marketplace not available")
-        return []
-
-    catalog: list[AppInfo] = []
-
-    for cat_dir in sorted(base.iterdir()):
-        if not cat_dir.is_dir() or cat_dir.name.startswith("_"):
-            continue
-
-        for mod_dir in sorted(cat_dir.iterdir()):
-            if not mod_dir.is_dir() or mod_dir.name.startswith("_"):
-                continue
-
-            apps_dir = mod_dir / "apps"
-            if not apps_dir.is_dir():
-                continue
-
-            module_path = f"naas_abi_marketplace.{cat_dir.name}.{mod_dir.name}"
-
-            for app_dir in sorted(apps_dir.iterdir()):
-                if not app_dir.is_dir() or app_dir.name.startswith("_"):
-                    continue
-                manifest_path = app_dir / "manifest.json"
-                if not manifest_path.is_file():
-                    continue
-                manifest = _read_manifest(manifest_path)
-                if manifest is None:
-                    continue
-                catalog.append(_build_app_info(module_path, app_dir, manifest))
-
-    return catalog
-
-
-def _scan_builtin_apps() -> list[AppInfo]:
-    """Scan ``naas_abi/apps/<app_name>/manifest.json`` for built-in apps.
-
-    Built-in apps ship with the platform (not the marketplace) and are
-    always considered installed.
+    Same discovery shape as ``agents__primary_adapter__FastAPI``: the root
+    ``ABIModule`` first, then each engine-loaded module (deduped against
+    the root in case it also appears in the engine's module map).
     """
-    try:
-        import naas_abi
+    from naas_abi import ABIModule
 
-        pkg_paths = list(naas_abi.__path__)
-        if not pkg_paths:
-            return []
-        apps_dir = Path(pkg_paths[0]) / _BUILTIN_APPS_SUBPATH
-    except (ImportError, AttributeError):
+    abi_module = ABIModule.get_instance()
+    yield abi_module
+    for module in abi_module.engine.modules.values():
+        if module is abi_module:
+            continue
+        yield module
+
+
+def _scan_module_apps(module: Any) -> list[AppInfo]:
+    """Discover apps under ``<module_root_path>/apps/<app_name>/manifest.json``."""
+    module_root = getattr(module, "module_root_path", None)
+    if not module_root:
         return []
-
+    apps_dir = Path(module_root) / "apps"
     if not apps_dir.is_dir():
         return []
+
+    module_path = module.__class__.__module__
 
     catalog: list[AppInfo] = []
     for app_dir in sorted(apps_dir.iterdir()):
@@ -208,20 +155,22 @@ def _scan_builtin_apps() -> list[AppInfo]:
         manifest = _read_manifest(manifest_path)
         if manifest is None:
             continue
-        module_path = f"{_BUILTIN_APPS_PACKAGE}.{_BUILTIN_APPS_SUBPATH}.{app_dir.name}"
-        # Built-in apps are always installed — they ship with the platform.
-        info = _build_app_info(module_path, app_dir, manifest)
-        catalog.append(info.model_copy(update={"installed": True}))
+        catalog.append(_build_app_info(module_path, app_dir, manifest))
     return catalog
 
 
 @lru_cache(maxsize=1)
 def _scan_apps_catalog() -> tuple[AppInfo, ...]:
-    """Discover apps from the marketplace and naas_abi's built-in apps dir.
+    """Discover apps from every loaded module's ``apps/`` directory.
 
-    Results are process-cached; restart the API to pick up new manifests.
+    Everything we discover lives inside an already-loaded module, so all
+    results are flagged ``installed=True``. Results are process-cached;
+    restart the API to pick up new manifests.
     """
-    catalog = _scan_marketplace_apps() + _scan_builtin_apps()
+    catalog: list[AppInfo] = []
+    for module in _iter_loaded_modules():
+        for info in _scan_module_apps(module):
+            catalog.append(info.model_copy(update={"installed": True}))
     _log.info("Apps catalog built: %d apps", len(catalog))
     return tuple(catalog)
 
@@ -269,7 +218,7 @@ async def list_apps(
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> AppsResponse:
-    """Return every app discovered from marketplace + built-in manifests.
+    """Return every app discovered from loaded-module manifests.
 
     When ``workspace_id`` is provided, results carry the workspace's enable
     state. Apps without a stored record default to ``enabled=True``.
@@ -280,10 +229,9 @@ async def list_apps(
     try:
         from naas_abi import ABIModule
 
-        engine = ABIModule.get_instance().engine
-        installed_modules = engine.modules
+        loaded_modules = ABIModule.get_instance().engine.modules
     except Exception:
-        installed_modules = {}
+        loaded_modules = {}
 
     catalog = _scan_apps_catalog()
 
@@ -293,14 +241,13 @@ async def list_apps(
 
     results: list[AppInfo] = []
     for app in catalog:
-        installed_module = installed_modules.get(app.module_path)
         update: dict = {"enabled": enabled_by_app_id.get(app.app_id, True)}
 
-        if installed_module is not None:
-            update["installed"] = True
-            # Manifest values take precedence; only fall back to runtime
-            # config when the manifest omits the credential.
-            cfg = getattr(installed_module, "configuration", None)
+        # Manifest values take precedence; only fall back to runtime config
+        # when the manifest omits the credential.
+        loaded_module = loaded_modules.get(app.module_path)
+        if loaded_module is not None:
+            cfg = getattr(loaded_module, "configuration", None)
             if not app.demo_login:
                 update["demo_login"] = getattr(cfg, "demo_login", None) or None
             if not app.demo_password:

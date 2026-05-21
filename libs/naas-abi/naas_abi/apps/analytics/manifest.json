@@ -1,6 +1,7 @@
 {
     "name": "Nexus Analytics",
     "description": "Embedded product analytics for Nexus. Track sessions, page views, users, workspaces, and events with a clean, guided dashboard.",
+    "category": "core",
     "url": "/analytics",
     "icon_emoji": "📊",
     "version": "1.0.0",
