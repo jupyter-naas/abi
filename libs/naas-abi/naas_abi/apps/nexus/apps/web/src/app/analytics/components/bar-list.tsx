@@ -30,7 +30,7 @@ export function BarList({
   const max = Math.max(1, ...items.map((i) => i.value));
 
   return (
-    <ul className={cn('space-y-1', className)}>
+    <ul className={cn('space-y-0.5', className)}>
       {items.map((item) => {
         const pct = Math.max(2, (item.value / max) * 100);
         const interactive = !!onItemClick;
@@ -38,14 +38,14 @@ export function BarList({
           <li
             key={item.key}
             className={cn(
-              'group relative isolate flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm',
+              'group relative isolate flex items-center justify-between gap-3 px-3 py-2 text-sm',
               interactive && 'cursor-pointer transition-colors hover:bg-muted/50',
             )}
             onClick={interactive ? () => onItemClick(item) : undefined}
           >
             <div
               aria-hidden
-              className="absolute inset-y-1 left-1 -z-10 rounded bg-primary/10 transition-all"
+              className="absolute inset-y-1 left-1 -z-10 bg-workspace-accent-10 transition-all"
               style={{ width: `calc(${pct}% - 0.5rem)` }}
             />
             <div className="flex-1 min-w-0">

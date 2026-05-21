@@ -10,7 +10,7 @@ interface LineChartProps {
   label?: string;
 }
 
-export function LineChart({ data, height = 180, color = 'hsl(var(--primary))', label }: LineChartProps) {
+export function LineChart({ data, height = 180, color = 'var(--workspace-accent, #22c55e)', label }: LineChartProps) {
   const [hover, setHover] = useState<number | null>(null);
 
   const { points, area, line, maxValue, minValue, w, h, pad, innerH } = useMemo(() => {

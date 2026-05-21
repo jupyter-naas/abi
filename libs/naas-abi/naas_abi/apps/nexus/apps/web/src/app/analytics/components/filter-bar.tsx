@@ -84,9 +84,9 @@ function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
+          'flex h-9 items-center gap-2 border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
           'hover:border-foreground/20 hover:bg-muted/40',
-          open && 'border-primary/50',
+          open && 'border-workspace-accent',
         )}
       >
         <Calendar size={14} className="text-muted-foreground" />
@@ -95,15 +95,15 @@ function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-64 border border-border bg-popover p-1.5 shadow-lg">
           {options.map((o) => (
             <button
               key={o.key}
               onClick={() => pick(o.key)}
               className={cn(
-                'flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors',
+                'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors',
                 'hover:bg-muted',
-                value.range === o.key && 'bg-primary/10 text-primary',
+                value.range === o.key && 'bg-workspace-accent-10 text-workspace-accent',
               )}
             >
               {o.label}
@@ -119,7 +119,7 @@ function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v
                 onChange={(e) =>
                   onChange({ ...value, start_date: new Date(e.target.value).toISOString() })
                 }
-                className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
+                className="w-full border border-border bg-background px-2 py-1 text-sm"
               />
               <label className="block text-xs text-muted-foreground">End</label>
               <input
@@ -128,7 +128,7 @@ function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v
                 onChange={(e) =>
                   onChange({ ...value, end_date: new Date(e.target.value).toISOString() })
                 }
-                className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
+                className="w-full border border-border bg-background px-2 py-1 text-sm"
               />
             </div>
           )}
@@ -172,9 +172,9 @@ function UserSelect({
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border border-border bg-background pl-3 pr-2.5 text-sm transition-colors max-w-[260px]',
+          'flex h-9 items-center gap-2 border border-border bg-background pl-3 pr-2.5 text-sm transition-colors max-w-[260px]',
           'hover:border-foreground/20 hover:bg-muted/40',
-          value.user_email !== 'all' && 'border-primary/40 bg-primary/5',
+          value.user_email !== 'all' && 'border-workspace-accent bg-workspace-accent-5',
         )}
       >
         <Users size={14} className="text-muted-foreground flex-shrink-0" />
@@ -194,7 +194,7 @@ function UserSelect({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 border border-border bg-popover p-1.5 shadow-lg">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -202,7 +202,7 @@ function UserSelect({
               placeholder="Search by email..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-background pl-8 pr-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="h-9 w-full border border-border bg-background pl-8 pr-2 text-sm focus:outline-none focus:ring-2 focus:ring-workspace-accent/30"
             />
           </div>
           <div className="mt-1.5 max-h-64 overflow-y-auto">
@@ -212,8 +212,8 @@ function UserSelect({
                 setOpen(false);
               }}
               className={cn(
-                'flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted',
-                value.user_email === 'all' && 'bg-primary/10 text-primary',
+                'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors hover:bg-muted',
+                value.user_email === 'all' && 'bg-workspace-accent-10 text-workspace-accent',
               )}
             >
               <span className="font-medium">All users</span>
@@ -232,8 +232,8 @@ function UserSelect({
                   setQuery('');
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted',
-                  value.user_email === u.user_email && 'bg-primary/10 text-primary',
+                  'flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted',
+                  value.user_email === u.user_email && 'bg-workspace-accent-10 text-workspace-accent',
                 )}
               >
                 <Avatar email={u.user_email} />
@@ -274,9 +274,9 @@ function WorkspaceSelect({
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
+          'flex h-9 items-center gap-2 border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
           'hover:border-foreground/20 hover:bg-muted/40',
-          value.workspace_id !== 'all' && 'border-primary/40 bg-primary/5',
+          value.workspace_id !== 'all' && 'border-workspace-accent bg-workspace-accent-5',
         )}
       >
         <Layers size={14} className="text-muted-foreground" />
@@ -284,15 +284,15 @@ function WorkspaceSelect({
         <ChevronDown size={14} className="text-muted-foreground" />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-56 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-56 border border-border bg-popover p-1.5 shadow-lg">
           <button
             onClick={() => {
               onChange({ ...value, workspace_id: 'all' });
               setOpen(false);
             }}
             className={cn(
-              'flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted',
-              value.workspace_id === 'all' && 'bg-primary/10 text-primary',
+              'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors hover:bg-muted',
+              value.workspace_id === 'all' && 'bg-workspace-accent-10 text-workspace-accent',
             )}
           >
             All workspaces
@@ -306,8 +306,8 @@ function WorkspaceSelect({
                 setOpen(false);
               }}
               className={cn(
-                'flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted',
-                value.workspace_id === w.workspace_id && 'bg-primary/10 text-primary',
+                'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors hover:bg-muted',
+                value.workspace_id === w.workspace_id && 'bg-workspace-accent-10 text-workspace-accent',
               )}
             >
               <span className="truncate">{w.workspace_name}</span>
