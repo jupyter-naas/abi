@@ -1,6 +1,7 @@
 {
     "name": "World Situation Room",
     "description": "Real-time geospatial intelligence platform. Fuses live satellite orbits, commercial and military flight data, seismic activity, CCTV streams, and conflict-zone intelligence into a single 3D globe.",
+    "category": "alpha",
     "url": "https://worldsituationroom.com/",
     "avatar_url": "https://assets.naas.ai/marketplace/wsr/logo.png",
     "demo_login": "demo@naas.ai",
