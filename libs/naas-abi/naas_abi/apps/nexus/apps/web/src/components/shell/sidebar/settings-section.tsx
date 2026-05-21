@@ -2,69 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  Settings,
-  Shield,
-  Server,
-  Cpu,
-  Bot,
-  Brush,
-  HardDrive,
-  Users,
-  Download,
-  type LucideIcon,
-} from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
-
-type SettingsNavItem = {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-};
-
-type SettingsNavGroup = {
-  label: string;
-  items: SettingsNavItem[];
-};
-
-const SETTINGS_GROUPS: SettingsNavGroup[] = [
-  {
-    label: 'General',
-    items: [
-      { href: '/settings/theme', label: 'Theme', icon: Brush },
-    ],
-  },
-  {
-    label: 'People',
-    items: [
-      { href: '/settings/members', label: 'Members', icon: Users },
-    ],
-  },
-  {
-    label: 'AI',
-    items: [
-      { href: '/settings/agents', label: 'Agents', icon: Bot },
-      { href: '/settings/models', label: 'Models', icon: Cpu },
-    ],
-  },
-  {
-    label: 'Connections',
-    items: [
-      { href: '/settings/servers', label: 'Servers', icon: Server },
-      { href: '/settings/secrets', label: 'Secrets', icon: Shield },
-    ],
-  },
-  {
-    label: 'Data',
-    items: [
-      { href: '/settings/drives', label: 'Drives',      icon: HardDrive },
-      { href: '/settings/export', label: 'Data Export', icon: Download },
-    ],
-  },
-];
+import { SETTINGS_GROUPS } from '@/components/shell/settings-nav';
 
 export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const pathname = usePathname();

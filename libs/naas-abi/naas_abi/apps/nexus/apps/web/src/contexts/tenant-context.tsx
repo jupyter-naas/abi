@@ -74,15 +74,19 @@ const WORKSPACE_SEGMENT_TITLE: Record<string, string> = {
   apps: 'Apps',
   marketplace: 'Marketplace',
   help: 'Help',
-  settings: 'Workspace Settings',
-  organization: 'Organization',
-  account: 'Account',
+  settings: 'Settings',
+  organization: 'Settings',
+  account: 'Settings',
 };
 
 function getPageTitle(pathname: string, tabTitle: string): string {
   // Auth routes and login: use config title only
   if (pathname.startsWith('/auth/') || pathname.startsWith('/org/')) {
     return tabTitle;
+  }
+  // Account is global (not workspace-scoped) but part of unified Settings.
+  if (pathname.startsWith('/account')) {
+    return `Settings | ${tabTitle}`;
   }
   // Workspace routes: "Nav item | Config title"
   const workspaceMatch = pathname.match(/^\/workspace\/[^/]+\/([^/]+)/);

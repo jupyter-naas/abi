@@ -18,7 +18,7 @@ type SectionDef = {
   icon: React.ReactNode;
   label: string;
   href: string;
-  feature?: 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph';
+  feature?: 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'settings.workspace';
   extraHref?: string;
 };
 
@@ -34,7 +34,7 @@ const SECTIONS: SectionDef[] = [
 ];
 
 const BOTTOM_SECTIONS: SectionDef[] = [
-  { id: 'settings', icon: <Settings size={18} />, label: 'Settings', href: '/settings' },
+  { id: 'settings', icon: <Settings size={18} />, label: 'Settings', href: '/settings', feature: 'settings.workspace' },
 ];
 
 const ALL_SECTIONS: SectionDef[] = [...SECTIONS, ...BOTTOM_SECTIONS];
@@ -67,6 +67,7 @@ export function Sidebar() {
   const canSearch = useFeature('search');
   const canOntology = useFeature('ontology');
   const canGraph = useFeature('graph');
+  const canSettingsWorkspace = useFeature('settings.workspace');
 
   useEffect(() => {
     setMounted(true);
@@ -79,7 +80,12 @@ export function Sidebar() {
   const urlSection = useMemo(() => {
     return ALL_SECTIONS.find((s) => {
       const base = getWorkspacePath(currentWorkspaceId, s.href);
-      return pathname.startsWith(base);
+      if (pathname.startsWith(base)) return true;
+      if (s.extraHref) {
+        const extra = getWorkspacePath(currentWorkspaceId, s.extraHref);
+        if (pathname.startsWith(extra)) return true;
+      }
+      return false;
     }) ?? null;
   }, [pathname, currentWorkspaceId]);
 
@@ -108,6 +114,7 @@ export function Sidebar() {
     if (feature === 'search') return !!canSearch;
     if (feature === 'ontology') return !!canOntology;
     if (feature === 'graph') return !!canGraph;
+    if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
 
