@@ -15,12 +15,12 @@ export default function SettingsLayout({
   return (
     <div className="flex h-full flex-col">
       <Header
-        title="Workspace Settings"
+        title="Settings"
         subtitle={currentWorkspace?.name || 'Configure your workspace'}
       />
 
       <div className="flex-1 overflow-auto px-4 py-6">
-        {children}
+        <div className="mx-auto max-w-4xl">{children}</div>
       </div>
     </div>
   );

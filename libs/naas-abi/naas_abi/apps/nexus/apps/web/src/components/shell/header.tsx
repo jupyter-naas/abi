@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { 
-  PanelLeft, 
-  User, 
-  Settings, 
-  LogOut, 
+import {
+  PanelLeft,
+  User,
+  LogOut,
   HelpCircle,
   GitBranch,
   ChevronDown,
@@ -18,6 +17,7 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type WorkspaceBranch, type Workspace } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
+import { useFeature } from '@/hooks/use-feature';
 import { ApiStatusIndicator } from './api-status-indicator';
 
 interface HeaderProps {
@@ -51,8 +51,10 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
   // Use authenticated user from auth store (not the hardcoded workspace store user)
   const user = authUser;
 
+  const canOrganizationSettings = useFeature('settings.organization');
+
   // Helper to generate workspace-scoped URLs
-  const getWorkspacePath = (path: string) => 
+  const getWorkspacePath = (path: string) =>
     currentWorkspaceId ? `/workspace/${currentWorkspaceId}${path}` : path;
 
   useEffect(() => {
@@ -232,22 +234,16 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
                   <User size={16} className="shrink-0 text-muted-foreground" />
                   Account Settings
                 </Link>
-                <Link
-                  href={getWorkspacePath('/settings')}
-                  onClick={() => setUserMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
-                >
-                  <Settings size={16} className="shrink-0 text-muted-foreground" />
-                  Workspace Settings
-                </Link>
-                <Link
-                  href="/organizations"
-                  onClick={() => setUserMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
-                >
-                  <Building2 size={16} className="shrink-0 text-muted-foreground" />
-                  Organization Settings
-                </Link>
+                {canOrganizationSettings && (
+                  <Link
+                    href="/organizations"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+                  >
+                    <Building2 size={16} className="shrink-0 text-muted-foreground" />
+                    Organization Settings
+                  </Link>
+                )}
                 <Link
                   href={getWorkspacePath('/help')}
                   onClick={() => setUserMenuOpen(false)}
