@@ -1,6 +1,7 @@
 import {
   AppWindow,
   Bot,
+  BrainCircuit,
   Brush,
   Cpu,
   Download,
@@ -39,6 +40,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       { href: '/settings/theme', label: 'Theme', icon: Brush },
       { href: '/settings/members', label: 'Members', icon: Users },
       { href: '/settings/servers', label: 'Servers', icon: Server },
+      { href: '/settings/drives', label: 'Drives', icon: HardDrive },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
     ],
@@ -48,8 +50,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       { href: '/settings/agents', label: 'Agents', icon: Bot },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow },
+      { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit },
       { href: '/settings/models', label: 'Models', icon: Cpu },
-      { href: '/settings/drives', label: 'Drives', icon: HardDrive },
     ],
   },
 ];

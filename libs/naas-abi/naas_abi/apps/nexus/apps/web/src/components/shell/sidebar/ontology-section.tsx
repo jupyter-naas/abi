@@ -9,9 +9,8 @@ import {
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useOntologyStore } from '@/stores/ontology';
+import { useOntologyConfigsStore } from '@/stores/ontology-configs';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { authFetch } from '@/stores/auth';
-import { getApiUrl } from '@/lib/config';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 
@@ -23,16 +22,6 @@ type OntologyFile = {
   description?: string;
 };
 
-type OntologyFileApiItem = {
-  name?: string;
-  path?: string;
-  module_name?: string;
-  moduleName?: string;
-  submodule_name?: string | null;
-  submoduleName?: string | null;
-  description?: string | null;
-};
-
 type ModuleSubmoduleGroup = {
   moduleName: string;
   filesWithoutSubmodule: OntologyFile[];
@@ -41,11 +30,14 @@ type ModuleSubmoduleGroup = {
 
 export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
-  const [ontologyFiles, setOntologyFiles] = useState<OntologyFile[]>([]);
   const [expandedOntologyModules, setExpandedOntologyModules] = useState<string[]>([]);
   const [expandedOntologySubmodules, setExpandedOntologySubmodules] = useState<string[]>([]);
-  const [loadingOntologyFiles, setLoadingOntologyFiles] = useState(false);
   const { currentWorkspaceId } = useWorkspaceStore();
+  const {
+    ontologies: ontologyConfigItems,
+    loading: loadingOntologyFiles,
+    fetchOntologies,
+  } = useOntologyConfigsStore();
   const {
     items: ontologyItems,
     loading: ontologyLoading,
@@ -77,6 +69,22 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
       },
     });
   };
+
+  const ontologyFiles = useMemo<OntologyFile[]>(() => (
+    ontologyConfigItems
+      .filter((item) => item.enabled)
+      .map((item) => ({
+        name: item.name,
+        path: item.path,
+        moduleName: item.module_name || 'Unknown module',
+        submoduleName: item.submodule_name || undefined,
+        description: item.description || undefined,
+      }))
+      .sort((a, b) =>
+        a.moduleName.localeCompare(b.moduleName, undefined, { sensitivity: 'base' })
+        || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      )
+  ), [ontologyConfigItems]);
 
   const groupedOntologyFiles = useMemo(() => {
     const grouped = new Map<string, OntologyFile[]>();
@@ -110,67 +118,38 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
   ), [groupedOntologyFiles]);
 
   useEffect(() => {
-    const fetchOntologyFiles = async () => {
-      setLoadingOntologyFiles(true);
-      try {
-        const apiUrl = getApiUrl();
-        const response = await authFetch(`${apiUrl}/api/ontology/ontologies`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ontology files: ${response.status}`);
-        }
-        const data = await response.json() as { items?: OntologyFileApiItem[] };
-        const files = Array.isArray(data.items) ? data.items : [];
-        const normalizedFiles: OntologyFile[] = files.reduce((acc: OntologyFile[], file: OntologyFileApiItem) => {
-          if (typeof file?.name !== 'string' || typeof file?.path !== 'string') {
-            return acc;
-          }
-          acc.push({
-            name: file.name,
-            path: file.path,
-            moduleName: file.module_name || file.moduleName || 'Unknown module',
-            submoduleName: file.submodule_name || file.submoduleName || undefined,
-            description: file.description || undefined,
-          });
-          return acc;
-        }, []).sort((a: OntologyFile, b: OntologyFile) =>
-            a.moduleName.localeCompare(b.moduleName, undefined, { sensitivity: 'base' })
-            || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-          );
-        setOntologyFiles(normalizedFiles);
+    if (currentWorkspaceId) {
+      void fetchOntologies(currentWorkspaceId);
+    }
+  }, [currentWorkspaceId, fetchOntologies]);
 
-        // Auto-select and navigate to the first ontology when none is selected.
-        // Read from getState() so we see the post-hydration value.
-        if (!useOntologyStore.getState().selectedOntologyPath && normalizedFiles.length > 0) {
-          const firstPath = normalizedFiles[0].path;
-          setSelectedOntologyPath(firstPath);
-          const params = new URLSearchParams({ view: 'network', ontology: firstPath });
-          router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
-        }
-
-        setExpandedOntologyModules(
-          Array.from(new Set(normalizedFiles.map((file) => file.moduleName)))
-        );
-        setExpandedOntologySubmodules(
-          Array.from(
-            new Set(
-              normalizedFiles
-                .filter((file) => file.submoduleName)
-                .map((file) => `${file.moduleName}::${file.submoduleName}`)
-            )
-          )
-        );
-      } catch (error) {
-        console.error('Failed to fetch ontology files:', error);
-        setOntologyFiles([]);
-        setExpandedOntologyModules([]);
-        setExpandedOntologySubmodules([]);
-      } finally {
-        setLoadingOntologyFiles(false);
-      }
-    };
-
-    fetchOntologyFiles();
-  }, []);
+  useEffect(() => {
+    // Auto-select and navigate to the first ontology when none is selected
+    // (or when the currently-selected one is no longer visible).
+    const currentSelected = useOntologyStore.getState().selectedOntologyPath;
+    const stillVisible = currentSelected
+      ? ontologyFiles.some((file) => file.path === currentSelected)
+      : false;
+    if (!stillVisible && ontologyFiles.length > 0) {
+      const firstPath = ontologyFiles[0].path;
+      setSelectedOntologyPath(firstPath);
+      const params = new URLSearchParams({ view: 'network', ontology: firstPath });
+      router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
+    }
+    setExpandedOntologyModules(
+      Array.from(new Set(ontologyFiles.map((file) => file.moduleName)))
+    );
+    setExpandedOntologySubmodules(
+      Array.from(
+        new Set(
+          ontologyFiles
+            .filter((file) => file.submoduleName)
+            .map((file) => `${file.moduleName}::${file.submoduleName}`)
+        )
+      )
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ontologyFiles]);
 
   return (
     <CollapsibleSection
