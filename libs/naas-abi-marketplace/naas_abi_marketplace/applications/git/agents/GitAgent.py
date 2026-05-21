@@ -140,7 +140,7 @@ Constraints:
             if not message or not message.strip():
                 raise ValueError("Commit message is required.")
             proc = subprocess.run(
-                ["git", "commit", "-m", message],
+                ["git", "commit", "-m", message, "-n"],
                 capture_output=True,
                 text=True,
             )
