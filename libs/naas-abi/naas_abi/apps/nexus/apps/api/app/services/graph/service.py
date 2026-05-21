@@ -21,6 +21,12 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.graph.port import (
+    GraphConfigCreateInput,
+    GraphConfigRecord,
+    GraphConfigUpdateInput,
+    GraphPersistencePort,
+)
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
@@ -167,9 +173,7 @@ def _get_subjects_graph_batch(
             where_clauses.append("?s ?p0 ?o0 .")
         else:
             construct_clauses.append(f"?o{i - 1} ?p{i} ?o{i} .")
-            where_clauses.append(
-                f"OPTIONAL {{ ?o{i - 1} ?p{i} ?o{i} . FILTER(isIRI(?o{i - 1})) }}"
-            )
+            where_clauses.append(f"OPTIONAL {{ ?o{i - 1} ?p{i} ?o{i} . FILTER(isIRI(?o{i - 1})) }}")
 
     sparql = f"""
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -233,9 +237,7 @@ def _build_network_from_subject_graph(
             nodes[subject_uri][_get_ontology_label(triple_store, str(p))] = str(o)
         elif isinstance(o, URIRef) and p != RDF.type:
             object_uri = str(o)
-            edge_id = hashlib.sha256(
-                f"{subject_uri}|{str(p)}|{object_uri}".encode()
-            ).hexdigest()
+            edge_id = hashlib.sha256(f"{subject_uri}|{str(p)}|{object_uri}".encode()).hexdigest()
             if edge_id not in edges:
                 object_label_value = subject_graph.value(URIRef(object_uri), RDFS.label)
                 object_label = str(object_label_value) if object_label_value else object_uri
@@ -487,8 +489,61 @@ class GraphService:
     def __init__(
         self,
         triple_store_getter: Callable[[], TripleStoreService] | None = None,
+        adapter: GraphPersistencePort | None = None,
     ) -> None:
         self._triple_store_getter = triple_store_getter
+        self.adapter = adapter
+
+    # ── Persistence (per-workspace graph configs) ─────────────────────────────
+
+    def _require_adapter(self) -> GraphPersistencePort:
+        if self.adapter is None:
+            raise RuntimeError("GraphService has no persistence adapter configured")
+        return self.adapter
+
+    async def list_workspace_configs(self, workspace_id: str) -> list[GraphConfigRecord]:
+        if self.adapter is None:
+            return []
+        return await self.adapter.list_by_workspace(workspace_id)
+
+    async def get_workspace_config(
+        self, workspace_id: str, graph_uri: str
+    ) -> GraphConfigRecord | None:
+        if self.adapter is None:
+            return None
+        return await self.adapter.get(workspace_id, graph_uri)
+
+    async def create_workspace_config(self, data: GraphConfigCreateInput) -> GraphConfigRecord:
+        adapter = self._require_adapter()
+        return await adapter.create(data)
+
+    async def create_workspace_configs(
+        self, configs: list[GraphConfigCreateInput]
+    ) -> list[GraphConfigRecord]:
+        adapter = self._require_adapter()
+        return await adapter.create_many(configs)
+
+    async def update_workspace_config(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        updates: GraphConfigUpdateInput,
+    ) -> GraphConfigRecord | None:
+        adapter = self._require_adapter()
+        return await adapter.update(workspace_id, graph_uri, updates)
+
+    async def delete_workspace_config(self, workspace_id: str, graph_uri: str) -> bool:
+        adapter = self._require_adapter()
+        return await adapter.delete(workspace_id, graph_uri)
+
+    async def get_enabled_states(self, workspace_id: str) -> dict[str, bool]:
+        """Return ``{graph_uri: enabled}`` for every record in ``workspace_id``.
+
+        Graph URIs without a stored record are absent from the result;
+        callers should default missing entries to ``True``.
+        """
+        records = await self.list_workspace_configs(workspace_id)
+        return {r.graph_uri: r.enabled for r in records}
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
@@ -806,7 +861,14 @@ class GraphService:
                     subject_category[s_str] = new_cat
 
         # Second pass: accumulate triples and collect unique subject sets per category
-        _cats = ("named_individual", "class", "object_property", "datatype_property", "restriction", "unknown")
+        _cats = (
+            "named_individual",
+            "class",
+            "object_property",
+            "datatype_property",
+            "restriction",
+            "unknown",
+        )
         triple_counts: dict[str, int] = dict.fromkeys(_cats, 0)
         subject_sets: dict[str, set[str]] = {c: set() for c in _cats}
 

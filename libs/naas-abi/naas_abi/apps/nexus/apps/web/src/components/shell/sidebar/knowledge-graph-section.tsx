@@ -9,6 +9,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useKnowledgeGraphStore, type GraphView } from '@/stores/knowledge-graph';
+import { useGraphConfigsStore } from '@/stores/graph-configs';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { useConfirm } from '@/components/ui/dialogs';
@@ -237,9 +238,29 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
   const [availableGraphPacks, setAvailableGraphPacks] = useState<GraphPackItem[]>([]);
   const [graphsExpanded, setGraphsExpanded] = useState(true);
   const [viewsExpanded, setViewsExpanded] = useState(true);
+  const {
+    graphs: graphConfigItems,
+    fetchGraphs: fetchGraphConfigs,
+  } = useGraphConfigsStore();
+
+  const enabledGraphUris = useMemo(
+    () => new Set(graphConfigItems.filter((g) => g.enabled).map((g) => g.uri)),
+    [graphConfigItems]
+  );
+
+  const filteredGraphPacks = useMemo(() => {
+    if (graphConfigItems.length === 0) return availableGraphPacks;
+    return availableGraphPacks
+      .map((pack) => ({
+        ...pack,
+        graphs: pack.graphs.filter((g) => enabledGraphUris.has(g.uri)),
+      }))
+      .filter((pack) => pack.graphs.length > 0);
+  }, [availableGraphPacks, enabledGraphUris, graphConfigItems.length]);
+
   const availableGraphs = useMemo(
-    () => availableGraphPacks.flatMap((pack) => pack.graphs),
-    [availableGraphPacks]
+    () => filteredGraphPacks.flatMap((pack) => pack.graphs),
+    [filteredGraphPacks]
   );
   const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
   const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
@@ -355,6 +376,12 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
   useEffect(() => {
     void fetchGraphs();
   }, [fetchGraphs]);
+
+  useEffect(() => {
+    if (currentWorkspaceId) {
+      void fetchGraphConfigs(currentWorkspaceId);
+    }
+  }, [currentWorkspaceId, fetchGraphConfigs]);
 
   useEffect(() => {
     const onGraphListUpdate = () => {
@@ -506,7 +533,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             {availableGraphs.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No named graphs</p>
             ) : (
-              availableGraphPacks.map((pack, packIndex) => (
+              filteredGraphPacks.map((pack, packIndex) => (
                 <React.Fragment key={pack.roleLabel}>
                   {packIndex > 0 && <div className="my-1 h-px bg-border/50" />}
                   {/* Pack label above graph list — hidden for now

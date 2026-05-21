@@ -643,6 +643,29 @@ class OntologyConfigModel(Base):
 
 
 # ============================================
+# Graph Configurations (per-workspace enable state for named graphs)
+# ============================================
+
+
+class GraphConfigModel(Base):
+    __tablename__ = "graph_configs"
+
+    id = Column(String, primary_key=True)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    graph_uri = Column(String(1024), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "graph_uri", name="uq_graph_configs_workspace_graph_uri"),
+    )
+
+
+# ============================================
 # Secrets
 # ============================================
 

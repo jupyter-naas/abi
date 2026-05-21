@@ -11,6 +11,13 @@ class GraphInfo(BaseModel):
     uri: str
     label: str
     role_label: str = "unknown"
+    enabled: bool = True
+
+
+class GraphConfigUpdate(BaseModel):
+    """Body for ``PATCH /api/graph/configs/{workspace_id}/{graph_uri:path}``."""
+
+    enabled: bool | None = None
 
 
 class GraphPack(BaseModel):

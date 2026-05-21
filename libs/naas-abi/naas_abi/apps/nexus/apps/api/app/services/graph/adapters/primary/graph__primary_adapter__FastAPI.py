@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -17,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
     GraphAnalysis,
     GraphClear,
+    GraphConfigUpdate,
     GraphCreate,
     GraphData,
     GraphDelete,
@@ -31,6 +33,11 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.port import (
+    GraphConfigCreateInput,
+    GraphConfigRecord,
+    GraphConfigUpdateInput,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
     GraphService,
@@ -81,25 +88,139 @@ def _edge_to_schema(edge) -> GraphEdge:
 @router.get("/list")
 async def list_graphs(
     workspace_id: str,
+    only_enabled: bool = Query(False, alias="only_enabled"),
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[GraphPack]:
-    """List all graphs available in the triple store and nexus ontology graph."""
+    """List all graphs available in the triple store and nexus ontology graph.
+
+    When ``workspace_id`` is provided, results carry the workspace's enable
+    state. Graphs without a stored record are auto-persisted with
+    ``enabled=True`` so the settings UI sees a stable catalog. Pass
+    ``only_enabled=true`` to filter out disabled graphs (used by the sidebar).
+    """
     await require_workspace_access(current_user.id, workspace_id)
     try:
-        graphs = await graph_service.list_graphs(workspace_id=workspace_id)
+        graph_packs = await graph_service.list_graphs(workspace_id=workspace_id)
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return [
-        GraphPack(
-            role_label=pack.role_label,
-            graphs=[
-                GraphInfo(id=g.id, uri=g.uri, label=g.label, role_label=g.role_label)
-                for g in pack.graphs
-            ],
+
+    enabled_by_uri: dict[str, bool] = await graph_service.get_enabled_states(workspace_id)
+
+    # Auto-persist any newly discovered graphs for this workspace.
+    all_graphs = [g for pack in graph_packs for g in pack.graphs]
+    new_configs = [
+        GraphConfigCreateInput(
+            workspace_id=workspace_id,
+            graph_uri=g.uri,
+            name=g.label,
+            enabled=True,
         )
-        for pack in graphs
+        for g in all_graphs
+        if g.uri not in enabled_by_uri
     ]
+    if new_configs:
+        try:
+            created = await graph_service.create_workspace_configs(new_configs)
+            for record in created:
+                enabled_by_uri[record.graph_uri] = record.enabled
+        except Exception:
+            pass
+
+    result: list[GraphPack] = []
+    for pack in graph_packs:
+        graphs_in_pack: list[GraphInfo] = []
+        for g in pack.graphs:
+            enabled = enabled_by_uri.get(g.uri, True)
+            if only_enabled and not enabled:
+                continue
+            graphs_in_pack.append(
+                GraphInfo(
+                    id=g.id,
+                    uri=g.uri,
+                    label=g.label,
+                    role_label=g.role_label,
+                    enabled=enabled,
+                )
+            )
+        if graphs_in_pack:
+            result.append(GraphPack(role_label=pack.role_label, graphs=graphs_in_pack))
+    return result
+
+
+def _serialize_config(record: GraphConfigRecord) -> dict:
+    data = asdict(record)
+    data["created_at"] = record.created_at.isoformat()
+    data["updated_at"] = record.updated_at.isoformat()
+    return data
+
+
+@router.get("/configs/{workspace_id}")
+async def list_graph_configs(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[dict]:
+    """List every stored graph config row for a workspace."""
+    await require_workspace_access(current_user.id, workspace_id)
+    records = await graph_service.list_workspace_configs(workspace_id)
+    return [_serialize_config(r) for r in records]
+
+
+@router.patch("/configs/{workspace_id}/{graph_uri:path}")
+async def update_graph_config(
+    workspace_id: str,
+    graph_uri: str,
+    updates: GraphConfigUpdate,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict:
+    """Update a graph config (e.g. enable/disable).
+
+    Idempotent: if no row exists yet, one is created with the supplied
+    values so the UI toggle can call PATCH without a prior POST.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+
+    record = await graph_service.update_workspace_config(
+        workspace_id=workspace_id,
+        graph_uri=graph_uri,
+        updates=GraphConfigUpdateInput(enabled=updates.enabled),
+    )
+    if record is None:
+        try:
+            graph_packs = await graph_service.list_graphs(workspace_id=workspace_id)
+        except GraphServiceUnavailableError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        all_graphs = [g for pack in graph_packs for g in pack.graphs]
+        match = next((g for g in all_graphs if g.uri == graph_uri), None)
+        if match is None:
+            raise HTTPException(status_code=404, detail="Graph not found")
+        enabled = True if updates.enabled is None else updates.enabled
+        record = await graph_service.create_workspace_config(
+            GraphConfigCreateInput(
+                workspace_id=workspace_id,
+                graph_uri=graph_uri,
+                name=match.label,
+                enabled=enabled,
+            )
+        )
+    return _serialize_config(record)
+
+
+@router.delete("/configs/{workspace_id}/{graph_uri:path}")
+async def delete_graph_config(
+    workspace_id: str,
+    graph_uri: str,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Delete a graph config (reverts to the default ``enabled=True``)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    deleted = await graph_service.delete_workspace_config(workspace_id, graph_uri)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Graph config not found")
+    return {"status": "deleted"}
 
 
 @router.post("/create")
