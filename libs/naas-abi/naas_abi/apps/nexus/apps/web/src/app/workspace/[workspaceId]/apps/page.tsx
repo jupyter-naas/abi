@@ -648,13 +648,6 @@ export default function AppsPage() {
                 className="h-10 w-full border bg-background pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            <Link
-              href={`/workspace/${currentWorkspaceId}/marketplace?type=applications`}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-            >
-              <ExternalLink size={12} />
-              Browse Marketplace
-            </Link>
           </div>
 
           {/* States */}
