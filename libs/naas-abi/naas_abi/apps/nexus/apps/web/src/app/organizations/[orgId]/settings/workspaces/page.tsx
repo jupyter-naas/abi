@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ExternalLink,
   FolderKanban,
@@ -79,6 +79,8 @@ const formatDate = (iso: string | null | undefined): string => {
   }
 };
 
+const deleteKey = (name: string) => name.toLowerCase().replace(/\s+/g, '');
+
 type FormState = {
   name: string;
   slug: string;
@@ -114,6 +116,18 @@ export default function OrganizationWorkspacesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<FormState>(EMPTY_FORM);
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  // Delete confirmation modal
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const deleteInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (deleteTarget) {
+      setTimeout(() => deleteInputRef.current?.focus(), 50);
+    }
+  }, [deleteTarget]);
 
   const fetchWorkspaces = useCallback(async () => {
     if (!orgId) return;
@@ -248,23 +262,43 @@ export default function OrganizationWorkspacesPage() {
     }
   };
 
-  const handleDelete = async (workspaceId: string, name: string) => {
-    if (!confirm(`Delete workspace "${name}"? This action cannot be undone.`)) return;
+  const openDeleteModal = (ws: OrgWorkspace) => {
+    setDeleteTarget({ id: ws.id, name: ws.name });
+    setDeleteConfirmInput('');
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteTarget(null);
+    setDeleteConfirmInput('');
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      const response = await authFetch(`/api/organizations/${orgId}/workspaces/${workspaceId}`, {
-        method: 'DELETE',
-      });
+      const response = await authFetch(
+        `/api/organizations/${orgId}/workspaces/${deleteTarget.id}`,
+        { method: 'DELETE' }
+      );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        alert(formatErrorDetail(body?.detail) || `Failed to delete workspace (${response.status})`);
+        setError(
+          formatErrorDetail(body?.detail) ||
+            `Failed to delete workspace (${response.status})`
+        );
+        closeDeleteModal();
         return;
       }
-      setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+      setWorkspaces((prev) => prev.filter((w) => w.id !== deleteTarget.id));
       void refreshWorkspaceStore();
-      if (editingId === workspaceId) cancelEdit();
+      if (editingId === deleteTarget.id) cancelEdit();
+      closeDeleteModal();
     } catch (err) {
       console.error('Failed to delete workspace:', err);
-      alert('Failed to delete workspace');
+      setError('Failed to delete workspace');
+      closeDeleteModal();
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -302,6 +336,69 @@ export default function OrganizationWorkspacesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-md rounded-xl border bg-background p-6 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold">Delete workspace</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This action is permanent and cannot be undone.
+                </p>
+              </div>
+              <button
+                onClick={closeDeleteModal}
+                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="mb-3 text-sm text-muted-foreground">
+              To confirm, type{' '}
+              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                {deleteKey(deleteTarget.name)}
+              </code>{' '}
+              below:
+            </p>
+            <input
+              ref={deleteInputRef}
+              type="text"
+              value={deleteConfirmInput}
+              onChange={(e) => setDeleteConfirmInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === 'Enter' &&
+                  deleteConfirmInput === deleteKey(deleteTarget.name) &&
+                  !deleting
+                ) {
+                  void handleDelete();
+                }
+                if (e.key === 'Escape') closeDeleteModal();
+              }}
+              placeholder={deleteKey(deleteTarget.name)}
+              className="mb-4 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500/30"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={closeDeleteModal}
+                disabled={deleting}
+                className="rounded-lg border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDelete()}
+                disabled={deleteConfirmInput !== deleteKey(deleteTarget.name) || deleting}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
+              >
+                {deleting ? 'Deleting...' : 'Delete workspace'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -496,15 +593,16 @@ export default function OrganizationWorkspacesPage() {
                         )}
                       >
                         <td className="p-3 align-top">
-                          <div className="flex items-center gap-3 min-h-[2.5rem]">
+                          <Link
+                            href={`/organizations/${orgId}/settings/workspaces/${ws.id}`}
+                            className="flex items-center gap-3 min-h-[2.5rem] group"
+                          >
                             {renderLogo(ws)}
                             <div className="min-w-0 flex-1">
-                              <p className="font-medium">{ws.name}</p>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {ws.id}
-                              </p>
+                              <p className="font-medium group-hover:underline">{ws.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{ws.id}</p>
                             </div>
-                          </div>
+                          </Link>
                         </td>
                         <td className="p-3 align-middle">
                           <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
@@ -545,7 +643,7 @@ export default function OrganizationWorkspacesPage() {
                               <ExternalLink size={14} />
                             </Link>
                             <button
-                              onClick={() => handleDelete(ws.id, ws.name)}
+                              onClick={() => openDeleteModal(ws)}
                               className="rounded p-1.5 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950"
                               title="Delete"
                             >

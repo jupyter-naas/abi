@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  LayoutGrid, Bot, ArrowLeft, ExternalLink,
+  AppWindow, Bot, ArrowLeft, ExternalLink,
   Info, KeyRound, Copy, Check, Tag, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -308,7 +308,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
             >
-              <LayoutGrid size={14} />
+              <AppWindow size={14} />
               <span>Installed apps</span>
             </Link>
             {groupedApps.map(([moduleName, moduleApps]) => {
@@ -365,7 +365,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >
-            <LayoutGrid size={14} />
+            <AppWindow size={14} />
             <span>Installed apps</span>
           </Link>
         )}
@@ -379,7 +379,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
   return (
     <CollapsibleSection
       id="apps"
-      icon={<LayoutGrid size={18} />}
+      icon={<AppWindow size={18} />}
       label="Apps"
       description="Web apps from your installed modules"
       href={basePath}

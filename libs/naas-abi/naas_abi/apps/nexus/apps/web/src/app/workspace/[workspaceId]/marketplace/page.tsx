@@ -109,7 +109,7 @@ type StatusFilter = 'all' | 'installed' | 'available' | 'coming-soon';
 const TYPE_LABELS: Record<ArtifactType, string> = {
   all: 'All',
   agents: 'Agents',
-  applications: 'Applications',
+  applications: 'Apps',
   tools: 'Tools',
   ontologies: 'Ontologies',
   workflows: 'Workflows',
@@ -119,7 +119,7 @@ const TYPE_LABELS: Record<ArtifactType, string> = {
 const TYPE_ICONS: Record<ArtifactType, React.ReactNode> = {
   all: <LayoutGrid size={12} />,
   agents: <Bot size={12} />,
-  applications: <ExternalLink size={12} />,
+  applications: <AppWindow size={12} />,
   tools: <FileText size={12} />,
   ontologies: <Network size={12} />,
   workflows: <Workflow size={12} />,
