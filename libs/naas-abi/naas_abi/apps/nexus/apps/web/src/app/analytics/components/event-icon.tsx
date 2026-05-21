@@ -41,7 +41,7 @@ export function EventIcon({ name, size = 14 }: { name: EventName; size?: number 
   const Icon = m.icon;
   return (
     <span
-      className={cn('inline-flex items-center justify-center rounded-md', m.bg, m.color)}
+      className={cn('inline-flex items-center justify-center', m.bg, m.color)}
       style={{ width: size + 12, height: size + 12 }}
     >
       <Icon size={size} />

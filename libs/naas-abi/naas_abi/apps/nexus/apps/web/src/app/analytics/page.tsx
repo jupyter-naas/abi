@@ -109,7 +109,7 @@ export default function AnalyticsPage() {
         <div className="mx-auto max-w-7xl px-6 py-4">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+              <p className="text-xs font-semibold uppercase tracking-wider text-workspace-accent">
                 Nexus Analytics
               </p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight">
@@ -137,15 +137,15 @@ export default function AnalyticsPage() {
               users={usersDir}
               workspaces={workspaceDir}
             />
-            <nav className="flex items-center gap-1 rounded-xl border border-border/60 bg-card p-1">
+            <nav className="flex items-center border border-border/60 bg-card">
               {TABS.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
                   className={cn(
-                    'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                    'px-3 py-1.5 text-sm font-medium transition-colors border-r border-border/60 last:border-r-0',
                     tab === t.key
-                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      ? 'bg-workspace-accent text-white'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                   )}
                 >
@@ -230,7 +230,7 @@ function LoadingBlock({ label = 'Loading' }: { label?: string }) {
 
 function ErrorBlock({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/5 p-6 text-sm text-rose-600">
+    <div className="flex items-center justify-center gap-2 border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
       <AlertTriangle size={16} />
       {message}
     </div>
@@ -311,7 +311,6 @@ function OverviewSection({
             >
               <LineChart
                 data={data.active_users_over_time}
-                color="hsl(var(--primary))"
                 label="users"
               />
             </Card>
@@ -593,10 +592,10 @@ function WorkspacesSection({ filters }: { filters: FilterValue }) {
           {ws.map((w) => (
             <div
               key={w.workspace_id}
-              className="rounded-xl border border-border/60 bg-background p-4"
+              className="border border-border/60 bg-background p-4"
             >
               <div className="flex items-center gap-2">
-                <Layers size={14} className="text-primary" />
+                <Layers size={14} className="text-workspace-accent" />
                 <h4 className="font-medium truncate">{w.workspace_name}</h4>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -697,7 +696,7 @@ function UserDetailSection({
         action={
           <button
             onClick={onClear}
-            className="text-xs text-primary hover:underline"
+            className="text-xs text-workspace-accent hover:underline"
           >
             Clear user filter
           </button>
@@ -760,9 +759,9 @@ function UserDetailSection({
                 {data.workspaces_used.map((w) => (
                   <li
                     key={w.id}
-                    className="flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-sm"
+                    className="flex items-center gap-2 border border-border/60 px-3 py-2 text-sm"
                   >
-                    <Layers size={13} className="text-primary" />
+                    <Layers size={13} className="text-workspace-accent" />
                     <span className="font-medium">{w.name}</span>
                     <span className="ml-auto text-xs text-muted-foreground">{w.id}</span>
                   </li>
@@ -796,7 +795,7 @@ function UserDetailSection({
                         <span
                           className={cn(
                             'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full',
-                            'bg-primary/10 text-primary text-xs font-semibold tabular-nums',
+                            'bg-workspace-accent-10 text-workspace-accent text-xs font-semibold tabular-nums',
                           )}
                         >
                           {s.events}
