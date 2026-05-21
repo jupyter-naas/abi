@@ -652,6 +652,408 @@ cco:ont00001180 rdfs:subClassOf
     ] .
 
 #################################################################
+#    Platform Process Classes (BFO 7 Buckets Pattern)
+#
+#    Each platform process is modelled as a subclass of the BFO
+#    "process" bucket (bfo:BFO_0000015) and has a dedicated class
+#    representative in each of the other six buckets:
+#
+#      Bucket            BFO parent          Property used   Per-process class
+#      ----------------  ------------------  --------------  ---------------------------
+#      WHAT  (process)   bfo:BFO_0000015                     nexus:VisitSession, nexus:LoginProcess
+#      WHEN  (time)      bfo:BFO_0000008     bfo:BFO_0000199 nexus:VisitSessionInterval, nexus:LoginInterval
+#      WHO   (material)  bfo:BFO_0000040     bfo:BFO_0000057 nexus:User
+#      WHERE (site)      bfo:BFO_0000029     bfo:BFO_0000066 nexus:DeploymentSite
+#      HOW-WE-KNOW (GDC) bfo:BFO_0000031     bfo:BFO_0000059 nexus:Session, nexus:Log
+#      HOW-IT-IS (qual.) bfo:BFO_0000019     bfo:BFO_0000057 nexus:UserEngagementQuality, nexus:AuthenticationStatus
+#      WHY   (role)      bfo:BFO_0000023     bfo:BFO_0000055 nexus:VisitorRole
+#
+#    These classes underlie the Nexus Analytics KPIs exposed by
+#    libs/naas-abi/naas_abi/apps/nexus/apps/web/src/app/analytics:
+#      total_sessions, avg_sessions_per_user, avg_session_duration_seconds,
+#      active_users, returning_users.
+#################################################################
+
+# ---------------------------------------------------------------------
+# HOW WE KNOW bucket (Generically Dependent Continuant — bfo:BFO_0000031)
+# ---------------------------------------------------------------------
+
+# Session — GDC carrying session metadata, concretized by VisitSession
+# and LoginProcess. Powers the SessionRow shape consumed by analytics.
+nexus:Session a owl:Class ;
+    rdfs:label "Session"@en ;
+    skos:definition "A generically dependent continuant representing a stored session artifact in the Nexus platform: the identity, time bounds, device context and aggregate metrics of a single user visit."@en ;
+    skos:example "Session #abc123 of Alice on 2026-05-21, 22 minutes, Chrome desktop", "Anonymous mobile session #def456"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isSessionOf ;
+          owl:allValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasLog ;
+          owl:allValuesFrom nexus:Log
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasSessionRole ;
+          owl:someValuesFrom nexus:SessionRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasSessionRole ;
+          owl:allValuesFrom nexus:SessionRole
+        ] .
+
+# Log — GDC capturing a single immutable record emitted by a platform
+# process. One AnalyticsEvent in the analytics layer is concretized by
+# one Log. Logs power every event-derived KPI (page_views, events,
+# top_users, recent_activity, …).
+nexus:Log a owl:Class ;
+    rdfs:label "Log"@en ;
+    skos:altLabel "Event Log"@en , "Analytics Event"@en ;
+    skos:definition "A generically dependent continuant representing a stored log/event record in the Nexus platform: a single immutable record of one platform event together with its identity, timestamp, principal, target, and structured payload. Logs are the persistence form behind every AnalyticsEvent consumed by the analytics app."@en ;
+    skos:example "Login event log for Alice on 2026-05-21 at 10:00:00 from IP 1.2.3.4", "page_viewed event log on /analytics by Bob", "session_started log #abc123 with device=desktop, browser=Chrome"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isLogOf ;
+          owl:allValuesFrom nexus:Session
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasLogRole ;
+          owl:someValuesFrom nexus:LogRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasLogRole ;
+          owl:allValuesFrom nexus:LogRole
+        ] .
+
+# ---------------------------------------------------------------------
+# WHEN bucket (Temporal Region — bfo:BFO_0000008)
+# ---------------------------------------------------------------------
+
+# VisitSessionInterval — temporal region occupied by a VisitSession.
+# Carries the started_at, ended_at and duration_seconds data
+# properties that drive avg_session_duration_seconds.
+nexus:VisitSessionInterval a owl:Class ;
+    rdfs:label "Visit Session Interval"@en ;
+    skos:definition "A temporal region representing the bounded interval during which a visit session unfolds, from the session's opening boundary to its closing boundary; its size is the duration measured in seconds by the analytics layer."@en ;
+    skos:example "[2026-05-21T10:00:00Z, 2026-05-21T10:22:00Z]"@en ;
+    rdfs:subClassOf bfo:BFO_0000008 .
+
+# LoginInterval — temporal region occupied by a LoginProcess. Its
+# closing boundary coincides with the opening boundary of the
+# corresponding VisitSessionInterval.
+nexus:LoginInterval a owl:Class ;
+    rdfs:label "Login Interval"@en ;
+    skos:definition "A temporal region representing the brief interval during which a login process unfolds; its closing boundary coincides with the opening boundary of the visit session interval that the login initiates."@en ;
+    skos:example "[2026-05-21T10:00:00Z, 2026-05-21T10:00:02Z]"@en ;
+    rdfs:subClassOf bfo:BFO_0000008 .
+
+# ---------------------------------------------------------------------
+# WHY bucket (Role — bfo:BFO_0000023)
+# ---------------------------------------------------------------------
+
+# SessionRole — role-side concretization of a Session.
+nexus:SessionRole a owl:Class ;
+    rdfs:label "Session Role"@en ;
+    skos:definition "A role associated with a session as a stored visit artifact in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isSessionRoleOf ;
+          owl:someValuesFrom nexus:Session
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isSessionRoleOf ;
+          owl:allValuesFrom nexus:Session
+        ] .
+
+# LogRole — role-side concretization of a Log.
+nexus:LogRole a owl:Class ;
+    rdfs:label "Log Role"@en ;
+    skos:definition "A role associated with a log entry as a stored event record in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isLogRoleOf ;
+          owl:someValuesFrom nexus:Log
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isLogRoleOf ;
+          owl:allValuesFrom nexus:Log
+        ] .
+
+# VisitorRole — role borne by a user during a visit; realized by
+# VisitSession and LoginProcess.
+nexus:VisitorRole a owl:Class ;
+    rdfs:label "Visitor Role"@en ;
+    skos:definition "A role borne by a user during the act of visiting the Nexus platform; the role is realized in visit session and login processes and underlies the user-side of the session, active-users and returning-users KPIs."@en ;
+    skos:example "Alice's visitor role while logged in on 2026-05-21", "Bob's visitor role across multiple visits this month"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isVisitorRoleOf ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isVisitorRoleOf ;
+          owl:allValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000054 ;
+          owl:someValuesFrom nexus:VisitSession
+        ] .
+
+# ---------------------------------------------------------------------
+# HOW IT IS bucket (Quality — bfo:BFO_0000019)
+# ---------------------------------------------------------------------
+
+# UserEngagementQuality — quality inhering in a User that
+# characterises engagement intensity during a VisitSession (low /
+# medium / high), derived from page_views, events and duration.
+nexus:UserEngagementQuality a owl:Class ;
+    rdfs:label "User Engagement Quality"@en ;
+    skos:definition "A quality inhering in a user that characterises the intensity and depth of the user's engagement with the platform during a visit session; the quality is realised through the visit session process and is derived from page views, events and session duration."@en ;
+    skos:example "Alice's high engagement during her 22-minute visit on 2026-05-21 (18 page views)", "Bob's low engagement on a 1-minute bounce visit"@en ;
+    rdfs:subClassOf bfo:BFO_0000019 ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000197 ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000056 ;
+          owl:someValuesFrom nexus:VisitSession
+        ] .
+
+# AuthenticationStatus — quality inhering in a User that characterises
+# the outcome of a LoginProcess (success, failure, locked, …).
+nexus:AuthenticationStatus a owl:Class ;
+    rdfs:label "Authentication Status"@en ;
+    skos:definition "A quality inhering in a user that characterises the outcome of a login attempt against the Nexus platform: success, failure, locked, expired, and similar terminal states."@en ;
+    skos:example "Successful authentication for Alice on 2026-05-21", "Failed authentication for an unknown email", "Locked account for a user after repeated failed attempts"@en ;
+    rdfs:subClassOf bfo:BFO_0000019 ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000197 ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000056 ;
+          owl:someValuesFrom nexus:LoginProcess
+        ] .
+
+# ---------------------------------------------------------------------
+# WHAT bucket (Process — bfo:BFO_0000015)
+# ---------------------------------------------------------------------
+
+# VisitSession — process bucket. Aligned with analytics KPIs:
+# total_sessions, avg_sessions_per_user, avg_session_duration_seconds,
+# active_users.
+nexus:VisitSession a owl:Class ;
+    rdfs:label "Visit Session"@en ;
+    skos:altLabel "Session"@en , "User Session"@en , "Browsing Session"@en ;
+    skos:definition "A process during which a user interacts with the Nexus platform within a single bounded period of activity, beginning when the session is opened and ending when it is closed; visit sessions underlie the platform's session, session-duration and active-user KPIs."@en ;
+    skos:example "Alice's 22-minute browsing session in workspace 'Naas.ai Main' on 2026-05-21", "An anonymous mobile visit lasting 3 minutes"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:someValuesFrom nexus:VisitSessionInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:allValuesFrom nexus:VisitSessionInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000066 ;
+          owl:someValuesFrom nexus:DeploymentSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Session
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Log
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:UserEngagementQuality
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000055 ;
+          owl:someValuesFrom nexus:VisitorRole
+        ] .
+
+# Page — GDC for a navigable page in the platform; addressed by path
+# and title. Powers the top_pages and PageRow shapes in analytics.
+nexus:Page a owl:Class ;
+    rdfs:label "Page"@en ;
+    skos:definition "A generically dependent continuant representing a navigable page of the Nexus platform; identified by path and title and visited during page-view processes."@en ;
+    skos:example "/analytics", "/workspaces/abc/graph", "/agents"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasPageRole ;
+          owl:someValuesFrom nexus:PageRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasPageRole ;
+          owl:allValuesFrom nexus:PageRole
+        ] .
+
+nexus:PageRole a owl:Class ;
+    rdfs:label "Page Role"@en ;
+    skos:definition "A role associated with a navigable page in the Nexus platform."@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isPageRoleOf ;
+          owl:someValuesFrom nexus:Page
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isPageRoleOf ;
+          owl:allValuesFrom nexus:Page
+        ] .
+
+# PageViewInterval — WHEN bucket for PageView.
+nexus:PageViewInterval a owl:Class ;
+    rdfs:label "Page View Interval"@en ;
+    skos:definition "A temporal region representing the interval during which a page-view process unfolds; bounded by the moment the page becomes active and the moment the user navigates away."@en ;
+    skos:example "[2026-05-21T10:05:00Z, 2026-05-21T10:05:42Z]"@en ;
+    rdfs:subClassOf bfo:BFO_0000008 .
+
+# LogoutInterval — WHEN bucket for Logout.
+nexus:LogoutInterval a owl:Class ;
+    rdfs:label "Logout Interval"@en ;
+    skos:definition "A temporal region representing the brief interval during which a logout process unfolds; its closing boundary coincides with the closing boundary of the visit session interval that the logout terminates."@en ;
+    skos:example "[2026-05-21T10:22:00Z, 2026-05-21T10:22:01Z]"@en ;
+    rdfs:subClassOf bfo:BFO_0000008 .
+
+# PageView — process bucket. Aligned with the 'page_viewed' analytics
+# event, the total_page_views KPI and the top_pages chart.
+nexus:PageView a owl:Class ;
+    rdfs:label "Page View"@en ;
+    skos:altLabel "Page Visit"@en ;
+    skos:definition "A process during which a user views a single page of the Nexus platform within a visit session; page-view processes are the source of the total_page_views, top_pages and most_visited_page KPIs."@en ;
+    skos:example "Alice viewing /analytics for 42 seconds on 2026-05-21"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:someValuesFrom nexus:PageViewInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:allValuesFrom nexus:PageViewInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000066 ;
+          owl:someValuesFrom nexus:DeploymentSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Page
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Log
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:UserEngagementQuality
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000055 ;
+          owl:someValuesFrom nexus:VisitorRole
+        ] .
+
+# Logout — process bucket. The closing boundary of a VisitSession.
+# Aligned with the 'logout' analytics event.
+nexus:Logout a owl:Class ;
+    rdfs:label "Logout"@en ;
+    skos:altLabel "Log Out"@en , "Sign Out"@en ;
+    skos:definition "A process by which a user ends their authenticated interaction with the Nexus platform; a logout process is the closing boundary of a visit session and is the source of the logout analytics event."@en ;
+    skos:example "Alice signs out on 2026-05-21 at 10:22"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:someValuesFrom nexus:LogoutInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:allValuesFrom nexus:LogoutInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000066 ;
+          owl:someValuesFrom nexus:DeploymentSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Session
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Log
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000055 ;
+          owl:someValuesFrom nexus:VisitorRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:terminatesSession ;
+          owl:someValuesFrom nexus:VisitSession
+        ] .
+
+# LoginProcess — process bucket. The opening boundary of a
+# VisitSession. Aligned with the 'login' analytics event and the
+# returning_users KPI.
+nexus:LoginProcess a owl:Class ;
+    rdfs:label "Login"@en ;
+    skos:altLabel "Log In"@en , "Sign In"@en , "Authentication"@en ;
+    skos:definition "A process by which a user authenticates with the Nexus platform; a login process is the opening boundary of a visit session and underlies the login analytics event and the returning_users KPI."@en ;
+    skos:example "Alice signs in with email and password on 2026-05-21 at 10:00", "Single sign-on for Bob via the corporate identity provider"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:someValuesFrom nexus:LoginInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:allValuesFrom nexus:LoginInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000066 ;
+          owl:someValuesFrom nexus:DeploymentSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Session
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Log
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:AuthenticationStatus
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000055 ;
+          owl:someValuesFrom nexus:VisitorRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:initiatesSession ;
+          owl:someValuesFrom nexus:VisitSession
+        ] .
+
+#################################################################
 #    Object Properties
 #################################################################
 
@@ -1130,6 +1532,148 @@ nexus:isCapabilitiesOf a owl:ObjectProperty ;
     rdfs:domain nexus:Capabilities ;
     rdfs:range cco:ont00001180 .
 
+# --- Session / VisitorRole properties (Platform Processes) -------
+
+nexus:hasSession a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isSessionOf ;
+    rdfs:label "has session"@en ;
+    skos:definition "Relates a workspace to a session that generically depends on it within the Nexus platform."@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range nexus:Session .
+
+nexus:isSessionOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasSession ;
+    rdfs:label "is session of"@en ;
+    skos:definition "Relates a session to the workspace on which it generically depends."@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range nexus:Workspace .
+
+nexus:hasSessionRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    owl:inverseOf nexus:isSessionRoleOf ;
+    rdfs:label "has session role"@en ;
+    skos:definition "Relates a session to a session role that concretizes it in platform use."@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range nexus:SessionRole .
+
+nexus:isSessionRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    owl:inverseOf nexus:hasSessionRole ;
+    rdfs:label "is session role of"@en ;
+    skos:definition "Relates a session role to the session of which it is the role-side concretization."@en ;
+    rdfs:domain nexus:SessionRole ;
+    rdfs:range nexus:Session .
+
+nexus:bearsVisitorRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000196 ;
+    owl:inverseOf nexus:isVisitorRoleOf ;
+    rdfs:label "bears visitor role"@en ;
+    skos:definition "Relates a user to the visitor role it bears when visiting the Nexus platform."@en ;
+    rdfs:domain nexus:User ;
+    rdfs:range nexus:VisitorRole .
+
+nexus:isVisitorRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000197 ;
+    owl:inverseOf nexus:bearsVisitorRole ;
+    rdfs:label "is visitor role of"@en ;
+    skos:definition "Relates a visitor role to the user in which it inheres."@en ;
+    rdfs:domain nexus:VisitorRole ;
+    rdfs:range nexus:User .
+
+nexus:initiatesSession a owl:ObjectProperty ;
+    owl:inverseOf nexus:isInitiatedByLogin ;
+    rdfs:label "initiates session"@en ;
+    skos:definition "Relates a login process to the visit session it opens; both processes share the same temporal boundary at session start."@en ;
+    rdfs:domain nexus:LoginProcess ;
+    rdfs:range nexus:VisitSession .
+
+nexus:isInitiatedByLogin a owl:ObjectProperty ;
+    owl:inverseOf nexus:initiatesSession ;
+    rdfs:label "is initiated by login"@en ;
+    skos:definition "Relates a visit session to the login process that opens it."@en ;
+    rdfs:domain nexus:VisitSession ;
+    rdfs:range nexus:LoginProcess .
+
+nexus:terminatesSession a owl:ObjectProperty ;
+    owl:inverseOf nexus:isTerminatedByLogout ;
+    rdfs:label "terminates session"@en ;
+    skos:definition "Relates a logout process to the visit session it closes; both processes share the same temporal boundary at session end."@en ;
+    rdfs:domain nexus:Logout ;
+    rdfs:range nexus:VisitSession .
+
+nexus:isTerminatedByLogout a owl:ObjectProperty ;
+    owl:inverseOf nexus:terminatesSession ;
+    rdfs:label "is terminated by logout"@en ;
+    skos:definition "Relates a visit session to the logout process that closes it."@en ;
+    rdfs:domain nexus:VisitSession ;
+    rdfs:range nexus:Logout .
+
+nexus:hasPage a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isPageOf ;
+    rdfs:label "has page"@en ;
+    skos:definition "Relates a workspace to a navigable page it carries."@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range nexus:Page .
+
+nexus:isPageOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasPage ;
+    rdfs:label "is page of"@en ;
+    skos:definition "Relates a page to the workspace on which it generically depends."@en ;
+    rdfs:domain nexus:Page ;
+    rdfs:range nexus:Workspace .
+
+nexus:hasPageRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    owl:inverseOf nexus:isPageRoleOf ;
+    rdfs:label "has page role"@en ;
+    skos:definition "Relates a page to a page role that concretizes it in platform use."@en ;
+    rdfs:domain nexus:Page ;
+    rdfs:range nexus:PageRole .
+
+nexus:isPageRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    owl:inverseOf nexus:hasPageRole ;
+    rdfs:label "is page role of"@en ;
+    skos:definition "Relates a page role to the page of which it is the role-side concretization."@en ;
+    rdfs:domain nexus:PageRole ;
+    rdfs:range nexus:Page .
+
+nexus:hasLog a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf nexus:isLogOf ;
+    rdfs:label "has log"@en ;
+    skos:definition "Relates a session to a log entry generically dependent on it; one session carries the ordered stream of logs emitted during the visit."@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range nexus:Log .
+
+nexus:isLogOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:inverseOf nexus:hasLog ;
+    rdfs:label "is log of"@en ;
+    skos:definition "Relates a log entry to the session on which it generically depends."@en ;
+    rdfs:domain nexus:Log ;
+    rdfs:range nexus:Session .
+
+nexus:hasLogRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    owl:inverseOf nexus:isLogRoleOf ;
+    rdfs:label "has log role"@en ;
+    skos:definition "Relates a log entry to a log role that concretizes it in platform use."@en ;
+    rdfs:domain nexus:Log ;
+    rdfs:range nexus:LogRole .
+
+nexus:isLogRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    owl:inverseOf nexus:hasLogRole ;
+    rdfs:label "is log role of"@en ;
+    skos:definition "Relates a log role to the log entry of which it is the role-side concretization."@en ;
+    rdfs:domain nexus:LogRole ;
+    rdfs:range nexus:Log .
+
 
 #################################################################
 #    Data Properties
@@ -1232,3 +1776,137 @@ nexus:model_id a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "The identifier of the AI model."@en ;
     skos:example "gpt-4.1-mini", "claude-sonnet-4-6" .
+
+# --- Session data properties (Platform Processes) ----------------
+
+nexus:session_id a owl:DatatypeProperty ;
+    rdfs:label "session id"@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier of a session within the Nexus platform."@en ;
+    skos:example "abc123" .
+
+nexus:device a owl:DatatypeProperty ;
+    rdfs:label "device"@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range xsd:string ;
+    skos:definition "The device category from which a session is conducted."@en ;
+    skos:example "desktop", "mobile", "tablet" .
+
+nexus:browser a owl:DatatypeProperty ;
+    rdfs:label "browser"@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range xsd:string ;
+    skos:definition "The browser used during a session."@en ;
+    skos:example "Chrome", "Safari", "Firefox" .
+
+nexus:country a owl:DatatypeProperty ;
+    rdfs:label "country"@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range xsd:string ;
+    skos:definition "The country code from which a session is conducted."@en ;
+    skos:example "FR", "US", "DE" .
+
+# --- VisitSessionInterval / LoginInterval data properties (WHEN) --
+
+nexus:started_at a owl:DatatypeProperty ;
+    rdfs:label "started at"@en ;
+    rdfs:domain nexus:VisitSessionInterval, nexus:LoginInterval ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The opening boundary of a temporal interval; corresponds to the SessionRow.started_at field in the analytics app."@en ;
+    skos:example "2026-05-21T10:00:00Z" .
+
+nexus:ended_at a owl:DatatypeProperty ;
+    rdfs:label "ended at"@en ;
+    rdfs:domain nexus:VisitSessionInterval, nexus:LoginInterval ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The closing boundary of a temporal interval; corresponds to the SessionRow.ended_at field in the analytics app."@en ;
+    skos:example "2026-05-21T10:22:00Z" .
+
+nexus:duration_seconds a owl:DatatypeProperty ;
+    rdfs:label "duration seconds"@en ;
+    rdfs:domain nexus:VisitSessionInterval, nexus:LoginInterval ;
+    rdfs:range xsd:integer ;
+    skos:definition "The size of a temporal interval in seconds; the source quantity behind the avg_session_duration_seconds analytics KPI."@en ;
+    skos:example "1320" .
+
+# --- Log data properties (HOW WE KNOW) ---------------------------
+
+nexus:event_id a owl:DatatypeProperty ;
+    rdfs:label "event id"@en ;
+    rdfs:domain nexus:Log ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier of a log entry; corresponds to AnalyticsEvent.event_id."@en ;
+    skos:example "evt_01HXYZ123" .
+
+nexus:event_name a owl:DatatypeProperty ;
+    rdfs:label "event name"@en ;
+    rdfs:domain nexus:Log ;
+    rdfs:range xsd:string ;
+    skos:definition "The categorical name of the event recorded by a log entry; matches the EventName union in the analytics layer."@en ;
+    skos:example "login", "logout", "session_started", "page_viewed", "workspace_opened" .
+
+nexus:timestamp a owl:DatatypeProperty ;
+    rdfs:label "timestamp"@en ;
+    rdfs:domain nexus:Log ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The timestamp at which a log entry was emitted; corresponds to AnalyticsEvent.timestamp."@en ;
+    skos:example "2026-05-21T10:00:00Z" .
+
+nexus:page_path a owl:DatatypeProperty ;
+    rdfs:label "page path"@en ;
+    rdfs:domain nexus:Log, nexus:Page ;
+    rdfs:range xsd:string ;
+    skos:definition "The path of a page; corresponds to AnalyticsEvent.page_path and Page identity, and feeds the top_pages KPI."@en ;
+    skos:example "/analytics", "/workspaces/abc/graph" .
+
+nexus:page_title a owl:DatatypeProperty ;
+    rdfs:label "page title"@en ;
+    rdfs:domain nexus:Log, nexus:Page ;
+    rdfs:range xsd:string ;
+    skos:definition "The human-readable title of a page; corresponds to AnalyticsEvent.page_title and the label used in top_pages."@en ;
+    skos:example "Nexus Analytics", "Knowledge Graph View" .
+
+nexus:event_payload a owl:DatatypeProperty ;
+    rdfs:label "event payload"@en ;
+    rdfs:domain nexus:Log ;
+    rdfs:range xsd:string ;
+    skos:definition "A JSON-encoded payload of structured properties attached to a log entry; corresponds to AnalyticsEvent.properties."@en ;
+    skos:example "{\"button\": \"export\", \"format\": \"csv\"}" .
+
+nexus:referrer a owl:DatatypeProperty ;
+    rdfs:label "referrer"@en ;
+    rdfs:domain nexus:Log ;
+    rdfs:range xsd:string ;
+    skos:definition "The referring URL recorded with a log entry; corresponds to AnalyticsEvent.referrer."@en ;
+    skos:example "https://app.naas.ai/" .
+
+# --- User / Workspace identifier data properties -----------------
+
+nexus:user_id a owl:DatatypeProperty ;
+    rdfs:label "user id"@en ;
+    rdfs:domain nexus:User ;
+    rdfs:range xsd:string ;
+    skos:definition "The platform-internal identifier of a user."@en ;
+    skos:example "u_alice", "u_bob" .
+
+nexus:email a owl:DatatypeProperty ;
+    rdfs:label "email"@en ;
+    rdfs:domain nexus:User ;
+    rdfs:range xsd:string ;
+    skos:definition "The email address of a user."@en ;
+    skos:example "alice@example.com" .
+
+nexus:workspace_id a owl:DatatypeProperty ;
+    rdfs:label "workspace id"@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range xsd:string ;
+    skos:definition "The platform-internal identifier of a workspace."@en ;
+    skos:example "ws_main", "ws_research" .
+
+nexus:workspace_name a owl:DatatypeProperty ;
+    rdfs:label "workspace name"@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range xsd:string ;
+    skos:definition "The display name of a workspace."@en ;
+    skos:example "Naas Main", "Research Lab" .
