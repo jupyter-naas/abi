@@ -15,9 +15,18 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     ReferenceOntologyData,
     ReferencePropertyData,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.port import (
+    OntologyConfigCreateInput,
+    OntologyConfigRecord,
+    OntologyConfigUpdateInput,
+    OntologyPersistencePort,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
 
 __all__ = [
+    "OntologyConfigCreateInput",
+    "OntologyConfigRecord",
+    "OntologyConfigUpdateInput",
     "OntologyFileItemData",
     "OntologyFileNotFoundError",
     "OntologyItemData",
@@ -28,6 +37,7 @@ __all__ = [
     "OntologyOverviewStatsData",
     "OntologyParseError",
     "OntologyPathNotFoundError",
+    "OntologyPersistencePort",
     "OntologyService",
     "OntologyServiceUnavailableError",
     "OntologyTypeCountsData",

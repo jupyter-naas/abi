@@ -52,6 +52,13 @@ class OntologyFileItem(BaseModel):
     contributors: list[str] | None = None
     date: str | None = None
     imports: list[str] | None = None
+    enabled: bool = True
+
+
+class OntologyConfigUpdate(BaseModel):
+    """Body for ``PATCH /api/ontology/configs/{workspace_id}/{path:path}``."""
+
+    enabled: bool | None = None
 
 
 class OntologyOverviewStats(BaseModel):
@@ -118,7 +125,9 @@ class RelationshipCreate(BaseModel):
 
 
 class ImportRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=5_000_000, description="File content (text, max ~5MB)")
+    content: str = Field(
+        ..., min_length=1, max_length=5_000_000, description="File content (text, max ~5MB)"
+    )
     filename: str = Field(
         ...,
         min_length=1,

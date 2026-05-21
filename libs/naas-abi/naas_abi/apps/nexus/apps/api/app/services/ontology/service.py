@@ -24,6 +24,12 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     ReferenceOntologyData,
     ReferencePropertyData,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.port import (
+    OntologyConfigCreateInput,
+    OntologyConfigRecord,
+    OntologyConfigUpdateInput,
+    OntologyPersistencePort,
+)
 from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
@@ -355,13 +361,69 @@ def _get_ontology_metadata(triple_store: TripleStoreService, ontology_iri: str) 
 class OntologyService:
     def __init__(
         self,
+        adapter: OntologyPersistencePort | None = None,
         triple_store_getter: Callable[[], TripleStoreService] | None = None,
         abi_module_getter: Callable[[], Any] | None = None,
     ) -> None:
+        self.adapter = adapter
         self._triple_store_getter = triple_store_getter
         self._abi_module_getter = abi_module_getter
-        # In-memory storage (replace with persistence later)
+        # In-memory storage for ad-hoc entities/relationships created via the
+        # legacy ``/entity`` and ``/relationship`` endpoints.
         self._ontology_items: list[OntologyItemData] = []
+
+    # ── Persistence (per-workspace ontology file configs) ────────────────────
+
+    def _require_adapter(self) -> OntologyPersistencePort:
+        if self.adapter is None:
+            raise RuntimeError("OntologyService has no persistence adapter configured")
+        return self.adapter
+
+    async def list_workspace_configs(self, workspace_id: str) -> list[OntologyConfigRecord]:
+        if self.adapter is None:
+            return []
+        return await self.adapter.list_by_workspace(workspace_id)
+
+    async def get_workspace_config(
+        self, workspace_id: str, path: str
+    ) -> OntologyConfigRecord | None:
+        if self.adapter is None:
+            return None
+        return await self.adapter.get(workspace_id, path)
+
+    async def create_workspace_config(
+        self, data: OntologyConfigCreateInput
+    ) -> OntologyConfigRecord:
+        adapter = self._require_adapter()
+        return await adapter.create(data)
+
+    async def create_workspace_configs(
+        self, configs: list[OntologyConfigCreateInput]
+    ) -> list[OntologyConfigRecord]:
+        adapter = self._require_adapter()
+        return await adapter.create_many(configs)
+
+    async def update_workspace_config(
+        self,
+        workspace_id: str,
+        path: str,
+        updates: OntologyConfigUpdateInput,
+    ) -> OntologyConfigRecord | None:
+        adapter = self._require_adapter()
+        return await adapter.update(workspace_id, path, updates)
+
+    async def delete_workspace_config(self, workspace_id: str, path: str) -> bool:
+        adapter = self._require_adapter()
+        return await adapter.delete(workspace_id, path)
+
+    async def get_enabled_states(self, workspace_id: str) -> dict[str, bool]:
+        """Return ``{ontology_path: enabled}`` for every record in ``workspace_id``.
+
+        Ontology paths without a stored record are absent from the result;
+        callers should default missing entries to ``True``.
+        """
+        records = await self.list_workspace_configs(workspace_id)
+        return {r.path: r.enabled for r in records}
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

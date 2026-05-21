@@ -20,6 +20,9 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.adapters.secondary.postgres i
     IAMSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
+from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.secondary.postgres import (
+    OntologySecondaryAdapterPostgres,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
@@ -61,7 +64,9 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
     )
     apps_service = AppsService(AppSecondaryAdapterPostgres(db_getter=db_getter))
     graph_service = GraphService()
-    ontology_service = OntologyService()
+    ontology_service = OntologyService(
+        adapter=OntologySecondaryAdapterPostgres(db_getter=db_getter),
+    )
 
     return ServiceRegistry.configure(
         RegistryServices(

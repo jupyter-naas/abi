@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User,
+    get_current_user_required,
+    require_workspace_access,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__dependencies import (  # noqa: E501
     get_ontology_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__schemas import (  # noqa: E501
     EntityCreate,
     ImportRequest,
+    OntologyConfigUpdate,
     OntologyFileItem,
     OntologyItem,
     OntologyOverviewAggregateStats,
@@ -29,6 +36,11 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     OntologyParseError,
     OntologyPathNotFoundError,
     OntologyServiceUnavailableError,
+)
+from naas_abi.apps.nexus.apps.api.app.services.ontology.port import (
+    OntologyConfigCreateInput,
+    OntologyConfigRecord,
+    OntologyConfigUpdateInput,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
 
@@ -124,15 +136,59 @@ async def list_relations(
 
 @router.get("/ontologies")
 async def list_ontology_files(
+    workspace_id: str | None = Query(None, alias="workspace_id"),
+    only_enabled: bool = Query(False, alias="only_enabled"),
+    current_user: User = Depends(get_current_user_required),
     ontology_service: OntologyService = Depends(get_ontology_service),
 ) -> dict:
-    """List ontology files from all registered modules."""
+    """List ontology files from all registered modules.
+
+    When ``workspace_id`` is provided, results carry the workspace's enable
+    state. Ontologies without a stored record are auto-persisted with
+    ``enabled=True`` so the settings UI sees a stable catalog. Pass
+    ``only_enabled=true`` to filter out disabled ontologies (used by the
+    sidebar).
+    """
+    if workspace_id:
+        await require_workspace_access(current_user.id, workspace_id)
+
     try:
         items = await ontology_service.list_ontology_files()
     except OntologyServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {
-        "items": [
+
+    enabled_by_path: dict[str, bool] = {}
+    if workspace_id:
+        enabled_by_path = await ontology_service.get_enabled_states(workspace_id)
+
+        # Auto-persist any newly discovered ontology files for this workspace.
+        new_configs = [
+            OntologyConfigCreateInput(
+                workspace_id=workspace_id,
+                path=item.path,
+                name=item.name,
+                module_name=item.module_name,
+                submodule_name=item.submodule_name,
+                enabled=True,
+            )
+            for item in items
+            if item.path not in enabled_by_path
+        ]
+        if new_configs:
+            try:
+                created = await ontology_service.create_workspace_configs(new_configs)
+                for record in created:
+                    enabled_by_path[record.path] = record.enabled
+            except Exception:
+                # Persistence is best-effort here; the catalog still renders.
+                pass
+
+    result_items: list[OntologyFileItem] = []
+    for i in items:
+        enabled = enabled_by_path.get(i.path, True) if workspace_id else True
+        if only_enabled and workspace_id and not enabled:
+            continue
+        result_items.append(
             OntologyFileItem(
                 name=i.name,
                 path=i.path,
@@ -143,10 +199,86 @@ async def list_ontology_files(
                 contributors=i.contributors,
                 date=i.date,
                 imports=i.imports,
+                enabled=enabled,
             )
-            for i in items
-        ]
-    }
+        )
+    return {"items": result_items}
+
+
+def _serialize_config(record: OntologyConfigRecord) -> dict:
+    data = asdict(record)
+    data["created_at"] = record.created_at.isoformat()
+    data["updated_at"] = record.updated_at.isoformat()
+    return data
+
+
+@router.get("/configs/{workspace_id}")
+async def list_ontology_configs(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+) -> list[dict]:
+    """List every stored ontology config row for a workspace."""
+    await require_workspace_access(current_user.id, workspace_id)
+    records = await ontology_service.list_workspace_configs(workspace_id)
+    return [_serialize_config(r) for r in records]
+
+
+@router.patch("/configs/{workspace_id}/{path:path}")
+async def update_ontology_config(
+    workspace_id: str,
+    path: str,
+    updates: OntologyConfigUpdate,
+    current_user: User = Depends(get_current_user_required),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+) -> dict:
+    """Update an ontology config (e.g. enable/disable).
+
+    Idempotent: if no row exists yet, one is created with the supplied
+    values so the UI toggle can call PATCH without a prior POST.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+
+    record = await ontology_service.update_workspace_config(
+        workspace_id=workspace_id,
+        path=path,
+        updates=OntologyConfigUpdateInput(enabled=updates.enabled),
+    )
+    if record is None:
+        try:
+            files = await ontology_service.list_ontology_files()
+        except OntologyServiceUnavailableError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        match = next((f for f in files if f.path == path), None)
+        if match is None:
+            raise HTTPException(status_code=404, detail="Ontology file not found")
+        enabled = True if updates.enabled is None else updates.enabled
+        record = await ontology_service.create_workspace_config(
+            OntologyConfigCreateInput(
+                workspace_id=workspace_id,
+                path=path,
+                name=match.name,
+                module_name=match.module_name,
+                submodule_name=match.submodule_name,
+                enabled=enabled,
+            )
+        )
+    return _serialize_config(record)
+
+
+@router.delete("/configs/{workspace_id}/{path:path}")
+async def delete_ontology_config(
+    workspace_id: str,
+    path: str,
+    current_user: User = Depends(get_current_user_required),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+) -> dict[str, str]:
+    """Delete an ontology config (reverts to the default ``enabled=True``)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    deleted = await ontology_service.delete_workspace_config(workspace_id, path)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Ontology config not found")
+    return {"status": "deleted"}
 
 
 @router.get("/overview/stats")
@@ -158,7 +290,9 @@ async def get_ontology_overview_stats(
     try:
         stats = await ontology_service.get_overview_stats(ontology_path=ontology_path)
     except OntologyServiceUnavailableError as exc:
-        raise HTTPException(status_code=500, detail="Failed to compute ontology overview stats") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to compute ontology overview stats"
+        ) from exc
     return OntologyOverviewStats(
         name=stats.name,
         path=stats.path,
@@ -179,7 +313,9 @@ async def get_all_ontologies_overview_stats(
     try:
         stats = await ontology_service.get_all_overview_stats()
     except OntologyServiceUnavailableError as exc:
-        raise HTTPException(status_code=500, detail="Failed to compute consolidated ontology overview stats") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to compute consolidated ontology overview stats"
+        ) from exc
     return OntologyOverviewAggregateStats(
         name=stats.name,
         path=stats.path,
@@ -204,7 +340,9 @@ async def get_ontology_type_counts(
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OntologyServiceUnavailableError as exc:
-        raise HTTPException(status_code=500, detail="Failed to compute ontology type counts") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to compute ontology type counts"
+        ) from exc
     return OntologyTypeCounts(
         name=counts.name,
         path=counts.path,

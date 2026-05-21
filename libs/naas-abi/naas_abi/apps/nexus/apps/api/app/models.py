@@ -618,6 +618,31 @@ class AppConfigModel(Base):
 
 
 # ============================================
+# Ontology Configurations (per-workspace enable state for ontology files)
+# ============================================
+
+
+class OntologyConfigModel(Base):
+    __tablename__ = "ontology_configs"
+
+    id = Column(String, primary_key=True)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    path = Column(String(1024), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    module_name = Column(String, nullable=False)
+    submodule_name = Column(String, nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "path", name="uq_ontology_configs_workspace_path"),
+    )
+
+
+# ============================================
 # Secrets
 # ============================================
 
