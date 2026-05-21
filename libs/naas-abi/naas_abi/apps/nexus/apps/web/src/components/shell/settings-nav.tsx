@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   Bot,
   Brush,
   Cpu,
@@ -46,6 +47,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     label: 'Components',
     items: [
       { href: '/settings/agents', label: 'Agents', icon: Bot },
+      { href: '/settings/apps', label: 'Apps', icon: AppWindow },
       { href: '/settings/models', label: 'Models', icon: Cpu },
       { href: '/settings/drives', label: 'Drives', icon: HardDrive },
     ],

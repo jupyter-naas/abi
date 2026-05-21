@@ -38,6 +38,7 @@ interface AppInfo {
   tier?: string | null;
   maintainer?: string | null;
   installed: boolean;
+  enabled: boolean;
 }
 
 interface AppsResponse {
@@ -548,16 +549,17 @@ export default function AppsPage() {
 
   useEffect(() => {
     const apiBase = getApiUrl();
+    if (!currentWorkspaceId) return;
     setLoading(true);
-    authFetch(`${apiBase}/api/apps/`)
+    authFetch(`${apiBase}/api/apps/?workspace_id=${encodeURIComponent(currentWorkspaceId)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
       .then((data: AppsResponse) => {
-        setApps(data.apps.filter((a) => a.installed && a.url));
+        setApps(data.apps.filter((a) => a.installed && a.url && a.enabled));
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentWorkspaceId]);
 
   // Sync activeApp with ?open= so navigating back to the gallery (without the
   // query param) clears the embed view.

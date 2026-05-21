@@ -31,6 +31,7 @@ interface AppInfo {
   maintainer?: string | null;
   tier?: string | null;
   installed: boolean;
+  enabled: boolean;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -235,18 +236,23 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const hideTooltip = () => setTooltip(null);
 
   useEffect(() => {
+    if (!currentWorkspaceId) {
+      setPanelLoading(false);
+      return;
+    }
     const apiBase = getApiUrl();
-    authFetch(`${apiBase}/api/apps/`)
+    const url = `${apiBase}/api/apps/?workspace_id=${encodeURIComponent(currentWorkspaceId)}`;
+    authFetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data: { apps: AppInfo[] }) => {
-        const installed = data.apps.filter((a) => a.installed && a.url);
-        setApps(installed);
+        const visible = data.apps.filter((a) => a.installed && a.url && a.enabled);
+        setApps(visible);
         // Expand all module groups by default
-        setExpandedModules(Array.from(new Set(installed.map((a) => a.module_name))));
+        setExpandedModules(Array.from(new Set(visible.map((a) => a.module_name))));
       })
       .catch(() => { /* fail silently */ })
       .finally(() => setPanelLoading(false));
-  }, []);
+  }, [currentWorkspaceId]);
 
   const groupedApps = useMemo(() => groupAppsByModule(apps), [apps]);
   const activeAppId = openAppModule

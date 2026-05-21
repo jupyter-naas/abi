@@ -117,6 +117,7 @@ KNOWN_TABLES = frozenset(
         "api_keys",
         "provider_configs",
         "agent_configs",
+        "app_configs",
         "secrets",
         "refresh_tokens",
         "revoked_tokens",
