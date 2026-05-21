@@ -153,6 +153,7 @@ export interface Workspace {
   currentUserRole?: string;
   featureFlags?: WorkspaceFeatureFlags;
   platformDriveEnabled?: boolean;
+  systemDriveEnabled?: boolean;
   isDemo?: boolean;
 }
 
@@ -166,7 +167,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace';
+export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
 
 export interface OpenAppModule {
   module_path: string;
@@ -803,8 +804,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         currentUserRole: ws.current_user_role,
         featureFlags: ws.feature_flags,
         platformDriveEnabled: Boolean(ws.platform_drive_enabled),
+        systemDriveEnabled: Boolean(ws.system_drive_enabled),
       }));
-      
+
       set({ workspaces });
       
       // If no current workspace or current one not in list, select first

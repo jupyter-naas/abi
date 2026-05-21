@@ -2304,7 +2304,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.1.0"
+version = "2.1.1"
 source = { editable = "../naas-abi" }
 dependencies = [
     { name = "aiosqlite" },

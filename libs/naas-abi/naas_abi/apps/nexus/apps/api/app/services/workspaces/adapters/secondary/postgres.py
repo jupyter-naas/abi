@@ -84,6 +84,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             sidebar_color=model.sidebar_color,
             font_family=model.font_family,
             platform_drive_enabled=bool(model.platform_drive_enabled),
+            system_drive_enabled=bool(model.system_drive_enabled),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -225,6 +226,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             "sidebar_color": updates.sidebar_color,
             "font_family": updates.font_family,
             "platform_drive_enabled": updates.platform_drive_enabled,
+            "system_drive_enabled": updates.system_drive_enabled,
         }
         for field, value in update_data.items():
             if value is not None:
