@@ -13,7 +13,8 @@ export default function DrivesSettingsPage() {
   const role = workspace?.currentUserRole;
   const canEdit = role === 'owner' || role === 'admin';
 
-  const [saving, setSaving] = useState(false);
+  const [savingPlatform, setSavingPlatform] = useState(false);
+  const [savingSystem, setSavingSystem] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!workspace) {
@@ -25,11 +26,12 @@ export default function DrivesSettingsPage() {
   }
 
   const platformDriveEnabled = Boolean(workspace.platformDriveEnabled);
+  const systemDriveEnabled = Boolean(workspace.systemDriveEnabled);
 
-  const handleToggle = async (next: boolean) => {
-    if (!canEdit || saving) return;
+  const handleTogglePlatform = async (next: boolean) => {
+    if (!canEdit || savingPlatform) return;
     setError(null);
-    setSaving(true);
+    setSavingPlatform(true);
     try {
       const { authFetch } = await import('@/stores/auth');
       const response = await authFetch(`/api/workspaces/${workspace.id}`, {
@@ -50,7 +52,35 @@ export default function DrivesSettingsPage() {
       console.error('Failed to update platform drive setting:', err);
       setError('Failed to update setting. Please try again.');
     } finally {
-      setSaving(false);
+      setSavingPlatform(false);
+    }
+  };
+
+  const handleToggleSystem = async (next: boolean) => {
+    if (!canEdit || savingSystem) return;
+    setError(null);
+    setSavingSystem(true);
+    try {
+      const { authFetch } = await import('@/stores/auth');
+      const response = await authFetch(`/api/workspaces/${workspace.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system_drive_enabled: next }),
+      });
+      if (!response.ok) {
+        if (response.status === 403) {
+          setError('Only workspace admins can change drive settings.');
+        } else {
+          setError(`Failed to update setting (HTTP ${response.status}).`);
+        }
+        return;
+      }
+      await fetchWorkspaces();
+    } catch (err) {
+      console.error('Failed to update system drive setting:', err);
+      setError('Failed to update setting. Please try again.');
+    } finally {
+      setSavingSystem(false);
     }
   };
 
@@ -71,14 +101,14 @@ export default function DrivesSettingsPage() {
           <input
             type="checkbox"
             checked={platformDriveEnabled}
-            onChange={(e) => handleToggle(e.target.checked)}
-            disabled={!canEdit || saving}
+            onChange={(e) => handleTogglePlatform(e.target.checked)}
+            disabled={!canEdit || savingPlatform}
             className="mt-1 h-4 w-4 rounded border-input"
           />
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium">Platform drive</p>
-              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+              {savingPlatform && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               When enabled, members of this workspace can read and write files in the
@@ -87,17 +117,40 @@ export default function DrivesSettingsPage() {
             </p>
           </div>
         </label>
-
-        {!canEdit && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Only workspace owners and admins can change this setting.
-          </p>
-        )}
-
-        {error && (
-          <p className="mt-3 text-xs text-destructive">{error}</p>
-        )}
       </section>
+
+      <section className="rounded-lg border bg-card p-4">
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={systemDriveEnabled}
+            onChange={(e) => handleToggleSystem(e.target.checked)}
+            disabled={!canEdit || savingSystem}
+            className="mt-1 h-4 w-4 rounded border-input"
+          />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium">System drive</p>
+              {savingSystem && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              When enabled, workspace owners and admins can browse the full
+              object-storage tree. The system drive exposes all storage paths and
+              is restricted to admin roles regardless of this setting.
+            </p>
+          </div>
+        </label>
+      </section>
+
+      {!canEdit && (
+        <p className="text-xs text-muted-foreground">
+          Only workspace owners and admins can change drive settings.
+        </p>
+      )}
+
+      {error && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
     </div>
   );
 }

@@ -22,7 +22,7 @@ You have access to tools that can:
 - generate a pull request description by invoking the PullRequestDescriptionAgent
 - commit staged changes
 - restore accidental working-tree changes and commit lockfile updates in a dedicated chore commit
-- push the branch (ONLY when explicitly requested)
+- push the branch (ONLY when explicitly requested) — always pulls first when the branch exists on origin
 - find/create/update/view a GitHub pull request via `gh`
 
 Decision rules (STRICT):
@@ -55,6 +55,7 @@ Standard workflow — pick the path that matches the user request:
 Constraints:
 - Do NOT use destructive git operations (no force push, no hard reset).
 - Keep PR body concise: include Summary + Test plan.
+- Before any push, the branch must be up to date with origin. `git_push` enforces this by running `git pull` first when the branch exists on origin; never bypass it.
 """
     model = "gpt-4.1-mini"
 
@@ -148,17 +149,34 @@ Constraints:
                 raise RuntimeError(f"git commit failed:\n{output.strip()}")
             return output.strip()
 
-        @tool(description="Push current branch to origin (sets upstream if needed)")
+        @tool(
+            description=(
+                "Push current branch to origin (sets upstream if needed). "
+                "Always runs `git pull` first when the branch already exists on origin."
+            )
+        )
         def git_push() -> str:
             branch = _run(["git", "branch", "--show-current"])
+            remote_code, _ = _run_allow_fail(
+                ["git", "ls-remote", "--exit-code", "--heads", "origin", branch]
+            )
+            pull_output = ""
+            if remote_code == 0:
+                pull_code, pull_output = _run_allow_fail(
+                    ["git", "pull", "origin", branch]
+                )
+                if pull_code != 0:
+                    raise RuntimeError(
+                        f"git pull failed before push (resolve conflicts and retry):\n{pull_output}"
+                    )
             code, output = _run_allow_fail(["git", "push", "-u", "origin", branch])
             if code != 0:
                 # Try non-upstream push if already set
                 code2, output2 = _run_allow_fail(["git", "push"])
                 if code2 != 0:
                     raise RuntimeError(f"git push failed:\n{output}\n{output2}")
-                return output2
-            return output
+                return f"{pull_output}\n{output2}".strip()
+            return f"{pull_output}\n{output}".strip()
 
         @tool(
             description=(
