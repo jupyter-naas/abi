@@ -594,6 +594,30 @@ class AgentConfigModel(Base):
 
 
 # ============================================
+# App Configurations (per-workspace enable state)
+# ============================================
+
+
+class AppConfigModel(Base):
+    __tablename__ = "app_configs"
+
+    id = Column(String, primary_key=True)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
+    # "naas_abi_marketplace.applications.openrouter:dashboard").
+    app_id = Column(String(512), nullable=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "app_id", name="uq_app_configs_workspace_app"),
+    )
+
+
+# ============================================
 # Secrets
 # ============================================
 
