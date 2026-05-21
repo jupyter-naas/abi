@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v2.3.0 (2026-05-21)
+
+### Features
+
+- **analytics**: Add Nexus product analytics feature
+  ([`bdc584c`](https://github.com/jupyter-naas/abi/commit/bdc584c9d88ac43f517655be8abead4b3855c202))
+
+- **apps**: Add new apps service and API endpoint
+  ([`3ad8ba5`](https://github.com/jupyter-naas/abi/commit/3ad8ba5e8a8b2a0cd9e5d818f27f76c2e33eb5dd))
+
+- **apps**: Add per-workspace app enable/disable state
+  ([`e0d2033`](https://github.com/jupyter-naas/abi/commit/e0d2033f4efc1c063340eb25d9f3ec27a285bfc2))
+
+- **chat**: Add PDF preview support with a right-side panel
+  ([`131aab4`](https://github.com/jupyter-naas/abi/commit/131aab48de402c1852056aeb649554e263828d46))
+
+- **settings**: Add sidebar and layout for workspace settings
+  ([`cdeb381`](https://github.com/jupyter-naas/abi/commit/cdeb381289dbf7c2d8499662c29ee49ac3f5365a))
+
+- **sidebar**: Improve URL-driven active panel section management
+  ([`173f299`](https://github.com/jupyter-naas/abi/commit/173f299d68783608ff01afa3a5c2ecaea70ede75))
+
+- **system-drive**: Add support for system drive access in workspaces
+  ([`0061150`](https://github.com/jupyter-naas/abi/commit/006115008f4ac3aff1898552665f40a8786a4434))
+
+- **workspace-settings**: Move and update workspace settings UI and routing
+  ([`a428ba2`](https://github.com/jupyter-naas/abi/commit/a428ba27a30872ba43b8e69552af364c681e6bb6))
+
+
 ## v2.2.0 (2026-05-19)
 
 ### Chores
