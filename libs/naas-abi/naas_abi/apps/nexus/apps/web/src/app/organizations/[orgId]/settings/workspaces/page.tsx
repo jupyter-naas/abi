@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 interface OrgWorkspace {
   id: string;
@@ -39,12 +40,35 @@ interface OrgWorkspace {
   organization_logo_rectangle_url?: string | null;
 }
 
-const slugify = (value: string): string =>
-  value
+const slugify = (value: string): string => {
+  const base = value
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  // Backend requires min 2 chars matching ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+  if (base.length === 1) return `${base}-ws`;
+  return base;
+};
+
+const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
+
+const formatErrorDetail = (detail: unknown): string => {
+  if (!detail) return '';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d: { loc?: string[]; msg?: string }) =>
+        d.msg ? `${(d.loc || []).slice(-1).join('') || 'field'}: ${d.msg}` : JSON.stringify(d)
+      )
+      .join('; ');
+  }
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
+  }
+};
 
 const formatDate = (iso: string | null | undefined): string => {
   if (!iso) return '—';
@@ -74,11 +98,14 @@ const EMPTY_FORM: FormState = {
 export default function OrganizationWorkspacesPage() {
   const params = useParams();
   const orgId = params.orgId as string;
+  const refreshWorkspaceStore = useWorkspaceStore((s) => s.fetchWorkspaces);
 
   const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [createForm, setCreateForm] = useState<FormState>(EMPTY_FORM);
@@ -122,34 +149,49 @@ export default function OrganizationWorkspacesPage() {
   const resetCreate = () => {
     setShowAddForm(false);
     setCreateForm(EMPTY_FORM);
+    setCreateError(null);
   };
 
   const handleCreate = async () => {
-    if (!createForm.name.trim() || !createForm.slug.trim()) return;
+    const name = createForm.name.trim();
+    const slug = createForm.slug.trim();
+    if (!name || !slug) return;
+    if (!SLUG_PATTERN.test(slug)) {
+      setCreateError(
+        'Slug must be at least 2 characters, lowercase letters/digits/dashes, and start and end with a letter or digit.'
+      );
+      return;
+    }
+    setCreateError(null);
     setCreating(true);
     try {
       const response = await authFetch(`/api/organizations/${orgId}/workspaces`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: createForm.name.trim(),
-          slug: createForm.slug.trim(),
+          name,
+          slug,
           logo_emoji: createForm.logo_emoji || null,
           logo_url: createForm.logo_url || null,
           primary_color: createForm.primary_color || '#22c55e',
         }),
       });
       if (!response.ok) {
-        const detail = await response.json().catch(() => ({}));
-        alert(detail?.detail || `Failed to create workspace (${response.status})`);
+        const body = await response.json().catch(() => ({}));
+        setCreateError(
+          formatErrorDetail(body?.detail) || `Failed to create workspace (${response.status})`
+        );
         return;
       }
       const created: OrgWorkspace = await response.json();
-      setWorkspaces((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setWorkspaces((prev) =>
+        [...prev, created].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      void refreshWorkspaceStore();
       resetCreate();
     } catch (err) {
       console.error('Failed to create workspace:', err);
-      alert('Failed to create workspace');
+      setCreateError('Network error while creating workspace.');
     } finally {
       setCreating(false);
     }
@@ -157,6 +199,7 @@ export default function OrganizationWorkspacesPage() {
 
   const startEdit = (ws: OrgWorkspace) => {
     setEditingId(ws.id);
+    setEditError(null);
     setEditForm({
       name: ws.name,
       slug: ws.slug,
@@ -169,10 +212,12 @@ export default function OrganizationWorkspacesPage() {
   const cancelEdit = () => {
     setEditingId(null);
     setEditForm(EMPTY_FORM);
+    setEditError(null);
   };
 
   const handleUpdate = async (workspaceId: string) => {
     setSavingId(workspaceId);
+    setEditError(null);
     try {
       const response = await authFetch(`/api/organizations/${orgId}/workspaces/${workspaceId}`, {
         method: 'PATCH',
@@ -185,16 +230,19 @@ export default function OrganizationWorkspacesPage() {
         }),
       });
       if (!response.ok) {
-        const detail = await response.json().catch(() => ({}));
-        alert(detail?.detail || `Failed to update workspace (${response.status})`);
+        const body = await response.json().catch(() => ({}));
+        setEditError(
+          formatErrorDetail(body?.detail) || `Failed to update workspace (${response.status})`
+        );
         return;
       }
       const updated: OrgWorkspace = await response.json();
       setWorkspaces((prev) => prev.map((w) => (w.id === workspaceId ? updated : w)));
+      void refreshWorkspaceStore();
       cancelEdit();
     } catch (err) {
       console.error('Failed to update workspace:', err);
-      alert('Failed to update workspace');
+      setEditError('Network error while updating workspace.');
     } finally {
       setSavingId(null);
     }
@@ -207,11 +255,12 @@ export default function OrganizationWorkspacesPage() {
         method: 'DELETE',
       });
       if (!response.ok) {
-        const detail = await response.json().catch(() => ({}));
-        alert(detail?.detail || `Failed to delete workspace (${response.status})`);
+        const body = await response.json().catch(() => ({}));
+        alert(formatErrorDetail(body?.detail) || `Failed to delete workspace (${response.status})`);
         return;
       }
       setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+      void refreshWorkspaceStore();
       if (editingId === workspaceId) cancelEdit();
     } catch (err) {
       console.error('Failed to delete workspace:', err);
@@ -356,6 +405,11 @@ export default function OrganizationWorkspacesPage() {
                 />
               </div>
             </div>
+            {createError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-500">
+                {createError}
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 onClick={resetCreate}
@@ -583,6 +637,11 @@ export default function OrganizationWorkspacesPage() {
                                   />
                                 </div>
                               </div>
+                              {editError && (
+                                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-500">
+                                  {editError}
+                                </div>
+                              )}
                               <div className="flex justify-end gap-2">
                                 <button
                                   onClick={cancelEdit}
