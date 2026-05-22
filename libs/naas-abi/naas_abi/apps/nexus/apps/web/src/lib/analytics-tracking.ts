@@ -24,6 +24,9 @@
  */
 
 import type { AnalyticsEvent, EventName } from '@/app/analytics/lib/types';
+import { getApiUrl } from '@/lib/config';
+import { useAuthStore } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 const SESSION_KEY = 'nexus.analytics.session_id';
 const SESSION_TS_KEY = 'nexus.analytics.session_last_event_ts';
@@ -102,15 +105,26 @@ function shortReferrer(): string | undefined {
 
 function getCurrentUser(): { id?: string; email?: string } {
   if (typeof window === 'undefined') return {};
+
+  // Preferred path: read directly from the running zustand auth store. This
+  // always reflects the live session, including the case where the user has
+  // just logged in and persistence hasn't flushed to localStorage yet.
   try {
-    // Nexus persists auth via zustand under a known key; we read defensively
-    // so the tracker keeps working if storage shape changes.
-    const raw = localStorage.getItem('auth-storage');
+    const user = useAuthStore.getState().user;
+    if (user?.id) return { id: user.id, email: user.email };
+  } catch {
+    // Store not available (e.g. very early on first render) — fall through.
+  }
+
+  // Fallback: parse the persisted snapshot from localStorage. Key matches
+  // the zustand persist name in src/stores/auth.ts.
+  try {
+    const raw = localStorage.getItem('nexus-auth');
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     const user = parsed?.state?.user;
     if (!user) return {};
-    return { id: user.id ?? user.user_id, email: user.email };
+    return { id: user.id, email: user.email };
   } catch {
     return {};
   }
@@ -121,6 +135,16 @@ export interface TrackContext {
   workspace_name?: string;
   page_path?: string;
   page_title?: string;
+}
+
+function resolveWorkspaceName(workspace_id?: string): string | undefined {
+  if (!workspace_id) return undefined;
+  try {
+    const ws = useWorkspaceStore.getState().workspaces.find((w) => w.id === workspace_id);
+    return ws?.name;
+  } catch {
+    return undefined;
+  }
 }
 
 export function trackEvent(
@@ -138,7 +162,7 @@ export function trackEvent(
     user_id: user.id,
     user_email: user.email,
     workspace_id: context.workspace_id,
-    workspace_name: context.workspace_name,
+    workspace_name: context.workspace_name ?? resolveWorkspaceName(context.workspace_id),
     page_path: context.page_path ?? window.location.pathname,
     page_title: context.page_title ?? document.title,
     properties: context.properties,
@@ -148,9 +172,11 @@ export function trackEvent(
     referrer: shortReferrer(),
   };
 
-  // Fire-and-forget POST. We use keepalive so events sent on unload still ship.
+  // Fire-and-forget POST to the Nexus API (port 9879 in local dev), which
+  // persists through ABI's object storage service. keepalive lets events
+  // sent during unload still ship.
   try {
-    fetch('/api/analytics/events', {
+    fetch(`${getApiUrl()}/api/analytics/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(event),
