@@ -19,6 +19,7 @@ Subscriptions are live-only. Historical reads go through `query()` (filter-based
   - Requires an adapter. A bus is optional but required for `subscribe()`.
 - `publish(event: LogProcess) -> StoredEvent`
   - Persists via the adapter, then broadcasts on the bus topic `class_iri_to_topic(event._class_uri)`. If the bus broadcast fails, the event is still persisted (warning logged).
+  - **Populates `event.created_at = datetime.now()` if the caller didn't set it**, before serializing — so the timestamp round-trips through `query`/`iter_query`.
   - Raises `InvalidEventError` if `event` is not a `LogProcess` subclass instance.
 - `query(event_class=None, since_seq=None, until_seq=None, since_timestamp=None, until_timestamp=None, limit=None) -> list[LogProcess]`
   - Eager read. Reconstructs each row back into an instance of `event_class` (or `LogProcess` if no class hint is given). Use `since_seq` for stable seq-based pagination.
@@ -95,6 +96,19 @@ for evt in events.iter_query_for_consumer("worker-1", UserAuthenticated):
 ```
 
 ---
+
+## Reconstructed events
+
+`query`, `iter_query`, `query_for_consumer`, and `iter_query_for_consumer` all return **instances of the requested `event_class`** (a Pydantic model), not a wrapper. Domain fields you set at publish-time are populated; storage metadata is attached as private attributes:
+
+```python
+for evt in events.iter_query(event_class=UserAuthenticated):
+    evt.user_id        # domain field set at publish-time
+    evt.created_at     # always populated (auto-set by publish if unset)
+    evt._uri           # original instance IRI
+    evt._seq           # global monotonic sequence (storage metadata)
+    evt._stored_at     # ISO timestamp persisted by the adapter
+```
 
 ## Caveats
 - **Live-only subscribe**: events published before a subscriber connects are not delivered to it. Use `query_for_consumer` for catch-up.
