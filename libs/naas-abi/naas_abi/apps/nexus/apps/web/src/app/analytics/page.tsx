@@ -23,6 +23,7 @@ import { LineChart } from './components/line-chart';
 import { BarList, type BarItem } from './components/bar-list';
 import { Card } from './components/card';
 import { EventIcon, formatEventName } from './components/event-icon';
+import { UpdateStatus } from './components/update-status';
 import { formatDateTime, formatDuration, formatNumber, formatRelative } from './lib/format';
 import type {
   AnalyticsEvent,
@@ -133,6 +134,7 @@ export default function AnalyticsPage() {
                   : 'How your users are engaging across sessions, pages, and workspaces.'}
               </p>
             </div>
+            <UpdateStatus />
           </div>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
