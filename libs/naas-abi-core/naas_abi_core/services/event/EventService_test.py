@@ -1,0 +1,197 @@
+"""Tests for EventService."""
+
+from __future__ import annotations
+
+import threading
+from typing import Callable, ClassVar, Optional
+
+from naas_abi_core.services.bus.BusPorts import IBusAdapter
+from naas_abi_core.services.bus.BusService import BusService
+from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
+    EventSQLiteAdapter,
+)
+from naas_abi_core.services.event.event_ontology import LogProcess
+from naas_abi_core.services.event.EventPort import InvalidEventError
+from naas_abi_core.services.event.EventService import EventService, class_iri_to_topic
+
+
+# ---------------------------------------------------------------------------
+# Test doubles
+# ---------------------------------------------------------------------------
+
+
+class _FakeBusAdapter(IBusAdapter):
+    """Records publishes; topic_consume registers a callback synchronously."""
+
+    def __init__(self):
+        self.published: list[tuple[str, str, bytes]] = []
+        self._subscribers: dict[str, list[Callable[[bytes], None]]] = {}
+
+    def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+        self.published.append((topic, routing_key, payload))
+        for cb in self._subscribers.get(topic, []):
+            cb(payload)
+
+    def topic_consume(self, topic, routing_key, callback):
+        self._subscribers.setdefault(topic, []).append(callback)
+        t = threading.Thread(target=lambda: None, daemon=True)
+        t.start()
+        return t
+
+
+# A concrete subclass of LogProcess for testing.
+class UserAuthenticated(LogProcess):
+    _class_uri: ClassVar[str] = "http://example.org/UserAuthenticated"
+    _property_uris: ClassVar[dict] = {
+        **LogProcess._property_uris,
+        "user_id": "http://example.org/userId",
+    }
+    user_id: Optional[str] = None
+
+
+# A non-LogProcess type, for the rejection test.
+class _NotAnEvent:
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+def _make_service(tmp_path):
+    adapter = EventSQLiteAdapter(str(tmp_path / "events.sqlite"))
+    bus_adapter = _FakeBusAdapter()
+    bus = BusService(bus_adapter)
+    service = EventService(adapter=adapter, bus=bus)
+    return service, adapter, bus_adapter
+
+
+# ---------------------------------------------------------------------------
+# publish
+# ---------------------------------------------------------------------------
+
+
+def test_publish_persists_and_broadcasts(tmp_path):
+    service, adapter, bus_adapter = _make_service(tmp_path)
+
+    evt = UserAuthenticated(user_id="alice")
+    stored = service.publish(evt)
+
+    assert stored.event_type == UserAuthenticated._class_uri
+    assert stored.id == evt._uri
+    assert stored.seq == 1
+
+    # Persisted
+    rows = adapter.query()
+    assert len(rows) == 1
+    assert rows[0].payload == stored.payload
+
+    # Broadcast on the bus under the hashed topic
+    assert len(bus_adapter.published) == 1
+    topic, routing_key, payload = bus_adapter.published[0]
+    assert topic == class_iri_to_topic(UserAuthenticated._class_uri)
+    assert payload == stored.payload
+
+
+def test_publish_rejects_non_log_process(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    try:
+        service.publish(_NotAnEvent())
+    except InvalidEventError:
+        return
+    raise AssertionError("expected InvalidEventError")
+
+
+def test_publish_persists_even_if_bus_fails(tmp_path):
+    service, adapter, bus_adapter = _make_service(tmp_path)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("bus down")
+
+    bus_adapter.topic_publish = boom  # type: ignore[assignment]
+
+    evt = UserAuthenticated(user_id="bob")
+    stored = service.publish(evt)
+    assert stored.seq == 1
+    assert len(adapter.query()) == 1
+
+
+# ---------------------------------------------------------------------------
+# query
+# ---------------------------------------------------------------------------
+
+
+def test_query_reconstructs_instances(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+
+    e1 = UserAuthenticated(user_id="alice")
+    e2 = UserAuthenticated(user_id="bob")
+    service.publish(e1)
+    service.publish(e2)
+
+    results = service.query(event_class=UserAuthenticated)
+    assert len(results) == 2
+    assert all(isinstance(r, UserAuthenticated) for r in results)
+    user_ids = sorted(r.user_id for r in results)
+    assert user_ids == ["alice", "bob"]
+
+
+def test_query_without_event_class_returns_log_process(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    results = service.query()
+    assert len(results) == 1
+    assert isinstance(results[0], LogProcess)
+
+
+# ---------------------------------------------------------------------------
+# query_for_consumer
+# ---------------------------------------------------------------------------
+
+
+def test_query_for_consumer_advances_cursor(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(UserAuthenticated(user_id="bob"))
+
+    first = service.query_for_consumer("worker-1", UserAuthenticated)
+    assert sorted(e.user_id for e in first) == ["alice", "bob"]
+
+    second = service.query_for_consumer("worker-1", UserAuthenticated)
+    assert second == []
+
+
+# ---------------------------------------------------------------------------
+# subscribe
+# ---------------------------------------------------------------------------
+
+
+def test_subscribe_routes_to_bus(tmp_path):
+    service, _, bus_adapter = _make_service(tmp_path)
+
+    received: list[UserAuthenticated] = []
+
+    def cb(evt: UserAuthenticated) -> None:
+        received.append(evt)
+
+    service.subscribe(UserAuthenticated, cb)
+    service.publish(UserAuthenticated(user_id="alice"))
+
+    assert len(received) == 1
+    assert isinstance(received[0], UserAuthenticated)
+    assert received[0].user_id == "alice"
+
+
+# ---------------------------------------------------------------------------
+# topic hashing
+# ---------------------------------------------------------------------------
+
+
+def test_class_iri_to_topic_is_deterministic_and_short():
+    iri = "http://example.org/UserAuthenticated"
+    t1 = class_iri_to_topic(iri)
+    t2 = class_iri_to_topic(iri)
+    assert t1 == t2
+    assert len(t1) <= 64
+    assert "://" not in t1 and "#" not in t1

@@ -1364,24 +1364,13 @@ def generate_python_code(
     """Generate Python code from extracted class and property information"""
 
     # Determine which imports are needed
-    needs_list = False
     needs_any = False
-    needs_union = False
     needs_datetime = False
     needs_os = False
 
     # Check all properties to see what types are needed
     for class_info in classes.values():
         for prop in class_info.properties:
-            # Check if any range class has cardinality None or > 1 (needs list)
-            if prop.property_type == "object":
-                for cardinality in prop.range_classes.values():
-                    if cardinality is None or cardinality > 1:
-                        needs_list = True
-                        break
-            # Object properties always need Union (for str, URIRef, and classes)
-            if prop.property_type == "object":
-                needs_union = True
             if (prop.property_type == "data" and not prop.datatype) or (
                 prop.property_type == "object" and not prop.range_classes
             ):
@@ -1395,21 +1384,21 @@ def generate_python_code(
             if prop.default_value and "os.environ" in prop.default_value:
                 needs_os = True
 
-    # Build typing imports
+    # Build typing imports. `List` and `Union` are referenced at runtime by
+    # RDFEntity helpers regardless of whether any individual class declares
+    # them, so they are always imported.
     typing_imports = [
         "Annotated",
         "Any",
         "Callable",
         "ClassVar",
         "Iterable",
+        "List",
         "Optional",
+        "Union",
         "get_args",
         "get_origin",
     ]
-    if needs_list:
-        typing_imports.append("List")
-    if needs_union:
-        typing_imports.append("Union")
 
     # Build sorted stdlib imports
     stdlib_lines: list[str] = ["import uuid"]
