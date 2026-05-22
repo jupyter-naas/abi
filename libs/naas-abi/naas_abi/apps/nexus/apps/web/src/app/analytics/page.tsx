@@ -68,7 +68,7 @@ function buildQuery(filters: FilterValue): string {
 
 interface UsersDirectory {
   users: UserRow[];
-  directory: { user_email: string; user_id: string }[];
+  directory: { user_email: string; user_id: string; workspace_ids: string[] }[];
 }
 
 interface WorkspacesDirectory {
@@ -80,7 +80,7 @@ export default function AnalyticsPage() {
   const [filters, setFilters] = useState<FilterValue>(initialFilters);
   const [tab, setTab] = useState<Tab>('overview');
 
-  const [usersDir, setUsersDir] = useState<{ user_email: string; user_id: string }[]>([]);
+  const [usersDir, setUsersDir] = useState<{ user_email: string; user_id: string; workspace_ids: string[] }[]>([]);
   const [workspaceDir, setWorkspaceDir] = useState<{ workspace_id: string; workspace_name: string }[]>([]);
 
   // Bootstrap directories (independent of date filter — full catalog).
@@ -101,6 +101,11 @@ export default function AnalyticsPage() {
   }, []);
 
   const isUserDetail = filters.user_email !== 'all';
+
+  const filteredUsersDir =
+    filters.workspace_id && filters.workspace_id !== 'all'
+      ? usersDir.filter((u) => u.workspace_ids.includes(filters.workspace_id))
+      : usersDir;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -134,7 +139,7 @@ export default function AnalyticsPage() {
             <FilterBar
               value={filters}
               onChange={setFilters}
-              users={usersDir}
+              users={filteredUsersDir}
               workspaces={workspaceDir}
             />
             <nav className="flex items-center border border-border/60 bg-card">
