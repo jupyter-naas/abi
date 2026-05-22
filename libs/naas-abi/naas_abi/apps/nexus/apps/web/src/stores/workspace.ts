@@ -755,6 +755,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   },
 
   fetchWorkspaces: async () => {
+    if (!useAuthStore.getState().token) return;
     try {
       const { authFetch } = await import('./auth');
       const response = await authFetch('/api/workspaces');
