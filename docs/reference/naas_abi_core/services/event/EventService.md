@@ -22,12 +22,13 @@ Subscriptions are live-only. Historical reads go through `query()` (filter-based
   - Raises `InvalidEventError` if `event` is not a `LogProcess` subclass instance.
 - `query(event_class=None, since_seq=None, until_seq=None, since_timestamp=None, until_timestamp=None, limit=None) -> list[LogProcess]`
   - Eager read. Reconstructs each row back into an instance of `event_class` (or `LogProcess` if no class hint is given). Use `since_seq` for stable seq-based pagination.
-- `iter_query(event_class=None, since_seq=None, since_timestamp=None, until_timestamp=None, batch_size=500) -> Iterator[LogProcess]`
+- `iter_query(event_class=None, since_seq=None, since_timestamp=None, until_timestamp=None, limit=None, batch_size=500) -> Iterator[LogProcess]`
   - Streaming read with **snapshot semantics**: captures the current `max(seq)` at the first call and stops once it has yielded everything up to that point. Events appended during iteration are not included — call again to pick them up. Caller does not have to manage pagination.
+  - `limit` caps the total number of events yielded; `batch_size` is the per-round-trip SQL fetch size (defaults to 500).
 - `query_for_consumer(consumer_id: str, event_class: type, limit=None) -> list[LogProcess]`
   - Eager. Returns undelivered events for `(consumer_id, event_class._class_uri)` and advances the cursor in the same transaction.
-- `iter_query_for_consumer(consumer_id, event_class, batch_size=500) -> Iterator[LogProcess]`
-  - Drains all pending events for `consumer_id` in batches, advancing the cursor per batch. Stops when caught up.
+- `iter_query_for_consumer(consumer_id, event_class, limit=None, batch_size=500) -> Iterator[LogProcess]`
+  - Drains pending events for `consumer_id` in batches, advancing the cursor per batch. Stops when caught up or when `limit` events have been yielded. The cursor only advances over events actually returned, so a stopped iteration leaves the remainder pending for the next call.
 - `subscribe(event_class: type, callback: Callable[[LogProcess], None], routing_key: str = "#") -> Thread`
   - Subscribes to the bus topic for `event_class._class_uri`. The callback receives a reconstructed instance of `event_class`. Requires a `BusService`; raises `RuntimeError` otherwise.
 

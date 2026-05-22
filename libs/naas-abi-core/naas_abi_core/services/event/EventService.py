@@ -126,6 +126,7 @@ class EventService(ServiceBase, IEventService):
         since_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
+        limit: int | None = None,
         batch_size: int = 500,
     ) -> Iterator[Any]:
         """Stream events matching the filters.
@@ -133,27 +134,41 @@ class EventService(ServiceBase, IEventService):
         Snapshot semantics: a max `seq` is captured at the first call and is
         used as the upper bound for the whole iteration. Events appended
         during iteration are not included.
+
+        `limit` caps the total number of events yielded. `batch_size` is the
+        SQL fetch size per round-trip.
         """
         if batch_size <= 0:
             raise ValueError("batch_size must be > 0")
+        if limit is not None and limit <= 0:
+            return
 
         event_type = str(event_class._class_uri) if event_class is not None else None
         snapshot_max = self._adapter.max_seq(event_type=event_type)
         cursor = since_seq if since_seq is not None else 0
+        yielded = 0
 
         while cursor < snapshot_max:
+            fetch_size = batch_size
+            if limit is not None:
+                fetch_size = min(batch_size, limit - yielded)
+                if fetch_size <= 0:
+                    return
             rows = self._adapter.query(
                 event_type=event_type,
                 since_seq=cursor,
                 until_seq=snapshot_max,
                 since_timestamp=since_timestamp,
                 until_timestamp=until_timestamp,
-                limit=batch_size,
+                limit=fetch_size,
             )
             if not rows:
                 break
             for row in rows:
                 yield self._reconstruct(row, event_class)
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    return
             cursor = rows[-1].seq
 
     def query_for_consumer(
@@ -173,23 +188,40 @@ class EventService(ServiceBase, IEventService):
         self,
         consumer_id: str,
         event_class: type[LogProcess],
+        limit: int | None = None,
         batch_size: int = 500,
     ) -> Iterator[Any]:
-        """Drain pending events for `consumer_id` in batches, advancing the cursor."""
+        """Drain pending events for `consumer_id` in batches, advancing the cursor.
+
+        `limit` caps the total number of events yielded (and the cursor only
+        advances over events actually read). `batch_size` is the per-round-trip
+        fetch size.
+        """
         if batch_size <= 0:
             raise ValueError("batch_size must be > 0")
+        if limit is not None and limit <= 0:
+            return
 
         event_type = str(event_class._class_uri)
+        yielded = 0
         while True:
+            fetch_size = batch_size
+            if limit is not None:
+                fetch_size = min(batch_size, limit - yielded)
+                if fetch_size <= 0:
+                    return
             rows = self._adapter.query_for_consumer(
                 consumer_id=consumer_id,
                 event_type=event_type,
-                limit=batch_size,
+                limit=fetch_size,
             )
             if not rows:
                 return
             for row in rows:
                 yield self._reconstruct(row, event_class)
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    return
 
     # ------------------------------------------------------------------
     # subscribe
