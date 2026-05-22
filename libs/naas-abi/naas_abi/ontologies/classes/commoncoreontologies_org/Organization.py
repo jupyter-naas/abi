@@ -1,10 +1,10 @@
 from naas_abi.ontologies.modules.ABIOntology import (
-    Quality as _Quality,
+    Organization as _Organization,
 )
 
 
-class Quality(_Quality):
-    """Action class for Quality"""
+class Organization(_Organization):
+    """Action class for Organization"""
 
     def actions(self):
         """Action method - implement your logic here"""
