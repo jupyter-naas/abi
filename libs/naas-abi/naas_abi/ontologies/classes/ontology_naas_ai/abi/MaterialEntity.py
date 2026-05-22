@@ -1,4 +1,4 @@
-from naas_abi.ontologies.modules.7BucketsOntology import (
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
     MaterialEntity as _MaterialEntity,
 )
 
