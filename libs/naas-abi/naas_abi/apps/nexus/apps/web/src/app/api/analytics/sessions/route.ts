@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
 import { applyFilters, computeSessionRows } from '@/app/analytics/lib/aggregate';
 import { parseFilters } from '@/app/analytics/lib/filters';
-import eventData from '@/app/analytics/data/events.json';
-import type { AnalyticsEvent } from '@/app/analytics/lib/types';
+import { readEvents } from '@/app/analytics/lib/server-data';
 
 export const dynamic = 'force-dynamic';
 
-const ALL_EVENTS = eventData.events as AnalyticsEvent[];
-
-export function GET(req: Request) {
+export async function GET(req: Request) {
   const filters = parseFilters(new URL(req.url));
-  const events = applyFilters(ALL_EVENTS, filters);
+  const all = await readEvents();
+  const events = applyFilters(all, filters);
   return NextResponse.json({ sessions: computeSessionRows(events) });
 }
