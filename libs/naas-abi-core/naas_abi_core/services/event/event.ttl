@@ -28,8 +28,8 @@ abi:LogProcess a owl:Class ;
     skos:example "user authenticated; agent invoked; task started"@en .
 
 # Standard data properties on every LogProcess instance.
-abi:eventTimestamp a owl:DatatypeProperty ;
-    rdfs:label "event timestamp"@en ;
+abi:createdAt a owl:DatatypeProperty ;
+    rdfs:label "created at"@en ;
     rdfs:domain abi:LogProcess ;
     rdfs:range xsd:dateTime ;
-    skos:definition "ISO 8601 timestamp at which the event occurred."@en .
+    skos:definition "ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."@en .

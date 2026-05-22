@@ -343,17 +343,19 @@ class LogProcess(Process, RDFEntity):
     _name: ClassVar[str] = "log process"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
+        "created_at": "http://ontology.naas.ai/abi/createdAt",
         "creator": "http://purl.org/dc/terms/creator",
-        "event_timestamp": "http://ontology.naas.ai/abi/eventTimestamp",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    event_timestamp: Optional[
+    created_at: Optional[
         Annotated[
             datetime.datetime,
-            Field(description="ISO 8601 timestamp at which the event occurred."),
+            Field(
+                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
+            ),
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None

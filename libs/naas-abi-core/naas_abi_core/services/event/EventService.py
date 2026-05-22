@@ -73,12 +73,13 @@ class EventService(ServiceBase, IEventService):
 
         event_type = str(event._class_uri)
         event_id = str(event._uri)
-        event_ts = getattr(event, "event_timestamp", None)
-        timestamp = (
-            event_ts.isoformat()
-            if event_ts is not None
-            else datetime.datetime.now().isoformat()
-        )
+
+        # Ensure `created_at` is always populated before we serialize, so it
+        # round-trips through reconstruction. Caller-supplied values are kept.
+        if getattr(event, "created_at", None) is None:
+            event.created_at = datetime.datetime.now()
+        timestamp = event.created_at.isoformat()
+
         payload = event.rdf().serialize(format="nt", encoding="utf-8")
 
         stored = self._adapter.append(event_id, event_type, timestamp, payload)
@@ -287,4 +288,12 @@ class EventService(ServiceBase, IEventService):
                 subject_iri = str(s)
                 break
 
-        return cls.from_iri(subject_iri, query_executor=graph.query)
+        instance = cls.from_iri(subject_iri, query_executor=graph.query)
+
+        # Attach storage metadata as private attrs (bypass Pydantic validation).
+        # `_seq` is the global monotonic counter; `_stored_at` is the ISO
+        # timestamp the adapter persisted. These are storage concerns, not
+        # part of the event's domain schema.
+        object.__setattr__(instance, "_seq", row.seq)
+        object.__setattr__(instance, "_stored_at", row.timestamp)
+        return instance
