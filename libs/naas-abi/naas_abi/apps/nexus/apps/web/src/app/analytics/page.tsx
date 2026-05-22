@@ -48,9 +48,9 @@ const TABS: { key: Tab; label: string }[] = [
 
 function initialFilters(): FilterValue {
   const end = new Date();
-  const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
   return {
-    range: '30d',
+    range: '7d',
     start_date: start.toISOString(),
     end_date: end.toISOString(),
     user_email: 'all',
