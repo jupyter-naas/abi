@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { applyFilters, computeOverview } from '@/app/analytics/lib/aggregate';
 import { parseFilters } from '@/app/analytics/lib/filters';
-import { getMockEvents } from '@/app/analytics/lib/mock-data';
+import eventData from '@/app/analytics/data/events.json';
+import type { AnalyticsEvent } from '@/app/analytics/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+const ALL_EVENTS = eventData.events as AnalyticsEvent[];
+
 export function GET(req: Request) {
   const filters = parseFilters(new URL(req.url));
-  const events = applyFilters(getMockEvents(), filters);
+  const events = applyFilters(ALL_EVENTS, filters);
   return NextResponse.json(computeOverview(events, filters));
 }

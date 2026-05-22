@@ -109,7 +109,6 @@ export function computeOverview(events: AnalyticsEvent[], filters: AnalyticsFilt
   const avgSessionDuration = sessions.length ? Math.floor(totalDurationSec / sessions.length) : 0;
   const returningUsers = Array.from(sessionsByUser.values()).filter((arr) => arr.length > 1).length;
 
-  // Most active workspace
   const wsEventCounts = new Map<string, { id: string; name: string; events: number }>();
   for (const e of events) {
     if (!e.workspace_id) continue;
@@ -133,7 +132,6 @@ export function computeOverview(events: AnalyticsEvent[], filters: AnalyticsFilt
     most_active_workspace: mostActiveWorkspace,
   };
 
-  // Sessions over time
   const sessionsByDay = new Map<string, Set<string>>();
   for (const s of sessions) {
     const k = dayKey(s.started_at);
@@ -146,7 +144,6 @@ export function computeOverview(events: AnalyticsEvent[], filters: AnalyticsFilt
     value: sessionsByDay.get(d)?.size ?? 0,
   }));
 
-  // Active users over time
   const usersByDay = new Map<string, Set<string>>();
   for (const e of events) {
     if (!e.user_email) continue;
@@ -160,28 +157,14 @@ export function computeOverview(events: AnalyticsEvent[], filters: AnalyticsFilt
     value: usersByDay.get(d)?.size ?? 0,
   }));
 
-  // Top users
-  const top_users = computeUserRows(events).slice(0, 10);
-
-  // Top pages
-  const top_pages = computePageRows(events).slice(0, 10);
-
-  // Workspace activity
-  const workspace_activity = computeWorkspaceRows(events);
-
-  // Recent activity feed
-  const recent_activity = [...events]
-    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-    .slice(0, 25);
-
   return {
     kpi,
     sessions_over_time,
     active_users_over_time,
-    top_users,
-    top_pages,
-    workspace_activity,
-    recent_activity,
+    top_users: computeUserRows(events).slice(0, 10),
+    top_pages: computePageRows(events).slice(0, 10),
+    workspace_activity: computeWorkspaceRows(events),
+    recent_activity: [...events].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 25),
   };
 }
 
@@ -258,10 +241,7 @@ export function computeSessionRows(events: AnalyticsEvent[]): SessionRow[] {
   }));
 }
 
-export function computeUserDetail(
-  events: AnalyticsEvent[],
-  email: string,
-): UserDetail | null {
+export function computeUserDetail(events: AnalyticsEvent[], email: string): UserDetail | null {
   const userEvents = events.filter((e) => e.user_email === email);
   if (userEvents.length === 0) return null;
 
