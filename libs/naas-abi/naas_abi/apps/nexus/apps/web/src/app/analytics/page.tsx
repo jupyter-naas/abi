@@ -207,18 +207,30 @@ export default function AnalyticsPage() {
 // Generic fetch hook
 // ---------------------------------------------------------------------------
 
-function useAnalytics<T>(path: string, filters: FilterValue) {
+function useAnalytics<T>(
+  path: string,
+  filters: FilterValue,
+  extra?: Record<string, string>,
+) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const q = buildQuery(filters);
+  const extraKey = extra ? JSON.stringify(extra) : '';
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${getApiUrl()}${path}${q ? `?${q}` : ''}`)
+
+    const p = new URLSearchParams(buildQuery(filters));
+    if (extra) {
+      Object.entries(extra).forEach(([k, v]) => p.set(k, v));
+    }
+    const qs = p.toString();
+    const url = `${getApiUrl()}${path}${qs ? `?${qs}` : ''}`;
+
+    fetch(url)
       .then(async (r) => {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
         return r.json();
@@ -235,7 +247,8 @@ function useAnalytics<T>(path: string, filters: FilterValue) {
     return () => {
       cancelled = true;
     };
-  }, [path, q]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, buildQuery(filters), extraKey]);
 
   return { data, loading, error };
 }
@@ -647,8 +660,9 @@ function WorkspacesSection({ filters }: { filters: FilterValue }) {
 
 function EventsSection({ filters }: { filters: FilterValue }) {
   const { data, loading, error } = useAnalytics<{ events: AnalyticsEvent[] }>(
-    '/api/analytics/events?limit=300',
+    '/api/analytics/events',
     filters,
+    { limit: '300' },
   );
   if (loading && !data) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
