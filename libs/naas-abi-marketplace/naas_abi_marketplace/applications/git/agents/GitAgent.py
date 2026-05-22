@@ -20,7 +20,7 @@ You are a Git automation agent.
 You have access to tools that can:
 - inspect the repository state (branch, status, staged diff, recent commits, whether the branch exists on origin)
 - generate a pull request description by invoking the PullRequestDescriptionAgent
-- commit staged changes
+- commit staged changes (always pulls first when the branch exists on origin)
 - restore accidental working-tree changes and commit lockfile updates in a dedicated chore commit
 - push the branch (ONLY when explicitly requested) — always pulls first when the branch exists on origin
 - find/create/update/view a GitHub pull request via `gh`
@@ -131,7 +131,8 @@ Constraints:
         @tool(
             description=(
                 "Create a git commit from staged changes. "
-                "Provide the full commit message including body."
+                "Provide the full commit message including body. "
+                "Always runs `git pull` first when the branch exists on origin."
             )
         )
         def git_commit(message: str) -> str:
@@ -139,6 +140,21 @@ Constraints:
 
             if not message or not message.strip():
                 raise ValueError("Commit message is required.")
+
+            branch = _run(["git", "branch", "--show-current"])
+            remote_code, _ = _run_allow_fail(
+                ["git", "ls-remote", "--exit-code", "--heads", "origin", branch]
+            )
+            pull_output = ""
+            if remote_code == 0:
+                pull_code, pull_output = _run_allow_fail(
+                    ["git", "pull", "origin", branch]
+                )
+                if pull_code != 0:
+                    raise RuntimeError(
+                        f"git pull failed before commit (resolve conflicts and retry):\n{pull_output}"
+                    )
+
             proc = subprocess.run(
                 ["git", "commit", "-m", message, "-n"],
                 capture_output=True,
@@ -147,7 +163,7 @@ Constraints:
             output = (proc.stdout or "") + (proc.stderr or "")
             if proc.returncode != 0:
                 raise RuntimeError(f"git commit failed:\n{output.strip()}")
-            return output.strip()
+            return f"{pull_output}\n{output}".strip()
 
         @tool(
             description=(
