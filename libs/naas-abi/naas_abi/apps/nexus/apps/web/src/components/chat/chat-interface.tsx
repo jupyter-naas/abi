@@ -14,6 +14,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
+import { useTenant } from '@/contexts/tenant-context';
 import { AgentSelector } from './agent-selector';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
@@ -451,7 +452,7 @@ function LinkWithPreview({
   );
 }
 
-export function ChatInterface() {
+export function ChatInterface({ initialConversationId }: { initialConversationId?: string | null }) {
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -535,10 +536,13 @@ export function ChatInterface() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const router = useRouter();
+
   const {
     activeConversationId,
     selectedAgent,
     createConversation,
+    setActiveConversation,
     addMessage,
     updateLastMessage,
     getWorkspaceConversations,
@@ -547,6 +551,7 @@ export function ChatInterface() {
   } = useWorkspaceStore();
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
+  const { tab_title: tabTitle } = useTenant();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
   const { getAgent } = useAgentsStore();
@@ -580,6 +585,42 @@ export function ChatInterface() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // On first render, activate the conversation referenced in the URL (if any).
+  useEffect(() => {
+    if (!initialConversationId) return;
+    setActiveConversation(initialConversationId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConversationId]);
+
+  // Keep the URL in sync with the active conversation so each conversation has a shareable link.
+  useEffect(() => {
+    if (!mounted) return;
+    if (!currentWorkspaceId) return;
+    const base = `/workspace/${currentWorkspaceId}/chat`;
+    const target = activeConversationId ? `${base}/${activeConversationId}` : base;
+    router.replace(target, { scroll: false });
+  }, [activeConversationId, mounted, currentWorkspaceId, router]);
+
+  // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
+  const activeConversationTitle = useWorkspaceStore((s) =>
+    s.conversations.find((c) => c.id === s.activeConversationId)?.title
+  );
+
+  // Update the browser tab title with the active conversation name.
+  // The 700 ms delay ensures we run after tenant-context.tsx's 600 ms re-apply,
+  // which resets the title after every pathname change.
+  useEffect(() => {
+    if (!mounted) return;
+    const t = setTimeout(() => {
+      if (activeConversationTitle && activeConversationTitle !== 'New Conversation') {
+        document.title = `${activeConversationTitle} | ${tabTitle}`;
+      } else {
+        document.title = `Chat | ${tabTitle}`;
+      }
+    }, 700);
+    return () => clearTimeout(t);
+  }, [activeConversationTitle, mounted, tabTitle]);
 
   // When switching/creating a conversation (including via keyboard shortcut in the sidebar),
   // keep the typing cursor in the chat bar.
