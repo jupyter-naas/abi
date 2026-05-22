@@ -96,6 +96,31 @@ def test_query_since_seq(adapter):
     assert [r.seq for r in rows] == [2, 3]
 
 
+def test_query_until_seq(adapter):
+    for i in range(4):
+        adapter.append(f"urn:e{i}", "urn:Type:A", _ts(i), b"p")
+    rows = adapter.query(until_seq=2)
+    assert [r.seq for r in rows] == [1, 2]
+
+
+def test_query_since_and_until_seq(adapter):
+    for i in range(5):
+        adapter.append(f"urn:e{i}", "urn:Type:A", _ts(i), b"p")
+    rows = adapter.query(since_seq=1, until_seq=3)
+    assert [r.seq for r in rows] == [2, 3]
+
+
+def test_max_seq(adapter):
+    assert adapter.max_seq() == 0
+    adapter.append("urn:e1", "urn:Type:A", _ts(0), b"p")
+    adapter.append("urn:e2", "urn:Type:B", _ts(1), b"p")
+    adapter.append("urn:e3", "urn:Type:A", _ts(2), b"p")
+    assert adapter.max_seq() == 3
+    assert adapter.max_seq(event_type="urn:Type:A") == 3
+    assert adapter.max_seq(event_type="urn:Type:B") == 2
+    assert adapter.max_seq(event_type="urn:Type:DoesNotExist") == 0
+
+
 # ---------------------------------------------------------------------------
 # cursor / query_for_consumer
 # ---------------------------------------------------------------------------
