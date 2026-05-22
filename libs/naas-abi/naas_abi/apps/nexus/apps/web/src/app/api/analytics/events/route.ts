@@ -1,28 +1,20 @@
 import { NextResponse } from 'next/server';
-import { applyFilters } from '@/app/analytics/lib/aggregate';
-import { parseFilters } from '@/app/analytics/lib/filters';
-import { getMockEvents } from '@/app/analytics/lib/mock-data';
+import { passthrough } from '@/app/analytics/lib/api-client';
 
 export const dynamic = 'force-dynamic';
 
 export function GET(req: Request) {
-  const url = new URL(req.url);
-  const filters = parseFilters(url);
-  const limit = Math.max(1, Math.min(1000, Number(url.searchParams.get('limit') ?? '200')));
-  const events = applyFilters(getMockEvents(), filters)
-    .slice(-limit)
-    .reverse();
-  return NextResponse.json({ events });
+  return passthrough('/events', req.url);
 }
 
-export function POST(req: Request) {
-  // Stub ingestion endpoint — the tracking helper posts here. Mock backend
-  // accepts the payload and acknowledges; persistence belongs to a real
-  // analytics pipeline.
-  return new Promise<Response>((resolve) => {
-    req
-      .json()
-      .then((payload) => resolve(NextResponse.json({ ok: true, received: payload })))
-      .catch(() => resolve(NextResponse.json({ ok: false }, { status: 400 })));
-  });
+export async function POST(req: Request) {
+  // Ingestion stub — the analytics service is currently read-only and
+  // is fed by the TTL files. Tracking calls are accepted but ignored so
+  // the front-end's tracker.ts does not error.
+  try {
+    const payload = await req.json();
+    return NextResponse.json({ ok: true, received: payload });
+  } catch {
+    return NextResponse.json({ ok: false }, { status: 400 });
+  }
 }
