@@ -1265,7 +1265,7 @@ nexus:AddUserToWorkspace a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty nexus:createdAt ;
           owl:allValuesFrom abi:TemporalInstant
-        ] .
+        ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:createdBy ;
           owl:allValuesFrom abi:Person

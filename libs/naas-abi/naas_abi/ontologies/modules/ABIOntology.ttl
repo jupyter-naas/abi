@@ -351,15 +351,15 @@ abi:TemporalRegion a owl:Class ;
     rdfs:label "temporal region"@en ;
     skos:definition "(Elucidation) A temporal region is an occurrent over which processes can unfold"@en ;
     skos:example "As for zero-dimensional temporal region and one-dimensional temporal region"@en ;
-    rdfs:subClassOf bfo:BFO_0000008 ;
-    [ a owl:Restriction ;
-      owl:onProperty abi:hasFirstInstant ;
-      owl:allValuesFrom abi:TemporalInstant
-    ] ,
-    [ a owl:Restriction ;
-      owl:onProperty abi:hasLastInstant ;
-      owl:allValuesFrom abi:TemporalInstant
-    ] .
+    rdfs:subClassOf bfo:BFO_0000008 ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:hasFirstInstant ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:hasLastInstant ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] .
 
 abi:TemporalInstant a owl:Class ;
     rdfs:label "temporal instant"@en ;
@@ -372,18 +372,18 @@ abi:TemporalInstant a owl:Class ;
 
 abi:first_name a owl:DatatypeProperty ;
     rdfs:label "first name"@en ;
-    skos:definition "x first name y =Def x is a person & y is a string & y is the first name of x"@en .
+    skos:definition "x first name y =Def x is a person & y is a string & y is the first name of x"@en ;
     rdfs:domain abi:Person ;
     rdfs:range xsd:string .
 
 abi:last_name a owl:DatatypeProperty ;
     rdfs:label "last name"@en ;
-    skos:definition "x last name y =Def x is a person & y is a string & y is the last name of x"@en .
+    skos:definition "x last name y =Def x is a person & y is a string & y is the last name of x"@en ;
     rdfs:domain abi:Person ;
     rdfs:range xsd:string .
 
 abi:full_name a owl:DatatypeProperty ;
     rdfs:label "full name"@en ;
-    skos:definition "x full name y =Def x is a person & y is a string & y is the full name of x"@en .
+    skos:definition "x full name y =Def x is a person & y is a string & y is the full name of x"@en ;
     rdfs:domain abi:Person ;
     rdfs:range xsd:string .

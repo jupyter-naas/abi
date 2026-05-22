@@ -1,4 +1,4 @@
-# onto2py-source-sha256: be8c218907a723b7140842e3df3bf743c7bda547713c6d8eaabbc0b779cb6dc9
+# onto2py-source-sha256: 57d817d7dbb1700c3078b900b582a01d4cea5754a3878376bd81e0ab01e31c62
 from __future__ import annotations
 
 import datetime
@@ -309,6 +309,134 @@ class RDFEntity(BaseModel):
         return g
 
 
+class Person(RDFEntity):
+    """
+    Person
+    """
+
+    _class_uri: ClassVar[str] = "https://www.commoncoreontologies.org/ont00001262"
+    _name: ClassVar[str] = "Person"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+
+class Disposition(RDFEntity):
+    """
+    disposition
+    """
+
+    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000016"
+    _name: ClassVar[str] = "disposition"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_material_basis": "http://purl.obolibrary.org/obo/BFO_0000218",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"has_material_basis"}
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    has_material_basis: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b has material basis c =Def b is a disposition & c is a material entity & there is some d bearer of b & there is some time t such that c is a continuant part of d at t & d has disposition b because c is a continuant part of d at t"
+            ),
+        ]
+    ] = None
+
+
+class TemporalRegion(RDFEntity):
+    """
+    temporal region
+    """
+
+    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000008"
+    _name: ClassVar[str] = "temporal region"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_first_instant": "http://purl.obolibrary.org/obo/BFO_0000222",
+        "has_last_instant": "http://purl.obolibrary.org/obo/BFO_0000224",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occurrent_part_of": "http://purl.obolibrary.org/obo/BFO_0000132",
+        "temporal_part_of": "http://purl.obolibrary.org/obo/BFO_0000139",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "has_first_instant",
+        "has_last_instant",
+        "occurrent_part_of",
+        "temporal_part_of",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    has_first_instant: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(description="t has first instant t' =Def t' first instant of t"),
+        ]
+    ] = None
+    has_last_instant: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(description="t has last instant t' =Def t' last instant of t"),
+        ]
+    ] = None
+    occurrent_part_of: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="(Elucidation) occurrent part of is a relation between occurrents b and c when b is part of c"
+            ),
+        ]
+    ] = None
+    temporal_part_of: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="b temporal part of c =Def b occurrent part of c & (b and c are temporal regions) or (b and c are spatiotemporal regions & b temporally projects onto an occurrent part of the temporal region that c temporally projects onto) or (b and c are processes or process boundaries & b occupies a temporal region that is an occurrent part of the temporal region that c occupies)"
+            ),
+        ]
+    ] = None
+
+
 class Role(RDFEntity):
     """
     role
@@ -335,60 +463,13 @@ class Role(RDFEntity):
     ] = os.environ.get("USER")
 
 
-class MaterialEntity(RDFEntity):
+class Quality(RDFEntity):
     """
-    material entity
-    """
-
-    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000040"
-    _name: ClassVar[str] = "material entity"
-    _property_uris: ClassVar[dict] = {
-        "continuant_part_of": "http://purl.obolibrary.org/obo/BFO_0000176",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_continuant_part": "http://purl.obolibrary.org/obo/BFO_0000178",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "continuant_part_of",
-        "has_continuant_part",
-    }
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    continuant_part_of: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
-            ),
-        ]
-    ] = None
-    has_continuant_part: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Site, URIRef, str]],
-            Field(description="b has continuant part c =Def c continuant part of b"),
-        ]
-    ] = None
-
-
-class GenericallyDependentContinuant(RDFEntity):
-    """
-    generically dependent continuant
+    quality
     """
 
-    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000031"
-    _name: ClassVar[str] = "generically dependent continuant"
+    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000019"
+    _name: ClassVar[str] = "quality"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -408,26 +489,19 @@ class GenericallyDependentContinuant(RDFEntity):
     ] = os.environ.get("USER")
 
 
-class Process(RDFEntity):
+class TemporalInstant(RDFEntity):
     """
-    process
+    temporal instant
     """
 
-    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000015"
-    _name: ClassVar[str] = "process"
+    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000203"
+    _name: ClassVar[str] = "temporal instant"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_occurrent_part": "http://purl.obolibrary.org/obo/BFO_0000117",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occurrent_part_of": "http://purl.obolibrary.org/obo/BFO_0000132",
-        "temporal_part_of": "http://purl.obolibrary.org/obo/BFO_0000139",
     }
-    _object_properties: ClassVar[set[str]] = {
-        "has_occurrent_part",
-        "occurrent_part_of",
-        "temporal_part_of",
-    }
+    _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
@@ -439,30 +513,6 @@ class Process(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
-
-    # Object properties
-    has_occurrent_part: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has occurrent part c =Def c occurrent part of b"),
-        ]
-    ] = None
-    occurrent_part_of: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(
-                description="(Elucidation) occurrent part of is a relation between occurrents b and c when b is part of c"
-            ),
-        ]
-    ] = None
-    temporal_part_of: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(
-                description="b temporal part of c =Def b occurrent part of c & (b and c are temporal regions) or (b and c are spatiotemporal regions & b temporally projects onto an occurrent part of the temporal region that c temporally projects onto) or (b and c are processes or process boundaries & b occupies a temporal region that is an occurrent part of the temporal region that c occupies)"
-            ),
-        ]
-    ] = None
 
 
 class Site(RDFEntity):
@@ -522,19 +572,24 @@ class Site(RDFEntity):
     ] = None
 
 
-class Quality(RDFEntity):
+class GenericallyDependentContinuant(RDFEntity):
     """
-    quality
+    generically dependent continuant
     """
 
-    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000019"
-    _name: ClassVar[str] = "quality"
+    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000031"
+    _name: ClassVar[str] = "generically dependent continuant"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://purl.obolibrary.org/obo/BFO_0000084",
+        "is_concretized_by": "http://purl.obolibrary.org/obo/BFO_0000058",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+    }
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
@@ -547,31 +602,21 @@ class Quality(RDFEntity):
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
-
-class Person(RDFEntity):
-    """
-    Person
-    """
-
-    _class_uri: ClassVar[str] = "https://www.commoncoreontologies.org/ont00001262"
-    _name: ClassVar[str] = "Person"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = set()
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
 
 
 class Organization(RDFEntity):
@@ -600,47 +645,28 @@ class Organization(RDFEntity):
     ] = os.environ.get("USER")
 
 
-class Disposition(RDFEntity):
+class MaterialEntity(RDFEntity):
     """
-    disposition
+    material entity
     """
 
-    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000016"
-    _name: ClassVar[str] = "disposition"
+    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000040"
+    _name: ClassVar[str] = "material entity"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://purl.obolibrary.org/obo/BFO_0000176",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "has_continuant_part": "http://purl.obolibrary.org/obo/BFO_0000178",
+        "has_member_part": "http://purl.obolibrary.org/obo/BFO_0000115",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "material_basis_of": "http://purl.obolibrary.org/obo/BFO_0000127",
     }
-    _object_properties: ClassVar[set[str]] = set()
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-
-class TemporalRegion(RDFEntity):
-    """
-    temporal region
-    """
-
-    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000008"
-    _name: ClassVar[str] = "temporal region"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occurrent_part_of": "http://purl.obolibrary.org/obo/BFO_0000132",
-        "temporal_part_of": "http://purl.obolibrary.org/obo/BFO_0000139",
+    _object_properties: ClassVar[set[str]] = {
+        "continuant_part_of",
+        "has_continuant_part",
+        "has_member_part",
+        "material_basis_of",
     }
-    _object_properties: ClassVar[set[str]] = {"occurrent_part_of", "temporal_part_of"}
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
@@ -654,17 +680,102 @@ class TemporalRegion(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
+    continuant_part_of: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
+            ),
+        ]
+    ] = None
+    has_continuant_part: Optional[
+        Annotated[
+            List[Union[MaterialEntity, Site, URIRef, str]],
+            Field(description="b has continuant part c =Def c continuant part of b"),
+        ]
+    ] = None
+    has_member_part: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(description="b has member part c =Def c member part of b"),
+        ]
+    ] = None
+    material_basis_of: Optional[
+        Annotated[
+            List[Union[Disposition, URIRef, str]],
+            Field(description="b material basis of c =Def c has material basis b"),
+        ]
+    ] = None
+
+
+class Process(RDFEntity):
+    """
+    process
+    """
+
+    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000015"
+    _name: ClassVar[str] = "process"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_occurrent_part": "http://purl.obolibrary.org/obo/BFO_0000117",
+        "has_participant": "http://purl.obolibrary.org/obo/BFO_0000057",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occurrent_part_of": "http://purl.obolibrary.org/obo/BFO_0000132",
+        "realizes": "http://purl.obolibrary.org/obo/BFO_0000055",
+        "temporal_part_of": "http://purl.obolibrary.org/obo/BFO_0000139",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "has_occurrent_part",
+        "has_participant",
+        "occurrent_part_of",
+        "realizes",
+        "temporal_part_of",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    has_occurrent_part: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(description="b has occurrent part c =Def c occurrent part of b"),
+        ]
+    ] = None
+    has_participant: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(description="p has participant c =Def c participates in p"),
+        ]
+    ] = None
     occurrent_part_of: Optional[
         Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
+            List[Union[Process, URIRef, str]],
             Field(
                 description="(Elucidation) occurrent part of is a relation between occurrents b and c when b is part of c"
             ),
         ]
     ] = None
+    realizes: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
+            ),
+        ]
+    ] = None
     temporal_part_of: Optional[
         Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
+            List[Union[Process, URIRef, str]],
             Field(
                 description="b temporal part of c =Def b occurrent part of c & (b and c are temporal regions) or (b and c are spatiotemporal regions & b temporally projects onto an occurrent part of the temporal region that c temporally projects onto) or (b and c are processes or process boundaries & b occupies a temporal region that is an occurrent part of the temporal region that c occupies)"
             ),
@@ -679,241 +790,6 @@ class DocumentContentEntity(GenericallyDependentContinuant, RDFEntity):
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/DocumentContentEntity"
     _name: ClassVar[str] = "Document Content Entity"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "generically_depends_on",
-        "is_concretized_by",
-    }
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-
-
-class Transcript(DocumentContentEntity, RDFEntity):
-    """
-    Transcript
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Transcript"
-    _name: ClassVar[str] = "Transcript"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "generically_depends_on",
-        "is_concretized_by",
-    }
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-
-
-class FormDocument(DocumentContentEntity, RDFEntity):
-    """
-    Form Document
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/FormDocument"
-    _name: ClassVar[str] = "Form Document"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "generically_depends_on",
-        "is_concretized_by",
-    }
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-
-
-class Report(DocumentContentEntity, RDFEntity):
-    """
-    Report
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Report"
-    _name: ClassVar[str] = "Report"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "generically_depends_on",
-        "is_concretized_by",
-    }
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-
-
-class Book(DocumentContentEntity, RDFEntity):
-    """
-    Book
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Book"
-    _name: ClassVar[str] = "Book"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "generically_depends_on",
-        "is_concretized_by",
-    }
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-
-
-class Spreadsheet(DocumentContentEntity, RDFEntity):
-    """
-    Spreadsheet
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Spreadsheet"
-    _name: ClassVar[str] = "Spreadsheet"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -1001,21 +877,257 @@ class JournalArticle(DocumentContentEntity, RDFEntity):
     ] = None
 
 
+class Book(DocumentContentEntity, RDFEntity):
+    """
+    Book
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Book"
+    _name: ClassVar[str] = "Book"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+
+
+class Transcript(DocumentContentEntity, RDFEntity):
+    """
+    Transcript
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Transcript"
+    _name: ClassVar[str] = "Transcript"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+
+
+class Spreadsheet(DocumentContentEntity, RDFEntity):
+    """
+    Spreadsheet
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Spreadsheet"
+    _name: ClassVar[str] = "Spreadsheet"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+
+
+class Report(DocumentContentEntity, RDFEntity):
+    """
+    Report
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Report"
+    _name: ClassVar[str] = "Report"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+
+
+class FormDocument(DocumentContentEntity, RDFEntity):
+    """
+    Form Document
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/FormDocument"
+    _name: ClassVar[str] = "Form Document"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+
+
 # Rebuild models to resolve forward references
-Role.model_rebuild()
-MaterialEntity.model_rebuild()
-GenericallyDependentContinuant.model_rebuild()
-Process.model_rebuild()
-Site.model_rebuild()
-Quality.model_rebuild()
 Person.model_rebuild()
-Organization.model_rebuild()
 Disposition.model_rebuild()
 TemporalRegion.model_rebuild()
+Role.model_rebuild()
+Quality.model_rebuild()
+TemporalInstant.model_rebuild()
+Site.model_rebuild()
+GenericallyDependentContinuant.model_rebuild()
+Organization.model_rebuild()
+MaterialEntity.model_rebuild()
+Process.model_rebuild()
 DocumentContentEntity.model_rebuild()
-Transcript.model_rebuild()
-FormDocument.model_rebuild()
-Report.model_rebuild()
-Book.model_rebuild()
-Spreadsheet.model_rebuild()
 JournalArticle.model_rebuild()
+Book.model_rebuild()
+Transcript.model_rebuild()
+Spreadsheet.model_rebuild()
+Report.model_rebuild()
+FormDocument.model_rebuild()
