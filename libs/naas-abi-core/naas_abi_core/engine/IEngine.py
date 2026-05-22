@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Dict, List, Protocol, Union, runtime_checkable
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -32,6 +33,7 @@ class IEngine:
         __kv: KeyValueService | None
         __email: EmailService | None
         __cache: CacheService | None
+        __events: EventService | None
 
         def __init__(
             self,
@@ -43,6 +45,7 @@ class IEngine:
             kv: KeyValueService | None = None,
             email: EmailService | None = None,
             cache: CacheService | None = None,
+            events: EventService | None = None,
         ):
             self.__object_storage = object_storage
             self.__triple_store = triple_store
@@ -52,6 +55,7 @@ class IEngine:
             self.__kv = kv
             self.__email = email
             self.__cache = cache
+            self.__events = events
 
         @property
         def kv(self) -> KeyValueService:
@@ -106,6 +110,14 @@ class IEngine:
             return self.__cache is not None
 
         @property
+        def events(self) -> EventService:
+            assert self.__events is not None, "Event service is not initialized"
+            return self.__events
+
+        def events_available(self) -> bool:
+            return self.__events is not None
+
+        @property
         def all(
             self,
         ) -> List[
@@ -118,6 +130,7 @@ class IEngine:
                 KeyValueService | None,
                 EmailService | None,
                 CacheService | None,
+                EventService | None,
             ]
         ]:
             return [
@@ -129,6 +142,7 @@ class IEngine:
                 self.__kv,
                 self.__email,
                 self.__cache,
+                self.__events,
             ]
 
         def wire_services(self) -> None:
