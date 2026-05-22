@@ -75,6 +75,31 @@ function detectBrowser(): string | undefined {
   return 'Unknown';
 }
 
+// Best-effort, client-side only. Derives country from the user's locale
+// region (e.g. `fr-FR` → `FR`). Locale ≠ physical location, but it works
+// offline and needs no third-party call. For accurate geolocation, enrich
+// server-side from the request IP (e.g. `x-vercel-ip-country`).
+function detectCountry(): string | undefined {
+  if (typeof navigator === 'undefined') return undefined;
+  try {
+    const tag = navigator.language;
+    if (!tag) return undefined;
+    const region = new Intl.Locale(tag).region;
+    return region || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function shortReferrer(): string | undefined {
+  if (typeof document === 'undefined' || !document.referrer) return undefined;
+  try {
+    return new URL(document.referrer).hostname || undefined;
+  } catch {
+    return document.referrer;
+  }
+}
+
 function getCurrentUser(): { id?: string; email?: string } {
   if (typeof window === 'undefined') return {};
   try {
@@ -119,7 +144,8 @@ export function trackEvent(
     properties: context.properties,
     device: detectDevice(),
     browser: detectBrowser(),
-    referrer: document.referrer || undefined,
+    country: detectCountry(),
+    referrer: shortReferrer(),
   };
 
   // Fire-and-forget POST. We use keepalive so events sent on unload still ship.

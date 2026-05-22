@@ -10,27 +10,25 @@
 @prefix abi:   <http://ontology.naas.ai/abi/> .
 @prefix nexus: <http://ontology.naas.ai/nexus/> .
 
-<http://ontology.naas.ai/abi/nexus/NexusPlatformOntology> a owl:Ontology ;
-  owl:imports
-    <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ,
-    <https://www.commoncoreontologies.org/AgentOntology> ,
-    <https://www.commoncoreontologies.org/InformationEntityOntology> ,
-    <https://www.commoncoreontologies.org/EventOntology> ;
+nexus:PlatformOntology a owl:Ontology ;
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   dc:title "Nexus Platform Ontology"@en ;
-  dc:description "Ontology for core continuant concepts of the Nexus platform."@en ;
+  dc:description "Ontology for the Nexus platform."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Ontology for the Nexus platform."@en ;
   dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
-  dc11:date "2026-03-27"^^xsd:date .
+  dc11:date "2026-05-22"^^xsd:date .
 
 #################################################################
 #    Classes
 #################################################################
 
+# WHO bucket — material entity bearing a tenant role
 nexus:Tenant a owl:Class ;
     rdfs:label "Tenant"@en ;
     skos:definition "A role borne by an organization in relation to a deployed Nexus platform instance, through which the organization is granted tenant status within the platform."@en ;
     skos:example "Naas.ai as tenant of a Nexus deployment", "Customer X as tenant of a private Nexus instance", "Research Lab Y as tenant of a shared deployment"@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isTenantOf ;
           owl:someValuesFrom nexus:Organization
@@ -40,11 +38,12 @@ nexus:Tenant a owl:Class ;
           owl:allValuesFrom nexus:Organization
         ] .
 
+# WHO bucket — physical machine (material entity)
 nexus:Server a owl:Class ;
     rdfs:label "Server"@en ;
     skos:definition "A physical machine that hosts or supports the deployment and operation of the Nexus platform."@en ;
     skos:example "AWS EC2 host", "On-premise rack server", "Dedicated GPU server"@en ;
-    rdfs:subClassOf bfo:BFO_0000040 ,
+    rdfs:subClassOf abi:MaterialEntity ,
         [ a owl:Restriction ;
           owl:onProperty nexus:locatedInDeploymentSite ;
           owl:someValuesFrom nexus:DeploymentSite
@@ -54,23 +53,26 @@ nexus:Server a owl:Class ;
           owl:allValuesFrom nexus:DeploymentSite
         ] .
 
+# WHERE bucket — deployment site (site)
 nexus:DeploymentSite a owl:Class ;
     rdfs:label "Deployment Site"@en ;
     skos:definition "A physical or digital site in which a Nexus platform deployment is located or operates."@en ;
     skos:example "Europe West deployment region", "US East deployment region", "Private datacenter zone A"@en ;
-    rdfs:subClassOf bfo:BFO_0000029 .
+    rdfs:subClassOf abi:Site .
 
+# WHO bucket — person registered in the platform
 nexus:User a owl:Class ;
     rdfs:label "User"@en ;
     skos:definition "A person registered in or recognized by the Nexus platform as part of its set of users."@en ;
     skos:example "Alice Johnson", "Bob Smith", "Charlie Brown"@en ;
-    rdfs:subClassOf cco:ont00001262 .
+    rdfs:subClassOf abi:Person .
 
+# WHO bucket — organization using the platform
 nexus:Organization a owl:Class ;
     rdfs:label "Nexus Organization"@en ;
     skos:definition "An organization that uses, manages, or is represented within the Nexus platform."@en ;
     skos:example "Naas.ai", "Customer X", "Research Team"@en ;
-    rdfs:subClassOf cco:ont00001180 ,
+    rdfs:subClassOf abi:Organization ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasWorkspace ;
           owl:allValuesFrom nexus:Workspace
@@ -84,11 +86,12 @@ nexus:Organization a owl:Class ;
           owl:allValuesFrom nexus:Tenant
         ] .
 
+# HOW WE KNOW bucket — configured digital workspace (generically dependent continuant)
 nexus:Workspace a owl:Class ;
     rdfs:label "Workspace"@en ;
     skos:definition "A generically dependent continuant representing a configured digital workspace in the Nexus platform, including its structure, settings, permissions, and organization of resources and activities."@en ;
     skos:example "Naas.ai Main Workspace", "Customer X Workspace", "Internal Ontology Workspace"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isWorkspaceOf ;
           owl:someValuesFrom nexus:Organization
@@ -114,11 +117,12 @@ nexus:Workspace a owl:Class ;
           owl:allValuesFrom nexus:WorkspaceRole
         ] .
 
+# HOW WE KNOW bucket — stored search artifact (generically dependent continuant)
 nexus:Search a owl:Class ;
     rdfs:label "Search"@en ;
     skos:definition "A generically dependent continuant representing a configured search capability or stored search artifact in the Nexus platform through which information from configured sources can be accessed."@en ;
     skos:example "Global platform search", "Ontology search", "Knowledge graph search"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasSearchRole ;
           owl:someValuesFrom nexus:SearchRole
@@ -128,11 +132,12 @@ nexus:Search a owl:Class ;
           owl:allValuesFrom nexus:SearchRole
         ] .
 
+# HOW WE KNOW bucket — stored conversational artifact (generically dependent continuant)
 nexus:Conversation a owl:Class ;
     rdfs:label "Conversation"@en ;
     skos:definition "A generically dependent continuant representing a stored conversational artifact in the Nexus platform, composed of messages exchanged between users and agents."@en ;
     skos:example "Conversation about ontology design", "Support discussion with an agent", "Research chat about graph views"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isConversationOf ;
           owl:someValuesFrom nexus:Workspace
@@ -154,11 +159,12 @@ nexus:Conversation a owl:Class ;
           owl:allValuesFrom nexus:ConversationRole
         ] .
 
+# HOW WE KNOW bucket — stored message unit (generically dependent continuant)
 nexus:Message a owl:Class ;
     rdfs:label "Message"@en ;
     skos:definition "A generically dependent continuant representing a stored message within a conversation in the Nexus platform."@en ;
     skos:example "User prompt", "Agent answer", "Follow-up clarification message"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isMessageOf ;
           owl:someValuesFrom nexus:Conversation
@@ -176,11 +182,12 @@ nexus:Message a owl:Class ;
           owl:allValuesFrom nexus:MessageRole
         ] .
 
+# HOW WE KNOW bucket — configured software agent (generically dependent continuant)
 nexus:Agent a owl:Class ;
     rdfs:label "Agent"@en ;
     skos:definition "A generically dependent continuant representing a configured software agent in the Nexus platform."@en ;
     skos:example "Ontology Assistant", "Search Assistant", "KG Assistant"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasAgentTool ;
           owl:someValuesFrom nexus:AgentTool
@@ -218,11 +225,12 @@ nexus:Agent a owl:Class ;
           owl:allValuesFrom nexus:AIModel
         ] .
 
+# HOW WE KNOW bucket — tool available to an agent (generically dependent continuant)
 nexus:AgentTool a owl:Class ;
     rdfs:label "Agent Tool"@en ;
     skos:definition "A generically dependent continuant representing a tool available to an agent in the Nexus platform."@en ;
     skos:example "Web Search", "Read File", "Get current date and time"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isToolOf ;
           owl:someValuesFrom nexus:Agent
@@ -232,11 +240,12 @@ nexus:AgentTool a owl:Class ;
           owl:allValuesFrom nexus:Agent
         ] .
 
+# HOW WE KNOW bucket — intent available to an agent (generically dependent continuant)
 nexus:AgentIntent a owl:Class ;
     rdfs:label "Agent Intent"@en ;
     skos:definition "A generically dependent continuant representing an intent available to an agent in the Nexus platform with intent type, value, target and scope."@en ;
     skos:example "type: RAW, value: What can you tell about you?, target: I am a software agent developed by Naas.ai, scope: INDIRECT"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isIntentOf ;
           owl:someValuesFrom nexus:Agent
@@ -246,11 +255,12 @@ nexus:AgentIntent a owl:Class ;
           owl:allValuesFrom nexus:Agent
         ] .
 
+# HOW WE KNOW bucket — formal ontology stored in the platform (generically dependent continuant)
 nexus:Ontology a owl:Class ;
     rdfs:label "Ontology"@en ;
     skos:definition "A generically dependent continuant representing a formal ontology stored in the Nexus platform."@en ;
     skos:example "BFO 7 Buckets Ontology", "Nexus Platform Ontology", "Customer Domain Ontology"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasOntologyModule ;
           owl:allValuesFrom nexus:OntologyModule
@@ -272,11 +282,12 @@ nexus:Ontology a owl:Class ;
           owl:allValuesFrom nexus:OntologyRole
         ] .
 
+# HOW WE KNOW bucket — modular portion of an ontology (generically dependent continuant)
 nexus:OntologyModule a owl:Class ;
     rdfs:label "Ontology Module"@en ;
     skos:definition "A generically dependent continuant representing a modular portion of an ontology stored and managed in the Nexus platform."@en ;
     skos:example "Agent module", "Platform module", "Knowledge graph module"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyModuleOf ;
           owl:someValuesFrom nexus:Ontology
@@ -294,11 +305,12 @@ nexus:OntologyModule a owl:Class ;
           owl:allValuesFrom nexus:OntologyModuleRole
         ] .
 
+# HOW WE KNOW bucket — class defined within an ontology (generically dependent continuant)
 nexus:OntologyClass a owl:Class ;
     rdfs:label "Ontology Class"@en ;
     skos:definition "A generically dependent continuant representing a class defined within an ontology."@en ;
     skos:example "Workspace", "Organization"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasOntologyClassRole ;
           owl:someValuesFrom nexus:OntologyClassRole
@@ -308,11 +320,12 @@ nexus:OntologyClass a owl:Class ;
           owl:allValuesFrom nexus:OntologyClassRole
         ] .
 
+# HOW WE KNOW bucket — object property defined within an ontology (generically dependent continuant)
 nexus:OntologyObjectProperty a owl:Class ;
     rdfs:label "Ontology Object Property"@en ;
     skos:definition "A generically dependent continuant representing an object property defined within an ontology."@en ;
     skos:example "hasWorkspace", "hasTenant"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasOntologyObjectPropertyRole ;
           owl:someValuesFrom nexus:OntologyObjectPropertyRole
@@ -322,11 +335,12 @@ nexus:OntologyObjectProperty a owl:Class ;
           owl:allValuesFrom nexus:OntologyObjectPropertyRole
         ] .
 
+# HOW WE KNOW bucket — structured graph of entities and relations (generically dependent continuant)
 nexus:KnowledgeGraph a owl:Class ;
     rdfs:label "Knowledge Graph"@en ;
     skos:definition "A generically dependent continuant representing a structured graph of entities and relations stored in the Nexus platform."@en ;
     skos:example "Project knowledge graph", "Customer knowledge graph", "Ontology-driven graph store"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasGraphView ;
           owl:allValuesFrom nexus:GraphView
@@ -340,11 +354,12 @@ nexus:KnowledgeGraph a owl:Class ;
           owl:allValuesFrom nexus:KnowledgeGraphRole
         ] .
 
+# HOW WE KNOW bucket — configured partial representation of graph(s) (generically dependent continuant)
 nexus:GraphView a owl:Class ;
     rdfs:label "Graph View"@en ;
     skos:definition "A generically dependent continuant representing a partial and configured representation of one or more named graphs, defined by graph selection and filters for visualization or analysis."@en ;
     skos:example "Customer-only instance view", "Ontology class hierarchy view", "Project analytics view"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:includesKnowledgeGraph ;
           owl:someValuesFrom nexus:KnowledgeGraph
@@ -362,11 +377,12 @@ nexus:GraphView a owl:Class ;
           owl:allValuesFrom nexus:GraphViewRole
         ] .
 
+# HOW WE KNOW bucket — graph-specific selection criterion (generically dependent continuant)
 nexus:GraphFilter a owl:Class ;
     rdfs:label "Graph Filter"@en ;
     skos:definition "A generically dependent continuant representing a graph-specific selection criterion used to restrict or structure the representation of data in a graph view."@en ;
     skos:example "Filter by class Workspace", "Filter by graph ontology/core", "Filter by tenant Customer X"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasGraphFilterRole ;
           owl:someValuesFrom nexus:GraphFilterRole
@@ -376,11 +392,12 @@ nexus:GraphFilter a owl:Class ;
           owl:allValuesFrom nexus:GraphFilterRole
         ] .
 
+# HOW WE KNOW bucket — digital file accessible through the platform (generically dependent continuant)
 nexus:Files a owl:Class ;
     rdfs:label "Files"@en ;
     skos:definition "A generically dependent continuant representing a digital file accessible through the Nexus platform."@en ;
     skos:example "ontology.ttl", "report.pdf", "dataset.csv"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasFileRole ;
           owl:someValuesFrom nexus:FileRole
@@ -390,11 +407,12 @@ nexus:Files a owl:Class ;
           owl:allValuesFrom nexus:FileRole
         ] .
 
+# HOW WE KNOW bucket — configured file system source (generically dependent continuant)
 nexus:FileSystem a owl:Class ;
     rdfs:label "File System"@en ;
     skos:definition "A generically dependent continuant representing a configured file system source accessible from the Nexus platform."@en ;
     skos:example "Local storage", "S3 connector", "Google Drive connector"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasFiles ;
           owl:allValuesFrom nexus:Files
@@ -408,11 +426,12 @@ nexus:FileSystem a owl:Class ;
           owl:allValuesFrom nexus:FileSystemRole
         ] .
 
+# HOW WE KNOW bucket — marketplace application or customization (generically dependent continuant)
 nexus:MarketplaceApps a owl:Class ;
     rdfs:label "Marketplace Apps"@en ;
     skos:definition "A generically dependent continuant representing a configured application or customization available in or deployed through the Nexus platform marketplace."@en ;
     skos:example "Knowledge Browser App", "Ontology Editor App", "Graph Analytics App"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasMarketplaceAppRole ;
           owl:someValuesFrom nexus:MarketplaceAppRole
@@ -422,10 +441,11 @@ nexus:MarketplaceApps a owl:Class ;
           owl:allValuesFrom nexus:MarketplaceAppRole
         ] .
 
+# WHY bucket — roles (role)
 nexus:WorkspaceRole a owl:Class ;
     rdfs:label "Workspace Role"@en ;
     skos:definition "A role associated with a workspace as a configured digital environment in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isWorkspaceRoleOf ;
           owl:someValuesFrom nexus:Workspace
@@ -438,7 +458,7 @@ nexus:WorkspaceRole a owl:Class ;
 nexus:SearchRole a owl:Class ;
     rdfs:label "Search Role"@en ;
     skos:definition "A role associated with a search artifact as a search capability in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isSearchRoleOf ;
           owl:someValuesFrom nexus:Search
@@ -451,7 +471,7 @@ nexus:SearchRole a owl:Class ;
 nexus:ConversationRole a owl:Class ;
     rdfs:label "Conversation Role"@en ;
     skos:definition "A role associated with a conversation as a stored communication artifact in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isConversationRoleOf ;
           owl:someValuesFrom nexus:Conversation
@@ -464,7 +484,7 @@ nexus:ConversationRole a owl:Class ;
 nexus:MessageRole a owl:Class ;
     rdfs:label "Message Role"@en ;
     skos:definition "A role associated with a message as a stored communication unit in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isMessageRoleOf ;
           owl:someValuesFrom nexus:Message
@@ -477,7 +497,7 @@ nexus:MessageRole a owl:Class ;
 nexus:AgentRole a owl:Class ;
     rdfs:label "Agent Role"@en ;
     skos:definition "A role associated with an agent as a configured software assistant in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isAgentRoleOf ;
           owl:someValuesFrom nexus:Agent
@@ -490,7 +510,7 @@ nexus:AgentRole a owl:Class ;
 nexus:OntologyRole a owl:Class ;
     rdfs:label "Ontology Role"@en ;
     skos:definition "A role associated with an ontology as a formal knowledge schema in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyRoleOf ;
           owl:someValuesFrom nexus:Ontology
@@ -503,7 +523,7 @@ nexus:OntologyRole a owl:Class ;
 nexus:OntologyModuleRole a owl:Class ;
     rdfs:label "Ontology Module Role"@en ;
     skos:definition "A role associated with an ontology module as a modular portion of an ontology in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyModuleRoleOf ;
           owl:someValuesFrom nexus:OntologyModule
@@ -516,7 +536,7 @@ nexus:OntologyModuleRole a owl:Class ;
 nexus:OntologyClassRole a owl:Class ;
     rdfs:label "Ontology Class Role"@en ;
     skos:definition "A role associated with an ontology class as a formal classificatory element in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyClassRoleOf ;
           owl:someValuesFrom nexus:OntologyClass
@@ -529,7 +549,7 @@ nexus:OntologyClassRole a owl:Class ;
 nexus:OntologyObjectPropertyRole a owl:Class ;
     rdfs:label "Ontology Object Property Role"@en ;
     skos:definition "A role associated with an ontology object property as a formal relational element in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyObjectPropertyRoleOf ;
           owl:someValuesFrom nexus:OntologyObjectProperty
@@ -542,7 +562,7 @@ nexus:OntologyObjectPropertyRole a owl:Class ;
 nexus:KnowledgeGraphRole a owl:Class ;
     rdfs:label "Knowledge Graph Role"@en ;
     skos:definition "A role associated with a knowledge graph as a structured graph artifact in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isKnowledgeGraphRoleOf ;
           owl:someValuesFrom nexus:KnowledgeGraph
@@ -555,7 +575,7 @@ nexus:KnowledgeGraphRole a owl:Class ;
 nexus:GraphViewRole a owl:Class ;
     rdfs:label "Graph View Role"@en ;
     skos:definition "A role associated with a graph view as a configured graph representation in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isGraphViewRoleOf ;
           owl:someValuesFrom nexus:GraphView
@@ -568,7 +588,7 @@ nexus:GraphViewRole a owl:Class ;
 nexus:GraphFilterRole a owl:Class ;
     rdfs:label "Graph Filter Role"@en ;
     skos:definition "A role associated with a graph filter as a graph-specific selection criterion in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isGraphFilterRoleOf ;
           owl:someValuesFrom nexus:GraphFilter
@@ -581,7 +601,7 @@ nexus:GraphFilterRole a owl:Class ;
 nexus:FileRole a owl:Class ;
     rdfs:label "File Role"@en ;
     skos:definition "A role associated with a digital file as an accessible file artifact in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isFileRoleOf ;
           owl:someValuesFrom nexus:Files
@@ -594,7 +614,7 @@ nexus:FileRole a owl:Class ;
 nexus:FileSystemRole a owl:Class ;
     rdfs:label "File System Role"@en ;
     skos:definition "A role associated with a configured file system source in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isFileSystemRoleOf ;
           owl:someValuesFrom nexus:FileSystem
@@ -607,7 +627,7 @@ nexus:FileSystemRole a owl:Class ;
 nexus:MarketplaceAppRole a owl:Class ;
     rdfs:label "Marketplace App Role"@en ;
     skos:definition "A role associated with a marketplace application as a configured application or customization in the Nexus platform."@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf abi:Role ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isMarketplaceAppRoleOf ;
           owl:someValuesFrom nexus:MarketplaceApps
@@ -617,46 +637,60 @@ nexus:MarketplaceAppRole a owl:Class ;
           owl:allValuesFrom nexus:MarketplaceApps
         ] .
 
+# HOW WE KNOW bucket — AI language model (generically dependent continuant)
 nexus:AIModel a owl:Class ;
     rdfs:label "AI Model"@en ;
     skos:definition "A generically dependent continuant representing an AI language model used by an agent in the Nexus platform."@en ;
     skos:example "gpt-4.1-mini", "claude-sonnet-4-6", "gemini-1.5-pro"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasProvider ;
-          owl:someValuesFrom cco:ont00001180
+          owl:someValuesFrom abi:Organization
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasProvider ;
-          owl:allValuesFrom cco:ont00001180
+          owl:allValuesFrom abi:Organization
         ] .
 
+# WHY bucket — capability disposition inhering in an organization (disposition)
 nexus:Capabilities a owl:Class ;
     rdfs:label "Capabilities"@en ;
     skos:definition "A disposition inhering in an organization, representing a capability it possesses."@en ;
     skos:example "AI Model Provider capability", "Search Provider capability"@en ;
-    rdfs:subClassOf bfo:BFO_0000016 ,
+    rdfs:subClassOf abi:Disposition ,
         [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000197 ;
-          owl:someValuesFrom cco:ont00001180
+          owl:onProperty abi:inheresIn ;
+          owl:someValuesFrom abi:Organization
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000197 ;
-          owl:allValuesFrom cco:ont00001180
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Organization
         ] .
 
-cco:ont00001180 rdfs:subClassOf
-    [ a owl:Restriction ;
-      owl:onProperty nexus:hasCapabilities ;
-      owl:allValuesFrom nexus:Capabilities
-    ] .
+abi:Organization rdfs:label "Organization"@en ;
+    rdfs:subClassOf
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasCapabilities ;
+          owl:allValuesFrom nexus:Capabilities
+        ] .
+
+# Process (WHAT)
+nexus:CreateUser a owl:Class ;
+    rdfs:label "Create User"@en ;
+    skos:definition "A process that creates a new user in the Nexus platform."@en ;
+    rdfs:subClassOf abi:Process ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:hasParticipant ;
+          owl:allValuesFrom abi:Person
+        ] .
 
 #################################################################
 #    Object Properties
 #################################################################
 
+# WHO ↔ HOW WE KNOW — organization carries workspace
 nexus:hasWorkspace a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     owl:inverseOf nexus:isWorkspaceOf ;
     rdfs:label "has workspace"@en ;
     skos:definition "Relates an organization to a workspace that depends on it within the Nexus platform."@en ;
@@ -664,22 +698,24 @@ nexus:hasWorkspace a owl:ObjectProperty ;
     rdfs:range nexus:Workspace .
 
 nexus:isWorkspaceOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     owl:inverseOf nexus:hasWorkspace ;
     rdfs:label "is workspace of"@en ;
     skos:definition "Relates a workspace to the organization on which it generically depends."@en ;
     rdfs:domain nexus:Workspace ;
     rdfs:range nexus:Organization .
 
+# WHO — organization has member user
 nexus:hasUser a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:subPropertyOf abi:hasMemberPart ;
     rdfs:label "has user"@en ;
     skos:definition "Relates an organization to a user that is a member of it in the platform."@en ;
     rdfs:domain nexus:Organization ;
     rdfs:range nexus:User .
 
+# WHO — organization bears tenant role
 nexus:hasTenant a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000196 ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isTenantOf ;
     rdfs:label "has tenant"@en ;
     skos:definition "Relates an organization to the tenant role it bears."@en ;
@@ -687,29 +723,32 @@ nexus:hasTenant a owl:ObjectProperty ;
     rdfs:range nexus:Tenant .
 
 nexus:isTenantOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000197 ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasTenant ;
     rdfs:label "is tenant of"@en ;
     skos:definition "Relates a tenant role to the organization in which it inheres."@en ;
     rdfs:domain nexus:Tenant ;
     rdfs:range nexus:Organization .
 
+# HOW WE KNOW → WHO — workspace depends on server
 nexus:hostedOn a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     rdfs:label "hosted on"@en ;
     skos:definition "Relates a workspace to the physical server on which it depends for hosting."@en ;
     rdfs:domain nexus:Workspace ;
     rdfs:range nexus:Server .
 
+# WHERE — server located in deployment site
 nexus:locatedInDeploymentSite a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000171 ;
+    rdfs:subPropertyOf abi:locatedIn ;
     rdfs:label "located in deployment site"@en ;
     skos:definition "Relates a server to the deployment site in which it is located."@en ;
     rdfs:domain nexus:Server ;
     rdfs:range nexus:DeploymentSite .
 
+# HOW WE KNOW — workspace carries conversation
 nexus:hasConversation a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     owl:inverseOf nexus:isConversationOf ;
     rdfs:label "has conversation"@en ;
     skos:definition "Relates a workspace to a conversation it carries or contains."@en ;
@@ -717,15 +756,16 @@ nexus:hasConversation a owl:ObjectProperty ;
     rdfs:range nexus:Conversation .
 
 nexus:isConversationOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     owl:inverseOf nexus:hasConversation ;
     rdfs:label "is conversation of"@en ;
     skos:definition "Relates a conversation to the workspace on which it depends."@en ;
     rdfs:domain nexus:Conversation ;
     rdfs:range nexus:Workspace .
 
+# HOW WE KNOW — conversation carries message
 nexus:hasMessage a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     owl:inverseOf nexus:isMessageOf ;
     rdfs:label "has message"@en ;
     skos:definition "Relates a conversation to a message it contains."@en ;
@@ -733,45 +773,48 @@ nexus:hasMessage a owl:ObjectProperty ;
     rdfs:range nexus:Message .
 
 nexus:isMessageOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     owl:inverseOf nexus:hasMessage ;
     rdfs:label "is message of"@en ;
     skos:definition "Relates a message to the conversation on which it depends."@en ;
     rdfs:domain nexus:Message ;
     rdfs:range nexus:Conversation .
 
+# HOW WE KNOW — agent carries intent
 nexus:hasAgentIntent a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     rdfs:label "has intent"@en ;
     skos:definition "Relates an agent to an intent available to it."@en ;
     rdfs:domain nexus:Agent ;
     rdfs:range nexus:AgentIntent .
 
 nexus:isIntentOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     owl:inverseOf nexus:hasAgentIntent ;
     rdfs:label "is intent of"@en ;
     skos:definition "Relates an intent to the agent on which it depends."@en ;
     rdfs:domain nexus:AgentIntent ;
     rdfs:range nexus:Agent .
 
+# HOW WE KNOW — agent carries tool
 nexus:hasAgentTool a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     rdfs:label "has tool"@en ;
     skos:definition "Relates an agent to a tool available to it."@en ;
     rdfs:domain nexus:Agent ;
     rdfs:range nexus:AgentTool .
 
 nexus:isToolOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     owl:inverseOf nexus:hasAgentTool ;
     rdfs:label "is tool of"@en ;
     skos:definition "Relates a tool to the agent on which it depends."@en ;
     rdfs:domain nexus:AgentTool ;
     rdfs:range nexus:Agent .
 
+# HOW WE KNOW — ontology carries module
 nexus:hasOntologyModule a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     owl:inverseOf nexus:isOntologyModuleOf ;
     rdfs:label "has ontology module"@en ;
     skos:definition "Relates an ontology to one of its ontology modules."@en ;
@@ -779,64 +822,71 @@ nexus:hasOntologyModule a owl:ObjectProperty ;
     rdfs:range nexus:OntologyModule .
 
 nexus:isOntologyModuleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     owl:inverseOf nexus:hasOntologyModule ;
     rdfs:label "is ontology module of"@en ;
     skos:definition "Relates an ontology module to the ontology on which it depends."@en ;
     rdfs:domain nexus:OntologyModule ;
     rdfs:range nexus:Ontology .
 
+# HOW WE KNOW — ontology carries class
 nexus:hasOntologyClass a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     rdfs:label "has ontology class"@en ;
     skos:definition "Relates an ontology to a class defined within it."@en ;
     rdfs:domain nexus:Ontology ;
     rdfs:range nexus:OntologyClass .
 
+# HOW WE KNOW — ontology carries object property
 nexus:hasOntologyObjectProperty a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     rdfs:label "has ontology object property"@en ;
     skos:definition "Relates an ontology to an object property defined within it."@en ;
     rdfs:domain nexus:Ontology ;
     rdfs:range nexus:OntologyObjectProperty .
 
+# HOW WE KNOW — knowledge graph carries graph view
 nexus:hasGraphView a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     rdfs:label "has graph view"@en ;
     skos:definition "Relates a knowledge graph to a graph view derived from it."@en ;
     rdfs:domain nexus:KnowledgeGraph ;
     rdfs:range nexus:GraphView .
 
+# HOW WE KNOW — graph view carries graph filter
 nexus:hasGraphFilter a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     rdfs:label "has graph filter"@en ;
     skos:definition "Relates a graph view to a graph filter used in it."@en ;
     rdfs:domain nexus:GraphView ;
     rdfs:range nexus:GraphFilter .
 
 nexus:includesKnowledgeGraph a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     rdfs:label "includes knowledge graph"@en ;
     skos:definition "Relates a graph view to a knowledge graph it includes."@en ;
     rdfs:domain nexus:GraphView ;
     rdfs:range nexus:KnowledgeGraph .
 
+# HOW WE KNOW — file system carries files
 nexus:hasFiles a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     rdfs:label "has files"@en ;
     skos:definition "Relates a file system to files accessible through it."@en ;
     rdfs:domain nexus:FileSystem ;
     rdfs:range nexus:Files .
 
+# HOW WE KNOW — workspace carries marketplace apps
 nexus:hasMarketplaceApps a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     rdfs:label "has marketplace apps"@en ;
     skos:definition "Relates a workspace to a marketplace application available in or associated with it."@en ;
     rdfs:domain nexus:Workspace ;
     rdfs:range nexus:MarketplaceApps .
 
+# WHY — concretization pairs for workspace role
 nexus:hasWorkspaceRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isWorkspaceRoleOf ;
     rdfs:label "has workspace role"@en ;
     skos:definition "Relates a workspace to a workspace role that concretizes it in platform use."@en ;
@@ -844,15 +894,16 @@ nexus:hasWorkspaceRole a owl:ObjectProperty ;
     rdfs:range nexus:WorkspaceRole .
 
 nexus:isWorkspaceRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasWorkspaceRole ;
     rdfs:label "is workspace role of"@en ;
     skos:definition "Relates a workspace role to the workspace of which it is the role-side concretization."@en ;
     rdfs:domain nexus:WorkspaceRole ;
     rdfs:range nexus:Workspace .
 
+# WHY — concretization pairs for search role
 nexus:hasSearchRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isSearchRoleOf ;
     rdfs:label "has search role"@en ;
     skos:definition "Relates a search artifact to a search role that concretizes it in platform use."@en ;
@@ -860,15 +911,16 @@ nexus:hasSearchRole a owl:ObjectProperty ;
     rdfs:range nexus:SearchRole .
 
 nexus:isSearchRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasSearchRole ;
     rdfs:label "is search role of"@en ;
     skos:definition "Relates a search role to the search artifact of which it is the role-side concretization."@en ;
     rdfs:domain nexus:SearchRole ;
     rdfs:range nexus:Search .
 
+# WHY — concretization pairs for conversation role
 nexus:hasConversationRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isConversationRoleOf ;
     rdfs:label "has conversation role"@en ;
     skos:definition "Relates a conversation to a conversation role that concretizes it in platform use."@en ;
@@ -876,15 +928,16 @@ nexus:hasConversationRole a owl:ObjectProperty ;
     rdfs:range nexus:ConversationRole .
 
 nexus:isConversationRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasConversationRole ;
     rdfs:label "is conversation role of"@en ;
     skos:definition "Relates a conversation role to the conversation of which it is the role-side concretization."@en ;
     rdfs:domain nexus:ConversationRole ;
     rdfs:range nexus:Conversation .
 
+# WHY — concretization pairs for message role
 nexus:hasMessageRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isMessageRoleOf ;
     rdfs:label "has message role"@en ;
     skos:definition "Relates a message to a message role that concretizes it in platform use."@en ;
@@ -892,15 +945,16 @@ nexus:hasMessageRole a owl:ObjectProperty ;
     rdfs:range nexus:MessageRole .
 
 nexus:isMessageRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasMessageRole ;
     rdfs:label "is message role of"@en ;
     skos:definition "Relates a message role to the message of which it is the role-side concretization."@en ;
     rdfs:domain nexus:MessageRole ;
     rdfs:range nexus:Message .
 
+# WHY — concretization pairs for agent role
 nexus:hasAgentRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isAgentRoleOf ;
     rdfs:label "has agent role"@en ;
     skos:definition "Relates an agent to an agent role that concretizes it in platform use."@en ;
@@ -908,15 +962,16 @@ nexus:hasAgentRole a owl:ObjectProperty ;
     rdfs:range nexus:AgentRole .
 
 nexus:isAgentRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasAgentRole ;
     rdfs:label "is agent role of"@en ;
     skos:definition "Relates an agent role to the agent of which it is the role-side concretization."@en ;
     rdfs:domain nexus:AgentRole ;
     rdfs:range nexus:Agent .
 
+# HOW WE KNOW — agent orchestrates sub-agent
 nexus:hasSubAgent a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     owl:inverseOf nexus:isSubAgentOf ;
     rdfs:label "has sub-agent"@en ;
     skos:definition "Relates a supervisor agent to a sub-agent it orchestrates within the Nexus platform."@en ;
@@ -924,15 +979,16 @@ nexus:hasSubAgent a owl:ObjectProperty ;
     rdfs:range nexus:Agent .
 
 nexus:isSubAgentOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     owl:inverseOf nexus:hasSubAgent ;
     rdfs:label "is sub-agent of"@en ;
     skos:definition "Relates a sub-agent to the supervisor agent that orchestrates it within the Nexus platform."@en ;
     rdfs:domain nexus:Agent ;
     rdfs:range nexus:Agent .
 
+# WHY — concretization pairs for ontology role
 nexus:hasOntologyRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isOntologyRoleOf ;
     rdfs:label "has ontology role"@en ;
     skos:definition "Relates an ontology to an ontology role that concretizes it in platform use."@en ;
@@ -940,15 +996,16 @@ nexus:hasOntologyRole a owl:ObjectProperty ;
     rdfs:range nexus:OntologyRole .
 
 nexus:isOntologyRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasOntologyRole ;
     rdfs:label "is ontology role of"@en ;
     skos:definition "Relates an ontology role to the ontology of which it is the role-side concretization."@en ;
     rdfs:domain nexus:OntologyRole ;
     rdfs:range nexus:Ontology .
 
+# WHY — concretization pairs for ontology module role
 nexus:hasOntologyModuleRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isOntologyModuleRoleOf ;
     rdfs:label "has ontology module role"@en ;
     skos:definition "Relates an ontology module to an ontology module role that concretizes it in platform use."@en ;
@@ -956,15 +1013,16 @@ nexus:hasOntologyModuleRole a owl:ObjectProperty ;
     rdfs:range nexus:OntologyModuleRole .
 
 nexus:isOntologyModuleRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasOntologyModuleRole ;
     rdfs:label "is ontology module role of"@en ;
     skos:definition "Relates an ontology module role to the ontology module of which it is the role-side concretization."@en ;
     rdfs:domain nexus:OntologyModuleRole ;
     rdfs:range nexus:OntologyModule .
 
+# WHY — concretization pairs for ontology class role
 nexus:hasOntologyClassRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isOntologyClassRoleOf ;
     rdfs:label "has ontology class role"@en ;
     skos:definition "Relates an ontology class to an ontology class role that concretizes it in platform use."@en ;
@@ -972,15 +1030,16 @@ nexus:hasOntologyClassRole a owl:ObjectProperty ;
     rdfs:range nexus:OntologyClassRole .
 
 nexus:isOntologyClassRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasOntologyClassRole ;
     rdfs:label "is ontology class role of"@en ;
     skos:definition "Relates an ontology class role to the ontology class of which it is the role-side concretization."@en ;
     rdfs:domain nexus:OntologyClassRole ;
     rdfs:range nexus:OntologyClass .
 
+# WHY — concretization pairs for ontology object property role
 nexus:hasOntologyObjectPropertyRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isOntologyObjectPropertyRoleOf ;
     rdfs:label "has ontology object property role"@en ;
     skos:definition "Relates an ontology object property to an ontology object property role that concretizes it in platform use."@en ;
@@ -988,15 +1047,16 @@ nexus:hasOntologyObjectPropertyRole a owl:ObjectProperty ;
     rdfs:range nexus:OntologyObjectPropertyRole .
 
 nexus:isOntologyObjectPropertyRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasOntologyObjectPropertyRole ;
     rdfs:label "is ontology object property role of"@en ;
     skos:definition "Relates an ontology object property role to the ontology object property of which it is the role-side concretization."@en ;
     rdfs:domain nexus:OntologyObjectPropertyRole ;
     rdfs:range nexus:OntologyObjectProperty .
 
+# WHY — concretization pairs for knowledge graph role
 nexus:hasKnowledgeGraphRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isKnowledgeGraphRoleOf ;
     rdfs:label "has knowledge graph role"@en ;
     skos:definition "Relates a knowledge graph to a knowledge graph role that concretizes it in platform use."@en ;
@@ -1004,15 +1064,16 @@ nexus:hasKnowledgeGraphRole a owl:ObjectProperty ;
     rdfs:range nexus:KnowledgeGraphRole .
 
 nexus:isKnowledgeGraphRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasKnowledgeGraphRole ;
     rdfs:label "is knowledge graph role of"@en ;
     skos:definition "Relates a knowledge graph role to the knowledge graph of which it is the role-side concretization."@en ;
     rdfs:domain nexus:KnowledgeGraphRole ;
     rdfs:range nexus:KnowledgeGraph .
 
+# WHY — concretization pairs for graph view role
 nexus:hasGraphViewRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isGraphViewRoleOf ;
     rdfs:label "has graph view role"@en ;
     skos:definition "Relates a graph view to a graph view role that concretizes it in platform use."@en ;
@@ -1020,15 +1081,16 @@ nexus:hasGraphViewRole a owl:ObjectProperty ;
     rdfs:range nexus:GraphViewRole .
 
 nexus:isGraphViewRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasGraphViewRole ;
     rdfs:label "is graph view role of"@en ;
     skos:definition "Relates a graph view role to the graph view of which it is the role-side concretization."@en ;
     rdfs:domain nexus:GraphViewRole ;
     rdfs:range nexus:GraphView .
 
+# WHY — concretization pairs for graph filter role
 nexus:hasGraphFilterRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isGraphFilterRoleOf ;
     rdfs:label "has graph filter role"@en ;
     skos:definition "Relates a graph filter to a graph filter role that concretizes it in platform use."@en ;
@@ -1036,15 +1098,16 @@ nexus:hasGraphFilterRole a owl:ObjectProperty ;
     rdfs:range nexus:GraphFilterRole .
 
 nexus:isGraphFilterRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasGraphFilterRole ;
     rdfs:label "is graph filter role of"@en ;
     skos:definition "Relates a graph filter role to the graph filter of which it is the role-side concretization."@en ;
     rdfs:domain nexus:GraphFilterRole ;
     rdfs:range nexus:GraphFilter .
 
+# WHY — concretization pairs for file role
 nexus:hasFileRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isFileRoleOf ;
     rdfs:label "has file role"@en ;
     skos:definition "Relates a file artifact to a file role that concretizes it in platform use."@en ;
@@ -1052,15 +1115,16 @@ nexus:hasFileRole a owl:ObjectProperty ;
     rdfs:range nexus:FileRole .
 
 nexus:isFileRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasFileRole ;
     rdfs:label "is file role of"@en ;
     skos:definition "Relates a file role to the file artifact of which it is the role-side concretization."@en ;
     rdfs:domain nexus:FileRole ;
     rdfs:range nexus:Files .
 
+# WHY — concretization pairs for file system role
 nexus:hasFileSystemRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isFileSystemRoleOf ;
     rdfs:label "has file system role"@en ;
     skos:definition "Relates a file system to a file system role that concretizes it in platform use."@en ;
@@ -1068,15 +1132,16 @@ nexus:hasFileSystemRole a owl:ObjectProperty ;
     rdfs:range nexus:FileSystemRole .
 
 nexus:isFileSystemRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasFileSystemRole ;
     rdfs:label "is file system role of"@en ;
     skos:definition "Relates a file system role to the file system of which it is the role-side concretization."@en ;
     rdfs:domain nexus:FileSystemRole ;
     rdfs:range nexus:FileSystem .
 
+# WHY — concretization pairs for marketplace app role
 nexus:hasMarketplaceAppRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
     owl:inverseOf nexus:isMarketplaceAppRoleOf ;
     rdfs:label "has marketplace app role"@en ;
     skos:definition "Relates a marketplace application to a marketplace application role that concretizes it in platform use."@en ;
@@ -1084,15 +1149,16 @@ nexus:hasMarketplaceAppRole a owl:ObjectProperty ;
     rdfs:range nexus:MarketplaceAppRole .
 
 nexus:isMarketplaceAppRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf nexus:hasMarketplaceAppRole ;
     rdfs:label "is marketplace app role of"@en ;
     skos:definition "Relates a marketplace application role to the marketplace application of which it is the role-side concretization."@en ;
     rdfs:domain nexus:MarketplaceAppRole ;
     rdfs:range nexus:MarketplaceApps .
 
+# HOW WE KNOW — agent carries AI model
 nexus:usesModel a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
     owl:inverseOf nexus:isModelOf ;
     rdfs:label "uses model"@en ;
     skos:definition "Relates an agent to the AI model it uses."@en ;
@@ -1100,35 +1166,37 @@ nexus:usesModel a owl:ObjectProperty ;
     rdfs:range nexus:AIModel .
 
 nexus:isModelOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     owl:inverseOf nexus:usesModel ;
     rdfs:label "is model of"@en ;
     skos:definition "Relates an AI model to the agent that uses it."@en ;
     rdfs:domain nexus:AIModel ;
     rdfs:range nexus:Agent .
 
+# HOW WE KNOW → WHO — AI model depends on provider organization
 nexus:hasProvider a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
     rdfs:label "has provider"@en ;
     skos:definition "Relates an AI model to the organization that provides it."@en ;
     rdfs:domain nexus:AIModel ;
-    rdfs:range cco:ont00001180 .
+    rdfs:range abi:Organization .
 
+# WHY — organization bears capabilities disposition
 nexus:hasCapabilities a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000196 ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isCapabilitiesOf ;
     rdfs:label "has capabilities"@en ;
     skos:definition "Relates an organization to a capability it possesses."@en ;
-    rdfs:domain cco:ont00001180 ;
+    rdfs:domain abi:Organization ;
     rdfs:range nexus:Capabilities .
 
 nexus:isCapabilitiesOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000197 ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasCapabilities ;
     rdfs:label "is capabilities of"@en ;
     skos:definition "Relates a capability to the organization in which it inheres."@en ;
     rdfs:domain nexus:Capabilities ;
-    rdfs:range cco:ont00001180 .
+    rdfs:range abi:Organization .
 
 
 #################################################################
