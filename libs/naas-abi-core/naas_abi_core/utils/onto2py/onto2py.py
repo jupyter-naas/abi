@@ -1733,8 +1733,13 @@ def generate_python_code(
     # Sort classes to handle inheritance properly
     sorted_classes = topological_sort_classes(classes)
 
+    # Names of classes actually generated in this module. Forwarded into
+    # property generation so unresolved external refs (e.g. CCO classes
+    # surfaced as Ont00001180) get filtered out of object-property unions.
+    local_class_names = {ci.name for ci in classes.values()}
+
     for class_info in sorted_classes:
-        code_lines.extend(generate_class_code(class_info, needs_any))
+        code_lines.extend(generate_class_code(class_info, needs_any, local_class_names))
         code_lines.append("")
         code_lines.append("")
 
@@ -1826,9 +1831,15 @@ def topological_sort_classes(classes: Dict[str, ClassInfo]) -> List[ClassInfo]:
 
 
 def generate_class_code(
-    class_info: ClassInfo, has_any_import: bool = False
+    class_info: ClassInfo,
+    has_any_import: bool = False,
+    local_class_names: Optional[set] = None,
 ) -> List[str]:
-    """Generate Python code for a single class"""
+    """Generate Python code for a single class.
+
+    ``local_class_names`` is forwarded to :func:`generate_property_code`
+    so unresolved external class refs are dropped from property unions.
+    """
 
     lines = []
 
@@ -1947,7 +1958,7 @@ def generate_class_code(
             lines.append("")
         lines.append(f"    # {group_label}")
         for prop in props:
-            lines.extend(generate_property_code(prop, has_any_import))
+            lines.extend(generate_property_code(prop, has_any_import, local_class_names))
         emitted_property_group = True
 
     if not emitted_property_group:
@@ -1957,11 +1968,21 @@ def generate_class_code(
 
 
 def generate_property_code(
-    prop: PropertyInfo, has_any_import: bool = False
+    prop: PropertyInfo,
+    has_any_import: bool = False,
+    local_class_names: Optional[set] = None,
 ) -> List[str]:
     """Generate code lines for a single property using Annotated.
 
     Returns a list of lines already prefixed with 4-space indentation.
+
+    ``local_class_names`` lets the caller restrict object-property unions
+    to classes that are actually generated in this module. Any range
+    class that is not in the set is dropped — the union falls back to
+    ``URIRef|str``. This avoids emitting forward references like
+    ``Ont00001180`` (the CCO Organization URI fragment) that Pydantic
+    cannot resolve at ``model_rebuild()`` time because the class is
+    never defined in this module.
     """
     INDENT = "    "
     LINE_LIMIT = 88
@@ -1970,7 +1991,8 @@ def generate_property_code(
     if prop.property_type == "object":
         union_type_parts_set = {"str", "URIRef"}
         for class_name in prop.range_classes:
-            union_type_parts_set.add(class_name)
+            if local_class_names is None or class_name in local_class_names:
+                union_type_parts_set.add(class_name)
 
         needs_lists = any(
             c is None or c > 1 for c in prop.range_classes.values()
