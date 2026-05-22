@@ -15,10 +15,30 @@ from pathlib import Path
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 USERS = [
-    {"id": "u_001", "email": "admin@example.com", "name": "Local Admin"},
-    {"id": "u_002", "email": "jeremy@naas.ai", "name": "Jeremy Ravenel"},
-    {"id": "u_003", "email": "maxime@naas.ai", "name": "Maxime Jublou"},
-    {"id": "u_003", "email": "florent@naas.ai", "name": "Florent Ravenel"},
+    {
+        "id": "u_001",
+        "email": "admin@example.com",
+        "name": "Local Admin",
+        "workspace_ids": ["ws_001"],
+    },
+    {
+        "id": "u_002",
+        "email": "jeremy@naas.ai",
+        "name": "Jeremy Ravenel",
+        "workspace_ids": ["ws_001"],
+    },
+    {
+        "id": "u_003",
+        "email": "maxime@naas.ai",
+        "name": "Maxime Jublou",
+        "workspace_ids": ["ws_001"],
+    },
+    {
+        "id": "u_004",
+        "email": "florent@naas.ai",
+        "name": "Florent Ravenel",
+        "workspace_ids": ["ws_001", "ws_002"],
+    },
 ]
 
 WORKSPACES = [
@@ -48,15 +68,15 @@ REFERRERS = ["direct", "google.com", "linkedin.com", "twitter.com", "github.com"
 
 EVENT_WEIGHTS = [
     ("page_viewed", 50),
-    ("button_clicked", 20),
-    ("search_performed", 8),
-    ("workspace_opened", 6),
-    ("file_uploaded", 4),
-    ("export_clicked", 3),
-    ("invite_sent", 2),
-    ("workspace_updated", 2),
-    ("workspace_created", 1),
-    ("error_seen", 2),
+    # ("button_clicked", 20),
+    # ("search_performed", 8),
+    # ("workspace_opened", 6),
+    # ("file_uploaded", 4),
+    # ("export_clicked", 3),
+    # ("invite_sent", 2),
+    # ("workspace_updated", 2),
+    # ("workspace_created", 1),
+    # ("error_seen", 2),
     ("login", 1),
     ("logout", 1),
 ]
@@ -164,7 +184,14 @@ def main() -> None:
 
     write_json(
         DATA_DIR / "ref-users.json",
-        [{"user_id": u["id"], "user_email": u["email"]} for u in USERS],
+        [
+            {
+                "user_id": u["id"],
+                "user_email": u["email"],
+                "workspace_ids": u["workspace_ids"],
+            }
+            for u in USERS
+        ],
     )
     write_json(
         DATA_DIR / "ref-workspaces.json",
