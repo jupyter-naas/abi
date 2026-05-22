@@ -164,7 +164,7 @@ export function trackEvent(
     workspace_id: context.workspace_id,
     workspace_name: context.workspace_name ?? resolveWorkspaceName(context.workspace_id),
     page_path: context.page_path ?? window.location.pathname,
-    page_title: context.page_title ?? document.title,
+    page_title: context.page_title ?? document.title.split(' | ')[0],
     properties: context.properties,
     device: detectDevice(),
     browser: detectBrowser(),
