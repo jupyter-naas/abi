@@ -10,29 +10,35 @@ interface PdfViewerProps {
   className?: string;
 }
 
-// Mounts the @embedpdf/snippet web-component viewer (PDFium WASM under the hood)
-// inside a host div. We dynamically import the module so the ~MB-class WASM/JS
-// payload is only fetched when a PDF is actually opened.
+// Patch ResizeObserver at module load time so all callbacks are deferred through
+// requestAnimationFrame. This breaks the synchronous loop that triggers
+// "ResizeObserver loop completed with undelivered notifications" — the browser
+// only fires that error when callbacks fire synchronously in the same frame.
+// Doing this once at module level rather than inside a component avoids the
+// race between React's useEffect timing and Next.js dev overlay handlers.
+if (typeof window !== 'undefined' && window.ResizeObserver) {
+  const Native = window.ResizeObserver;
+  // Only patch once even if this module is HMR-reloaded.
+  if (!(Native as unknown as { __patchedForPdfViewer?: boolean }).__patchedForPdfViewer) {
+    class PatchedResizeObserver extends Native {
+      constructor(callback: ResizeObserverCallback) {
+        super((entries, observer) => {
+          requestAnimationFrame(() => {
+            try { callback(entries, observer); } catch { /* silence */ }
+          });
+        });
+      }
+    }
+    (PatchedResizeObserver as unknown as { __patchedForPdfViewer: boolean }).__patchedForPdfViewer = true;
+    window.ResizeObserver = PatchedResizeObserver;
+  }
+}
+
 export function PdfViewer({ src, className }: PdfViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<Element | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { resolvedTheme } = useTheme();
-
-  // Suppress the harmless "ResizeObserver loop completed with undelivered
-  // notifications" warning that the viewer's internal layout observers can
-  // emit. Next.js's dev error overlay otherwise turns it into a toast.
-  useEffect(() => {
-    const RESIZE_MSG = 'ResizeObserver loop completed with undelivered notifications';
-    const onError = (e: ErrorEvent) => {
-      if (e.message?.includes(RESIZE_MSG)) {
-        e.stopImmediatePropagation();
-        e.preventDefault();
-      }
-    };
-    window.addEventListener('error', onError);
-    return () => window.removeEventListener('error', onError);
-  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -46,7 +52,6 @@ export function PdfViewer({ src, className }: PdfViewerProps) {
         const mod: SnippetModule = await import('@embedpdf/snippet');
         if (cancelled || !hostRef.current) return;
 
-        // Tear down any prior instance before mounting a new one.
         host.replaceChildren();
 
         const instance = mod.default.init({
@@ -57,10 +62,6 @@ export function PdfViewer({ src, className }: PdfViewerProps) {
         });
         containerRef.current = instance ?? null;
 
-        // The snippet mounts an <embedpdf-container> custom element; by default
-        // custom elements are display:inline and don't fill their parent,
-        // which leaves the inner scroll viewport unbounded. Force it to fill
-        // the host so the viewer's own scrolling/zoom can work.
         if (instance instanceof HTMLElement) {
           instance.style.position = 'absolute';
           instance.style.inset = '0';
@@ -75,8 +76,6 @@ export function PdfViewer({ src, className }: PdfViewerProps) {
 
     return () => {
       cancelled = true;
-      // Removing children triggers the web-component's disconnectedCallback,
-      // which disposes the engine and releases the WASM document.
       host.replaceChildren();
       containerRef.current = null;
     };
@@ -87,8 +86,6 @@ export function PdfViewer({ src, className }: PdfViewerProps) {
       className={className}
       style={{ position: 'relative', height: '100%', width: '100%', minHeight: 0 }}
     >
-      {/* Absolute fill guarantees a concrete pixel height for the snippet's
-          internal scroll viewport, regardless of the surrounding flex chain. */}
       <div
         ref={hostRef}
         style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}

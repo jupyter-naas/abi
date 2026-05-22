@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.42.0 (2026-05-21)
+
+### Features
+
+- **settings**: Add sidebar and layout for workspace settings
+  ([`cdeb381`](https://github.com/jupyter-naas/abi/commit/cdeb381289dbf7c2d8499662c29ee49ac3f5365a))
+
+- **system-drive**: Add support for system drive access in workspaces
+  ([`0061150`](https://github.com/jupyter-naas/abi/commit/006115008f4ac3aff1898552665f40a8786a4434))
+
+
 ## v1.41.0 (2026-05-19)
 
 ### Features

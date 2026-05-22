@@ -1,0 +1,17 @@
+{
+    "name": "Nexus Analytics",
+    "description": "Embedded product analytics for Nexus. Track sessions, page views, users, workspaces, and events with a clean, guided dashboard.",
+    "category": "core",
+    "url": "/analytics",
+    "icon_emoji": "📊",
+    "version": "1.0.0",
+    "author": "naas.ai",
+    "license": "MIT",
+    "keywords": ["nexus", "analytics", "dashboard", "telemetry"],
+    "tier": "core",
+    "maintainer": "naas.ai",
+    "pricing": {
+        "type": "free",
+        "price": 0
+    }
+}

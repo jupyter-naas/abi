@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
     from naas_abi.apps.nexus.apps.api.app.services.agents.service import AgentService
+    from naas_abi.apps.nexus.apps.api.app.services.apps.service import AppsService
     from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
     from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
     from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
@@ -28,6 +29,7 @@ class RegistryServices:
     chat: ChatService
     search: SearchService
     agents: AgentService
+    apps: AppsService
     workspaces: WorkspaceService
     organizations: OrganizationService
     graph: GraphService
@@ -62,6 +64,10 @@ class ServiceRegistry:
     @property
     def agents(self) -> AgentService:
         return self._services.agents
+
+    @property
+    def apps(self) -> AppsService:
+        return self._services.apps
 
     @property
     def search(self) -> SearchService:
