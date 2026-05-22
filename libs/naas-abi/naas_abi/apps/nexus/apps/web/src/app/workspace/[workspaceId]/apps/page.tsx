@@ -516,12 +516,6 @@ function EmptyState({ hasSearch, workspaceId }: { hasSearch: boolean; workspaceI
           Install modules from the Marketplace to see their apps here.
         </p>
       </div>
-      <Link
-        href={`/workspace/${workspaceId}/marketplace?type=applications`}
-        className="mt-2 px-4 py-2 text-sm font-semibold bg-workspace-accent text-white hover:bg-workspace-accent/90 transition-colors"
-      >
-        Browse Marketplace
-      </Link>
     </div>
   );
 }
@@ -546,6 +540,21 @@ export default function AppsPage() {
     return () => { setOpenAppModule(null); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Restore last opened app when navigating back to the section without ?open=
+  useEffect(() => {
+    if (!currentWorkspaceId) return;
+    if (searchParams?.get('open')) return;
+    try {
+      const saved = sessionStorage.getItem(`nexus.apps.last_open.${currentWorkspaceId}`);
+      if (saved) {
+        router.replace(`/workspace/${currentWorkspaceId}/apps?open=${encodeURIComponent(saved)}`);
+      }
+    } catch {
+      // sessionStorage unavailable (e.g. private mode restrictions) — ignore
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspaceId]);
 
   useEffect(() => {
     const apiBase = getApiUrl();
@@ -588,9 +597,12 @@ export default function AppsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, apps, tenant.apps]);
 
+  const lastOpenKey = currentWorkspaceId ? `nexus.apps.last_open.${currentWorkspaceId}` : null;
+
   const handleClose = () => {
     setActiveApp(null);
     setOpenAppModule(null);
+    if (lastOpenKey) sessionStorage.removeItem(lastOpenKey);
     const base = `/workspace/${currentWorkspaceId}/apps`;
     router.replace(base);
   };
@@ -601,6 +613,7 @@ export default function AppsPage() {
     else setOpenAppModule(null);
     setActivePanelSection('apps');
     const param = entry.kind === 'app' ? entry.data.app_id : entry.data.url;
+    if (lastOpenKey) sessionStorage.setItem(lastOpenKey, param);
     const base = `/workspace/${currentWorkspaceId}/apps`;
     router.replace(`${base}?open=${encodeURIComponent(param)}`);
   };
@@ -648,13 +661,6 @@ export default function AppsPage() {
                 className="h-10 w-full border bg-background pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            <Link
-              href={`/workspace/${currentWorkspaceId}/marketplace?type=applications`}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-            >
-              <ExternalLink size={12} />
-              Browse Marketplace
-            </Link>
           </div>
 
           {/* States */}
