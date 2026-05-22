@@ -31,7 +31,7 @@ export function UpdateStatus() {
 
   const fetchMetadata = useCallback(async () => {
     try {
-      const r = await fetch('/api/analytics/metadata', { cache: 'no-store' });
+      const r = await fetch(`${getApiUrl()}/api/analytics/metadata`, { cache: 'no-store' });
       if (!r.ok) return;
       const data = await r.json();
       setMetadata(data);
