@@ -25,6 +25,7 @@ import { Card } from './components/card';
 import { EventIcon, formatEventName } from './components/event-icon';
 import { UpdateStatus } from './components/update-status';
 import { formatDateTime, formatDuration, formatNumber, formatRelative } from './lib/format';
+import { getApiUrl } from '@/lib/config';
 import type {
   AnalyticsEvent,
   OverviewResponse,
@@ -86,11 +87,12 @@ export default function AnalyticsPage() {
 
   // Bootstrap directories (independent of date filter — full catalog).
   useEffect(() => {
-    fetch('/api/analytics/users')
+    const api = getApiUrl();
+    fetch(`${api}/api/analytics/users`)
       .then((r) => r.json())
       .then((d: UsersDirectory) => setUsersDir(d.directory ?? []))
       .catch(() => setUsersDir([]));
-    fetch('/api/analytics/workspaces')
+    fetch(`${api}/api/analytics/workspaces`)
       .then((r) => r.json())
       .then((d: WorkspacesDirectory) => setWorkspaceDir(d.directory ?? []))
       .catch(() => setWorkspaceDir([]));
@@ -216,7 +218,7 @@ function useAnalytics<T>(path: string, filters: FilterValue) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${path}${q ? `?${q}` : ''}`)
+    fetch(`${getApiUrl()}${path}${q ? `?${q}` : ''}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
         return r.json();
