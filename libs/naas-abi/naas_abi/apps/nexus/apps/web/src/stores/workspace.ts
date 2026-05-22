@@ -66,6 +66,7 @@ export interface Message {
   activityLine?: string; // Single-line live status (legacy, kept for backward compat)
   toolCalls?: ToolCall[]; // Ordered list of tool invocations for this message
   images?: string[]; // Base64-encoded images for multimodal chat
+  fileAttachments?: string[]; // Filenames of uploaded documents attached to this message
   thinkingDuration?: number; // Duration in seconds the AI spent "thinking"
   executionTime?: number; // Total seconds from request sent to response complete
   sources?: string[]; // filenames of RAG documents used to answer
