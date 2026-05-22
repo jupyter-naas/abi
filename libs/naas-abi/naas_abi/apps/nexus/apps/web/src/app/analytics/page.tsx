@@ -103,6 +103,18 @@ export default function AnalyticsPage() {
 
   const isUserDetail = filters.user_email !== 'all';
 
+  // Only Overview and Events are meaningful in user-detail mode.
+  const visibleTabs = isUserDetail
+    ? TABS.filter((t) => t.key === 'overview' || t.key === 'events')
+    : TABS;
+
+  // If the user picks a specific email while on a now-hidden tab, snap back.
+  useEffect(() => {
+    if (isUserDetail && tab !== 'overview' && tab !== 'events') {
+      setTab('overview');
+    }
+  }, [isUserDetail, tab]);
+
   const filteredUsersDir =
     filters.workspace_id && filters.workspace_id !== 'all'
       ? usersDir.filter((u) => u.workspace_ids.includes(filters.workspace_id))
@@ -145,7 +157,7 @@ export default function AnalyticsPage() {
               workspaces={workspaceDir}
             />
             <nav className="flex items-center border border-border/60 bg-card">
-              {TABS.map((t) => (
+              {visibleTabs.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
