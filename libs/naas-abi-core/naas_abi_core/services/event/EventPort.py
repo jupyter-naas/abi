@@ -110,6 +110,7 @@ class IEventService(ABC):
         since_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
+        limit: int | None = None,
         batch_size: int = 500,
     ) -> Iterator[Any]:
         """Stream events matching the filters as reconstructed instances.
@@ -134,6 +135,7 @@ class IEventService(ABC):
         self,
         consumer_id: str,
         event_class: type,
+        limit: int | None = None,
         batch_size: int = 500,
     ) -> Iterator[Any]:
         """Stream undelivered events for `consumer_id`, advancing the cursor.

@@ -213,6 +213,43 @@ def test_iter_query_empty(tmp_path):
     assert list(service.iter_query(event_class=UserAuthenticated)) == []
 
 
+def test_iter_query_respects_limit(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for i in range(10):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    streamed = list(
+        service.iter_query(event_class=UserAuthenticated, limit=3, batch_size=2)
+    )
+    assert [e.user_id for e in streamed] == ["u0", "u1", "u2"]
+
+
+def test_iter_query_limit_zero_yields_nothing(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    assert list(service.iter_query(event_class=UserAuthenticated, limit=0)) == []
+
+
+def test_iter_query_for_consumer_respects_limit(tmp_path):
+    service, adapter, _ = _make_service(tmp_path)
+    for i in range(10):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    first = list(
+        service.iter_query_for_consumer(
+            "worker-1", UserAuthenticated, limit=4, batch_size=3
+        )
+    )
+    assert [e.user_id for e in first] == ["u0", "u1", "u2", "u3"]
+    # Cursor advanced over only what we actually consumed.
+    assert adapter.get_cursor("worker-1", UserAuthenticated._class_uri) == 4
+
+    rest = list(
+        service.iter_query_for_consumer("worker-1", UserAuthenticated, batch_size=3)
+    )
+    assert [e.user_id for e in rest] == [f"u{i}" for i in range(4, 10)]
+
+
 def test_iter_query_respects_since_seq(tmp_path):
     service, _, _ = _make_service(tmp_path)
     stored = [service.publish(UserAuthenticated(user_id=f"u{i}")) for i in range(5)]
