@@ -1,10 +1,10 @@
 from naas_abi.ontologies.modules.NexusPlatformOntology import (
-    Process as _Process,
+    VisitSession as _VisitSession,
 )
 
 
-class Process(_Process):
-    """Action class for Process"""
+class VisitSession(_VisitSession):
+    """Action class for VisitSession"""
 
     def actions(self):
         """Action method - implement your logic here"""

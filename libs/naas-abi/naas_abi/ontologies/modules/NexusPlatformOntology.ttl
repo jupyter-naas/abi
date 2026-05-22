@@ -550,6 +550,54 @@ nexus:isCapabilitiesOf a owl:ObjectProperty ;
     rdfs:domain nexus:Capabilities ;
     rdfs:range abi:Organization .
 
+# WHEN — page-view process occupies a temporal instant
+nexus:viewedAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occupiesTemporalRegion ;
+    rdfs:label "viewed at"@en ;
+    skos:definition "Relates a page-view process to the temporal instant at which the view occurred."@en ;
+    rdfs:domain nexus:PageView ;
+    rdfs:range abi:TemporalInstant .
+
+# WHO ↔ WHAT — page-view participant
+nexus:viewedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "viewed by"@en ;
+    skos:definition "Relates a page-view process to the user account that participates in it."@en ;
+    rdfs:domain nexus:PageView ;
+    rdfs:range nexus:User .
+
+# WHERE — process occurs in a user-side site context
+nexus:occursIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occursIn ;
+    rdfs:label "occurs in"@en ;
+    skos:definition "Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range nexus:UserSite .
+
+# WHERE — process occurs in a workspace
+nexus:occursInWorkspace a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    rdfs:label "occurs in workspace"@en ;
+    skos:definition "Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range nexus:Workspace .
+
+# WHEN — page-view is a temporal part of a visit session
+nexus:occursDuringSession a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    rdfs:label "occurs during session"@en ;
+    skos:definition "Relates a page-view process to the visit session of which it is a temporal part."@en ;
+    rdfs:domain nexus:PageView ;
+    rdfs:range nexus:VisitSession .
+
+# WHAT — page-view concretizes a stored page artifact
+nexus:concretizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:label "concretizes"@en ;
+    skos:definition "Relates a page-view process to the page artifact (generically dependent continuant) it concretizes when rendered."@en ;
+    rdfs:domain nexus:PageView ;
+    rdfs:range nexus:Page .
+
 #################################################################
 #    Classes
 #################################################################
@@ -602,6 +650,26 @@ nexus:DeploymentSite a owl:Class ;
     skos:definition "A physical or digital site in which a Nexus platform deployment is located or operates."@en ;
     skos:example "Europe West deployment region", "US East deployment region", "Private datacenter zone A"@en ;
     rdfs:subClassOf abi:Site .
+
+# Site (WHERE) — user-side site bearing country/device/browser context for a process
+nexus:UserSite a owl:Class ;
+    rdfs:label "User Site"@en ;
+    skos:altLabel "User Context"@en , "Client Site"@en ;
+    skos:definition "A user-side site in which a platform process (such as a page view or visit session) occurs, characterized by the end-user country, device and browser observed at the time of the process."@en ;
+    skos:example "France / Windows / Chrome", "United States / iOS / Safari"@en ;
+    rdfs:subClassOf abi:Site ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:country ;
+          owl:someValuesFrom xsd:string
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:device ;
+          owl:someValuesFrom xsd:string
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:browser ;
+          owl:someValuesFrom xsd:string
+        ] .
 
 # Generically dependent continuant (HOW WE KNOW)
 nexus:User a owl:Class ;
@@ -987,6 +1055,22 @@ nexus:AIModel a owl:Class ;
           owl:allValuesFrom abi:Organization
         ] .
 
+# HOW WE KNOW bucket — page artifact (generically dependent continuant) viewed in the platform
+nexus:Page a owl:Class ;
+    rdfs:label "Page"@en ;
+    skos:altLabel "Platform Page"@en ;
+    skos:definition "A generically dependent continuant representing a navigable page artifact of the Nexus platform, identified by its path and title and concretized by page-view processes."@en ;
+    skos:example "/workspace/ws-ee0d7c1d56b2/lab", "/analytics"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:page_path ;
+          owl:someValuesFrom xsd:string
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:page_title ;
+          owl:someValuesFrom xsd:string
+        ] .
+
 # Role (WHY)
 
 # WHO bucket — material entity bearing a tenant role
@@ -1310,6 +1394,96 @@ nexus:Login a owl:Class ;
           owl:someValuesFrom nexus:VisitSession
         ] .
 
+nexus:VisitSession a owl:Class ;
+    rdfs:label "Visit Session"@en ;
+    skos:altLabel "Session"@en , "User Session"@en , "Browsing Session"@en ;
+    skos:definition "A process during which a user interacts with the Nexus platform within a single bounded period of activity, beginning when the session is opened and ending when it is closed; visit sessions underlie the platform's session, session-duration and active-user KPIs."@en ;
+    skos:example "Alice's 22-minute browsing session in workspace 'Naas.ai Main' on 2026-05-21", "An anonymous mobile visit lasting 3 minutes"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:someValuesFrom nexus:VisitSessionInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000199 ;
+          owl:allValuesFrom nexus:VisitSessionInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000066 ;
+          owl:someValuesFrom nexus:DeploymentSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursIn ;
+          owl:someValuesFrom nexus:UserSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursInWorkspace ;
+          owl:someValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:session_id ;
+          owl:someValuesFrom xsd:string
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Session
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Log
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000057 ;
+          owl:someValuesFrom nexus:UserEngagementQuality
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000055 ;
+          owl:someValuesFrom nexus:VisitorRole
+        ] .
+
+nexus:PageView a owl:Class ;
+    rdfs:label "Page View"@en ;
+    skos:altLabel "Page Visit"@en , "page_viewed"@en ;
+    skos:definition "A process during which a user views a single page of the Nexus platform within a visit session; page-view processes are the source of the total_page_views, top_pages and most_visited_page KPIs and correspond to the page_viewed analytics event."@en ;
+    skos:example "Alice viewing /analytics for 42 seconds on 2026-05-21"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:viewedAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:viewedBy ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursIn ;
+          owl:someValuesFrom nexus:UserSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursInWorkspace ;
+          owl:someValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursDuringSession ;
+          owl:someValuesFrom nexus:VisitSession
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:concretizes ;
+          owl:someValuesFrom nexus:Page
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:event_id ;
+          owl:someValuesFrom xsd:string
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty bfo:BFO_0000059 ;
+          owl:someValuesFrom nexus:Log
+        ] .
+
 nexus:Logout a owl:Class ;
     rdfs:label "Logout"@en ;
     skos:altLabel "Log Out"@en , "Sign Out"@en ;
@@ -1335,45 +1509,6 @@ nexus:Logout a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty nexus:terminatesSession ;
           owl:someValuesFrom nexus:VisitSession
-        ] .
-
-nexus:PageView a owl:Class ;
-    rdfs:label "Page View"@en ;
-    skos:altLabel "Page Visit"@en ;
-    skos:definition "A process during which a user views a single page of the Nexus platform within a visit session; page-view processes are the source of the total_page_views, top_pages and most_visited_page KPIs."@en ;
-    skos:example "Alice viewing /analytics for 42 seconds on 2026-05-21"@en ;
-    rdfs:subClassOf bfo:BFO_0000015 ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000199 ;
-          owl:someValuesFrom nexus:PageViewInterval
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000199 ;
-          owl:allValuesFrom nexus:PageViewInterval
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000057 ;
-          owl:someValuesFrom nexus:User
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000066 ;
-          owl:someValuesFrom nexus:DeploymentSite
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000059 ;
-          owl:someValuesFrom nexus:Page
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000059 ;
-          owl:someValuesFrom nexus:Log
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000057 ;
-          owl:someValuesFrom nexus:UserEngagementQuality
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000055 ;
-          owl:someValuesFrom nexus:VisitorRole
         ] .
 
 #################################################################
@@ -1491,3 +1626,74 @@ nexus:email a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "The email address associated with the user account in the Nexus platform."@en ;
     skos:example "alice@example.com", "bob.smith@company.org" .
+
+# Analytics event identification
+
+nexus:event_id a owl:DatatypeProperty ;
+    rdfs:label "event id"@en ;
+    rdfs:domain nexus:PageView, nexus:VisitSession, nexus:Login, nexus:Logout ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."@en ;
+    skos:example "103036d2-2929-442b-b15d-d73bca3928aa" .
+
+nexus:session_id a owl:DatatypeProperty ;
+    rdfs:label "session id"@en ;
+    rdfs:domain nexus:VisitSession ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier of a visit session in the Nexus platform."@en ;
+    skos:example "d292a58c-52a1-4892-ba54-3083db5e580d" .
+
+# Workspace identification
+
+nexus:workspace_id a owl:DatatypeProperty ;
+    rdfs:label "workspace id"@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier of a workspace in the Nexus platform."@en ;
+    skos:example "ws-ee0d7c1d56b2" .
+
+nexus:workspace_name a owl:DatatypeProperty ;
+    rdfs:label "workspace name"@en ;
+    rdfs:domain nexus:Workspace ;
+    rdfs:range xsd:string ;
+    skos:definition "The human-readable display name of a workspace in the Nexus platform."@en ;
+    skos:example "Primary", "Naas.ai Main Workspace" .
+
+# Page artifact identification
+
+nexus:page_path a owl:DatatypeProperty ;
+    rdfs:label "page path"@en ;
+    rdfs:domain nexus:Page ;
+    rdfs:range xsd:string ;
+    skos:definition "The URL path of a page within the Nexus platform."@en ;
+    skos:example "/workspace/ws-ee0d7c1d56b2/lab", "/analytics" .
+
+nexus:page_title a owl:DatatypeProperty ;
+    rdfs:label "page title"@en ;
+    rdfs:domain nexus:Page ;
+    rdfs:range xsd:string ;
+    skos:definition "The HTML document title of a page within the Nexus platform."@en ;
+    skos:example "Lab | ABI AI Platform | Naas.ai" .
+
+# User-side site context (country/device/browser)
+
+nexus:country a owl:DatatypeProperty ;
+    rdfs:label "country"@en ;
+    rdfs:domain nexus:UserSite ;
+    rdfs:range xsd:string ;
+    skos:definition "The ISO 3166-1 alpha-2 country code derived from the end-user network location during a platform process."@en ;
+    skos:example "FR", "US", "DE" .
+
+nexus:device a owl:DatatypeProperty ;
+    rdfs:label "device"@en ;
+    rdfs:domain nexus:UserSite ;
+    rdfs:range xsd:string ;
+    skos:definition "The operating system or device class detected for the end user during a platform process."@en ;
+    skos:example "Windows", "macOS", "iOS", "Android" .
+
+nexus:browser a owl:DatatypeProperty ;
+    rdfs:label "browser"@en ;
+    rdfs:domain nexus:UserSite ;
+    rdfs:range xsd:string ;
+    skos:definition "The web browser detected for the end user during a platform process."@en ;
+    skos:example "Chrome", "Safari", "Firefox", "Edge" .
