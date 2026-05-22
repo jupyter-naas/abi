@@ -103,6 +103,53 @@ def test_publish_rejects_non_log_process(tmp_path):
     raise AssertionError("expected InvalidEventError")
 
 
+def test_publish_populates_created_at_if_unset(tmp_path):
+    import datetime as _dt
+
+    service, _, _ = _make_service(tmp_path)
+
+    evt = UserAuthenticated(user_id="alice")
+    assert evt.created_at is None  # unset before publish
+
+    before = _dt.datetime.now()
+    service.publish(evt)
+    after = _dt.datetime.now()
+
+    assert evt.created_at is not None
+    assert before <= evt.created_at <= after
+
+
+def test_publish_preserves_caller_supplied_created_at(tmp_path):
+    import datetime as _dt
+
+    service, _, _ = _make_service(tmp_path)
+
+    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)
+    evt = UserAuthenticated(user_id="alice", created_at=ts)
+    service.publish(evt)
+    assert evt.created_at == ts
+
+
+def test_reconstructed_instance_round_trips_created_at(tmp_path):
+    import datetime as _dt
+
+    service, _, _ = _make_service(tmp_path)
+    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)
+    service.publish(UserAuthenticated(user_id="alice", created_at=ts))
+
+    [evt] = service.query(event_class=UserAuthenticated)
+    assert evt.created_at == ts
+
+
+def test_reconstructed_instance_exposes_storage_metadata(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    stored = service.publish(UserAuthenticated(user_id="alice"))
+
+    [evt] = service.query(event_class=UserAuthenticated)
+    assert evt._seq == stored.seq
+    assert evt._stored_at == stored.timestamp
+
+
 def test_publish_persists_even_if_bus_fails(tmp_path):
     service, adapter, bus_adapter = _make_service(tmp_path)
 
