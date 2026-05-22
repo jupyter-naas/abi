@@ -681,7 +681,7 @@ function EventsSection({ filters }: { filters: FilterValue }) {
                 </div>
               </div>
               <div className="flex-shrink-0 text-right text-xs text-muted-foreground whitespace-nowrap">
-                <div>{formatRelative(e.timestamp)}</div>
+                <div>{formatDateTime(e.timestamp)}</div>
                 <div className="font-mono opacity-70">{e.session_id.slice(0, 12)}</div>
               </div>
             </li>
