@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.23.1 (2026-05-22)
+
+### Bug Fixes
+
+- Ensure git pull before committing staged changes
+  ([`d99236e`](https://github.com/jupyter-naas/abi/commit/d99236e102160c13237e830b1283aba0746fbc93))
+
+
 ## v1.23.0 (2026-05-21)
 
 ### Bug Fixes
