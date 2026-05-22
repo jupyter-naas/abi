@@ -1347,9 +1347,11 @@ export default function FilesPage() {
         </div>
       </div>
 
-      {/* PDF Viewer modal */}
+    </div>
+
+      {/* PDF Viewer modal — rendered outside the page container to avoid stacking-context traps */}
       {pdfViewerFileName && (
-        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <div className="truncate text-sm font-medium">{pdfViewerFileName}</div>
@@ -1391,7 +1393,7 @@ export default function FilesPage() {
         </div>
       )}
       {imageViewerFileName && (
-        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <div className="truncate text-sm font-medium">{imageViewerFileName}</div>
@@ -1428,7 +1430,7 @@ export default function FilesPage() {
         </div>
       )}
       {textViewerFileName && (
-        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <div className="truncate text-sm font-medium">{textViewerFileName}</div>
@@ -1467,7 +1469,6 @@ export default function FilesPage() {
           </div>
         </div>
       )}
-    </div>
     </>
   );
 }
