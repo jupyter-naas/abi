@@ -44,6 +44,9 @@ test('guard maps workspace paths to features', () => {
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/ontology'), 'ontology');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/graph'), 'graph');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/settings/agents'), 'agents');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/settings/theme'), 'settings.workspace');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/organization'), 'settings.organization');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/organization/billing'), 'settings.organization');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/apps'), 'apps');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/marketplace'), 'marketplace');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/help'), 'settings');
