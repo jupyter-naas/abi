@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from threading import Thread
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 
 class EventNotFoundError(Exception):
@@ -47,11 +47,20 @@ class IEventAdapter(ABC):
         self,
         event_type: str | None = None,
         since_seq: int | None = None,
+        until_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
         limit: int | None = None,
     ) -> list[StoredEvent]:
         """Read events matching the filters, ordered by `seq` ascending."""
+
+    @abstractmethod
+    def max_seq(self, event_type: str | None = None) -> int:
+        """Return the highest `seq` currently stored (0 if empty).
+
+        Used by iterators to capture a snapshot upper bound at start of
+        iteration so that events appended during iteration are not included.
+        """
 
     @abstractmethod
     def get_cursor(self, consumer_id: str, event_type: str) -> int:
@@ -86,11 +95,30 @@ class IEventService(ABC):
     def query(
         self,
         event_class: "type | None" = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
         limit: int | None = None,
     ) -> list[Any]:
         """Return reconstructed event instances matching the filters."""
+
+    @abstractmethod
+    def iter_query(
+        self,
+        event_class: "type | None" = None,
+        since_seq: int | None = None,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        batch_size: int = 500,
+    ) -> Iterator[Any]:
+        """Stream events matching the filters as reconstructed instances.
+
+        Snapshot semantics: the iterator captures the current max `seq` at the
+        first call and stops once it has yielded everything up to that point.
+        Events appended **during iteration are not included** — call again to
+        pick them up. This guarantees deterministic termination.
+        """
 
     @abstractmethod
     def query_for_consumer(
@@ -100,6 +128,20 @@ class IEventService(ABC):
         limit: int | None = None,
     ) -> list[Any]:
         """Return undelivered events for `consumer_id` and advance the cursor."""
+
+    @abstractmethod
+    def iter_query_for_consumer(
+        self,
+        consumer_id: str,
+        event_class: type,
+        batch_size: int = 500,
+    ) -> Iterator[Any]:
+        """Stream undelivered events for `consumer_id`, advancing the cursor.
+
+        Drains all currently-pending events in batches of `batch_size`. The
+        cursor is advanced per batch (same atomic semantics as `query_for_consumer`).
+        Stops when the consumer is caught up.
+        """
 
     @abstractmethod
     def subscribe(

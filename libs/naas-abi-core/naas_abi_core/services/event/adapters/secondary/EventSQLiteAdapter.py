@@ -90,6 +90,7 @@ class EventSQLiteAdapter(IEventAdapter):
         self,
         event_type: str | None = None,
         since_seq: int | None = None,
+        until_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
         limit: int | None = None,
@@ -102,6 +103,9 @@ class EventSQLiteAdapter(IEventAdapter):
         if since_seq is not None:
             clauses.append("seq > ?")
             params.append(since_seq)
+        if until_seq is not None:
+            clauses.append("seq <= ?")
+            params.append(until_seq)
         if since_timestamp is not None:
             clauses.append("timestamp >= ?")
             params.append(since_timestamp)
@@ -123,6 +127,17 @@ class EventSQLiteAdapter(IEventAdapter):
             StoredEvent(id=r[0], event_type=r[1], seq=r[2], timestamp=r[3], payload=r[4])
             for r in rows
         ]
+
+    def max_seq(self, event_type: str | None = None) -> int:
+        if event_type is None:
+            sql = "SELECT COALESCE(MAX(seq), 0) FROM events"
+            params: tuple = ()
+        else:
+            sql = "SELECT COALESCE(MAX(seq), 0) FROM events WHERE event_type = ?"
+            params = (event_type,)
+        with self._lock:
+            row = self._conn.execute(sql, params).fetchone()
+        return int(row[0]) if row else 0
 
     # ------------------------------------------------------------------
     # cursor / per-consumer
