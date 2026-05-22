@@ -163,6 +163,94 @@ def test_query_for_consumer_advances_cursor(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# iter_query
+# ---------------------------------------------------------------------------
+
+
+def test_iter_query_streams_all_events(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for i in range(7):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    streamed = list(service.iter_query(event_class=UserAuthenticated, batch_size=3))
+    assert len(streamed) == 7
+    assert sorted(e.user_id for e in streamed) == [f"u{i}" for i in range(7)]
+
+
+def test_iter_query_is_a_lazy_iterator(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for i in range(5):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    it = service.iter_query(event_class=UserAuthenticated, batch_size=2)
+    # It's an iterator, not a list — consuming one item must work.
+    first = next(it)
+    assert isinstance(first, UserAuthenticated)
+    # Remaining are still yieldable.
+    rest = list(it)
+    assert len(rest) == 4
+
+
+def test_iter_query_snapshot_semantics(tmp_path):
+    """Events appended during iteration are not included."""
+    service, _, _ = _make_service(tmp_path)
+    for i in range(3):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    it = service.iter_query(event_class=UserAuthenticated, batch_size=1)
+    seen = []
+    seen.append(next(it).user_id)
+
+    # Append more between yields — they must NOT appear in this iteration.
+    service.publish(UserAuthenticated(user_id="appended-mid-iteration"))
+
+    seen.extend(e.user_id for e in it)
+    assert sorted(seen) == ["u0", "u1", "u2"]
+
+
+def test_iter_query_empty(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    assert list(service.iter_query(event_class=UserAuthenticated)) == []
+
+
+def test_iter_query_respects_since_seq(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    stored = [service.publish(UserAuthenticated(user_id=f"u{i}")) for i in range(5)]
+
+    streamed = list(
+        service.iter_query(
+            event_class=UserAuthenticated,
+            since_seq=stored[1].seq,  # skip first two
+            batch_size=2,
+        )
+    )
+    assert [e.user_id for e in streamed] == ["u2", "u3", "u4"]
+
+
+# ---------------------------------------------------------------------------
+# iter_query_for_consumer
+# ---------------------------------------------------------------------------
+
+
+def test_iter_query_for_consumer_drains_across_batches(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for i in range(10):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    streamed = list(
+        service.iter_query_for_consumer(
+            "worker-1", UserAuthenticated, batch_size=3
+        )
+    )
+    assert [e.user_id for e in streamed] == [f"u{i}" for i in range(10)]
+
+    # Cursor is fully advanced — second call yields nothing.
+    assert list(
+        service.iter_query_for_consumer("worker-1", UserAuthenticated, batch_size=3)
+    ) == []
+
+
+# ---------------------------------------------------------------------------
 # subscribe
 # ---------------------------------------------------------------------------
 

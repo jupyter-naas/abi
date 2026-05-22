@@ -15,7 +15,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 from threading import Thread
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from rdflib import Graph
 
@@ -103,6 +103,8 @@ class EventService(ServiceBase, IEventService):
     def query(
         self,
         event_class: type[LogProcess] | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
         limit: int | None = None,
@@ -110,11 +112,49 @@ class EventService(ServiceBase, IEventService):
         event_type = str(event_class._class_uri) if event_class is not None else None
         rows = self._adapter.query(
             event_type=event_type,
+            since_seq=since_seq,
+            until_seq=until_seq,
             since_timestamp=since_timestamp,
             until_timestamp=until_timestamp,
             limit=limit,
         )
         return [self._reconstruct(row, event_class) for row in rows]
+
+    def iter_query(
+        self,
+        event_class: type[LogProcess] | None = None,
+        since_seq: int | None = None,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        batch_size: int = 500,
+    ) -> Iterator[Any]:
+        """Stream events matching the filters.
+
+        Snapshot semantics: a max `seq` is captured at the first call and is
+        used as the upper bound for the whole iteration. Events appended
+        during iteration are not included.
+        """
+        if batch_size <= 0:
+            raise ValueError("batch_size must be > 0")
+
+        event_type = str(event_class._class_uri) if event_class is not None else None
+        snapshot_max = self._adapter.max_seq(event_type=event_type)
+        cursor = since_seq if since_seq is not None else 0
+
+        while cursor < snapshot_max:
+            rows = self._adapter.query(
+                event_type=event_type,
+                since_seq=cursor,
+                until_seq=snapshot_max,
+                since_timestamp=since_timestamp,
+                until_timestamp=until_timestamp,
+                limit=batch_size,
+            )
+            if not rows:
+                break
+            for row in rows:
+                yield self._reconstruct(row, event_class)
+            cursor = rows[-1].seq
 
     def query_for_consumer(
         self,
@@ -128,6 +168,28 @@ class EventService(ServiceBase, IEventService):
             limit=limit,
         )
         return [self._reconstruct(row, event_class) for row in rows]
+
+    def iter_query_for_consumer(
+        self,
+        consumer_id: str,
+        event_class: type[LogProcess],
+        batch_size: int = 500,
+    ) -> Iterator[Any]:
+        """Drain pending events for `consumer_id` in batches, advancing the cursor."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be > 0")
+
+        event_type = str(event_class._class_uri)
+        while True:
+            rows = self._adapter.query_for_consumer(
+                consumer_id=consumer_id,
+                event_type=event_type,
+                limit=batch_size,
+            )
+            if not rows:
+                return
+            for row in rows:
+                yield self._reconstruct(row, event_class)
 
     # ------------------------------------------------------------------
     # subscribe

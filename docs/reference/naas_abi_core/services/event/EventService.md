@@ -20,10 +20,14 @@ Subscriptions are live-only. Historical reads go through `query()` (filter-based
 - `publish(event: LogProcess) -> StoredEvent`
   - Persists via the adapter, then broadcasts on the bus topic `class_iri_to_topic(event._class_uri)`. If the bus broadcast fails, the event is still persisted (warning logged).
   - Raises `InvalidEventError` if `event` is not a `LogProcess` subclass instance.
-- `query(event_class=None, since_timestamp=None, until_timestamp=None, limit=None) -> list[LogProcess]`
-  - Reads from the adapter and reconstructs each row back into an instance of `event_class` (or `LogProcess` if no class hint is given).
+- `query(event_class=None, since_seq=None, until_seq=None, since_timestamp=None, until_timestamp=None, limit=None) -> list[LogProcess]`
+  - Eager read. Reconstructs each row back into an instance of `event_class` (or `LogProcess` if no class hint is given). Use `since_seq` for stable seq-based pagination.
+- `iter_query(event_class=None, since_seq=None, since_timestamp=None, until_timestamp=None, batch_size=500) -> Iterator[LogProcess]`
+  - Streaming read with **snapshot semantics**: captures the current `max(seq)` at the first call and stops once it has yielded everything up to that point. Events appended during iteration are not included — call again to pick them up. Caller does not have to manage pagination.
 - `query_for_consumer(consumer_id: str, event_class: type, limit=None) -> list[LogProcess]`
-  - Returns undelivered events for `(consumer_id, event_class._class_uri)` and advances the cursor in the same transaction.
+  - Eager. Returns undelivered events for `(consumer_id, event_class._class_uri)` and advances the cursor in the same transaction.
+- `iter_query_for_consumer(consumer_id, event_class, batch_size=500) -> Iterator[LogProcess]`
+  - Drains all pending events for `consumer_id` in batches, advancing the cursor per batch. Stops when caught up.
 - `subscribe(event_class: type, callback: Callable[[LogProcess], None], routing_key: str = "#") -> Thread`
   - Subscribes to the bus topic for `event_class._class_uri`. The callback receives a reconstructed instance of `event_class`. Requires a `BusService`; raises `RuntimeError` otherwise.
 
@@ -74,11 +78,19 @@ events.subscribe(UserAuthenticated, on_user_auth)
 # Publish
 events.publish(UserAuthenticated(user_id="alice"))
 
-# Historical query
+# Historical query (eager)
 recent = events.query(event_class=UserAuthenticated, limit=100)
 
-# Catch-up for a durable consumer
+# Streaming over all history without managing pagination (snapshot)
+for evt in events.iter_query(event_class=UserAuthenticated, batch_size=500):
+    process(evt)
+
+# Catch-up for a durable consumer (eager, one batch)
 batch = events.query_for_consumer("worker-1", UserAuthenticated)
+
+# Catch-up streaming until the consumer is up to date
+for evt in events.iter_query_for_consumer("worker-1", UserAuthenticated):
+    process(evt)
 ```
 
 ---

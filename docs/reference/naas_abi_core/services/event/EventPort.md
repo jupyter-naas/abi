@@ -28,15 +28,18 @@ Events themselves are not modeled in this port: a published event must be an ins
 
 #### `IEventAdapter` (secondary port — durable log)
 - `append(event_id, event_type, timestamp, payload) -> StoredEvent` — persist one event; returns the stored record with its assigned `seq`.
-- `query(event_type=None, since_seq=None, since_timestamp=None, until_timestamp=None, limit=None) -> list[StoredEvent]` — filtered read, ordered by `seq` ascending.
+- `query(event_type=None, since_seq=None, until_seq=None, since_timestamp=None, until_timestamp=None, limit=None) -> list[StoredEvent]` — filtered read, ordered by `seq` ascending.
+- `max_seq(event_type=None) -> int` — highest stored `seq` (0 if empty). Used by iterators to capture a snapshot upper bound.
 - `get_cursor(consumer_id, event_type) -> int` — return last delivered `seq` for `(consumer_id, event_type)`; `0` if unset.
 - `query_for_consumer(consumer_id, event_type, limit=None) -> list[StoredEvent]` — return events with `seq > cursor` and advance the cursor atomically in the same transaction.
 
 #### `IEventService` (primary port)
 - `publish(event) -> StoredEvent` — persist a `LogProcess` subclass instance and broadcast it on the bus. Raises `InvalidEventError` if `event` is not a `LogProcess` subclass instance.
-- `query(event_class=None, since_timestamp=None, until_timestamp=None, limit=None) -> list` — return reconstructed event instances matching the filters.
-- `query_for_consumer(consumer_id, event_class, limit=None) -> list` — return undelivered events for `consumer_id` and advance the cursor.
-- `subscribe(event_class, callback, routing_key="#") -> Thread` — subscribe to live events via the bus. **Live-only — does not replay history.** Use `query_for_consumer` for catch-up.
+- `query(event_class=None, since_seq=None, until_seq=None, since_timestamp=None, until_timestamp=None, limit=None) -> list` — eager read. Return reconstructed event instances matching the filters.
+- `iter_query(event_class=None, since_seq=None, since_timestamp=None, until_timestamp=None, batch_size=500) -> Iterator` — streaming read with snapshot semantics; caller doesn't manage pagination.
+- `query_for_consumer(consumer_id, event_class, limit=None) -> list` — eager. Return undelivered events for `consumer_id` and advance the cursor.
+- `iter_query_for_consumer(consumer_id, event_class, batch_size=500) -> Iterator` — drain all pending events for `consumer_id` across batches, advancing the cursor each batch.
+- `subscribe(event_class, callback, routing_key="#") -> Thread` — subscribe to live events via the bus. **Live-only — does not replay history.** Use `query_for_consumer` / `iter_query_for_consumer` for catch-up.
 
 ## Configuration/Dependencies
 - Standard library: `abc`, `dataclasses`, `threading`, `typing`.
