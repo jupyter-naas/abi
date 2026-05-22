@@ -25,7 +25,7 @@ export function AnalyticsPageTracker() {
     const handle = setTimeout(() => {
       trackPageView({
         page_path: pathname,
-        page_title: document.title,
+        page_title: document.title.split(' | ')[0],
         workspace_id: getWorkspaceId(pathname),
       });
     }, TITLE_SETTLE_MS);
