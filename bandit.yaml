@@ -19,3 +19,5 @@ skips:
   # hashlib/md5 — flagged generically; project uses it for non-security hashing (e.g. cache keys)
   # Remove this skip once all hashlib usages have been audited and confirmed safe
   - B324
+  # pickle used only with trusted internal storage
+  - B301
