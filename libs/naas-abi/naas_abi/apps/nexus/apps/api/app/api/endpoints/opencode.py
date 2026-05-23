@@ -86,6 +86,70 @@ def _base_url() -> str:
     return _get_agent()._base_url
 
 
+_resolved_opencode_base: str | None = None
+
+
+def _opencode_base_candidates() -> list[str]:
+    port = int(os.environ.get("OPENCODE_PORT", "4005"))
+    hosts: list[str] = []
+    for host in (
+        os.environ.get("OPENCODE_HOST", "127.0.0.1"),
+        "host.docker.internal",
+        "127.0.0.1",
+        "localhost",
+    ):
+        if host and host not in hosts:
+            hosts.append(host)
+    return [f"http://{host}:{port}" for host in hosts]
+
+
+def _sync_agent_from_base(agent: object, base: str) -> None:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(base)
+    conf = getattr(agent, "conf", None)
+    if conf is None:
+        return
+    conf.host = parsed.hostname or "127.0.0.1"
+    conf.port = parsed.port or int(os.environ.get("OPENCODE_PORT", "4005"))
+
+
+async def _resolve_opencode_base() -> str:
+    """Find a reachable opencode server (Docker host, localhost, etc.)."""
+    global _resolved_opencode_base
+
+    if _resolved_opencode_base:
+        try:
+            async with httpx.AsyncClient(timeout=1.5) as client:
+                response = await client.get(f"{_resolved_opencode_base}/global/health")
+                if response.status_code == 200 and response.json().get("healthy") is True:
+                    return _resolved_opencode_base
+        except Exception:
+            _resolved_opencode_base = None
+
+    last_error = ""
+    for base in _opencode_base_candidates():
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                response = await client.get(f"{base}/global/health")
+                if response.status_code == 200 and response.json().get("healthy") is True:
+                    _resolved_opencode_base = base
+                    _sync_agent_from_base(_get_agent(), base)
+                    return base
+        except Exception as exc:
+            last_error = str(exc)
+
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "opencode is not running. On your Mac, run: make opencode-up "
+            f"(checked: {', '.join(_opencode_base_candidates())}"
+            + (f"; {last_error}" if last_error else "")
+            + ")"
+        ),
+    )
+
+
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 
 class OpencodeChatRequest(BaseModel):
@@ -93,6 +157,7 @@ class OpencodeChatRequest(BaseModel):
     session_id: str = ""
     model_provider_id: str = ""
     model_id: str = ""
+    agent: str = ""  # opencode primary agent, e.g. "build" or "plan"
 
 
 class OpencodeRevertRequest(BaseModel):
@@ -110,27 +175,112 @@ def _ensure_session_dir(session_id: str) -> str:
 
 async def _proxy_get(path: str):
     """GET from opencode server and return parsed JSON."""
+    base = await _resolve_opencode_base()
     async with httpx.AsyncClient(timeout=5.0) as c:
-        r = await c.get(f"{_base_url()}/{path}")
+        r = await c.get(f"{base}/{path}")
         if r.status_code >= 300:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         return r.json()
 
 
 async def _proxy_post(path: str, body: dict | None = None):
+    base = await _resolve_opencode_base()
     async with httpx.AsyncClient(timeout=10.0) as c:
-        r = await c.post(f"{_base_url()}/{path}", json=body or {})
+        r = await c.post(f"{base}/{path}", json=body or {})
         if r.status_code >= 300:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         return r.json()
 
 
 async def _proxy_delete(path: str):
+    base = await _resolve_opencode_base()
     async with httpx.AsyncClient(timeout=5.0) as c:
-        r = await c.delete(f"{_base_url()}/{path}")
+        r = await c.delete(f"{base}/{path}")
         if r.status_code >= 300:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         return r.json()
+
+
+def _parse_model_ref(model_value: str | None) -> tuple[str, str] | None:
+    if not model_value or "/" not in model_value:
+        return None
+    provider_id, model_id = model_value.strip().split("/", 1)
+    provider_id = provider_id.strip()
+    model_id = model_id.strip()
+    if provider_id and model_id:
+        return provider_id, model_id
+    return None
+
+
+def _lookup_model_name(providers_data: object, provider_id: str, model_id: str) -> str:
+    """Resolve a human-readable model name from opencode /config/providers."""
+    if not isinstance(providers_data, (list, dict)):
+        return model_id
+
+    raw: list[dict] = []
+    if isinstance(providers_data, list):
+        raw = [p for p in providers_data if isinstance(p, dict)]
+    elif isinstance(providers_data, dict):
+        nested = providers_data.get("providers")
+        if isinstance(nested, list):
+            raw = [p for p in nested if isinstance(p, dict)]
+        elif isinstance(nested, dict):
+            raw = [p for p in nested.values() if isinstance(p, dict)]
+
+    for provider in raw:
+        if str(provider.get("id") or "") != provider_id:
+            continue
+        models = provider.get("models")
+        if isinstance(models, dict):
+            entry = models.get(model_id)
+            if isinstance(entry, dict):
+                return str(entry.get("name") or entry.get("id") or model_id)
+            return model_id
+        if isinstance(models, list):
+            for model in models:
+                if not isinstance(model, dict):
+                    continue
+                mid = str(model.get("modelID") or model.get("modelId") or model.get("id") or "")
+                if mid == model_id:
+                    return str(model.get("name") or mid)
+    return model_id
+
+
+def _first_available_model(providers_data: object) -> tuple[str, str, str] | None:
+    if not isinstance(providers_data, (list, dict)):
+        return None
+
+    raw: list[dict] = []
+    if isinstance(providers_data, list):
+        raw = [p for p in providers_data if isinstance(p, dict)]
+    elif isinstance(providers_data, dict):
+        nested = providers_data.get("providers")
+        if isinstance(nested, list):
+            raw = [p for p in nested if isinstance(p, dict)]
+        elif isinstance(nested, dict):
+            raw = [p for p in nested.values() if isinstance(p, dict)]
+
+    for provider in raw:
+        provider_id = str(provider.get("id") or "")
+        if not provider_id:
+            continue
+        models = provider.get("models")
+        if isinstance(models, dict) and models:
+            model_id, entry = next(iter(models.items()))
+            if isinstance(entry, dict):
+                name = str(entry.get("name") or entry.get("id") or model_id)
+            else:
+                name = str(model_id)
+            return provider_id, str(model_id), name
+        if isinstance(models, list):
+            for model in models:
+                if not isinstance(model, dict):
+                    continue
+                model_id = str(model.get("modelID") or model.get("modelId") or model.get("id") or "")
+                if model_id:
+                    name = str(model.get("name") or model_id)
+                    return provider_id, model_id, name
+    return None
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -138,11 +288,11 @@ async def _proxy_delete(path: str):
 @router.get("/health")
 async def health():
     try:
+        base = await _resolve_opencode_base()
         agent = _get_agent()
-        async with httpx.AsyncClient(timeout=2.0) as c:
-            r = await c.get(f"{agent._base_url}/global/health")
-            ok = r.status_code == 200 and r.json().get("healthy") is True
-            return {"healthy": ok, "port": agent.conf.port}
+        return {"healthy": True, "port": agent.conf.port, "baseUrl": base}
+    except HTTPException as exc:
+        return {"healthy": False, "error": exc.detail}
     except Exception as exc:
         return {"healthy": False, "error": str(exc)}
 
@@ -150,18 +300,58 @@ async def health():
 @router.get("/providers")
 async def providers():
     """List all configured providers and their available models."""
-    agent = _get_agent()
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, agent.start)
     return await _proxy_get("config/providers")
+
+
+@router.get("/default-model")
+async def default_model():
+    """Resolved default model (provider/model + display name) for the opencode UI."""
+    agent = _get_agent()
+    provider_id = ""
+    model_id = ""
+    name = ""
+    source = "auto"
+
+    parsed = _parse_model_ref(agent.conf.model)
+    if parsed:
+        provider_id, model_id = parsed
+        name = model_id
+        source = "engine"
+
+    try:
+        await _resolve_opencode_base()
+        cfg = await _proxy_get("config")
+        if isinstance(cfg, dict):
+            model_val = cfg.get("model")
+            if isinstance(model_val, str):
+                cfg_parsed = _parse_model_ref(model_val)
+                if cfg_parsed:
+                    provider_id, model_id = cfg_parsed
+                    name = model_id
+                    source = "opencode"
+
+        providers_data = await _proxy_get("config/providers")
+        if provider_id and model_id:
+            name = _lookup_model_name(providers_data, provider_id, model_id)
+        else:
+            first = _first_available_model(providers_data)
+            if first:
+                provider_id, model_id, name = first
+    except Exception:
+        if not name:
+            name = model_id
+
+    return {
+        "providerID": provider_id,
+        "modelID": model_id,
+        "name": name or model_id,
+        "source": source,
+    }
 
 
 @router.get("/sessions")
 async def list_sessions():
     """List all opencode sessions."""
-    agent = _get_agent()
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, agent.start)
     return await _proxy_get("session")
 
 
@@ -281,10 +471,12 @@ async def chat(body: OpencodeChatRequest):
                         oc_session_id = cr.json().get("id", session_id)
 
                     # Send the message with model override (non-blocking)
-                    prompt_payload = {
+                    prompt_payload: dict = {
                         "parts": [{"type": "text", "text": message_with_ctx}],
                         "model": {"providerID": body.model_provider_id, "modelID": body.model_id},
                     }
+                    if body.agent:
+                        prompt_payload["agent"] = body.agent
                     prompt_task = asyncio.create_task(
                         client.post(f"{base}/session/{oc_session_id}/message", json=prompt_payload)
                     )
@@ -323,7 +515,10 @@ async def chat(body: OpencodeChatRequest):
     async def _stream() -> AsyncIterator[dict]:
         try:
             await loop.run_in_executor(None, agent.start)
-            async for raw_event in agent.astream(message=message_with_ctx, thread_id=session_id):
+            oc_agent = body.agent or None
+            async for raw_event in agent.astream(
+                message=message_with_ctx, thread_id=session_id, agent=oc_agent
+            ):
                 yield {"data": raw_event}
         except Exception as exc:
             yield {"data": json.dumps({"type": "error", "message": str(exc)})}

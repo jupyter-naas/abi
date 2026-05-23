@@ -138,7 +138,10 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     setSocket(socketInstance);
 
     return () => {
-      socketInstance.disconnect();
+      // Avoid "closed before the connection is established" in React Strict Mode.
+      if (socketInstance.active) {
+        socketInstance.disconnect();
+      }
     };
   }, [user, token]);
 

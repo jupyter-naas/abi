@@ -569,6 +569,7 @@ class OpencodeAgent(Expose):
         self,
         message: str,
         thread_id: Optional[str] = None,
+        agent: Optional[str] = None,
     ) -> AsyncIterator[str]:
         self.start()
 
@@ -578,7 +579,7 @@ class OpencodeAgent(Expose):
                 await self._ensure_system_prompt(client, session_id)
 
                 prompt_task = asyncio.create_task(
-                    self._prompt(client, session_id, message)
+                    self._prompt(client, session_id, message, agent=agent)
                 )
 
                 async with client.stream("GET", f"{self._base_url}/event") as response:
@@ -707,11 +708,14 @@ class OpencodeAgent(Expose):
         session_id: str,
         message: str,
         no_reply: bool = False,
+        agent: Optional[str] = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "parts": [{"type": "text", "text": message}],
             "noReply": no_reply,
         }
+        if agent:
+            payload["agent"] = agent
         model_payload = self._model_payload(self.conf.model)
         if model_payload is not None:
             payload["model"] = model_payload

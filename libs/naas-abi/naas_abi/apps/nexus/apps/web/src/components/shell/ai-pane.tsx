@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import {
   X,
   Send,
+  ArrowUp,
   Bot,
   Loader2,
   ChevronDown,
@@ -80,6 +81,62 @@ interface OcProvider {
   models: OcModel[];
 }
 
+/** Normalize opencode /config/providers (array, map, or { providers }). */
+function normalizeOcProviders(data: unknown): OcProvider[] {
+  if (!data || typeof data !== 'object') return [];
+
+  const record = data as Record<string, unknown>;
+  let raw: unknown[] = [];
+  if (Array.isArray(data)) {
+    raw = data;
+  } else if (Array.isArray(record.providers)) {
+    raw = record.providers;
+  } else if (record.providers && typeof record.providers === 'object') {
+    raw = Object.values(record.providers as Record<string, unknown>);
+  } else if (record.provider && typeof record.provider === 'object') {
+    raw = Object.values(record.provider as Record<string, unknown>);
+  }
+
+  return raw
+    .filter((p): p is Record<string, unknown> => (
+      !!p && typeof p === 'object' && typeof (p as Record<string, unknown>).id === 'string'
+    ))
+    .map((p) => {
+      const id = p.id as string;
+      const name = (typeof p.name === 'string' ? p.name : id);
+      const modelsRaw = p.models;
+      let models: OcModel[] = [];
+
+      if (Array.isArray(modelsRaw)) {
+        models = modelsRaw
+          .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object')
+          .map((m) => {
+            const modelID = String(m.modelID ?? m.modelId ?? m.id ?? '');
+            return { providerID: id, modelID, name: String(m.name ?? modelID) };
+          })
+          .filter((m) => m.modelID);
+      } else if (modelsRaw && typeof modelsRaw === 'object') {
+        models = Object.entries(modelsRaw as Record<string, unknown>).map(([key, m]) => {
+          const rec = m && typeof m === 'object' ? (m as Record<string, unknown>) : {};
+          const modelID = String(rec.modelID ?? rec.modelId ?? rec.id ?? key);
+          return { providerID: id, modelID, name: String(rec.name ?? modelID) };
+        }).filter((m) => m.modelID);
+      }
+
+      return { id, name, models };
+    })
+    .filter((p) => p.models.length > 0);
+}
+
+function lookupOcModelName(providers: OcProvider[], providerID: string, modelID: string): string {
+  for (const p of providers) {
+    if (p.id !== providerID) continue;
+    const match = p.models.find((m) => m.modelID === modelID);
+    if (match) return match.name || match.modelID;
+  }
+  return modelID;
+}
+
 
 // ─── Opencode tool event card ─────────────────────────────────────────────────
 
@@ -115,6 +172,13 @@ function ToolEventCard({ event }: { event: ToolEvent }) {
 
 const OPENCODE_AGENT_ID = 'opencode';
 
+const OC_PRIMARY_AGENTS = [
+  { id: 'build', label: 'Build', hint: 'Full tool access' },
+  { id: 'plan', label: 'Plan', hint: 'Plan without edits' },
+] as const;
+
+type OcPrimaryAgentId = (typeof OC_PRIMARY_AGENTS)[number]['id'];
+
 export function AIPane() {
   const pathname = usePathname();
   const isCodeSection = pathname?.includes('/code') ?? false;
@@ -133,9 +197,15 @@ export function AIPane() {
   const [opencodeSessionId, setOpencodeSessionId] = useState<string>(() => `nexus-${Date.now()}`);
   // Model picker (opencode only)
   const [opencodeProviders, setOpencodeProviders] = useState<OcProvider[]>([]);
+  const [ocProvidersLoading, setOcProvidersLoading] = useState(false);
+  const [ocProvidersError, setOcProvidersError] = useState<string | null>(null);
   const [selectedOcModel, setSelectedOcModel] = useState<OcModel | null>(null);
+  const [ocDefaultModel, setOcDefaultModel] = useState<OcModel | null>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [selectedOcPrimaryAgent, setSelectedOcPrimaryAgent] = useState<OcPrimaryAgentId>('build');
+  const [showOcModePicker, setShowOcModePicker] = useState(false);
   const modelPickerRef = useRef<HTMLDivElement>(null);
+  const ocModePickerRef = useRef<HTMLDivElement>(null);
   // Abort support
   const streamReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -148,6 +218,8 @@ export function AIPane() {
   const { activeFile, fileContents, fsActiveFile, refreshFsFiles, readFsFile, setFsDiffs, clearFsDiffs, fsFiles, fetchFsFolderContents } = useFilesStore();
 
   const isOpencode = paneAgent === OPENCODE_AGENT_ID;
+  const activeOcModel = selectedOcModel ?? ocDefaultModel;
+  const ocModelLabel = activeOcModel?.name || activeOcModel?.modelID || '…';
   const currentAgent = mounted
     ? isOpencode
       ? null  // opencode is not in the agents store
@@ -217,42 +289,88 @@ export function AIPane() {
       if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
         setShowModelPicker(false);
       }
+      if (ocModePickerRef.current && !ocModePickerRef.current.contains(e.target as Node)) {
+        setShowOcModePicker(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch opencode providers when opencode is active
+  // Fetch opencode providers when opencode is active (Code page or opencode agent)
   const fetchOcProviders = useCallback(async () => {
+    setOcProvidersLoading(true);
     try {
       const token = useAuthStore.getState().token;
       const r = await fetch(`${getApiBase()}/api/opencode/providers`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
-      if (!r.ok) return;
+      if (!r.ok) {
+        setOpencodeProviders([]);
+        setOcProvidersError(
+          r.status >= 500
+            ? 'opencode is not running. Run: make opencode-up'
+            : `Could not load models (${r.status})`
+        );
+        return;
+      }
       const data = await r.json();
-      // opencode returns { providers: [{ id, name, models: { modelId: {...} } }] }
-      // Normalize models dict -> array
-      const rawList: Array<{ id: string; name?: string; models?: Record<string, { id?: string; name?: string }> | Array<{ id?: string; name?: string }> }> =
-        Array.isArray(data) ? data : (data.providers ?? []);
-      const list: OcProvider[] = rawList
-        .filter((p) => p.id)
-        .map((p) => ({
-          id: p.id,
-          name: p.name ?? p.id,
-          models: Array.isArray(p.models)
-            ? p.models.map((m) => ({ providerID: p.id, modelID: m.id ?? '', name: m.name ?? m.id ?? '' }))
-            : Object.values(p.models ?? {}).map((m) => ({ providerID: p.id, modelID: m.id ?? '', name: m.name ?? m.id ?? '' })),
-        }))
-        // Only show providers with at least one usable model
-        .filter((p) => p.models.length > 0);
+      const list = normalizeOcProviders(data);
       setOpencodeProviders(list);
-    } catch { /* opencode not available */ }
+      setOcProvidersError(
+        list.length === 0 ? 'No models from opencode. Check API keys in opencode config.' : null
+      );
+
+      try {
+        const dmRes = await fetch(`${getApiBase()}/api/opencode/default-model`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+        if (dmRes.ok) {
+          const dm = (await dmRes.json()) as { providerID?: string; modelID?: string; name?: string };
+          if (dm.modelID && dm.providerID) {
+            setOcDefaultModel({
+              providerID: dm.providerID,
+              modelID: dm.modelID,
+              name: dm.name || lookupOcModelName(list, dm.providerID, dm.modelID),
+            });
+          } else if (list.length > 0 && list[0].models.length > 0) {
+            const m = list[0].models[0];
+            setOcDefaultModel({ ...m, providerID: list[0].id });
+          }
+        } else if (list.length > 0 && list[0].models.length > 0) {
+          const m = list[0].models[0];
+          setOcDefaultModel({ ...m, providerID: list[0].id });
+        }
+      } catch {
+        if (list.length > 0 && list[0].models.length > 0) {
+          const m = list[0].models[0];
+          setOcDefaultModel({ ...m, providerID: list[0].id });
+        }
+      }
+    } catch {
+      setOpencodeProviders([]);
+      setOcProvidersError('opencode unreachable. Run: make opencode-up');
+    } finally {
+      setOcProvidersLoading(false);
+    }
   }, []);
 
+  // Refresh default model display name when provider catalog loads
   useEffect(() => {
-    if (isOpencode && mounted) fetchOcProviders();
-  }, [isOpencode, mounted, fetchOcProviders]);
+    if (!ocDefaultModel?.modelID || opencodeProviders.length === 0) return;
+    const name = lookupOcModelName(
+      opencodeProviders,
+      ocDefaultModel.providerID,
+      ocDefaultModel.modelID
+    );
+    if (name && name !== ocDefaultModel.name) {
+      setOcDefaultModel((prev) => (prev ? { ...prev, name } : prev));
+    }
+  }, [opencodeProviders, ocDefaultModel?.providerID, ocDefaultModel?.modelID, ocDefaultModel?.name]);
+
+  useEffect(() => {
+    if ((isOpencode || isCodeSection) && mounted) fetchOcProviders();
+  }, [isOpencode, isCodeSection, mounted, fetchOcProviders]);
 
   // Fetch real opencode sessions when history panel opens
   const fetchOcSessions = useCallback(async () => {
@@ -459,7 +577,11 @@ export function AIPane() {
     ]);
 
     const token = useAuthStore.getState().token;
-    const chatBody: Record<string, unknown> = { message: messageWithAttachments, session_id: opencodeSessionId };
+    const chatBody: Record<string, unknown> = {
+      message: messageWithAttachments,
+      session_id: opencodeSessionId,
+      agent: selectedOcPrimaryAgent,
+    };
     if (selectedOcModel) {
       chatBody.model_provider_id = selectedOcModel.providerID;
       chatBody.model_id = selectedOcModel.modelID;
@@ -837,225 +959,411 @@ export function AIPane() {
       {/* Input area */}
       <div className="border-t p-3">
         <form onSubmit={handleSubmit}>
-          {/* Attached file chips */}
-          {attachedFiles.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1">
-              {attachedFiles.map((path) => (
-                <span key={path} className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
-                  <FileCode size={10} className="flex-shrink-0 text-primary" />
-                  <span className="max-w-[140px] truncate">{path.split('/').pop()}</span>
-                  <button type="button" onClick={() => toggleAttachment(path)} className="ml-0.5 rounded-full hover:text-destructive">
-                    <X size={10} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask anything..."
-            rows={3}
-            className={cn(
-              'w-full resize-none rounded border bg-background px-2.5 py-1.5 text-xs outline-none',
-              'placeholder:text-muted-foreground/50',
-              'focus:ring-1 focus:ring-primary/30'
-            )}
-            disabled={isLoading}
-          />
-          
-          {/* Bottom bar: agent/model selectors + actions */}
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              {/* Agent selector */}
-              <div ref={modelMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowAgentMenu(!showAgentMenu)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
-                    'hover:bg-muted',
-                    showAgentMenu && 'bg-muted'
-                  )}
-                >
-                  {isOpencode && <Terminal size={12} className="text-emerald-500" />}
-                  <span className={cn(isOpencode && 'text-emerald-600 dark:text-emerald-400 font-medium')}>
-                    {isOpencode ? 'opencode' : (currentAgent?.name || 'Agent')}
-                  </span>
-                  <ChevronDown size={12} className="text-muted-foreground" />
-                </button>
-
-                {showAgentMenu && (
-                  <div className="absolute bottom-full left-0 mb-1 w-52 rounded-lg border bg-background py-1 shadow-lg">
-                    <div className="px-3 py-1.5 text-xs text-muted-foreground">Select agent</div>
-
-                    {/* opencode — always available, pinned at top */}
-                    <button
-                      type="button"
-                      onClick={() => { setPaneAgent(OPENCODE_AGENT_ID); setShowAgentMenu(false); }}
-                      className={cn(
-                        'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
-                        isOpencode && 'bg-muted'
-                      )}
-                    >
-                      <Terminal size={13} className="text-emerald-500 flex-shrink-0" />
-                      <span className="flex-1 text-left">opencode</span>
-                      <span className="text-[10px] text-muted-foreground">coding agent</span>
-                      {isOpencode && <Check size={12} className="flex-shrink-0" />}
-                    </button>
-
-                    {/* Separator */}
-                    <div className="my-1 border-t border-border/50" />
-
-                    {/* Regular agents */}
-                    {agents.filter(a => a.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
-                      <button
-                        key={agent.id}
-                        type="button"
-                        onClick={() => { setPaneAgent(agent.id); setShowAgentMenu(false); }}
-                        className={cn(
-                          'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
-                          paneAgent === agent.id && 'bg-muted'
-                        )}
-                      >
-                        <span className="flex-1 text-left">{agent.name}</span>
-                        {paneAgent === agent.id && <Check size={12} className="flex-shrink-0" />}
-                      </button>
+          {isCodeSection && isOpencode ? (
+            <>
+              {/* Opencode-style composer (matches native prompt bar) */}
+              <div className="relative rounded-lg border border-border/70 bg-muted/25 shadow-sm">
+                {attachedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1 border-b border-border/40 px-2.5 py-2">
+                    {attachedFiles.map((path) => (
+                      <span key={path} className="flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
+                        <FileCode size={10} className="flex-shrink-0 text-primary" />
+                        <span className="max-w-[120px] truncate">{path.split('/').pop()}</span>
+                        <button type="button" onClick={() => toggleAttachment(path)} className="ml-0.5 rounded-full hover:text-destructive">
+                          <X size={10} />
+                        </button>
+                      </span>
                     ))}
                   </div>
                 )}
+
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask anything..."
+                  rows={3}
+                  className={cn(
+                    'min-h-[72px] w-full resize-none border-0 bg-transparent px-3 pt-3 pb-11 text-sm outline-none',
+                    'placeholder:text-muted-foreground/50',
+                    'focus:ring-0'
+                  )}
+                  disabled={isLoading}
+                />
+
+                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+                  <div ref={filePickerRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowFilePicker((v) => !v)}
+                      title="Attach file"
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground',
+                        (showFilePicker || attachedFiles.length > 0) && 'text-foreground'
+                      )}
+                    >
+                      <Plus size={16} />
+                    </button>
+                    {showFilePicker && (
+                      <div className="absolute bottom-full left-0 mb-2 w-64 rounded-lg border bg-background shadow-lg">
+                        <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">Attach from sandbox</div>
+                        <div className="max-h-56 overflow-y-auto py-1">
+                          <FileBrowserTree
+                            files={fsFiles}
+                            fetchChildren={fetchFsFolderContents}
+                            attached={attachedFiles}
+                            onToggle={toggleAttachment}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {!isLoading && messages.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleRevert}
+                        title="Undo last exchange"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+                      >
+                        <Undo2 size={14} />
+                      </button>
+                    )}
+                    {isLoading ? (
+                      <button
+                        type="button"
+                        onClick={handleAbort}
+                        title="Stop generation"
+                        className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive/90 text-destructive-foreground transition-colors hover:bg-destructive"
+                      >
+                        <StopCircle size={14} />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={!input.trim()}
+                        className={cn(
+                          'flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-muted/60 text-muted-foreground transition-colors',
+                          'hover:bg-muted hover:text-foreground',
+                          input.trim() && 'border-primary/40 bg-primary text-primary-foreground hover:bg-primary/90'
+                        )}
+                      >
+                        <ArrowUp size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Model picker — opencode only */}
-              {isOpencode && opencodeProviders.length > 0 && (
+              {/* Config bar: Build/Plan | Model | Default */}
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                <div ref={ocModePickerRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowOcModePicker((v) => !v)}
+                    className={cn(
+                      'flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                      showOcModePicker && 'bg-muted text-foreground'
+                    )}
+                  >
+                    <span>{OC_PRIMARY_AGENTS.find((m) => m.id === selectedOcPrimaryAgent)?.label ?? selectedOcPrimaryAgent}</span>
+                    <ChevronDown size={12} />
+                  </button>
+                  {showOcModePicker && (
+                    <div className="absolute bottom-full left-0 z-20 mb-1 w-44 rounded-lg border bg-background py-1 shadow-lg">
+                      {OC_PRIMARY_AGENTS.map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => { setSelectedOcPrimaryAgent(mode.id); setShowOcModePicker(false); }}
+                          className={cn(
+                            'flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left text-xs hover:bg-muted',
+                            selectedOcPrimaryAgent === mode.id && 'bg-muted'
+                          )}
+                        >
+                          <span className="font-medium">{mode.label}</span>
+                          <span className="text-[10px] text-muted-foreground">{mode.hint}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div ref={modelPickerRef} className="relative">
                   <button
                     type="button"
                     onClick={() => setShowModelPicker((v) => !v)}
                     title="Select model"
                     className={cn(
-                      'flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                      (showModelPicker || selectedOcModel) && 'text-foreground'
+                      'flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                      (showModelPicker || selectedOcModel) && 'bg-muted text-foreground'
                     )}
                   >
-                    <Cpu size={11} />
-                    <span className="max-w-[80px] truncate">
-                      {selectedOcModel ? selectedOcModel.name || selectedOcModel.modelID : 'default'}
+                    <Cpu size={12} />
+                    <span className="max-w-[120px] truncate" title={ocModelLabel}>
+                      {ocModelLabel}
                     </span>
-                    <ChevronDown size={10} />
+                    <ChevronDown size={12} />
                   </button>
-
                   {showModelPicker && (
-                    <div className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border bg-background py-1 shadow-lg max-h-64 overflow-y-auto">
+                    <div className="absolute bottom-full left-0 z-20 mb-1 w-64 rounded-lg border bg-background py-1 shadow-lg max-h-64 overflow-y-auto">
                       <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Model</div>
-                      {/* Default (use EngineConfiguration model) */}
                       <button
                         type="button"
                         onClick={() => { setSelectedOcModel(null); setShowModelPicker(false); }}
                         className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted', !selectedOcModel && 'bg-muted')}
                       >
-                        <span className="flex-1 text-left text-muted-foreground italic">Default (from config)</span>
+                        <span className="flex-1 truncate text-left font-mono">
+                          {ocDefaultModel?.name || ocDefaultModel?.modelID || 'Default'}
+                        </span>
                         {!selectedOcModel && <Check size={11} />}
                       </button>
-                      <div className="my-1 border-t border-border/40" />
-                      {opencodeProviders.map((prov) => (
-                        <div key={prov.id}>
-                          <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                            {prov.name || prov.id}
-                          </div>
-                          {(prov.models ?? []).map((m) => {
-                            const isSelected = selectedOcModel?.providerID === prov.id && selectedOcModel?.modelID === m.modelID;
-                            return (
-                              <button
-                                key={m.modelID}
-                                type="button"
-                                onClick={() => { setSelectedOcModel({ ...m, providerID: prov.id }); setShowModelPicker(false); }}
-                                className={cn('flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-muted', isSelected && 'bg-muted')}
-                              >
-                                <span className="flex-1 truncate text-left font-mono">{m.name || m.modelID}</span>
-                                {isSelected && <Check size={10} />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
+                      {ocProvidersLoading && (
+                        <p className="px-3 py-2 text-[11px] text-muted-foreground">Loading models...</p>
+                      )}
+                      {ocProvidersError && !ocProvidersLoading && (
+                        <p className="px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">{ocProvidersError}</p>
+                      )}
+                      {!ocProvidersLoading && opencodeProviders.length > 0 && (
+                        <>
+                          <div className="my-1 border-t border-border/40" />
+                          {opencodeProviders.map((prov) => (
+                            <div key={prov.id}>
+                              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                {prov.name || prov.id}
+                              </div>
+                              {(prov.models ?? []).map((m) => {
+                                const isSelected = selectedOcModel?.providerID === prov.id && selectedOcModel?.modelID === m.modelID;
+                                return (
+                                  <button
+                                    key={`${prov.id}-${m.modelID}`}
+                                    type="button"
+                                    onClick={() => { setSelectedOcModel({ ...m, providerID: prov.id }); setShowModelPicker(false); }}
+                                    className={cn('flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-muted', isSelected && 'bg-muted')}
+                                  >
+                                    <span className="flex-1 truncate text-left font-mono">{m.name || m.modelID}</span>
+                                    {isSelected && <Check size={10} />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {attachedFiles.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {attachedFiles.map((path) => (
+                    <span key={path} className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
+                      <FileCode size={10} className="flex-shrink-0 text-primary" />
+                      <span className="max-w-[140px] truncate">{path.split('/').pop()}</span>
+                      <button type="button" onClick={() => toggleAttachment(path)} className="ml-0.5 rounded-full hover:text-destructive">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
               )}
-            </div>
 
-            <div className="flex items-center gap-1">
-              {/* Revert last exchange — opencode only, when there are messages */}
-              {isOpencode && !isLoading && messages.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleRevert}
-                  title="Undo last exchange"
-                  className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <Undo2 size={14} />
-                </button>
-              )}
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything..."
+                rows={3}
+                className={cn(
+                  'w-full resize-none rounded border bg-background px-2.5 py-1.5 text-xs outline-none',
+                  'placeholder:text-muted-foreground/50',
+                  'focus:ring-1 focus:ring-primary/30'
+                )}
+                disabled={isLoading}
+              />
 
-              {/* Attach file button — opencode only */}
-              {isOpencode && (
-                <div ref={filePickerRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowFilePicker((v) => !v)}
-                    title="Attach file"
-                    className={cn(
-                      'flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                      (showFilePicker || attachedFiles.length > 0) && 'text-primary'
-                    )}
-                  >
-                    <Paperclip size={14} />
-                  </button>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <div ref={modelMenuRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowAgentMenu(!showAgentMenu)}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
+                        'hover:bg-muted',
+                        showAgentMenu && 'bg-muted'
+                      )}
+                    >
+                      {isOpencode && <Terminal size={12} className="text-emerald-500" />}
+                      <span className={cn(isOpencode && 'text-emerald-600 dark:text-emerald-400 font-medium')}>
+                        {isOpencode ? 'opencode' : (currentAgent?.name || 'Agent')}
+                      </span>
+                      <ChevronDown size={12} className="text-muted-foreground" />
+                    </button>
 
-                  {showFilePicker && (
-                    <div className="absolute bottom-full right-0 mb-2 w-64 rounded-lg border bg-background shadow-lg">
-                      <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">Attach from sandbox</div>
-                      <div className="max-h-56 overflow-y-auto py-1">
-                        <FileBrowserTree
-                          files={fsFiles}
-                          fetchChildren={fetchFsFolderContents}
-                          attached={attachedFiles}
-                          onToggle={toggleAttachment}
-                        />
+                    {showAgentMenu && (
+                      <div className="absolute bottom-full left-0 mb-1 w-52 rounded-lg border bg-background py-1 shadow-lg">
+                        <div className="px-3 py-1.5 text-xs text-muted-foreground">Select agent</div>
+                        <button
+                          type="button"
+                          onClick={() => { setPaneAgent(OPENCODE_AGENT_ID); setShowAgentMenu(false); }}
+                          className={cn(
+                            'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
+                            isOpencode && 'bg-muted'
+                          )}
+                        >
+                          <Terminal size={13} className="text-emerald-500 flex-shrink-0" />
+                          <span className="flex-1 text-left">opencode</span>
+                          <span className="text-[10px] text-muted-foreground">coding agent</span>
+                          {isOpencode && <Check size={12} className="flex-shrink-0" />}
+                        </button>
+                        <div className="my-1 border-t border-border/50" />
+                        {agents.filter(a => a.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
+                          <button
+                            key={agent.id}
+                            type="button"
+                            onClick={() => { setPaneAgent(agent.id); setShowAgentMenu(false); }}
+                            className={cn(
+                              'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
+                              paneAgent === agent.id && 'bg-muted'
+                            )}
+                          >
+                            <span className="flex-1 text-left">{agent.name}</span>
+                            {paneAgent === agent.id && <Check size={12} className="flex-shrink-0" />}
+                          </button>
+                        ))}
                       </div>
+                    )}
+                  </div>
+
+                  {isOpencode && opencodeProviders.length > 0 && (
+                    <div ref={modelPickerRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowModelPicker((v) => !v)}
+                        title="Select model"
+                        className={cn(
+                          'flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                          (showModelPicker || selectedOcModel) && 'text-foreground'
+                        )}
+                      >
+                        <Cpu size={11} />
+                        <span className="max-w-[100px] truncate" title={ocModelLabel}>
+                          {ocModelLabel}
+                        </span>
+                        <ChevronDown size={10} />
+                      </button>
+                      {showModelPicker && (
+                        <div className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border bg-background py-1 shadow-lg max-h-64 overflow-y-auto">
+                          <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Model</div>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedOcModel(null); setShowModelPicker(false); }}
+                            className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted', !selectedOcModel && 'bg-muted')}
+                          >
+                            <span className="flex-1 truncate text-left font-mono">
+                              {ocDefaultModel?.name || ocDefaultModel?.modelID || 'Default'}
+                            </span>
+                            {!selectedOcModel && <Check size={11} />}
+                          </button>
+                          <div className="my-1 border-t border-border/40" />
+                          {opencodeProviders.map((prov) => (
+                            <div key={prov.id}>
+                              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                {prov.name || prov.id}
+                              </div>
+                              {(prov.models ?? []).map((m) => {
+                                const isSelected = selectedOcModel?.providerID === prov.id && selectedOcModel?.modelID === m.modelID;
+                                return (
+                                  <button
+                                    key={m.modelID}
+                                    type="button"
+                                    onClick={() => { setSelectedOcModel({ ...m, providerID: prov.id }); setShowModelPicker(false); }}
+                                    className={cn('flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-muted', isSelected && 'bg-muted')}
+                                  >
+                                    <span className="flex-1 truncate text-left font-mono">{m.name || m.modelID}</span>
+                                    {isSelected && <Check size={10} />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
 
-              {/* Abort button (while streaming) or Send button */}
-              {isOpencode && isLoading ? (
-                <button
-                  type="button"
-                  onClick={handleAbort}
-                  title="Stop generation"
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive/80 text-destructive-foreground transition-colors hover:bg-destructive"
-                >
-                  <StopCircle size={14} />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isLoading}
-                  className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
-                    'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
+                <div className="flex items-center gap-1">
+                  {isOpencode && !isLoading && messages.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleRevert}
+                      title="Undo last exchange"
+                      className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <Undo2 size={14} />
+                    </button>
                   )}
-                >
-                  <Send size={14} />
-                </button>
-              )}
-            </div>
-          </div>
+                  {isOpencode && (
+                    <div ref={filePickerRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowFilePicker((v) => !v)}
+                        title="Attach file"
+                        className={cn(
+                          'flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                          (showFilePicker || attachedFiles.length > 0) && 'text-primary'
+                        )}
+                      >
+                        <Paperclip size={14} />
+                      </button>
+                      {showFilePicker && (
+                        <div className="absolute bottom-full right-0 mb-2 w-64 rounded-lg border bg-background shadow-lg">
+                          <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">Attach from sandbox</div>
+                          <div className="max-h-56 overflow-y-auto py-1">
+                            <FileBrowserTree
+                              files={fsFiles}
+                              fetchChildren={fetchFsFolderContents}
+                              attached={attachedFiles}
+                              onToggle={toggleAttachment}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {isOpencode && isLoading ? (
+                    <button
+                      type="button"
+                      onClick={handleAbort}
+                      title="Stop generation"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive/80 text-destructive-foreground transition-colors hover:bg-destructive"
+                    >
+                      <StopCircle size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!input.trim() || isLoading}
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
+                        'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
+                      )}
+                    >
+                      <Send size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </form>
       </div>
     </aside>
