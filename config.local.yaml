@@ -59,13 +59,17 @@ modules:
             - chat
             - files
             - agents
-            - knowledge
+            - apps
+            - marketplace
+            - search
+            - ontology
+            - graph
             - settings
           role_baseline:
-            owner:  [chat, files, agents, knowledge, settings]
-            admin:  [chat, files, agents, knowledge, settings]
-            member: [chat, files]
-            viewer: [chat, files]
+            owner:  [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
+            admin:  [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
+            member: [chat, apps, marketplace]
+            viewer: [chat, apps, marketplace]
           workspace_overrides: {}
 
         # Q: How do users sign in?
@@ -101,6 +105,8 @@ modules:
         users:
           - email: "admin@example.com"
             name: "Local Admin"
+          - email: "member@example.com"
+            name: "Local Member"
 
         # Q: How is the organization structured into workspaces and roles?
         # A: Define orgs, their workspaces, and who belongs to each with what role.
@@ -123,6 +129,8 @@ modules:
                 members:
                   - email: "admin@example.com"
                     role: "owner"
+                  - email: "member@example.com"
+                    role: "admin"
               - name: "Secondary"
                 slug: "secondary"
                 owner_email: "admin@example.com"
@@ -130,6 +138,8 @@ modules:
                 accent_color: "#34D399"
                 members:
                   - email: "admin@example.com"
+                    role: "owner"
+                  - email: "member@example.com"
                     role: "member"
 
 

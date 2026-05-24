@@ -8,10 +8,12 @@ import { ChatSection } from './chat-section';
 import { SearchSection } from './search-section';
 import { FilesSection } from './files-section';
 import { CodeSection } from './code-section';
+import { LabSection } from './lab-section';
 import { OntologySection } from './ontology-section';
 import { KnowledgeGraphSection } from './knowledge-graph-section';
 import { MarketplaceSection } from './marketplace-section';
 import { AppsSection } from './apps-section';
+import { SettingsSection } from './settings-section';
 
 const SECTION_LABELS: Record<SidebarSection, string> = {
   search: 'Search',
@@ -23,22 +25,29 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   lab: 'Lab',
   apps: 'Apps',
   marketplace: 'Marketplace',
+  settings: 'Settings',
 };
 
 function SectionContent({ section }: { section: SidebarSection }) {
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canAgents = useFeature('agents');
-  const canKnowledge = useFeature('knowledge');
+  const canApps = useFeature('apps');
+  const canMarketplace = useFeature('marketplace');
+  const canSearch = useFeature('search');
+  const canOntology = useFeature('ontology');
+  const canGraph = useFeature('graph');
 
-  if (section === 'search' && canKnowledge) return <SearchSection collapsed={false} detailOnly />;
+  if (section === 'search' && canSearch) return <SearchSection collapsed={false} detailOnly />;
   if (section === 'chat' && canChat) return <ChatSection collapsed={false} detailOnly />;
-  if (section === 'ontology' && canKnowledge) return <OntologySection collapsed={false} detailOnly />;
-  if (section === 'graph' && canKnowledge) return <KnowledgeGraphSection collapsed={false} detailOnly />;
+  if (section === 'ontology' && canOntology) return <OntologySection collapsed={false} detailOnly />;
+  if (section === 'graph' && canGraph) return <KnowledgeGraphSection collapsed={false} detailOnly />;
   if (section === 'files' && canFiles) return <FilesSection collapsed={false} detailOnly />;
   if (section === 'code' && canAgents) return <CodeSection collapsed={false} detailOnly />;
-  if (section === 'apps' && canAgents) return <AppsSection collapsed={false} detailOnly />;
-  if (section === 'marketplace' && canAgents) return <MarketplaceSection collapsed={false} detailOnly />;
+  if (section === 'lab' && canAgents) return <LabSection collapsed={false} detailOnly />;
+  if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
+  if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
+  if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
   return null;
 }
 

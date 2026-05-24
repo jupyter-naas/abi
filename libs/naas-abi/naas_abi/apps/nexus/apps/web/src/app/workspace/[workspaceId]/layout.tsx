@@ -8,11 +8,29 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 
 // Catches unhandled promise rejections (not caught by React error boundaries)
+// Next.js uses thrown sentinels (NEXT_REDIRECT, NEXT_NOT_FOUND) to drive
+// navigation from Server Components. They are not real errors and must not
+// surface in any user-facing error UI.
+function isNextNavigationSentinel(reason: unknown): boolean {
+  if (!reason) return false;
+  const digest = (reason as { digest?: unknown }).digest;
+  if (typeof digest === 'string' && digest.startsWith('NEXT_')) return true;
+  const message = (reason as { message?: unknown }).message;
+  if (typeof message === 'string' && (message === 'NEXT_REDIRECT' || message === 'NEXT_NOT_FOUND')) {
+    return true;
+  }
+  return false;
+}
+
 function AsyncErrorCatcher() {
   const [asyncError, setAsyncError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (isNextNavigationSentinel(event.reason)) {
+        event.preventDefault();
+        return;
+      }
       const msg = event.reason?.message || event.reason?.toString() || 'Unknown async error';
       const stack = event.reason?.stack || '';
       console.error('[NEXUS Unhandled Rejection]', msg, stack);
@@ -21,6 +39,9 @@ function AsyncErrorCatcher() {
     };
 
     const handleError = (event: ErrorEvent) => {
+      if (isNextNavigationSentinel(event.error) || event.message === 'Uncaught Error: NEXT_REDIRECT' || event.message === 'Uncaught Error: NEXT_NOT_FOUND') {
+        return;
+      }
       console.error('[NEXUS Global Error]', event.message, event.error?.stack);
       setAsyncError(`${event.message}\n\n${event.error?.stack || ''}`);
     };

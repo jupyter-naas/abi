@@ -83,9 +83,9 @@ x-abi-template: &abi_template
   healthcheck:
     test: ["CMD-SHELL", "for i in 1 2 3; do curl -fsS http://localhost:9879/ >/dev/null || exit 1; sleep 2; done"]
     interval: 10s
-    timeout: 15s
-    start_period: 30s
-    retries: 10
+    timeout: 10s
+    start_period: 3m
+    retries: 6
   networks:
     - abi-network
 

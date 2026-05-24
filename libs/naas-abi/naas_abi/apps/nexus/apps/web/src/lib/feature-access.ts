@@ -1,8 +1,31 @@
-export type FeatureKey = 'chat' | 'files' | 'agents' | 'knowledge' | 'settings';
+export type FeatureKey =
+  | 'chat'
+  | 'files'
+  | 'agents'
+  | 'apps'
+  | 'marketplace'
+  | 'search'
+  | 'ontology'
+  | 'graph'
+  | 'settings'
+  | 'settings.workspace'
+  | 'settings.organization';
 
 export type WorkspaceFeatureFlags = Partial<Record<FeatureKey, boolean>>;
 
-export const FEATURE_KEYS: FeatureKey[] = ['chat', 'files', 'agents', 'knowledge', 'settings'];
+export const FEATURE_KEYS: FeatureKey[] = [
+  'chat',
+  'files',
+  'agents',
+  'apps',
+  'marketplace',
+  'search',
+  'ontology',
+  'graph',
+  'settings',
+  'settings.workspace',
+  'settings.organization',
+];
 
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: [...FEATURE_KEYS],
@@ -15,8 +38,14 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   chat: '/chat',
   files: '/files',
   agents: '/code',
-  knowledge: '/search',
+  apps: '/apps',
+  marketplace: '/marketplace',
+  search: '/search',
+  ontology: '/ontology',
+  graph: '/graph',
   settings: '/settings',
+  'settings.workspace': '/settings',
+  'settings.organization': '/organization',
 };
 
 export function mergeFeatureFlags(role?: string, workspaceFlags?: WorkspaceFeatureFlags): Record<FeatureKey, boolean> {
@@ -63,19 +92,35 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'files') {
     return 'files';
   }
-  if (firstSegment === 'search' || firstSegment === 'ontology' || firstSegment === 'graph') {
-    return 'knowledge';
+  if (firstSegment === 'search') {
+    return 'search';
+  }
+  if (firstSegment === 'ontology') {
+    return 'ontology';
+  }
+  if (firstSegment === 'graph') {
+    return 'graph';
+  }
+  if (firstSegment === 'apps') {
+    return 'apps';
+  }
+  if (firstSegment === 'marketplace') {
+    return 'marketplace';
   }
   if (
     firstSegment === 'code' ||
     firstSegment === 'lab' ||
-    firstSegment === 'apps' ||
-    firstSegment === 'marketplace' ||
     (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents')
   ) {
     return 'agents';
   }
-  if (firstSegment === 'settings' || firstSegment === 'organization' || firstSegment === 'help') {
+  if (firstSegment === 'settings') {
+    return 'settings.workspace';
+  }
+  if (firstSegment === 'organization') {
+    return 'settings.organization';
+  }
+  if (firstSegment === 'help') {
     return 'settings';
   }
 
@@ -104,7 +149,7 @@ export function getFirstAllowedWorkspacePath(params: {
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
   const resolved = mergeFeatureFlags(params.role, params.workspaceFlags);
-  const priority: FeatureKey[] = ['chat', 'files', 'knowledge', 'agents', 'settings'];
+  const priority: FeatureKey[] = ['chat', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
 
   for (const feature of priority) {
     if (resolved[feature]) {
