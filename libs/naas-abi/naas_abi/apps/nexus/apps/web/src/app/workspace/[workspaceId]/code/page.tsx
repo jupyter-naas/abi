@@ -8,7 +8,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useFilesStore } from '@/stores/files';
+import { useFilesStore, CODE_MY_DRIVE_FOLDER, resolveCodePath } from '@/stores/files';
 import { useCodeStore } from '@/stores/code';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrompt } from '@/components/ui/dialogs';
@@ -279,8 +279,9 @@ function EmptyState({ onNewFile, sessionName }: { onNewFile: () => void; session
 
 export default function CodePage() {
   const {
-    fsOpenFiles, fsActiveFile, fsFileContents, fsUnsavedChanges,
-    setFsActiveFile, closeFsFile, setFsFileContent, saveFsFile, createFsFile, openFsFile,
+    codeOpenFiles, codeActiveFile, codeFileContents, codeUnsavedChanges,
+    setCodeActiveFile, closeCodeFile, setCodeFileContent, saveCodeFile, createCodeFile, openCodeFile,
+    syncCodeWorkdir, fetchCodeFiles,
   } = useFilesStore();
   const { getActiveSession } = useCodeStore();
   const { setContextPanelOpen } = useWorkspaceStore();
@@ -289,10 +290,10 @@ export default function CodePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('code');
 
   const activeSession = getActiveSession();
-  const activeContent = fsActiveFile ? fsFileContents[fsActiveFile] : undefined;
-  const hasUnsaved = fsActiveFile ? fsUnsavedChanges[fsActiveFile] : false;
-  const language = fsActiveFile ? getLanguage(fsActiveFile) : 'plaintext';
-  const ext = fsActiveFile?.split('.').pop()?.toLowerCase() ?? '';
+  const activeContent = codeActiveFile ? codeFileContents[codeActiveFile] : undefined;
+  const hasUnsaved = codeActiveFile ? codeUnsavedChanges[codeActiveFile] : false;
+  const language = codeActiveFile ? getLanguage(codeActiveFile) : 'plaintext';
+  const ext = codeActiveFile?.split('.').pop()?.toLowerCase() ?? '';
   const isHtml = ext === 'html' || ext === 'htm';
   const isMarkdown = ext === 'md' || ext === 'mdx';
   const hasPreview = isHtml || isMarkdown;
@@ -309,12 +310,17 @@ export default function CodePage() {
     return () => setContextPanelOpen(false);
   }, [setContextPanelOpen]);
 
+  useEffect(() => {
+    void syncCodeWorkdir('pull');
+    void fetchCodeFiles(CODE_MY_DRIVE_FOLDER);
+  }, [syncCodeWorkdir, fetchCodeFiles]);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
-      if (fsActiveFile) saveFsFile(fsActiveFile);
+      if (codeActiveFile) saveCodeFile(codeActiveFile);
     }
-  }, [fsActiveFile, saveFsFile]);
+  }, [codeActiveFile, saveCodeFile]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -329,8 +335,9 @@ export default function CodePage() {
       confirmLabel: 'Create',
     });
     if (name) {
-      const ok = await createFsFile(name);
-      if (ok) openFsFile(name);
+      const path = resolveCodePath(name);
+      const createdPath = await createCodeFile(path);
+      if (createdPath) openCodeFile(createdPath);
     }
   };
 
@@ -342,12 +349,12 @@ export default function CodePage() {
 
         {/* Tab bar */}
         <div className="flex h-8 flex-shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border/50 bg-muted/20 px-1">
-          {fsOpenFiles.map((path) => {
+          {codeOpenFiles.map((path) => {
             const filename = path.split('/').pop() || path;
-            const isActive = path === fsActiveFile;
-            const isUnsaved = fsUnsavedChanges[path];
+            const isActive = path === codeActiveFile;
+            const isUnsaved = codeUnsavedChanges[path];
             return (
-              <div key={path} onClick={() => setFsActiveFile(path)}
+              <div key={path} onClick={() => setCodeActiveFile(path)}
                 className={cn(
                   'group flex flex-shrink-0 items-center gap-1.5 rounded px-2.5 py-1 text-xs cursor-pointer transition-colors select-none',
                   isActive ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -356,7 +363,7 @@ export default function CodePage() {
                 <FileCode size={11} className={isActive ? 'text-workspace-accent' : 'text-muted-foreground/60'} />
                 <span>{filename}</span>
                 {isUnsaved && <span className="text-amber-400 text-[10px]">●</span>}
-                <button onClick={(e) => { e.stopPropagation(); closeFsFile(path); }}
+                <button onClick={(e) => { e.stopPropagation(); closeCodeFile(path); }}
                   className="ml-0.5 rounded p-0.5 opacity-0 hover:bg-muted group-hover:opacity-100 transition-opacity">
                   <X size={9} />
                 </button>
@@ -373,14 +380,14 @@ export default function CodePage() {
 
         {/* Editor / preview area */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          {fsActiveFile && activeContent !== undefined ? (
+          {codeActiveFile && activeContent !== undefined ? (
             <div className="flex flex-1 flex-col overflow-hidden">
               {/* Breadcrumb + save */}
               <div className="flex h-6 flex-shrink-0 items-center justify-between border-b border-border/30 bg-muted/10 px-4">
-                <span className="text-[11px] text-muted-foreground">{fsActiveFile}</span>
+                <span className="text-[11px] text-muted-foreground">{codeActiveFile}</span>
                 <div className="flex items-center gap-2">
                   {hasUnsaved && (
-                    <button onClick={() => saveFsFile(fsActiveFile)}
+                    <button onClick={() => saveCodeFile(codeActiveFile)}
                       className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-amber-500 hover:bg-muted">
                       <Save size={10} /> Save
                     </button>
@@ -411,7 +418,7 @@ export default function CodePage() {
                       height="100%"
                       language={language}
                       value={activeContent}
-                      onChange={(v) => setFsFileContent(fsActiveFile, v || '')}
+                      onChange={(v) => setCodeFileContent(codeActiveFile, v || '')}
                       theme="vs-dark"
                       options={{
                         fontSize: 13,

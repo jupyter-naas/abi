@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useFilesStore, type FileInfo } from '@/stores/files';
+import { useFilesStore, type FileInfo, CODE_MY_DRIVE_FOLDER, resolveCodePath } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
@@ -50,7 +50,7 @@ const FileNode = React.memo(function FileNode({
     ? (diffs[file.path] ?? Object.entries(diffs).find(([k]) => file.path.endsWith(k) || k.endsWith(file.path))?.[1])
     : undefined;
 
-  // Re-fetch children when the tree version bumps (triggered by refreshFsFiles)
+  // Re-fetch children when the tree version bumps (triggered by refreshCodeFiles)
   useEffect(() => {
     if (isFolder && expanded && fetchFolderContents && treeVersion !== undefined) {
       fetchFolderContents(file.path).then((data) => setChildren(data));
@@ -267,61 +267,53 @@ function TreePanel({
 export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [sandboxRoot, setSandboxRoot] = useState<string>('sandbox');
+  const [codeRoot, setCodeRoot] = useState<string>('');
   const { currentWorkspaceId } = useWorkspaceStore();
   const {
-    fsFiles, fsLoading, fsActiveFile, fsFolderContents,
-    fetchFsFiles, fetchFsFolderContents, refreshFsFiles,
-    openFsFile, createFsFile, createFsFolder, deleteFsFile,
-    fsDiffs, fsTreeVersion,
+    codeFiles, codeLoading, codeActiveFile, codeFolderContents,
+    fetchCodeFiles, fetchCodeFolderContents, refreshCodeFiles,
+    openCodeFile, createCodeFile, createCodeFolder, deleteCodeFile,
+    codeDiffs, codeTreeVersion, syncCodeWorkdir,
   } = useFilesStore();
   const { prompt, dialog: promptDialog } = usePrompt();
 
-  // Load the sandbox subtree on first mount — we only expose the writable sandbox
+  // Load the sandbox subtree on mount — we only expose the writable sandbox
   useEffect(() => {
-    if (fsFiles.length === 0 && !fsLoading) {
-      const sr = useFilesStore.getState().fsSandboxRoot || 'sandbox';
-      setSandboxRoot(sr);
-      fetchFsFiles(sr);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    void syncCodeWorkdir('pull');
+    void fetchCodeFiles(CODE_MY_DRIVE_FOLDER);
+  }, [fetchCodeFiles, syncCodeWorkdir]);
+
+  useEffect(() => {
+    const root = useFilesStore.getState().codeRoot;
+    if (root) setCodeRoot(root);
+  }, [codeFiles, codeLoading]);
 
   const navigateToCode = () => router.push(getWorkspacePath(currentWorkspaceId, '/code'));
 
-  // Resolve target path for new file/folder relative to current selection.
-  // Falls back to sandbox root so new items always land in the writable area.
-  const resolveTarget = useCallback((name: string) => {
-    const base = sandboxRoot || 'sandbox';
-    if (!selectedPath) return `${base}/${name}`;
-    const allFiles = [
-      ...fsFiles,
-      ...Object.values(fsFolderContents).flat(),
-    ];
-    const item = allFiles.find((f) => f.path === selectedPath);
-    if (item?.type === 'folder') return `${selectedPath}/${name}`;
-    const parent = selectedPath.substring(0, selectedPath.lastIndexOf('/'));
-    return parent ? `${parent}/${name}` : `${base}/${name}`;
-  }, [selectedPath, fsFiles, fsFolderContents, sandboxRoot]);
+  const resolveTarget = useCallback(
+    (name: string) => resolveCodePath(name, selectedPath),
+    [selectedPath],
+  );
 
   // fetchFsFolderContents receives the full path from FileNode (no stripping needed)
   const fetchFolderContents = useCallback(
-    (path: string) => fetchFsFolderContents(path),
-    [fetchFsFolderContents]
+    (path: string) => fetchCodeFolderContents(path),
+    [fetchCodeFolderContents]
   );
 
   const handleNewFile = useCallback(async () => {
     const name = await prompt({ title: 'New File', description: 'Enter file name', defaultValue: 'untitled.py', confirmLabel: 'Create' });
     if (name) {
       const targetPath = resolveTarget(name);
-      const ok = await createFsFile(targetPath);
-      if (ok) { openFsFile(targetPath); navigateToCode(); }
+      const createdPath = await createCodeFile(targetPath);
+      if (createdPath) { openCodeFile(createdPath); navigateToCode(); }
     }
-  }, [prompt, resolveTarget, createFsFile, openFsFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prompt, resolveTarget, createCodeFile, openCodeFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNewFolder = useCallback(async () => {
     const name = await prompt({ title: 'New Folder', description: 'Enter folder name', defaultValue: 'my-folder', confirmLabel: 'Create' });
-    if (name) await createFsFolder(resolveTarget(name));
-  }, [prompt, resolveTarget, createFsFolder]);
+    if (name) await createCodeFolder(resolveTarget(name));
+  }, [prompt, resolveTarget, createCodeFolder]);
 
   const handleNewModule = useCallback(async () => {
     const name = await prompt({
@@ -333,13 +325,13 @@ export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; det
     if (name) {
       const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
       const base = resolveTarget(slug);
-      await createFsFolder(base);
-      await createFsFile(`${base}/__init__.py`);
-      await createFsFile(`${base}/README.md`);
-      openFsFile(`${base}/__init__.py`);
+      await createCodeFolder(base);
+      const initPath = await createCodeFile(`${base}/__init__.py`);
+      await createCodeFile(`${base}/README.md`);
+      if (initPath) openCodeFile(initPath);
       navigateToCode();
     }
-  }, [prompt, resolveTarget, createFsFolder, createFsFile, openFsFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prompt, resolveTarget, createCodeFolder, createCodeFile, openCodeFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -356,24 +348,24 @@ export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; det
         <TreePanel
           label="Explorer"
           icon={<Code2 size={10} />}
-          files={fsFiles}
-          loading={fsLoading}
-          activeFile={fsActiveFile}
+          files={codeFiles}
+          loading={codeLoading}
+          activeFile={codeActiveFile}
           selectedPath={selectedPath}
-          onFileClick={(path) => { openFsFile(path); navigateToCode(); }}
+          onFileClick={(path) => { openCodeFile(path); navigateToCode(); }}
           onSelect={(p) => setSelectedPath(p)}
           onRename={async (oldPath, newPath) => {
-            await useFilesStore.getState().renameFsFile(oldPath, newPath);
+            await useFilesStore.getState().renameCodeFile(oldPath, newPath);
           }}
-          onDelete={async (p) => { await deleteFsFile(p); }}
+          onDelete={async (p) => { await deleteCodeFile(p); }}
           fetchFolderContents={fetchFolderContents}
           onNewFile={handleNewFile}
           onNewFolder={handleNewFolder}
-          onRefresh={refreshFsFiles}
+          onRefresh={refreshCodeFiles}
           onNewModule={handleNewModule}
-          diffs={fsDiffs}
-          treeVersion={fsTreeVersion}
-          sandboxRoot={sandboxRoot}
+          diffs={codeDiffs}
+          treeVersion={codeTreeVersion}
+          sandboxRoot={codeRoot}
         />
       </CollapsibleSection>
     </>

@@ -22,6 +22,34 @@ const getCurrentWorkspaceId = (): string | null => {
   return useWorkspaceStore.getState().currentWorkspaceId ?? getWorkspaceIdFromPathname();
 };
 
+/** My Drive folder used by the Code IDE (matches backend `my_drive_code_root`). */
+export const CODE_MY_DRIVE_FOLDER = 'code';
+const CODE_FILES_SCOPE = 'my_drive' as const;
+const codeScopeQuery = () => `scope=${CODE_FILES_SCOPE}`;
+
+/** Resolve a new file/folder name to a path under the Code sandbox. */
+export function resolveCodePath(name: string, selectedPath?: string | null): string {
+  const { codeRoot, codeFiles, codeFolderContents } = useFilesStore.getState();
+  const base = codeRoot || CODE_MY_DRIVE_FOLDER;
+
+  if (name.startsWith('naas_abi/my-drive/')) return name;
+  if (codeRoot && name.startsWith(`${codeRoot}/`)) return name;
+  if (name.startsWith(`${CODE_MY_DRIVE_FOLDER}/`)) return name;
+
+  if (selectedPath) {
+    const allFiles = [
+      ...codeFiles,
+      ...Object.values(codeFolderContents).flat(),
+    ];
+    const item = allFiles.find((f) => f.path === selectedPath);
+    if (item?.type === 'folder') return `${selectedPath}/${name}`;
+    const parent = selectedPath.substring(0, selectedPath.lastIndexOf('/'));
+    return parent ? `${parent}/${name}` : `${base}/${name}`;
+  }
+
+  return `${base}/${name}`;
+}
+
 // Storage source types - only Local (synced folders) and Cloud
 export type StorageCategory = 'local' | 'cloud';
 
@@ -97,20 +125,18 @@ interface FilesState {
   fileContents: Record<string, string>;  // path -> content
   unsavedChanges: Record<string, boolean>;  // path -> hasUnsavedChanges
 
-  // Filesystem state (Code section — real OS filesystem under FILESYSTEM_ROOT)
-  fsFiles: FileInfo[];
-  fsFolderContents: Record<string, FileInfo[]>;
-  fsLoading: boolean;
-  fsOpenFiles: string[];
-  fsActiveFile: string | null;
-  fsFileContents: Record<string, string>;
-  fsUnsavedChanges: Record<string, boolean>;
-  // Sandbox root path (relative to FILESYSTEM_ROOT) where writes are allowed
-  fsSandboxRoot: string;
-  // Diff decorations from opencode session.diff events
-  fsDiffs: Record<string, { additions: number; deletions: number; status: string }>;
-  // Increments on every refreshFsFiles so FileNode can react and re-fetch children
-  fsTreeVersion: number;
+  // Code section (My Drive `code/` via /api/files)
+  codeFiles: FileInfo[];
+  codeFolderContents: Record<string, FileInfo[]>;
+  codeLoading: boolean;
+  codeOpenFiles: string[];
+  codeActiveFile: string | null;
+  codeFileContents: Record<string, string>;
+  codeUnsavedChanges: Record<string, boolean>;
+  /** Full object-storage path to the user's `code/` root, e.g. naas_abi/my-drive/{userId}/code */
+  codeRoot: string;
+  codeDiffs: Record<string, { additions: number; deletions: number; status: string }>;
+  codeTreeVersion: number;
   
   // Storage sources
   storageSources: StorageSource[];
@@ -168,22 +194,23 @@ interface FilesState {
   readFile: (path: string) => Promise<string | null>;
   saveFile: (path: string) => Promise<boolean>;
 
-  // Filesystem actions (real OS filesystem under FILESYSTEM_ROOT)
-  fetchFsFiles: (path?: string) => Promise<void>;
-  fetchFsFolderContents: (folderPath: string) => Promise<FileInfo[]>;
-  refreshFsFiles: () => Promise<void>;
-  openFsFile: (path: string) => void;
-  closeFsFile: (path: string) => void;
-  setFsActiveFile: (path: string | null) => void;
-  setFsFileContent: (path: string, content: string) => void;
-  readFsFile: (path: string) => Promise<string | null>;
-  saveFsFile: (path: string) => Promise<boolean>;
-  createFsFile: (path: string, content?: string) => Promise<boolean>;
-  createFsFolder: (path: string) => Promise<boolean>;
-  deleteFsFile: (path: string) => Promise<boolean>;
-  renameFsFile: (oldPath: string, newPath: string) => Promise<boolean>;
-  setFsDiffs: (diffs: Array<{ file: string; additions: number; deletions: number; status: string }>) => void;
-  clearFsDiffs: () => void;
+  // Code actions (My Drive `code/` folder)
+  fetchCodeFiles: (path?: string) => Promise<void>;
+  fetchCodeFolderContents: (folderPath: string) => Promise<FileInfo[]>;
+  refreshCodeFiles: () => Promise<void>;
+  openCodeFile: (path: string) => void;
+  closeCodeFile: (path: string) => void;
+  setCodeActiveFile: (path: string | null) => void;
+  setCodeFileContent: (path: string, content: string) => void;
+  readCodeFile: (path: string) => Promise<string | null>;
+  saveCodeFile: (path: string) => Promise<boolean>;
+  createCodeFile: (path: string, content?: string) => Promise<string | null>;
+  createCodeFolder: (path: string) => Promise<boolean>;
+  deleteCodeFile: (path: string) => Promise<boolean>;
+  renameCodeFile: (oldPath: string, newPath: string) => Promise<boolean>;
+  setCodeDiffs: (diffs: Array<{ file: string; additions: number; deletions: number; status: string }>) => void;
+  clearCodeDiffs: () => void;
+  syncCodeWorkdir: (direction?: 'pull' | 'push' | 'both') => Promise<void>;
 }
 
 import { getApiUrl } from '@/lib/config';
@@ -215,17 +242,17 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   fileContents: {},
   unsavedChanges: {},
 
-  // Filesystem state
-  fsFiles: [],
-  fsFolderContents: {},
-  fsLoading: false,
-  fsOpenFiles: [],
-  fsActiveFile: null,
-  fsFileContents: {},
-  fsUnsavedChanges: {},
-  fsSandboxRoot: 'sandbox',
-  fsDiffs: {},
-  fsTreeVersion: 0,
+  // Code section state
+  codeFiles: [],
+  codeFolderContents: {},
+  codeLoading: false,
+  codeOpenFiles: [],
+  codeActiveFile: null,
+  codeFileContents: {},
+  codeUnsavedChanges: {},
+  codeRoot: '',
+  codeDiffs: {},
+  codeTreeVersion: 0,
   
   // Storage sources
   storageSources: defaultStorageSources,
@@ -926,216 +953,248 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     }
   },
 
-  // ─── Filesystem actions ────────────────────────────────────────────────────
+  // ─── Code actions (My Drive via /api/files) ───────────────────────────────
 
-  fetchFsFiles: async (path = '') => {
-    set({ fsLoading: true });
+  fetchCodeFiles: async (path = CODE_MY_DRIVE_FOLDER) => {
+    set({ codeLoading: true });
     try {
       const response = await authFetch(
-        `${getApiBase()}/api/filesystem/?path=${encodeURIComponent(path)}`
+        `${getApiBase()}/api/files/?path=${encodeURIComponent(path)}&${codeScopeQuery()}`
       );
-      if (!response.ok) throw new Error('Failed to fetch filesystem files');
+      if (!response.ok) throw new Error('Failed to fetch code files');
       const data = await response.json();
+      const listedPath = (data.path as string) || path;
       set({
-        fsFiles: data.files as FileInfo[],
-        fsLoading: false,
-        ...(data.sandbox_root ? { fsSandboxRoot: data.sandbox_root as string } : {}),
+        codeFiles: data.files as FileInfo[],
+        codeLoading: false,
+        codeRoot: listedPath,
       });
     } catch (error) {
-      console.error('Error fetching filesystem files:', error);
-      set({ fsLoading: false });
+      console.error('Error fetching code files:', error);
+      set({ codeLoading: false });
     }
   },
 
-  fetchFsFolderContents: async (folderPath: string) => {
-    const cached = get().fsFolderContents[folderPath];
+  fetchCodeFolderContents: async (folderPath: string) => {
+    const cached = get().codeFolderContents[folderPath];
     if (cached) return cached;
 
     try {
       const response = await authFetch(
-        `${getApiBase()}/api/filesystem/?path=${encodeURIComponent(folderPath)}`
+        `${getApiBase()}/api/files/?path=${encodeURIComponent(folderPath)}&${codeScopeQuery()}`
       );
       if (!response.ok) throw new Error('Failed to fetch folder');
       const data = await response.json();
       const files = data.files as FileInfo[];
       set((state) => ({
-        fsFolderContents: { ...state.fsFolderContents, [folderPath]: files },
+        codeFolderContents: { ...state.codeFolderContents, [folderPath]: files },
       }));
       return files;
     } catch (error) {
-      console.error('Error fetching fs folder:', error);
+      console.error('Error fetching code folder:', error);
       return [];
     }
   },
 
-  refreshFsFiles: async () => {
-    const sandboxRoot = get().fsSandboxRoot || 'sandbox';
-    set((state) => ({ fsFolderContents: {}, fsTreeVersion: state.fsTreeVersion + 1 }));
-    await get().fetchFsFiles(sandboxRoot);
+  refreshCodeFiles: async () => {
+    const codeRoot = get().codeRoot || CODE_MY_DRIVE_FOLDER;
+    set((state) => ({ codeFolderContents: {}, codeTreeVersion: state.codeTreeVersion + 1 }));
+    await get().fetchCodeFiles(codeRoot);
   },
 
-  openFsFile: (path) => {
-    const { fsOpenFiles } = get();
-    if (!fsOpenFiles.includes(path)) {
-      set({ fsOpenFiles: [...fsOpenFiles, path], fsActiveFile: path });
-      get().readFsFile(path);
+  openCodeFile: (path) => {
+    const { codeOpenFiles } = get();
+    if (!codeOpenFiles.includes(path)) {
+      set({ codeOpenFiles: [...codeOpenFiles, path], codeActiveFile: path });
+      get().readCodeFile(path);
     } else {
-      set({ fsActiveFile: path });
+      set({ codeActiveFile: path });
     }
   },
 
-  closeFsFile: (path) => {
-    const { fsOpenFiles, fsActiveFile, fsFileContents, fsUnsavedChanges } = get();
-    const newOpen = fsOpenFiles.filter((p) => p !== path);
-    const newActive = fsActiveFile === path
+  closeCodeFile: (path) => {
+    const { codeOpenFiles, codeActiveFile, codeFileContents, codeUnsavedChanges } = get();
+    const newOpen = codeOpenFiles.filter((p) => p !== path);
+    const newActive = codeActiveFile === path
       ? (newOpen.length > 0 ? newOpen[newOpen.length - 1] : null)
-      : fsActiveFile;
-    const newContents = { ...fsFileContents };
+      : codeActiveFile;
+    const newContents = { ...codeFileContents };
     delete newContents[path];
-    const newUnsaved = { ...fsUnsavedChanges };
+    const newUnsaved = { ...codeUnsavedChanges };
     delete newUnsaved[path];
-    set({ fsOpenFiles: newOpen, fsActiveFile: newActive, fsFileContents: newContents, fsUnsavedChanges: newUnsaved });
-  },
-
-  setFsActiveFile: (fsActiveFile) => set({ fsActiveFile }),
-
-  setFsFileContent: (path, content) => {
-    const { fsFileContents, fsUnsavedChanges } = get();
     set({
-      fsFileContents: { ...fsFileContents, [path]: content },
-      fsUnsavedChanges: { ...fsUnsavedChanges, [path]: true },
+      codeOpenFiles: newOpen,
+      codeActiveFile: newActive,
+      codeFileContents: newContents,
+      codeUnsavedChanges: newUnsaved,
     });
   },
 
-  readFsFile: async (path) => {
+  setCodeActiveFile: (codeActiveFile) => set({ codeActiveFile }),
+
+  setCodeFileContent: (path, content) => {
+    const { codeFileContents, codeUnsavedChanges } = get();
+    set({
+      codeFileContents: { ...codeFileContents, [path]: content },
+      codeUnsavedChanges: { ...codeUnsavedChanges, [path]: true },
+    });
+  },
+
+  readCodeFile: async (path) => {
     try {
       const response = await authFetch(
-        `${getApiBase()}/api/filesystem/content?path=${encodeURIComponent(path)}`
+        `${getApiBase()}/api/files/${encodeURIComponent(path)}?${codeScopeQuery()}`
       );
       if (!response.ok) throw new Error('Failed to read file');
-      const content = await response.text();
-      set((state) => ({ fsFileContents: { ...state.fsFileContents, [path]: content } }));
+      const data = await response.json();
+      const content = data.content as string;
+      set((state) => ({ codeFileContents: { ...state.codeFileContents, [path]: content } }));
       return content;
     } catch (error) {
-      console.error('Error reading fs file:', error);
+      console.error('Error reading code file:', error);
       return null;
     }
   },
 
-  saveFsFile: async (path) => {
-    const { fsFileContents, fsUnsavedChanges } = get();
-    const content = fsFileContents[path];
+  saveCodeFile: async (path) => {
+    const { codeFileContents, codeUnsavedChanges } = get();
+    const content = codeFileContents[path];
     if (content === undefined) return false;
     try {
       const response = await authFetch(
-        `${getApiBase()}/api/filesystem/content?path=${encodeURIComponent(path)}`,
+        `${getApiBase()}/api/files/${encodeURIComponent(path)}?${codeScopeQuery()}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({
+            path,
+            scope: CODE_FILES_SCOPE,
+            content,
+            content_type: 'text/plain',
+          }),
         }
       );
       if (!response.ok) throw new Error('Failed to save file');
-      set({ fsUnsavedChanges: { ...fsUnsavedChanges, [path]: false } });
+      set({ codeUnsavedChanges: { ...codeUnsavedChanges, [path]: false } });
+      await get().syncCodeWorkdir('push');
       return true;
     } catch (error) {
-      console.error('Error saving fs file:', error);
+      console.error('Error saving code file:', error);
       return false;
     }
   },
 
-  createFsFile: async (path, content = '') => {
+  createCodeFile: async (path, content = '') => {
     try {
-      const response = await authFetch(
-        `${getApiBase()}/api/filesystem/content?path=${encodeURIComponent(path)}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
-        }
-      );
+      const response = await authFetch(`${getApiBase()}/api/files/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path,
+          scope: CODE_FILES_SCOPE,
+          content,
+          content_type: 'text/plain',
+        }),
+      });
       if (!response.ok) throw new Error('Failed to create file');
-      await get().refreshFsFiles(); // bumps fsTreeVersion so expanded nodes re-fetch
-      return true;
+      const created = (await response.json()) as FileInfo;
+      const resolvedPath = created.path || path;
+      void get().refreshCodeFiles();
+      void get().syncCodeWorkdir('push');
+      return resolvedPath;
     } catch (error) {
-      console.error('Error creating fs file:', error);
-      return false;
+      console.error('Error creating code file:', error);
+      return null;
     }
   },
 
-  createFsFolder: async (path) => {
+  createCodeFolder: async (path) => {
     try {
-      const response = await authFetch(
-        `${getApiBase()}/api/filesystem/folder?path=${encodeURIComponent(path)}`,
-        { method: 'POST' }
-      );
+      const response = await authFetch(`${getApiBase()}/api/files/folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, scope: CODE_FILES_SCOPE }),
+      });
       if (!response.ok) throw new Error('Failed to create folder');
-      await get().refreshFsFiles();
+      await get().refreshCodeFiles();
+      await get().syncCodeWorkdir('push');
       return true;
     } catch (error) {
-      console.error('Error creating fs folder:', error);
+      console.error('Error creating code folder:', error);
       return false;
     }
   },
 
-  deleteFsFile: async (path) => {
+  deleteCodeFile: async (path) => {
     try {
       const response = await authFetch(
-        `${getApiBase()}/api/filesystem/content?path=${encodeURIComponent(path)}`,
+        `${getApiBase()}/api/files/${encodeURIComponent(path)}?${codeScopeQuery()}`,
         { method: 'DELETE' }
       );
       if (!response.ok) throw new Error('Failed to delete');
-      const { fsOpenFiles } = get();
-      if (fsOpenFiles.includes(path)) get().closeFsFile(path);
-      await get().refreshFsFiles();
+      const { codeOpenFiles } = get();
+      if (codeOpenFiles.includes(path)) get().closeCodeFile(path);
+      await get().refreshCodeFiles();
+      await get().syncCodeWorkdir('push');
       return true;
     } catch (error) {
-      console.error('Error deleting fs path:', error);
+      console.error('Error deleting code path:', error);
       return false;
     }
   },
 
-  renameFsFile: async (oldPath, newPath) => {
+  renameCodeFile: async (oldPath, newPath) => {
     try {
-      const response = await authFetch(
-        `${getApiBase()}/api/filesystem/rename?path=${encodeURIComponent(oldPath)}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ new_path: newPath }),
-        }
-      );
+      const response = await authFetch(`${getApiBase()}/api/files/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          old_path: oldPath,
+          new_path: newPath,
+          scope: CODE_FILES_SCOPE,
+        }),
+      });
       if (!response.ok) throw new Error('Failed to rename');
-      // Update open tabs if the renamed file was open
-      const { fsOpenFiles, fsActiveFile, fsFileContents, fsUnsavedChanges } = get();
-      if (fsOpenFiles.includes(oldPath)) {
-        const newContents = { ...fsFileContents, [newPath]: fsFileContents[oldPath] };
+      const { codeOpenFiles, codeActiveFile, codeFileContents, codeUnsavedChanges } = get();
+      if (codeOpenFiles.includes(oldPath)) {
+        const newContents = { ...codeFileContents, [newPath]: codeFileContents[oldPath] };
         delete newContents[oldPath];
-        const newUnsaved = { ...fsUnsavedChanges, [newPath]: fsUnsavedChanges[oldPath] };
+        const newUnsaved = { ...codeUnsavedChanges, [newPath]: codeUnsavedChanges[oldPath] };
         delete newUnsaved[oldPath];
         set({
-          fsOpenFiles: fsOpenFiles.map((p) => (p === oldPath ? newPath : p)),
-          fsActiveFile: fsActiveFile === oldPath ? newPath : fsActiveFile,
-          fsFileContents: newContents,
-          fsUnsavedChanges: newUnsaved,
+          codeOpenFiles: codeOpenFiles.map((p) => (p === oldPath ? newPath : p)),
+          codeActiveFile: codeActiveFile === oldPath ? newPath : codeActiveFile,
+          codeFileContents: newContents,
+          codeUnsavedChanges: newUnsaved,
         });
       }
-      await get().refreshFsFiles();
+      await get().refreshCodeFiles();
+      await get().syncCodeWorkdir('push');
       return true;
     } catch (error) {
-      console.error('Error renaming fs path:', error);
+      console.error('Error renaming code path:', error);
       return false;
     }
   },
 
-  setFsDiffs: (diffs) => {
+  setCodeDiffs: (diffs) => {
     set((state) => ({
-      fsDiffs: {
-        ...state.fsDiffs,
-        ...Object.fromEntries(diffs.map((d) => [d.file, { additions: d.additions, deletions: d.deletions, status: d.status }])),
+      codeDiffs: {
+        ...state.codeDiffs,
+        ...Object.fromEntries(
+          diffs.map((d) => [d.file, { additions: d.additions, deletions: d.deletions, status: d.status }])
+        ),
       },
     }));
   },
 
-  clearFsDiffs: () => set({ fsDiffs: {} }),
+  clearCodeDiffs: () => set({ codeDiffs: {} }),
+
+  syncCodeWorkdir: async (direction = 'both') => {
+    try {
+      await authFetch(`${getApiBase()}/api/code/sync?direction=${direction}`, { method: 'POST' });
+    } catch (error) {
+      console.warn('Code workdir sync failed (non-fatal):', error);
+    }
+  },
 }));

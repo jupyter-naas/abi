@@ -215,7 +215,7 @@ export function AIPane() {
   const { contextPanelOpen, toggleContextPanel, currentWorkspaceId, paneAgent, setPaneAgent } = useWorkspaceStore();
   const { agents, getAgent } = useAgentsStore();
   const { providers } = useIntegrationsStore();
-  const { activeFile, fileContents, fsActiveFile, refreshFsFiles, readFsFile, setFsDiffs, clearFsDiffs, fsFiles, fetchFsFolderContents } = useFilesStore();
+  const { activeFile, fileContents, codeActiveFile, refreshCodeFiles, readCodeFile, setCodeDiffs, clearCodeDiffs, codeFiles, fetchCodeFolderContents } = useFilesStore();
 
   const isOpencode = paneAgent === OPENCODE_AGENT_ID;
   const activeOcModel = selectedOcModel ?? ocDefaultModel;
@@ -400,7 +400,7 @@ export function AIPane() {
   // Read file content for attachments (uses the filesystem API)
   const readAttachmentContent = async (path: string): Promise<string> => {
     try {
-      const content = await readFsFile(path);
+      const content = await readCodeFile(path);
       return content ?? '';
     } catch {
       return '';
@@ -555,7 +555,7 @@ export function AIPane() {
     const assistantId = (Date.now() + 1).toString();
     const textParts: Record<string, string> = {};
 
-    clearFsDiffs();
+    clearCodeDiffs();
 
     // Prepend attached file contents as fenced code blocks
     let messageWithAttachments = userContent;
@@ -652,12 +652,11 @@ export function AIPane() {
         if (eventType === 'session.diff') {
           const diff = (props.diff ?? []) as Array<{ file: string; additions: number; deletions: number; status: string }>;
           if (diff.length > 0) {
-            setFsDiffs(diff);
-            // Fire-and-forget: refresh tree and reload active file if changed
-            refreshFsFiles().then(() => {
-              const currentActive = useFilesStore.getState().fsActiveFile;
+            setCodeDiffs(diff);
+            refreshCodeFiles().then(() => {
+              const currentActive = useFilesStore.getState().codeActiveFile;
               if (currentActive && diff.some((d) => currentActive.endsWith(d.file))) {
-                readFsFile(currentActive);
+                readCodeFile(currentActive);
               }
             });
           }
@@ -849,7 +848,7 @@ export function AIPane() {
 
   if (!mounted || !contextPanelOpen) return null;
 
-  const contextFile = isCodeSection ? fsActiveFile : activeFile;
+  const contextFile = isCodeSection ? codeActiveFile : activeFile;
 
   return (
     <aside className={cn('flex h-full flex-col border-l border-border/50 bg-background', isCodeSection ? 'w-96' : 'w-80')}>
@@ -1010,8 +1009,8 @@ export function AIPane() {
                         <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">Attach from sandbox</div>
                         <div className="max-h-56 overflow-y-auto py-1">
                           <FileBrowserTree
-                            files={fsFiles}
-                            fetchChildren={fetchFsFolderContents}
+                            files={codeFiles}
+                            fetchChildren={fetchCodeFolderContents}
                             attached={attachedFiles}
                             onToggle={toggleAttachment}
                           />
@@ -1329,8 +1328,8 @@ export function AIPane() {
                           <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">Attach from sandbox</div>
                           <div className="max-h-56 overflow-y-auto py-1">
                             <FileBrowserTree
-                              files={fsFiles}
-                              fetchChildren={fetchFsFolderContents}
+                              files={codeFiles}
+                              fetchChildren={fetchCodeFolderContents}
                               attached={attachedFiles}
                               onToggle={toggleAttachment}
                             />

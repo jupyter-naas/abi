@@ -64,6 +64,8 @@ x-abi-template: &abi_template
     - OPENCODE_PORT=${OPENCODE_PORT:-4005}
     - FILESYSTEM_ROOT=/app
     - SANDBOX_ROOT=sandbox
+    - CODE_WORKDIR_SYNC_ROOT=/app/sandbox
+    - OPENCODE_HOST_WORKDIR=${PWD}/sandbox
     - OPENCODE_WORKDIR=${PWD}/sandbox
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)

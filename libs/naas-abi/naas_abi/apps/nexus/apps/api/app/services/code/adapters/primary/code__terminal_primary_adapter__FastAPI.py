@@ -1,13 +1,4 @@
-"""PTY terminal WebSocket endpoint.
-
-Spawns an interactive shell inside the container and relays input/output
-over WebSocket so the browser-side xterm.js can drive it.
-
-Protocol:
-  Binary frames  raw terminal bytes (both directions)
-  Text frames    JSON control messages:
-                   {"type": "resize", "cols": 80, "rows": 24}
-"""
+"""Code terminal WebSocket primary adapter."""
 
 from __future__ import annotations
 
@@ -20,29 +11,34 @@ import select
 import struct
 import termios
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
     AuthSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+from naas_abi.apps.nexus.apps.api.app.services.code.adapters.primary.code__primary_adapter__dependencies import (
+    get_code_workdir_sync_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.code.workdir_sync_service import (
+    CodeWorkdirSyncService,
+)
 
-router = APIRouter()
+terminal_router = APIRouter()
+
+SHELL = os.environ.get("SHELL", "/bin/bash")
+DEFAULT_WORKDIR = os.environ.get("FILESYSTEM_ROOT", "/app")
 
 
-async def _auth_ws(websocket: WebSocket, token: str) -> bool:
-    """Validate Bearer token for WebSocket (browsers can't send Authorization headers)."""
+async def _auth_ws(websocket: WebSocket, token: str) -> str | None:
     async for db in get_db():
         service = AuthService(adapter=AuthSecondaryAdapterPostgres(db=db))
         user = await service.get_user_from_access_token(token)
         if user is None:
             await websocket.close(code=4001, reason="Unauthorized")
-            return False
-        return True
-    return False
-
-SHELL = os.environ.get("SHELL", "/bin/bash")
-WORKDIR = os.environ.get("FILESYSTEM_ROOT", "/app")
+            return None
+        return user.id
+    return None
 
 
 def _set_winsize(fd: int, rows: int, cols: int) -> None:
@@ -59,14 +55,22 @@ def _read_master(fd: int, timeout: float = 0.05) -> bytes:
     return b""
 
 
-@router.websocket("/ws")
+@terminal_router.websocket("/ws")
 async def terminal_ws(
     websocket: WebSocket,
     token: str = Query(..., description="Bearer access token"),
+    sync_service: CodeWorkdirSyncService = Depends(get_code_workdir_sync_service),
 ) -> None:
-    if not await _auth_ws(websocket, token):
+    user_id = await _auth_ws(websocket, token)
+    if not user_id:
         return
     await websocket.accept()
+
+    try:
+        sync_result = sync_service.pull(user_id)
+        workdir = sync_result.local_path
+    except Exception:
+        workdir = DEFAULT_WORKDIR
 
     master_fd, slave_fd = pty.openpty()
     _set_winsize(master_fd, 24, 80)
@@ -78,21 +82,20 @@ async def terminal_ws(
         "LANG": os.environ.get("LANG", "en_US.UTF-8"),
     }
 
-    # Make the slave fd the controlling terminal of a new session so bash
-    # can enable job control without the "cannot set terminal process group"
-    # warning.
     def _set_controlling_tty() -> None:
         os.setsid()
         if hasattr(termios, "TIOCSCTTY"):
-            fcntl.ioctl(0, termios.TIOCSCTTY, 0)  # fd 0 == slave_fd (stdin)
+            fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
     proc = await asyncio.create_subprocess_exec(
-        SHELL, "--login", "-i",
+        SHELL,
+        "--login",
+        "-i",
         stdin=slave_fd,
         stdout=slave_fd,
         stderr=slave_fd,
         close_fds=True,
-        cwd=WORKDIR,
+        cwd=workdir,
         env=env,
         preexec_fn=_set_controlling_tty,
     )
@@ -102,7 +105,6 @@ async def terminal_ws(
     stop = asyncio.Event()
 
     async def _pump_output() -> None:
-        """Read PTY master output and forward to WebSocket."""
         while not stop.is_set():
             data = await loop.run_in_executor(None, _read_master, master_fd)
             if data:
@@ -113,7 +115,6 @@ async def terminal_ws(
         stop.set()
 
     async def _pump_input() -> None:
-        """Read WebSocket messages and write to PTY master."""
         while not stop.is_set():
             try:
                 msg = await websocket.receive()
@@ -145,6 +146,10 @@ async def terminal_ws(
         await asyncio.gather(_pump_output(), _pump_input())
     finally:
         stop.set()
+        try:
+            sync_service.push(user_id)
+        except Exception:
+            pass
         try:
             proc.terminate()
         except Exception:
