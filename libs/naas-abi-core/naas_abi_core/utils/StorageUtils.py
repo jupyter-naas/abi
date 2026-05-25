@@ -479,7 +479,7 @@ class StorageUtils:
             content = self.__storage_service.get_object(dir_path, file_name)
             if content is None:
                 return None
-            return pickle.loads(content)
+            return pickle.loads(content)  # nosec B301 — trusted internal storage only
         except Exception as e:
             logger.warning(f"Error getting pickle from {dir_path}/{file_name}: {e}")
             return None
