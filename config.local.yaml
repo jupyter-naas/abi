@@ -196,7 +196,7 @@ modules:
         api_key: "{{ secret.OPENAI_API_KEY }}"
       markdowntovector_pipelines:
         - api_key: "{{ secret.OPENAI_API_KEY }}"
-
+        
 
 # 3. SERVICES: what the modules run on
 # Q: Which technology does each service use?
