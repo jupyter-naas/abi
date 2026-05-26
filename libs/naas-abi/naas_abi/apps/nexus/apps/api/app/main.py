@@ -277,6 +277,15 @@ def _configure_middleware(app: FastAPI) -> None:
     )
     app.add_middleware(SecurityHeadersMiddleware)
 
+    # Per-actor HTTP activity log. Reads ActivityLogService from
+    # app.state.activity_log_service (wired by the engine); if absent,
+    # the middleware is a no-op.
+    from naas_abi.apps.nexus.apps.api.app.services.activity_log.HttpActivityLogMiddleware import (
+        HttpActivityLogMiddleware,
+    )
+
+    app.add_middleware(HttpActivityLogMiddleware)
+
 
 def _register_routes(app: FastAPI) -> None:
     # Include API router

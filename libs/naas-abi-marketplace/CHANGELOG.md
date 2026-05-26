@@ -2,6 +2,51 @@
 
 <!-- version list -->
 
+## v1.23.1 (2026-05-22)
+
+### Bug Fixes
+
+- Ensure git pull before committing staged changes
+  ([`d99236e`](https://github.com/jupyter-naas/abi/commit/d99236e102160c13237e830b1283aba0746fbc93))
+
+
+## v1.23.0 (2026-05-21)
+
+### Bug Fixes
+
+- Suppress commit hooks for GitAgent commit
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update naas-abi package versions in uv.lock
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update timeout and retry settings in docker-compose healthcheck
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Features
+
+- Add category fields to app manifests in the marketplace
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Refactoring
+
+- **apps**: Change app catalog discovery to use loaded modules
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+
+## v1.22.1 (2026-05-21)
+
+### Bug Fixes
+
+- **git**: Enhance git_push to pull before pushing if remote branch exists
+  ([`46125c5`](https://github.com/jupyter-naas/abi/commit/46125c56faf87987e23506bf18ed83a2faab9498))
+
+### Refactoring
+
+- Move app files in dashboard folder and create manifest.json
+  ([`a315d38`](https://github.com/jupyter-naas/abi/commit/a315d38e47c6ffc2f1a997c46d0a27d91d3a701d))
+
+
 ## v1.22.0 (2026-05-18)
 
 ### Bug Fixes

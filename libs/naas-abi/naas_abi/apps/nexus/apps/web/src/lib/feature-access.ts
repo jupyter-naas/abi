@@ -7,7 +7,9 @@ export type FeatureKey =
   | 'search'
   | 'ontology'
   | 'graph'
-  | 'settings';
+  | 'settings'
+  | 'settings.workspace'
+  | 'settings.organization';
 
 export type WorkspaceFeatureFlags = Partial<Record<FeatureKey, boolean>>;
 
@@ -21,6 +23,8 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'ontology',
   'graph',
   'settings',
+  'settings.workspace',
+  'settings.organization',
 ];
 
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
@@ -40,6 +44,8 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   ontology: '/ontology',
   graph: '/graph',
   settings: '/settings',
+  'settings.workspace': '/settings',
+  'settings.organization': '/organization',
 };
 
 export function mergeFeatureFlags(role?: string, workspaceFlags?: WorkspaceFeatureFlags): Record<FeatureKey, boolean> {
@@ -107,7 +113,13 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   ) {
     return 'agents';
   }
-  if (firstSegment === 'settings' || firstSegment === 'organization' || firstSegment === 'help') {
+  if (firstSegment === 'settings') {
+    return 'settings.workspace';
+  }
+  if (firstSegment === 'organization') {
+    return 'settings.organization';
+  }
+  if (firstSegment === 'help') {
     return 'settings';
   }
 
@@ -136,7 +148,7 @@ export function getFirstAllowedWorkspacePath(params: {
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
   const resolved = mergeFeatureFlags(params.role, params.workspaceFlags);
-  const priority: FeatureKey[] = ['chat', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings'];
+  const priority: FeatureKey[] = ['chat', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
 
   for (const feature of priority) {
     if (resolved[feature]) {
