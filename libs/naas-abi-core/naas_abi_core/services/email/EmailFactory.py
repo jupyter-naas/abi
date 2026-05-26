@@ -4,6 +4,7 @@ from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
     FilesystemAdapter,
 )
+from naas_abi_core.services.email.adapters.secondary.SESAdapter import SESAdapter
 from naas_abi_core.services.email.adapters.secondary.SMTPAdapter import SMTPAdapter
 
 
@@ -34,3 +35,20 @@ class EmailFactory:
     @staticmethod
     def EmailServiceFilesystem(*, directory: str) -> EmailService:
         return EmailService(FilesystemAdapter(directory=directory))
+
+    @staticmethod
+    def EmailServiceSES(
+        *,
+        region_name: str | None = None,
+        aws_access_key_id: str | None = None,
+        aws_secret_access_key: str | None = None,
+        aws_session_token: str | None = None,
+    ) -> EmailService:
+        return EmailService(
+            SESAdapter(
+                region_name=region_name,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token,
+            )
+        )
