@@ -2,6 +2,51 @@
 
 <!-- version list -->
 
+## v1.24.0 (2026-05-26)
+
+### Chores
+
+- **marketplace/bedrock**: Remove unused ontology
+  ([`f9c0051`](https://github.com/jupyter-naas/abi/commit/f9c0051370c13aa3eb3a97f5eabb4ca928a156bd))
+
+### Features
+
+- **marketplace**: Add Amazon Bedrock AI module
+  ([`69e1fa8`](https://github.com/jupyter-naas/abi/commit/69e1fa82afed5b12c41ebf126f01f61ec26930fd))
+
+
+## v1.23.1 (2026-05-22)
+
+### Bug Fixes
+
+- Ensure git pull before committing staged changes
+  ([`d99236e`](https://github.com/jupyter-naas/abi/commit/d99236e102160c13237e830b1283aba0746fbc93))
+
+
+## v1.23.0 (2026-05-21)
+
+### Bug Fixes
+
+- Suppress commit hooks for GitAgent commit
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update naas-abi package versions in uv.lock
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update timeout and retry settings in docker-compose healthcheck
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Features
+
+- Add category fields to app manifests in the marketplace
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Refactoring
+
+- **apps**: Change app catalog discovery to use loaded modules
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+
 ## v1.22.1 (2026-05-21)
 
 ### Bug Fixes

@@ -10,6 +10,7 @@ from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogSe
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -139,6 +140,9 @@ class TenantConfig(BaseModel):
     tab_title: str = "ABI Nexus | naas.ai"
     favicon_url: str | None = None
     logo_url: str | None = None
+    og_title: str | None = None
+    og_description: str | None = None
+    og_image_url: str | None = None
     logo_rectangle_url: str | None = None
     logo_emoji: str | None = None
     primary_color: str = "#34D399"
@@ -450,6 +454,7 @@ class ABIModule(BaseModule):
             CacheService,
             EmailService,
             ActivityLogService,
+            EventService,
         ],
     )
 

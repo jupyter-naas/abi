@@ -123,7 +123,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             try:
                 topic = f"ts.insert.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                self.services.bus.topic_publish(
+                self.services.bus.publish(
                     "triple_store",
                     topic,
                     triple_bytes,
@@ -151,7 +151,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             try:
                 topic = f"ts.delete.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                self.services.bus.topic_publish(
+                self.services.bus.publish(
                     "triple_store",
                     topic,
                     triple_bytes,
@@ -209,7 +209,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         topic_str = f"ts.{_event_type}.g.{graph_topic}.s.{s}.p.{p}.o.{o}"
 
-        self.services.bus.topic_consume(
+        self.services.bus.subscribe(
             "triple_store",
             topic_str,
             callback,

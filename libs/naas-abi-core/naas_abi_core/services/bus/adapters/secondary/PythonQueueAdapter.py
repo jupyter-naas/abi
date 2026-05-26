@@ -24,9 +24,15 @@ class PythonQueueAdapter(IBusAdapter):
         busy_timeout_ms: int = 5000,
         poll_interval_seconds: float = 0.05,
         lock_timeout_seconds: float = 1.0,
+        broadcast_retention_seconds: float = 60.0,
     ) -> None:
         self._poll_interval_seconds = poll_interval_seconds
         self._lock_timeout_seconds = lock_timeout_seconds
+        # Broadcast rows are append-only with no per-subscriber bookkeeping in
+        # SQLite — late subscribers don't replay history (Redis pub/sub
+        # semantics). A short retention window covers the gap between publish
+        # and a cross-process subscriber's next poll, then we GC the row.
+        self._broadcast_retention_seconds = broadcast_retention_seconds
 
         if persistence_path is None:
             db_target = self._SHARED_IN_MEMORY_URI
@@ -58,10 +64,29 @@ class PythonQueueAdapter(IBusAdapter):
             )
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bus_pubsub (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic TEXT NOT NULL,
+                routing_key TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bus_pubsub_topic_seq "
+            "ON bus_pubsub(topic, seq)"
+        )
         self._conn.commit()
         self._db_lock = threading.RLock()
 
-    def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+    # ------------------------------------------------------------------
+    # Work queue — durable, claim-and-ACK, exactly-one consumer.
+    # ------------------------------------------------------------------
+
+    def enqueue(self, topic: str, routing_key: str, payload: bytes) -> None:
         with self._db_lock:
             self._conn.execute(
                 "INSERT INTO bus_messages(topic, routing_key, payload, created_at) VALUES(?, ?, ?, ?)",
@@ -122,7 +147,7 @@ class PythonQueueAdapter(IBusAdapter):
             )
             self._conn.commit()
 
-    def topic_consume(
+    def dequeue(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
     ) -> Thread:
         stop_event = Event()
@@ -144,6 +169,76 @@ class PythonQueueAdapter(IBusAdapter):
                 except Exception:
                     self._release(message_id)
                     raise
+
+        thread = Thread(target=_consume_loop, daemon=True)
+        thread.start()
+        return thread
+
+    # ------------------------------------------------------------------
+    # Pub/sub — append-only log + per-subscriber cursor + routing-key match.
+    # Every matching subscriber receives every matching message; no
+    # competition. Ephemeral: late subscribers don't replay history.
+    # ------------------------------------------------------------------
+
+    def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+        now = time.time()
+        with self._db_lock:
+            self._conn.execute(
+                "INSERT INTO bus_pubsub(topic, routing_key, payload, created_at) "
+                "VALUES(?, ?, ?, ?)",
+                (topic, routing_key, payload, now),
+            )
+            # Opportunistic TTL cleanup so the log doesn't grow unbounded.
+            # Rows older than the retention window are long past any live
+            # subscriber's polling cadence.
+            self._conn.execute(
+                "DELETE FROM bus_pubsub WHERE created_at < ?",
+                (now - self._broadcast_retention_seconds,),
+            )
+            self._conn.commit()
+
+    def subscribe(
+        self, topic: str, routing_key: str, callback: Callable[[bytes], None]
+    ) -> Thread:
+        # Start the cursor at the current max seq for this topic so we
+        # don't replay history — Redis pub/sub semantics: late joiners
+        # don't see past messages. Use the EventService log for replay.
+        with self._db_lock:
+            row = self._conn.execute(
+                "SELECT COALESCE(MAX(seq), 0) FROM bus_pubsub WHERE topic=?",
+                (topic,),
+            ).fetchone()
+        cursor = int(row[0]) if row else 0
+        stop_event = Event()
+
+        def _consume_loop() -> None:
+            nonlocal cursor
+            while not stop_event.is_set():
+                with self._db_lock:
+                    rows = self._conn.execute(
+                        "SELECT seq, routing_key, payload FROM bus_pubsub "
+                        "WHERE topic=? AND seq>? ORDER BY seq",
+                        (topic, cursor),
+                    ).fetchall()
+                if not rows:
+                    time.sleep(self._poll_interval_seconds)
+                    continue
+                for seq, msg_routing_key, payload in rows:
+                    # Advance cursor regardless of match/mismatch so we
+                    # don't loop on the same rows.
+                    cursor = int(seq)
+                    if not self._match_routing_key(routing_key, str(msg_routing_key)):
+                        continue
+                    try:
+                        callback(bytes(payload))
+                    except StopIteration:
+                        stop_event.set()
+                        return
+                    except Exception:
+                        # Best-effort: pub/sub does not redeliver on
+                        # subscriber failure. Caller-side error handling
+                        # is the subscriber's responsibility.
+                        pass
 
         thread = Thread(target=_consume_loop, daemon=True)
         thread.start()
