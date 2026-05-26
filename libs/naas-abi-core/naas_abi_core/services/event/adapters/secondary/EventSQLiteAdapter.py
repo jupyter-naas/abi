@@ -12,6 +12,7 @@ import os
 import sqlite3
 import threading
 
+from naas_abi_core.services.event.EventFilter import build_where
 from naas_abi_core.services.event.EventPort import IEventAdapter, StoredEvent
 
 
@@ -93,6 +94,7 @@ class EventSQLiteAdapter(IEventAdapter):
         until_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
+        json_filter: dict | None = None,
         limit: int | None = None,
     ) -> list[StoredEvent]:
         clauses: list[str] = []
@@ -112,6 +114,11 @@ class EventSQLiteAdapter(IEventAdapter):
         if until_timestamp is not None:
             clauses.append("timestamp <= ?")
             params.append(until_timestamp)
+        if json_filter:
+            where_sql, where_params = build_where(json_filter, column="payload")
+            if where_sql:
+                clauses.append(where_sql)
+                params.extend(where_params)
 
         sql = "SELECT id, event_type, seq, timestamp, payload FROM events"
         if clauses:
