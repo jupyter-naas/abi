@@ -1,11 +1,13 @@
 {$PUBLIC_WEB_HOST:localhost} {
     reverse_proxy nexus-web:3000 {
         header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
     }
 }
 
 {$PUBLIC_API_HOST:api.localhost} {
     reverse_proxy abi:9879 {
         header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
     }
 }

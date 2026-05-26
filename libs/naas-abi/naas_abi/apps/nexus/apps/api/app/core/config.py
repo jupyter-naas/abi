@@ -30,6 +30,12 @@ class TenantConfig(BaseModel):
     tab_title: str = "ABI Nexus | naas.ai"
     favicon_url: str | None = None
     logo_url: str | None = None
+
+    # Open Graph / social sharing preview (used when the platform URL is shared
+    # in Slack, Twitter/X, iMessage, LinkedIn, etc.).
+    og_title: str | None = None
+    og_description: str | None = None
+    og_image_url: str | None = None
     logo_rectangle_url: str | None = None
     logo_emoji: str | None = None
     primary_color: str = "#34D399"

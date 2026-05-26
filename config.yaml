@@ -43,6 +43,13 @@ modules:
         # `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
         auth_password_enabled: true
         magic_link_allow_signup: false
+        tenant:
+          tab_title: "ABI"
+          # Social sharing preview - shown when the platform URL is shared in
+          # Slack, Twitter/X, iMessage, LinkedIn, etc.
+          og_title: "ABI"
+          og_description: "Your AI Operating System - agents, knowledge, and data in one place."
+          og_image_url: "https://repository-images.githubusercontent.com/704324955/444d3ad8-befb-446f-9723-6453aad2c336"
         marketplace:
           pricing:
             maintenance_standard_usd: 499
