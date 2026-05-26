@@ -1,0 +1,98 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+
+<http://naas.ai/ontology/abi/BedrockOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Amazon Bedrock AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for AWS Bedrock managed foundation models"@en ;
+    dc:created "20260522T000000"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
+abi:BedrockAgent a abi:AIAgent ;
+    rdfs:label "Bedrock AI Agent"@en ;
+    rdfs:comment "AI Agent invoking foundation models hosted on Amazon Bedrock"@en ;
+    abi:hasSpecializedRole "Managed foundation model inference"@en .
+
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:BedrockInferenceProcess a abi:TextGenerationProcess ;
+    rdfs:label "Bedrock Inference Process"@en ;
+    abi:hasParticipant abi:BedrockAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:BedrockInferenceSession .
+
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:BedrockInferenceSession a abi:InferenceSession ;
+    rdfs:label "Bedrock Inference Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude Sonnet 4 on Bedrock
+#################################################################
+
+abi:Bedrock_Claude_Sonnet_4 a abi:AIModelInstance ;
+    rdfs:label "Claude Sonnet 4 (Bedrock)"@en ;
+    abi:modelSlug "anthropic.claude-sonnet-4-20250514-v1:0"@en ;
+    abi:provider "Amazon Bedrock"@en ;
+    abi:sourceAPI "aws_bedrock"@en .
+
+abi:BedrockAgent abi:canUtilizeModel abi:Bedrock_Claude_Sonnet_4 .
+abi:BedrockInferenceProcess abi:utilizesModel abi:Bedrock_Claude_Sonnet_4 .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3.5 Haiku on Bedrock
+#################################################################
+
+abi:Bedrock_Claude_3_5_Haiku a abi:AIModelInstance ;
+    rdfs:label "Claude 3.5 Haiku (Bedrock)"@en ;
+    abi:modelSlug "anthropic.claude-3-5-haiku-20241022-v1:0"@en ;
+    abi:provider "Amazon Bedrock"@en ;
+    abi:sourceAPI "aws_bedrock"@en .
+
+abi:BedrockAgent abi:canUtilizeModel abi:Bedrock_Claude_3_5_Haiku .
+abi:BedrockInferenceProcess abi:utilizesModel abi:Bedrock_Claude_3_5_Haiku .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Llama 3.3 70B on Bedrock
+#################################################################
+
+abi:Bedrock_Llama_3_3_70B a abi:AIModelInstance ;
+    rdfs:label "Llama 3.3 70B Instruct (Bedrock)"@en ;
+    abi:modelSlug "meta.llama3-3-70b-instruct-v1:0"@en ;
+    abi:provider "Amazon Bedrock"@en ;
+    abi:sourceAPI "aws_bedrock"@en .
+
+abi:BedrockAgent abi:canUtilizeModel abi:Bedrock_Llama_3_3_70B .
+abi:BedrockInferenceProcess abi:utilizesModel abi:Bedrock_Llama_3_3_70B .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Amazon Nova Pro on Bedrock
+#################################################################
+
+abi:Bedrock_Nova_Pro a abi:AIModelInstance ;
+    rdfs:label "Amazon Nova Pro (Bedrock)"@en ;
+    abi:modelSlug "amazon.nova-pro-v1:0"@en ;
+    abi:provider "Amazon Bedrock"@en ;
+    abi:sourceAPI "aws_bedrock"@en .
+
+abi:BedrockAgent abi:canUtilizeModel abi:Bedrock_Nova_Pro .
+abi:BedrockInferenceProcess abi:utilizesModel abi:Bedrock_Nova_Pro .
