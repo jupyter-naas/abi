@@ -34,6 +34,9 @@ jobs:
         with:
           version: 8.15.0
 
+      - name: Install frontend dependencies
+        run: cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm install --frozen-lockfile
+
       - name: Run checks
         run: make check
 

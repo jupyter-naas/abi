@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings,
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Terminal,
+  LayoutGrid, Store, Settings,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -28,7 +29,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'ontology' },
   { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'graph' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
-  { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
+  { id: 'code',     icon: <Terminal size={18} />,      label: 'Code',           href: '/code',        feature: 'agents' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
 ];
@@ -56,7 +57,7 @@ export function Sidebar() {
     setActivePanelSection,
   } = useWorkspaceStore();
 
-  const { fetchFiles, fetchLabFiles, setActiveSource } = useFilesStore();
+  const { fetchFiles, setActiveSource } = useFilesStore();
   const { fetchItems: fetchOntology } = useOntologyStore();
 
   const canChat = useFeature('chat');
@@ -71,9 +72,9 @@ export function Sidebar() {
 
   useEffect(() => {
     setMounted(true);
-    if (canFiles) { fetchFiles(); fetchLabFiles(); }
+    if (canFiles) { fetchFiles(); }
     if (canOntology) { fetchOntology(); }
-  }, [canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
+  }, [canFiles, canOntology, fetchFiles, fetchOntology]);
 
   // Resolve the section that owns the current URL — single source of truth
   // for the highlighted icon, the sub-panel, and the browser tab title.
@@ -143,7 +144,7 @@ export function Sidebar() {
       }
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
-      case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
+      case 'code':     return getWorkspacePath(currentWorkspaceId, '/code');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');

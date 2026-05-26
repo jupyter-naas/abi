@@ -37,7 +37,7 @@ const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   chat: '/chat',
   files: '/files',
-  agents: '/lab',
+  agents: '/code',
   apps: '/apps',
   marketplace: '/marketplace',
   search: '/search',
@@ -108,7 +108,8 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
     return 'marketplace';
   }
   if (
-    firstSegment === 'lab' ||
+    firstSegment === 'code' ||
+    firstSegment === 'lab' || // legacy redirect to /code
     (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents')
   ) {
     return 'agents';

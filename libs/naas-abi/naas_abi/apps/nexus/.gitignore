@@ -48,6 +48,10 @@ pnpm-debug.log*
 # Testing
 coverage
 .coverage
+test-results
+playwright-report
+**/test-results
+**/playwright-report
 
 # Misc
 *.tsbuildinfo

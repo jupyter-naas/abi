@@ -40,6 +40,11 @@ def my_drive_root(user_id: str) -> str:
     return PurePosixPath(MY_DRIVE_ROOT, user_id).as_posix()
 
 
+def my_drive_code_root(user_id: str) -> str:
+    """Per-user Code IDE sandbox inside My Drive."""
+    return PurePosixPath(MY_DRIVE_ROOT, user_id, "code").as_posix()
+
+
 def workspace_drive_root(workspace_id: str) -> str:
     return PurePosixPath(WORKSPACE_DRIVE_ROOT, workspace_id).as_posix()
 

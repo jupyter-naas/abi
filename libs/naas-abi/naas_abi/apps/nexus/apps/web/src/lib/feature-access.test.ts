@@ -54,6 +54,7 @@ test('guard maps workspace paths to features', () => {
 
 test('guard supports org-scoped rewritten routes', () => {
   assert.equal(getFeatureForWorkspacePath('/org/acme/workspace/ws1/chat'), 'chat');
+  assert.equal(getFeatureForWorkspacePath('/org/acme/workspace/ws1/code'), 'agents');
   assert.equal(getFeatureForWorkspacePath('/org/acme/workspace/ws1/lab'), 'agents');
 });
 

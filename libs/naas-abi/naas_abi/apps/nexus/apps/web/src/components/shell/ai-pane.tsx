@@ -1,51 +1,67 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   X,
   Send,
-  Sparkles,
+  ArrowUp,
   Bot,
   Loader2,
   ChevronDown,
-  Infinity,
-  ListTree,
-  Bug,
   MessageSquare,
   Check,
   Plus,
   History,
   Download,
   Trash2,
+  Terminal,
+  FileCode,
+  FileEdit,
+  Play,
+  BookOpen,
+  CheckCircle2,
+  Circle,
+  Paperclip,
+  ChevronRight,
+  Folder,
+  StopCircle,
+  Undo2,
+  Cpu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore } from '@/stores/auth';
+import { useFilesStore } from '@/stores/files';
+import { useOpencodeSessionStore } from '@/stores/opencode-session';
+import { sessionDisplayTitle } from '@/lib/opencode-sessions';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
 const getApiBase = () => getApiUrl();
 
-type Mode = 'agent' | 'plan' | 'debug' | 'ask';
+// ─── Opencode event types ────────────────────────────────────────────────────
 
-const modes: { id: Mode; label: string; icon: React.ElementType; shortcut?: string; description: string }[] = [
-  { id: 'agent', label: 'Agent', icon: Infinity, shortcut: '⌘I', description: 'Can perform actions' },
-  { id: 'plan', label: 'Plan', icon: ListTree, description: 'Proposes plans' },
-  { id: 'debug', label: 'Debug', icon: Bug, description: 'Helps debug issues' },
-  { id: 'ask', label: 'Ask', icon: MessageSquare, description: 'Only answers questions' },
-];
+interface ToolEvent {
+  callId: string;
+  tool: string;  // read | write | edit | bash
+  path?: string;
+  command?: string;
+  status: 'running' | 'completed';
+  output?: string;
+}
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   thinkingDuration?: number;
+  toolEvents?: ToolEvent[];  // opencode tool activity
+  isOpencode?: boolean;      // rendered differently
 }
 
 interface ChatSession {
@@ -55,29 +71,176 @@ interface ChatSession {
   createdAt: Date;
 }
 
+interface OcModel {
+  providerID: string;
+  modelID: string;
+  name: string;
+}
+
+interface OcProvider {
+  id: string;
+  name: string;
+  models: OcModel[];
+}
+
+/** Normalize opencode /config/providers (array, map, or { providers }). */
+function normalizeOcProviders(data: unknown): OcProvider[] {
+  if (!data || typeof data !== 'object') return [];
+
+  const record = data as Record<string, unknown>;
+  let raw: unknown[] = [];
+  if (Array.isArray(data)) {
+    raw = data;
+  } else if (Array.isArray(record.providers)) {
+    raw = record.providers;
+  } else if (record.providers && typeof record.providers === 'object') {
+    raw = Object.values(record.providers as Record<string, unknown>);
+  } else if (record.provider && typeof record.provider === 'object') {
+    raw = Object.values(record.provider as Record<string, unknown>);
+  }
+
+  return raw
+    .filter((p): p is Record<string, unknown> => (
+      !!p && typeof p === 'object' && typeof (p as Record<string, unknown>).id === 'string'
+    ))
+    .map((p) => {
+      const id = p.id as string;
+      const name = (typeof p.name === 'string' ? p.name : id);
+      const modelsRaw = p.models;
+      let models: OcModel[] = [];
+
+      if (Array.isArray(modelsRaw)) {
+        models = modelsRaw
+          .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object')
+          .map((m) => {
+            const modelID = String(m.modelID ?? m.modelId ?? m.id ?? '');
+            return { providerID: id, modelID, name: String(m.name ?? modelID) };
+          })
+          .filter((m) => m.modelID);
+      } else if (modelsRaw && typeof modelsRaw === 'object') {
+        models = Object.entries(modelsRaw as Record<string, unknown>).map(([key, m]) => {
+          const rec = m && typeof m === 'object' ? (m as Record<string, unknown>) : {};
+          const modelID = String(rec.modelID ?? rec.modelId ?? rec.id ?? key);
+          return { providerID: id, modelID, name: String(rec.name ?? modelID) };
+        }).filter((m) => m.modelID);
+      }
+
+      return { id, name, models };
+    })
+    .filter((p) => p.models.length > 0);
+}
+
+function lookupOcModelName(providers: OcProvider[], providerID: string, modelID: string): string {
+  for (const p of providers) {
+    if (p.id !== providerID) continue;
+    const match = p.models.find((m) => m.modelID === modelID);
+    if (match) return match.name || match.modelID;
+  }
+  return modelID;
+}
+
+
+// ─── Opencode tool event card ─────────────────────────────────────────────────
+
+const TOOL_ICONS: Record<string, React.ElementType> = {
+  read: BookOpen,
+  write: FileCode,
+  edit: FileEdit,
+  bash: Play,
+};
+
+function ToolEventCard({ event }: { event: ToolEvent }) {
+  const Icon = TOOL_ICONS[event.tool] ?? Terminal;
+  const label = event.path ?? event.command ?? event.tool;
+  const done = event.status === 'completed';
+  return (
+    <div className={cn(
+      'flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors',
+      done
+        ? 'border-border/30 bg-muted/20 text-muted-foreground'
+        : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'
+    )}>
+      {done
+        ? <CheckCircle2 size={11} className="flex-shrink-0 text-emerald-500" />
+        : <Circle size={11} className="flex-shrink-0 animate-pulse" />
+      }
+      <Icon size={11} className="flex-shrink-0" />
+      <span className="font-medium capitalize">{event.tool}</span>
+      <span className="flex-1 truncate font-mono opacity-70">{label}</span>
+    </div>
+  );
+}
+
+
+const OPENCODE_AGENT_ID = 'opencode';
+
+const OC_PRIMARY_AGENTS = [
+  { id: 'build', label: 'Build', hint: 'Full tool access' },
+  { id: 'plan', label: 'Plan', hint: 'Plan without edits' },
+] as const;
+
+type OcPrimaryAgentId = (typeof OC_PRIMARY_AGENTS)[number]['id'];
+
 export function AIPane() {
-  const router = useRouter();
+  const pathname = usePathname();
+  const isCodeSection = pathname?.includes('/code') ?? false;
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [mode, setMode] = useState<Mode>('agent');
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const [showAgentMenu, setShowAgentMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+  const filePickerRef = useRef<HTMLDivElement>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const loadedOcSessionRef = useRef<string | null>(null);
+  // Model picker (opencode only)
+  const [opencodeProviders, setOpencodeProviders] = useState<OcProvider[]>([]);
+  const [ocProvidersLoading, setOcProvidersLoading] = useState(false);
+  const [ocProvidersError, setOcProvidersError] = useState<string | null>(null);
+  const [selectedOcModel, setSelectedOcModel] = useState<OcModel | null>(null);
+  const [ocDefaultModel, setOcDefaultModel] = useState<OcModel | null>(null);
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [selectedOcPrimaryAgent, setSelectedOcPrimaryAgent] = useState<OcPrimaryAgentId>('build');
+  const [showOcModePicker, setShowOcModePicker] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
+  const ocModePickerRef = useRef<HTMLDivElement>(null);
+  // Abort support
+  const streamReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const modeMenuRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
 
   const { contextPanelOpen, toggleContextPanel, currentWorkspaceId, paneAgent, setPaneAgent } = useWorkspaceStore();
   const { agents, getAgent } = useAgentsStore();
   const { providers } = useIntegrationsStore();
-  const { getSecretByKey } = useSecretsStore();
-  
-  const currentAgent = mounted ? agents.find((a) => a.id === paneAgent) || agents.find((a) => a.id === 'abi') || agents[0] : null;
+  const { activeFile, fileContents, codeActiveFile, refreshCodeFiles, readCodeFile, setCodeDiffs, clearCodeDiffs, codeFiles, fetchCodeFolderContents } = useFilesStore();
+  const {
+    opencodeSessionId,
+    setOpencodeSessionId,
+    setCanForkSession,
+    fetchOcSessions,
+    createOcSession,
+  } = useOpencodeSessionStore();
+
+  const isOpencode = paneAgent === OPENCODE_AGENT_ID;
+  const usesOcSessions = isCodeSection || isOpencode;
+  const activeOcModel = selectedOcModel ?? ocDefaultModel;
+  const ocModelLabel = activeOcModel?.name || activeOcModel?.modelID || '…';
+  const currentAgent = mounted
+    ? isOpencode
+      ? null  // opencode is not in the agents store
+      : agents.find((a) => a.id === paneAgent) || agents.find((a) => a.id === 'abi') || agents[0]
+    : null;
+
+  // Auto-select opencode when entering the Code section
+  useEffect(() => {
+    if (isCodeSection && paneAgent !== OPENCODE_AGENT_ID) {
+      setPaneAgent(OPENCODE_AGENT_ID);
+    }
+  }, [isCodeSection]); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Get provider for agent with resolved secrets
   const getProviderForAgent = (agentId: string) => {
@@ -126,49 +289,234 @@ export function AIPane() {
   // Close menus on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (modeMenuRef.current && !modeMenuRef.current.contains(e.target as Node)) {
-        setShowModeMenu(false);
-      }
       if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
         setShowAgentMenu(false);
+      }
+      if (filePickerRef.current && !filePickerRef.current.contains(e.target as Node)) {
+        setShowFilePicker(false);
+      }
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+      if (ocModePickerRef.current && !ocModePickerRef.current.contains(e.target as Node)) {
+        setShowOcModePicker(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Fetch opencode providers when opencode is active (Code page or opencode agent)
+  const fetchOcProviders = useCallback(async () => {
+    setOcProvidersLoading(true);
+    try {
+      const token = useAuthStore.getState().token;
+      const r = await fetch(`${getApiBase()}/api/opencode/providers`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!r.ok) {
+        setOpencodeProviders([]);
+        setOcProvidersError(
+          r.status >= 500
+            ? 'opencode is not running. Run: make opencode-up'
+            : `Could not load models (${r.status})`
+        );
+        return;
+      }
+      const data = await r.json();
+      const list = normalizeOcProviders(data);
+      setOpencodeProviders(list);
+      setOcProvidersError(
+        list.length === 0 ? 'No models from opencode. Check API keys in opencode config.' : null
+      );
+
+      try {
+        const dmRes = await fetch(`${getApiBase()}/api/opencode/default-model`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+        if (dmRes.ok) {
+          const dm = (await dmRes.json()) as { providerID?: string; modelID?: string; name?: string };
+          if (dm.modelID && dm.providerID) {
+            setOcDefaultModel({
+              providerID: dm.providerID,
+              modelID: dm.modelID,
+              name: dm.name || lookupOcModelName(list, dm.providerID, dm.modelID),
+            });
+          } else if (list.length > 0 && list[0].models.length > 0) {
+            const m = list[0].models[0];
+            setOcDefaultModel({ ...m, providerID: list[0].id });
+          }
+        } else if (list.length > 0 && list[0].models.length > 0) {
+          const m = list[0].models[0];
+          setOcDefaultModel({ ...m, providerID: list[0].id });
+        }
+      } catch {
+        if (list.length > 0 && list[0].models.length > 0) {
+          const m = list[0].models[0];
+          setOcDefaultModel({ ...m, providerID: list[0].id });
+        }
+      }
+    } catch {
+      setOpencodeProviders([]);
+      setOcProvidersError('opencode unreachable. Run: make opencode-up');
+    } finally {
+      setOcProvidersLoading(false);
+    }
+  }, []);
+
+  // Refresh default model display name when provider catalog loads
+  useEffect(() => {
+    if (!ocDefaultModel?.modelID || opencodeProviders.length === 0) return;
+    const name = lookupOcModelName(
+      opencodeProviders,
+      ocDefaultModel.providerID,
+      ocDefaultModel.modelID
+    );
+    if (name && name !== ocDefaultModel.name) {
+      setOcDefaultModel((prev) => (prev ? { ...prev, name } : prev));
+    }
+  }, [opencodeProviders, ocDefaultModel?.providerID, ocDefaultModel?.modelID, ocDefaultModel?.name]);
+
+  useEffect(() => {
+    if ((isOpencode || isCodeSection) && mounted) fetchOcProviders();
+  }, [isOpencode, isCodeSection, mounted, fetchOcProviders]);
+
+  const fetchOcSessionsForHistory = useCallback(async () => {
+    const sessions = await fetchOcSessions();
+    setChatSessions(
+      sessions.map((s) => ({
+        id: s.id,
+        title: sessionDisplayTitle(s, s.id),
+        messages: [],
+        createdAt: new Date(s.updatedAt ?? Date.now()),
+      })),
+    );
+  }, [fetchOcSessions]);
+
+  useEffect(() => {
+    if (usesOcSessions && mounted) void fetchOcSessionsForHistory();
+  }, [usesOcSessions, mounted, fetchOcSessionsForHistory]);
+
+  useEffect(() => {
+    if (showHistory && usesOcSessions) void fetchOcSessionsForHistory();
+  }, [showHistory, usesOcSessions, fetchOcSessionsForHistory]);
+
+  const loadOcSessionMessages = useCallback(async (sessionId: string) => {
+    try {
+      const token = useAuthStore.getState().token;
+      const r = await fetch(`${getApiBase()}/api/opencode/sessions/${sessionId}/messages`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!r.ok) return;
+      const raw = await r.json() as Array<{ id?: string; role?: string; parts?: Array<{ type: string; text?: string }> }>;
+      const converted: Message[] = raw.flatMap((m) => {
+        const role = (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant';
+        const text = (m.parts ?? [])
+          .filter((p) => p.type === 'text')
+          .map((p) => p.text ?? '')
+          .join('');
+        if (!text) return [];
+        return [{ id: m.id ?? String(Date.now()), role, content: text, isOpencode: role === 'assistant' }];
+      });
+      setMessages(converted);
+      setCurrentSessionId(sessionId);
+      loadedOcSessionRef.current = sessionId;
+      setCanForkSession(converted.some((m) => m.role === 'user'));
+    } catch { /* ignore */ }
+  }, [setCanForkSession]);
+
+  // Reload chat when the shared OpenCode session changes (e.g. from History)
+  useEffect(() => {
+    if (!isCodeSection || !opencodeSessionId) return;
+    if (loadedOcSessionRef.current === opencodeSessionId) return;
+    void loadOcSessionMessages(opencodeSessionId);
+  }, [isCodeSection, opencodeSessionId, loadOcSessionMessages]);
+
+  // Read file content for attachments (uses the filesystem API)
+  const readAttachmentContent = async (path: string): Promise<string> => {
+    try {
+      const content = await readCodeFile(path);
+      return content ?? '';
+    } catch {
+      return '';
+    }
+  };
+
+  const toggleAttachment = (path: string) => {
+    setAttachedFiles((prev) =>
+      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
+    );
+  };
+
   // Chat session management
-  const handleNewChat = () => {
-    // Save current session if it has messages
+  const handleNewChat = async () => {
     if (messages.length > 0) {
       const newSession: ChatSession = {
-        id: currentSessionId || Date.now().toString(),
+        id: currentSessionId || opencodeSessionId || Date.now().toString(),
         title: messages[0]?.content.slice(0, 30) + '...' || 'New chat',
         messages: [...messages],
         createdAt: new Date(),
       };
       setChatSessions((prev) => {
         const existing = prev.find((s) => s.id === newSession.id);
-        if (existing) {
-          return prev.map((s) => (s.id === newSession.id ? newSession : s));
-        }
+        if (existing) return prev.map((s) => (s.id === newSession.id ? newSession : s));
         return [newSession, ...prev];
       });
     }
-    // Start fresh
+
     setMessages([]);
-    setCurrentSessionId(Date.now().toString());
+    setCurrentSessionId(null);
     setShowHistory(false);
+    loadedOcSessionRef.current = null;
+    setCanForkSession(false);
+
+    if (isCodeSection) {
+      const created = await createOcSession('New session');
+      if (created) {
+        setOpencodeSessionId(created.id);
+        setCurrentSessionId(created.id);
+        loadedOcSessionRef.current = created.id;
+        inputRef.current?.focus();
+        return;
+      }
+    }
+
+    setOpencodeSessionId(`nexus-${Date.now()}`);
     inputRef.current?.focus();
   };
 
-  const handleLoadSession = (session: ChatSession) => {
-    // Save current first
+  const handleLoadSession = async (session: ChatSession) => {
+    if (usesOcSessions) {
+      try {
+        const token = useAuthStore.getState().token;
+        const r = await fetch(`${getApiBase()}/api/opencode/sessions/${session.id}/messages`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+        if (r.ok) {
+          const raw = await r.json() as Array<{ id?: string; role?: string; parts?: Array<{ type: string; text?: string }> }>;
+          const converted: Message[] = raw.flatMap((m) => {
+            const role = (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant';
+            const text = (m.parts ?? [])
+              .filter((p) => p.type === 'text')
+              .map((p) => p.text ?? '')
+              .join('');
+            if (!text) return [];
+            return [{ id: m.id ?? String(Date.now()), role, content: text, isOpencode: role === 'assistant' }];
+          });
+          setMessages(converted);
+          setOpencodeSessionId(session.id);
+          setCurrentSessionId(session.id);
+          loadedOcSessionRef.current = session.id;
+          setCanForkSession(converted.some((m) => m.role === 'user'));
+          void useOpencodeSessionStore.getState().fetchSessionDiff(session.id);
+          setShowHistory(false);
+          return;
+        }
+      } catch { /* fall through to in-memory */ }
+    }
     if (messages.length > 0 && currentSessionId) {
       setChatSessions((prev) =>
-        prev.map((s) =>
-          s.id === currentSessionId ? { ...s, messages: [...messages] } : s
-        )
+        prev.map((s) => (s.id === currentSessionId ? { ...s, messages: [...messages] } : s))
       );
     }
     setMessages(session.messages);
@@ -176,12 +524,23 @@ export function AIPane() {
     setShowHistory(false);
   };
 
-  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (usesOcSessions) {
+      try {
+        const token = useAuthStore.getState().token;
+        await fetch(`${getApiBase()}/api/opencode/sessions/${sessionId}`, {
+          method: 'DELETE',
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+      } catch { /* ignore */ }
+    }
     setChatSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    if (currentSessionId === sessionId) {
+    if (currentSessionId === sessionId || opencodeSessionId === sessionId) {
       setMessages([]);
       setCurrentSessionId(null);
+      loadedOcSessionRef.current = null;
+      setOpencodeSessionId(`nexus-${Date.now()}`);
     }
   };
 
@@ -201,6 +560,220 @@ export function AIPane() {
     URL.revokeObjectURL(url);
   };
 
+  // ─── Abort (stop mid-stream) ───────────────────────────────────────────────
+
+  const handleAbort = useCallback(async () => {
+    try {
+      if (streamReaderRef.current) {
+        await streamReaderRef.current.cancel();
+        streamReaderRef.current = null;
+      }
+      const token = useAuthStore.getState().token;
+      await fetch(`${getApiBase()}/api/opencode/sessions/${opencodeSessionId}/abort`, {
+        method: 'POST',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+    } catch { /* ignore */ } finally {
+      setIsLoading(false);
+    }
+  }, [opencodeSessionId]);
+
+  // ─── Revert (undo last exchange) ──────────────────────────────────────────
+
+  const handleRevert = useCallback(async () => {
+    try {
+      const token = useAuthStore.getState().token;
+      await fetch(`${getApiBase()}/api/opencode/sessions/${opencodeSessionId}/revert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({}),
+      });
+    } catch { /* ignore */ }
+    // Remove last assistant + its preceding user message from local state
+    setMessages((prev) => {
+      const lastAssIdx = [...prev].reverse().findIndex((m) => m.role === 'assistant');
+      if (lastAssIdx === -1) return prev;
+      const trimAt = prev.length - 1 - lastAssIdx;
+      const before = prev.slice(0, trimAt);
+      const lastUserIdx = [...before].reverse().findIndex((m) => m.role === 'user');
+      if (lastUserIdx === -1) return before;
+      return before.slice(0, before.length - 1 - lastUserIdx);
+    });
+  }, [opencodeSessionId]);
+
+  // ─── Opencode submit (used on /code route) ────────────────────────────────
+
+  const handleOpencodeSubmit = async (userContent: string) => {
+    setCanForkSession(true);
+    const assistantId = (Date.now() + 1).toString();
+    const textParts: Record<string, string> = {};
+
+    clearCodeDiffs();
+
+    // Prepend attached file contents as fenced code blocks
+    let messageWithAttachments = userContent;
+    if (attachedFiles.length > 0) {
+      const blocks = await Promise.all(
+        attachedFiles.map(async (path) => {
+          const content = await readAttachmentContent(path);
+          const ext = path.split('.').pop() ?? '';
+          return `[Attached file: ${path}]\n\`\`\`${ext}\n${content}\n\`\`\``;
+        })
+      );
+      messageWithAttachments = blocks.join('\n\n') + '\n\n' + userContent;
+      setAttachedFiles([]);
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantId, role: 'assistant', content: '', toolEvents: [], isOpencode: true },
+    ]);
+
+    const token = useAuthStore.getState().token;
+    const chatBody: Record<string, unknown> = {
+      message: messageWithAttachments,
+      session_id: opencodeSessionId,
+      agent: selectedOcPrimaryAgent,
+    };
+    if (selectedOcModel) {
+      chatBody.model_provider_id = selectedOcModel.providerID;
+      chatBody.model_id = selectedOcModel.modelID;
+    }
+    const response = await fetch(`${getApiBase()}/api/opencode/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(chatBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(`opencode API error: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      console.error('[opencode] no response body reader');
+      return;
+    }
+    streamReaderRef.current = reader;
+
+    let buffer = '';
+
+    outer: while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+
+        let event: Record<string, unknown>;
+        try {
+          event = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          console.warn('[opencode] failed to parse event:', raw.slice(0, 120));
+          continue;
+        }
+
+        const eventType = event.type as string;
+        const props = (event.properties ?? {}) as Record<string, unknown>;
+
+        // ── Done / error ──────────────────────────────────────────────
+        if (eventType === 'done' || eventType === 'error') {
+          if (eventType === 'error') {
+            const msg = (event.message as string) ?? 'opencode error';
+            console.error('[opencode] stream error:', msg);
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, content: `Error: ${msg}` } : m))
+            );
+          }
+          streamReaderRef.current = null;
+          break outer;
+        }
+
+        if (eventType === 'session.idle') {
+          streamReaderRef.current = null;
+          void fetchOcSessionsForHistory();
+          void useOpencodeSessionStore.getState().fetchSessionDiff(opencodeSessionId);
+          break outer;
+        }
+
+        // ── session.diff — live filesystem refresh ────────────────────
+        if (eventType === 'session.diff') {
+          const diff = (props.diff ?? []) as import('@/lib/code-diff').CodeDiffEntry[];
+          if (diff.length > 0) {
+            setCodeDiffs(diff);
+            refreshCodeFiles().then(() => {
+              const currentActive = useFilesStore.getState().codeActiveFile;
+              if (currentActive && diff.some((d) => currentActive.endsWith(d.file))) {
+                readCodeFile(currentActive);
+              }
+            });
+          }
+          continue;
+        }
+
+        if (eventType !== 'message.part.updated') continue;
+
+        const part = (props.part ?? {}) as Record<string, unknown>;
+        const partType = part.type as string;
+
+        // ── Text parts ────────────────────────────────────────────────
+        if (partType === 'text') {
+          const partId = (part.id as string) ?? 'default';
+          textParts[partId] = (part.text as string) ?? '';
+          const fullText = Object.values(textParts).join('');
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: fullText } : m))
+          );
+        }
+
+        // ── Tool parts ────────────────────────────────────────────────
+        if (partType === 'tool') {
+          const callId = (part.callID as string) ?? String(Date.now());
+          const toolName = (part.tool as string) ?? 'tool';
+          // opencode nests the input inside state: state.input.filePath
+          const state = (part.state ?? {}) as Record<string, unknown>;
+          const stateInput = (state.input ?? {}) as Record<string, unknown>;
+          const filePath =
+            (stateInput.filePath as string) ??
+            (stateInput.path as string) ??
+            undefined;
+          const command = (stateInput.command as string) ?? undefined;
+          const output = (state.output as string) ?? undefined;
+          const status = (state.status as string) === 'completed' ? 'completed' : 'running';
+
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== assistantId) return m;
+              const existing = (m.toolEvents ?? []).find((t) => t.callId === callId);
+              const updated: ToolEvent = existing
+                ? { ...existing, status, output }
+                : { callId, tool: toolName, path: filePath, command, status, output };
+              const toolEvents = existing
+                ? (m.toolEvents ?? []).map((t) => (t.callId === callId ? updated : t))
+                : [...(m.toolEvents ?? []), updated];
+              return { ...m, toolEvents };
+            })
+          );
+        }
+      }
+    }
+  };
+
+  // ─── Regular chat submit ───────────────────────────────────────────────────
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -216,10 +789,14 @@ export function AIPane() {
     setIsLoading(true);
 
     try {
-      // Get provider for current agent (AI Pane uses paneAgent)
+      // ── Route to opencode when opencode agent is selected ───────────────
+      if (isOpencode) {
+        await handleOpencodeSubmit(userContent);
+        return;
+      }
+
+      // ── Regular Nexus chat ──────────────────────────────────────────────
       const provider = getProviderForAgent(paneAgent);
-      
-      // Build provider payload (may be null if no provider, API will fallback to Ollama)
       const providerPayload = provider ? {
         id: provider.id,
         name: provider.name,
@@ -231,27 +808,28 @@ export function AIPane() {
         model: provider.model,
       } : null;
 
-      // Get agent's system prompt
       const agentData = getAgent(paneAgent);
-      const systemPrompt = agentData?.systemPrompt || null;
-      
-      // Build message history for the API (must include the current user message)
-      // Note: React setState is async, so `messages` doesn't have userMessage yet.
-      // We manually append it, matching how chat-interface uses getState() for fresh data.
-      const fullHistory = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
+      let systemPrompt = agentData?.systemPrompt || null;
+      if (activeFile) {
+        const content = fileContents[activeFile];
+        const fileContext = content !== undefined
+          ? `\n\nCurrent open file: ${activeFile}\n\`\`\`\n${content.slice(0, 8000)}\n\`\`\``
+          : `\n\nCurrent open file: ${activeFile} (not yet loaded)`;
+        systemPrompt = (systemPrompt || 'You are a helpful coding assistant.') + fileContext;
+      }
 
-      // Add placeholder for streaming response
+      const fullHistory = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
       const assistantId = (Date.now() + 1).toString();
       const thinkingStartTime = Date.now();
       setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '▌' }]);
-      setIsLoading(false); // Stop loading indicator, streaming will show the cursor
+      setIsLoading(false);
 
       const token = useAuthStore.getState().token;
       const response = await fetch(`${getApiBase()}/api/chat/stream`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           workspace_id: currentWorkspaceId,
@@ -263,9 +841,7 @@ export function AIPane() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -277,81 +853,39 @@ export function AIPane() {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-
           const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  const token = parsed.content as string;
-                  
-                  // Track <think> tags
-                  if (token.includes('<think>')) {
-                    isInThinking = true;
-                    const assembled = `<think>${thinkingContent}</think>`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  if (token.includes('</think>')) {
-                    isInThinking = false;
-                    const assembled = `<think>${thinkingContent}</think>\n\n▌`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  if (isInThinking) {
-                    thinkingContent += token;
-                    const assembled = `<think>${thinkingContent}</think>`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  // Regular response content
-                  responseContent += token;
-                  const assembled = thinkingContent
-                    ? `<think>${thinkingContent}</think>\n\n${responseContent}▌`
-                    : `${responseContent}▌`;
-                  setMessages((prev) => 
-                    prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                  );
+          for (const line of chunk.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                const tok = parsed.content as string;
+                if (tok.includes('<think>')) { isInThinking = true; continue; }
+                if (tok.includes('</think>')) {
+                  isInThinking = false;
+                  setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: `<think>${thinkingContent}</think>\n\n▌` } : m));
+                  continue;
                 }
-                if (parsed.error) {
-                  const errContent = `Error: ${parsed.error}`;
-                  setMessages((prev) => 
-                    prev.map((m) => m.id === assistantId ? { ...m, content: errContent } : m)
-                  );
-                  throw new Error(parsed.error);
+                if (isInThinking) {
+                  thinkingContent += tok;
+                  setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: `<think>${thinkingContent}</think>` } : m));
+                  continue;
                 }
-              } catch (parseError) {
-                // Only swallow JSON parsing failures for partial SSE chunks
-                if (!(parseError instanceof SyntaxError)) {
-                  throw parseError;
-                }
+                responseContent += tok;
+                const assembled = thinkingContent ? `<think>${thinkingContent}</think>\n\n${responseContent}▌` : `${responseContent}▌`;
+                setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m));
               }
+              if (parsed.error) throw new Error(parsed.error);
+            } catch (parseError) {
+              if (!(parseError instanceof SyntaxError)) throw parseError;
             }
           }
         }
-        // Final: store full content with thinking duration
         const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
-        const finalContent = thinkingContent
-          ? `<think>${thinkingContent}</think>\n\n${responseContent}`
-          : responseContent;
-        setMessages((prev) => 
-          prev.map((m) => m.id === assistantId ? { ...m, content: finalContent, thinkingDuration } : m)
-        );
+        const finalContent = thinkingContent ? `<think>${thinkingContent}</think>\n\n${responseContent}` : responseContent;
+        setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: finalContent, thinkingDuration } : m));
       }
     } catch (error) {
       console.error('AI Pane API error:', error);
@@ -373,13 +907,20 @@ export function AIPane() {
     }
   };
 
-  const currentMode = modes.find((m) => m.id === mode) || modes[0];
-  const ModeIcon = currentMode.icon;
-
   if (!mounted || !contextPanelOpen) return null;
 
+  const contextFile = isCodeSection ? codeActiveFile : activeFile;
+
   return (
-    <aside className="flex h-full w-80 flex-col border-l border-border/50 bg-background">
+    <aside className={cn('flex h-full flex-col border-l border-border/50 bg-background', isCodeSection ? 'w-96' : 'w-80')}>
+      {/* Active file context pill */}
+      {contextFile && (
+        <div className="flex items-center gap-1.5 border-b bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+          <FileCode size={10} className="flex-shrink-0" />
+          <span className="flex-1 truncate font-mono">{contextFile.split('/').pop()}</span>
+          <span className="flex-shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">in context</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b px-3">
         <div className="flex items-center gap-1">
@@ -456,8 +997,8 @@ export function AIPane() {
       <div className="flex-1 overflow-auto p-3">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <Bot size={40} className="mb-3 text-muted-foreground/20" />
-            <p className="text-sm text-muted-foreground">How can I help you?</p>
+            <Bot size={32} className="mb-3 text-muted-foreground/20" />
+            <p className="text-xs text-muted-foreground">How can I help you?</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -465,8 +1006,8 @@ export function AIPane() {
               <PaneMessage key={message.id} message={message} />
             ))}
             {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
-              <div className="mr-6 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
-                <Loader2 size={14} className="animate-spin" />
+              <div className="mr-6 flex items-center gap-2 rounded bg-muted px-2.5 py-1.5 text-xs">
+                <Loader2 size={12} className="animate-spin" />
                 <span className="text-muted-foreground">Processing...</span>
               </div>
             )}
@@ -478,140 +1019,524 @@ export function AIPane() {
       {/* Input area */}
       <div className="border-t p-3">
         <form onSubmit={handleSubmit}>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask anything..."
-            rows={3}
-            className={cn(
-              'w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none',
-              'placeholder:text-muted-foreground/50',
-              'focus:ring-1 focus:ring-primary/30'
-            )}
-            disabled={isLoading}
-          />
-          
-          {/* Bottom bar with mode and model selectors */}
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              {/* Mode selector */}
-              <div ref={modeMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowModeMenu(!showModeMenu)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
-                    'hover:bg-muted',
-                    showModeMenu && 'bg-muted'
-                  )}
-                >
-                  <ModeIcon size={14} />
-                  <span>{currentMode.label}</span>
-                  {currentMode.shortcut && (
-                    <kbd className="ml-1 rounded border bg-background px-1 text-[10px] text-muted-foreground">
-                      {currentMode.shortcut}
-                    </kbd>
-                  )}
-                </button>
-                
-                {showModeMenu && (
-                  <div className="absolute bottom-full left-0 mb-1 w-36 rounded-lg border bg-background py-1 shadow-lg">
-                    {modes.map((m) => {
-                      const Icon = m.icon;
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => {
-                            setMode(m.id);
-                            setShowModeMenu(false);
-                          }}
-                          className={cn(
-                            'flex w-full items-center gap-2 px-3 py-1.5 text-sm',
-                            'hover:bg-muted',
-                            mode === m.id && 'bg-muted'
-                          )}
-                        >
-                          <Icon size={14} />
-                          <span className="flex-1 text-left">{m.label}</span>
-                          {m.shortcut && (
-                            <kbd className="rounded border bg-background px-1 text-[10px] text-muted-foreground">
-                              {m.shortcut}
-                            </kbd>
-                          )}
-                          {mode === m.id && <Check size={12} />}
+          {isCodeSection && isOpencode ? (
+            <>
+              {/* Opencode-style composer (matches native prompt bar) */}
+              <div className="relative rounded-lg border border-border/70 bg-muted/25 shadow-sm">
+                {attachedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1 border-b border-border/40 px-2.5 py-2">
+                    {attachedFiles.map((path) => (
+                      <span key={path} className="flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
+                        <FileCode size={10} className="flex-shrink-0 text-primary" />
+                        <span className="max-w-[120px] truncate">{path.split('/').pop()}</span>
+                        <button type="button" onClick={() => toggleAttachment(path)} className="ml-0.5 rounded-full hover:text-destructive">
+                          <X size={10} />
                         </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Agent selector (AI Pane has its own selection, defaults to SupervisorAgent) */}
-              <div ref={modelMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowAgentMenu(!showAgentMenu)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
-                    'hover:bg-muted',
-                    showAgentMenu && 'bg-muted'
-                  )}
-                >
-                  <span>{currentAgent?.name || 'SupervisorAgent'}</span>
-                  <ChevronDown size={12} className="text-muted-foreground" />
-                </button>
-                
-                {showAgentMenu && (
-                  <div className="absolute bottom-full left-0 mb-1 w-48 rounded-lg border bg-background py-1 shadow-lg">
-                    <div className="px-3 py-1.5 text-xs text-muted-foreground">
-                      Select agent
-                    </div>
-                    {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
-                      <button
-                        key={agent.id}
-                        type="button"
-                        onClick={() => {
-                          setPaneAgent(agent.id);
-                          setShowAgentMenu(false);
-                        }}
-                        className={cn(
-                          'flex w-full items-center gap-2 px-3 py-1.5 text-sm',
-                          'hover:bg-muted',
-                          paneAgent === agent.id && 'bg-muted'
-                        )}
-                      >
-                        <span className="flex-1 text-left">{agent.name}</span>
-                        {paneAgent === agent.id && <Check size={12} />}
-                      </button>
+                      </span>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Send button */}
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
-                'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask anything..."
+                  rows={3}
+                  className={cn(
+                    'min-h-[72px] w-full resize-none border-0 bg-transparent px-3 pt-3 pb-11 text-sm outline-none',
+                    'placeholder:text-muted-foreground/50',
+                    'focus:ring-0'
+                  )}
+                  disabled={isLoading}
+                />
+
+                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+                  <div ref={filePickerRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowFilePicker((v) => !v)}
+                      title="Attach file"
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground',
+                        (showFilePicker || attachedFiles.length > 0) && 'text-foreground'
+                      )}
+                    >
+                      <Plus size={16} />
+                    </button>
+                    {showFilePicker && (
+                      <div className="absolute bottom-full left-0 mb-2 w-64 rounded-lg border bg-background shadow-lg">
+                        <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">Attach from sandbox</div>
+                        <div className="max-h-56 overflow-y-auto py-1">
+                          <FileBrowserTree
+                            files={codeFiles}
+                            fetchChildren={fetchCodeFolderContents}
+                            attached={attachedFiles}
+                            onToggle={toggleAttachment}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {!isLoading && messages.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleRevert}
+                        title="Undo last exchange"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+                      >
+                        <Undo2 size={14} />
+                      </button>
+                    )}
+                    {isLoading ? (
+                      <button
+                        type="button"
+                        onClick={handleAbort}
+                        title="Stop generation"
+                        className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive/90 text-destructive-foreground transition-colors hover:bg-destructive"
+                      >
+                        <StopCircle size={14} />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={!input.trim()}
+                        className={cn(
+                          'flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-muted/60 text-muted-foreground transition-colors',
+                          'hover:bg-muted hover:text-foreground',
+                          input.trim() && 'border-primary/40 bg-primary text-primary-foreground hover:bg-primary/90'
+                        )}
+                      >
+                        <ArrowUp size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Config bar: Build/Plan | Model | Default */}
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                <div ref={ocModePickerRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowOcModePicker((v) => !v)}
+                    className={cn(
+                      'flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                      showOcModePicker && 'bg-muted text-foreground'
+                    )}
+                  >
+                    <span>{OC_PRIMARY_AGENTS.find((m) => m.id === selectedOcPrimaryAgent)?.label ?? selectedOcPrimaryAgent}</span>
+                    <ChevronDown size={12} />
+                  </button>
+                  {showOcModePicker && (
+                    <div className="absolute bottom-full left-0 z-20 mb-1 w-44 rounded-lg border bg-background py-1 shadow-lg">
+                      {OC_PRIMARY_AGENTS.map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => { setSelectedOcPrimaryAgent(mode.id); setShowOcModePicker(false); }}
+                          className={cn(
+                            'flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left text-xs hover:bg-muted',
+                            selectedOcPrimaryAgent === mode.id && 'bg-muted'
+                          )}
+                        >
+                          <span className="font-medium">{mode.label}</span>
+                          <span className="text-[10px] text-muted-foreground">{mode.hint}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div ref={modelPickerRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowModelPicker((v) => !v)}
+                    title="Select model"
+                    className={cn(
+                      'flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                      (showModelPicker || selectedOcModel) && 'bg-muted text-foreground'
+                    )}
+                  >
+                    <Cpu size={12} />
+                    <span className="max-w-[120px] truncate" title={ocModelLabel}>
+                      {ocModelLabel}
+                    </span>
+                    <ChevronDown size={12} />
+                  </button>
+                  {showModelPicker && (
+                    <div className="absolute bottom-full left-0 z-20 mb-1 w-64 rounded-lg border bg-background py-1 shadow-lg max-h-64 overflow-y-auto">
+                      <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Model</div>
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedOcModel(null); setShowModelPicker(false); }}
+                        className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted', !selectedOcModel && 'bg-muted')}
+                      >
+                        <span className="flex-1 truncate text-left font-mono">
+                          {ocDefaultModel?.name || ocDefaultModel?.modelID || 'Default'}
+                        </span>
+                        {!selectedOcModel && <Check size={11} />}
+                      </button>
+                      {ocProvidersLoading && (
+                        <p className="px-3 py-2 text-[11px] text-muted-foreground">Loading models...</p>
+                      )}
+                      {ocProvidersError && !ocProvidersLoading && (
+                        <p className="px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">{ocProvidersError}</p>
+                      )}
+                      {!ocProvidersLoading && opencodeProviders.length > 0 && (
+                        <>
+                          <div className="my-1 border-t border-border/40" />
+                          {opencodeProviders.map((prov) => (
+                            <div key={prov.id}>
+                              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                {prov.name || prov.id}
+                              </div>
+                              {(prov.models ?? []).map((m) => {
+                                const isSelected = selectedOcModel?.providerID === prov.id && selectedOcModel?.modelID === m.modelID;
+                                return (
+                                  <button
+                                    key={`${prov.id}-${m.modelID}`}
+                                    type="button"
+                                    onClick={() => { setSelectedOcModel({ ...m, providerID: prov.id }); setShowModelPicker(false); }}
+                                    className={cn('flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-muted', isSelected && 'bg-muted')}
+                                  >
+                                    <span className="flex-1 truncate text-left font-mono">{m.name || m.modelID}</span>
+                                    {isSelected && <Check size={10} />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {attachedFiles.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {attachedFiles.map((path) => (
+                    <span key={path} className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
+                      <FileCode size={10} className="flex-shrink-0 text-primary" />
+                      <span className="max-w-[140px] truncate">{path.split('/').pop()}</span>
+                      <button type="button" onClick={() => toggleAttachment(path)} className="ml-0.5 rounded-full hover:text-destructive">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
               )}
-            >
-              <Send size={14} />
-            </button>
-          </div>
+
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything..."
+                rows={3}
+                className={cn(
+                  'w-full resize-none rounded border bg-background px-2.5 py-1.5 text-xs outline-none',
+                  'placeholder:text-muted-foreground/50',
+                  'focus:ring-1 focus:ring-primary/30'
+                )}
+                disabled={isLoading}
+              />
+
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <div ref={modelMenuRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowAgentMenu(!showAgentMenu)}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
+                        'hover:bg-muted',
+                        showAgentMenu && 'bg-muted'
+                      )}
+                    >
+                      {isOpencode && <Terminal size={12} className="text-emerald-500" />}
+                      <span className={cn(isOpencode && 'text-emerald-600 dark:text-emerald-400 font-medium')}>
+                        {isOpencode ? 'opencode' : (currentAgent?.name || 'Agent')}
+                      </span>
+                      <ChevronDown size={12} className="text-muted-foreground" />
+                    </button>
+
+                    {showAgentMenu && (
+                      <div className="absolute bottom-full left-0 mb-1 w-52 rounded-lg border bg-background py-1 shadow-lg">
+                        <div className="px-3 py-1.5 text-xs text-muted-foreground">Select agent</div>
+                        <button
+                          type="button"
+                          onClick={() => { setPaneAgent(OPENCODE_AGENT_ID); setShowAgentMenu(false); }}
+                          className={cn(
+                            'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
+                            isOpencode && 'bg-muted'
+                          )}
+                        >
+                          <Terminal size={13} className="text-emerald-500 flex-shrink-0" />
+                          <span className="flex-1 text-left">opencode</span>
+                          <span className="text-[10px] text-muted-foreground">coding agent</span>
+                          {isOpencode && <Check size={12} className="flex-shrink-0" />}
+                        </button>
+                        <div className="my-1 border-t border-border/50" />
+                        {agents.filter(a => a.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
+                          <button
+                            key={agent.id}
+                            type="button"
+                            onClick={() => { setPaneAgent(agent.id); setShowAgentMenu(false); }}
+                            className={cn(
+                              'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted',
+                              paneAgent === agent.id && 'bg-muted'
+                            )}
+                          >
+                            <span className="flex-1 text-left">{agent.name}</span>
+                            {paneAgent === agent.id && <Check size={12} className="flex-shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {isOpencode && opencodeProviders.length > 0 && (
+                    <div ref={modelPickerRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowModelPicker((v) => !v)}
+                        title="Select model"
+                        className={cn(
+                          'flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                          (showModelPicker || selectedOcModel) && 'text-foreground'
+                        )}
+                      >
+                        <Cpu size={11} />
+                        <span className="max-w-[100px] truncate" title={ocModelLabel}>
+                          {ocModelLabel}
+                        </span>
+                        <ChevronDown size={10} />
+                      </button>
+                      {showModelPicker && (
+                        <div className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border bg-background py-1 shadow-lg max-h-64 overflow-y-auto">
+                          <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Model</div>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedOcModel(null); setShowModelPicker(false); }}
+                            className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted', !selectedOcModel && 'bg-muted')}
+                          >
+                            <span className="flex-1 truncate text-left font-mono">
+                              {ocDefaultModel?.name || ocDefaultModel?.modelID || 'Default'}
+                            </span>
+                            {!selectedOcModel && <Check size={11} />}
+                          </button>
+                          <div className="my-1 border-t border-border/40" />
+                          {opencodeProviders.map((prov) => (
+                            <div key={prov.id}>
+                              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                {prov.name || prov.id}
+                              </div>
+                              {(prov.models ?? []).map((m) => {
+                                const isSelected = selectedOcModel?.providerID === prov.id && selectedOcModel?.modelID === m.modelID;
+                                return (
+                                  <button
+                                    key={m.modelID}
+                                    type="button"
+                                    onClick={() => { setSelectedOcModel({ ...m, providerID: prov.id }); setShowModelPicker(false); }}
+                                    className={cn('flex w-full items-center gap-2 px-3 py-1 text-xs hover:bg-muted', isSelected && 'bg-muted')}
+                                  >
+                                    <span className="flex-1 truncate text-left font-mono">{m.name || m.modelID}</span>
+                                    {isSelected && <Check size={10} />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {isOpencode && !isLoading && messages.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleRevert}
+                      title="Undo last exchange"
+                      className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <Undo2 size={14} />
+                    </button>
+                  )}
+                  {isOpencode && (
+                    <div ref={filePickerRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowFilePicker((v) => !v)}
+                        title="Attach file"
+                        className={cn(
+                          'flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                          (showFilePicker || attachedFiles.length > 0) && 'text-primary'
+                        )}
+                      >
+                        <Paperclip size={14} />
+                      </button>
+                      {showFilePicker && (
+                        <div className="absolute bottom-full right-0 mb-2 w-64 rounded-lg border bg-background shadow-lg">
+                          <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">Attach from sandbox</div>
+                          <div className="max-h-56 overflow-y-auto py-1">
+                            <FileBrowserTree
+                              files={codeFiles}
+                              fetchChildren={fetchCodeFolderContents}
+                              attached={attachedFiles}
+                              onToggle={toggleAttachment}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {isOpencode && isLoading ? (
+                    <button
+                      type="button"
+                      onClick={handleAbort}
+                      title="Stop generation"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive/80 text-destructive-foreground transition-colors hover:bg-destructive"
+                    >
+                      <StopCircle size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!input.trim() || isLoading}
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
+                        'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
+                      )}
+                    >
+                      <Send size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </form>
       </div>
     </aside>
   );
 }
 
+// ─── Inline file browser for attachment picker ────────────────────────────────
+
+import type { FileInfo } from '@/stores/files';
+
+function FileBrowserTree({
+  files, fetchChildren, attached, onToggle, depth = 0,
+}: {
+  files: FileInfo[];
+  fetchChildren: (path: string) => Promise<FileInfo[]>;
+  attached: string[];
+  onToggle: (path: string) => void;
+  depth?: number;
+}) {
+  if (files.length === 0) {
+    return (
+      <p className="px-3 py-2 text-[11px] italic text-muted-foreground">
+        {depth === 0 ? 'Sandbox is empty' : 'Empty folder'}
+      </p>
+    );
+  }
+  return (
+    <>
+      {files.map((f) => (
+        <FileBrowserNode
+          key={f.path}
+          file={f}
+          fetchChildren={fetchChildren}
+          attached={attached}
+          onToggle={onToggle}
+          depth={depth}
+        />
+      ))}
+    </>
+  );
+}
+
+function FileBrowserNode({
+  file, fetchChildren, attached, onToggle, depth,
+}: {
+  file: FileInfo;
+  fetchChildren: (path: string) => Promise<FileInfo[]>;
+  attached: string[];
+  onToggle: (path: string) => void;
+  depth: number;
+}) {
+  const isFolder = file.type === 'folder';
+  const isAttached = attached.includes(file.path);
+  const [expanded, setExpanded] = useState(false);
+  const [children, setChildren] = useState<FileInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    if (isFolder) {
+      if (!expanded && children.length === 0) {
+        setLoading(true);
+        const data = await fetchChildren(file.path);
+        setChildren(data);
+        setLoading(false);
+      }
+      setExpanded((v) => !v);
+    } else {
+      onToggle(file.path);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className={cn(
+          'flex w-full items-center gap-1.5 px-2 py-1 text-[11px] transition-colors hover:bg-muted',
+          isAttached && 'bg-primary/10 text-primary'
+        )}
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      >
+        {isFolder ? (
+          <>
+            <ChevronRight size={10} className={cn('flex-shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-90', loading && 'animate-pulse')} />
+            <Folder size={11} className="flex-shrink-0 text-muted-foreground" />
+          </>
+        ) : (
+          <>
+            <span className="w-2.5 flex-shrink-0" />
+            <FileCode size={11} className={cn('flex-shrink-0', isAttached ? 'text-primary' : 'text-muted-foreground')} />
+          </>
+        )}
+        <span className={cn('flex-1 truncate text-left font-mono', isAttached && 'font-medium')}>{file.name}</span>
+        {isAttached && <Check size={10} className="flex-shrink-0 text-primary" />}
+      </button>
+
+      {isFolder && expanded && (
+        <FileBrowserTree
+          files={children}
+          fetchChildren={fetchChildren}
+          attached={attached}
+          onToggle={onToggle}
+          depth={depth + 1}
+        />
+      )}
+    </div>
+  );
+}
+
 function PaneMessage({ message }: { message: Message }) {
   const isUser = message.role === 'user';
+
   const [showThinking, setShowThinking] = useState(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -666,6 +1591,45 @@ function PaneMessage({ message }: { message: Message }) {
     }
   }, [isStillProcessing, autoCollapsed]);
 
+  // Opencode assistant message with tool activity
+  if (!isUser && message.isOpencode) {
+    const isStreaming = !message.content || message.content.endsWith('▌');
+    return (
+      <div className="space-y-1.5">
+        {/* Tool events */}
+        {(message.toolEvents ?? []).length > 0 && (
+          <div className="space-y-0.5">
+            {(message.toolEvents ?? []).map((ev) => (
+              <ToolEventCard key={ev.callId} event={ev} />
+            ))}
+          </div>
+        )}
+        {/* Text response */}
+        {message.content ? (
+          <div className="rounded bg-muted px-2.5 py-1.5 text-xs prose dark:prose-invert max-w-none [&_p]:my-0.5 [&_p]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_li]:text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-[11px] [&_pre]:overflow-x-auto [&_pre]:text-[11px]">
+            {isStreaming ? (
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
+              </span>
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            )}
+          </div>
+        ) : (message.toolEvents ?? []).length === 0 ? (
+          <div className="rounded bg-muted px-2.5 py-1.5 text-xs">
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
+            </span>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   const formatDuration = (seconds: number) => {
     if (seconds < 1) return '<1s';
     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -678,14 +1642,16 @@ function PaneMessage({ message }: { message: Message }) {
 
   if (isUser) {
     return (
-      <div className="ml-6 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
-        <p className="whitespace-pre-wrap">{message.content}</p>
+      <div className="flex justify-end">
+        <div className="max-w-[85%] rounded bg-primary px-2.5 py-1.5 text-xs text-primary-foreground">
+          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mr-6 space-y-1">
+    <div className="space-y-1">
       {/* Processing / Processed indicator */}
       {hasThinkingSection && (
         <div>
@@ -720,8 +1686,8 @@ function PaneMessage({ message }: { message: Message }) {
         </div>
       )}
 
-      {/* Response bubble */}
-      <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
+      {/* Response bubble — full width, no indent, matches opencode style */}
+      <div className="rounded bg-muted px-2.5 py-1.5 text-xs prose dark:prose-invert max-w-none [&_p]:my-0.5 [&_p]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_li]:text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-[11px] [&_pre]:overflow-x-auto [&_pre]:text-[11px]">
         {isStillProcessing ? (
           <span className="inline-flex items-center gap-0.5">
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />

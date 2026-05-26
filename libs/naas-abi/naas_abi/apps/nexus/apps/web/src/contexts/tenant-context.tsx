@@ -70,7 +70,8 @@ const WORKSPACE_SEGMENT_TITLE: Record<string, string> = {
   ontology: 'Ontology',
   graph: 'Knowledge Graph',
   files: 'Files',
-  lab: 'Lab',
+  code: 'Code',
+  lab: 'Code', // legacy /lab redirect
   apps: 'Apps',
   marketplace: 'Marketplace',
   help: 'Help',

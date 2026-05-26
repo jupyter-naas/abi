@@ -26,7 +26,6 @@ import {
   Grid,
   List,
   Search,
-  FlaskConical,
   Eye,
   X,
 } from 'lucide-react';
@@ -125,12 +124,6 @@ export default function FilesPage() {
   const [textViewerLoading, setTextViewerLoading] = useState(false);
   const [textViewerError, setTextViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Helper to open file in Lab
-  const handleOpenInLab = (file: FileInfo) => {
-    openFile(file.path);
-    router.push(`/workspace/${workspaceId}/lab`);
-  };
   
   // Close context menu when clicking outside
   useEffect(() => {
@@ -1166,19 +1159,6 @@ export default function FilesPage() {
                         </button>
                         {activeContextMenu === file.path && (
                           <div className="absolute right-0 top-full z-50 min-w-[140px] rounded-md border bg-popover py-1 shadow-lg">
-                            {file.type === 'file' && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveContextMenu(null);
-                                  handleOpenInLab(file);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <FlaskConical size={12} />
-                                Open in Lab
-                              </button>
-                            )}
                             {isOfficeFile(file) && (
                               <button
                                 onClick={(e) => {

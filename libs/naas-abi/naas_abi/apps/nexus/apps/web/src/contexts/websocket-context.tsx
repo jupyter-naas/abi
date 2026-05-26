@@ -11,7 +11,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { useAuthStore } from '@/stores/auth';
 import { getApiUrl, getWebsocketPath } from '@/lib/config';
 
@@ -42,7 +42,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [presenceUsers, setPresenceUsers] = useState<string[]>([]);
   const [typingUsers, setTypingUsers] = useState<Map<string, string[]>>(new Map());
 
-  // Initialize socket connection
+  // Initialize socket connection (dynamic import keeps socket.io off the SSR bundle)
   useEffect(() => {
     if (!user || !token) {
       setSocket(null);
@@ -52,93 +52,102 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     const apiUrl = getApiUrl();
     const websocketPath = getWebsocketPath();
+    let socketInstance: Socket | null = null;
+    let cancelled = false;
 
-    const socketInstance = io(apiUrl, {
-      path: websocketPath,
-      auth: { authorization: `Bearer ${token}` },
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5
-    });
+    void import('socket.io-client').then(({ io }) => {
+      if (cancelled) return;
 
-    socketInstance.on('connect', () => {
-      console.log('✓ WebSocket connected');
-      setIsConnected(true);
-    });
-
-    socketInstance.on('disconnect', () => {
-      console.log('✗ WebSocket disconnected');
-      setIsConnected(false);
-    });
-
-    socketInstance.on('connect_error', (error: Error & { data?: { status?: number } }) => {
-      const message = error.message.toLowerCase();
-      const status = error.data?.status;
-      const isAuthError =
-        status === 401 ||
-        status === 403 ||
-        message.includes('401') ||
-        message.includes('403') ||
-        message.includes('unauthorized') ||
-        message.includes('forbidden');
-
-      // Stop retry loop on auth failures; reconnect will happen when token changes.
-      if (isAuthError) {
-        socketInstance.io.opts.reconnection = false;
-        socketInstance.disconnect();
-        useAuthStore.getState().logout();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/auth/login';
-        }
-        return;
-      }
-      console.error('WebSocket connection error:', error);
-    });
-
-    // Presence events
-    socketInstance.on('user_joined', (data: PresenceUser) => {
-      setPresenceUsers(prev => {
-        if (!prev.includes(data.user_id)) {
-          return [...prev, data.user_id];
-        }
-        return prev;
+      socketInstance = io(apiUrl, {
+        path: websocketPath,
+        auth: { authorization: `Bearer ${token}` },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
       });
-    });
 
-    socketInstance.on('user_left', (data: { user_id: string }) => {
-      setPresenceUsers(prev => prev.filter(id => id !== data.user_id));
-    });
+      socketInstance.on('connect', () => {
+        console.log('✓ WebSocket connected');
+        setIsConnected(true);
+      });
 
-    // Typing events
-    socketInstance.on('user_typing', (data: { 
-      user_id: string; 
-      conversation_id: string; 
-      typing: boolean 
-    }) => {
-      setTypingUsers(prev => {
-        const newMap = new Map(prev);
-        const conversationTypers = newMap.get(data.conversation_id) || [];
-        
-        if (data.typing) {
-          if (!conversationTypers.includes(data.user_id)) {
-            newMap.set(data.conversation_id, [...conversationTypers, data.user_id]);
+      socketInstance.on('disconnect', () => {
+        console.log('✗ WebSocket disconnected');
+        setIsConnected(false);
+      });
+
+      socketInstance.on('connect_error', (error: Error & { data?: { status?: number } }) => {
+        const message = error.message.toLowerCase();
+        const status = error.data?.status;
+        const isAuthError =
+          status === 401 ||
+          status === 403 ||
+          message.includes('401') ||
+          message.includes('403') ||
+          message.includes('unauthorized') ||
+          message.includes('forbidden');
+
+        // Stop retry loop on auth failures; reconnect will happen when token changes.
+        if (isAuthError) {
+          socketInstance!.io.opts.reconnection = false;
+          socketInstance!.disconnect();
+          useAuthStore.getState().logout();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth/login';
           }
-        } else {
-          newMap.set(
-            data.conversation_id, 
-            conversationTypers.filter(id => id !== data.user_id)
-          );
+          return;
         }
-        
-        return newMap;
+        console.error('WebSocket connection error:', error);
       });
-    });
 
-    setSocket(socketInstance);
+      // Presence events
+      socketInstance.on('user_joined', (data: PresenceUser) => {
+        setPresenceUsers(prev => {
+          if (!prev.includes(data.user_id)) {
+            return [...prev, data.user_id];
+          }
+          return prev;
+        });
+      });
+
+      socketInstance.on('user_left', (data: { user_id: string }) => {
+        setPresenceUsers(prev => prev.filter(id => id !== data.user_id));
+      });
+
+      // Typing events
+      socketInstance.on('user_typing', (data: {
+        user_id: string;
+        conversation_id: string;
+        typing: boolean;
+      }) => {
+        setTypingUsers(prev => {
+          const newMap = new Map(prev);
+          const conversationTypers = newMap.get(data.conversation_id) || [];
+
+          if (data.typing) {
+            if (!conversationTypers.includes(data.user_id)) {
+              newMap.set(data.conversation_id, [...conversationTypers, data.user_id]);
+            }
+          } else {
+            newMap.set(
+              data.conversation_id,
+              conversationTypers.filter(id => id !== data.user_id)
+            );
+          }
+
+          return newMap;
+        });
+      });
+
+      setSocket(socketInstance);
+    });
 
     return () => {
-      socketInstance.disconnect();
+      cancelled = true;
+      if (socketInstance?.active) {
+        socketInstance.disconnect();
+      }
     };
   }, [user, token]);
 

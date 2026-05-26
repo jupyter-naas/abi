@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { normalizeDiffText } from '@/lib/code-diff';
 import { useWorkspaceStore } from './workspace';
 import { authFetch } from './auth';
 
@@ -21,6 +22,34 @@ const getWorkspaceIdFromPathname = (): string | null => {
 const getCurrentWorkspaceId = (): string | null => {
   return useWorkspaceStore.getState().currentWorkspaceId ?? getWorkspaceIdFromPathname();
 };
+
+/** My Drive folder used by the Code IDE (matches backend `my_drive_code_root`). */
+export const CODE_MY_DRIVE_FOLDER = 'code';
+const CODE_FILES_SCOPE = 'my_drive' as const;
+const codeScopeQuery = () => `scope=${CODE_FILES_SCOPE}`;
+
+/** Resolve a new file/folder name to a path under the Code sandbox. */
+export function resolveCodePath(name: string, selectedPath?: string | null): string {
+  const { codeRoot, codeFiles, codeFolderContents } = useFilesStore.getState();
+  const base = codeRoot || CODE_MY_DRIVE_FOLDER;
+
+  if (name.startsWith('naas_abi/my-drive/')) return name;
+  if (codeRoot && name.startsWith(`${codeRoot}/`)) return name;
+  if (name.startsWith(`${CODE_MY_DRIVE_FOLDER}/`)) return name;
+
+  if (selectedPath) {
+    const allFiles = [
+      ...codeFiles,
+      ...Object.values(codeFolderContents).flat(),
+    ];
+    const item = allFiles.find((f) => f.path === selectedPath);
+    if (item?.type === 'folder') return `${selectedPath}/${name}`;
+    const parent = selectedPath.substring(0, selectedPath.lastIndexOf('/'));
+    return parent ? `${parent}/${name}` : `${base}/${name}`;
+  }
+
+  return `${base}/${name}`;
+}
 
 // Storage source types - only Local (synced folders) and Cloud
 export type StorageCategory = 'local' | 'cloud';
@@ -86,16 +115,31 @@ interface FilesState {
   loading: boolean;
   error: string | null;
   
-  // Lab state (VS Code-like, always at workspace root)
-  labFiles: FileInfo[];
-  labLoading: boolean;
-  labFolderContents: Record<string, FileInfo[]>;  // Cached folder contents for tree expansion
-  
-  // Editor state (shared between Lab and Files)
+  // Editor state (Files page viewers)
   openFiles: string[];
   activeFile: string | null;
   fileContents: Record<string, string>;  // path -> content
   unsavedChanges: Record<string, boolean>;  // path -> hasUnsavedChanges
+
+  // Code section (My Drive `code/` via /api/files)
+  codeFiles: FileInfo[];
+  codeFolderContents: Record<string, FileInfo[]>;
+  codeLoading: boolean;
+  codeOpenFiles: string[];
+  codeActiveFile: string | null;
+  codeFileContents: Record<string, string>;
+  codeUnsavedChanges: Record<string, boolean>;
+  /** Full object-storage path to the user's `code/` root, e.g. naas_abi/my-drive/{userId}/code */
+  codeRoot: string;
+  codeDiffs: Record<string, import('@/lib/code-diff').CodeDiffInfo>;
+  /** Files the user manually created or saved in this session (not tracked by OpenCode). */
+  localChanges: Record<string, { status: 'added' | 'modified' }>;
+  /** Snapshot of file content at first open — used as the "before" side in diffs. */
+  codeOriginalContents: Record<string, string>;
+  codeDiffViewPath: string | null;
+  codeDiffOriginal: Record<string, string>;
+  codeDiffModified: Record<string, string>;
+  codeTreeVersion: number;
   
   // Storage sources
   storageSources: StorageSource[];
@@ -140,8 +184,6 @@ interface FilesState {
   
   // API actions
   fetchFiles: (path?: string) => Promise<void>;
-  fetchLabFiles: () => Promise<void>;  // Always fetches workspace root for Lab
-  fetchLabFolderContents: (folderPath: string) => Promise<FileInfo[]>;  // Fetch subfolder contents for Lab tree
   createFile: (path: string, content?: string) => Promise<FileInfo | null>;
   createFolder: (path: string) => Promise<FileInfo | null>;
   deleteFile: (path: string) => Promise<boolean>;
@@ -149,9 +191,31 @@ interface FilesState {
   uploadFile: (file: File, relativeDir?: string) => Promise<FileInfo | null>;
   uploadFiles: (files: FileList | File[] | { file: File; relativeDir?: string }[]) => Promise<FileInfo[]>;
   refreshFiles: () => Promise<void>;
-  refreshLabFiles: () => Promise<void>;  // Refreshes Lab's file tree
   readFile: (path: string) => Promise<string | null>;
   saveFile: (path: string) => Promise<boolean>;
+
+  // Code actions (My Drive `code/` folder)
+  fetchCodeFiles: (path?: string) => Promise<void>;
+  fetchCodeFolderContents: (folderPath: string) => Promise<FileInfo[]>;
+  refreshCodeFiles: () => Promise<void>;
+  openCodeFile: (path: string) => void;
+  openCodeFileDiff: (path: string) => Promise<void>;
+  exitCodeDiffView: () => void;
+  closeCodeFile: (path: string) => void;
+  setCodeActiveFile: (path: string | null) => void;
+  setCodeFileContent: (path: string, content: string) => void;
+  readCodeFile: (path: string, options?: { updateStore?: boolean }) => Promise<string | null>;
+  saveCodeFile: (path: string) => Promise<boolean>;
+  createCodeFile: (path: string, content?: string) => Promise<string | null>;
+  createCodeFolder: (path: string) => Promise<boolean>;
+  deleteCodeFile: (path: string) => Promise<boolean>;
+  renameCodeFile: (oldPath: string, newPath: string) => Promise<boolean>;
+  setCodeDiffs: (diffs: import('@/lib/code-diff').CodeDiffEntry[]) => void;
+  replaceCodeDiffs: (diffs: import('@/lib/code-diff').CodeDiffEntry[]) => void;
+  clearCodeDiffs: () => void;
+  clearLocalChanges: () => void;
+  clearOriginalContents: () => void;
+  syncCodeWorkdir: (direction?: 'pull' | 'push' | 'both') => Promise<void>;
 }
 
 import { getApiUrl } from '@/lib/config';
@@ -172,16 +236,28 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   loading: false,
   error: null,
   
-  // Lab state (VS Code-like, always workspace root)
-  labFiles: [],
-  labLoading: false,
-  labFolderContents: {},  // Cached folder contents for tree expansion
-  
   // Editor state
   openFiles: [],
   activeFile: null,
   fileContents: {},
   unsavedChanges: {},
+
+  // Code section state
+  codeFiles: [],
+  codeFolderContents: {},
+  codeLoading: false,
+  codeOpenFiles: [],
+  codeActiveFile: null,
+  codeFileContents: {},
+  codeUnsavedChanges: {},
+  codeRoot: '',
+  codeDiffs: {},
+  localChanges: {},
+  codeOriginalContents: {},
+  codeDiffViewPath: null,
+  codeDiffOriginal: {},
+  codeDiffModified: {},
+  codeTreeVersion: 0,
   
   // Storage sources
   storageSources: defaultStorageSources,
@@ -455,70 +531,6 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       set({ files: resolvedFiles, currentPath: resolvedPath, loading: false });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
-    }
-  },
-
-  // Fetch files for Lab - always at workspace root (independent of Files navigation)
-  fetchLabFiles: async () => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      set({ labLoading: false });
-      return;
-    }
-    
-    set({ labLoading: true });
-    try {
-      const response = await authFetch(
-        `${getApiBase()}/api/files/?path=${encodeURIComponent(workspaceId)}&workspace_id=${encodeURIComponent(workspaceId)}`
-      );
-      if (!response.ok) {
-        throw new Error('Failed to fetch lab files');
-      }
-      const data = await response.json();
-      set({ labFiles: data.files, labLoading: false, labFolderContents: {} });
-    } catch (error) {
-      console.error('Error fetching lab files:', error);
-      set({ labLoading: false });
-    }
-  },
-
-  // Fetch contents of a specific folder for Lab tree expansion
-  fetchLabFolderContents: async (folderPath: string) => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      return [];
-    }
-    
-    // Check cache first
-    const cached = get().labFolderContents[folderPath];
-    if (cached) {
-      return cached;
-    }
-    
-    try {
-      // folderPath is relative to workspace, like "new-folder"
-      const fullPath = `${workspaceId}/${folderPath}`;
-      const response = await authFetch(
-        `${getApiBase()}/api/files/?path=${encodeURIComponent(fullPath)}&workspace_id=${encodeURIComponent(workspaceId)}`
-      );
-      if (!response.ok) {
-        throw new Error('Failed to fetch folder contents');
-      }
-      const data = await response.json();
-      const files = data.files as FileInfo[];
-      
-      // Cache the results
-      set((state) => ({
-        labFolderContents: {
-          ...state.labFolderContents,
-          [folderPath]: files
-        }
-      }));
-      
-      return files;
-    } catch (error) {
-      console.error('Error fetching folder contents:', error);
-      return [];
     }
   },
 
@@ -801,10 +813,6 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     await get().fetchFiles(currentPath);
   },
 
-  refreshLabFiles: async () => {
-    await get().fetchLabFiles();
-  },
-
   readFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
@@ -879,6 +887,392 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     } catch (error) {
       set({ error: (error as Error).message });
       return false;
+    }
+  },
+
+  // ─── Code actions (My Drive via /api/files) ───────────────────────────────
+
+  fetchCodeFiles: async (path = CODE_MY_DRIVE_FOLDER) => {
+    set({ codeLoading: true });
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/files/?path=${encodeURIComponent(path)}&${codeScopeQuery()}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch code files');
+      const data = await response.json();
+      const listedPath = (data.path as string) || path;
+      set({
+        codeFiles: data.files as FileInfo[],
+        codeLoading: false,
+        codeRoot: listedPath,
+      });
+    } catch (error) {
+      console.error('Error fetching code files:', error);
+      set({ codeLoading: false });
+    }
+  },
+
+  fetchCodeFolderContents: async (folderPath: string) => {
+    const cached = get().codeFolderContents[folderPath];
+    if (cached) return cached;
+
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/files/?path=${encodeURIComponent(folderPath)}&${codeScopeQuery()}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch folder');
+      const data = await response.json();
+      const files = data.files as FileInfo[];
+      set((state) => ({
+        codeFolderContents: { ...state.codeFolderContents, [folderPath]: files },
+      }));
+      return files;
+    } catch (error) {
+      console.error('Error fetching code folder:', error);
+      return [];
+    }
+  },
+
+  refreshCodeFiles: async () => {
+    const codeRoot = get().codeRoot || CODE_MY_DRIVE_FOLDER;
+    set((state) => ({ codeFolderContents: {}, codeTreeVersion: state.codeTreeVersion + 1 }));
+    await get().fetchCodeFiles(codeRoot);
+  },
+
+  openCodeFile: (path) => {
+    const { codeOpenFiles } = get();
+    if (!codeOpenFiles.includes(path)) {
+      set({
+        codeOpenFiles: [...codeOpenFiles, path],
+        codeActiveFile: path,
+        codeDiffViewPath: null,
+      });
+      get().readCodeFile(path);
+    } else {
+      set({ codeActiveFile: path, codeDiffViewPath: null });
+    }
+  },
+
+  openCodeFileDiff: async (path) => {
+    try {
+      const { useOpencodeSessionStore } = await import('./opencode-session');
+      const { findCodeDiffKey, normalizeDiffText } = await import('@/lib/code-diff');
+
+      // Fetch current disk content (populates codeOriginalContents on first read).
+      let diskContent = get().codeFileContents[path];
+      if (diskContent === undefined) {
+        diskContent = (await get().readCodeFile(path)) ?? '';
+      }
+
+      // Try OpenCode session diff first.
+      let diffKey = findCodeDiffKey(get().codeDiffs, path);
+      let diff = diffKey ? get().codeDiffs[diffKey] : undefined;
+      const sessionId = useOpencodeSessionStore.getState().opencodeSessionId;
+      if ((!diff || (diff.before === undefined && diff.after === undefined))
+          && sessionId && !sessionId.startsWith('nexus-')) {
+        await useOpencodeSessionStore.getState().fetchSessionDiff(sessionId);
+        diffKey = findCodeDiffKey(get().codeDiffs, path);
+        diff = diffKey ? get().codeDiffs[diffKey] : undefined;
+      }
+
+      let before: string;
+      let after: string;
+
+      if (diff?.before !== undefined || diff?.after !== undefined) {
+        // OpenCode returned actual content — use it.
+        before = normalizeDiffText(diff!.before);
+        after = normalizeDiffText(diff!.after) || diskContent;
+      } else {
+        // Fall back to local tracking.
+        const localChange = get().localChanges[path];
+        const original = get().codeOriginalContents[path];
+
+        if (localChange?.status === 'added') {
+          before = '';         // file didn't exist before
+          after = diskContent;
+        } else if (localChange?.status === 'modified' || diff) {
+          // Diff metadata only (no content) or manual save — compare original vs current.
+          before = original ?? '';
+          after = diskContent;
+        } else {
+          // No diff info at all — still show diff view but both sides same.
+          before = original ?? diskContent;
+          after = diskContent;
+        }
+      }
+
+      set((state) => {
+        const codeOpenFiles = state.codeOpenFiles.includes(path)
+          ? state.codeOpenFiles
+          : [...state.codeOpenFiles, path];
+        return {
+          codeOpenFiles,
+          codeActiveFile: path,
+          codeDiffViewPath: path,
+          codeDiffOriginal: { ...state.codeDiffOriginal, [path]: before },
+          codeDiffModified: { ...state.codeDiffModified, [path]: after },
+          codeFileContents: { ...state.codeFileContents, [path]: diskContent },
+          codeUnsavedChanges: { ...state.codeUnsavedChanges, [path]: false },
+        };
+      });
+    } catch (error) {
+      console.error('Failed to open code diff view:', error);
+      get().openCodeFile(path);
+    }
+  },
+
+  exitCodeDiffView: () => set({ codeDiffViewPath: null }),
+
+  closeCodeFile: (path) => {
+    const { codeOpenFiles, codeActiveFile, codeFileContents, codeUnsavedChanges, codeDiffOriginal, codeDiffModified, codeDiffViewPath } = get();
+    const newOpen = codeOpenFiles.filter((p) => p !== path);
+    const newActive = codeActiveFile === path
+      ? (newOpen.length > 0 ? newOpen[newOpen.length - 1] : null)
+      : codeActiveFile;
+    const newContents = { ...codeFileContents };
+    delete newContents[path];
+    const newUnsaved = { ...codeUnsavedChanges };
+    delete newUnsaved[path];
+    const newOriginal = { ...codeDiffOriginal };
+    delete newOriginal[path];
+    const newModified = { ...codeDiffModified };
+    delete newModified[path];
+    set({
+      codeOpenFiles: newOpen,
+      codeActiveFile: newActive,
+      codeFileContents: newContents,
+      codeUnsavedChanges: newUnsaved,
+      codeDiffOriginal: newOriginal,
+      codeDiffModified: newModified,
+      codeDiffViewPath: codeDiffViewPath === path ? null : codeDiffViewPath,
+    });
+  },
+
+  setCodeActiveFile: (codeActiveFile) => set({ codeActiveFile }),
+
+  setCodeFileContent: (path, content) => {
+    const { codeFileContents, codeUnsavedChanges } = get();
+    set({
+      codeFileContents: { ...codeFileContents, [path]: content },
+      codeUnsavedChanges: { ...codeUnsavedChanges, [path]: true },
+    });
+  },
+
+  readCodeFile: async (path, options) => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/files/${encodeURIComponent(path)}?${codeScopeQuery()}`
+      );
+      if (!response.ok) throw new Error('Failed to read file');
+      const data = await response.json();
+      const content = data.content as string;
+      if (options?.updateStore !== false) {
+        set((state) => ({
+          codeFileContents: { ...state.codeFileContents, [path]: content },
+          // Capture original only on first read — never overwritten.
+          codeOriginalContents: path in state.codeOriginalContents
+            ? state.codeOriginalContents
+            : { ...state.codeOriginalContents, [path]: content },
+        }));
+      }
+      return content;
+    } catch (error) {
+      console.error('Error reading code file:', error);
+      return null;
+    }
+  },
+
+  saveCodeFile: async (path) => {
+    const { codeFileContents, codeUnsavedChanges } = get();
+    const content = codeFileContents[path];
+    if (content === undefined) return false;
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/files/${encodeURIComponent(path)}?${codeScopeQuery()}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path,
+            scope: CODE_FILES_SCOPE,
+            content,
+            content_type: 'text/plain',
+          }),
+        }
+      );
+      if (!response.ok) throw new Error('Failed to save file');
+      set((state) => ({
+        codeUnsavedChanges: { ...state.codeUnsavedChanges, [path]: false },
+        // Only mark as 'modified' if it wasn't already tracked as 'added'.
+        localChanges: state.localChanges[path]?.status === 'added'
+          ? state.localChanges
+          : { ...state.localChanges, [path]: { status: 'modified' } },
+      }));
+      await get().syncCodeWorkdir('push');
+      // Refresh OpenCode diffs too if a real session is active.
+      const { useOpencodeSessionStore } = await import('./opencode-session');
+      const sessionId = useOpencodeSessionStore.getState().opencodeSessionId;
+      if (sessionId && !sessionId.startsWith('nexus-')) {
+        void useOpencodeSessionStore.getState().fetchSessionDiff(sessionId);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error saving code file:', error);
+      return false;
+    }
+  },
+
+  createCodeFile: async (path, content = '') => {
+    try {
+      const response = await authFetch(`${getApiBase()}/api/files/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path,
+          scope: CODE_FILES_SCOPE,
+          content,
+          content_type: 'text/plain',
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to create file');
+      const created = (await response.json()) as FileInfo;
+      const resolvedPath = created.path || path;
+      set((state) => ({
+        localChanges: { ...state.localChanges, [resolvedPath]: { status: 'added' } },
+      }));
+      void get().refreshCodeFiles();
+      void get().syncCodeWorkdir('push');
+      return resolvedPath;
+    } catch (error) {
+      console.error('Error creating code file:', error);
+      return null;
+    }
+  },
+
+  createCodeFolder: async (path) => {
+    try {
+      const response = await authFetch(`${getApiBase()}/api/files/folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, scope: CODE_FILES_SCOPE }),
+      });
+      if (!response.ok) throw new Error('Failed to create folder');
+      await get().refreshCodeFiles();
+      await get().syncCodeWorkdir('push');
+      return true;
+    } catch (error) {
+      console.error('Error creating code folder:', error);
+      return false;
+    }
+  },
+
+  deleteCodeFile: async (path) => {
+    try {
+      const response = await authFetch(
+        `${getApiBase()}/api/files/${encodeURIComponent(path)}?${codeScopeQuery()}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) throw new Error('Failed to delete');
+      const { codeOpenFiles } = get();
+      if (codeOpenFiles.includes(path)) get().closeCodeFile(path);
+      await get().refreshCodeFiles();
+      await get().syncCodeWorkdir('push');
+      return true;
+    } catch (error) {
+      console.error('Error deleting code path:', error);
+      return false;
+    }
+  },
+
+  renameCodeFile: async (oldPath, newPath) => {
+    try {
+      const response = await authFetch(`${getApiBase()}/api/files/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          old_path: oldPath,
+          new_path: newPath,
+          scope: CODE_FILES_SCOPE,
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to rename');
+      const { codeOpenFiles, codeActiveFile, codeFileContents, codeUnsavedChanges } = get();
+      if (codeOpenFiles.includes(oldPath)) {
+        const newContents = { ...codeFileContents, [newPath]: codeFileContents[oldPath] };
+        delete newContents[oldPath];
+        const newUnsaved = { ...codeUnsavedChanges, [newPath]: codeUnsavedChanges[oldPath] };
+        delete newUnsaved[oldPath];
+        set({
+          codeOpenFiles: codeOpenFiles.map((p) => (p === oldPath ? newPath : p)),
+          codeActiveFile: codeActiveFile === oldPath ? newPath : codeActiveFile,
+          codeFileContents: newContents,
+          codeUnsavedChanges: newUnsaved,
+        });
+      }
+      await get().refreshCodeFiles();
+      await get().syncCodeWorkdir('push');
+      return true;
+    } catch (error) {
+      console.error('Error renaming code path:', error);
+      return false;
+    }
+  },
+
+  setCodeDiffs: (diffs) => {
+    set((state) => ({
+      codeDiffs: {
+        ...state.codeDiffs,
+        ...Object.fromEntries(
+          diffs.map((d) => [
+            d.file,
+            {
+              additions: d.additions,
+              deletions: d.deletions,
+              status: d.status,
+              ...(d.before !== undefined ? { before: normalizeDiffText(d.before) } : {}),
+              ...(d.after !== undefined ? { after: normalizeDiffText(d.after) } : {}),
+              ...(d.patch !== undefined ? { patch: normalizeDiffText(d.patch) } : {}),
+            },
+          ]),
+        ),
+      },
+    }));
+  },
+
+  replaceCodeDiffs: (diffs) => {
+    set({
+      codeDiffs: Object.fromEntries(
+        diffs.map((d) => [
+          d.file,
+          {
+            additions: d.additions,
+            deletions: d.deletions,
+            status: d.status,
+            ...(d.before !== undefined ? { before: normalizeDiffText(d.before) } : {}),
+            ...(d.after !== undefined ? { after: normalizeDiffText(d.after) } : {}),
+            ...(d.patch !== undefined ? { patch: normalizeDiffText(d.patch) } : {}),
+          },
+        ]),
+      ),
+    });
+  },
+
+  clearCodeDiffs: () => set({
+    codeDiffs: {},
+    codeDiffViewPath: null,
+    codeDiffOriginal: {},
+    codeDiffModified: {},
+  }),
+
+  clearLocalChanges: () => set({ localChanges: {} }),
+
+  clearOriginalContents: () => set({ codeOriginalContents: {} }),
+
+  syncCodeWorkdir: async (direction = 'both') => {
+    try {
+      await authFetch(`${getApiBase()}/api/code/sync?direction=${direction}`, { method: 'POST' });
+    } catch (error) {
+      console.warn('Code workdir sync failed (non-fatal):', error);
     }
   },
 }));
