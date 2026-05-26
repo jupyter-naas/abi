@@ -7,6 +7,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     require_workspace_access,
     require_workspace_admin,
     require_workspace_platform_drive,
+    require_workspace_system_drive,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (  # noqa: E501
     ALLOWED_AVATAR_EXTENSIONS,
@@ -87,6 +88,7 @@ __all__ = [
     "require_workspace_access",
     "require_workspace_admin",
     "require_workspace_platform_drive",
+    "require_workspace_system_drive",
     "reset_password",
     "router",
     "update_me",
