@@ -28,6 +28,7 @@ import {
   Search,
   FlaskConical,
   Eye,
+  Star,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -95,10 +96,16 @@ export default function FilesPage() {
     refreshFiles,
     openFile,
     activeSource,
+    setActiveSource,
     syncedFolders,
     fetchLocalFiles,
     setError,
     uploadProgress,
+    starredItems,
+    starItem,
+    unstarItem,
+    starredNavigation,
+    setStarredNavigation,
   } = useFilesStore();
 
   const { prompt, dialog: promptDialog } = usePrompt();
@@ -125,7 +132,11 @@ export default function FilesPage() {
   const [textViewerLoading, setTextViewerLoading] = useState(false);
   const [textViewerError, setTextViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+  // When a starred navigation is pending, skip the regular fetch triggered by activeSource change
+  const skipRegularFetchRef = useRef(false);
+  // Local path of the file to auto-preview once files finish loading
+  const [localPendingPreview, setLocalPendingPreview] = useState<string | null>(null);
+
   // Helper to open file in Lab
   const handleOpenInLab = (file: FileInfo) => {
     openFile(file.path);
@@ -169,6 +180,34 @@ export default function FilesPage() {
       }
     };
   }, [imageViewerUrl]);
+
+  // Handle navigation triggered by clicking a starred item in the sidebar.
+  // Setting skipRegularFetchRef prevents the activeSource-change effect from
+  // overriding the path we set here.
+  useEffect(() => {
+    if (!starredNavigation) return;
+    skipRegularFetchRef.current = true;
+    setActiveSource(starredNavigation.source);
+    fetchFiles(starredNavigation.path);
+    if (starredNavigation.previewPath) {
+      setLocalPendingPreview(starredNavigation.previewPath);
+    }
+    setStarredNavigation(null);
+  }, [starredNavigation, setActiveSource, fetchFiles, setStarredNavigation]);
+
+  // Once the files list loads, open the pending preview (if any).
+  useEffect(() => {
+    if (!localPendingPreview || loading) return;
+    const target = files.find((f) => f.path === localPendingPreview);
+    if (!target) return;
+    setLocalPendingPreview(null);
+    if (isPdfFile(target)) openPdfViewer(target);
+    else if (isOfficeFile(target)) openOfficePreview(target);
+    else if (isImageFile(target)) openImageViewer(target);
+    else if (isTextFile(target)) openTextViewer(target);
+  // isPdfFile etc. are stable inline functions — listing them would cause an infinite loop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localPendingPreview, files, loading]);
   
   // Check if we're viewing a synced local folder
   const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
@@ -231,6 +270,12 @@ export default function FilesPage() {
   }
 
   useEffect(() => {
+    // Skip if a starred navigation just updated activeSource — it already called fetchFiles.
+    if (skipRegularFetchRef.current) {
+      skipRegularFetchRef.current = false;
+      return;
+    }
+
     // Clear any previous errors
     setError(null);
 
@@ -1141,6 +1186,38 @@ export default function FilesPage() {
                     </td>
                     <td className="py-2">
                       <div className="relative flex items-center justify-end gap-0.5">
+                        {(() => {
+                          const starred = starredItems.some(
+                            (i) => i.path === file.path && i.workspaceId === workspaceId
+                          );
+                          return (
+                            <button
+                              title={starred ? 'Remove from starred' : 'Add to starred'}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (starred) {
+                                  unstarItem(file.path, workspaceId);
+                                } else {
+                                  starItem({
+                                    path: file.path,
+                                    name: file.name,
+                                    type: file.type,
+                                    source: activeSource,
+                                    workspaceId,
+                                  });
+                                }
+                              }}
+                              className={cn(
+                                'h-6 w-6 items-center justify-center rounded hover:bg-muted',
+                                starred
+                                  ? 'flex text-amber-400 hover:text-amber-500'
+                                  : 'hidden text-muted-foreground/50 hover:text-foreground group-hover:flex'
+                              )}
+                            >
+                              <Star size={14} className={starred ? 'fill-current' : ''} />
+                            </button>
+                          );
+                        })()}
                         <button
                           title={file.type === 'folder' ? 'Download as ZIP' : 'Download'}
                           onClick={(e) => {
@@ -1326,6 +1403,38 @@ export default function FilesPage() {
                     {getFileIcon(file, 40)}
                     <span className="w-full truncate text-center text-sm">{file.name}</span>
                   </button>
+                  {(() => {
+                    const starred = starredItems.some(
+                      (i) => i.path === file.path && i.workspaceId === workspaceId
+                    );
+                    return (
+                      <button
+                        title={starred ? 'Remove from starred' : 'Add to starred'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (starred) {
+                            unstarItem(file.path, workspaceId);
+                          } else {
+                            starItem({
+                              path: file.path,
+                              name: file.name,
+                              type: file.type,
+                              source: activeSource,
+                              workspaceId,
+                            });
+                          }
+                        }}
+                        className={cn(
+                          'absolute left-1.5 top-1.5 h-6 w-6 items-center justify-center rounded bg-background/80 shadow-sm',
+                          starred
+                            ? 'flex text-amber-400 hover:text-amber-500'
+                            : 'hidden text-muted-foreground hover:bg-muted hover:text-foreground group-hover:flex'
+                        )}
+                      >
+                        <Star size={13} className={starred ? 'fill-current' : ''} />
+                      </button>
+                    );
+                  })()}
                   <button
                     title={file.type === 'folder' ? 'Download as ZIP' : 'Download'}
                     onClick={(e) => {
@@ -1347,9 +1456,11 @@ export default function FilesPage() {
         </div>
       </div>
 
-      {/* PDF Viewer modal */}
+    </div>
+
+      {/* PDF Viewer modal — rendered outside the page container to avoid stacking-context traps */}
       {pdfViewerFileName && (
-        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <div className="truncate text-sm font-medium">{pdfViewerFileName}</div>
@@ -1391,7 +1502,7 @@ export default function FilesPage() {
         </div>
       )}
       {imageViewerFileName && (
-        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <div className="truncate text-sm font-medium">{imageViewerFileName}</div>
@@ -1428,7 +1539,7 @@ export default function FilesPage() {
         </div>
       )}
       {textViewerFileName && (
-        <div className="fixed inset-0 z-[100] bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <div className="truncate text-sm font-medium">{textViewerFileName}</div>
@@ -1467,7 +1578,6 @@ export default function FilesPage() {
           </div>
         </div>
       )}
-    </div>
     </>
   );
 }

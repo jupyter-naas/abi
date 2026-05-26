@@ -3,13 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, ChevronDown, Search, Users, Layers, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-export type DateRangeKey = '7d' | '30d' | '90d' | 'custom';
+import type { Scenario, ScenarioId } from '../lib/types';
 
 export interface FilterValue {
-  range: DateRangeKey;
-  start_date?: string;
-  end_date?: string;
+  scenario_id: ScenarioId;
   user_email: string; // 'all' or a specific email
   workspace_id: string; // 'all' or a specific workspace id
 }
@@ -27,21 +24,30 @@ interface WorkspaceOption {
 interface FilterBarProps {
   value: FilterValue;
   onChange: (next: FilterValue) => void;
+  scenarios: Scenario[];
   users: UserOption[];
   workspaces: WorkspaceOption[];
 }
 
-export function FilterBar({ value, onChange, users, workspaces }: FilterBarProps) {
+export function FilterBar({ value, onChange, scenarios, users, workspaces }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <DateRangePicker value={value} onChange={onChange} />
+      <ScenarioPicker value={value} onChange={onChange} scenarios={scenarios} />
       <UserSelect value={value} onChange={onChange} users={users} />
       <WorkspaceSelect value={value} onChange={onChange} workspaces={workspaces} />
     </div>
   );
 }
 
-function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v: FilterValue) => void }) {
+function ScenarioPicker({
+  value,
+  onChange,
+  scenarios,
+}: {
+  value: FilterValue;
+  onChange: (v: FilterValue) => void;
+  scenarios: Scenario[];
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -53,85 +59,43 @@ function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const options: { key: DateRangeKey; label: string }[] = [
-    { key: '7d', label: 'Last 7 days' },
-    { key: '30d', label: 'Last 30 days' },
-    { key: '90d', label: 'Last 90 days' },
-    { key: 'custom', label: 'Custom range' },
-  ];
-
-  const pick = (k: DateRangeKey) => {
-    if (k === 'custom') {
-      onChange({ ...value, range: 'custom' });
-      return;
-    }
-    const days = k === '7d' ? 7 : k === '30d' ? 30 : 90;
-    const end = new Date();
-    const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
-    onChange({
-      ...value,
-      range: k,
-      start_date: start.toISOString(),
-      end_date: end.toISOString(),
-    });
-    setOpen(false);
-  };
-
-  const labelFor = (v: FilterValue) => options.find((o) => o.key === v.range)?.label ?? 'Date range';
+  const current = scenarios.find((s) => s.scenario_id === value.scenario_id);
+  const label = current?.scenario ?? 'Last 7 days';
 
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
+          'flex h-9 items-center gap-2 border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
           'hover:border-foreground/20 hover:bg-muted/40',
-          open && 'border-primary/50',
+          open && 'border-workspace-accent',
         )}
       >
         <Calendar size={14} className="text-muted-foreground" />
-        <span className="font-medium">{labelFor(value)}</span>
+        <span className="font-medium">{label}</span>
         <ChevronDown size={14} className="text-muted-foreground" />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
-          {options.map((o) => (
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-64 border border-border bg-popover p-1.5 shadow-lg">
+          {scenarios.map((s) => (
             <button
-              key={o.key}
-              onClick={() => pick(o.key)}
+              key={s.scenario_id}
+              onClick={() => {
+                onChange({ ...value, scenario_id: s.scenario_id });
+                setOpen(false);
+              }}
               className={cn(
-                'flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors',
+                'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors',
                 'hover:bg-muted',
-                value.range === o.key && 'bg-primary/10 text-primary',
+                value.scenario_id === s.scenario_id && 'bg-workspace-accent-10 text-workspace-accent',
               )}
             >
-              {o.label}
-              {value.range === o.key && <span className="text-xs">●</span>}
+              {s.scenario}
+              {value.scenario_id === s.scenario_id && <span className="text-xs">●</span>}
             </button>
           ))}
-          {value.range === 'custom' && (
-            <div className="border-t border-border/60 mt-1.5 p-2 space-y-2">
-              <label className="block text-xs text-muted-foreground">Start</label>
-              <input
-                type="date"
-                value={value.start_date?.slice(0, 10) ?? ''}
-                onChange={(e) =>
-                  onChange({ ...value, start_date: new Date(e.target.value).toISOString() })
-                }
-                className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
-              />
-              <label className="block text-xs text-muted-foreground">End</label>
-              <input
-                type="date"
-                value={value.end_date?.slice(0, 10) ?? ''}
-                onChange={(e) =>
-                  onChange({ ...value, end_date: new Date(e.target.value).toISOString() })
-                }
-                className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
-              />
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -172,9 +136,9 @@ function UserSelect({
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border border-border bg-background pl-3 pr-2.5 text-sm transition-colors max-w-[260px]',
+          'flex h-9 items-center gap-2 border border-border bg-background pl-3 pr-2.5 text-sm transition-colors max-w-[260px]',
           'hover:border-foreground/20 hover:bg-muted/40',
-          value.user_email !== 'all' && 'border-primary/40 bg-primary/5',
+          value.user_email !== 'all' && 'border-workspace-accent bg-workspace-accent-5',
         )}
       >
         <Users size={14} className="text-muted-foreground flex-shrink-0" />
@@ -194,7 +158,7 @@ function UserSelect({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 border border-border bg-popover p-1.5 shadow-lg">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -202,7 +166,7 @@ function UserSelect({
               placeholder="Search by email..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-background pl-8 pr-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="h-9 w-full border border-border bg-background pl-8 pr-2 text-sm focus:outline-none focus:ring-2 focus:ring-workspace-accent/30"
             />
           </div>
           <div className="mt-1.5 max-h-64 overflow-y-auto">
@@ -212,8 +176,8 @@ function UserSelect({
                 setOpen(false);
               }}
               className={cn(
-                'flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted',
-                value.user_email === 'all' && 'bg-primary/10 text-primary',
+                'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors hover:bg-muted',
+                value.user_email === 'all' && 'bg-workspace-accent-10 text-workspace-accent',
               )}
             >
               <span className="font-medium">All users</span>
@@ -232,8 +196,8 @@ function UserSelect({
                   setQuery('');
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted',
-                  value.user_email === u.user_email && 'bg-primary/10 text-primary',
+                  'flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted',
+                  value.user_email === u.user_email && 'bg-workspace-accent-10 text-workspace-accent',
                 )}
               >
                 <Avatar email={u.user_email} />
@@ -274,9 +238,9 @@ function WorkspaceSelect({
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
+          'flex h-9 items-center gap-2 border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
           'hover:border-foreground/20 hover:bg-muted/40',
-          value.workspace_id !== 'all' && 'border-primary/40 bg-primary/5',
+          value.workspace_id !== 'all' && 'border-workspace-accent bg-workspace-accent-5',
         )}
       >
         <Layers size={14} className="text-muted-foreground" />
@@ -284,15 +248,15 @@ function WorkspaceSelect({
         <ChevronDown size={14} className="text-muted-foreground" />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-56 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-56 border border-border bg-popover p-1.5 shadow-lg">
           <button
             onClick={() => {
               onChange({ ...value, workspace_id: 'all' });
               setOpen(false);
             }}
             className={cn(
-              'flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted',
-              value.workspace_id === 'all' && 'bg-primary/10 text-primary',
+              'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors hover:bg-muted',
+              value.workspace_id === 'all' && 'bg-workspace-accent-10 text-workspace-accent',
             )}
           >
             All workspaces
@@ -306,8 +270,8 @@ function WorkspaceSelect({
                 setOpen(false);
               }}
               className={cn(
-                'flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted',
-                value.workspace_id === w.workspace_id && 'bg-primary/10 text-primary',
+                'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors hover:bg-muted',
+                value.workspace_id === w.workspace_id && 'bg-workspace-accent-10 text-workspace-accent',
               )}
             >
               <span className="truncate">{w.workspace_name}</span>
