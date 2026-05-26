@@ -1,0 +1,22 @@
+{
+    "name": "World Situation Room",
+    "description": "Real-time geospatial intelligence platform. Fuses live satellite orbits, commercial and military flight data, seismic activity, CCTV streams, and conflict-zone intelligence into a single 3D globe.",
+    "category": "alpha",
+    "url": "https://worldsituationroom.com/",
+    "avatar_url": "https://assets.naas.ai/marketplace/wsr/logo.png",
+    "demo_login": "demo@naas.ai",
+    "demo_password": "demo1234",
+    "version": "1.0.0",
+    "author": "naas.ai",
+    "license": "MIT",
+    "keywords": ["wsr", "geospatial", "intelligence", "satellite"],
+    "dependencies": {
+        "wsr": "1.0.0"
+    },
+    "tier": "community",
+    "maintainer": "naas.ai",
+    "pricing": {
+        "type": "free",
+        "price": 0
+    }
+}
