@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.46.0 (2026-05-26)
+
+### Features
+
+- **object-storage**: Emit ObjectPut/ObjectDeleted events via onto2py
+  ([`08d999a`](https://github.com/jupyter-naas/abi/commit/08d999a18812bbeacfc6d6b47d0bfb88ac4826cf))
+
+### Refactoring
+
+- **bus**: Split into publish/subscribe + enqueue/dequeue
+  ([`0ff1a66`](https://github.com/jupyter-naas/abi/commit/0ff1a66c67707a80f9181c831d849acc9c984dff))
+
+
 ## v1.45.0 (2026-05-26)
 
 ### Bug Fixes
