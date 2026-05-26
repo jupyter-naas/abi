@@ -1514,6 +1514,15 @@ nexus:Capabilities a owl:Class ;
 
 # Process (WHAT)
 
+nexus:FrontEndEvent a owl:Class ;
+    rdfs:label "Front End Event"@en ;
+    skos:definition "A process that creates a new user in the Nexus platform."@en ;
+    rdfs:subClassOf abi:Process ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] .
+
 nexus:CreateUser a owl:Class ;
     rdfs:label "Create User"@en ;
     skos:definition "A process that creates a new user in the Nexus platform."@en ;
@@ -1835,14 +1844,14 @@ nexus:model_id a owl:DatatypeProperty ;
 
 nexus:user_id a owl:DatatypeProperty ;
     rdfs:label "user id"@en ;
-    rdfs:domain nexus:User ;
+    rdfs:domain nexus:User, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The unique identifier of the user account in the Nexus platform."@en ;
     skos:example "usr_01HXYZ", "42a3f9c1-1234-5678-abcd-ef0123456789" .
 
-nexus:email a owl:DatatypeProperty ;
-    rdfs:label "email"@en ;
-    rdfs:domain nexus:User ;
+nexus:user_email a owl:DatatypeProperty ;
+    rdfs:label "user email"@en ;
+    rdfs:domain nexus:User, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The email address associated with the user account in the Nexus platform."@en ;
     skos:example "alice@example.com", "bob.smith@company.org" .
@@ -1851,14 +1860,28 @@ nexus:email a owl:DatatypeProperty ;
 
 nexus:event_id a owl:DatatypeProperty ;
     rdfs:label "event id"@en ;
-    rdfs:domain nexus:PageView, nexus:VisitSession, nexus:Login, nexus:Logout ;
+    rdfs:domain nexus:PageView, nexus:VisitSession, nexus:Login, nexus:Logout, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."@en ;
     skos:example "103036d2-2929-442b-b15d-d73bca3928aa" .
 
+nexus:event_name a owl:DatatypeProperty ;
+    rdfs:label "event name"@en ;
+    rdfs:domain nexus:FrontEndEvent ;
+    rdfs:range xsd:string ;
+    skos:definition "Name/type of the analytics event (e.g. 'page_viewed', 'clicked')."@en ;
+    skos:example "page_viewed" .
+
+nexus:timestamp a owl:DatatypeProperty ;
+    rdfs:label "timestamp"@en ;
+    rdfs:domain nexus:FrontEndEvent ;
+    rdfs:range xsd:string ;
+    skos:definition "ISO8601 string timestamp when the event was recorded."@en ;
+    skos:example "2024-05-20T14:23:01.193Z" .
+
 nexus:session_id a owl:DatatypeProperty ;
     rdfs:label "session id"@en ;
-    rdfs:domain nexus:Session, nexus:VisitSession ;
+    rdfs:domain nexus:Session, nexus:VisitSession, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The unique identifier of a platform session artifact or visit-session process in the Nexus platform."@en ;
     skos:example "d292a58c-52a1-4892-ba54-3083db5e580d" .
@@ -1867,14 +1890,14 @@ nexus:session_id a owl:DatatypeProperty ;
 
 nexus:workspace_id a owl:DatatypeProperty ;
     rdfs:label "workspace id"@en ;
-    rdfs:domain nexus:Workspace ;
+    rdfs:domain nexus:Workspace, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The unique identifier of a workspace in the Nexus platform."@en ;
     skos:example "ws-ee0d7c1d56b2" .
 
 nexus:workspace_name a owl:DatatypeProperty ;
     rdfs:label "workspace name"@en ;
-    rdfs:domain nexus:Workspace ;
+    rdfs:domain nexus:Workspace, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The human-readable display name of a workspace in the Nexus platform."@en ;
     skos:example "Primary", "Naas.ai Main Workspace" .
@@ -1883,14 +1906,14 @@ nexus:workspace_name a owl:DatatypeProperty ;
 
 nexus:page_path a owl:DatatypeProperty ;
     rdfs:label "page path"@en ;
-    rdfs:domain nexus:Page ;
+    rdfs:domain nexus:Page, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The URL path of a page within the Nexus platform."@en ;
     skos:example "/workspace/ws-ee0d7c1d56b2/lab", "/analytics" .
 
 nexus:page_title a owl:DatatypeProperty ;
     rdfs:label "page title"@en ;
-    rdfs:domain nexus:Page ;
+    rdfs:domain nexus:Page, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The HTML document title of a page within the Nexus platform."@en ;
     skos:example "Lab | ABI AI Platform | Naas.ai" .
@@ -1899,21 +1922,21 @@ nexus:page_title a owl:DatatypeProperty ;
 
 nexus:country a owl:DatatypeProperty ;
     rdfs:label "country"@en ;
-    rdfs:domain nexus:UserSite ;
+    rdfs:domain nexus:UserSite, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The ISO 3166-1 alpha-2 country code derived from the end-user network location during a platform process."@en ;
     skos:example "FR", "US", "DE" .
 
 nexus:device a owl:DatatypeProperty ;
     rdfs:label "device"@en ;
-    rdfs:domain nexus:UserSite, nexus:Session ;
+    rdfs:domain nexus:UserSite, nexus:Session, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The operating system or device class detected for the end user during a platform process or recorded on a session artifact."@en ;
     skos:example "Windows", "macOS", "iOS", "Android" .
 
 nexus:browser a owl:DatatypeProperty ;
     rdfs:label "browser"@en ;
-    rdfs:domain nexus:UserSite, nexus:Session ;
+    rdfs:domain nexus:UserSite, nexus:Session, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The web browser detected for the end user during a platform process or recorded on a session artifact."@en ;
     skos:example "Chrome", "Safari", "Firefox", "Edge" .
@@ -1922,7 +1945,7 @@ nexus:browser a owl:DatatypeProperty ;
 
 nexus:referrer a owl:DatatypeProperty ;
     rdfs:label "referrer"@en ;
-    rdfs:domain nexus:PageView ;
+    rdfs:domain nexus:PageView, nexus:FrontEndEvent ;
     rdfs:range xsd:string ;
     skos:definition "The HTTP referrer (originating page or host) recorded at the time of a page-view process."@en ;
     skos:example "nexus.localhost", "https://google.com" .
