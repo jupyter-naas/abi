@@ -312,7 +312,7 @@ def _load_import(import_iri: URIRef, base_dir: str) -> tuple[Graph | None, str, 
                 iri_str,
                 headers={"Accept": "text/turtle, application/rdf+xml;q=0.9, */*;q=0.8"},
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310  # nosec B310
                 raw = resp.read()
             ig = Graph()
             for fmt in ("turtle", "xml", "n3"):
