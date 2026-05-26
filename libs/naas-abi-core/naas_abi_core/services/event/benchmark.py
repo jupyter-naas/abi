@@ -18,11 +18,18 @@ import time
 from contextlib import contextmanager
 from typing import ClassVar, Optional
 
+import threading
+
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
     PythonQueueAdapter,
 )
+from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
+    EventSQLiteAdapter,
+)
+from naas_abi_core.services.event.event_ontology import LogProcess
+from naas_abi_core.services.event.EventService import EventService
 
 
 class _InMemoryBusAdapter(IBusAdapter):
@@ -38,16 +45,10 @@ class _InMemoryBusAdapter(IBusAdapter):
             cb(payload)
 
     def topic_consume(self, topic, routing_key, callback):
-        import threading
         self._subscribers.setdefault(topic, []).append(callback)
         t = threading.Thread(target=lambda: None, daemon=True)
         t.start()
         return t
-from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
-    EventSQLiteAdapter,
-)
-from naas_abi_core.services.event.event_ontology import LogProcess
-from naas_abi_core.services.event.EventService import EventService
 
 
 # A realistic event shape: a few string/datetime fields, one of each common type.
@@ -243,7 +244,7 @@ def run_bench(name: str, fn, n: int, repeats: int = 3) -> float:
 
 
 def main():
-    print(f"\nEventService benchmark")
+    print("\nEventService benchmark")
     print(f"  Python   : {sys.version.split()[0]}")
     print(f"  Platform : {platform.platform()}")
     print(f"  Machine  : {platform.machine()}\n")
