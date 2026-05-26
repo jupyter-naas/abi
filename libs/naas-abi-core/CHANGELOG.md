@@ -2,6 +2,52 @@
 
 <!-- version list -->
 
+## v1.45.0 (2026-05-26)
+
+### Bug Fixes
+
+- **core/event**: Satisfy ruff and mypy after benchmark addition
+  ([`27aba61`](https://github.com/jupyter-naas/abi/commit/27aba61d114cb64c3f9a9467b785a40b2ca915fc))
+
+- **email**: Satisfy mypy in SESAdapter_test.py + clean stash-leftover uv.lock conflict
+  ([`f8dd1a7`](https://github.com/jupyter-naas/abi/commit/f8dd1a7a2ed663dbf3d724b01198c057b3bbeb57))
+
+### Documentation
+
+- **event**: Move benchmark results into the service folder
+  ([`dfd7ebb`](https://github.com/jupyter-naas/abi/commit/dfd7ebba7e847d3ca35b2d9ce5c47d4aadad5520))
+
+### Features
+
+- **core**: Add EventService for durable, queryable events
+  ([`4b9d1e9`](https://github.com/jupyter-naas/abi/commit/4b9d1e9a06ac13c7c0a6d0c7e12914a81e6a0c7e))
+
+- **core/event**: Add limit parameter to streaming iterators
+  ([`7e31828`](https://github.com/jupyter-naas/abi/commit/7e31828f8161fe58e54360db5dd1d980bed4b1c9))
+
+- **core/event**: Add streaming iterators and seq-based pagination
+  ([`eeadf9f`](https://github.com/jupyter-naas/abi/commit/eeadf9f854fa8f86937cdae2e7f97fb5cba843a4))
+
+- **core/event**: Auto-populate created_at and surface storage metadata
+  ([`76630e2`](https://github.com/jupyter-naas/abi/commit/76630e2423cb6d53c7f1b7357e453e35eedfa643))
+
+- **core/event**: Wire EventService into EngineConfiguration
+  ([`62db0d6`](https://github.com/jupyter-naas/abi/commit/62db0d6a3e07e8f0081456bc09cc42de2fcd64cf))
+
+### Performance Improvements
+
+- **core/event**: Add throughput benchmark and findings doc
+  ([`ec8f10a`](https://github.com/jupyter-naas/abi/commit/ec8f10ae713d69952bb5a1bb4a82b0bda5c4d088))
+
+- **core/event**: Switch storage codec to JSON, add filter= API
+  ([`149b550`](https://github.com/jupyter-naas/abi/commit/149b55033c3ef66cad7a100276105f2489d11b79))
+
+### Refactoring
+
+- **core/event**: Move ontology under services/event/ontologies/ per convention
+  ([`43faa34`](https://github.com/jupyter-naas/abi/commit/43faa34a03c8b1173739d5521b309b17c7085e68))
+
+
 ## v1.44.0 (2026-05-26)
 
 ### Features
