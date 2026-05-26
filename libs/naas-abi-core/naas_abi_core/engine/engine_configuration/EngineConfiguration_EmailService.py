@@ -29,8 +29,17 @@ class EmailAdapterFilesystemConfiguration(BaseModel):
     directory: str = "storage/email"
 
 
+class EmailAdapterSESConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    region_name: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_session_token: str | None = None
+
+
 class EmailAdapterConfiguration(GenericLoader):
-    adapter: Literal["smtp", "filesystem", "custom"]
+    adapter: Literal["smtp", "filesystem", "ses", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -52,6 +61,12 @@ class EmailAdapterConfiguration(GenericLoader):
                 self.config,
                 "Invalid configuration for services.email.email_adapter 'filesystem' adapter",
             )
+        elif self.adapter == "ses":
+            pydantic_model_validator(
+                EmailAdapterSESConfiguration,
+                self.config,
+                "Invalid configuration for services.email.email_adapter 'ses' adapter",
+            )
 
         return self
 
@@ -72,6 +87,13 @@ class EmailAdapterConfiguration(GenericLoader):
             )
 
             return FilesystemAdapter(**self.config)
+        elif self.adapter == "ses":
+            assert self.config is not None, "config is required for ses adapter"
+            from naas_abi_core.services.email.adapters.secondary.SESAdapter import (
+                SESAdapter,
+            )
+
+            return SESAdapter(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:
