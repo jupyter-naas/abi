@@ -28,7 +28,7 @@ from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
 from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
     EventSQLiteAdapter,
 )
-from naas_abi_core.services.event.event_ontology import LogProcess
+from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 from naas_abi_core.services.event.EventService import EventService
 
 
