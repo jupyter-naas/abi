@@ -58,7 +58,22 @@ class EventService(ServiceBase, IEventService):
     def __init__(self, adapter: IEventAdapter, bus: BusService | None = None):
         super().__init__()
         self._adapter = adapter
-        self._bus = bus
+        # `bus` may be passed explicitly (e.g. by EventFactory or in tests) or
+        # left None and resolved lazily via wire_services() — the engine sets
+        # `self._services`, from which we can pick up `services.bus`.
+        self._explicit_bus = bus
+
+    @property
+    def _bus(self) -> BusService | None:
+        if self._explicit_bus is not None:
+            return self._explicit_bus
+        if self.services_wired:
+            # Fall back to engine-wired bus if available.
+            try:
+                return self.services.bus
+            except AssertionError:
+                return None
+        return None
 
     # ------------------------------------------------------------------
     # publish
