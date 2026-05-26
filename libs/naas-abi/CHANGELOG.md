@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.7.0 (2026-05-26)
+
+### Chores
+
+- Update naas-abi packages version and add langchain-aws dependency
+  ([`cf41b96`](https://github.com/jupyter-naas/abi/commit/cf41b96782ee38e80771238d2fb242c7c51d330d))
+
+### Features
+
+- **analytics**: Reduce recent events limit and increase rebuild debounce
+  ([`cf41b96`](https://github.com/jupyter-naas/abi/commit/cf41b96782ee38e80771238d2fb242c7c51d330d))
+
+
 ## v2.6.0 (2026-05-26)
 
 ### Refactoring
