@@ -6,8 +6,9 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, field
+from importlib import resources as importlib_resources
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 import rdflib
 from rdflib import BNode
@@ -46,6 +47,11 @@ class ClassInfo:
         default_factory=dict
     )  # Maps property name to URI
     label: Optional[str] = None  # rdfs:label
+    # If set, this class is sourced from another already-generated module
+    # (resolved via owl:imports in the TTL). The generator must emit an
+    # `import` for it instead of a class body, and must use this name as
+    # the parent when subclasses reference its URI.
+    external_module: Optional[str] = None
 
 
 def extract_class_name_from_label(label: str) -> Optional[str]:
@@ -564,6 +570,262 @@ def extract_restriction_properties(
             class_info.property_uris[prop_name] = str(prop_uri)
 
 
+_PYTHON_IMPORT_SCHEME = "python://"
+_FILE_IMPORT_SCHEME = "file://"
+
+# Matches Turtle's `owl:imports <iri>` (and the rare full-IRI form
+# `<http://www.w3.org/2002/07/owl#imports> <iri>`). Compact prefixed-name
+# imports like `owl:imports myonto:Foo` are not supported — file/python
+# paths must be angle-bracketed.
+_OWL_IMPORTS_RE = re.compile(
+    r"(?:owl:imports|<http://www\.w3\.org/2002/07/owl#imports>)\s*<([^>]+)>",
+)
+
+
+def _quick_extract_owl_imports(content: str) -> List[str]:
+    """Find owl:imports IRIs in a TTL string without invoking rdflib.
+
+    Used to compute the cache key before deciding whether to parse. Only
+    angle-bracketed IRIs are recognized.
+    """
+    return _OWL_IMPORTS_RE.findall(content)
+
+
+def _resolve_owl_import(
+    iri: str, importer_ttl_path: Optional[Path]
+) -> Tuple[str, str]:
+    """Resolve an ``owl:imports`` IRI to (ttl_content, generated_python_module).
+
+    Supported forms:
+
+    - ``python://<dotted.module.path>/<resource.ttl>`` — resolved via
+      ``importlib.resources.files(...)`` so it works equally well in
+      editable installs, wheel installs, and zipped packages. The Python
+      module of the generated ``.py`` is ``<dotted.module.path>.<stem>``.
+    - ``file://<absolute path>`` or a plain filesystem path — read directly
+      from disk. Relative paths are resolved against the importing TTL's
+      directory. The generated Python module is derived by walking up to the
+      first ``naas_abi*`` ancestor directory and joining the parts (the same
+      rule onto2py uses for class-file imports).
+
+    The Python module is *not* the importer's module — it points at the
+    already-generated ``.py`` of the imported ontology, so the importer can
+    emit ``from <that module> import <ClassName>``.
+    """
+    if iri.startswith(_PYTHON_IMPORT_SCHEME):
+        rest = iri[len(_PYTHON_IMPORT_SCHEME):]
+        module_path, _, resource = rest.rpartition("/")
+        if not module_path or not resource:
+            raise ValueError(
+                f"Invalid python:// import {iri!r}: expected "
+                "python://<module.path>/<resource.ttl>"
+            )
+        traversable = importlib_resources.files(module_path).joinpath(resource)
+        with importlib_resources.as_file(traversable) as fs_path:
+            content = Path(fs_path).read_text()
+        py_module = f"{module_path}.{Path(resource).stem}"
+        return content, py_module
+
+    if iri.startswith(_FILE_IMPORT_SCHEME):
+        fs_path = Path(iri[len(_FILE_IMPORT_SCHEME):])
+    else:
+        fs_path = Path(iri)
+    if not fs_path.is_absolute() and importer_ttl_path is not None:
+        fs_path = Path(importer_ttl_path).parent / fs_path
+    fs_path = fs_path.resolve()
+    content = fs_path.read_text()
+    py_module = _path_to_python_module(fs_path)
+    return content, py_module
+
+
+def _path_to_python_module(ttl_path: Path) -> str:
+    """Derive the dotted Python module path of the generated .py sibling.
+
+    Walks up the path to the first ancestor directory whose name starts with
+    ``naas_abi`` (the package root convention used across this repo), then
+    joins parts to the file's stem. Stops early at any part containing a
+    hyphen (e.g. ``naas-abi-core`` distribution dir vs ``naas_abi_core``
+    package dir).
+    """
+    parts = ttl_path.parts
+    naas_idx: Optional[int] = None
+    for i, part in enumerate(parts):
+        if part.startswith("naas_abi") and "-" not in part:
+            naas_idx = i
+            break
+    if naas_idx is None:
+        raise ValueError(
+            f"Cannot derive Python module path for {ttl_path}: no "
+            "naas_abi* ancestor directory found"
+        )
+    module_parts = list(parts[naas_idx:-1]) + [ttl_path.stem]
+    safe_parts: List[str] = []
+    for part in module_parts:
+        if "-" in part:
+            break
+        safe_parts.append(part)
+    return ".".join(safe_parts)
+
+
+def _extract_into(
+    g: rdflib.Graph,
+    classes: Dict[str, ClassInfo],
+    properties: Dict[str, PropertyInfo],
+) -> None:
+    """Run class/property extraction over ``g`` into the given dicts.
+
+    Pre-existing entries in ``classes`` (typically external classes
+    populated from owl:imports) are *not* overwritten, and their parent
+    chains are not re-resolved. Pre-existing entries in ``properties`` are
+    likewise preserved.
+
+    Mirrors the logic the main flow used to inline; factored out so it can
+    be applied to imported graphs as well as the importer's graph.
+    """
+    RDF = rdflib.Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
+    RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
+    OWL = rdflib.Namespace("http://www.w3.org/2002/07/owl#")
+    SHACL = rdflib.Namespace("http://www.w3.org/ns/shacl#")
+
+    for cls in g.subjects(RDF.type, OWL.Class):
+        if isinstance(cls, BNode):
+            continue
+        if str(cls) in classes:
+            continue
+        class_name = extract_class_name(cls, g)
+        if class_name:
+            classes[str(cls)] = ClassInfo(
+                name=class_name,
+                uri=str(cls),
+                parent_classes=[],
+                properties=[],
+                description=get_description(g, cls),
+                label=get_label(g, cls),
+            )
+
+    for cls in g.subjects(RDF.type, RDFS.Class):
+        if isinstance(cls, BNode):
+            continue
+        if str(cls) in classes:
+            continue
+        class_name = extract_class_name(cls, g)
+        if class_name:
+            classes[str(cls)] = ClassInfo(
+                name=class_name,
+                uri=str(cls),
+                parent_classes=[],
+                properties=[],
+                description=get_description(g, cls),
+                label=get_label(g, cls),
+            )
+
+    for cls_uri, class_info in list(classes.items()):
+        if class_info.external_module:
+            # Externals already have their parent chain baked in.
+            continue
+        for parent in g.objects(rdflib.URIRef(cls_uri), RDFS.subClassOf):
+            if str(parent) in classes:
+                parent_name = classes[str(parent)].name
+                if parent_name not in class_info.parent_classes:
+                    class_info.parent_classes.append(parent_name)
+            elif isinstance(parent, BNode):
+                restriction_types = list(g.objects(parent, RDF.type))
+                if OWL.Restriction in restriction_types:
+                    extract_restriction_properties(
+                        g, parent, cls_uri, class_info, classes, OWL
+                    )
+
+    for prop in g.subjects(RDF.type, OWL.ObjectProperty):
+        if str(prop) in properties:
+            continue
+        prop_name = extract_property_name(prop, g)
+        if prop_name:
+            properties[str(prop)] = PropertyInfo(
+                name=prop_name,
+                property_type="object",
+                range_classes=get_property_range(g, prop, classes),
+                description=get_property_description(g, prop),
+            )
+
+    for prop in g.subjects(RDF.type, OWL.DatatypeProperty):
+        if str(prop) in properties:
+            continue
+        prop_name = extract_property_name(prop, g)
+        if prop_name:
+            properties[str(prop)] = PropertyInfo(
+                name=prop_name,
+                property_type="data",
+                datatype=get_datatype_range(g, prop),
+                description=get_property_description(g, prop),
+            )
+
+    extract_shacl_constraints(g, classes, properties, SHACL)
+
+    for prop_uri, prop_info in properties.items():
+        for domain in g.objects(rdflib.URIRef(prop_uri), RDFS.domain):
+            domain_str = str(domain)
+            if domain_str not in classes:
+                continue
+            class_info = classes[domain_str]
+            if class_info.external_module:
+                # Don't mutate external classes from the importer's graph.
+                continue
+            existing_props = {prop.name: prop for prop in class_info.properties}
+            if prop_info.name in existing_props:
+                existing_prop = existing_props[prop_info.name]
+                if prop_info.required and existing_prop.required:
+                    existing_prop.required = True
+                else:
+                    existing_prop.required = False
+                for cls_name, card in prop_info.range_classes.items():
+                    if cls_name not in existing_prop.range_classes:
+                        existing_prop.range_classes[cls_name] = card
+                    elif (
+                        card is not None
+                        and existing_prop.range_classes[cls_name] is None
+                    ):
+                        existing_prop.range_classes[cls_name] = card
+                if prop_info.description and not existing_prop.description:
+                    existing_prop.description = prop_info.description
+                continue
+            class_info.properties.append(prop_info)
+            class_info.property_uris[prop_info.name] = prop_uri
+
+
+def _ingest_imported_ontology(
+    import_content: str,
+    py_module: str,
+    classes: Dict[str, ClassInfo],
+    properties: Dict[str, PropertyInfo],
+) -> None:
+    """Parse an imported TTL and add its classes to ``classes`` as externals.
+
+    The imported ontology is fully extracted (including metadata properties
+    and inherited properties) so that subclasses defined in the importer can
+    inherit the full property set at codegen time. Each new class gets
+    ``external_module = py_module`` so the importer's emitter knows to write
+    an ``import`` for it instead of a class body.
+    """
+    import_g = rdflib.Graph()
+    import_g.parse(data=import_content, format="turtle")
+
+    sub_classes: Dict[str, ClassInfo] = {}
+    sub_properties: Dict[str, PropertyInfo] = {}
+    _extract_into(import_g, sub_classes, sub_properties)
+    add_metadata_properties(import_g, sub_classes)
+    inherit_parent_properties(sub_classes)
+
+    for uri, cinfo in sub_classes.items():
+        if uri in classes:
+            continue
+        cinfo.external_module = py_module
+        classes[uri] = cinfo
+
+    for uri, pinfo in sub_properties.items():
+        if uri not in properties:
+            properties[uri] = pinfo
+
+
 def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     """
     Convert TTL file to Python classes
@@ -580,149 +842,68 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
         ttl_file_path = ttl_file
         with open(ttl_file, "r") as f:
             content = f.read()
-
-        # Short-circuit: if the generated .py file already exists and was
-        # produced from the same TTL content (matching SHA-256 marker), skip
-        # the expensive rdflib parse + code generation + ruff format. This is
-        # the common case on boot — TTL files don't change across restarts.
-        if not overwrite:
-            ttl_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-            cached_code = _read_cached_python(ttl_file_path, ttl_hash)
-            if cached_code is not None:
-                return cached_code
-
-        g = rdflib.Graph()
-        g.parse(data=content, format="turtle")
     else:
         content = ttl_file.read()
-        g = rdflib.Graph()
-        g.parse(data=content, format="turtle")
 
-    # Define common RDF/OWL/SHACL namespaces
-    RDF = rdflib.Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
-    RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
-    OWL = rdflib.Namespace("http://www.w3.org/2002/07/owl#")
-    SHACL = rdflib.Namespace("http://www.w3.org/ns/shacl#")
+    # Cheap pre-scan for owl:imports — avoids the rdflib parse on the common
+    # case (no imports) so the cache short-circuit below can still skip all
+    # heavy work when the TTL hasn't changed.
+    importer_path = Path(ttl_file_path) if ttl_file_path else None
+    import_records: List[Tuple[str, str]] = []
+    for imported_iri in _quick_extract_owl_imports(content):
+        try:
+            import_content, py_module = _resolve_owl_import(
+                imported_iri, importer_path
+            )
+        except Exception as exc:
+            raise ValueError(
+                f"Failed to resolve owl:imports {imported_iri!r} from "
+                f"{ttl_file_path}: {exc}"
+            ) from exc
+        import_records.append((import_content, py_module))
+
+    # Cache check: hash includes the importer's content AND every imported
+    # TTL's content, so any upstream ontology change busts the cache.
+    if ttl_file_path is not None and not overwrite:
+        hasher = hashlib.sha256()
+        hasher.update(content.encode("utf-8"))
+        for import_content, _py_module in sorted(import_records):
+            hasher.update(b"\x00")
+            hasher.update(import_content.encode("utf-8"))
+        combined_hash = hasher.hexdigest()
+        cached_code = _read_cached_python(ttl_file_path, combined_hash)
+        if cached_code is not None:
+            return cached_code
+
+    g = rdflib.Graph()
+    g.parse(data=content, format="turtle")
 
     # Extract classes and their information
     classes: Dict[str, ClassInfo] = {}
-
-    # Find all OWL classes
-    for cls in g.subjects(RDF.type, OWL.Class):
-        # Skip blank nodes
-        if isinstance(cls, BNode):
-            continue
-        class_name = extract_class_name(cls, g)
-        if class_name:
-            classes[str(cls)] = ClassInfo(
-                name=class_name,
-                uri=str(cls),
-                parent_classes=[],
-                properties=[],
-                description=get_description(g, cls),
-                label=get_label(g, cls),
-            )
-
-    # Find all RDFS classes (if not already OWL classes)
-    for cls in g.subjects(RDF.type, RDFS.Class):
-        # Skip blank nodes
-        if isinstance(cls, BNode):
-            continue
-        if str(cls) not in classes:
-            class_name = extract_class_name(cls, g)
-            if class_name:
-                classes[str(cls)] = ClassInfo(
-                    name=class_name,
-                    uri=str(cls),
-                    parent_classes=[],
-                    properties=[],
-                    description=get_description(g, cls),
-                    label=get_label(g, cls),
-                )
-
-    # Extract inheritance relationships and OWL restrictions
-    for cls_uri, class_info in classes.items():
-        for parent in g.objects(rdflib.URIRef(cls_uri), RDFS.subClassOf):
-            if str(parent) in classes:
-                parent_name = classes[str(parent)].name
-                class_info.parent_classes.append(parent_name)
-            elif isinstance(parent, BNode):
-                # Check if it's an OWL restriction
-                restriction_types = list(g.objects(parent, RDF.type))
-                if OWL.Restriction in restriction_types:
-                    # Extract property from restriction
-                    extract_restriction_properties(
-                        g, parent, cls_uri, class_info, classes, OWL
-                    )
-
-    # Extract properties
     properties: Dict[str, PropertyInfo] = {}
 
-    # Object properties
-    for prop in g.subjects(RDF.type, OWL.ObjectProperty):
-        prop_name = extract_property_name(prop, g)
-        if prop_name:
-            properties[str(prop)] = PropertyInfo(
-                name=prop_name,
-                property_type="object",
-                range_classes=get_property_range(g, prop, classes),
-                description=get_property_description(g, prop),
-            )
+    # Pre-populate external classes from owl:imports so that the importer's
+    # subClassOf resolution can find them in `classes`.
+    for import_content, py_module in import_records:
+        _ingest_imported_ontology(import_content, py_module, classes, properties)
 
-    # Data properties
-    for prop in g.subjects(RDF.type, OWL.DatatypeProperty):
-        prop_name = extract_property_name(prop, g)
-        if prop_name:
-            properties[str(prop)] = PropertyInfo(
-                name=prop_name,
-                property_type="data",
-                datatype=get_datatype_range(g, prop),
-                description=get_property_description(g, prop),
-            )
+    # Extract the importer's own classes + properties (skipping any URIs
+    # already populated as externals).
+    _extract_into(g, classes, properties)
 
-    # Extract SHACL shapes and constraints
-    extract_shacl_constraints(g, classes, properties, SHACL)
-
-    # Associate properties with classes based on domain
-    for prop_uri, prop_info in properties.items():
-        for domain in g.objects(rdflib.URIRef(prop_uri), RDFS.domain):
-            if str(domain) in classes:
-                class_info = classes[str(domain)]
-                # Avoid emitting duplicate property declarations when a property
-                # specifies the same domain multiple times in the ontology.
-                existing_props = {prop.name: prop for prop in class_info.properties}
-
-                if prop_info.name in existing_props:
-                    existing_prop = existing_props[prop_info.name]
-                    # Merge stronger constraints if the duplicate carries them.
-                    # Only mark as required if BOTH are required (conservative approach)
-                    # This prevents properties from being incorrectly marked as required
-                    if prop_info.required and existing_prop.required:
-                        existing_prop.required = True
-                    else:
-                        # If either is not required, keep it optional (safer default)
-                        existing_prop.required = False
-                    # Merge range classes
-                    for cls_name, card in prop_info.range_classes.items():
-                        if cls_name not in existing_prop.range_classes:
-                            existing_prop.range_classes[cls_name] = card
-                        elif (
-                            card is not None
-                            and existing_prop.range_classes[cls_name] is None
-                        ):
-                            existing_prop.range_classes[cls_name] = card
-                    if prop_info.description and not existing_prop.description:
-                        existing_prop.description = prop_info.description
-                    continue
-
-                class_info.properties.append(prop_info)
-                class_info.property_uris[prop_info.name] = prop_uri
-
-    # Inherit properties from parent classes
+    # Inherit properties from parent classes — works across external parents
+    # because they were ingested with full property chains.
     inherit_parent_properties(classes)
 
-    # Add required metadata properties (rdfs:label, dcterms:created, dcterms:creator) to all classes
-    add_metadata_properties(g, classes)
+    # Add required metadata properties (rdfs:label, dcterms:created,
+    # dcterms:creator) to all *local* classes. External classes already had
+    # this applied during ingestion.
+    local_classes = {
+        uri: cinfo
+        for uri, cinfo in classes.items()
+        if cinfo.external_module is None
+    }
+    add_metadata_properties(g, local_classes)
 
     # Generate Python code
     python_code = generate_python_code(classes, properties)
@@ -731,8 +912,14 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     if ttl_file_path:
         py_file = Path(ttl_file_path).with_suffix(".py")
 
-        # Embed the source hash so future calls can short-circuit before parsing.
-        ttl_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        # Embed the combined source hash (importer + all owl:imports content)
+        # so future calls short-circuit only when *both* sides are unchanged.
+        marker_hasher = hashlib.sha256()
+        marker_hasher.update(content.encode("utf-8"))
+        for import_content, _py_module in sorted(import_records):
+            marker_hasher.update(b"\x00")
+            marker_hasher.update(import_content.encode("utf-8"))
+        ttl_hash = marker_hasher.hexdigest()
         python_code_with_marker = (
             f"{_CACHE_MARKER_PREFIX}{ttl_hash}\n{python_code}"
         )
@@ -1136,6 +1323,10 @@ def create_class_files(
     created_files: list[str] = []
 
     for class_uri, class_info in classes.items():
+        # External classes already live in another module's class-files
+        # tree; don't redirect them.
+        if class_info.external_module:
+            continue
         # Parse URI: remove "http://" or "https://" prefix and split by "/"
         uri_str = str(class_uri)
         if uri_str.startswith("http://"):
@@ -1424,6 +1615,19 @@ def generate_python_code(
             "from rdflib.namespace import OWL, RDF, RDFS, XSD",
         ]
     )
+
+    # Emit `from <module> import <Class>` for every external class brought
+    # in via owl:imports. Grouped by module and deduped to keep the import
+    # block stable across runs.
+    external_by_module: Dict[str, Set[str]] = {}
+    for class_info in classes.values():
+        if class_info.external_module:
+            external_by_module.setdefault(
+                class_info.external_module, set()
+            ).add(class_info.name)
+    for module_path in sorted(external_by_module):
+        names = ", ".join(sorted(external_by_module[module_path]))
+        code_lines.append(f"from {module_path} import {names}")
 
     code_lines.extend(
         [
@@ -1722,14 +1926,21 @@ def generate_python_code(
     # Sort classes to handle inheritance properly
     sorted_classes = topological_sort_classes(classes)
 
-    for class_info in sorted_classes:
+    # External classes are imported, not defined — skip emitting bodies or
+    # model_rebuild() calls for them. Their RDFEntity base lives in their
+    # own generated module.
+    locally_defined_classes = [
+        c for c in sorted_classes if c.external_module is None
+    ]
+
+    for class_info in locally_defined_classes:
         code_lines.extend(generate_class_code(class_info, needs_any))
         code_lines.append("")
         code_lines.append("")
 
     # Add model_rebuild() calls for forward references
     code_lines.append("# Rebuild models to resolve forward references")
-    for class_info in sorted_classes:
+    for class_info in locally_defined_classes:
         code_lines.append(f"{class_info.name}.model_rebuild()")
     code_lines.append("")
 
