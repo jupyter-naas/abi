@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from email.message import EmailMessage
 from email.utils import formataddr
 from typing import Any
 
@@ -52,23 +53,21 @@ class SESAdapter(IEmailAdapter):
         from_name: str | None = None,
         reply_to: str | None = None,
     ) -> None:
-        source = formataddr((from_name, from_email)) if from_name else from_email
+        msg = EmailMessage()
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg["From"] = (
+            formataddr((from_name or "", from_email)) if from_name else from_email
+        )
+        if reply_to:
+            msg["Reply-To"] = reply_to
 
-        body: dict[str, dict[str, str]] = {
-            "Text": {"Data": text_body, "Charset": "UTF-8"},
-        }
-        if html_body is not None:
-            body["Html"] = {"Data": html_body, "Charset": "UTF-8"}
+        msg.set_content(text_body)
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
 
-        params: dict[str, Any] = {
-            "Source": source,
-            "Destination": {"ToAddresses": [to_email]},
-            "Message": {
-                "Subject": {"Data": subject, "Charset": "UTF-8"},
-                "Body": body,
-            },
-        }
-        if reply_to is not None:
-            params["ReplyToAddresses"] = [reply_to]
-
-        self._get_client().send_email(**params)
+        self._get_client().send_raw_email(
+            Source=from_email,
+            Destinations=[to_email],
+            RawMessage={"Data": bytes(msg)},
+        )
