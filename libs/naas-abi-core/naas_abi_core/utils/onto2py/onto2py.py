@@ -7,11 +7,68 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import rdflib
 from rdflib import BNode
 from rdflib.collection import Collection
+
+# Ontology checker lives in the parent utils/ directory next to this package.
+_UTILS_DIR = str(Path(__file__).resolve().parent.parent)
+if _UTILS_DIR not in sys.path:
+    sys.path.insert(0, _UTILS_DIR)
+
+
+def _run_ontology_check(ttl_file_path: str) -> None:
+    """
+    Run the static ontology checker on *ttl_file_path* before code generation.
+
+    Raises ValueError listing every ERROR-severity issue found.
+    Skipped silently if either of these is true:
+      - ABI_SKIP_ONTOLOGY_CHECK=1 is set (emergency bypass)
+      - The checker module cannot be imported (missing dep)
+    """
+    if os.environ.get("ABI_SKIP_ONTOLOGY_CHECK") == "1":
+        return
+
+    try:
+        import ontology_checker  # type: ignore[import-not-found]
+    except ImportError:
+        return
+
+    try:
+        report = ontology_checker.check(
+            source_path=ttl_file_path,
+            layers=["static"],
+            raise_error=False,
+            no_raw=True,
+        )
+    except FileNotFoundError:
+        raise
+    except Exception as exc:
+        # Never let a checker bug block onto2py — log and continue.
+        print(
+            f"⚠️  ontology_checker raised during validation of {ttl_file_path}: {exc}",
+            file=sys.stderr,
+        )
+        return
+
+    static = report.get("static", {}) or {}
+    if static.get("skipped"):
+        return
+
+    errors: List[Dict[str, Any]] = static.get("errors", []) or []
+    if not errors:
+        return
+
+    lines = [f"Ontology validation failed for {ttl_file_path}:"]
+    for issue in errors:
+        lines.append(
+            f"  [{issue.get('category', 'ERROR')}] "
+            f"{issue.get('subject', '?')}: {issue.get('message', '')}"
+        )
+    raise ValueError("\n".join(lines))
+
 
 _CACHE_MARKER_PREFIX = "# onto2py-source-sha256: "
 # Bump this when the generator output format changes so previously cached
@@ -845,6 +902,10 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
             cached_code = _read_cached_python(ttl_file_path, ttl_hash)
             if cached_code is not None:
                 return cached_code
+
+        # Validate ontology structure before generating Python.
+        # Raises ValueError listing every ERROR-severity issue.
+        _run_ontology_check(ttl_file_path)
 
         main_only_graph = rdflib.Graph()
         main_only_graph.parse(data=content, format="turtle")
