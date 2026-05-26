@@ -2,6 +2,108 @@
 
 <!-- version list -->
 
+## v2.4.0 (2026-05-21)
+
+### Bug Fixes
+
+- Suppress commit hooks for GitAgent commit
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update naas-abi package versions in uv.lock
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update timeout and retry settings in docker-compose healthcheck
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Features
+
+- Add category fields to app manifests in the marketplace
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Refactoring
+
+- **apps**: Change app catalog discovery to use loaded modules
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+
+## v2.3.0 (2026-05-21)
+
+### Features
+
+- **analytics**: Add Nexus product analytics feature
+  ([`bdc584c`](https://github.com/jupyter-naas/abi/commit/bdc584c9d88ac43f517655be8abead4b3855c202))
+
+- **apps**: Add new apps service and API endpoint
+  ([`3ad8ba5`](https://github.com/jupyter-naas/abi/commit/3ad8ba5e8a8b2a0cd9e5d818f27f76c2e33eb5dd))
+
+- **apps**: Add per-workspace app enable/disable state
+  ([`e0d2033`](https://github.com/jupyter-naas/abi/commit/e0d2033f4efc1c063340eb25d9f3ec27a285bfc2))
+
+- **chat**: Add PDF preview support with a right-side panel
+  ([`131aab4`](https://github.com/jupyter-naas/abi/commit/131aab48de402c1852056aeb649554e263828d46))
+
+- **settings**: Add sidebar and layout for workspace settings
+  ([`cdeb381`](https://github.com/jupyter-naas/abi/commit/cdeb381289dbf7c2d8499662c29ee49ac3f5365a))
+
+- **sidebar**: Improve URL-driven active panel section management
+  ([`173f299`](https://github.com/jupyter-naas/abi/commit/173f299d68783608ff01afa3a5c2ecaea70ede75))
+
+- **system-drive**: Add support for system drive access in workspaces
+  ([`0061150`](https://github.com/jupyter-naas/abi/commit/006115008f4ac3aff1898552665f40a8786a4434))
+
+- **workspace-settings**: Move and update workspace settings UI and routing
+  ([`a428ba2`](https://github.com/jupyter-naas/abi/commit/a428ba27a30872ba43b8e69552af364c681e6bb6))
+
+
+## v2.2.0 (2026-05-19)
+
+### Chores
+
+- **activity_log**: Apply ruff import sort + collections.abc.Iterable
+  ([`9ce4738`](https://github.com/jupyter-naas/abi/commit/9ce4738c4152135448690e0259f8b1a7b6362a4b))
+
+### Features
+
+- **activity_log**: Per-actor SQLite activity ledger + Nexus HTTP middleware
+  ([`fd7c558`](https://github.com/jupyter-naas/abi/commit/fd7c5585e8936967c66cdafc593ab4a036aac239))
+
+- **activity_log**: Pure-ASGI middleware with request body + query capture
+  ([`820c044`](https://github.com/jupyter-naas/abi/commit/820c0447f7a1d3f1adbe0b79113f7a29290425c3))
+
+
+## v2.1.1 (2026-05-19)
+
+### Bug Fixes
+
+- **nexus**: Align outer FeatureKey literal with new flag set
+  ([`d1e0c46`](https://github.com/jupyter-naas/abi/commit/d1e0c46c676775b006a2ac763049bdfda572056d))
+
+
+## v2.1.0 (2026-05-19)
+
+### Features
+
+- **nexus**: Split feature flags per sidebar section
+  ([`29c1a29`](https://github.com/jupyter-naas/abi/commit/29c1a299ea641ec456081dcc25c00453f26ce6e2))
+
+
+## v2.0.0 (2026-05-19)
+
+### Bug Fixes
+
+- Error dl url
+  ([`6dae0a4`](https://github.com/jupyter-naas/abi/commit/6dae0a498ae7eb0dafabaf20d1e873d48e9c6270))
+
+### Features
+
+- **sidebar**: Derive active panel section from URL if no persisted value
+  ([`957200b`](https://github.com/jupyter-naas/abi/commit/957200bf44ff80512ca22aa27b4a0a7b6c80b9e0))
+
+### Breaking Changes
+
+- **sidebar**: Workspace store rehydrate state now includes activePanelSection
+
+
 ## v1.55.2 (2026-05-18)
 
 
