@@ -76,9 +76,11 @@ class EventService(ServiceBase, IEventService):
 
         # Ensure `created_at` is always populated before we serialize, so it
         # round-trips through reconstruction. Caller-supplied values are kept.
-        if getattr(event, "created_at", None) is None:
-            event.created_at = datetime.datetime.now()
-        timestamp = event.created_at.isoformat()
+        created_at = getattr(event, "created_at", None)
+        if created_at is None:
+            created_at = datetime.datetime.now()
+            event.created_at = created_at
+        timestamp = created_at.isoformat()
 
         payload = event.rdf().serialize(format="nt", encoding="utf-8")
 
