@@ -57,8 +57,8 @@ USER_DETAILS_FILE = "user_details.json"
 SESSIONS_FILE = "sessions.json"
 PAGES_FILE = "pages.json"
 WORKSPACES_FILE = "workspaces.json"
-SCENARIO_FILE = "scenario.json"
 METADATA_FILE = "metadata.json"
+SCENARIO_FILE = "ref-scenario.json"
 REF_USERS_FILE = "ref-users.json"
 REF_WORKSPACES_FILE = "ref-workspaces.json"
 
@@ -134,14 +134,8 @@ def _session_duration_sec(started_at: str, ended_at: str) -> int:
     return max(0, int((parse(ended_at) - parse(started_at)).total_seconds()))
 
 
-def _filter_events_to_window(
-    events: list[dict], date_start: str, date_end: str
-) -> list[dict]:
-    return [
-        e
-        for e in events
-        if date_start <= e.get("timestamp", "") <= date_end
-    ]
+def _filter_events_to_window(events: list[dict], date_start: str, date_end: str) -> list[dict]:
+    return [e for e in events if date_start <= e.get("timestamp", "") <= date_end]
 
 
 # ---------------------------------------------------------------------------
@@ -263,9 +257,7 @@ def _build_overview(events: list[dict], sessions: list[dict], days: list[str]) -
     total_duration = sum(s["duration_seconds"] for s in sessions)
     avg_session_duration = int(total_duration / len(sessions)) if sessions else 0
     returning_users = sum(1 for arr in sessions_by_user.values() if len(arr) > 1)
-    avg_sessions_per_user = (
-        round(len(sessions) / len(active_users), 1) if active_users else 0.0
-    )
+    avg_sessions_per_user = round(len(sessions) / len(active_users), 1) if active_users else 0.0
 
     ws_event_counts: dict[str, dict] = {}
     for e in events:
@@ -418,10 +410,7 @@ class AnalyticsService:
                     }
                 )
                 changed = True
-            elif (
-                event.workspace_name
-                and existing.get("workspace_name") != event.workspace_name
-            ):
+            elif event.workspace_name and existing.get("workspace_name") != event.workspace_name:
                 existing["workspace_name"] = event.workspace_name
                 changed = True
             if changed:
@@ -431,9 +420,7 @@ class AnalyticsService:
             users: list[dict[str, Any]] = self._storage.load_json(REF_USERS_FILE, fallback=[])
             if not isinstance(users, list):
                 users = []
-            existing = next(
-                (u for u in users if u.get("user_id") == event.user_id), None
-            )
+            existing = next((u for u in users if u.get("user_id") == event.user_id), None)
             changed = False
             if existing is None:
                 users.append(
@@ -448,9 +435,8 @@ class AnalyticsService:
                 if existing.get("user_email") != event.user_email:
                     existing["user_email"] = event.user_email
                     changed = True
-                if (
-                    event.workspace_id
-                    and event.workspace_id not in existing.get("workspace_ids", [])
+                if event.workspace_id and event.workspace_id not in existing.get(
+                    "workspace_ids", []
                 ):
                     existing.setdefault("workspace_ids", []).append(event.workspace_id)
                     changed = True
@@ -550,9 +536,7 @@ class AnalyticsService:
         with self._rebuild_lock:
             if self._rebuild_timer is not None:
                 self._rebuild_timer.cancel()
-            self._rebuild_timer = threading.Timer(
-                _REBUILD_DEBOUNCE_SECONDS, self._run_rebuild
-            )
+            self._rebuild_timer = threading.Timer(_REBUILD_DEBOUNCE_SECONDS, self._run_rebuild)
             self._rebuild_timer.daemon = True
             self._rebuild_timer.start()
 
@@ -615,9 +599,7 @@ class AnalyticsService:
         )
         return UsersResponse.model_validate(slice_data)
 
-    def get_user_detail(
-        self, email: str, scenario_id: str = DEFAULT_SCENARIO_ID
-    ) -> UserDetail:
+    def get_user_detail(self, email: str, scenario_id: str = DEFAULT_SCENARIO_ID) -> UserDetail:
         decoded = urllib.parse.unquote(email)
         scenario_data = self._load_scenario_slice(USER_DETAILS_FILE, scenario_id, fallback={})
         if not isinstance(scenario_data, dict) or decoded not in scenario_data:
@@ -631,9 +613,7 @@ class AnalyticsService:
         return SessionsResponse.model_validate(slice_data)
 
     def get_pages(self, scenario_id: str = DEFAULT_SCENARIO_ID) -> PagesResponse:
-        slice_data = self._load_scenario_slice(
-            PAGES_FILE, scenario_id, fallback={"pages": []}
-        )
+        slice_data = self._load_scenario_slice(PAGES_FILE, scenario_id, fallback={"pages": []})
         return PagesResponse.model_validate(slice_data)
 
     def get_workspaces(self, scenario_id: str = DEFAULT_SCENARIO_ID) -> WorkspacesResponse:
