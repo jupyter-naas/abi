@@ -18,16 +18,27 @@ class _FakeBus:
         self.published: list[tuple[str, str, bytes]] = []
         self.consumed: list[tuple[str, str, Callable[[bytes], None]]] = []
 
-    def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+    def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
         self.published.append((topic, routing_key, payload))
 
-    def topic_consume(
+    def subscribe(
         self,
         topic: str,
         routing_key: str,
         callback: Callable[[bytes], None],
     ) -> None:
         self.consumed.append((topic, routing_key, callback))
+
+    def enqueue(self, topic: str, routing_key: str, payload: bytes) -> None:
+        pass
+
+    def dequeue(
+        self,
+        topic: str,
+        routing_key: str,
+        callback: Callable[[bytes], None],
+    ) -> None:
+        pass
 
 
 class _FakeTripleStoreAdapter(ITripleStorePort):

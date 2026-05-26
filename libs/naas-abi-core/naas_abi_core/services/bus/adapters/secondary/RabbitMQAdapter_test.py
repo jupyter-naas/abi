@@ -49,8 +49,8 @@ def test_init_is_lazy(monkeypatch):
     connect.assert_not_called()
 
 
-def test_topic_publish_connects_and_publishes(adapter, channel):
-    adapter.topic_publish("topic", "routing.key", b"payload")
+def test_enqueue_connects_and_publishes(adapter, channel):
+    adapter.enqueue("topic", "routing.key", b"payload")
 
     channel.exchange_declare.assert_called_once_with(
         exchange="topic", exchange_type="topic", durable=True
@@ -62,9 +62,9 @@ def test_topic_publish_connects_and_publishes(adapter, channel):
     assert kwargs["properties"].delivery_mode == 2
 
 
-def test_topic_publish_reuses_declared_exchange(adapter, channel):
-    adapter.topic_publish("topic", "routing.key.1", b"payload-1")
-    adapter.topic_publish("topic", "routing.key.2", b"payload-2")
+def test_enqueue_reuses_declared_exchange(adapter, channel):
+    adapter.enqueue("topic", "routing.key.1", b"payload-1")
+    adapter.enqueue("topic", "routing.key.2", b"payload-2")
 
     channel.exchange_declare.assert_called_once_with(
         exchange="topic", exchange_type="topic", durable=True
@@ -72,13 +72,13 @@ def test_topic_publish_reuses_declared_exchange(adapter, channel):
     assert channel.basic_publish.call_count == 2
 
 
-def test_topic_publish_error_closes_connection(monkeypatch, connection, channel):
+def test_enqueue_error_closes_connection(monkeypatch, connection, channel):
     channel.exchange_declare.side_effect = RuntimeError("boom")
     monkeypatch.setattr(pika, "BlockingConnection", MagicMock(return_value=connection))
     adapter = RabbitMQAdapter("amqp://localhost")
 
     with pytest.raises(ConnectionError, match="RabbitMQ publish failed"):
-        adapter.topic_publish("topic", "routing.key", b"payload")
+        adapter.enqueue("topic", "routing.key", b"payload")
 
     channel.close.assert_called_once()
     connection.close.assert_called_once()
@@ -87,7 +87,7 @@ def test_topic_publish_error_closes_connection(monkeypatch, connection, channel)
 def test_close_closes_publish_connection(monkeypatch, connection, channel):
     monkeypatch.setattr(pika, "BlockingConnection", MagicMock(return_value=connection))
     adapter = RabbitMQAdapter("amqp://localhost")
-    adapter.topic_publish("topic", "routing.key", b"payload")
+    adapter.enqueue("topic", "routing.key", b"payload")
 
     adapter.close()
 
@@ -95,8 +95,8 @@ def test_close_closes_publish_connection(monkeypatch, connection, channel):
     connection.close.assert_called()
 
 
-def test_topic_consume_declares_exchange_and_queue(adapter, channel):
-    thread = adapter.topic_consume("topic", "routing.key", lambda _body: None)
+def test_dequeue_declares_exchange_and_queue(adapter, channel):
+    thread = adapter.dequeue("topic", "routing.key", lambda _body: None)
     _wait_for_thread(thread)
 
     queue_name = RabbitMQAdapter._durable_queue_name("topic", "routing.key")
@@ -118,9 +118,9 @@ def test_topic_consume_declares_exchange_and_queue(adapter, channel):
     channel.start_consuming.assert_called_once()
 
 
-def test_topic_consume_acks_on_success(adapter, channel):
+def test_dequeue_acks_on_success(adapter, channel):
     callback = MagicMock()
-    thread = adapter.topic_consume("topic", "routing.key", callback)
+    thread = adapter.dequeue("topic", "routing.key", callback)
     _wait_for_thread(thread)
 
     on_message = channel.basic_consume.call_args.kwargs["on_message_callback"]
@@ -133,11 +133,11 @@ def test_topic_consume_acks_on_success(adapter, channel):
     channel.basic_ack.assert_called_once_with(delivery_tag="tag")
 
 
-def test_topic_consume_nacks_on_failure(adapter, channel):
+def test_dequeue_nacks_on_failure(adapter, channel):
     def failing_callback(_body):
         raise ValueError("boom")
 
-    thread = adapter.topic_consume("topic", "routing.key", failing_callback)
+    thread = adapter.dequeue("topic", "routing.key", failing_callback)
     _wait_for_thread(thread)
 
     on_message = channel.basic_consume.call_args.kwargs["on_message_callback"]

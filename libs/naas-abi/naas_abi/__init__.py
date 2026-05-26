@@ -10,6 +10,7 @@ from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogSe
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -453,6 +454,7 @@ class ABIModule(BaseModule):
             CacheService,
             EmailService,
             ActivityLogService,
+            EventService,
         ],
     )
 

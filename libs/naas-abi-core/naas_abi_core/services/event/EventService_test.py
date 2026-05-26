@@ -21,19 +21,31 @@ from naas_abi_core.services.event.EventService import EventService, class_iri_to
 
 
 class _FakeBusAdapter(IBusAdapter):
-    """Records publishes; topic_consume registers a callback synchronously."""
+    """Records publishes; subscribe registers callbacks synchronously and
+    delivers to ALL of them per publish (pub/sub fanout)."""
 
     def __init__(self):
         self.published: list[tuple[str, str, bytes]] = []
+        self.enqueued: list[tuple[str, str, bytes]] = []
         self._subscribers: dict[str, list[Callable[[bytes], None]]] = {}
+        self._workers: dict[str, list[Callable[[bytes], None]]] = {}
 
-    def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+    def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
         self.published.append((topic, routing_key, payload))
         for cb in self._subscribers.get(topic, []):
             cb(payload)
 
-    def topic_consume(self, topic, routing_key, callback):
+    def subscribe(self, topic, routing_key, callback):
         self._subscribers.setdefault(topic, []).append(callback)
+        t = threading.Thread(target=lambda: None, daemon=True)
+        t.start()
+        return t
+
+    def enqueue(self, topic: str, routing_key: str, payload: bytes) -> None:
+        self.enqueued.append((topic, routing_key, payload))
+
+    def dequeue(self, topic, routing_key, callback):
+        self._workers.setdefault(topic, []).append(callback)
         t = threading.Thread(target=lambda: None, daemon=True)
         t.start()
         return t
@@ -87,10 +99,11 @@ def test_publish_persists_and_broadcasts(tmp_path):
     assert len(rows) == 1
     assert rows[0].payload == stored.payload
 
-    # Broadcast on the bus under the hashed topic
+    # Pub/sub-published on the bus under the hashed topic
     assert len(bus_adapter.published) == 1
     topic, routing_key, payload = bus_adapter.published[0]
     assert topic == class_iri_to_topic(UserAuthenticated._class_uri)
+    assert routing_key == evt._uri
     assert payload == stored.payload
 
 
@@ -156,7 +169,7 @@ def test_publish_persists_even_if_bus_fails(tmp_path):
     def boom(*args, **kwargs):
         raise RuntimeError("bus down")
 
-    bus_adapter.topic_publish = boom  # type: ignore[assignment]
+    bus_adapter.publish = boom  # type: ignore[assignment]
 
     evt = UserAuthenticated(user_id="bob")
     stored = service.publish(evt)
@@ -499,3 +512,61 @@ def test_class_iri_to_topic_is_deterministic_and_short():
     assert t1 == t2
     assert len(t1) <= 64
     assert "://" not in t1 and "#" not in t1
+
+
+# ---------------------------------------------------------------------------
+# Fanout: multiple subscribers each receive every event
+# ---------------------------------------------------------------------------
+
+
+def test_subscribe_fanout_across_multiple_subscribers(tmp_path):
+    """Two subscribers on the same event class must each receive every
+    published event (Redis-style pub/sub). Regression for the work-queue
+    semantics that previously dropped messages to the second subscriber."""
+    import time
+    from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
+        PythonQueueAdapter,
+    )
+
+    bus_adapter = PythonQueueAdapter(
+        persistence_path=str(tmp_path / "bus.sqlite"),
+        poll_interval_seconds=0.01,
+    )
+    bus = BusService(bus_adapter)
+    service = EventService(
+        adapter=EventSQLiteAdapter(str(tmp_path / "events.sqlite")),
+        bus=bus,
+    )
+
+    received_unfiltered: list[str] = []
+    received_pdf_only: list[str] = []
+    unfiltered_done = threading.Event()
+    pdf_done = threading.Event()
+
+    def cb_all(evt):
+        received_unfiltered.append(evt.user_id)
+        if len(received_unfiltered) == 3:
+            unfiltered_done.set()
+
+    def cb_pdf(evt):
+        received_pdf_only.append(evt.user_id)
+        pdf_done.set()
+
+    service.subscribe(UserAuthenticated, cb_all)
+    service.subscribe(
+        UserAuthenticated,
+        cb_pdf,
+        filter={"user_id": {"suffix": ".pdf"}},
+    )
+
+    # Let the subscriber loops capture initial cursor.
+    time.sleep(0.05)
+
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(UserAuthenticated(user_id="report.pdf"))
+    service.publish(UserAuthenticated(user_id="bob"))
+
+    assert unfiltered_done.wait(timeout=2)
+    assert pdf_done.wait(timeout=2)
+    assert received_unfiltered == ["alice", "report.pdf", "bob"]
+    assert received_pdf_only == ["report.pdf"]
