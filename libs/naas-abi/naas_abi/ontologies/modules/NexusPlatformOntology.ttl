@@ -280,7 +280,7 @@ nexus:hasProvider a owl:ObjectProperty ;
 
 # WHY — concretization pairs for workspace role
 nexus:hasWorkspaceRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isWorkspaceRoleOf ;
     rdfs:label "has workspace role"@en ;
     skos:definition "Relates a workspace to a workspace role that concretizes it in platform use."@en ;
@@ -288,7 +288,7 @@ nexus:hasWorkspaceRole a owl:ObjectProperty ;
     rdfs:range nexus:WorkspaceRole .
 
 nexus:isWorkspaceRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasWorkspaceRole ;
     rdfs:label "is workspace role of"@en ;
     skos:definition "Relates a workspace role to the workspace of which it is the role-side concretization."@en ;
@@ -297,7 +297,7 @@ nexus:isWorkspaceRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for search role
 nexus:hasSearchRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isSearchRoleOf ;
     rdfs:label "has search role"@en ;
     skos:definition "Relates a search artifact to a search role that concretizes it in platform use."@en ;
@@ -305,7 +305,7 @@ nexus:hasSearchRole a owl:ObjectProperty ;
     rdfs:range nexus:SearchRole .
 
 nexus:isSearchRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasSearchRole ;
     rdfs:label "is search role of"@en ;
     skos:definition "Relates a search role to the search artifact of which it is the role-side concretization."@en ;
@@ -314,7 +314,7 @@ nexus:isSearchRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for conversation role
 nexus:hasConversationRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isConversationRoleOf ;
     rdfs:label "has conversation role"@en ;
     skos:definition "Relates a conversation to a conversation role that concretizes it in platform use."@en ;
@@ -322,7 +322,7 @@ nexus:hasConversationRole a owl:ObjectProperty ;
     rdfs:range nexus:ConversationRole .
 
 nexus:isConversationRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasConversationRole ;
     rdfs:label "is conversation role of"@en ;
     skos:definition "Relates a conversation role to the conversation of which it is the role-side concretization."@en ;
@@ -331,7 +331,7 @@ nexus:isConversationRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for message role
 nexus:hasMessageRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isMessageRoleOf ;
     rdfs:label "has message role"@en ;
     skos:definition "Relates a message to a message role that concretizes it in platform use."@en ;
@@ -339,7 +339,7 @@ nexus:hasMessageRole a owl:ObjectProperty ;
     rdfs:range nexus:MessageRole .
 
 nexus:isMessageRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasMessageRole ;
     rdfs:label "is message role of"@en ;
     skos:definition "Relates a message role to the message of which it is the role-side concretization."@en ;
@@ -348,7 +348,7 @@ nexus:isMessageRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for agent role
 nexus:hasAgentRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isAgentRoleOf ;
     rdfs:label "has agent role"@en ;
     skos:definition "Relates an agent to an agent role that concretizes it in platform use."@en ;
@@ -356,7 +356,7 @@ nexus:hasAgentRole a owl:ObjectProperty ;
     rdfs:range nexus:AgentRole .
 
 nexus:isAgentRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasAgentRole ;
     rdfs:label "is agent role of"@en ;
     skos:definition "Relates an agent role to the agent of which it is the role-side concretization."@en ;
@@ -365,7 +365,7 @@ nexus:isAgentRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for ontology role
 nexus:hasOntologyRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isOntologyRoleOf ;
     rdfs:label "has ontology role"@en ;
     skos:definition "Relates an ontology to an ontology role that concretizes it in platform use."@en ;
@@ -373,7 +373,7 @@ nexus:hasOntologyRole a owl:ObjectProperty ;
     rdfs:range nexus:OntologyRole .
 
 nexus:isOntologyRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasOntologyRole ;
     rdfs:label "is ontology role of"@en ;
     skos:definition "Relates an ontology role to the ontology of which it is the role-side concretization."@en ;
@@ -382,7 +382,7 @@ nexus:isOntologyRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for ontology module role
 nexus:hasOntologyModuleRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isOntologyModuleRoleOf ;
     rdfs:label "has ontology module role"@en ;
     skos:definition "Relates an ontology module to an ontology module role that concretizes it in platform use."@en ;
@@ -390,7 +390,7 @@ nexus:hasOntologyModuleRole a owl:ObjectProperty ;
     rdfs:range nexus:OntologyModuleRole .
 
 nexus:isOntologyModuleRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasOntologyModuleRole ;
     rdfs:label "is ontology module role of"@en ;
     skos:definition "Relates an ontology module role to the ontology module of which it is the role-side concretization."@en ;
@@ -399,7 +399,7 @@ nexus:isOntologyModuleRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for ontology class role
 nexus:hasOntologyClassRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isOntologyClassRoleOf ;
     rdfs:label "has ontology class role"@en ;
     skos:definition "Relates an ontology class to an ontology class role that concretizes it in platform use."@en ;
@@ -407,7 +407,7 @@ nexus:hasOntologyClassRole a owl:ObjectProperty ;
     rdfs:range nexus:OntologyClassRole .
 
 nexus:isOntologyClassRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasOntologyClassRole ;
     rdfs:label "is ontology class role of"@en ;
     skos:definition "Relates an ontology class role to the ontology class of which it is the role-side concretization."@en ;
@@ -416,7 +416,7 @@ nexus:isOntologyClassRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for ontology object property role
 nexus:hasOntologyObjectPropertyRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isOntologyObjectPropertyRoleOf ;
     rdfs:label "has ontology object property role"@en ;
     skos:definition "Relates an ontology object property to an ontology object property role that concretizes it in platform use."@en ;
@@ -424,7 +424,7 @@ nexus:hasOntologyObjectPropertyRole a owl:ObjectProperty ;
     rdfs:range nexus:OntologyObjectPropertyRole .
 
 nexus:isOntologyObjectPropertyRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasOntologyObjectPropertyRole ;
     rdfs:label "is ontology object property role of"@en ;
     skos:definition "Relates an ontology object property role to the ontology object property of which it is the role-side concretization."@en ;
@@ -433,7 +433,7 @@ nexus:isOntologyObjectPropertyRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for knowledge graph role
 nexus:hasKnowledgeGraphRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isKnowledgeGraphRoleOf ;
     rdfs:label "has knowledge graph role"@en ;
     skos:definition "Relates a knowledge graph to a knowledge graph role that concretizes it in platform use."@en ;
@@ -441,7 +441,7 @@ nexus:hasKnowledgeGraphRole a owl:ObjectProperty ;
     rdfs:range nexus:KnowledgeGraphRole .
 
 nexus:isKnowledgeGraphRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasKnowledgeGraphRole ;
     rdfs:label "is knowledge graph role of"@en ;
     skos:definition "Relates a knowledge graph role to the knowledge graph of which it is the role-side concretization."@en ;
@@ -450,7 +450,7 @@ nexus:isKnowledgeGraphRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for graph view role
 nexus:hasGraphViewRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isGraphViewRoleOf ;
     rdfs:label "has graph view role"@en ;
     skos:definition "Relates a graph view to a graph view role that concretizes it in platform use."@en ;
@@ -458,7 +458,7 @@ nexus:hasGraphViewRole a owl:ObjectProperty ;
     rdfs:range nexus:GraphViewRole .
 
 nexus:isGraphViewRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasGraphViewRole ;
     rdfs:label "is graph view role of"@en ;
     skos:definition "Relates a graph view role to the graph view of which it is the role-side concretization."@en ;
@@ -467,7 +467,7 @@ nexus:isGraphViewRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for graph filter role
 nexus:hasGraphFilterRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isGraphFilterRoleOf ;
     rdfs:label "has graph filter role"@en ;
     skos:definition "Relates a graph filter to a graph filter role that concretizes it in platform use."@en ;
@@ -475,7 +475,7 @@ nexus:hasGraphFilterRole a owl:ObjectProperty ;
     rdfs:range nexus:GraphFilterRole .
 
 nexus:isGraphFilterRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasGraphFilterRole ;
     rdfs:label "is graph filter role of"@en ;
     skos:definition "Relates a graph filter role to the graph filter of which it is the role-side concretization."@en ;
@@ -484,7 +484,7 @@ nexus:isGraphFilterRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for file role
 nexus:hasFileRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isFileRoleOf ;
     rdfs:label "has file role"@en ;
     skos:definition "Relates a file artifact to a file role that concretizes it in platform use."@en ;
@@ -492,7 +492,7 @@ nexus:hasFileRole a owl:ObjectProperty ;
     rdfs:range nexus:FileRole .
 
 nexus:isFileRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasFileRole ;
     rdfs:label "is file role of"@en ;
     skos:definition "Relates a file role to the file artifact of which it is the role-side concretization."@en ;
@@ -501,7 +501,7 @@ nexus:isFileRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for file system role
 nexus:hasFileSystemRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isFileSystemRoleOf ;
     rdfs:label "has file system role"@en ;
     skos:definition "Relates a file system to a file system role that concretizes it in platform use."@en ;
@@ -509,7 +509,7 @@ nexus:hasFileSystemRole a owl:ObjectProperty ;
     rdfs:range nexus:FileSystemRole .
 
 nexus:isFileSystemRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasFileSystemRole ;
     rdfs:label "is file system role of"@en ;
     skos:definition "Relates a file system role to the file system of which it is the role-side concretization."@en ;
@@ -518,7 +518,7 @@ nexus:isFileSystemRoleOf a owl:ObjectProperty ;
 
 # WHY — concretization pairs for marketplace app role
 nexus:hasMarketplaceAppRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:isConcretizedBy ;
+    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isMarketplaceAppRoleOf ;
     rdfs:label "has marketplace app role"@en ;
     skos:definition "Relates a marketplace application to a marketplace application role that concretizes it in platform use."@en ;
@@ -526,7 +526,7 @@ nexus:hasMarketplaceAppRole a owl:ObjectProperty ;
     rdfs:range nexus:MarketplaceAppRole .
 
 nexus:isMarketplaceAppRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:concretizes ;
+    rdfs:subPropertyOf abi:inheresIn ;
     owl:inverseOf nexus:hasMarketplaceAppRole ;
     rdfs:label "is marketplace app role of"@en ;
     skos:definition "Relates a marketplace application role to the marketplace application of which it is the role-side concretization."@en ;
@@ -590,13 +590,180 @@ nexus:occursDuringSession a owl:ObjectProperty ;
     rdfs:domain nexus:PageView ;
     rdfs:range nexus:VisitSession .
 
-# WHAT — page-view concretizes a stored page artifact
-nexus:concretizes a owl:ObjectProperty ;
+# WHEN — visit session occupies its bounded temporal interval
+nexus:hasSessionInterval a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occupiesTemporalRegion ;
+    rdfs:label "has session interval"@en ;
+    skos:definition "Relates a visit-session process to the temporal interval that bounds its start and end."@en ;
+    rdfs:domain nexus:VisitSession ;
+    rdfs:range nexus:VisitSessionInterval .
+
+nexus:startedAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasFirstInstant ;
+    rdfs:label "start at"@en ;
+    skos:definition "Relates a visit-session interval to the temporal instant at which the session starts."@en ;
+    rdfs:domain nexus:VisitSessionInterval ;
+    rdfs:range abi:TemporalInstant .
+
+nexus:endedAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasLastInstant ;
+    rdfs:label "ended at"@en ;
+    skos:definition "Relates a visit-session interval to the temporal instant at which the session ends."@en ;
+    rdfs:domain nexus:VisitSessionInterval ;
+    rdfs:range abi:TemporalInstant .
+
+# WHO — visit session is started by a user
+nexus:startedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "started by"@en ;
+    skos:definition "Relates a visit-session process to the user account that started it."@en ;
+    rdfs:domain nexus:VisitSession ;
+    rdfs:range nexus:User .
+
+# WHAT — platform process performs CRUD on a generically dependent continuant artifact
+nexus:creates a owl:ObjectProperty ;
+    owl:inverseOf nexus:isCreatedBy ;
+    rdfs:label "creates"@en ;
+    skos:definition "Relates a platform process performed in the application to a generically dependent continuant artifact it creates."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:GenericallyDependentContinuant .
+
+nexus:isCreatedBy a owl:ObjectProperty ;
+    owl:inverseOf nexus:creates ;
+    rdfs:label "is created by"@en ;
+    skos:definition "Relates a generically dependent continuant artifact to the platform process that created it in the application."@en ;
+    rdfs:domain abi:GenericallyDependentContinuant ;
+    rdfs:range abi:Process .
+
+nexus:updates a owl:ObjectProperty ;
+    owl:inverseOf nexus:isUpdatedBy ;
+    rdfs:label "updates"@en ;
+    skos:definition "Relates a platform process performed in the application to a generically dependent continuant artifact it modifies."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:GenericallyDependentContinuant .
+
+nexus:isUpdatedBy a owl:ObjectProperty ;
+    owl:inverseOf nexus:updates ;
+    rdfs:label "is updated by"@en ;
+    skos:definition "Relates a generically dependent continuant artifact to a platform process that modified it in the application."@en ;
+    rdfs:domain abi:GenericallyDependentContinuant ;
+    rdfs:range abi:Process .
+
+nexus:deletes a owl:ObjectProperty ;
+    owl:inverseOf nexus:isDeletedBy ;
+    rdfs:label "deletes"@en ;
+    skos:definition "Relates a platform process performed in the application to a generically dependent continuant artifact it removes or retires."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:GenericallyDependentContinuant .
+
+nexus:isDeletedBy a owl:ObjectProperty ;
+    owl:inverseOf nexus:deletes ;
+    rdfs:label "is deleted by"@en ;
+    skos:definition "Relates a generically dependent continuant artifact to the platform process that deleted or retired it in the application."@en ;
+    rdfs:domain abi:GenericallyDependentContinuant ;
+    rdfs:range abi:Process .
+
+# WHEN — process occurred at a temporal instant (e.g. user creation, workspace creation)
+nexus:createdAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occupiesTemporalRegion ;
+    rdfs:label "created at"@en ;
+    skos:definition "Relates a platform process to the temporal instant at which it occurred."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:TemporalInstant .
+
+# WHO — process was initiated by an agent
+nexus:createdBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "created by"@en ;
+    skos:definition "Relates a platform process to the agent (user or person) who initiated it."@en ;
+    rdfs:domain abi:Process .
+
+# WHO — process was performed for a person
+nexus:createdFor a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "created for"@en ;
+    skos:definition "Relates a platform process to the person for whom it was performed."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:Person .
+
+# WHAT — login process initiates a visit session
+nexus:initiatesSession a owl:ObjectProperty ;
+    rdfs:label "initiates session"@en ;
+    skos:definition "Relates a login process to the visit session that it initiates."@en ;
+    rdfs:domain nexus:Login ;
+    rdfs:range nexus:VisitSession .
+
+# WHAT — logout process terminates a session artifact
+nexus:terminates a owl:ObjectProperty ;
+    rdfs:label "terminates"@en ;
+    skos:definition "Relates a logout process to the session artifact it terminates."@en ;
+    rdfs:domain nexus:Logout ;
+    rdfs:range nexus:Session .
+
+# WHAT — logout process terminates a visit session
+nexus:terminatesSession a owl:ObjectProperty ;
+    rdfs:label "terminates session"@en ;
+    skos:definition "Relates a logout process to the visit session it terminates."@en ;
+    rdfs:domain nexus:Logout ;
+    rdfs:range nexus:VisitSession .
+
+# WHAT — login process realizes an authentication status
+nexus:realizes a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:realizes ;
+    rdfs:label "realizes"@en ;
+    skos:definition "Relates a login process to the authentication status that results from it."@en ;
+    rdfs:domain nexus:Login ;
+    rdfs:range nexus:AuthenticationStatus .
+
+# WHAT — page-view process targets the page artifact visited
+nexus:hasVisitedPage a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:concretizes ;
-    rdfs:label "concretizes"@en ;
-    skos:definition "Relates a page-view process to the page artifact (generically dependent continuant) it concretizes when rendered."@en ;
+    owl:inverseOf nexus:isVisitedPageOf ;
+    rdfs:label "has visited page"@en ;
+    skos:definition "Relates a page-view process to the page artifact (generically dependent continuant) that the user viewed during that process."@en ;
     rdfs:domain nexus:PageView ;
     rdfs:range nexus:Page .
+
+nexus:isVisitedPageOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
+    owl:inverseOf nexus:hasVisitedPage ;
+    rdfs:label "is visited page of"@en ;
+    skos:definition "Relates a page artifact to the page-view process in which it was visited."@en ;
+    rdfs:domain nexus:Page ;
+    rdfs:range nexus:PageView .
+
+# HOW WE KNOW — platform session artifact depends on user and user-side site during an app visit
+nexus:dependsOnUser a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf nexus:hasSession ;
+    rdfs:label "depends on user"@en ;
+    skos:definition "Relates a platform session artifact to the user account on which it generically depends when the user visits the application."@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range nexus:User .
+
+nexus:hasSession a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf nexus:dependsOnUser ;
+    rdfs:label "has session"@en ;
+    skos:definition "Relates a user account to a platform session artifact it carries during an application visit."@en ;
+    rdfs:domain nexus:User ;
+    rdfs:range nexus:Session .
+
+nexus:dependsOnUserSite a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf nexus:isSessionContextOf ;
+    rdfs:label "depends on user site"@en ;
+    skos:definition "Relates a platform session artifact to the user-side site (device, browser, country context) on which it generically depends when the user visits the application."@en ;
+    rdfs:domain nexus:Session ;
+    rdfs:range nexus:UserSite .
+
+nexus:isSessionContextOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf nexus:dependsOnUserSite ;
+    rdfs:label "is session context of"@en ;
+    skos:definition "Relates a user-side site to a platform session artifact that generically depends on it during an application visit."@en ;
+    rdfs:domain nexus:UserSite ;
+    rdfs:range nexus:Session .
 
 #################################################################
 #    Classes
@@ -1059,17 +1226,60 @@ nexus:AIModel a owl:Class ;
 nexus:Page a owl:Class ;
     rdfs:label "Page"@en ;
     skos:altLabel "Platform Page"@en ;
-    skos:definition "A generically dependent continuant representing a navigable page artifact of the Nexus platform, identified by its path and title and concretized by page-view processes."@en ;
+    skos:definition "A generically dependent continuant representing a navigable page artifact of the Nexus platform, identified by its path and title and visited in page-view processes."@en ;
     skos:example "/workspace/ws-ee0d7c1d56b2/lab", "/analytics"@en ;
     rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
-          owl:onProperty nexus:page_path ;
+          owl:onProperty nexus:isVisitedPageOf ;
+          owl:allValuesFrom nexus:PageView
+        ] .
+
+# HOW WE KNOW bucket — platform session artifact (generically dependent continuant)
+nexus:Session a owl:Class ;
+    rdfs:label "Session"@en ;
+    skos:altLabel "Platform Session"@en ;
+    skos:definition "A generically dependent continuant representing the platform session artifact created when a user visits the application, identified by client device and browser and linked to a user account and user-side site."@en ;
+    skos:example "Alice's authenticated session d292a58c-52a1-4892-ba54-3083db5e580d on Windows / Chrome"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:session_id ;
           owl:someValuesFrom xsd:string
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty nexus:page_title ;
+          owl:onProperty nexus:device ;
           owl:someValuesFrom xsd:string
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:browser ;
+          owl:someValuesFrom xsd:string
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:dependsOnUser ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:dependsOnUser ;
+          owl:allValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:dependsOnUserSite ;
+          owl:someValuesFrom nexus:UserSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:dependsOnUserSite ;
+          owl:allValuesFrom nexus:UserSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isCreatedBy ;
+          owl:someValuesFrom nexus:VisitSession
         ] .
+
+# HOW WE KNOW — authentication status artifact produced by a login process
+nexus:AuthenticationStatus a owl:Class ;
+    rdfs:label "Authentication Status"@en ;
+    skos:definition "A generically dependent continuant representing the result or status of an authentication process in the Nexus platform, such as successful or failed authentication."@en ;
+    skos:example "Authentication successful for Alice", "Authentication failed: invalid credentials for Bob"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant .
 
 # Role (WHY)
 
@@ -1321,7 +1531,7 @@ nexus:CreateUser a owl:Class ;
           owl:allValuesFrom abi:Person
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty abi:creates ;
+          owl:onProperty nexus:creates ;
           owl:someValuesFrom nexus:User
         ] .
 
@@ -1338,7 +1548,7 @@ nexus:CreateWorkspace a owl:Class ;
           owl:allValuesFrom abi:Person
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty abi:creates ;
+          owl:onProperty nexus:creates ;
           owl:someValuesFrom nexus:Workspace
         ] .
 
@@ -1355,11 +1565,11 @@ nexus:AddUserToWorkspace a owl:Class ;
           owl:allValuesFrom abi:Person
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty abi:updates ;
+          owl:onProperty nexus:updates ;
           owl:someValuesFrom nexus:User
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty abi:updates ;
+          owl:onProperty nexus:updates ;
           owl:someValuesFrom nexus:Workspace
         ] .
 
@@ -1394,6 +1604,44 @@ nexus:Login a owl:Class ;
           owl:someValuesFrom nexus:VisitSession
         ] .
 
+# WHEN — temporal interval bounding a login process
+nexus:LoginInterval a owl:Class ;
+    rdfs:label "Login Interval"@en ;
+    skos:definition "A one-dimensional temporal region that bounds a login process, from the start of the authentication attempt to its completion."@en ;
+    skos:example "Login interval for Alice at 2026-05-21 10:00:00 to 10:00:02"@en ;
+    rdfs:subClassOf abi:TemporalRegion .
+
+# WHEN — temporal interval bounding a logout process
+nexus:LogoutInterval a owl:Class ;
+    rdfs:label "Logout Interval"@en ;
+    skos:definition "A one-dimensional temporal region that bounds a logout process, from the start of the logout action to its completion."@en ;
+    skos:example "Logout interval for Alice at 2026-05-21 10:22:00 to 10:22:01"@en ;
+    rdfs:subClassOf abi:TemporalRegion .
+
+# WHEN — temporal interval bounding a visit session
+nexus:VisitSessionInterval a owl:Class ;
+    rdfs:label "Visit Session Interval"@en ;
+    skos:altLabel "Session Interval"@en , "Browsing Session Interval"@en ;
+    skos:definition "A one-dimensional temporal region that bounds a visit-session process, delimited by a start instant and an end instant."@en ;
+    skos:example "Alice's visit on 2026-05-21 from 09:14 to 09:36"@en ;
+    rdfs:subClassOf abi:TemporalRegion ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:startedAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:startedAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:endedAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:endedAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] .
+
 nexus:VisitSession a owl:Class ;
     rdfs:label "Visit Session"@en ;
     skos:altLabel "Session"@en , "User Session"@en , "Browsing Session"@en ;
@@ -1401,48 +1649,24 @@ nexus:VisitSession a owl:Class ;
     skos:example "Alice's 22-minute browsing session in workspace 'Naas.ai Main' on 2026-05-21", "An anonymous mobile visit lasting 3 minutes"@en ;
     rdfs:subClassOf bfo:BFO_0000015 ,
         [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000199 ;
+          owl:onProperty nexus:hasSessionInterval ;
           owl:someValuesFrom nexus:VisitSessionInterval
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000199 ;
+          owl:onProperty nexus:hasSessionInterval ;
           owl:allValuesFrom nexus:VisitSessionInterval
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000057 ;
+          owl:onProperty nexus:startedBy ;
           owl:someValuesFrom nexus:User
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000066 ;
-          owl:someValuesFrom nexus:DeploymentSite
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:occursIn ;
           owl:someValuesFrom nexus:UserSite
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty nexus:occursInWorkspace ;
-          owl:someValuesFrom nexus:Workspace
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty nexus:session_id ;
-          owl:someValuesFrom xsd:string
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000059 ;
+          owl:onProperty nexus:creates ;
           owl:someValuesFrom nexus:Session
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000059 ;
-          owl:someValuesFrom nexus:Log
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000057 ;
-          owl:someValuesFrom nexus:UserEngagementQuality
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000055 ;
-          owl:someValuesFrom nexus:VisitorRole
         ] .
 
 nexus:PageView a owl:Class ;
@@ -1472,16 +1696,12 @@ nexus:PageView a owl:Class ;
           owl:someValuesFrom nexus:VisitSession
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty nexus:concretizes ;
+          owl:onProperty nexus:hasVisitedPage ;
           owl:someValuesFrom nexus:Page
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty nexus:event_id ;
-          owl:someValuesFrom xsd:string
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty bfo:BFO_0000059 ;
-          owl:someValuesFrom nexus:Log
+          owl:onProperty nexus:hasVisitedPage ;
+          owl:allValuesFrom nexus:Page
         ] .
 
 nexus:Logout a owl:Class ;
@@ -1638,9 +1858,9 @@ nexus:event_id a owl:DatatypeProperty ;
 
 nexus:session_id a owl:DatatypeProperty ;
     rdfs:label "session id"@en ;
-    rdfs:domain nexus:VisitSession ;
+    rdfs:domain nexus:Session, nexus:VisitSession ;
     rdfs:range xsd:string ;
-    skos:definition "The unique identifier of a visit session in the Nexus platform."@en ;
+    skos:definition "The unique identifier of a platform session artifact or visit-session process in the Nexus platform."@en ;
     skos:example "d292a58c-52a1-4892-ba54-3083db5e580d" .
 
 # Workspace identification
@@ -1686,14 +1906,23 @@ nexus:country a owl:DatatypeProperty ;
 
 nexus:device a owl:DatatypeProperty ;
     rdfs:label "device"@en ;
-    rdfs:domain nexus:UserSite ;
+    rdfs:domain nexus:UserSite, nexus:Session ;
     rdfs:range xsd:string ;
-    skos:definition "The operating system or device class detected for the end user during a platform process."@en ;
+    skos:definition "The operating system or device class detected for the end user during a platform process or recorded on a session artifact."@en ;
     skos:example "Windows", "macOS", "iOS", "Android" .
 
 nexus:browser a owl:DatatypeProperty ;
     rdfs:label "browser"@en ;
-    rdfs:domain nexus:UserSite ;
+    rdfs:domain nexus:UserSite, nexus:Session ;
     rdfs:range xsd:string ;
-    skos:definition "The web browser detected for the end user during a platform process."@en ;
+    skos:definition "The web browser detected for the end user during a platform process or recorded on a session artifact."@en ;
     skos:example "Chrome", "Safari", "Firefox", "Edge" .
+
+# Page-view referrer
+
+nexus:referrer a owl:DatatypeProperty ;
+    rdfs:label "referrer"@en ;
+    rdfs:domain nexus:PageView ;
+    rdfs:range xsd:string ;
+    skos:definition "The HTTP referrer (originating page or host) recorded at the time of a page-view process."@en ;
+    skos:example "nexus.localhost", "https://google.com" .
