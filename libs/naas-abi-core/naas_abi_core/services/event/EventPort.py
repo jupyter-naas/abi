@@ -50,9 +50,14 @@ class IEventAdapter(ABC):
         until_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
+        json_filter: dict | None = None,
         limit: int | None = None,
     ) -> list[StoredEvent]:
-        """Read events matching the filters, ordered by `seq` ascending."""
+        """Read events matching the filters, ordered by `seq` ascending.
+
+        ``json_filter`` is an EventBridge-style dict translated by the adapter
+        into backend-native pushdown (SQLite JSON1 for the SQLite adapter).
+        """
 
     @abstractmethod
     def max_seq(self, event_type: str | None = None) -> int:
@@ -99,6 +104,7 @@ class IEventService(ABC):
         until_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
+        filter: dict | None = None,
         limit: int | None = None,
     ) -> list[Any]:
         """Return reconstructed event instances matching the filters."""
@@ -110,6 +116,7 @@ class IEventService(ABC):
         since_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
+        filter: dict | None = None,
         limit: int | None = None,
         batch_size: int = 500,
     ) -> Iterator[Any]:

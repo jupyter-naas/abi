@@ -17,10 +17,9 @@ import hashlib
 from threading import Thread
 from typing import Any, Callable, Iterator
 
-from rdflib import Graph
-
 from naas_abi_core import logger
 from naas_abi_core.services.bus.BusService import BusService
+from naas_abi_core.services.event import EventCodec, EventFilter
 from naas_abi_core.services.event.EventPort import (
     IEventAdapter,
     IEventService,
@@ -82,7 +81,7 @@ class EventService(ServiceBase, IEventService):
             event.created_at = created_at
         timestamp = created_at.isoformat()
 
-        payload = event.rdf().serialize(format="nt", encoding="utf-8")
+        payload = EventCodec.serialize(event)
 
         stored = self._adapter.append(event_id, event_type, timestamp, payload)
 
@@ -110,8 +109,15 @@ class EventService(ServiceBase, IEventService):
         until_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
+        filter: dict | None = None,
         limit: int | None = None,
     ) -> list[Any]:
+        """Read events.
+
+        ``filter`` is an EventBridge-style dict; see :mod:`EventFilter` for
+        the supported syntax. Translated to SQLite JSON1 SQL — pushdown
+        happens at the adapter, not in Python.
+        """
         event_type = str(event_class._class_uri) if event_class is not None else None
         rows = self._adapter.query(
             event_type=event_type,
@@ -119,6 +125,7 @@ class EventService(ServiceBase, IEventService):
             until_seq=until_seq,
             since_timestamp=since_timestamp,
             until_timestamp=until_timestamp,
+            json_filter=filter,
             limit=limit,
         )
         return [self._reconstruct(row, event_class) for row in rows]
@@ -129,6 +136,7 @@ class EventService(ServiceBase, IEventService):
         since_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,
+        filter: dict | None = None,
         limit: int | None = None,
         batch_size: int = 500,
     ) -> Iterator[Any]:
@@ -163,6 +171,7 @@ class EventService(ServiceBase, IEventService):
                 until_seq=snapshot_max,
                 since_timestamp=since_timestamp,
                 until_timestamp=until_timestamp,
+                json_filter=filter,
                 limit=fetch_size,
             )
             if not rows:
@@ -235,7 +244,16 @@ class EventService(ServiceBase, IEventService):
         event_class: type[LogProcess],
         callback: Callable[[Any], None],
         routing_key: str = "#",
+        filter: dict | None = None,
     ) -> Thread:
+        """Subscribe to live events.
+
+        ``filter`` (optional) is evaluated in-memory against each incoming
+        event; non-matching events skip the callback. Same dict syntax as
+        :meth:`query`. Filtering happens client-side because the bus is just
+        a transport — pre-filtering at publish-time would require the
+        publisher to know each subscriber's filter.
+        """
         if self._bus is None:
             raise RuntimeError("EventService.subscribe requires a BusService")
 
@@ -243,6 +261,12 @@ class EventService(ServiceBase, IEventService):
 
         def _on_message(payload: bytes) -> None:
             try:
+                if filter:
+                    # Fast path: evaluate filter against the raw JSON dict
+                    # before the (more expensive) Pydantic reconstruction.
+                    import json
+                    if not EventFilter.matches(json.loads(payload), filter):
+                        return
                 row = StoredEvent(
                     id="",
                     event_type=str(event_class._class_uri),
@@ -264,38 +288,14 @@ class EventService(ServiceBase, IEventService):
     def _reconstruct(
         self, row: StoredEvent, hint_class: type[LogProcess] | None
     ) -> Any:
-        """Rebuild a LogProcess instance from a stored RDF payload.
+        """Rebuild a LogProcess instance from a stored JSON payload.
 
-        If `hint_class` is given, use it. Otherwise look up the class by its IRI
-        in the subclass index; if unknown, fall back to LogProcess.
+        Uses ``hint_class`` if given; otherwise EventCodec resolves the
+        target class via the stored ``_class_uri`` (falling back to
+        LogProcess). Unknown fields in the stored JSON are dropped to allow
+        forward-compatible class evolution.
         """
-        cls: type[LogProcess]
-        if hint_class is not None:
-            cls = hint_class
-        else:
-            index = _build_subclass_index()
-            cls = index.get(row.event_type, LogProcess)
-
-        graph = Graph()
-        graph.parse(data=row.payload, format="nt")
-
-        # Find the event subject IRI in the graph if we don't have it (subscribe path).
-        subject_iri = row.id
-        if not subject_iri:
-            from rdflib import RDF, URIRef
-
-            for s, _, _ in graph.triples(
-                (None, RDF.type, URIRef(row.event_type))
-            ):
-                subject_iri = str(s)
-                break
-
-        instance = cls.from_iri(subject_iri, query_executor=graph.query)
-
-        # Attach storage metadata as private attrs (bypass Pydantic validation).
-        # `_seq` is the global monotonic counter; `_stored_at` is the ISO
-        # timestamp the adapter persisted. These are storage concerns, not
-        # part of the event's domain schema.
+        instance = EventCodec.deserialize(row.payload, hint_class=hint_class)
         object.__setattr__(instance, "_seq", row.seq)
         object.__setattr__(instance, "_stored_at", row.timestamp)
         return instance
