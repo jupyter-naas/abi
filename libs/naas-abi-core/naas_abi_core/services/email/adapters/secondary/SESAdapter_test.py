@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import email
 from typing import Any
 
 import pytest
@@ -16,10 +17,10 @@ from naas_abi_core.services.email.tests.email__secondary_adapter__generic_test i
 
 class _FakeSESClient:
     def __init__(self) -> None:
-        self.send_email_calls: list[dict[str, Any]] = []
+        self.send_raw_email_calls: list[dict[str, Any]] = []
 
-    def send_email(self, **kwargs: Any) -> dict[str, Any]:
-        self.send_email_calls.append(kwargs)
+    def send_raw_email(self, **kwargs: Any) -> dict[str, Any]:
+        self.send_raw_email_calls.append(kwargs)
         return {"MessageId": "fake-message-id"}
 
 
@@ -31,6 +32,10 @@ class _BotoClientFactory:
     def __call__(self, service_name: str, **kwargs: Any) -> _FakeSESClient:
         self.calls.append({"service_name": service_name, **kwargs})
         return self.client
+
+
+def _parse_raw_message(call: dict[str, Any]) -> email.message.Message:
+    return email.message_from_bytes(call["RawMessage"]["Data"])
 
 
 class TestSESAdapter(GenericEmailSecondaryAdapterTest):
@@ -51,17 +56,21 @@ class TestSESAdapter(GenericEmailSecondaryAdapterTest):
         )
 
         assert factory.calls == [{"service_name": "ses", "region_name": "us-east-1"}]
-        assert len(factory.client.send_email_calls) == 1
-        call = factory.client.send_email_calls[0]
+        assert len(factory.client.send_raw_email_calls) == 1
+        call = factory.client.send_raw_email_calls[0]
         assert call["Source"] == "noreply@example.com"
-        assert call["Destination"] == {"ToAddresses": ["alice@example.com"]}
-        assert call["Message"]["Subject"] == {"Data": "Hello", "Charset": "UTF-8"}
-        assert call["Message"]["Body"]["Text"] == {
-            "Data": "Hello world",
-            "Charset": "UTF-8",
-        }
-        assert "Html" not in call["Message"]["Body"]
-        assert "ReplyToAddresses" not in call
+        assert call["Destinations"] == ["alice@example.com"]
+
+        msg = _parse_raw_message(call)
+        assert msg["To"] == "alice@example.com"
+        assert msg["Subject"] == "Hello"
+        assert msg["From"] == "noreply@example.com"
+        assert msg.get("Reply-To") is None
+        assert "Hello world" in msg.get_payload(decode=False) if not msg.is_multipart() else any(
+            "Hello world" in part.get_payload(decode=True).decode()
+            for part in msg.walk()
+            if part.get_content_type() == "text/plain"
+        )
 
     def test_send_html_email_with_from_name_and_reply_to(self, monkeypatch) -> None:
         factory = _BotoClientFactory()
@@ -78,13 +87,20 @@ class TestSESAdapter(GenericEmailSecondaryAdapterTest):
             reply_to="support@example.com",
         )
 
-        call = factory.client.send_email_calls[-1]
-        assert call["Source"] == "NEXUS <noreply@example.com>"
-        assert call["Message"]["Body"]["Html"] == {
-            "Data": "<p>html</p>",
-            "Charset": "UTF-8",
-        }
-        assert call["ReplyToAddresses"] == ["support@example.com"]
+        call = factory.client.send_raw_email_calls[-1]
+        assert call["Source"] == "noreply@example.com"
+        assert call["Destinations"] == ["bob@example.com"]
+
+        msg = _parse_raw_message(call)
+        assert msg["From"] == "NEXUS <noreply@example.com>"
+        assert msg["Reply-To"] == "support@example.com"
+        assert msg["Subject"] == "Hi Bob"
+        assert msg.is_multipart()
+        parts = {part.get_content_type(): part for part in msg.walk()}
+        assert "text/plain" in parts
+        assert "text/html" in parts
+        assert "plain" in parts["text/plain"].get_payload(decode=True).decode()
+        assert "<p>html</p>" in parts["text/html"].get_payload(decode=True).decode()
 
     def test_explicit_credentials_passed_to_boto_client(self, monkeypatch) -> None:
         factory = _BotoClientFactory()
@@ -124,4 +140,4 @@ class TestSESAdapter(GenericEmailSecondaryAdapterTest):
             from_email="noreply@example.com",
         )
 
-        assert len(client.send_email_calls) == 1
+        assert len(client.send_raw_email_calls) == 1
