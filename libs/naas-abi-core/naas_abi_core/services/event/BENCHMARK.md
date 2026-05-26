@@ -1,6 +1,6 @@
 # EventService — benchmarks
 
-Single-process microbench on macOS arm64 (Apple Silicon, Python 3.11.9). Numbers are median of 3 runs, freshly-created SQLite file per run. Events have 4 string properties on top of `LogProcess`. See [`benchmark.py`](../../../../../libs/naas-abi-core/naas_abi_core/services/event/benchmark.py).
+Single-process microbench on macOS arm64 (Apple Silicon, Python 3.11.9). Numbers are median of 3 runs, freshly-created SQLite file per run. Events have 4 string properties on top of `LogProcess`. See [`benchmark.py`](./benchmark.py).
 
 Run yourself:
 ```bash
