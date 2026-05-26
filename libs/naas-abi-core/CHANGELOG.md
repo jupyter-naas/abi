@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.44.0 (2026-05-26)
+
+### Features
+
+- **email**: Add AWS SES secondary adapter
+  ([`0bf4302`](https://github.com/jupyter-naas/abi/commit/0bf43023d352bd1e40a04d8ff4f3b3fd250f22fa))
+
+### Refactoring
+
+- **email**: Make SESAdapter iso with SMTP/Filesystem adapters
+  ([`5359b64`](https://github.com/jupyter-naas/abi/commit/5359b64f9a4b9f27e6e6195f60856e3649492d04))
+
+
 ## v1.43.0 (2026-05-19)
 
 ### Bug Fixes
