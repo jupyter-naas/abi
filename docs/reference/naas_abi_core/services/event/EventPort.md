@@ -49,7 +49,7 @@ Events themselves are not modeled in this port: a published event must be an ins
 
 ```python
 from naas_abi_core.services.event.EventPort import IEventService
-from naas_abi_core.services.event.event_ontology import LogProcess
+from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 
 def emit(svc: IEventService, evt: LogProcess) -> None:
     svc.publish(evt)

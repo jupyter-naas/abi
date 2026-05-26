@@ -10,7 +10,7 @@ from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
     EventSQLiteAdapter,
 )
-from naas_abi_core.services.event.event_ontology import LogProcess
+from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 from naas_abi_core.services.event.EventPort import InvalidEventError
 from naas_abi_core.services.event.EventService import EventService, class_iri_to_topic
 
