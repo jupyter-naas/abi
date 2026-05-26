@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.43.0 (2026-05-19)
+
+### Bug Fixes
+
+- **activity_log**: Expose service via EngineProxy
+  ([`82bd72a`](https://github.com/jupyter-naas/abi/commit/82bd72ad150311598469aebccc513584661bc21b))
+
+### Chores
+
+- **api**: Add early boot timestamps to api module
+  ([`4c57250`](https://github.com/jupyter-naas/abi/commit/4c57250d6254afc4eeee4134c450dcf0792fbcb8))
+
+### Features
+
+- **activity_log**: Per-actor SQLite activity ledger + Nexus HTTP middleware
+  ([`fd7c558`](https://github.com/jupyter-naas/abi/commit/fd7c5585e8936967c66cdafc593ab4a036aac239))
+
+
 ## v1.42.0 (2026-05-18)
 
 
