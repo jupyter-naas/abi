@@ -2236,7 +2236,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.4.0"
+version = "2.5.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -2436,7 +2436,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "1.23.0"
+version = "1.24.0"
 source = { editable = "../naas-abi-marketplace" }
 dependencies = [
     { name = "naas-abi-core" },
@@ -2454,6 +2454,7 @@ requires-dist = [
     { name = "google-api-python-client", marker = "extra == 'applications-gmail'", specifier = ">=2.188.0" },
     { name = "google-api-python-client-stubs", marker = "extra == 'applications-gmail'", specifier = ">=1.31.0" },
     { name = "langchain-anthropic", marker = "extra == 'ai-claude'", specifier = ">=0.3.17" },
+    { name = "langchain-aws", marker = "extra == 'ai-bedrock'", specifier = ">=0.2.10" },
     { name = "langchain-google-genai", marker = "extra == 'ai-gemini'", specifier = ">=2.1.4" },
     { name = "langchain-mistralai", marker = "extra == 'ai-mistral'", specifier = ">=0.2.11" },
     { name = "langchain-ollama", marker = "extra == 'ai-deepseek'", specifier = ">=0.3.4" },
@@ -2480,7 +2481,7 @@ requires-dist = [
     { name = "yahooquery", marker = "extra == 'applications-yahoofinance'", specifier = "==2.4.1" },
     { name = "yfinance", marker = "extra == 'applications-yahoofinance'", specifier = "==0.2.66" },
 ]
-provides-extras = ["ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-airtable", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-datagouv", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-gmail", "applications-google-calendar", "applications-google-drive", "applications-google-sheets", "applications-googlesearch", "applications-hubspot", "applications-linkedin", "applications-naas", "applications-nebari", "applications-newsapi", "applications-notion", "applications-openrouter", "applications-openweathermap", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-sharepoint", "applications-spotify", "applications-twilio", "applications-worldbank", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
+provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-airtable", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-datagouv", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-gmail", "applications-google-calendar", "applications-google-drive", "applications-google-sheets", "applications-googlesearch", "applications-hubspot", "applications-linkedin", "applications-naas", "applications-nebari", "applications-newsapi", "applications-notion", "applications-openrouter", "applications-openweathermap", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-sharepoint", "applications-spotify", "applications-twilio", "applications-worldbank", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
 
 [package.metadata.requires-dev]
 dev = [
