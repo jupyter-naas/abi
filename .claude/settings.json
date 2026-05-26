@@ -1,0 +1,8 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "network": {
+      "allowedDomains": ["fonts.googleapis.com", "fonts.gstatic.com"]
+    }
+  }
+}

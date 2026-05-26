@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v2.5.0 (2026-05-26)
+
+
+## v2.4.0 (2026-05-21)
+
+### Bug Fixes
+
+- Suppress commit hooks for GitAgent commit
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update naas-abi package versions in uv.lock
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update timeout and retry settings in docker-compose healthcheck
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Features
+
+- Add category fields to app manifests in the marketplace
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Refactoring
+
+- **apps**: Change app catalog discovery to use loaded modules
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+
 ## v2.3.0 (2026-05-21)
 
 ### Features
