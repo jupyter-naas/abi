@@ -27,7 +27,7 @@ from naas_abi_core.services.event.EventPort import (
     InvalidEventError,
     StoredEvent,
 )
-from naas_abi_core.services.event.event_ontology import LogProcess
+from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
