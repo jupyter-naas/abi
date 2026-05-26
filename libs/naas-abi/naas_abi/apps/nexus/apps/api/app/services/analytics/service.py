@@ -62,9 +62,9 @@ SCENARIO_FILE = "ref-scenario.json"
 REF_USERS_FILE = "ref-users.json"
 REF_WORKSPACES_FILE = "ref-workspaces.json"
 
-RECENT_EVENTS_LIMIT = 1000
+RECENT_EVENTS_LIMIT = 100
 
-_REBUILD_DEBOUNCE_SECONDS = 1.5
+_REBUILD_DEBOUNCE_SECONDS = 10
 
 _CHAT_CONV_PATH_RE = re.compile(r"/chat/(conv-[^/?#]+)")
 
