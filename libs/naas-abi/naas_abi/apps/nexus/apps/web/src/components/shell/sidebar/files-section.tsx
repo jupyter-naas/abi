@@ -15,6 +15,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const platformDriveEnabled = Boolean(currentWorkspace?.platformDriveEnabled);
+  const systemDriveEnabled = Boolean(currentWorkspace?.systemDriveEnabled);
   const workspaceRole = currentWorkspace?.currentUserRole;
   const isWorkspaceAdmin = workspaceRole === 'owner' || workspaceRole === 'admin';
   const {
@@ -47,7 +48,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
             className={cn('transition-transform', fileExpandedCategories.includes('local') && 'rotate-90')}
           />
           <span className="flex-1 truncate text-left">Local</span>
-          <span className="text-[10px]">{2 + (platformDriveEnabled ? 1 : 0) + (isWorkspaceAdmin ? 1 : 0) + syncedFolders.length}</span>
+          <span className="text-[10px]">{2 + (platformDriveEnabled ? 1 : 0) + (isWorkspaceAdmin && systemDriveEnabled ? 1 : 0) + syncedFolders.length}</span>
         </button>
         {fileExpandedCategories.includes('local') && (
           <div className="ml-3 space-y-0.5">
@@ -99,7 +100,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
               </button>
             )}
 
-            {isWorkspaceAdmin && (
+            {isWorkspaceAdmin && systemDriveEnabled && (
               <button
                 onClick={() => {
                   setActiveSource('system-drive');
