@@ -10,6 +10,7 @@ from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogSe
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -20,6 +21,10 @@ from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreSe
 
 SERVICES_DEPENDENCIES = {
     TripleStoreService: [BusService],
+    # EventService uses the bus for live broadcast on publish() and as the
+    # transport for subscribe(); requesting the event service should pull
+    # the bus in too.
+    EventService: [BusService],
 }
 
 
@@ -78,6 +83,9 @@ class EngineServiceLoader:
             else None,
             activity_log=self.__configuration.services.activity_log.load()
             if self._should_load_service(ActivityLogService, services_to_load)
+            else None,
+            events=self.__configuration.services.event.load()
+            if self._should_load_service(EventService, services_to_load)
             else None,
         )
         services.wire_services()

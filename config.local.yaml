@@ -252,6 +252,16 @@ services:
       config:
         rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@rabbitmq:5672"
 
+  # Q: Where is the durable event log stored, and how do live listeners find each other?
+  # A: SQLite holds every published event for query and replay; the bus above carries
+  #    live broadcasts to subscribers. Two systems, one contract: SQLite owns durability,
+  #    the bus owns delivery. Late or restarted consumers catch up with iter_query_for_consumer.
+  event:
+    event_adapter:
+      adapter: "sqlite"
+      config:
+        db_path: "storage/events/events.sqlite"
+
   # Q: Where is temporary data kept (sessions, caches, locks)?
   # A: Redis handles it. Swap to "python" for an in-memory dict with no Redis container.
   kv:
