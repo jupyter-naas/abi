@@ -32,9 +32,21 @@ export interface AnalyticsEvent {
   referrer?: string;
 }
 
+export type ScenarioId = 'last_7_days' | 'last_30_days' | 'last_90_days';
+
+export interface Scenario {
+  scenario: string;
+  scenario_id: ScenarioId;
+  date_start: string;
+  date_end: string;
+}
+
+export interface ScenariosResponse {
+  scenarios: Scenario[];
+}
+
 export interface AnalyticsFilters {
-  start_date?: string;
-  end_date?: string;
+  scenario_id: ScenarioId;
   user_email?: string;
   workspace_id?: string;
 }

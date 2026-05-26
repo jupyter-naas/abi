@@ -30,6 +30,8 @@ import type {
   AnalyticsEvent,
   OverviewResponse,
   PageRow,
+  Scenario,
+  ScenariosResponse,
   SessionRow,
   UserDetail,
   UserRow,
@@ -48,12 +50,8 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 function initialFilters(): FilterValue {
-  const end = new Date();
-  const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
   return {
-    range: '7d',
-    start_date: start.toISOString(),
-    end_date: end.toISOString(),
+    scenario_id: 'last_7_days',
     user_email: 'all',
     workspace_id: 'all',
   };
@@ -61,10 +59,7 @@ function initialFilters(): FilterValue {
 
 function buildQuery(filters: FilterValue): string {
   const p = new URLSearchParams();
-  if (filters.start_date) p.set('start_date', filters.start_date);
-  if (filters.end_date) p.set('end_date', filters.end_date);
-  if (filters.user_email && filters.user_email !== 'all') p.set('user_email', filters.user_email);
-  if (filters.workspace_id && filters.workspace_id !== 'all') p.set('workspace_id', filters.workspace_id);
+  p.set('scenario_id', filters.scenario_id);
   return p.toString();
 }
 
@@ -84,18 +79,24 @@ export default function AnalyticsPage() {
 
   const [usersDir, setUsersDir] = useState<{ user_email: string; user_id: string; workspace_ids: string[] }[]>([]);
   const [workspaceDir, setWorkspaceDir] = useState<{ workspace_id: string; workspace_name: string }[]>([]);
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
 
-  // Bootstrap directories (independent of date filter — full catalog).
+  // Bootstrap directories + scenario catalog (independent of scenario filter).
   useEffect(() => {
     const api = getApiUrl();
-    fetch(`${api}/api/analytics/users`)
+    fetch(`${api}/api/analytics/scenarios`)
+      .then((r) => r.json())
+      .then((d: ScenariosResponse) => setScenarios(d.scenarios ?? []))
+      .catch(() => setScenarios([]));
+    fetch(`${api}/api/analytics/users?scenario_id=${filters.scenario_id}`)
       .then((r) => r.json())
       .then((d: UsersDirectory) => setUsersDir(d.directory ?? []))
       .catch(() => setUsersDir([]));
-    fetch(`${api}/api/analytics/workspaces`)
+    fetch(`${api}/api/analytics/workspaces?scenario_id=${filters.scenario_id}`)
       .then((r) => r.json())
       .then((d: WorkspacesDirectory) => setWorkspaceDir(d.directory ?? []))
       .catch(() => setWorkspaceDir([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleUserPick = useCallback((email: string) => {
@@ -155,6 +156,7 @@ export default function AnalyticsPage() {
             <FilterBar
               value={filters}
               onChange={setFilters}
+              scenarios={scenarios}
               users={filteredUsersDir}
               workspaces={workspaceDir}
             />
