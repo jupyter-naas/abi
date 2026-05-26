@@ -3,13 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, ChevronDown, Search, Users, Layers, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-export type DateRangeKey = '7d' | '30d' | '90d' | 'custom';
+import type { Scenario, ScenarioId } from '../lib/types';
 
 export interface FilterValue {
-  range: DateRangeKey;
-  start_date?: string;
-  end_date?: string;
+  scenario_id: ScenarioId;
   user_email: string; // 'all' or a specific email
   workspace_id: string; // 'all' or a specific workspace id
 }
@@ -27,21 +24,30 @@ interface WorkspaceOption {
 interface FilterBarProps {
   value: FilterValue;
   onChange: (next: FilterValue) => void;
+  scenarios: Scenario[];
   users: UserOption[];
   workspaces: WorkspaceOption[];
 }
 
-export function FilterBar({ value, onChange, users, workspaces }: FilterBarProps) {
+export function FilterBar({ value, onChange, scenarios, users, workspaces }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <DateRangePicker value={value} onChange={onChange} />
+      <ScenarioPicker value={value} onChange={onChange} scenarios={scenarios} />
       <UserSelect value={value} onChange={onChange} users={users} />
       <WorkspaceSelect value={value} onChange={onChange} workspaces={workspaces} />
     </div>
   );
 }
 
-function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v: FilterValue) => void }) {
+function ScenarioPicker({
+  value,
+  onChange,
+  scenarios,
+}: {
+  value: FilterValue;
+  onChange: (v: FilterValue) => void;
+  scenarios: Scenario[];
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -53,31 +59,8 @@ function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const options: { key: DateRangeKey; label: string }[] = [
-    { key: '7d', label: 'Last 7 days' },
-    { key: '30d', label: 'Last 30 days' },
-    { key: '90d', label: 'Last 90 days' },
-    { key: 'custom', label: 'Custom range' },
-  ];
-
-  const pick = (k: DateRangeKey) => {
-    if (k === 'custom') {
-      onChange({ ...value, range: 'custom' });
-      return;
-    }
-    const days = k === '7d' ? 7 : k === '30d' ? 30 : 90;
-    const end = new Date();
-    const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
-    onChange({
-      ...value,
-      range: k,
-      start_date: start.toISOString(),
-      end_date: end.toISOString(),
-    });
-    setOpen(false);
-  };
-
-  const labelFor = (v: FilterValue) => options.find((o) => o.key === v.range)?.label ?? 'Date range';
+  const current = scenarios.find((s) => s.scenario_id === value.scenario_id);
+  const label = current?.scenario ?? 'Last 7 days';
 
   return (
     <div ref={ref} className="relative">
@@ -90,48 +73,29 @@ function DateRangePicker({ value, onChange }: { value: FilterValue; onChange: (v
         )}
       >
         <Calendar size={14} className="text-muted-foreground" />
-        <span className="font-medium">{labelFor(value)}</span>
+        <span className="font-medium">{label}</span>
         <ChevronDown size={14} className="text-muted-foreground" />
       </button>
 
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1.5 w-64 border border-border bg-popover p-1.5 shadow-lg">
-          {options.map((o) => (
+          {scenarios.map((s) => (
             <button
-              key={o.key}
-              onClick={() => pick(o.key)}
+              key={s.scenario_id}
+              onClick={() => {
+                onChange({ ...value, scenario_id: s.scenario_id });
+                setOpen(false);
+              }}
               className={cn(
                 'flex w-full items-center justify-between px-2.5 py-2 text-sm transition-colors',
                 'hover:bg-muted',
-                value.range === o.key && 'bg-workspace-accent-10 text-workspace-accent',
+                value.scenario_id === s.scenario_id && 'bg-workspace-accent-10 text-workspace-accent',
               )}
             >
-              {o.label}
-              {value.range === o.key && <span className="text-xs">●</span>}
+              {s.scenario}
+              {value.scenario_id === s.scenario_id && <span className="text-xs">●</span>}
             </button>
           ))}
-          {value.range === 'custom' && (
-            <div className="border-t border-border/60 mt-1.5 p-2 space-y-2">
-              <label className="block text-xs text-muted-foreground">Start</label>
-              <input
-                type="date"
-                value={value.start_date?.slice(0, 10) ?? ''}
-                onChange={(e) =>
-                  onChange({ ...value, start_date: new Date(e.target.value).toISOString() })
-                }
-                className="w-full border border-border bg-background px-2 py-1 text-sm"
-              />
-              <label className="block text-xs text-muted-foreground">End</label>
-              <input
-                type="date"
-                value={value.end_date?.slice(0, 10) ?? ''}
-                onChange={(e) =>
-                  onChange({ ...value, end_date: new Date(e.target.value).toISOString() })
-                }
-                className="w-full border border-border bg-background px-2 py-1 text-sm"
-              />
-            </div>
-          )}
         </div>
       )}
     </div>
