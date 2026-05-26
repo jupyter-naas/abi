@@ -335,6 +335,138 @@ def test_iter_query_for_consumer_drains_across_batches(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# JSON codec / schema drift
+# ---------------------------------------------------------------------------
+
+
+def test_stored_payload_includes_class_uri_and_property_uris(tmp_path):
+    import json
+
+    service, adapter, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+
+    (row,) = adapter.query()
+    doc = json.loads(row.payload)
+    assert doc["_class_uri"] == UserAuthenticated._class_uri
+    assert doc["user_id"] == "alice"
+    # _property_uris embedded so future renames can still map back to IRIs.
+    assert "user_id" in doc["_property_uris"]
+    assert doc["_property_uris"]["user_id"] == "http://example.org/userId"
+
+
+def test_reconstruction_drops_fields_no_longer_on_class(tmp_path):
+    """Forward-compat: dropping a field from the class doesn't break reading old events."""
+    import json
+    from naas_abi_core.services.event.EventCodec import deserialize
+
+    service, adapter, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+
+    (row,) = adapter.query()
+    doc = json.loads(row.payload)
+    # Simulate a stored event that has an extra field the current class no longer has.
+    doc["legacy_field"] = "legacy-value"
+    altered = json.dumps(doc).encode("utf-8")
+
+    instance = deserialize(altered, hint_class=UserAuthenticated)
+    assert instance.user_id == "alice"  # known field survives
+    assert not hasattr(instance, "legacy_field")  # unknown field dropped
+
+
+# ---------------------------------------------------------------------------
+# filter (EventBridge-style)
+# ---------------------------------------------------------------------------
+
+
+def test_query_filter_equals(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(UserAuthenticated(user_id="bob"))
+
+    rows = service.query(event_class=UserAuthenticated, filter={"user_id": "alice"})
+    assert [r.user_id for r in rows] == ["alice"]
+
+
+def test_query_filter_in(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for uid in ("alice", "bob", "carol", "dave"):
+        service.publish(UserAuthenticated(user_id=uid))
+
+    rows = service.query(
+        event_class=UserAuthenticated, filter={"user_id": ["alice", "carol"]}
+    )
+    assert sorted(r.user_id for r in rows) == ["alice", "carol"]
+
+
+def test_query_filter_operators(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice-1"))
+    service.publish(UserAuthenticated(user_id="alice-2"))
+    service.publish(UserAuthenticated(user_id="bob"))
+
+    rows = service.query(
+        event_class=UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+    )
+    assert sorted(r.user_id for r in rows) == ["alice-1", "alice-2"]
+
+    rows = service.query(
+        event_class=UserAuthenticated, filter={"user_id": {"contains": "lic"}}
+    )
+    assert sorted(r.user_id for r in rows) == ["alice-1", "alice-2"]
+
+    rows = service.query(
+        event_class=UserAuthenticated, filter={"user_id": {"ne": "bob"}}
+    )
+    assert sorted(r.user_id for r in rows) == ["alice-1", "alice-2"]
+
+
+def test_query_filter_multiple_keys_anded(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(UserAuthenticated(user_id="alice"))  # different _uri
+    service.publish(UserAuthenticated(user_id="bob"))
+
+    # _uri varies per instance; filter both for an empty-set check.
+    rows = service.query(
+        event_class=UserAuthenticated,
+        filter={"user_id": "alice", "_uri": "nope"},
+    )
+    assert rows == []
+
+
+def test_iter_query_filter(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for uid in ("alice", "bob", "alice", "carol", "alice"):
+        service.publish(UserAuthenticated(user_id=uid))
+
+    streamed = list(
+        service.iter_query(
+            event_class=UserAuthenticated,
+            filter={"user_id": "alice"},
+            batch_size=2,
+        )
+    )
+    assert [e.user_id for e in streamed] == ["alice", "alice", "alice"]
+
+
+def test_subscribe_with_filter(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    received: list[str] = []
+
+    service.subscribe(
+        UserAuthenticated,
+        lambda e: received.append(e.user_id),
+        filter={"user_id": "alice"},
+    )
+
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(UserAuthenticated(user_id="bob"))
+    service.publish(UserAuthenticated(user_id="alice"))
+
+    assert received == ["alice", "alice"]
+
+
+# ---------------------------------------------------------------------------
 # subscribe
 # ---------------------------------------------------------------------------
 
