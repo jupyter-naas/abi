@@ -617,7 +617,11 @@ check-nexus: deps
 	@echo " |_____|_____|_____|_____|_____|"
 	@echo ""
 	@echo "\033[1;4m🔨 Building Nexus web app...\033[0m\n"
-	@cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm install && pnpm build
+	@if [ ! -d libs/naas-abi/naas_abi/apps/nexus/apps/web/node_modules ]; then \
+		echo "📦 node_modules missing — installing frontend dependencies..."; \
+		cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm install; \
+	fi
+	@cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm build
 	@echo "\n✅ NEXUS build passed!"
 
 # Code quality checks for core modules
