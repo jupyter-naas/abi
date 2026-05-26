@@ -139,7 +139,7 @@ export default function AnalyticsPage() {
                     <span>{filters.user_email}</span>
                   </span>
                 ) : (
-                  'Product usage'
+                  'Platform usage'
                 )}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -410,9 +410,10 @@ function RecentActivityList({
   onUserPick: (email: string) => void;
 }) {
   if (events.length === 0) return <EmptyBlock>No recent events.</EmptyBlock>;
+  const sorted = events.slice().sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return (
     <ul className="divide-y divide-border/50 -mx-5 -my-5">
-      {events.map((e) => (
+      {sorted.map((e) => (
         <li key={e.event_id} className="flex items-start gap-3 px-5 py-2.5 text-sm">
           <EventIcon name={e.event_name} />
           <div className="flex-1 min-w-0">
@@ -438,7 +439,7 @@ function RecentActivityList({
             </div>
           </div>
           <span className="flex-shrink-0 text-xs text-muted-foreground whitespace-nowrap">
-            {formatRelative(e.timestamp)}
+            {formatDateTime(e.timestamp)}
           </span>
         </li>
       ))}
