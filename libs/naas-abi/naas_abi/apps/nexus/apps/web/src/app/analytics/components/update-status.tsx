@@ -22,7 +22,7 @@ interface Metadata {
   updated_at: string;
   duration_ms: number;
   events: FileStats;
-  kpis: FileStats;
+  aggregates: FileStats[];
 }
 
 export function UpdateStatus() {
@@ -58,7 +58,7 @@ export function UpdateStatus() {
   }, [refreshing, fetchMetadata]);
 
   const tooltip = metadata
-    ? `${metadata.events.count} events · ${metadata.kpis.count} KPI rows · rebuilt in ${metadata.duration_ms} ms`
+    ? `${metadata.events.count} events · ${metadata.aggregates.length} aggregates · rebuilt in ${metadata.duration_ms} ms`
     : 'No rebuild data yet';
 
   return (
