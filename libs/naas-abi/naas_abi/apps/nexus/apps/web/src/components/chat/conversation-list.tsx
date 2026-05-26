@@ -1,22 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus, MessageSquare, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 export function ConversationList() {
   const [mounted, setMounted] = useState(false);
+  const router = useRouter();
   const {
     conversations,
     activeConversationId,
     createConversation,
     setActiveConversation,
+    currentWorkspaceId,
   } = useWorkspaceStore();
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const navigateToConversation = (conversationId: string) => {
+    setActiveConversation(conversationId);
+    if (currentWorkspaceId) {
+      router.push(`/workspace/${currentWorkspaceId}/chat/${conversationId}`);
+    }
+  };
+
+  const handleCreateConversation = () => {
+    const id = createConversation();
+    if (currentWorkspaceId) {
+      router.push(`/workspace/${currentWorkspaceId}/chat/${id}`);
+    }
+  };
 
   // Use empty state on server to prevent hydration mismatch
   const displayConversations = mounted ? conversations : [];
@@ -28,7 +45,7 @@ export function ConversationList() {
       <div className="flex h-12 items-center justify-between border-b border-border/50 px-3">
         <span className="text-sm font-medium">Conversations</span>
         <button
-          onClick={() => createConversation()}
+          onClick={handleCreateConversation}
           className={cn(
             'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors',
             'hover:bg-primary/10 hover:text-primary'
@@ -45,7 +62,7 @@ export function ConversationList() {
             <MessageSquare size={32} className="mb-3 text-muted-foreground/50" />
             <p className="text-sm text-muted-foreground">No conversations yet</p>
             <button
-              onClick={() => createConversation()}
+              onClick={handleCreateConversation}
               className="mt-3 text-sm font-medium text-primary hover:underline"
             >
               Start a conversation
@@ -56,7 +73,7 @@ export function ConversationList() {
             {displayConversations.map((conv) => (
               <button
                 key={conv.id}
-                onClick={() => setActiveConversation(conv.id)}
+                onClick={() => navigateToConversation(conv.id)}
                 className={cn(
                   'group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
                   'hover:bg-primary/10',

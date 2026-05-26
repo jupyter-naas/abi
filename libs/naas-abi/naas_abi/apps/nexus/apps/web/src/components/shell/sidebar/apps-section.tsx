@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  LayoutGrid, Bot, Store, ArrowLeft, ExternalLink,
+  LayoutGrid, Bot, ArrowLeft, ExternalLink,
   Info, KeyRound, Copy, Check, Tag, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -208,7 +208,6 @@ function groupAppsByModule(apps: AppInfo[]): Array<[string, AppInfo[]]> {
 export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const { currentWorkspaceId, setActivePanelSection, openAppModule } = useWorkspaceStore();
   const basePath = getWorkspacePath(currentWorkspaceId, '/apps');
-  const marketplacePath = getWorkspacePath(currentWorkspaceId, '/marketplace?type=applications');
   const pathname = usePathname();
   const isOnApps = pathname?.includes('/apps');
 
@@ -371,14 +370,6 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
           </Link>
         )}
 
-        <Link
-          href={marketplacePath}
-          onClick={() => setActivePanelSection('marketplace')}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Store size={14} />
-          <span>Browse Marketplace</span>
-        </Link>
         {tooltipPortal}
       </div>
     );

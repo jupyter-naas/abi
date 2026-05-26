@@ -24,6 +24,9 @@
  */
 
 import type { AnalyticsEvent, EventName } from '@/app/analytics/lib/types';
+import { getApiUrl } from '@/lib/config';
+import { useAuthStore } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 const SESSION_KEY = 'nexus.analytics.session_id';
 const SESSION_TS_KEY = 'nexus.analytics.session_last_event_ts';
@@ -75,17 +78,53 @@ function detectBrowser(): string | undefined {
   return 'Unknown';
 }
 
+// Best-effort, client-side only. Derives country from the user's locale
+// region (e.g. `fr-FR` → `FR`). Locale ≠ physical location, but it works
+// offline and needs no third-party call. For accurate geolocation, enrich
+// server-side from the request IP (e.g. `x-vercel-ip-country`).
+function detectCountry(): string | undefined {
+  if (typeof navigator === 'undefined') return undefined;
+  try {
+    const tag = navigator.language;
+    if (!tag) return undefined;
+    const region = new Intl.Locale(tag).region;
+    return region || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function shortReferrer(): string | undefined {
+  if (typeof document === 'undefined' || !document.referrer) return undefined;
+  try {
+    return new URL(document.referrer).hostname || undefined;
+  } catch {
+    return document.referrer;
+  }
+}
+
 function getCurrentUser(): { id?: string; email?: string } {
   if (typeof window === 'undefined') return {};
+
+  // Preferred path: read directly from the running zustand auth store. This
+  // always reflects the live session, including the case where the user has
+  // just logged in and persistence hasn't flushed to localStorage yet.
   try {
-    // Nexus persists auth via zustand under a known key; we read defensively
-    // so the tracker keeps working if storage shape changes.
-    const raw = localStorage.getItem('auth-storage');
+    const user = useAuthStore.getState().user;
+    if (user?.id) return { id: user.id, email: user.email };
+  } catch {
+    // Store not available (e.g. very early on first render) — fall through.
+  }
+
+  // Fallback: parse the persisted snapshot from localStorage. Key matches
+  // the zustand persist name in src/stores/auth.ts.
+  try {
+    const raw = localStorage.getItem('nexus-auth');
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     const user = parsed?.state?.user;
     if (!user) return {};
-    return { id: user.id ?? user.user_id, email: user.email };
+    return { id: user.id, email: user.email };
   } catch {
     return {};
   }
@@ -98,6 +137,21 @@ export interface TrackContext {
   page_title?: string;
 }
 
+function resolveWorkspaceName(workspace_id?: string): string | undefined {
+  if (!workspace_id) return undefined;
+  try {
+    const ws = useWorkspaceStore.getState().workspaces.find((w) => w.id === workspace_id);
+    return ws?.name;
+  } catch {
+    return undefined;
+  }
+}
+
+function decoratePageTitle(title: string, path: string): string {
+  const m = path.match(/\/chat\/(conv-[^/?#]+)/);
+  return m ? `${title} - ${m[1]}` : title;
+}
+
 export function trackEvent(
   event_name: EventName,
   context: TrackContext & { properties?: Record<string, unknown> } = {},
@@ -105,6 +159,8 @@ export function trackEvent(
   if (typeof window === 'undefined') return;
 
   const user = getCurrentUser();
+  const page_path = context.page_path ?? window.location.pathname;
+  const base_title = context.page_title ?? document.title.split(' | ')[0];
   const event: AnalyticsEvent = {
     event_id: uuid(),
     timestamp: new Date().toISOString(),
@@ -113,18 +169,21 @@ export function trackEvent(
     user_id: user.id,
     user_email: user.email,
     workspace_id: context.workspace_id,
-    workspace_name: context.workspace_name,
-    page_path: context.page_path ?? window.location.pathname,
-    page_title: context.page_title ?? document.title,
+    workspace_name: context.workspace_name ?? resolveWorkspaceName(context.workspace_id),
+    page_path,
+    page_title: decoratePageTitle(base_title, page_path),
     properties: context.properties,
     device: detectDevice(),
     browser: detectBrowser(),
-    referrer: document.referrer || undefined,
+    country: detectCountry(),
+    referrer: shortReferrer(),
   };
 
-  // Fire-and-forget POST. We use keepalive so events sent on unload still ship.
+  // Fire-and-forget POST to the Nexus API (port 9879 in local dev), which
+  // persists through ABI's object storage service. keepalive lets events
+  // sent during unload still ship.
   try {
-    fetch('/api/analytics/events', {
+    fetch(`${getApiUrl()}/api/analytics/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(event),
