@@ -147,6 +147,11 @@ function resolveWorkspaceName(workspace_id?: string): string | undefined {
   }
 }
 
+function decoratePageTitle(title: string, path: string): string {
+  const m = path.match(/\/chat\/(conv-[^/?#]+)/);
+  return m ? `${title} - ${m[1]}` : title;
+}
+
 export function trackEvent(
   event_name: EventName,
   context: TrackContext & { properties?: Record<string, unknown> } = {},
@@ -154,6 +159,8 @@ export function trackEvent(
   if (typeof window === 'undefined') return;
 
   const user = getCurrentUser();
+  const page_path = context.page_path ?? window.location.pathname;
+  const base_title = context.page_title ?? document.title.split(' | ')[0];
   const event: AnalyticsEvent = {
     event_id: uuid(),
     timestamp: new Date().toISOString(),
@@ -163,8 +170,8 @@ export function trackEvent(
     user_email: user.email,
     workspace_id: context.workspace_id,
     workspace_name: context.workspace_name ?? resolveWorkspaceName(context.workspace_id),
-    page_path: context.page_path ?? window.location.pathname,
-    page_title: context.page_title ?? document.title.split(' | ')[0],
+    page_path,
+    page_title: decoratePageTitle(base_title, page_path),
     properties: context.properties,
     device: detectDevice(),
     browser: detectBrowser(),
