@@ -190,3 +190,8 @@ services:
       adapter: "filesystem"
       config:
         directory: "storage/email"
+  event:
+    event_adapter:
+      adapter: "sqlite"
+      config:
+        db_path: "storage/events/events.sqlite"
