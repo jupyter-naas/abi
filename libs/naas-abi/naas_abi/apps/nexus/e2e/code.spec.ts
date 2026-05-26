@@ -71,15 +71,18 @@ test.describe('Code Section IDE', () => {
 
     await expect(page.getByRole('main').getByText(filename, { exact: true })).toBeVisible({ timeout: 15000 });
 
-    const editor = page.locator('.monaco-editor');
-    await expect(editor).toBeVisible({ timeout: 15000 });
-    await editor.click();
+    // Wait for Monaco to fully mount, then focus its inner textarea.
+    const editorTextarea = page.locator('.monaco-editor textarea').first();
+    await expect(editorTextarea).toBeAttached({ timeout: 15000 });
+    await editorTextarea.focus();
     await page.keyboard.type('print("code e2e ok")');
 
-    await expect(page.locator('text=●').first()).toBeVisible({ timeout: 5000 });
+    // The unsaved dot should appear in the tab.
+    await expect(page.locator('span').filter({ hasText: '●' }).first()).toBeVisible({ timeout: 5000 });
 
+    // Save via keyboard shortcut and wait for the "Saved" indicator.
     await page.keyboard.press('Meta+s');
-    await page.waitForTimeout(1500);
+    await expect(page.locator('button', { hasText: 'Saved' })).toBeVisible({ timeout: 5000 });
 
     const token = await page.evaluate(() => {
       const raw = localStorage.getItem('nexus-auth');

@@ -71,7 +71,7 @@ nexus:StreamingThrottle a owl:Class ;
 nexus:WorkspaceState a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000031 ;
     rdfs:label "WorkspaceState"@en ;
-    skos:definition "State: conversations, activeConversationId, selectedAgent, workspaces, currentWorkspaceId, projects, branches"@en .
+    skos:definition "State: conversations, activeConversationId, selectedAgent, workspaces, currentWorkspaceId, projects"@en .
 
 nexus:ConversationActions a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000031 ;
@@ -82,11 +82,6 @@ nexus:WorkspaceActions a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000031 ;
     rdfs:label "WorkspaceActions"@en ;
     skos:definition "fetchWorkspaces(), setCurrentWorkspace(), createWorkspace(), deleteWorkspace()"@en .
-
-nexus:BranchActions a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000031 ;
-    rdfs:label "BranchActions"@en ;
-    skos:definition "createBranch(), deleteBranch(), checkoutBranch(), commit(), mergeBranch()"@en .
 
 # ======================================================================
 # HOW IT IS: Qualities (BFO_0000019)

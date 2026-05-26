@@ -51,6 +51,31 @@ class CodeOpencodeService:
             payload["messageID"] = message_id
         return await self.adapter.proxy_post(f"session/{session_id}/revert", payload)
 
+    async def fork_session(self, session_id: str, message_id: str = "") -> object:
+        payload: dict = {}
+        if message_id:
+            payload["messageID"] = message_id
+        return await self.adapter.proxy_post(f"session/{session_id}/fork", payload)
+
+    async def session_diff(self, session_id: str, message_id: str = "") -> object:
+        path = f"session/{session_id}/diff"
+        if message_id:
+            from urllib.parse import quote
+
+            path = f"{path}?messageID={quote(message_id, safe='')}"
+        return await self.adapter.proxy_get(path)
+
+    async def session_children(self, session_id: str) -> object:
+        return await self.adapter.proxy_get(f"session/{session_id}/children")
+
+    async def create_session(self, title: str = "", parent_id: str = "") -> object:
+        payload: dict = {}
+        if title:
+            payload["title"] = title
+        if parent_id:
+            payload["parentID"] = parent_id
+        return await self.adapter.proxy_post("session", payload)
+
     async def default_model(self) -> CodeOpencodeDefaultModelData:
         if not isinstance(self.adapter, OpencodeHttpAdapter):
             raise TypeError("default_model requires OpencodeHttpAdapter")

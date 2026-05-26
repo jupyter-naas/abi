@@ -37,6 +37,8 @@ import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAuthStore } from '@/stores/auth';
 import { useFilesStore } from '@/stores/files';
+import { useOpencodeSessionStore } from '@/stores/opencode-session';
+import { sessionDisplayTitle } from '@/lib/opencode-sessions';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
@@ -193,8 +195,7 @@ export function AIPane() {
   const filePickerRef = useRef<HTMLDivElement>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  // opencode thread ID — kept across messages so opencode has full conversation context
-  const [opencodeSessionId, setOpencodeSessionId] = useState<string>(() => `nexus-${Date.now()}`);
+  const loadedOcSessionRef = useRef<string | null>(null);
   // Model picker (opencode only)
   const [opencodeProviders, setOpencodeProviders] = useState<OcProvider[]>([]);
   const [ocProvidersLoading, setOcProvidersLoading] = useState(false);
@@ -216,8 +217,16 @@ export function AIPane() {
   const { agents, getAgent } = useAgentsStore();
   const { providers } = useIntegrationsStore();
   const { activeFile, fileContents, codeActiveFile, refreshCodeFiles, readCodeFile, setCodeDiffs, clearCodeDiffs, codeFiles, fetchCodeFolderContents } = useFilesStore();
+  const {
+    opencodeSessionId,
+    setOpencodeSessionId,
+    setCanForkSession,
+    fetchOcSessions,
+    createOcSession,
+  } = useOpencodeSessionStore();
 
   const isOpencode = paneAgent === OPENCODE_AGENT_ID;
+  const usesOcSessions = isCodeSection || isOpencode;
   const activeOcModel = selectedOcModel ?? ocDefaultModel;
   const ocModelLabel = activeOcModel?.name || activeOcModel?.modelID || '…';
   const currentAgent = mounted
@@ -372,30 +381,56 @@ export function AIPane() {
     if ((isOpencode || isCodeSection) && mounted) fetchOcProviders();
   }, [isOpencode, isCodeSection, mounted, fetchOcProviders]);
 
-  // Fetch real opencode sessions when history panel opens
-  const fetchOcSessions = useCallback(async () => {
+  const fetchOcSessionsForHistory = useCallback(async () => {
+    const sessions = await fetchOcSessions();
+    setChatSessions(
+      sessions.map((s) => ({
+        id: s.id,
+        title: sessionDisplayTitle(s, s.id),
+        messages: [],
+        createdAt: new Date(s.updatedAt ?? Date.now()),
+      })),
+    );
+  }, [fetchOcSessions]);
+
+  useEffect(() => {
+    if (usesOcSessions && mounted) void fetchOcSessionsForHistory();
+  }, [usesOcSessions, mounted, fetchOcSessionsForHistory]);
+
+  useEffect(() => {
+    if (showHistory && usesOcSessions) void fetchOcSessionsForHistory();
+  }, [showHistory, usesOcSessions, fetchOcSessionsForHistory]);
+
+  const loadOcSessionMessages = useCallback(async (sessionId: string) => {
     try {
       const token = useAuthStore.getState().token;
-      const r = await fetch(`${getApiBase()}/api/opencode/sessions`, {
+      const r = await fetch(`${getApiBase()}/api/opencode/sessions/${sessionId}/messages`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       if (!r.ok) return;
-      const data = await r.json();
-      const sessions = (Array.isArray(data) ? data : []) as Array<{ id: string; title?: string; updatedAt?: string }>;
-      setChatSessions(
-        sessions.map((s) => ({
-          id: s.id,
-          title: s.title ?? s.id.slice(0, 24),
-          messages: [],
-          createdAt: new Date(s.updatedAt ?? Date.now()),
-        }))
-      );
+      const raw = await r.json() as Array<{ id?: string; role?: string; parts?: Array<{ type: string; text?: string }> }>;
+      const converted: Message[] = raw.flatMap((m) => {
+        const role = (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant';
+        const text = (m.parts ?? [])
+          .filter((p) => p.type === 'text')
+          .map((p) => p.text ?? '')
+          .join('');
+        if (!text) return [];
+        return [{ id: m.id ?? String(Date.now()), role, content: text, isOpencode: role === 'assistant' }];
+      });
+      setMessages(converted);
+      setCurrentSessionId(sessionId);
+      loadedOcSessionRef.current = sessionId;
+      setCanForkSession(converted.some((m) => m.role === 'user'));
     } catch { /* ignore */ }
-  }, []);
+  }, [setCanForkSession]);
 
+  // Reload chat when the shared OpenCode session changes (e.g. from History)
   useEffect(() => {
-    if (showHistory && isOpencode) fetchOcSessions();
-  }, [showHistory, isOpencode, fetchOcSessions]);
+    if (!isCodeSection || !opencodeSessionId) return;
+    if (loadedOcSessionRef.current === opencodeSessionId) return;
+    void loadOcSessionMessages(opencodeSessionId);
+  }, [isCodeSection, opencodeSessionId, loadOcSessionMessages]);
 
   // Read file content for attachments (uses the filesystem API)
   const readAttachmentContent = async (path: string): Promise<string> => {
@@ -414,10 +449,10 @@ export function AIPane() {
   };
 
   // Chat session management
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
     if (messages.length > 0) {
       const newSession: ChatSession = {
-        id: currentSessionId || Date.now().toString(),
+        id: currentSessionId || opencodeSessionId || Date.now().toString(),
         title: messages[0]?.content.slice(0, 30) + '...' || 'New chat',
         messages: [...messages],
         createdAt: new Date(),
@@ -428,15 +463,30 @@ export function AIPane() {
         return [newSession, ...prev];
       });
     }
+
     setMessages([]);
-    setCurrentSessionId(Date.now().toString());
-    setOpencodeSessionId(`nexus-${Date.now()}`);
+    setCurrentSessionId(null);
     setShowHistory(false);
+    loadedOcSessionRef.current = null;
+    setCanForkSession(false);
+
+    if (isCodeSection) {
+      const created = await createOcSession('New session');
+      if (created) {
+        setOpencodeSessionId(created.id);
+        setCurrentSessionId(created.id);
+        loadedOcSessionRef.current = created.id;
+        inputRef.current?.focus();
+        return;
+      }
+    }
+
+    setOpencodeSessionId(`nexus-${Date.now()}`);
     inputRef.current?.focus();
   };
 
   const handleLoadSession = async (session: ChatSession) => {
-    if (isOpencode) {
+    if (usesOcSessions) {
       try {
         const token = useAuthStore.getState().token;
         const r = await fetch(`${getApiBase()}/api/opencode/sessions/${session.id}/messages`, {
@@ -456,6 +506,9 @@ export function AIPane() {
           setMessages(converted);
           setOpencodeSessionId(session.id);
           setCurrentSessionId(session.id);
+          loadedOcSessionRef.current = session.id;
+          setCanForkSession(converted.some((m) => m.role === 'user'));
+          void useOpencodeSessionStore.getState().fetchSessionDiff(session.id);
           setShowHistory(false);
           return;
         }
@@ -473,7 +526,7 @@ export function AIPane() {
 
   const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isOpencode) {
+    if (usesOcSessions) {
       try {
         const token = useAuthStore.getState().token;
         await fetch(`${getApiBase()}/api/opencode/sessions/${sessionId}`, {
@@ -483,9 +536,11 @@ export function AIPane() {
       } catch { /* ignore */ }
     }
     setChatSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    if (currentSessionId === sessionId) {
+    if (currentSessionId === sessionId || opencodeSessionId === sessionId) {
       setMessages([]);
       setCurrentSessionId(null);
+      loadedOcSessionRef.current = null;
+      setOpencodeSessionId(`nexus-${Date.now()}`);
     }
   };
 
@@ -552,6 +607,7 @@ export function AIPane() {
   // ─── Opencode submit (used on /code route) ────────────────────────────────
 
   const handleOpencodeSubmit = async (userContent: string) => {
+    setCanForkSession(true);
     const assistantId = (Date.now() + 1).toString();
     const textParts: Record<string, string> = {};
 
@@ -646,11 +702,16 @@ export function AIPane() {
           break outer;
         }
 
-        if (eventType === 'session.idle') { streamReaderRef.current = null; break outer; }
+        if (eventType === 'session.idle') {
+          streamReaderRef.current = null;
+          void fetchOcSessionsForHistory();
+          void useOpencodeSessionStore.getState().fetchSessionDiff(opencodeSessionId);
+          break outer;
+        }
 
         // ── session.diff — live filesystem refresh ────────────────────
         if (eventType === 'session.diff') {
-          const diff = (props.diff ?? []) as Array<{ file: string; additions: number; deletions: number; status: string }>;
+          const diff = (props.diff ?? []) as import('@/lib/code-diff').CodeDiffEntry[];
           if (diff.length > 0) {
             setCodeDiffs(diff);
             refreshCodeFiles().then(() => {

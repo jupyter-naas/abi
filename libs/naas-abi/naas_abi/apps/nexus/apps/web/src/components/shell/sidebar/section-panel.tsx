@@ -8,7 +8,6 @@ import { ChatSection } from './chat-section';
 import { SearchSection } from './search-section';
 import { FilesSection } from './files-section';
 import { CodeSection } from './code-section';
-import { LabSection } from './lab-section';
 import { OntologySection } from './ontology-section';
 import { KnowledgeGraphSection } from './knowledge-graph-section';
 import { MarketplaceSection } from './marketplace-section';
@@ -22,7 +21,6 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   code: 'Code',
-  lab: 'Lab',
   apps: 'Apps',
   marketplace: 'Marketplace',
   settings: 'Settings',
@@ -44,7 +42,6 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'graph' && canGraph) return <KnowledgeGraphSection collapsed={false} detailOnly />;
   if (section === 'files' && canFiles) return <FilesSection collapsed={false} detailOnly />;
   if (section === 'code' && canAgents) return <CodeSection collapsed={false} detailOnly />;
-  if (section === 'lab' && canAgents) return <LabSection collapsed={false} detailOnly />;
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;

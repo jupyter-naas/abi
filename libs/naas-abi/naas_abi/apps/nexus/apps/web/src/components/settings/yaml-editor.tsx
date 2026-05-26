@@ -105,7 +105,7 @@ export function YamlEditor() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Edit provider configuration as YAML. For full editing, use the Lab module.
+          Edit provider configuration as YAML. For full editing, use the Code section.
         </p>
         <div className="flex items-center gap-2">
           <button

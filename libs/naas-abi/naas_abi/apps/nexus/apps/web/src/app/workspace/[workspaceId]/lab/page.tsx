@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
+/** Legacy route: Lab was replaced by Code. Keep redirect for bookmarks and old links. */
 export default function LabRedirect() {
   const router = useRouter();
   const params = useParams();

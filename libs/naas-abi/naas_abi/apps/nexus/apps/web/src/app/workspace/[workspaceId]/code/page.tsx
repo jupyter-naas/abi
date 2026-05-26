@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
 import {
   FileCode, Plus, Terminal, X, Save, GripHorizontal,
-  Code, Eye, Columns2,
+  Code, Eye, Columns2, GitCompare,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,9 +13,20 @@ import { useCodeStore } from '@/stores/code';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrompt } from '@/components/ui/dialogs';
 import { Header } from '@/components/shell/header';
-import Editor from '@monaco-editor/react';
+import { CodeDiffEditor } from '@/components/code/code-diff-editor';
+import dynamic from 'next/dynamic';
 import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
+
+import { ensureMonacoConfigured } from '@/lib/monaco';
+
+const Editor = dynamic(
+  () =>
+    ensureMonacoConfigured().then(() =>
+      import('@monaco-editor/react').then((m) => m.default),
+    ),
+  { ssr: false },
+);
 
 function getLanguage(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase();
@@ -280,7 +291,9 @@ function EmptyState({ onNewFile, sessionName }: { onNewFile: () => void; session
 export default function CodePage() {
   const {
     codeOpenFiles, codeActiveFile, codeFileContents, codeUnsavedChanges,
+    codeDiffViewPath, codeDiffOriginal, codeDiffModified,
     setCodeActiveFile, closeCodeFile, setCodeFileContent, saveCodeFile, createCodeFile, openCodeFile,
+    exitCodeDiffView, readCodeFile,
     syncCodeWorkdir, fetchCodeFiles,
   } = useFilesStore();
   const { getActiveSession } = useCodeStore();
@@ -288,6 +301,8 @@ export default function CodePage() {
   const { prompt, dialog: promptDialog } = usePrompt();
   const [terminalH, setTerminalH] = useState(MIN_H);
   const [viewMode, setViewMode] = useState<ViewMode>('code');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const saveToastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeSession = getActiveSession();
   const activeContent = codeActiveFile ? codeFileContents[codeActiveFile] : undefined;
@@ -297,6 +312,25 @@ export default function CodePage() {
   const isHtml = ext === 'html' || ext === 'htm';
   const isMarkdown = ext === 'md' || ext === 'mdx';
   const hasPreview = isHtml || isMarkdown;
+  const isDiffView = codeActiveFile !== null && codeDiffViewPath === codeActiveFile;
+  const diffOriginal = codeActiveFile ? (codeDiffOriginal[codeActiveFile] ?? '') : '';
+  const diffModified = codeActiveFile ? codeDiffModified[codeActiveFile] : undefined;
+  const hasEditorContent = isDiffView
+    ? diffModified !== undefined
+    : activeContent !== undefined;
+
+  const handleExitDiffView = useCallback(async () => {
+    if (!codeActiveFile) return;
+    exitCodeDiffView();
+    await readCodeFile(codeActiveFile);
+  }, [codeActiveFile, exitCodeDiffView, readCodeFile]);
+
+  const handleTabSelect = useCallback((path: string) => {
+    setCodeActiveFile(path);
+    if (codeDiffViewPath !== path) {
+      exitCodeDiffView();
+    }
+  }, [codeDiffViewPath, exitCodeDiffView, setCodeActiveFile]);
 
   // Auto-switch to split when opening a previewable file
   useEffect(() => {
@@ -311,16 +345,28 @@ export default function CodePage() {
   }, [setContextPanelOpen]);
 
   useEffect(() => {
+    void ensureMonacoConfigured();
+  }, []);
+
+  useEffect(() => {
     void syncCodeWorkdir('pull');
     void fetchCodeFiles(CODE_MY_DRIVE_FOLDER);
   }, [syncCodeWorkdir, fetchCodeFiles]);
 
+  const handleSave = useCallback(async (path: string) => {
+    setSaveState('saving');
+    await saveCodeFile(path);
+    setSaveState('saved');
+    if (saveToastRef.current) clearTimeout(saveToastRef.current);
+    saveToastRef.current = setTimeout(() => setSaveState('idle'), 1500);
+  }, [saveCodeFile]);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
-      if (codeActiveFile) saveCodeFile(codeActiveFile);
+      if (codeActiveFile) void handleSave(codeActiveFile);
     }
-  }, [codeActiveFile, saveCodeFile]);
+  }, [codeActiveFile, handleSave]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -345,7 +391,7 @@ export default function CodePage() {
     <>
       {promptDialog}
       <div className="flex h-full flex-col bg-background">
-        <Header title={activeSession?.name || 'Code'} subtitle={activeSession?.rootPath || 'Development environment'} />
+        <Header title={activeSession?.name || 'Code'} subtitle="Development environment" />
 
         {/* Tab bar */}
         <div className="flex h-8 flex-shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border/50 bg-muted/20 px-1">
@@ -354,13 +400,17 @@ export default function CodePage() {
             const isActive = path === codeActiveFile;
             const isUnsaved = codeUnsavedChanges[path];
             return (
-              <div key={path} onClick={() => setCodeActiveFile(path)}
+              <div key={path} onClick={() => handleTabSelect(path)}
                 className={cn(
                   'group flex flex-shrink-0 items-center gap-1.5 rounded px-2.5 py-1 text-xs cursor-pointer transition-colors select-none',
                   isActive ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
-                <FileCode size={11} className={isActive ? 'text-workspace-accent' : 'text-muted-foreground/60'} />
+                {codeDiffViewPath === path ? (
+                  <GitCompare size={11} className={isActive ? 'text-amber-500' : 'text-muted-foreground/60'} />
+                ) : (
+                  <FileCode size={11} className={isActive ? 'text-workspace-accent' : 'text-muted-foreground/60'} />
+                )}
                 <span>{filename}</span>
                 {isUnsaved && <span className="text-amber-400 text-[10px]">●</span>}
                 <button onClick={(e) => { e.stopPropagation(); closeCodeFile(path); }}
@@ -380,19 +430,44 @@ export default function CodePage() {
 
         {/* Editor / preview area */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          {codeActiveFile && activeContent !== undefined ? (
+          {codeActiveFile && hasEditorContent ? (
             <div className="flex flex-1 flex-col overflow-hidden">
               {/* Breadcrumb + save */}
               <div className="flex h-6 flex-shrink-0 items-center justify-between border-b border-border/30 bg-muted/10 px-4">
-                <span className="text-[11px] text-muted-foreground">{codeActiveFile}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-[11px] text-muted-foreground">{codeActiveFile}</span>
+                  {isDiffView && (
+                    <span className="flex-shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      Diff
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
-                  {hasUnsaved && (
-                    <button onClick={() => saveCodeFile(codeActiveFile)}
-                      className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-amber-500 hover:bg-muted">
-                      <Save size={10} /> Save
+                  {isDiffView && (
+                    <button
+                      type="button"
+                      onClick={() => void handleExitDiffView()}
+                      className="rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      Open file
                     </button>
                   )}
-                  {hasPreview && (
+                  {!isDiffView && (
+                    <button
+                      onClick={() => void handleSave(codeActiveFile!)}
+                      disabled={saveState === 'saving'}
+                      className={cn(
+                        'flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors hover:bg-muted disabled:cursor-wait',
+                        saveState === 'saved' ? 'text-emerald-500' :
+                        hasUnsaved ? 'text-amber-500' : 'text-muted-foreground',
+                      )}
+                      title="Save (⌘S)"
+                    >
+                      <Save size={10} />
+                      {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : hasUnsaved ? 'Save' : 'Save'}
+                    </button>
+                  )}
+                  {hasPreview && !isDiffView && (
                     <div className="flex items-center gap-0.5 rounded-md border border-border/60 bg-background p-0.5">
                       {([['code', Code, 'Code'], ['split', Columns2, 'Split'], ['preview', Eye, 'Preview']] as const).map(([mode, Icon, label]) => (
                         <button key={mode} onClick={() => setViewMode(mode)}
@@ -410,47 +485,57 @@ export default function CodePage() {
               </div>
 
               {/* Content pane */}
-              <div className={cn('flex flex-1 overflow-hidden', viewMode === 'split' && 'flex-row')}>
-                {/* Monaco — hidden in preview-only mode */}
+              <div className={cn('flex flex-1 overflow-hidden', viewMode === 'split' && !isDiffView && 'flex-row')}>
                 {viewMode !== 'preview' && (
-                  <div className={cn('overflow-hidden', viewMode === 'split' ? 'w-1/2 border-r border-border/50' : 'flex-1')}>
-                    <Editor
-                      height="100%"
-                      language={language}
-                      value={activeContent}
-                      onChange={(v) => setCodeFileContent(codeActiveFile, v || '')}
-                      theme="vs-dark"
-                      options={{
-                        fontSize: 13,
-                        fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-                        minimap: { enabled: viewMode === 'code' },
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        tabSize: 2,
-                        wordWrap: 'on',
-                        lineNumbers: 'on',
-                        renderWhitespace: 'selection',
-                        bracketPairColorization: { enabled: true },
-                        padding: { top: 12 },
-                        smoothScrolling: true,
-                        cursorBlinking: 'smooth',
-                        formatOnPaste: true,
-                      }}
-                      loading={
-                        <div className="flex h-full items-center justify-center bg-[#1e1e1e]">
-                          <span className="text-xs text-zinc-500">Loading editor...</span>
-                        </div>
-                      }
-                    />
+                  <div className={cn(
+                    'overflow-hidden',
+                    isDiffView ? 'flex-1' : viewMode === 'split' ? 'w-1/2 border-r border-border/50' : 'flex-1',
+                  )}>
+                    {isDiffView ? (
+                      <CodeDiffEditor
+                        path={codeActiveFile}
+                        original={diffOriginal}
+                        modified={diffModified ?? ''}
+                        language={language}
+                      />
+                    ) : (
+                      <Editor
+                        height="100%"
+                        language={language}
+                        value={activeContent}
+                        onChange={(v) => setCodeFileContent(codeActiveFile, v || '')}
+                        theme="vs-dark"
+                        options={{
+                          fontSize: 13,
+                          fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+                          minimap: { enabled: viewMode === 'code' },
+                          scrollBeyondLastLine: false,
+                          automaticLayout: true,
+                          tabSize: 2,
+                          wordWrap: 'on',
+                          lineNumbers: 'on',
+                          renderWhitespace: 'selection',
+                          bracketPairColorization: { enabled: true },
+                          padding: { top: 12 },
+                          smoothScrolling: true,
+                          cursorBlinking: 'smooth',
+                          formatOnPaste: true,
+                        }}
+                        loading={
+                          <div className="flex h-full items-center justify-center bg-[#1e1e1e]">
+                            <span className="text-xs text-zinc-500">Loading editor...</span>
+                          </div>
+                        }
+                      />
+                    )}
                   </div>
                 )}
 
-                {/* Preview — shown in preview or split mode */}
-                {hasPreview && viewMode !== 'code' && (
+                {hasPreview && viewMode !== 'code' && !isDiffView && (
                   <div className={cn('overflow-hidden', viewMode === 'split' ? 'w-1/2' : 'flex-1', isHtml ? 'bg-white' : 'bg-background')}>
                     {isHtml
-                      ? <HtmlPreview content={activeContent} />
-                      : <MarkdownPreview content={activeContent} />
+                      ? <HtmlPreview content={activeContent ?? ''} />
+                      : <MarkdownPreview content={activeContent ?? ''} />
                     }
                   </div>
                 )}
@@ -463,6 +548,7 @@ export default function CodePage() {
 
         {/* Resizable terminal */}
         <TerminalPanel height={terminalH} onResize={setTerminalH} />
+
       </div>
     </>
   );

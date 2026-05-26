@@ -33,7 +33,7 @@ const PAGES = [
   { path: '/settings/agents', title: 'Agents' },
   { path: '/settings/models', title: 'Models' },
   { path: '/settings/members', title: 'Members' },
-  { path: '/lab', title: 'Lab' },
+  { path: '/code', title: 'Code' },
   { path: '/search', title: 'Search' },
   { path: '/organization', title: 'Organization' },
 ];

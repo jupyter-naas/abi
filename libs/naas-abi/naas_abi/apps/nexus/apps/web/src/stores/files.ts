@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { normalizeDiffText } from '@/lib/code-diff';
 import { useWorkspaceStore } from './workspace';
 import { authFetch } from './auth';
 
@@ -114,12 +115,7 @@ interface FilesState {
   loading: boolean;
   error: string | null;
   
-  // Lab state (VS Code-like, always at workspace root)
-  labFiles: FileInfo[];
-  labLoading: boolean;
-  labFolderContents: Record<string, FileInfo[]>;  // Cached folder contents for tree expansion
-  
-  // Editor state (shared between Lab and Files)
+  // Editor state (Files page viewers)
   openFiles: string[];
   activeFile: string | null;
   fileContents: Record<string, string>;  // path -> content
@@ -135,7 +131,14 @@ interface FilesState {
   codeUnsavedChanges: Record<string, boolean>;
   /** Full object-storage path to the user's `code/` root, e.g. naas_abi/my-drive/{userId}/code */
   codeRoot: string;
-  codeDiffs: Record<string, { additions: number; deletions: number; status: string }>;
+  codeDiffs: Record<string, import('@/lib/code-diff').CodeDiffInfo>;
+  /** Files the user manually created or saved in this session (not tracked by OpenCode). */
+  localChanges: Record<string, { status: 'added' | 'modified' }>;
+  /** Snapshot of file content at first open — used as the "before" side in diffs. */
+  codeOriginalContents: Record<string, string>;
+  codeDiffViewPath: string | null;
+  codeDiffOriginal: Record<string, string>;
+  codeDiffModified: Record<string, string>;
   codeTreeVersion: number;
   
   // Storage sources
@@ -181,8 +184,6 @@ interface FilesState {
   
   // API actions
   fetchFiles: (path?: string) => Promise<void>;
-  fetchLabFiles: () => Promise<void>;  // Always fetches workspace root for Lab
-  fetchLabFolderContents: (folderPath: string) => Promise<FileInfo[]>;  // Fetch subfolder contents for Lab tree
   createFile: (path: string, content?: string) => Promise<FileInfo | null>;
   createFolder: (path: string) => Promise<FileInfo | null>;
   deleteFile: (path: string) => Promise<boolean>;
@@ -190,7 +191,6 @@ interface FilesState {
   uploadFile: (file: File, relativeDir?: string) => Promise<FileInfo | null>;
   uploadFiles: (files: FileList | File[] | { file: File; relativeDir?: string }[]) => Promise<FileInfo[]>;
   refreshFiles: () => Promise<void>;
-  refreshLabFiles: () => Promise<void>;  // Refreshes Lab's file tree
   readFile: (path: string) => Promise<string | null>;
   saveFile: (path: string) => Promise<boolean>;
 
@@ -199,17 +199,22 @@ interface FilesState {
   fetchCodeFolderContents: (folderPath: string) => Promise<FileInfo[]>;
   refreshCodeFiles: () => Promise<void>;
   openCodeFile: (path: string) => void;
+  openCodeFileDiff: (path: string) => Promise<void>;
+  exitCodeDiffView: () => void;
   closeCodeFile: (path: string) => void;
   setCodeActiveFile: (path: string | null) => void;
   setCodeFileContent: (path: string, content: string) => void;
-  readCodeFile: (path: string) => Promise<string | null>;
+  readCodeFile: (path: string, options?: { updateStore?: boolean }) => Promise<string | null>;
   saveCodeFile: (path: string) => Promise<boolean>;
   createCodeFile: (path: string, content?: string) => Promise<string | null>;
   createCodeFolder: (path: string) => Promise<boolean>;
   deleteCodeFile: (path: string) => Promise<boolean>;
   renameCodeFile: (oldPath: string, newPath: string) => Promise<boolean>;
-  setCodeDiffs: (diffs: Array<{ file: string; additions: number; deletions: number; status: string }>) => void;
+  setCodeDiffs: (diffs: import('@/lib/code-diff').CodeDiffEntry[]) => void;
+  replaceCodeDiffs: (diffs: import('@/lib/code-diff').CodeDiffEntry[]) => void;
   clearCodeDiffs: () => void;
+  clearLocalChanges: () => void;
+  clearOriginalContents: () => void;
   syncCodeWorkdir: (direction?: 'pull' | 'push' | 'both') => Promise<void>;
 }
 
@@ -231,11 +236,6 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   loading: false,
   error: null,
   
-  // Lab state (VS Code-like, always workspace root)
-  labFiles: [],
-  labLoading: false,
-  labFolderContents: {},  // Cached folder contents for tree expansion
-  
   // Editor state
   openFiles: [],
   activeFile: null,
@@ -252,6 +252,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   codeUnsavedChanges: {},
   codeRoot: '',
   codeDiffs: {},
+  localChanges: {},
+  codeOriginalContents: {},
+  codeDiffViewPath: null,
+  codeDiffOriginal: {},
+  codeDiffModified: {},
   codeTreeVersion: 0,
   
   // Storage sources
@@ -526,70 +531,6 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       set({ files: resolvedFiles, currentPath: resolvedPath, loading: false });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
-    }
-  },
-
-  // Fetch files for Lab - always at workspace root (independent of Files navigation)
-  fetchLabFiles: async () => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      set({ labLoading: false });
-      return;
-    }
-    
-    set({ labLoading: true });
-    try {
-      const response = await authFetch(
-        `${getApiBase()}/api/files/?path=${encodeURIComponent(workspaceId)}&workspace_id=${encodeURIComponent(workspaceId)}`
-      );
-      if (!response.ok) {
-        throw new Error('Failed to fetch lab files');
-      }
-      const data = await response.json();
-      set({ labFiles: data.files, labLoading: false, labFolderContents: {} });
-    } catch (error) {
-      console.error('Error fetching lab files:', error);
-      set({ labLoading: false });
-    }
-  },
-
-  // Fetch contents of a specific folder for Lab tree expansion
-  fetchLabFolderContents: async (folderPath: string) => {
-    const workspaceId = getCurrentWorkspaceId();
-    if (!workspaceId) {
-      return [];
-    }
-    
-    // Check cache first
-    const cached = get().labFolderContents[folderPath];
-    if (cached) {
-      return cached;
-    }
-    
-    try {
-      // folderPath is relative to workspace, like "new-folder"
-      const fullPath = `${workspaceId}/${folderPath}`;
-      const response = await authFetch(
-        `${getApiBase()}/api/files/?path=${encodeURIComponent(fullPath)}&workspace_id=${encodeURIComponent(workspaceId)}`
-      );
-      if (!response.ok) {
-        throw new Error('Failed to fetch folder contents');
-      }
-      const data = await response.json();
-      const files = data.files as FileInfo[];
-      
-      // Cache the results
-      set((state) => ({
-        labFolderContents: {
-          ...state.labFolderContents,
-          [folderPath]: files
-        }
-      }));
-      
-      return files;
-    } catch (error) {
-      console.error('Error fetching folder contents:', error);
-      return [];
     }
   },
 
@@ -872,10 +813,6 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     await get().fetchFiles(currentPath);
   },
 
-  refreshLabFiles: async () => {
-    await get().fetchLabFiles();
-  },
-
   readFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
@@ -1005,15 +942,89 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   openCodeFile: (path) => {
     const { codeOpenFiles } = get();
     if (!codeOpenFiles.includes(path)) {
-      set({ codeOpenFiles: [...codeOpenFiles, path], codeActiveFile: path });
+      set({
+        codeOpenFiles: [...codeOpenFiles, path],
+        codeActiveFile: path,
+        codeDiffViewPath: null,
+      });
       get().readCodeFile(path);
     } else {
-      set({ codeActiveFile: path });
+      set({ codeActiveFile: path, codeDiffViewPath: null });
     }
   },
 
+  openCodeFileDiff: async (path) => {
+    try {
+      const { useOpencodeSessionStore } = await import('./opencode-session');
+      const { findCodeDiffKey, normalizeDiffText } = await import('@/lib/code-diff');
+
+      // Fetch current disk content (populates codeOriginalContents on first read).
+      let diskContent = get().codeFileContents[path];
+      if (diskContent === undefined) {
+        diskContent = (await get().readCodeFile(path)) ?? '';
+      }
+
+      // Try OpenCode session diff first.
+      let diffKey = findCodeDiffKey(get().codeDiffs, path);
+      let diff = diffKey ? get().codeDiffs[diffKey] : undefined;
+      const sessionId = useOpencodeSessionStore.getState().opencodeSessionId;
+      if ((!diff || (diff.before === undefined && diff.after === undefined))
+          && sessionId && !sessionId.startsWith('nexus-')) {
+        await useOpencodeSessionStore.getState().fetchSessionDiff(sessionId);
+        diffKey = findCodeDiffKey(get().codeDiffs, path);
+        diff = diffKey ? get().codeDiffs[diffKey] : undefined;
+      }
+
+      let before: string;
+      let after: string;
+
+      if (diff?.before !== undefined || diff?.after !== undefined) {
+        // OpenCode returned actual content — use it.
+        before = normalizeDiffText(diff!.before);
+        after = normalizeDiffText(diff!.after) || diskContent;
+      } else {
+        // Fall back to local tracking.
+        const localChange = get().localChanges[path];
+        const original = get().codeOriginalContents[path];
+
+        if (localChange?.status === 'added') {
+          before = '';         // file didn't exist before
+          after = diskContent;
+        } else if (localChange?.status === 'modified' || diff) {
+          // Diff metadata only (no content) or manual save — compare original vs current.
+          before = original ?? '';
+          after = diskContent;
+        } else {
+          // No diff info at all — still show diff view but both sides same.
+          before = original ?? diskContent;
+          after = diskContent;
+        }
+      }
+
+      set((state) => {
+        const codeOpenFiles = state.codeOpenFiles.includes(path)
+          ? state.codeOpenFiles
+          : [...state.codeOpenFiles, path];
+        return {
+          codeOpenFiles,
+          codeActiveFile: path,
+          codeDiffViewPath: path,
+          codeDiffOriginal: { ...state.codeDiffOriginal, [path]: before },
+          codeDiffModified: { ...state.codeDiffModified, [path]: after },
+          codeFileContents: { ...state.codeFileContents, [path]: diskContent },
+          codeUnsavedChanges: { ...state.codeUnsavedChanges, [path]: false },
+        };
+      });
+    } catch (error) {
+      console.error('Failed to open code diff view:', error);
+      get().openCodeFile(path);
+    }
+  },
+
+  exitCodeDiffView: () => set({ codeDiffViewPath: null }),
+
   closeCodeFile: (path) => {
-    const { codeOpenFiles, codeActiveFile, codeFileContents, codeUnsavedChanges } = get();
+    const { codeOpenFiles, codeActiveFile, codeFileContents, codeUnsavedChanges, codeDiffOriginal, codeDiffModified, codeDiffViewPath } = get();
     const newOpen = codeOpenFiles.filter((p) => p !== path);
     const newActive = codeActiveFile === path
       ? (newOpen.length > 0 ? newOpen[newOpen.length - 1] : null)
@@ -1022,11 +1033,18 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     delete newContents[path];
     const newUnsaved = { ...codeUnsavedChanges };
     delete newUnsaved[path];
+    const newOriginal = { ...codeDiffOriginal };
+    delete newOriginal[path];
+    const newModified = { ...codeDiffModified };
+    delete newModified[path];
     set({
       codeOpenFiles: newOpen,
       codeActiveFile: newActive,
       codeFileContents: newContents,
       codeUnsavedChanges: newUnsaved,
+      codeDiffOriginal: newOriginal,
+      codeDiffModified: newModified,
+      codeDiffViewPath: codeDiffViewPath === path ? null : codeDiffViewPath,
     });
   },
 
@@ -1040,7 +1058,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     });
   },
 
-  readCodeFile: async (path) => {
+  readCodeFile: async (path, options) => {
     try {
       const response = await authFetch(
         `${getApiBase()}/api/files/${encodeURIComponent(path)}?${codeScopeQuery()}`
@@ -1048,7 +1066,15 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to read file');
       const data = await response.json();
       const content = data.content as string;
-      set((state) => ({ codeFileContents: { ...state.codeFileContents, [path]: content } }));
+      if (options?.updateStore !== false) {
+        set((state) => ({
+          codeFileContents: { ...state.codeFileContents, [path]: content },
+          // Capture original only on first read — never overwritten.
+          codeOriginalContents: path in state.codeOriginalContents
+            ? state.codeOriginalContents
+            : { ...state.codeOriginalContents, [path]: content },
+        }));
+      }
       return content;
     } catch (error) {
       console.error('Error reading code file:', error);
@@ -1075,8 +1101,20 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         }
       );
       if (!response.ok) throw new Error('Failed to save file');
-      set({ codeUnsavedChanges: { ...codeUnsavedChanges, [path]: false } });
+      set((state) => ({
+        codeUnsavedChanges: { ...state.codeUnsavedChanges, [path]: false },
+        // Only mark as 'modified' if it wasn't already tracked as 'added'.
+        localChanges: state.localChanges[path]?.status === 'added'
+          ? state.localChanges
+          : { ...state.localChanges, [path]: { status: 'modified' } },
+      }));
       await get().syncCodeWorkdir('push');
+      // Refresh OpenCode diffs too if a real session is active.
+      const { useOpencodeSessionStore } = await import('./opencode-session');
+      const sessionId = useOpencodeSessionStore.getState().opencodeSessionId;
+      if (sessionId && !sessionId.startsWith('nexus-')) {
+        void useOpencodeSessionStore.getState().fetchSessionDiff(sessionId);
+      }
       return true;
     } catch (error) {
       console.error('Error saving code file:', error);
@@ -1099,6 +1137,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to create file');
       const created = (await response.json()) as FileInfo;
       const resolvedPath = created.path || path;
+      set((state) => ({
+        localChanges: { ...state.localChanges, [resolvedPath]: { status: 'added' } },
+      }));
       void get().refreshCodeFiles();
       void get().syncCodeWorkdir('push');
       return resolvedPath;
@@ -1182,13 +1223,50 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       codeDiffs: {
         ...state.codeDiffs,
         ...Object.fromEntries(
-          diffs.map((d) => [d.file, { additions: d.additions, deletions: d.deletions, status: d.status }])
+          diffs.map((d) => [
+            d.file,
+            {
+              additions: d.additions,
+              deletions: d.deletions,
+              status: d.status,
+              ...(d.before !== undefined ? { before: normalizeDiffText(d.before) } : {}),
+              ...(d.after !== undefined ? { after: normalizeDiffText(d.after) } : {}),
+              ...(d.patch !== undefined ? { patch: normalizeDiffText(d.patch) } : {}),
+            },
+          ]),
         ),
       },
     }));
   },
 
-  clearCodeDiffs: () => set({ codeDiffs: {} }),
+  replaceCodeDiffs: (diffs) => {
+    set({
+      codeDiffs: Object.fromEntries(
+        diffs.map((d) => [
+          d.file,
+          {
+            additions: d.additions,
+            deletions: d.deletions,
+            status: d.status,
+            ...(d.before !== undefined ? { before: normalizeDiffText(d.before) } : {}),
+            ...(d.after !== undefined ? { after: normalizeDiffText(d.after) } : {}),
+            ...(d.patch !== undefined ? { patch: normalizeDiffText(d.patch) } : {}),
+          },
+        ]),
+      ),
+    });
+  },
+
+  clearCodeDiffs: () => set({
+    codeDiffs: {},
+    codeDiffViewPath: null,
+    codeDiffOriginal: {},
+    codeDiffModified: {},
+  }),
+
+  clearLocalChanges: () => set({ localChanges: {} }),
+
+  clearOriginalContents: () => set({ codeOriginalContents: {} }),
 
   syncCodeWorkdir: async (direction = 'both') => {
     try {

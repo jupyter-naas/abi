@@ -105,6 +105,9 @@ services:
       # host's missing/stale node_modules doesn't mask the deps installed at
       # build time (which is what produces `sh: next: not found`).
       - /app/apps/web/node_modules
+      # Keep Next build output inside the container to avoid stale vendor-chunks
+      # on the host bind mount (e.g. missing ws@8.x.js after dependency changes).
+      - /app/apps/web/.next
     environment:
       - NODE_ENV=development
       - PORT=3000

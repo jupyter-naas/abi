@@ -23,7 +23,7 @@ export interface NexusConfig {
   features: {
     enableGraph: boolean;
     enableOntology: boolean;
-    enableLab: boolean;
+    enableCode: boolean;
     enableApps: boolean;
   };
   
@@ -103,7 +103,7 @@ const configs: Record<Environment, NexusConfig> = {
     features: {
       enableGraph: true,
       enableOntology: true,
-      enableLab: true,
+      enableCode: true,
       enableApps: false,
     },
     providers: {
@@ -126,7 +126,7 @@ const configs: Record<Environment, NexusConfig> = {
     features: {
       enableGraph: true,
       enableOntology: true,
-      enableLab: true,
+      enableCode: true,
       enableApps: false,
     },
     providers: {
@@ -149,7 +149,7 @@ const configs: Record<Environment, NexusConfig> = {
     features: {
       enableGraph: true,
       enableOntology: true,
-      enableLab: true,
+      enableCode: true,
       enableApps: false,
     },
     providers: {

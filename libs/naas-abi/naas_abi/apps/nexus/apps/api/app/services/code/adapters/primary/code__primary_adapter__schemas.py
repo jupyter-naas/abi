@@ -36,3 +36,12 @@ class OpencodeChatRequest(BaseModel):
 
 class OpencodeRevertRequest(BaseModel):
     message_id: str = ""
+
+
+class OpencodeForkRequest(BaseModel):
+    message_id: str = ""
+
+
+class OpencodeCreateSessionRequest(BaseModel):
+    title: str = ""
+    parent_id: str = ""

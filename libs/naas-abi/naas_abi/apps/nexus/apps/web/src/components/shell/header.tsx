@@ -8,15 +8,12 @@ import {
   User,
   LogOut,
   HelpCircle,
-  GitBranch,
-  ChevronDown,
-  Check,
   Sparkles,
   Building2,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type WorkspaceBranch } from '@/stores/workspace';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { ApiStatusIndicator } from './api-status-indicator';
@@ -29,9 +26,7 @@ interface HeaderProps {
 export function Header({ title, subtitle }: HeaderProps = {}) {
   const [mounted, setMounted] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const branchMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
   const { logout, user: authUser } = useAuthStore();
@@ -42,9 +37,6 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
     contextPanelOpen, 
     toggleContextPanel, 
     currentWorkspaceId,
-    getCurrentBranch,
-    getBranches,
-    checkoutBranch,
     activePanelSection,
     setActivePanelSection,
     lastActivePanelSection,
@@ -68,9 +60,6 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
       }
-      if (branchMenuRef.current && !branchMenuRef.current.contains(event.target as Node)) {
-        setBranchMenuOpen(false);
-      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -82,23 +71,6 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
   const panelOpen = mounted ? contextPanelOpen : false;
   const displayUser = mounted ? user : null;
   const isCodeSection = pathname.includes('/code');
-  const currentBranch = mounted ? getCurrentBranch() : null;
-  const branches = mounted ? getBranches() : [];
-
-  const handleCheckoutBranch = (branchId: string) => {
-    checkoutBranch(branchId);
-    setBranchMenuOpen(false);
-  };
-
-  const getBranchColor = (branch: WorkspaceBranch) => {
-    if (branch.name === 'main') return 'text-green-500';
-    if (branch.name === 'demo') return 'text-purple-500';
-    if (branch.name === 'development') return 'text-blue-500';
-    if (branch.name.startsWith('feature/')) return 'text-cyan-500';
-    if (branch.name.startsWith('hotfix/')) return 'text-red-500';
-    return 'text-muted-foreground';
-  };
-
 
   return (
     <header className="glass-nav relative z-[200] flex h-14 items-center justify-between border-b border-border/50 pl-2 pr-4">
@@ -137,44 +109,6 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
       <div className="flex items-center gap-1">
         {/* API connection status */}
         <ApiStatusIndicator />
-
-        {/* Branch Selector - Simple dropdown like Palantir */}
-        <div ref={branchMenuRef} className="relative mr-2">
-          <button
-            onClick={() => setBranchMenuOpen(!branchMenuOpen)}
-            className={cn(
-              'flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors',
-              'hover:bg-muted',
-              branchMenuOpen && 'bg-muted border-primary'
-            )}
-          >
-            <GitBranch size={14} className={currentBranch ? getBranchColor(currentBranch) : 'text-muted-foreground'} />
-            <span className="font-medium">{currentBranch?.name || 'main'}</span>
-            <ChevronDown size={14} className="text-muted-foreground" />
-          </button>
-
-          {branchMenuOpen && (
-            <div className="glass-card absolute right-0 top-full z-[300] mt-2 w-56 py-1">
-              {branches.map((branch) => (
-                <button
-                  key={branch.id}
-                  onClick={() => handleCheckoutBranch(branch.id)}
-                  className={cn(
-                    'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
-                    'hover:bg-primary/10',
-                    currentBranch?.id === branch.id && 'bg-primary/5'
-                  )}
-                >
-                  <GitBranch size={14} className={getBranchColor(branch)} />
-                  <span className="flex-1 text-left">{branch.name}</span>
-                  {currentBranch?.id === branch.id && (
-                    <Check size={14} className="text-primary" />
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* AI pane toggle — subtle PanelRight on code, Sparkles elsewhere */}
         {isCodeSection ? (

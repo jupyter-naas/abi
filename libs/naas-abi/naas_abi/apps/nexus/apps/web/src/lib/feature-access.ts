@@ -109,7 +109,7 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   }
   if (
     firstSegment === 'code' ||
-    firstSegment === 'lab' ||
+    firstSegment === 'lab' || // legacy redirect to /code
     (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents')
   ) {
     return 'agents';

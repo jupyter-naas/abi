@@ -18,6 +18,8 @@ from naas_abi.apps.nexus.apps.api.app.services.code.adapters.primary.code__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.code.adapters.primary.code__primary_adapter__schemas import (
     OpencodeChatRequest,
+    OpencodeCreateSessionRequest,
+    OpencodeForkRequest,
     OpencodeRevertRequest,
 )
 from naas_abi.apps.nexus.apps.api.app.services.code.code__schema import (
@@ -122,6 +124,60 @@ async def revert_session(
 ):
     try:
         return await service.revert_session(session_id, message_id=body.message_id)
+    except httpx.HTTPStatusError as exc:
+        raise _translate_proxy_http_error(exc) from exc
+    except CodeDomainError as exc:
+        raise_http_for_code_error(exc)
+
+
+@opencode_router.post("/sessions")
+async def create_session(
+    body: OpencodeCreateSessionRequest,
+    service: CodeOpencodeService = Depends(get_code_opencode_service),
+):
+    try:
+        return await service.create_session(title=body.title, parent_id=body.parent_id)
+    except httpx.HTTPStatusError as exc:
+        raise _translate_proxy_http_error(exc) from exc
+    except CodeDomainError as exc:
+        raise_http_for_code_error(exc)
+
+
+@opencode_router.post("/sessions/{session_id}/fork")
+async def fork_session(
+    session_id: str,
+    body: OpencodeForkRequest,
+    service: CodeOpencodeService = Depends(get_code_opencode_service),
+):
+    try:
+        return await service.fork_session(session_id, message_id=body.message_id)
+    except httpx.HTTPStatusError as exc:
+        raise _translate_proxy_http_error(exc) from exc
+    except CodeDomainError as exc:
+        raise_http_for_code_error(exc)
+
+
+@opencode_router.get("/sessions/{session_id}/children")
+async def session_children(
+    session_id: str,
+    service: CodeOpencodeService = Depends(get_code_opencode_service),
+):
+    try:
+        return await service.session_children(session_id)
+    except httpx.HTTPStatusError as exc:
+        raise _translate_proxy_http_error(exc) from exc
+    except CodeDomainError as exc:
+        raise_http_for_code_error(exc)
+
+
+@opencode_router.get("/sessions/{session_id}/diff")
+async def session_diff(
+    session_id: str,
+    message_id: str = "",
+    service: CodeOpencodeService = Depends(get_code_opencode_service),
+):
+    try:
+        return await service.session_diff(session_id, message_id=message_id)
     except httpx.HTTPStatusError as exc:
         raise _translate_proxy_http_error(exc) from exc
     except CodeDomainError as exc:

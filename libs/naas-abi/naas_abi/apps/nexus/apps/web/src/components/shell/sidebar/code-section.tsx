@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Terminal, ChevronRight, Folder, FileCode, MoreVertical,
   FolderPlus, RefreshCw, Plus, Trash2, Pencil, PackagePlus,
-  Code2,
+  GitCompare,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,10 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
+import {
+  OpencodeChangesList,
+} from '@/components/code/code-sidebar-panels';
+import { useOpencodeSessionStore } from '@/stores/opencode-session';
 
 
 // ─── Generic file tree node ───────────────────────────────────────────────────
@@ -181,12 +185,10 @@ const FileNode = React.memo(function FileNode({
 // ─── Tree panel ───────────────────────────────────────────────────────────────
 
 function TreePanel({
-  label, icon, files, loading, activeFile, selectedPath, onFileClick, onSelect,
+  files, loading, activeFile, selectedPath, onFileClick, onSelect,
   onRename, onDelete, fetchFolderContents,
-  onNewFile, onNewFolder, onRefresh, onNewModule, diffs, treeVersion, sandboxRoot,
+  diffs, treeVersion, sandboxRoot,
 }: {
-  label: string;
-  icon: React.ReactNode;
   files: FileInfo[];
   loading: boolean;
   activeFile: string | null;
@@ -196,67 +198,24 @@ function TreePanel({
   onRename: (oldPath: string, newPath: string) => void;
   onDelete: (path: string) => void;
   fetchFolderContents?: (path: string) => Promise<FileInfo[]>;
-  onNewFile?: () => void;
-  onNewFolder?: () => void;
-  onRefresh?: () => void;
-  onNewModule?: () => void;
   diffs?: Record<string, DiffInfo>;
   treeVersion?: number;
-  sandboxRoot?: string;  // paths outside this prefix are read-only
+  sandboxRoot?: string;
 }) {
-  const [open, setOpen] = useState(true);
-
   return (
-    <div className="px-2 pb-2">
-      {/* Header row: toggle on the left, action buttons on the right — siblings, not nested */}
-      <div className="mb-1 flex items-center gap-1.5 px-1">
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-        >
-          <ChevronRight size={10} className={cn('flex-shrink-0 transition-transform', open && 'rotate-90')} />
-          <span className="flex items-center gap-1 truncate">{icon}{label}</span>
-        </button>
-        <div className="ml-auto flex flex-shrink-0 items-center gap-0.5">
-          {onNewModule && (
-            <button onClick={onNewModule} className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground" title="New module">
-              <PackagePlus size={11} />
-            </button>
-          )}
-          {onNewFile && (
-            <button onClick={onNewFile} className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground" title="New file">
-              <FileCode size={11} />
-            </button>
-          )}
-          {onNewFolder && (
-            <button onClick={onNewFolder} className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground" title="New folder">
-              <FolderPlus size={11} />
-            </button>
-          )}
-          {onRefresh && (
-            <button onClick={onRefresh} className={cn('flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground', loading && 'animate-spin')} title="Refresh">
-              <RefreshCw size={11} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {open && (
-        <div className="space-y-0.5">
-          {files.length > 0 ? (
-            files.map((f) => (
-              <FileNode key={f.path} file={f} activeFile={activeFile} selectedPath={selectedPath}
-                onFileClick={onFileClick} onSelect={(p) => onSelect(p)} onRename={onRename} onDelete={onDelete}
-                depth={0} fetchFolderContents={fetchFolderContents}
-                readOnly={sandboxRoot ? !f.path.startsWith(sandboxRoot) : false}
-                diffs={diffs} treeVersion={treeVersion} />
-            ))
-          ) : (
-            <p className="px-2 py-1 text-[11px] text-muted-foreground italic">
-              {loading ? 'Loading...' : 'No files yet — create your first module'}
-            </p>
-          )}
-        </div>
+    <div className="space-y-0.5 overflow-y-auto">
+      {files.length > 0 ? (
+        files.map((f) => (
+          <FileNode key={f.path} file={f} activeFile={activeFile} selectedPath={selectedPath}
+            onFileClick={onFileClick} onSelect={(p) => onSelect(p)} onRename={onRename} onDelete={onDelete}
+            depth={0} fetchFolderContents={fetchFolderContents}
+            readOnly={sandboxRoot ? !f.path.startsWith(sandboxRoot) : false}
+            diffs={diffs} treeVersion={treeVersion} />
+        ))
+      ) : (
+        <p className="px-2 py-1 text-[11px] text-muted-foreground italic">
+          {loading ? 'Loading...' : 'No files yet — create your first module'}
+        </p>
       )}
     </div>
   );
@@ -264,16 +223,21 @@ function TreePanel({
 
 // ─── Code section ─────────────────────────────────────────────────────────────
 
+type CodeSidebarView = 'explorer' | 'changes';
+
 export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [codeRoot, setCodeRoot] = useState<string>('');
+  const [sidebarView, setSidebarView] = useState<CodeSidebarView>('explorer');
+  const [refreshingChanges, setRefreshingChanges] = useState(false);
   const { currentWorkspaceId } = useWorkspaceStore();
+  const { opencodeSessionId, fetchSessionDiff } = useOpencodeSessionStore();
   const {
     codeFiles, codeLoading, codeActiveFile, codeFolderContents,
     fetchCodeFiles, fetchCodeFolderContents, refreshCodeFiles,
     openCodeFile, createCodeFile, createCodeFolder, deleteCodeFile,
-    codeDiffs, codeTreeVersion, syncCodeWorkdir,
+    codeDiffs, localChanges, codeTreeVersion, syncCodeWorkdir,
   } = useFilesStore();
   const { prompt, dialog: promptDialog } = usePrompt();
 
@@ -333,6 +297,17 @@ export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; det
     }
   }, [prompt, resolveTarget, createCodeFolder, createCodeFile, openCodeFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const changeCount = new Set([...Object.keys(codeDiffs), ...Object.keys(localChanges)]).size;
+
+  const handleRefreshChanges = async () => {
+    setRefreshingChanges(true);
+    try {
+      await fetchSessionDiff(opencodeSessionId);
+    } finally {
+      setRefreshingChanges(false);
+    }
+  };
+
   return (
     <>
       {promptDialog}
@@ -345,28 +320,123 @@ export function CodeSection({ collapsed, detailOnly }: { collapsed: boolean; det
         collapsed={collapsed}
         detailOnly={detailOnly}
       >
-        <TreePanel
-          label="Explorer"
-          icon={<Code2 size={10} />}
-          files={codeFiles}
-          loading={codeLoading}
-          activeFile={codeActiveFile}
-          selectedPath={selectedPath}
-          onFileClick={(path) => { openCodeFile(path); navigateToCode(); }}
-          onSelect={(p) => setSelectedPath(p)}
-          onRename={async (oldPath, newPath) => {
-            await useFilesStore.getState().renameCodeFile(oldPath, newPath);
-          }}
-          onDelete={async (p) => { await deleteCodeFile(p); }}
-          fetchFolderContents={fetchFolderContents}
-          onNewFile={handleNewFile}
-          onNewFolder={handleNewFolder}
-          onRefresh={refreshCodeFiles}
-          onNewModule={handleNewModule}
-          diffs={codeDiffs}
-          treeVersion={codeTreeVersion}
-          sandboxRoot={codeRoot}
-        />
+        <div className="px-2 pb-2">
+          {/* View toggle — full width */}
+          <div className="mb-1 flex rounded-md bg-muted/50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setSidebarView('explorer')}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1 rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors',
+                sidebarView === 'explorer'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Folder size={10} />
+              Explorer
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarView('changes')}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1 rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors',
+                sidebarView === 'changes'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <GitCompare size={10} />
+              Changes
+              {changeCount > 0 && (
+                <span className="rounded-full bg-primary/15 px-1 py-px text-[9px] font-bold text-primary">
+                  {changeCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Action buttons — right-aligned below toggle */}
+          <div className="mb-1.5 flex items-center justify-end gap-0.5 px-0.5">
+            {sidebarView === 'explorer' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleNewModule()}
+                  className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="New module"
+                >
+                  <PackagePlus size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleNewFile()}
+                  className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="New file"
+                >
+                  <FileCode size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleNewFolder()}
+                  className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="New folder"
+                >
+                  <FolderPlus size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void refreshCodeFiles()}
+                  className={cn(
+                    'flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground',
+                    codeLoading && 'animate-spin',
+                  )}
+                  title="Refresh"
+                >
+                  <RefreshCw size={12} />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleRefreshChanges()}
+                className={cn(
+                  'flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground',
+                  refreshingChanges && 'animate-spin',
+                )}
+                title="Refresh changes"
+              >
+                <RefreshCw size={12} />
+              </button>
+            )}
+          </div>
+
+          {sidebarView === 'explorer' ? (
+            <TreePanel
+              files={codeFiles}
+              loading={codeLoading}
+              activeFile={codeActiveFile}
+              selectedPath={selectedPath}
+              onFileClick={(path) => { openCodeFile(path); navigateToCode(); }}
+              onSelect={(p) => setSelectedPath(p)}
+              onRename={async (oldPath, newPath) => {
+                await useFilesStore.getState().renameCodeFile(oldPath, newPath);
+              }}
+              onDelete={async (p) => { await deleteCodeFile(p); }}
+              fetchFolderContents={fetchFolderContents}
+              diffs={codeDiffs}
+              treeVersion={codeTreeVersion}
+              sandboxRoot={codeRoot}
+            />
+          ) : (
+            <OpencodeChangesList
+              onOpenFile={(path) => {
+                void useFilesStore.getState().openCodeFileDiff(path);
+                navigateToCode();
+              }}
+            />
+          )}
+        </div>
       </CollapsibleSection>
     </>
   );

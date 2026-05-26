@@ -117,7 +117,7 @@ const defaultPrivateSources: SearchSource[] = [
     category: 'private',
     icon: 'FileCode',
     enabled: true,
-    description: 'Search files in Lab',
+    description: 'Search files in Code',
   },
   {
     id: 'knowledge-graph',
