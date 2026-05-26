@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.6.0 (2026-05-26)
+
+### Refactoring
+
+- **bus**: Split into publish/subscribe + enqueue/dequeue
+  ([`0ff1a66`](https://github.com/jupyter-naas/abi/commit/0ff1a66c67707a80f9181c831d849acc9c984dff))
+
+
 ## v2.5.0 (2026-05-26)
 
 
