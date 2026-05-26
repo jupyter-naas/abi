@@ -19,12 +19,16 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
-SERVICES_DEPENDENCIES = {
+SERVICES_DEPENDENCIES: Dict[type, List[type]] = {
     TripleStoreService: [BusService],
     # EventService uses the bus for live broadcast on publish() and as the
     # transport for subscribe(); requesting the event service should pull
     # the bus in too.
     EventService: [BusService],
+    # ObjectStorageService publishes ObjectPut / ObjectDeleted events on
+    # every write; requesting object storage must pull the event service
+    # (and transitively the bus) so those events are always captured.
+    ObjectStorageService: [EventService],
 }
 
 
@@ -40,10 +44,17 @@ class EngineServiceLoader:
         if service_type in services_to_load:
             return True
 
-        for service, dependencies in SERVICES_DEPENDENCIES.items():
-            if service_type in dependencies and service in services_to_load:
-                return True
-        return False
+        # Walk SERVICES_DEPENDENCIES transitively so a chain like
+        # ObjectStorageService -> EventService -> BusService loads all three.
+        reachable: set[type] = set(services_to_load)
+        frontier: list[type] = list(services_to_load)
+        while frontier:
+            current = frontier.pop()
+            for dep in SERVICES_DEPENDENCIES.get(current, []):
+                if dep not in reachable:
+                    reachable.add(dep)
+                    frontier.append(dep)
+        return service_type in reachable
 
     def load_services(
         self, module_dependencies: Dict[str, ModuleDependencies]
