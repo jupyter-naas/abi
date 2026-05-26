@@ -10,8 +10,8 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
     require_workspace_access,
-    require_workspace_admin,
     require_workspace_platform_drive,
+    require_workspace_system_drive,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     get_files_service,
@@ -205,7 +205,7 @@ async def _authorize_system_drive_path(
             detail="workspace_id is required for system drive access",
         )
     normalized_workspace = _normalize_workspace_id(workspace_id)
-    await require_workspace_admin(current_user.id, normalized_workspace)
+    await require_workspace_system_drive(current_user.id, normalized_workspace)
     return _resolve_system_drive_scoped_path(path)
 
 

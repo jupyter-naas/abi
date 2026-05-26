@@ -11,6 +11,7 @@ exclude_dirs:
   - libs/naas-abi-marketplace/naas_abi_marketplace/__demo__
   - libs/naas-abi-marketplace/naas_abi_marketplace/sandbox
   - libs/naas-abi/naas_abi/apps/nexus/apps/web
+  - libs/naas-abi-core/naas_abi_core/utils/sandbox
 
 skips:
   # assert statements are acceptable and expected in test files
