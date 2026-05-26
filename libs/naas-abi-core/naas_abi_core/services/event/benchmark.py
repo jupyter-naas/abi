@@ -39,13 +39,24 @@ class _InMemoryBusAdapter(IBusAdapter):
 
     def __init__(self):
         self._subscribers: dict[str, list] = {}
+        self._workers: dict[str, list] = {}
 
-    def topic_publish(self, topic, routing_key, payload):
+    def publish(self, topic, routing_key, payload):
         for cb in self._subscribers.get(topic, []):
             cb(payload)
 
-    def topic_consume(self, topic, routing_key, callback):
+    def subscribe(self, topic, routing_key, callback):
         self._subscribers.setdefault(topic, []).append(callback)
+        t = threading.Thread(target=lambda: None, daemon=True)
+        t.start()
+        return t
+
+    def enqueue(self, topic, routing_key, payload):
+        for cb in self._workers.get(topic, []):
+            cb(payload)
+
+    def dequeue(self, topic, routing_key, callback):
+        self._workers.setdefault(topic, []).append(callback)
         t = threading.Thread(target=lambda: None, daemon=True)
         t.start()
         return t

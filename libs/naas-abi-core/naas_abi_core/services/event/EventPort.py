@@ -157,9 +157,10 @@ class IEventService(ABC):
         self,
         event_class: type,
         callback: Callable[[Any], None],
-        routing_key: str = "#",
+        filter: dict | None = None,
     ) -> Thread:
         """Subscribe to live events of `event_class` via the bus.
 
         Live-only — does not replay history. Use `query_for_consumer` for catch-up.
+        ``filter`` is an EventBridge-style dict evaluated client-side.
         """

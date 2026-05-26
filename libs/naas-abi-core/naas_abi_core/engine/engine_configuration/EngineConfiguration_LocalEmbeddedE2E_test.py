@@ -73,7 +73,7 @@ services:
     assert kv.get("k") == b"v"
 
     bus = configuration.services.bus.load()
-    bus.topic_publish("events", "user.created", b"pending")
+    bus.enqueue("events", "user.created", b"pending")
     bus_restarted = configuration.services.bus.load()
 
     done = threading.Event()
@@ -84,7 +84,7 @@ services:
         done.set()
         raise StopIteration()
 
-    bus_restarted.topic_consume("events", "user.*", callback)
+    bus_restarted.dequeue("events", "user.*", callback)
     assert done.wait(timeout=3)
     assert seen == [b"pending"]
 

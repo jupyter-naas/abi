@@ -26,7 +26,7 @@ def publish_chat_ingestion_job(payload: dict[str, Any]) -> None:
     from naas_abi import ABIModule
 
     module = ABIModule.get_instance()
-    module.engine.services.bus.topic_publish(
+    module.engine.services.bus.enqueue(
         CHAT_INGESTION_TOPIC,
         CHAT_INGESTION_ROUTING_KEY,
         json.dumps(payload).encode(),
@@ -250,7 +250,7 @@ def start_chat_ingestion_consumer(app: FastAPI) -> None:
         )
         future.result()  # block the pika thread until the job is done
 
-    consumer_thread = module.engine.services.bus.topic_consume(
+    consumer_thread = module.engine.services.bus.dequeue(
         CHAT_INGESTION_TOPIC,
         CHAT_INGESTION_ROUTING_KEY,
         _callback,
