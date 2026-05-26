@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.42.2 (2026-05-26)
+
+### Bug Fixes
+
+- **core/event**: Satisfy ruff and mypy after benchmark addition
+  ([`27aba61`](https://github.com/jupyter-naas/abi/commit/27aba61d114cb64c3f9a9467b785a40b2ca915fc))
+
+
 ## v1.42.1 (2026-05-26)
 
 
