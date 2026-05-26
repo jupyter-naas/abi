@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -23,11 +23,15 @@ import { LineChart } from './components/line-chart';
 import { BarList, type BarItem } from './components/bar-list';
 import { Card } from './components/card';
 import { EventIcon, formatEventName } from './components/event-icon';
+import { UpdateStatus } from './components/update-status';
 import { formatDateTime, formatDuration, formatNumber, formatRelative } from './lib/format';
+import { getApiUrl } from '@/lib/config';
 import type {
   AnalyticsEvent,
   OverviewResponse,
   PageRow,
+  Scenario,
+  ScenariosResponse,
   SessionRow,
   UserDetail,
   UserRow,
@@ -46,12 +50,8 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 function initialFilters(): FilterValue {
-  const end = new Date();
-  const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
   return {
-    range: '30d',
-    start_date: start.toISOString(),
-    end_date: end.toISOString(),
+    scenario_id: 'last_7_days',
     user_email: 'all',
     workspace_id: 'all',
   };
@@ -59,16 +59,13 @@ function initialFilters(): FilterValue {
 
 function buildQuery(filters: FilterValue): string {
   const p = new URLSearchParams();
-  if (filters.start_date) p.set('start_date', filters.start_date);
-  if (filters.end_date) p.set('end_date', filters.end_date);
-  if (filters.user_email && filters.user_email !== 'all') p.set('user_email', filters.user_email);
-  if (filters.workspace_id && filters.workspace_id !== 'all') p.set('workspace_id', filters.workspace_id);
+  p.set('scenario_id', filters.scenario_id);
   return p.toString();
 }
 
 interface UsersDirectory {
   users: UserRow[];
-  directory: { user_email: string; user_id: string }[];
+  directory: { user_email: string; user_id: string; workspace_ids: string[] }[];
 }
 
 interface WorkspacesDirectory {
@@ -80,19 +77,26 @@ export default function AnalyticsPage() {
   const [filters, setFilters] = useState<FilterValue>(initialFilters);
   const [tab, setTab] = useState<Tab>('overview');
 
-  const [usersDir, setUsersDir] = useState<{ user_email: string; user_id: string }[]>([]);
+  const [usersDir, setUsersDir] = useState<{ user_email: string; user_id: string; workspace_ids: string[] }[]>([]);
   const [workspaceDir, setWorkspaceDir] = useState<{ workspace_id: string; workspace_name: string }[]>([]);
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
 
-  // Bootstrap directories (independent of date filter — full catalog).
+  // Bootstrap directories + scenario catalog (independent of scenario filter).
   useEffect(() => {
-    fetch('/api/analytics/users')
+    const api = getApiUrl();
+    fetch(`${api}/api/analytics/scenarios`)
+      .then((r) => r.json())
+      .then((d: ScenariosResponse) => setScenarios(d.scenarios ?? []))
+      .catch(() => setScenarios([]));
+    fetch(`${api}/api/analytics/users?scenario_id=${filters.scenario_id}`)
       .then((r) => r.json())
       .then((d: UsersDirectory) => setUsersDir(d.directory ?? []))
       .catch(() => setUsersDir([]));
-    fetch('/api/analytics/workspaces')
+    fetch(`${api}/api/analytics/workspaces?scenario_id=${filters.scenario_id}`)
       .then((r) => r.json())
       .then((d: WorkspacesDirectory) => setWorkspaceDir(d.directory ?? []))
       .catch(() => setWorkspaceDir([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleUserPick = useCallback((email: string) => {
@@ -102,6 +106,23 @@ export default function AnalyticsPage() {
 
   const isUserDetail = filters.user_email !== 'all';
 
+  // Only Overview and Events are meaningful in user-detail mode.
+  const visibleTabs = isUserDetail
+    ? TABS.filter((t) => t.key === 'overview' || t.key === 'events')
+    : TABS;
+
+  // If the user picks a specific email while on a now-hidden tab, snap back.
+  useEffect(() => {
+    if (isUserDetail && tab !== 'overview' && tab !== 'events') {
+      setTab('overview');
+    }
+  }, [isUserDetail, tab]);
+
+  const filteredUsersDir =
+    filters.workspace_id && filters.workspace_id !== 'all'
+      ? usersDir.filter((u) => u.workspace_ids.includes(filters.workspace_id))
+      : usersDir;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Top bar */}
@@ -109,7 +130,7 @@ export default function AnalyticsPage() {
         <div className="mx-auto max-w-7xl px-6 py-4">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+              <p className="text-xs font-semibold uppercase tracking-wider text-workspace-accent">
                 Nexus Analytics
               </p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight">
@@ -119,7 +140,7 @@ export default function AnalyticsPage() {
                     <span>{filters.user_email}</span>
                   </span>
                 ) : (
-                  'Product usage'
+                  'Platform usage'
                 )}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -128,24 +149,26 @@ export default function AnalyticsPage() {
                   : 'How your users are engaging across sessions, pages, and workspaces.'}
               </p>
             </div>
+            <UpdateStatus />
           </div>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <FilterBar
               value={filters}
               onChange={setFilters}
-              users={usersDir}
+              scenarios={scenarios}
+              users={filteredUsersDir}
               workspaces={workspaceDir}
             />
-            <nav className="flex items-center gap-1 rounded-xl border border-border/60 bg-card p-1">
-              {TABS.map((t) => (
+            <nav className="flex items-center border border-border/60 bg-card">
+              {visibleTabs.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
                   className={cn(
-                    'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                    'px-3 py-1.5 text-sm font-medium transition-colors border-r border-border/60 last:border-r-0',
                     tab === t.key
-                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      ? 'bg-workspace-accent text-white'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                   )}
                 >
@@ -186,18 +209,30 @@ export default function AnalyticsPage() {
 // Generic fetch hook
 // ---------------------------------------------------------------------------
 
-function useAnalytics<T>(path: string, filters: FilterValue) {
+function useAnalytics<T>(
+  path: string,
+  filters: FilterValue,
+  extra?: Record<string, string>,
+) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const q = buildQuery(filters);
+  const extraKey = extra ? JSON.stringify(extra) : '';
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${path}${q ? `?${q}` : ''}`)
+
+    const p = new URLSearchParams(buildQuery(filters));
+    if (extra) {
+      Object.entries(extra).forEach(([k, v]) => p.set(k, v));
+    }
+    const qs = p.toString();
+    const url = `${getApiUrl()}${path}${qs ? `?${qs}` : ''}`;
+
+    fetch(url)
       .then(async (r) => {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
         return r.json();
@@ -214,7 +249,8 @@ function useAnalytics<T>(path: string, filters: FilterValue) {
     return () => {
       cancelled = true;
     };
-  }, [path, q]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, buildQuery(filters), extraKey]);
 
   return { data, loading, error };
 }
@@ -230,7 +266,7 @@ function LoadingBlock({ label = 'Loading' }: { label?: string }) {
 
 function ErrorBlock({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/5 p-6 text-sm text-rose-600">
+    <div className="flex items-center justify-center gap-2 border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
       <AlertTriangle size={16} />
       {message}
     </div>
@@ -311,7 +347,6 @@ function OverviewSection({
             >
               <LineChart
                 data={data.active_users_over_time}
-                color="hsl(var(--primary))"
                 label="users"
               />
             </Card>
@@ -377,9 +412,10 @@ function RecentActivityList({
   onUserPick: (email: string) => void;
 }) {
   if (events.length === 0) return <EmptyBlock>No recent events.</EmptyBlock>;
+  const sorted = events.slice().sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return (
     <ul className="divide-y divide-border/50 -mx-5 -my-5">
-      {events.map((e) => (
+      {sorted.map((e) => (
         <li key={e.event_id} className="flex items-start gap-3 px-5 py-2.5 text-sm">
           <EventIcon name={e.event_name} />
           <div className="flex-1 min-w-0">
@@ -405,7 +441,7 @@ function RecentActivityList({
             </div>
           </div>
           <span className="flex-shrink-0 text-xs text-muted-foreground whitespace-nowrap">
-            {formatRelative(e.timestamp)}
+            {formatDateTime(e.timestamp)}
           </span>
         </li>
       ))}
@@ -593,10 +629,10 @@ function WorkspacesSection({ filters }: { filters: FilterValue }) {
           {ws.map((w) => (
             <div
               key={w.workspace_id}
-              className="rounded-xl border border-border/60 bg-background p-4"
+              className="border border-border/60 bg-background p-4"
             >
               <div className="flex items-center gap-2">
-                <Layers size={14} className="text-primary" />
+                <Layers size={14} className="text-workspace-accent" />
                 <h4 className="font-medium truncate">{w.workspace_name}</h4>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -627,8 +663,9 @@ function WorkspacesSection({ filters }: { filters: FilterValue }) {
 
 function EventsSection({ filters }: { filters: FilterValue }) {
   const { data, loading, error } = useAnalytics<{ events: AnalyticsEvent[] }>(
-    '/api/analytics/events?limit=300',
+    '/api/analytics/events',
     filters,
+    { limit: '300' },
   );
   if (loading && !data) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
@@ -663,7 +700,7 @@ function EventsSection({ filters }: { filters: FilterValue }) {
                 </div>
               </div>
               <div className="flex-shrink-0 text-right text-xs text-muted-foreground whitespace-nowrap">
-                <div>{formatRelative(e.timestamp)}</div>
+                <div>{formatDateTime(e.timestamp)}</div>
                 <div className="font-mono opacity-70">{e.session_id.slice(0, 12)}</div>
               </div>
             </li>
@@ -697,7 +734,7 @@ function UserDetailSection({
         action={
           <button
             onClick={onClear}
-            className="text-xs text-primary hover:underline"
+            className="text-xs text-workspace-accent hover:underline"
           >
             Clear user filter
           </button>
@@ -760,9 +797,9 @@ function UserDetailSection({
                 {data.workspaces_used.map((w) => (
                   <li
                     key={w.id}
-                    className="flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-sm"
+                    className="flex items-center gap-2 border border-border/60 px-3 py-2 text-sm"
                   >
-                    <Layers size={13} className="text-primary" />
+                    <Layers size={13} className="text-workspace-accent" />
                     <span className="font-medium">{w.name}</span>
                     <span className="ml-auto text-xs text-muted-foreground">{w.id}</span>
                   </li>
@@ -796,7 +833,7 @@ function UserDetailSection({
                         <span
                           className={cn(
                             'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full',
-                            'bg-primary/10 text-primary text-xs font-semibold tabular-nums',
+                            'bg-workspace-accent-10 text-workspace-accent text-xs font-semibold tabular-nums',
                           )}
                         >
                           {s.events}

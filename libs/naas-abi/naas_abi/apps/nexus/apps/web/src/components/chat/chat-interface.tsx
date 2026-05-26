@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -14,6 +14,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
+import { useTenant } from '@/contexts/tenant-context';
 import { AgentSelector } from './agent-selector';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
@@ -451,7 +452,7 @@ function LinkWithPreview({
   );
 }
 
-export function ChatInterface() {
+export function ChatInterface({ initialConversationId }: { initialConversationId?: string | null }) {
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -464,6 +465,7 @@ export function ChatInterface() {
   const gotFirstTokenRef = useRef(false);
   const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [attachedImages, setAttachedImages] = useState<string[]>([]); // Base64 images
+  const [pendingFileAttachments, setPendingFileAttachments] = useState<string[]>([]); // Uploaded doc filenames
   const [imageError, setImageError] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   // Web search — UI/API disabled until the feature is ready
@@ -535,10 +537,13 @@ export function ChatInterface() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const router = useRouter();
+
   const {
     activeConversationId,
     selectedAgent,
     createConversation,
+    setActiveConversation,
     addMessage,
     updateLastMessage,
     getWorkspaceConversations,
@@ -547,6 +552,7 @@ export function ChatInterface() {
   } = useWorkspaceStore();
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
+  const { tab_title: tabTitle } = useTenant();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
   const { getAgent } = useAgentsStore();
@@ -580,6 +586,42 @@ export function ChatInterface() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // On first render, activate the conversation referenced in the URL (if any).
+  useEffect(() => {
+    if (!initialConversationId) return;
+    setActiveConversation(initialConversationId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConversationId]);
+
+  // Keep the URL in sync with the active conversation so each conversation has a shareable link.
+  useEffect(() => {
+    if (!mounted) return;
+    if (!currentWorkspaceId) return;
+    const base = `/workspace/${currentWorkspaceId}/chat`;
+    const target = activeConversationId ? `${base}/${activeConversationId}` : base;
+    router.replace(target, { scroll: false });
+  }, [activeConversationId, mounted, currentWorkspaceId, router]);
+
+  // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
+  const activeConversationTitle = useWorkspaceStore((s) =>
+    s.conversations.find((c) => c.id === s.activeConversationId)?.title
+  );
+
+  // Update the browser tab title with the active conversation name.
+  // The 700 ms delay ensures we run after tenant-context.tsx's 600 ms re-apply,
+  // which resets the title after every pathname change.
+  useEffect(() => {
+    if (!mounted) return;
+    const t = setTimeout(() => {
+      if (activeConversationTitle && activeConversationTitle !== 'New Conversation') {
+        document.title = `${activeConversationTitle} | ${tabTitle}`;
+      } else {
+        document.title = `Chat | ${tabTitle}`;
+      }
+    }, 700);
+    return () => clearTimeout(t);
+  }, [activeConversationTitle, mounted, tabTitle]);
 
   // When switching/creating a conversation (including via keyboard shortcut in the sidebar),
   // keep the typing cursor in the chat bar.
@@ -859,6 +901,7 @@ export function ChatInterface() {
         next.set(syncJobId, { filename: file.name, status: 'uploaded', conversationId });
         return next;
       });
+      setPendingFileAttachments((prev) => [...prev, file.name]);
       return;
     }
 
@@ -869,6 +912,7 @@ export function ChatInterface() {
     });
 
     await pollIngestionJob(result.job_id, file.name, conversationId, token);
+    setPendingFileAttachments((prev) => [...prev, file.name]);
   };
 
   const fetchMyDriveFiles = async (path = '') => {
@@ -925,6 +969,7 @@ export function ChatInterface() {
         next.set(syncJobId, { filename, status: 'uploaded', conversationId });
         return next;
       });
+      setPendingFileAttachments((prev) => [...prev, filename]);
       return;
     }
 
@@ -935,6 +980,7 @@ export function ChatInterface() {
     });
 
     await pollIngestionJob(result.job_id, filename, conversationId, token);
+    setPendingFileAttachments((prev) => [...prev, filename]);
   };
 
   // Handle attachment selection (images + documents)
@@ -1313,7 +1359,7 @@ export function ChatInterface() {
     e?.preventDefault();
     if (isSubmittingRef.current) return;
     const sourceText = messageOverride !== undefined ? messageOverride : input;
-    if ((!sourceText.trim() && attachedImages.length === 0) || isLoading) return;
+    if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
     const effectiveAgent = agentOverride ?? selectedAgent;
 
@@ -1329,12 +1375,14 @@ export function ChatInterface() {
     }
 
     const currentImages = [...attachedImages]; // Copy before clearing
-    
-    // Add user message with images
+    const currentFileAttachments = [...pendingFileAttachments]; // Copy before clearing
+
+    // Add user message with images and file attachments
     addMessage(conversationId, {
       role: 'user',
       content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
       images: currentImages.length > 0 ? currentImages : undefined,
+      fileAttachments: currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
     });
 
     const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
@@ -1345,6 +1393,7 @@ export function ChatInterface() {
       setInput('');
     }
     setAttachedImages([]); // Clear attached images after adding to message
+    setPendingFileAttachments([]); // Clear file attachments after adding to message
     setImageError(null);
     // setSearchEnabled(false); // Reset search toggle after sending
     setRequestSentAt(Date.now());
@@ -2095,6 +2144,29 @@ export function ChatInterface() {
                 ))}
               </div>
             )}
+
+            {/* Pending file attachment chips */}
+            {pendingFileAttachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {pendingFileAttachments.map((filename, idx) => (
+                  <div
+                    key={idx}
+                    className="group flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground"
+                  >
+                    <FileText size={13} className="shrink-0 text-workspace-accent" />
+                    <span className="max-w-[160px] truncate">{filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPendingFileAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                      className="ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      title="Remove attachment"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             
             {/* Image error */}
             {imageError && (
@@ -2245,7 +2317,7 @@ export function ChatInterface() {
                     }
                   }}
                   placeholder={
-                    attachedImages.length > 0 ? 'Ask about the image...' : 'Send a message...'
+                    attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
@@ -2263,7 +2335,7 @@ export function ChatInterface() {
                     className={cn(
                       'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
                       'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      attachedImages.length > 0 && 'bg-workspace-accent/15 text-workspace-accent'
+                      (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'bg-workspace-accent/15 text-workspace-accent'
                     )}
                     title="Attach image or document"
                   >
@@ -2398,10 +2470,10 @@ export function ChatInterface() {
                   {/* Send button */}
                   <button
                     type="submit"
-                    disabled={(!input.trim() && attachedImages.length === 0) || isLoading}
+                    disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
                     className={cn(
                       'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                      (input.trim() || attachedImages.length > 0) && !isLoading
+                      (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
                         ? 'bg-foreground text-background hover:opacity-80'
                         : 'bg-muted text-muted-foreground'
                     )}
@@ -3271,6 +3343,21 @@ const MessageBubble = React.memo(function MessageBubble({
                 className="max-h-48 w-auto rounded-xl border border-border object-contain"
                 unoptimized
               />
+            ))}
+          </div>
+        )}
+
+        {/* Attached files (for user messages) */}
+        {isUser && message.fileAttachments && message.fileAttachments.length > 0 && (
+          <div className={cn('flex flex-wrap gap-2 mb-2', 'justify-end')}>
+            {message.fileAttachments.map((filename, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground"
+              >
+                <FileText size={13} className="shrink-0 text-workspace-accent" />
+                <span className="max-w-[200px] truncate">{filename}</span>
+              </div>
             ))}
           </div>
         )}

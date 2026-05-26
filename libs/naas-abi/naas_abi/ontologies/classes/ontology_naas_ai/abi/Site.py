@@ -1,4 +1,4 @@
-from naas_abi.ontologies.modules.BFO7BucketsProcessOntology import (
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
     Site as _Site,
 )
 

@@ -17,8 +17,8 @@ export function KpiCard({ label, value, hint, icon: Icon, trend, className }: Kp
   return (
     <div
       className={cn(
-        'rounded-2xl border border-border/60 bg-card p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]',
-        'transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:border-border',
+        'border border-border/60 bg-card p-5 transition-colors',
+        'hover:border-workspace-accent/40',
         className,
       )}
     >
@@ -34,10 +34,10 @@ export function KpiCard({ label, value, hint, icon: Icon, trend, className }: Kp
           {trend && (
             <p
               className={cn(
-                'mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium',
+                'mt-2 inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium',
                 trendPositive
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+                  ? 'bg-workspace-accent-10 text-workspace-accent'
+                  : 'bg-destructive/10 text-destructive',
               )}
             >
               {trendPositive ? '▲' : '▼'} {Math.abs(trend.value).toFixed(1)}%
@@ -46,7 +46,7 @@ export function KpiCard({ label, value, hint, icon: Icon, trend, className }: Kp
           )}
         </div>
         {Icon && (
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center bg-workspace-accent-10 text-workspace-accent">
             <Icon size={18} />
           </div>
         )}

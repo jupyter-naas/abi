@@ -8,11 +8,12 @@ interface ChatWorkspacePageProps {
   };
 }
 
-export default function ChatWorkspacePage(_: ChatWorkspacePageProps) {
+export default function ChatWorkspacePage({ params }: ChatWorkspacePageProps) {
+  const conversationId = params.slug?.[0] ?? null;
   return (
     <div className="flex h-full flex-col">
       <Header title="Chat" />
-      <ChatInterface />
+      <ChatInterface initialConversationId={conversationId} />
     </div>
   );
 }

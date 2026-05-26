@@ -377,7 +377,9 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
       // Refresh failed — full logout
       console.warn('Auth token expired and refresh failed, logging out...');
       useAuthStore.getState().logout();
-      if (typeof window !== 'undefined') {
+      // Skip redirect if already on an auth route — otherwise we trigger a
+      // reload loop with stores that auto-fetch on hydration.
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/')) {
         window.location.href = '/auth/login';
       }
     }
