@@ -587,8 +587,25 @@ def _quick_extract_owl_imports(content: str) -> List[str]:
 
     Used to compute the cache key before deciding whether to parse. Only
     angle-bracketed IRIs are recognized.
+
+    Traditional remote ontology IRIs (``http://`` / ``https://``) are
+    filtered out — onto2py does not fetch remote ontologies; those IRIs
+    are kept in the TTL purely as RDF-level references. Only resolvable
+    forms (``python://``, ``file://``, plain paths) are returned.
     """
-    return _OWL_IMPORTS_RE.findall(content)
+    iris = _OWL_IMPORTS_RE.findall(content)
+    return [iri for iri in iris if not _is_remote_import(iri)]
+
+
+def _is_remote_import(iri: str) -> bool:
+    """Return True for IRIs we deliberately don't resolve.
+
+    Traditional OWL ontologies are identified by ``http(s)://`` IRIs and
+    are not expected to be fetched at codegen time. ``python://`` is *not*
+    remote — it's a local importlib.resources reference that happens to
+    use a URL-like scheme.
+    """
+    return iri.startswith(("http://", "https://"))
 
 
 def _resolve_owl_import(

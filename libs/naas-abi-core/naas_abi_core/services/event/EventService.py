@@ -102,7 +102,12 @@ class EventService(ServiceBase, IEventService):
 
         if self._bus is not None:
             try:
-                self._bus.topic_publish(
+                # Publish on the event-class topic. EventService events use
+                # the bus's pub/sub semantics so every registered subscriber
+                # receives the event (no competing-consumer races). The
+                # event_id is the routing key — subscribers default to "#"
+                # so they receive every event of this class.
+                self._bus.publish(
                     topic=class_iri_to_topic(event_type),
                     routing_key=event_id,
                     payload=payload,
@@ -258,10 +263,13 @@ class EventService(ServiceBase, IEventService):
         self,
         event_class: type[LogProcess],
         callback: Callable[[Any], None],
-        routing_key: str = "#",
         filter: dict | None = None,
     ) -> Thread:
         """Subscribe to live events.
+
+        Each call to :meth:`subscribe` registers an independent listener:
+        every subscriber receives every published event (Redis-pub/sub
+        semantics), so two subscribers on the same event class don't compete.
 
         ``filter`` (optional) is evaluated in-memory against each incoming
         event; non-matching events skip the callback. Same dict syntax as
@@ -294,7 +302,7 @@ class EventService(ServiceBase, IEventService):
             except Exception as exc:
                 logger.exception(f"EventService: subscriber callback failed: {exc}")
 
-        return self._bus.topic_consume(topic, routing_key, _on_message)
+        return self._bus.subscribe(topic, "#", _on_message)
 
     # ------------------------------------------------------------------
     # reconstruction

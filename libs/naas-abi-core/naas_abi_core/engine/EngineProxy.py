@@ -10,6 +10,7 @@ from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogSe
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -123,6 +124,17 @@ class ServicesProxy:
         if not self.__unlocked and ActivityLogService not in self.__module_dependencies.services:
             return False
         return self.__engine.services.activity_log_available()
+
+    @property
+    def events(self) -> EventService:
+        self.__ensure_access(EventService)
+
+        return self.__engine.services.events
+
+    def events_available(self) -> bool:
+        if not self.__unlocked and EventService not in self.__module_dependencies.services:
+            return False
+        return self.__engine.services.events_available()
 
 
 class EngineProxy:

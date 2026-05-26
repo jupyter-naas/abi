@@ -85,8 +85,14 @@ class RabbitMQAdapter(IBusAdapter):
             properties=pika.BasicProperties(delivery_mode=2),
         )
 
-    def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
-        """Publish *payload* to *topic* / *routing_key*.
+    # ------------------------------------------------------------------
+    # Work queue — durable topic exchange + shared durable queue.
+    # All consumers on the same (topic, routing_key) share one queue and
+    # RabbitMQ load-balances messages across them. Exactly-one delivery.
+    # ------------------------------------------------------------------
+
+    def enqueue(self, topic: str, routing_key: str, payload: bytes) -> None:
+        """Append *payload* to the work queue identified by *topic*/*routing_key*.
 
         Automatically reconnects once if the idle connection was closed by the
         broker (e.g. due to a missed heartbeat while the process was not
@@ -103,7 +109,7 @@ class RabbitMQAdapter(IBusAdapter):
                 self._close_publish_connection()
                 raise ConnectionError("RabbitMQ publish failed") from exc
 
-    def topic_consume(
+    def dequeue(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
     ) -> Thread:
         def _consume_loop() -> None:
@@ -153,6 +159,103 @@ class RabbitMQAdapter(IBusAdapter):
                 channel.start_consuming()
             except (pika.exceptions.AMQPError, OSError) as exc:
                 raise ConnectionError("RabbitMQ consume failed") from exc
+            finally:
+                if channel is not None and channel.is_open:
+                    channel.close()
+                if connection is not None and connection.is_open:
+                    connection.close()
+
+        thread = Thread(target=_consume_loop, daemon=True)
+        thread.start()
+        return thread
+
+    # ------------------------------------------------------------------
+    # Pub/sub — topic exchange + per-subscriber exclusive auto-delete queue.
+    # Each subscribe call gets its OWN private queue bound to the topic
+    # exchange with the supplied routing-key pattern. RabbitMQ then copies
+    # every matching message to every subscriber's queue (fanout-like
+    # semantics with routing-key filtering). Queues die with the consumer.
+    # ------------------------------------------------------------------
+
+    _PUBSUB_EXCHANGE_PREFIX = "naas-abi.pubsub."
+
+    @staticmethod
+    def _pubsub_exchange(topic: str) -> str:
+        return f"{RabbitMQAdapter._PUBSUB_EXCHANGE_PREFIX}{topic}"
+
+    def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+        channel = self._ensure_publish_channel()
+        exchange = self._pubsub_exchange(topic)
+        if exchange not in self.__declared_publish_exchanges:
+            channel.exchange_declare(
+                exchange=exchange,
+                exchange_type="topic",
+                durable=False,
+                auto_delete=True,
+            )
+            self.__declared_publish_exchanges.add(exchange)
+        channel.basic_publish(
+            exchange=exchange,
+            routing_key=routing_key,
+            body=payload,
+        )
+
+    def subscribe(
+        self, topic: str, routing_key: str, callback: Callable[[bytes], None]
+    ) -> Thread:
+        def _consume_loop() -> None:
+            connection = None
+            channel = None
+            try:
+                connection = pika.BlockingConnection(
+                    pika.URLParameters(self.__rabbitmq_url)
+                )
+                channel = connection.channel()
+                exchange = self._pubsub_exchange(topic)
+                channel.exchange_declare(
+                    exchange=exchange,
+                    exchange_type="topic",
+                    durable=False,
+                    auto_delete=True,
+                )
+                # Server-generated unique name + exclusive + auto_delete →
+                # one queue per subscriber that disappears when the channel
+                # closes. No state survives a restart — Redis-style pub/sub.
+                result = channel.queue_declare(
+                    queue="",
+                    exclusive=True,
+                    auto_delete=True,
+                    durable=False,
+                )
+                queue_name = result.method.queue
+                channel.queue_bind(
+                    queue=queue_name, exchange=exchange, routing_key=routing_key
+                )
+
+                def _on_message(ch, method, properties, body):
+                    try:
+                        callback(body)
+                        ch.basic_ack(delivery_tag=method.delivery_tag)
+                    except StopIteration:
+                        ch.basic_ack(delivery_tag=method.delivery_tag)
+                        ch.stop_consuming()
+                    except Exception:
+                        # Pub/sub is best-effort; ACK so a buggy subscriber
+                        # doesn't redeliver the same message.
+                        ch.basic_ack(delivery_tag=method.delivery_tag)
+                        logger.exception(
+                            f"RabbitMQAdapter: subscriber failed on {topic} -- {routing_key}"
+                        )
+
+                logger.debug(f"Subscribing: {topic} -- {routing_key}")
+                channel.basic_consume(
+                    queue=queue_name,
+                    on_message_callback=_on_message,
+                    auto_ack=False,
+                )
+                channel.start_consuming()
+            except (pika.exceptions.AMQPError, OSError) as exc:
+                raise ConnectionError("RabbitMQ subscribe failed") from exc
             finally:
                 if channel is not None and channel.is_open:
                     channel.close()
