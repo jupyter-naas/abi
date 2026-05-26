@@ -44,10 +44,16 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from pydantic import BaseModel, Field
+from rdflib import Graph as RDFGraph
+from rdflib import URIRef
+from rdflib.query import ResultRow
 
 router = APIRouter()
+
+NEXUS_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/nexus-logs")
 
 OUTPUT_DIR = "naas_abi/nexus/analytics"
 EVENTS_PREFIX = f"{OUTPUT_DIR}/events"
@@ -150,14 +156,34 @@ def get_storage_utils(
     return StorageUtils(storage_service=storage)
 
 
+def get_triple_store(request: Request) -> TripleStoreService | None:
+    """Return the configured triple store, or None if unavailable.
+
+    Analytics ingestion to the knowledge graph is best-effort: the per-event
+    pickle is the source of truth, the graph is a derived projection. If the
+    engine isn't loaded yet, skip silently rather than failing the request.
+    """
+    store = getattr(request.app.state, "triple_store", None)
+    if store is not None:
+        return store
+    try:
+        from naas_abi import ABIModule
+
+        module = ABIModule.get_instance()
+        store = module.engine.services.triple_store
+        request.app.state.triple_store = store
+        return store
+    except Exception as exc:
+        logger.debug(f"[analytics] triple store unavailable: {exc}")
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Storage helpers
 # ---------------------------------------------------------------------------
 
 
-def _read_json(
-    storage: ObjectStorageService, file_name: str, fallback: Any
-) -> Any:
+def _read_json(storage: ObjectStorageService, file_name: str, fallback: Any) -> Any:
     try:
         raw = storage.get_object(OUTPUT_DIR, file_name)
         if raw is None:
@@ -223,13 +249,323 @@ def _upsert_refs(event: AnalyticsEvent, storage: ObjectStorageService) -> None:
             if existing.get("user_email") != event.user_email:
                 existing["user_email"] = event.user_email
                 changed = True
-            if event.workspace_id and event.workspace_id not in existing.get(
-                "workspace_ids", []
-            ):
+            if event.workspace_id and event.workspace_id not in existing.get("workspace_ids", []):
                 existing.setdefault("workspace_ids", []).append(event.workspace_id)
                 changed = True
         if changed:
             _save_refs(REF_USERS_FILE, users, storage)
+
+
+# ---------------------------------------------------------------------------
+# Knowledge graph ingestion (write-path projection of analytics events)
+# ---------------------------------------------------------------------------
+
+
+def _find_uri_by_label(
+    triple_store: TripleStoreService,
+    class_uri: str,
+    label: str,
+) -> str | None:
+    """Return the URI of the first instance of ``class_uri`` whose
+    ``rdfs:label`` equals ``label`` in the Nexus graph, or None."""
+    escaped = label.replace("\\", "\\\\").replace('"', '\\"')
+    rows = triple_store.query(
+        f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?uri WHERE {{
+            GRAPH <{str(NEXUS_GRAPH_URI)}> {{
+                ?uri rdf:type <{class_uri}> ;
+                     rdfs:label "{escaped}" .
+            }}
+        }} LIMIT 1
+        """
+    )
+    for row in rows:
+        assert isinstance(row, ResultRow)
+        return str(row[0])
+    return None
+
+
+def _find_visit_session_by_session_id(
+    triple_store: TripleStoreService,
+    session_id: str,
+) -> tuple[str | None, str | None]:
+    """Return ``(session_uri, interval_uri)`` for an existing VisitSession
+    whose ``nexus:session_id`` matches *session_id*, or ``(None, None)``."""
+    escaped = session_id.replace("\\", "\\\\").replace('"', '\\"')
+    rows = triple_store.query(
+        f"""
+        PREFIX nexus: <http://ontology.naas.ai/nexus/>
+        SELECT ?session_uri ?interval_uri WHERE {{
+            GRAPH <{str(NEXUS_GRAPH_URI)}> {{
+                ?session_uri nexus:session_id "{escaped}" .
+                OPTIONAL {{ ?session_uri nexus:hasSessionInterval ?interval_uri . }}
+            }}
+        }} LIMIT 1
+        """
+    )
+    for row in rows:
+        assert isinstance(row, ResultRow)
+        s = str(row[0]) if row[0] else None
+        i = str(row[1]) if row[1] else None
+        return s, i
+    return None, None
+
+
+def _ingest_page_view_event(event: AnalyticsEvent, triple_store: TripleStoreService) -> None:
+    """Project a ``page_viewed`` analytics event into the Nexus knowledge graph.
+
+    Strategy:
+    1. Resolve each related continuant (User, Workspace, Page, VisitSession,
+       UserSite, TemporalInstant) by ``rdfs:label`` — reuse the existing URI
+       when present, otherwise build a new instance.
+    2. Stage all instance triples first (without inter-entity relations).
+    3. Build the PageView process node and attach the relations to the
+       resolved URIs.
+    4. Insert everything in one batch into ``http://ontology.naas.ai/graph/nexus``.
+    """
+    # Imported lazily so importing this module doesn't force loading the
+    # full ontology module (~5k lines) when the API runs without the engine.
+    from naas_abi.ontologies.modules.NexusPlatformOntology import (
+        Page,
+        PageView,
+        TemporalInstant,
+        User,
+        UserSite,
+        VisitSession,
+        Workspace,
+    )
+
+    inserted = RDFGraph()
+
+    def _resolve_or_create(cls, label: str, **kwargs):
+        """Return URIRef for an entity, reusing existing or creating new."""
+        existing = _find_uri_by_label(triple_store, cls._class_uri, label)
+        if existing is not None:
+            return URIRef(existing)
+        instance = cls(label=label, **kwargs)
+        inserted.__iadd__(instance.rdf())
+        return URIRef(instance._uri)
+
+    # --- Step 1: resolve / create all related instances ---------------------
+
+    user_uri: URIRef | None = None
+    if event.user_email:
+        user_uri = _resolve_or_create(
+            User, event.user_email, user_id=event.user_id, email=event.user_email
+        )
+
+    workspace_uri: URIRef | None = None
+    if event.workspace_id:
+        ws_label = event.workspace_name or event.workspace_id
+        workspace_uri = _resolve_or_create(
+            Workspace,
+            ws_label,
+            workspace_id=event.workspace_id,
+            workspace_name=event.workspace_name,
+        )
+
+    page_uri: URIRef | None = None
+    if event.page_path:
+        page_uri = _resolve_or_create(
+            Page,
+            event.page_path,
+            page_path=event.page_path,
+            page_title=event.page_title,
+        )
+
+    # Reuse the VisitSession URI already persisted by _ingest_visit_session_event
+    # (which always runs before this function for page_viewed events).
+    session_uri: URIRef | None = None
+    if event.session_id:
+        existing_session, _ = _find_visit_session_by_session_id(triple_store, event.session_id)
+        if existing_session:
+            session_uri = URIRef(existing_session)
+        else:
+            session_uri = _resolve_or_create(
+                VisitSession, event.session_id, session_id=event.session_id
+            )
+
+    site_uri: URIRef | None = None
+    site_label_parts = [p for p in (event.country, event.device, event.browser) if p]
+    if site_label_parts:
+        site_label = " / ".join(site_label_parts)
+        site_uri = _resolve_or_create(
+            UserSite,
+            site_label,
+            country=event.country,
+            device=event.device,
+            browser=event.browser,
+        )
+
+    instant_uri = URIRef(_resolve_or_create(TemporalInstant, event.timestamp))
+
+    # --- Step 2: build the PageView process and attach relations ------------
+
+    page_view = PageView(label=event.event_id, event_id=event.event_id)
+    if event.referrer:
+        page_view.referrer = event.referrer
+    if user_uri is not None:
+        page_view.viewed_by = [user_uri]
+    if workspace_uri is not None:
+        page_view.occurs_in_workspace = [workspace_uri]
+    if page_uri is not None:
+        page_view.has_visited_page = [page_uri]
+    if session_uri is not None:
+        page_view.occurs_during_session = [session_uri]
+    if site_uri is not None:
+        page_view.occurs_in = [site_uri]
+    page_view.viewed_at = [instant_uri]
+
+    inserted += page_view.rdf()
+
+    # --- Step 3: insert into the Nexus graph --------------------------------
+
+    if len(inserted) > 0:
+        triple_store.insert(inserted, graph_name=NEXUS_GRAPH_URI)
+
+
+def _ingest_visit_session_event(event: AnalyticsEvent, triple_store: TripleStoreService) -> None:
+    """Create or update the VisitSession process node for the session carried by *event*.
+
+    - **First occurrence** of a ``session_id``: create a new ``VisitSession``
+      with a ``VisitSessionInterval`` whose ``startedAt`` and ``endedAt`` are
+      both set to ``event.timestamp``.
+    - **Subsequent occurrences**: advance ``endedAt`` on the existing
+      ``VisitSessionInterval`` to ``event.timestamp`` so that the interval
+      always reflects the true end of the session seen so far.
+    """
+    from naas_abi.ontologies.modules.NexusPlatformOntology import (
+        TemporalInstant,
+        User,
+        UserSite,
+        VisitSession,
+        VisitSessionInterval,
+        Workspace,
+    )
+
+    session_uri, interval_uri = _find_visit_session_by_session_id(triple_store, event.session_id)
+
+    new_end_instant = TemporalInstant(label=event.timestamp)
+    new_end_uri = URIRef(new_end_instant._uri)
+
+    if session_uri is not None and interval_uri is not None:
+        # --- Update path: advance endedAt on the existing interval ----------
+
+        # Collect existing endedAt object URIs so we can retract them.
+        old_rows = triple_store.query(
+            f"""
+            PREFIX nexus: <http://ontology.naas.ai/nexus/>
+            SELECT ?ended_at WHERE {{
+                GRAPH <{str(NEXUS_GRAPH_URI)}> {{
+                    <{interval_uri}> nexus:endedAt ?ended_at .
+                }}
+            }}
+            """
+        )
+        remove_graph = RDFGraph()
+        for old_row in old_rows:
+            assert isinstance(old_row, ResultRow)
+            if old_row[0]:
+                remove_graph.add(
+                    (
+                        URIRef(interval_uri),
+                        URIRef("http://ontology.naas.ai/nexus/endedAt"),
+                        URIRef(str(old_row[0])),
+                    )
+                )
+        if len(remove_graph) > 0:
+            triple_store.remove(remove_graph, NEXUS_GRAPH_URI)
+
+        # Insert new end instant + updated endedAt triple.
+        inserted = RDFGraph()
+        inserted += new_end_instant.rdf()
+        inserted.add(
+            (
+                URIRef(interval_uri),
+                URIRef("http://ontology.naas.ai/nexus/endedAt"),
+                new_end_uri,
+            )
+        )
+        triple_store.insert(inserted, NEXUS_GRAPH_URI)
+
+    else:
+        # --- Create path: first time we see this session --------------------
+
+        inserted = RDFGraph()
+
+        # Reuse already-persisted continuant URIs when available (best-effort).
+        def _resolve_existing(cls, label: str) -> URIRef | None:
+            existing = _find_uri_by_label(triple_store, cls._class_uri, label)
+            return URIRef(existing) if existing else None
+
+        user_uri: URIRef | None = None
+        if event.user_email:
+            user_uri = _resolve_existing(User, event.user_email)
+
+        workspace_uri: URIRef | None = None
+        if event.workspace_id:
+            ws_label = event.workspace_name or event.workspace_id
+            workspace_uri = _resolve_existing(Workspace, ws_label)
+
+        site_uri: URIRef | None = None
+        site_label_parts = [p for p in (event.country, event.device, event.browser) if p]
+        if site_label_parts:
+            site_label = " / ".join(site_label_parts)
+            site_uri = _resolve_existing(UserSite, site_label)
+
+        # startedAt and endedAt are both the current event timestamp on creation.
+        start_instant = TemporalInstant(label=event.timestamp)
+        inserted += start_instant.rdf()
+        inserted += new_end_instant.rdf()
+
+        interval = VisitSessionInterval(
+            label=event.session_id,
+            start_at=[URIRef(start_instant._uri)],
+            ended_at=[new_end_uri],
+        )
+        inserted += interval.rdf()
+
+        visit_session = VisitSession(
+            label=event.session_id,
+            session_id=event.session_id,
+            has_session_interval=[URIRef(interval._uri)],
+        )
+        if user_uri is not None:
+            visit_session.started_by = [user_uri]
+        if workspace_uri is not None:
+            visit_session.occurs_in_workspace = [workspace_uri]
+        if site_uri is not None:
+            visit_session.occurs_in = [site_uri]
+
+        inserted += visit_session.rdf()
+
+        if len(inserted) > 0:
+            triple_store.insert(inserted, NEXUS_GRAPH_URI)
+
+
+def _ingest_event_to_graph(event: AnalyticsEvent, triple_store: TripleStoreService | None) -> None:
+    """Dispatch an event to the matching knowledge-graph projection.
+
+    Best-effort: failures are logged but never propagated — the per-event
+    pickle has already been persisted by the caller and remains the source
+    of truth.
+    """
+    if triple_store is None:
+        return
+    try:
+        if event.event_name == "page_viewed":
+            # Visit session must be created/updated before the page-view node
+            # so that _ingest_page_view_event can reference the persisted URI.
+            if event.session_id:
+                _ingest_visit_session_event(event, triple_store)
+            _ingest_page_view_event(event, triple_store)
+    except Exception as exc:
+        logger.warning(
+            f"[analytics] failed to project event {event.event_id} "
+            f"({event.event_name}) to nexus graph: {exc}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +752,10 @@ def _rebuild_kpis(storage_utils: StorageUtils, events: list[dict]) -> list[dict]
         rows.extend(
             _compute_kpi_rows(
                 _slice_events(events, start_s, end_s, None, None),
-                "all", "all", scenario, snapshot_date,
+                "all",
+                "all",
+                scenario,
+                snapshot_date,
             )
         )
 
@@ -424,7 +763,10 @@ def _rebuild_kpis(storage_utils: StorageUtils, events: list[dict]) -> list[dict]
             rows.extend(
                 _compute_kpi_rows(
                     _slice_events(events, start_s, end_s, None, wid),
-                    wid, "all", scenario, snapshot_date,
+                    wid,
+                    "all",
+                    scenario,
+                    snapshot_date,
                 )
             )
 
@@ -432,7 +774,10 @@ def _rebuild_kpis(storage_utils: StorageUtils, events: list[dict]) -> list[dict]
             rows.extend(
                 _compute_kpi_rows(
                     _slice_events(events, start_s, end_s, uid, None),
-                    "all", uid, scenario, snapshot_date,
+                    "all",
+                    uid,
+                    scenario,
+                    snapshot_date,
                 )
             )
 
@@ -440,9 +785,7 @@ def _rebuild_kpis(storage_utils: StorageUtils, events: list[dict]) -> list[dict]
             for wid in workspace_ids:
                 evts = _slice_events(events, start_s, end_s, uid, wid)
                 if evts:
-                    rows.extend(
-                        _compute_kpi_rows(evts, wid, uid, scenario, snapshot_date)
-                    )
+                    rows.extend(_compute_kpi_rows(evts, wid, uid, scenario, snapshot_date))
 
     _publish_json(storage_utils, KPIS_FILE, {"kpis": rows})
     return rows
@@ -483,9 +826,7 @@ def _run_rebuild(storage_utils: StorageUtils, storage: ObjectStorageService) -> 
         _rebuild_running = True
     try:
         meta = _rebuild_all(storage_utils, storage)
-        logger.debug(
-            f"[analytics] rebuilt: {meta.events.count} events, {meta.kpis.count} kpi rows"
-        )
+        logger.debug(f"[analytics] rebuilt: {meta.events.count} events, {meta.kpis.count} kpi rows")
     except Exception as exc:
         logger.warning(f"[analytics] rebuild failed: {exc}")
     finally:
@@ -497,9 +838,7 @@ def _run_rebuild(storage_utils: StorageUtils, storage: ObjectStorageService) -> 
             _run_rebuild(storage_utils, storage)
 
 
-def _schedule_rebuild(
-    storage_utils: StorageUtils, storage: ObjectStorageService
-) -> None:
+def _schedule_rebuild(storage_utils: StorageUtils, storage: ObjectStorageService) -> None:
     global _rebuild_timer
     with _rebuild_lock:
         if _rebuild_timer is not None:
@@ -539,11 +878,7 @@ def _filter_events(
         if (not start_date or e.get("timestamp", "") >= start_date)
         and (not end_date or e.get("timestamp", "") <= end_date)
         and (not user_email or user_email == "all" or e.get("user_email") == user_email)
-        and (
-            not workspace_id
-            or workspace_id == "all"
-            or e.get("workspace_id") == workspace_id
-        )
+        and (not workspace_id or workspace_id == "all" or e.get("workspace_id") == workspace_id)
     ]
 
 
@@ -666,9 +1001,7 @@ def _range_days(start_date: str | None, end_date: str | None) -> list[str]:
     return days
 
 
-def _build_overview(
-    events: list[dict], start_date: str | None, end_date: str | None
-) -> dict:
+def _build_overview(events: list[dict], start_date: str | None, end_date: str | None) -> dict:
     days = _range_days(start_date, end_date)
     sessions = _build_sessions(events)
     page_views = [e for e in events if e.get("event_name") == "page_viewed"]
@@ -697,9 +1030,7 @@ def _build_overview(
                 }
             ws_event_counts[wid]["events"] += 1
     most_active_workspace = (
-        max(ws_event_counts.values(), key=lambda x: x["events"])
-        if ws_event_counts
-        else None
+        max(ws_event_counts.values(), key=lambda x: x["events"]) if ws_event_counts else None
     )
 
     kpi = {
@@ -717,18 +1048,14 @@ def _build_overview(
     for s in sessions:
         k = s["started_at"][:10]
         sessions_by_day.setdefault(k, set()).add(s["session_id"])
-    sessions_over_time = [
-        {"date": d, "value": len(sessions_by_day.get(d, set()))} for d in days
-    ]
+    sessions_over_time = [{"date": d, "value": len(sessions_by_day.get(d, set()))} for d in days]
 
     users_by_day: dict[str, set] = {}
     for e in events:
         if e.get("user_email"):
             k = e["timestamp"][:10]
             users_by_day.setdefault(k, set()).add(e["user_email"])
-    active_users_over_time = [
-        {"date": d, "value": len(users_by_day.get(d, set()))} for d in days
-    ]
+    active_users_over_time = [{"date": d, "value": len(users_by_day.get(d, set()))} for d in days]
 
     user_rows = _build_user_rows(events)
     page_rows = _build_page_rows(events)
@@ -800,6 +1127,7 @@ async def ingest_event(
     event: AnalyticsEvent,
     storage: ObjectStorageService = Depends(get_object_storage),
     storage_utils: StorageUtils = Depends(get_storage_utils),
+    triple_store: TripleStoreService | None = Depends(get_triple_store),
 ) -> IngestResponse:
     """Persist one analytics event as ``<sha256>.pkl`` in object storage."""
 
@@ -814,6 +1142,7 @@ async def ingest_event(
         copy=False,  # filename is already content-hashed; no audit copy needed.
     )
     _upsert_refs(event, storage)
+    # _ingest_event_to_graph(event, triple_store)
     _schedule_rebuild(storage_utils, storage)
 
     return IngestResponse(stored_at=f"{EVENTS_PREFIX}/{key}")
