@@ -49,9 +49,14 @@ export function LineChart({ data, height = 180, color = 'var(--workspace-accent,
     );
   }
 
-  // Y-axis ticks
-  const yTicks = [0, maxValue / 2, maxValue].map((v) => ({
-    value: Math.round(v),
+  // Y-axis ticks. For small integer ranges (counts of 1–4) show every integer —
+  // otherwise the 3-tick scheme rounds to duplicates (e.g. maxValue=1 → 0, 1, 1).
+  const tickValues =
+    maxValue <= 4
+      ? Array.from({ length: maxValue + 1 }, (_, v) => v)
+      : [0, Math.round(maxValue / 2), maxValue];
+  const yTicks = tickValues.map((v) => ({
+    value: v,
     y: pad.top + innerH - ((v - minValue) / (maxValue - minValue || 1)) * innerH,
   }));
 
