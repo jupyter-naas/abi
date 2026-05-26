@@ -31,6 +31,7 @@ import hashlib
 import json
 import os
 import pickle
+import re
 import threading
 import time
 import urllib.parse
@@ -941,6 +942,20 @@ def _build_user_rows(events: list[dict]) -> list[dict]:
     return rows
 
 
+_CHAT_CONV_PATH_RE = re.compile(r"/chat/(conv-[^/?#]+)")
+
+
+def _decorate_page_title(title: str, path: str) -> str:
+    # Chat conversation pages share the title "Chat" — re-derive the conv
+    # suffix from the path so each conversation appears as its own row even
+    # for events stored before write-time decoration was added.
+    m = _CHAT_CONV_PATH_RE.search(path or "")
+    if not m:
+        return title
+    conv = m.group(1)
+    return title if conv in title else f"{title} - {conv}"
+
+
 def _build_page_rows(events: list[dict]) -> list[dict]:
     views = [e for e in events if e.get("event_name") == "page_viewed" and e.get("page_path")]
     by_page: dict[str, list[dict]] = defaultdict(list)
@@ -950,10 +965,11 @@ def _build_page_rows(events: list[dict]) -> list[dict]:
     rows: list[dict] = []
     for page_path, evts in by_page.items():
         unique_users = {e.get("user_email") for e in evts if e.get("user_email")}
+        base_title = evts[0].get("page_title") or page_path
         rows.append(
             {
                 "page_path": page_path,
-                "page_title": evts[0].get("page_title") or page_path,
+                "page_title": _decorate_page_title(base_title, page_path),
                 "views": len(evts),
                 "unique_users": len(unique_users),
             }

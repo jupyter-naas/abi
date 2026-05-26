@@ -190,6 +190,16 @@ export function computeUserRows(events: AnalyticsEvent[]): UserRow[] {
   return rows;
 }
 
+function decoratePageTitle(title: string, path: string): string {
+  // Chat conversation pages share the title "Chat" — re-derive the conv
+  // suffix from the path so each conversation surfaces as its own row even
+  // when stored events predate write-time decoration.
+  const m = path.match(/\/chat\/(conv-[^/?#]+)/);
+  if (!m) return title;
+  const conv = m[1];
+  return title.includes(conv) ? title : `${title} - ${conv}`;
+}
+
 export function computePageRows(events: AnalyticsEvent[]): PageRow[] {
   const views = events.filter((e) => e.event_name === 'page_viewed' && e.page_path);
   const byPage = groupBy(views, (e) => e.page_path as string);
@@ -198,7 +208,7 @@ export function computePageRows(events: AnalyticsEvent[]): PageRow[] {
     const uniqueUsers = new Set(evts.map((e) => e.user_email).filter(Boolean));
     rows.push({
       page_path: path,
-      page_title: evts[0].page_title ?? path,
+      page_title: decoratePageTitle(evts[0].page_title ?? path, path),
       views: evts.length,
       unique_users: uniqueUsers.size,
     });
