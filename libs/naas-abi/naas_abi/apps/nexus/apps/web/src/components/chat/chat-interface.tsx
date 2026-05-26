@@ -16,6 +16,7 @@ import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { AgentSelector } from './agent-selector';
 import { TypingIndicator } from '@/components/typing-indicator';
+import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
@@ -120,6 +121,29 @@ function isLoginRequiredDomain(url: string): boolean {
   }
 }
 
+// Paths and extensions that reliably serve binary/download content.
+// Iframing these URLs triggers a browser download dialog, so we skip the probe.
+const FILE_PATH_RE = /\/asset\/[^/]+\/object\b|\/download\/|\/export\/|\/file\/[^/?#]+(?:[?#]|$)/i;
+const FILE_EXT_RE = /\.(pdf|xlsx?|docx?|pptx?|zip|tar\.gz|gz|csv|tsv|mp4|mp3|wav|png|jpe?g|gif|svg|webp|ico|json|xml|ttl|rdf|owl)(?:[?#]|$)/i;
+
+function isLikelyFileUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return FILE_PATH_RE.test(url) || FILE_EXT_RE.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isPdfUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return /\.pdf$/i.test(pathname.split('?')[0]);
+  } catch {
+    return /\.pdf$/i.test(url.split('?')[0]);
+  }
+}
+
 // Module-level cache so URL validity is checked at most twice (CORS GET → no-cors HEAD)
 // and the result is reused across re-renders and component instances.
 const urlValidityCache = new Map<string, boolean>();
@@ -209,6 +233,138 @@ function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => voi
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           onLoad={handleLoad}
         />
+      </div>
+    </div>
+  );
+}
+
+/** Right-side PDF preview panel.
+ *  Fetches the file with auth (internal URLs) or plain fetch (external),
+ *  creates a blob URL, and renders it with PdfViewer (PDFium WASM).
+ */
+function PdfPreviewPanel({ url, onClose, width }: { url: string; onClose: () => void; width: number }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+
+  const filename = useMemo(() => {
+    try {
+      const parts = new URL(url).pathname.split('/');
+      return decodeURIComponent(parts[parts.length - 1]) || 'Document.pdf';
+    } catch {
+      return 'Document.pdf';
+    }
+  }, [url]);
+
+  const apiBase = useMemo(() => getApiBase(), []);
+  const isInternal = useMemo(
+    () => url.startsWith(apiBase) || url.startsWith('/api/') || url.startsWith('/'),
+    [url, apiBase],
+  );
+
+  // Stable fetch URL — only recomputed when url or workspace changes.
+  // Injects workspace_id for scopes that require it.
+  const fetchUrl = useMemo(() => {
+    if (!isInternal) return url;
+    try {
+      const u = new URL(url.startsWith('http') ? url : `${apiBase}${url}`);
+      const scope = u.searchParams.get('scope') ?? '';
+      const needsWorkspace = scope === 'platform_drive' || scope === 'system_drive' || scope === 'workspace';
+      if (needsWorkspace && !u.searchParams.has('workspace_id') && currentWorkspaceId) {
+        u.searchParams.set('workspace_id', currentWorkspaceId);
+      }
+      return u.toString();
+    } catch {
+      return url;
+    }
+  }, [url, isInternal, apiBase, currentWorkspaceId]);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    setBlobUrl(null);
+    setIsLoading(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const response = isInternal ? await authFetch(fetchUrl) : await fetch(fetchUrl);
+        if (!response.ok) {
+          let detail = `HTTP ${response.status}`;
+          try {
+            const body = await response.json();
+            detail = body?.detail || detail;
+          } catch { /* ignore */ }
+          throw new Error(detail);
+        }
+        const blob = await response.blob();
+        if (cancelled) return;
+        const pdfBlob = blob.type.includes('pdf') ? blob : new Blob([blob], { type: 'application/pdf' });
+        objectUrl = URL.createObjectURL(pdfBlob);
+        setBlobUrl(objectUrl);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load PDF');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [fetchUrl, isInternal]);
+
+  return (
+    <div className="flex min-h-0 flex-col border-border bg-background" style={{ width, minWidth: 280, maxWidth: 900 }}>
+      {/* Header */}
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-2">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{filename}</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Open in new tab"
+        >
+          <ExternalLink size={14} />
+        </a>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Close"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="relative flex-1 min-h-0">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+            <Loader2 size={20} className="animate-spin text-muted-foreground" />
+          </div>
+        )}
+        {error && !isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-sm text-destructive">
+            <AlertCircle size={20} />
+            <span className="text-center">{error}</span>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-workspace-accent hover:underline"
+            >
+              <ExternalLink size={14} /> Open in new tab
+            </a>
+          </div>
+        )}
+        {blobUrl && !error && (
+          <PdfViewer src={blobUrl} />
+        )}
       </div>
     </div>
   );
@@ -2293,7 +2449,11 @@ export function ChatInterface() {
             ))}
           </div>
         </div>
-        <PreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} width={panelWidth} />
+        {isPdfUrl(previewUrl) ? (
+          <PdfPreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} width={panelWidth} />
+        ) : (
+          <PreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} width={panelWidth} />
+        )}
       </>
     )}
     </div>
@@ -2829,7 +2989,7 @@ const MessageBubble = React.memo(function MessageBubble({
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     contentUrls.forEach(url => {
-      if (isLoginRequiredDomain(url)) {
+      if (isLoginRequiredDomain(url) || isLikelyFileUrl(url) || url.startsWith(getApiBase())) {
         setUrlEmbeddability(prev => ({ ...prev, [url]: false }));
         return;
       }
@@ -2895,26 +3055,50 @@ const MessageBubble = React.memo(function MessageBubble({
         return;
       }
 
+      // Internal API URLs require auth — a plain fetch would always return 401.
+      // Trust that they exist and skip the network probe.
+      if (url.startsWith(getApiBase())) {
+        urlValidityCache.set(url, true);
+        setUrlExists(prev => ({ ...prev, [url]: true }));
+        return;
+      }
+
       const ctrl = new AbortController();
       controllers.push(ctrl);
       const timer = setTimeout(() => ctrl.abort(), 8000);
 
       try {
-        // Step 1: try a CORS fetch to get status + HTML title
-        const response = await fetch(url, { method: 'GET', mode: 'cors', signal: ctrl.signal });
+        // Step 1: HEAD request to get status + headers without downloading the body.
+        // This avoids triggering a browser download for binary/attachment URLs.
+        const headResp = await fetch(url, { method: 'HEAD', mode: 'cors', signal: ctrl.signal });
         clearTimeout(timer);
         if (cancelled) return;
 
-        if (!response.ok) {
+        if (!headResp.ok) {
           urlValidityCache.set(url, false);
           setUrlExists(prev => ({ ...prev, [url]: false }));
           return;
         }
 
-        // For HTML responses, parse the <title> for soft-404 patterns
-        const ct = response.headers.get('content-type') ?? '';
+        const ct = headResp.headers.get('content-type') ?? '';
+        const cd = headResp.headers.get('content-disposition') ?? '';
+
+        // File attachment: exists but never embed in an iframe
+        if (cd.toLowerCase().includes('attachment')) {
+          urlValidityCache.set(url, true);
+          setUrlExists(prev => ({ ...prev, [url]: true }));
+          return;
+        }
+
+        // For HTML responses, do a GET to parse the <title> for soft-404 patterns
         if (ct.includes('text/html')) {
-          const text = await response.text();
+          const ctrl2 = new AbortController();
+          controllers.push(ctrl2);
+          const t2 = setTimeout(() => ctrl2.abort(), 8000);
+          const getResp = await fetch(url, { method: 'GET', mode: 'cors', signal: ctrl2.signal });
+          clearTimeout(t2);
+          if (cancelled) return;
+          const text = await getResp.text();
           if (cancelled) return;
           const doc = new DOMParser().parseFromString(text, 'text/html');
           const valid = !NOT_FOUND_TITLE_RE.test(doc.title);
@@ -2981,6 +3165,17 @@ const MessageBubble = React.memo(function MessageBubble({
         if (!href || !/^https?:\/\//i.test(href)) {
           return <a href={href} {...props}>{children}</a>;
         }
+        if (isPdfUrl(href) && onPreviewUrl) {
+          return (
+            <a
+              href={href}
+              onClick={(e) => { e.preventDefault(); onPreviewUrl(href); }}
+              className="text-workspace-accent hover:text-workspace-accent/90 underline underline-offset-2 break-all cursor-pointer"
+            >
+              {children ?? href}
+            </a>
+          );
+        }
         return (
           <LinkWithPreview href={href} isUserBubble={false}>
             {children ?? href}
@@ -3031,7 +3226,7 @@ const MessageBubble = React.memo(function MessageBubble({
         );
       },
     }),
-    [copiedCodeKey, handleCopyCode]
+    [copiedCodeKey, handleCopyCode, onPreviewUrl]
   );
 
   return (
@@ -3247,7 +3442,9 @@ const MessageBubble = React.memo(function MessageBubble({
                       key={url}
                       type="button"
                       onClick={() => {
-                        if (opensNewTab) {
+                        if (isPdfUrl(url)) {
+                          onPreviewUrl?.(url);
+                        } else if (opensNewTab) {
                           window.open(url, '_blank', 'noopener,noreferrer');
                         } else {
                           onPreviewUrl?.(url);
@@ -3269,10 +3466,10 @@ const MessageBubble = React.memo(function MessageBubble({
 
                       {/* Open action icon (visible on hover once tested) */}
                       {!isTesting && (
-                        opensNewTab ? (
-                          <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                        ) : (
+                        isPdfUrl(url) || !opensNewTab ? (
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                        ) : (
+                          <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                         )
                       )}
                     </button>
