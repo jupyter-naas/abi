@@ -29,6 +29,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService 
     EmailAdapterSMTPConfiguration,
     EmailServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_EventService import (
+    EventAdapterConfiguration,
+    EventAdapterSqliteConfiguration,
+    EventServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
@@ -136,6 +141,12 @@ class ServicesConfiguration(BaseModel):
         activity_log_adapter=ActivityLogAdapterConfiguration(
             adapter="sqlite",
             config=ActivityLogAdapterSqliteConfiguration().model_dump(),
+        )
+    )
+    event: EventServiceConfiguration = EventServiceConfiguration(
+        event_adapter=EventAdapterConfiguration(
+            adapter="sqlite",
+            config=EventAdapterSqliteConfiguration().model_dump(),
         )
     )
     cache: CacheServiceConfiguration = CacheServiceConfiguration(

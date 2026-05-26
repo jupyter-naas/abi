@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import email
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -67,7 +67,7 @@ class TestSESAdapter(GenericEmailSecondaryAdapterTest):
         assert msg["From"] == "noreply@example.com"
         assert msg.get("Reply-To") is None
         assert "Hello world" in msg.get_payload(decode=False) if not msg.is_multipart() else any(
-            "Hello world" in part.get_payload(decode=True).decode()
+            "Hello world" in cast(bytes, part.get_payload(decode=True)).decode()
             for part in msg.walk()
             if part.get_content_type() == "text/plain"
         )
@@ -99,8 +99,8 @@ class TestSESAdapter(GenericEmailSecondaryAdapterTest):
         parts = {part.get_content_type(): part for part in msg.walk()}
         assert "text/plain" in parts
         assert "text/html" in parts
-        assert "plain" in parts["text/plain"].get_payload(decode=True).decode()
-        assert "<p>html</p>" in parts["text/html"].get_payload(decode=True).decode()
+        assert "plain" in cast(bytes, parts["text/plain"].get_payload(decode=True)).decode()
+        assert "<p>html</p>" in cast(bytes, parts["text/html"].get_payload(decode=True)).decode()
 
     def test_explicit_credentials_passed_to_boto_client(self, monkeypatch) -> None:
         factory = _BotoClientFactory()
