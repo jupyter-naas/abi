@@ -6,6 +6,7 @@ from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogSe
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -33,6 +34,7 @@ class IEngine:
         __kv: KeyValueService | None
         __email: EmailService | None
         __cache: CacheService | None
+        __events: EventService | None
         __activity_log: ActivityLogService | None
 
         def __init__(
@@ -45,6 +47,7 @@ class IEngine:
             kv: KeyValueService | None = None,
             email: EmailService | None = None,
             cache: CacheService | None = None,
+            events: EventService | None = None,
             activity_log: ActivityLogService | None = None,
         ):
             self.__object_storage = object_storage
@@ -55,6 +58,7 @@ class IEngine:
             self.__kv = kv
             self.__email = email
             self.__cache = cache
+            self.__events = events
             self.__activity_log = activity_log
 
         @property
@@ -110,6 +114,14 @@ class IEngine:
             return self.__cache is not None
 
         @property
+        def events(self) -> EventService:
+            assert self.__events is not None, "Event service is not initialized"
+            return self.__events
+
+        def events_available(self) -> bool:
+            return self.__events is not None
+
+        @property
         def activity_log(self) -> ActivityLogService:
             assert self.__activity_log is not None, (
                 "Activity log service is not initialized"
@@ -132,6 +144,7 @@ class IEngine:
                 KeyValueService | None,
                 EmailService | None,
                 CacheService | None,
+                EventService | None,
                 ActivityLogService | None,
             ]
         ]:
@@ -144,6 +157,7 @@ class IEngine:
                 self.__kv,
                 self.__email,
                 self.__cache,
+                self.__events,
                 self.__activity_log,
             ]
 
