@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.26.0 (2026-05-27)
+
+### Features
+
+- **core**: Publish typed events from cache, bus, email, keyvalue, secret, triple_store,
+  vector_store
+  ([`ed97217`](https://github.com/jupyter-naas/abi/commit/ed972173c198f2d05b5a327231ed66045de7dc55))
+
+
 ## v1.25.0 (2026-05-26)
 
 
