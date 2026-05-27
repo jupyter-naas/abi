@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.48.0 (2026-05-27)
+
+### Features
+
+- **onto2py**: Resolve cross-package owl:imports via locator annotations
+  ([`ee86802`](https://github.com/jupyter-naas/abi/commit/ee868028cc52f9edd3271f16550ba1f495cc8fe7))
+
+
 ## v1.47.0 (2026-05-26)
 
 ### Documentation
