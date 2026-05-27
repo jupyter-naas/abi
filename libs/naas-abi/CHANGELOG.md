@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.7.1 (2026-05-27)
+
+### Bug Fixes
+
+- **naas-abi**: Include analytics app manifest.json in wheel
+  ([`c9bdde8`](https://github.com/jupyter-naas/abi/commit/c9bdde85886516f875e8a315036a8ac29e915995))
+
+
 ## v2.7.0 (2026-05-26)
 
 ### Chores
