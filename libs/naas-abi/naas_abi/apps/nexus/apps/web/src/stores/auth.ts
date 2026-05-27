@@ -14,6 +14,7 @@ export interface User {
   company?: string;
   role?: string;
   bio?: string;
+  is_superadmin?: boolean;
   createdAt: Date;
 }
 
