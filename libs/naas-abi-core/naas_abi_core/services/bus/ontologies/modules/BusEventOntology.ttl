@@ -1,0 +1,67 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix bus: <http://ontology.naas.ai/abi/bus/> .
+
+bus:BusEventOntology a owl:Ontology ;
+  dc:title "Bus Event Ontology"@en ;
+  dc:description "Events emitted by the BusService when messages are published, enqueued, or fail to be delivered to the adapter."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.bus" ;
+  abi:ontologyResource "ontologies/modules/BusEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/BusEventOntology.py" ;
+  dc11:date "2026-05-27"^^xsd:date .
+
+# BusMessagePublished: published after a successful BusService.publish() call.
+bus:BusMessagePublished a owl:Class ;
+    rdfs:label "BusMessagePublished"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a message is successfully published on the bus."@en .
+
+# BusMessageEnqueued: published after a successful BusService.enqueue() call.
+bus:BusMessageEnqueued a owl:Class ;
+    rdfs:label "BusMessageEnqueued"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a message is successfully enqueued on the bus."@en .
+
+# BusError: published when a publish/enqueue operation against the adapter raises.
+bus:BusError a owl:Class ;
+    rdfs:label "BusError"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a bus publish or enqueue operation raises an exception."@en .
+
+bus:topic a owl:DatatypeProperty ;
+    rdfs:label "topic"@en ;
+    rdfs:domain bus:BusMessagePublished, bus:BusMessageEnqueued, bus:BusError ;
+    rdfs:range xsd:string ;
+    skos:definition "Bus topic the operation targeted."@en .
+
+bus:routingKey a owl:DatatypeProperty ;
+    rdfs:label "routing key"@en ;
+    rdfs:domain bus:BusMessagePublished, bus:BusMessageEnqueued, bus:BusError ;
+    rdfs:range xsd:string ;
+    skos:definition "Routing key used for the bus message."@en .
+
+bus:sizeBytes a owl:DatatypeProperty ;
+    rdfs:label "size bytes"@en ;
+    rdfs:domain bus:BusMessagePublished, bus:BusMessageEnqueued ;
+    rdfs:range xsd:integer ;
+    skos:definition "Size of the bus message payload in bytes."@en .
+
+bus:operation a owl:DatatypeProperty ;
+    rdfs:label "operation"@en ;
+    rdfs:domain bus:BusError ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the bus operation that failed (e.g. 'publish', 'enqueue')."@en .
+
+bus:message a owl:DatatypeProperty ;
+    rdfs:label "message"@en ;
+    rdfs:domain bus:BusError ;
+    rdfs:range xsd:string ;
+    skos:definition "String representation of the exception raised by the adapter."@en .
