@@ -103,6 +103,19 @@ async def stream_chat_response(
                     current_user=current_user,
                     now=now,
                 )
+                # Tag agent-emitted events (AgentToolCalled, AgentAIMessageEmitted, …)
+                # with request identity. Set on the request's asyncio context so
+                # nested awaits and the Thread spawned by Agent.stream_invoke
+                # (which uses copy_context) inherit them.
+                from naas_abi_core.services.agent.context import (
+                    agent_chat_id,
+                    agent_user_id,
+                    agent_workspace_id,
+                )
+                agent_user_id.set(str(current_user.id))
+                agent_chat_id.set(str(conversation_id))
+                if request.workspace_id is not None:
+                    agent_workspace_id.set(str(request.workspace_id))
                 provider_messages = await build_provider_messages_with_agents(
                     request=request,
                     context=request_context(current_user),

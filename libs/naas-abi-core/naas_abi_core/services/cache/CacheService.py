@@ -41,6 +41,11 @@ from naas_abi_core.services.cache.CachePort import (
     ICacheAdapter,
     ICacheService,
 )
+from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
+    CacheDeleted,
+    CacheError,
+    CacheSet,
+)
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 if TYPE_CHECKING:
@@ -71,8 +76,15 @@ class SingleTierCacheService:
     :attr:`CacheService.hot` and :attr:`CacheService.cold`.
     """
 
-    def __init__(self, adapter: ICacheAdapter) -> None:
+    def __init__(
+        self,
+        adapter: ICacheAdapter,
+        tier_name: str | None = None,
+        event_publisher: Callable[[Any], None] | None = None,
+    ) -> None:
         self.adapter = adapter
+        self._tier_name = tier_name
+        self._event_publisher = event_publisher
 
         self._deserializers = {
             DataType.TEXT: self._get_text,
@@ -80,6 +92,41 @@ class SingleTierCacheService:
             DataType.BINARY: self._get_binary,
             DataType.PICKLE: self._get_pickle,
         }
+
+    # ------------------------------------------------------------------
+    # Event emission helpers
+    # ------------------------------------------------------------------
+
+    def _emit(self, event: Any) -> None:
+        if self._event_publisher is None:
+            return
+        try:
+            self._event_publisher(event)
+        except Exception as exc:
+            logger.warning(
+                "Cache tier %r: event publication failed: %s", self._tier_name, exc
+            )
+
+    def _run_mutation(self, op_name: str, key: str, fn: Callable[[], Any]) -> Any:
+        """Run an adapter mutation; emit CacheError on unexpected failure.
+
+        CacheNotFoundError propagates without an event — "delete a missing key"
+        is a no-op, not an error worth logging.
+        """
+        try:
+            return fn()
+        except CacheNotFoundError:
+            raise
+        except Exception as exc:
+            self._emit(
+                CacheError(
+                    key=key,
+                    tier=self._tier_name,
+                    operation=op_name,
+                    message=str(exc),
+                )
+            )
+            raise
 
     # ------------------------------------------------------------------
     # Decorator
@@ -210,38 +257,48 @@ class SingleTierCacheService:
         return self.adapter.exists(key)
 
     def delete(self, key: str) -> None:
-        self.adapter.delete(key)
+        self._run_mutation("delete", key, lambda: self.adapter.delete(key))
+        self._emit(CacheDeleted(key=key, tier=self._tier_name))
+
+    def _emit_cache_set(self, key: str, cached: CachedData) -> None:
+        self._emit(
+            CacheSet(
+                key=key,
+                tier=self._tier_name,
+                data_type=cached.data_type.value,
+                size_bytes=len(cached.data)
+                if isinstance(cached.data, (str, bytes))
+                else None,
+            )
+        )
 
     def set_text(self, key: str, value: str) -> None:
         assert isinstance(value, str), f"Expected str, got {type(value)}"
-        self.adapter.set(key, CachedData(key=key, data=value, data_type=DataType.TEXT))
+        cached = CachedData(key=key, data=value, data_type=DataType.TEXT)
+        self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
+        self._emit_cache_set(key, cached)
 
     def set_json(self, key: str, value: Any) -> None:
-        self.adapter.set(
-            key,
-            CachedData(key=key, data=json.dumps(value), data_type=DataType.JSON),
-        )
+        cached = CachedData(key=key, data=json.dumps(value), data_type=DataType.JSON)
+        self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
+        self._emit_cache_set(key, cached)
 
     def set_json_if_absent(self, key: str, value: Any) -> bool:
         cached = CachedData(key=key, data=json.dumps(value), data_type=DataType.JSON)
-        try:
-            return self.adapter.set_if_absent(key, cached)
-        except NotImplementedError:
-            if self.exists(key):
-                return False
-            self.adapter.set(key, cached)
-            return True
+        wrote = self._set_if_absent(key, cached)
+        if wrote:
+            self._emit_cache_set(key, cached)
+        return wrote
 
     def set_binary(self, key: str, value: bytes) -> None:
         assert isinstance(value, bytes), f"Expected bytes, got {type(value)}"
-        self.adapter.set(
-            key,
-            CachedData(
-                key=key,
-                data=base64.b64encode(value).decode(),
-                data_type=DataType.BINARY,
-            ),
+        cached = CachedData(
+            key=key,
+            data=base64.b64encode(value).decode(),
+            data_type=DataType.BINARY,
         )
+        self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
+        self._emit_cache_set(key, cached)
 
     def set_binary_if_absent(self, key: str, value: bytes) -> bool:
         assert isinstance(value, bytes), f"Expected bytes, got {type(value)}"
@@ -250,23 +307,31 @@ class SingleTierCacheService:
             data=base64.b64encode(value).decode(),
             data_type=DataType.BINARY,
         )
-        try:
-            return self.adapter.set_if_absent(key, cached)
-        except NotImplementedError:
-            if self.exists(key):
-                return False
-            self.adapter.set(key, cached)
-            return True
+        wrote = self._set_if_absent(key, cached)
+        if wrote:
+            self._emit_cache_set(key, cached)
+        return wrote
 
     def set_pickle(self, key: str, value: Any) -> None:
-        self.adapter.set(
-            key,
-            CachedData(
-                key=key,
-                data=base64.b64encode(pickle.dumps(value)).decode(),
-                data_type=DataType.PICKLE,
-            ),
+        cached = CachedData(
+            key=key,
+            data=base64.b64encode(pickle.dumps(value)).decode(),
+            data_type=DataType.PICKLE,
         )
+        self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
+        self._emit_cache_set(key, cached)
+
+    def _set_if_absent(self, key: str, cached: CachedData) -> bool:
+        def _do() -> bool:
+            try:
+                return self.adapter.set_if_absent(key, cached)
+            except NotImplementedError:
+                if self.exists(key):
+                    return False
+                self.adapter.set(key, cached)
+                return True
+
+        return self._run_mutation("set", key, _do)
 
 
 # ---------------------------------------------------------------------------
@@ -298,8 +363,24 @@ class CacheService(ServiceBase, ICacheService):
             raise ValueError("CacheService requires at least one adapter")
         self._adapters: list[tuple[str, ICacheAdapter]] = adapters
         self._tiers: dict[str, SingleTierCacheService] = {
-            tier: SingleTierCacheService(adapter) for tier, adapter in adapters
+            tier: SingleTierCacheService(
+                adapter,
+                tier_name=tier,
+                event_publisher=self.__publish_event,
+            )
+            for tier, adapter in adapters
         }
+
+    def __publish_event(self, event: Any) -> None:
+        if not self.services_wired:
+            return
+        if not self.services.events_available():
+            return
+        try:
+            self.services.events.publish(event)
+        except Exception as exc:
+            # Cache mutations are the source of truth; event logging must not break them.
+            logger.warning(f"CacheService: failed to publish event: {exc}")
 
     # ------------------------------------------------------------------
     # Tier accessors
@@ -326,7 +407,12 @@ class CacheService(ServiceBase, ICacheService):
         if TIER_COLD in self._tiers:
             return self._tiers[TIER_COLD]
         # Fallback: last adapter is the coldest/most durable
-        return SingleTierCacheService(self._adapters[-1][1])
+        tier_name, adapter = self._adapters[-1]
+        return SingleTierCacheService(
+            adapter,
+            tier_name=tier_name,
+            event_publisher=self.__publish_event,
+        )
 
     def hot_available(self) -> bool:
         """Return True if a hot tier is configured."""
