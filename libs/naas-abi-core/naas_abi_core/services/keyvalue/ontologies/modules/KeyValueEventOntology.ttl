@@ -1,0 +1,69 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix kv: <http://ontology.naas.ai/abi/keyvalue/> .
+
+kv:KeyValueEventOntology a owl:Ontology ;
+  dc:title "Key-Value Event Ontology"@en ;
+  dc:description "Events emitted by the KeyValueService when entries are written, removed, or fail to mutate."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.keyvalue" ;
+  abi:ontologyResource "ontologies/modules/KeyValueEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/KeyValueEventOntology.py" ;
+  dc11:date "2026-05-27"^^xsd:date .
+
+# KeyValueSet: published after a successful set (including set_if_not_exists
+# when it actually wrote).
+kv:KeyValueSet a owl:Class ;
+    rdfs:label "KeyValueSet"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a key-value entry is successfully written."@en .
+
+# KeyValueDeleted: published after a successful delete (including
+# delete_if_value_matches when it actually deleted).
+kv:KeyValueDeleted a owl:Class ;
+    rdfs:label "KeyValueDeleted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a key-value entry is successfully removed."@en .
+
+# KeyValueError: published when a mutation operation against the adapter raises.
+kv:KeyValueError a owl:Class ;
+    rdfs:label "KeyValueError"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a key-value mutation raises an exception."@en .
+
+kv:key a owl:DatatypeProperty ;
+    rdfs:label "key"@en ;
+    rdfs:domain kv:KeyValueSet, kv:KeyValueDeleted, kv:KeyValueError ;
+    rdfs:range xsd:string ;
+    skos:definition "Key the operation targeted."@en .
+
+kv:sizeBytes a owl:DatatypeProperty ;
+    rdfs:label "size bytes"@en ;
+    rdfs:domain kv:KeyValueSet ;
+    rdfs:range xsd:integer ;
+    skos:definition "Size of the written value in bytes (len(value))."@en .
+
+kv:ttlSeconds a owl:DatatypeProperty ;
+    rdfs:label "ttl seconds"@en ;
+    rdfs:domain kv:KeyValueSet ;
+    rdfs:range xsd:integer ;
+    skos:definition "TTL in seconds, set only when the caller passed a TTL."@en .
+
+kv:operation a owl:DatatypeProperty ;
+    rdfs:label "operation"@en ;
+    rdfs:domain kv:KeyValueError ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the operation that failed (set/delete/set_if_not_exists/delete_if_value_matches)."@en .
+
+kv:message a owl:DatatypeProperty ;
+    rdfs:label "message"@en ;
+    rdfs:domain kv:KeyValueError ;
+    rdfs:range xsd:string ;
+    skos:definition "String representation of the exception raised by the adapter."@en .

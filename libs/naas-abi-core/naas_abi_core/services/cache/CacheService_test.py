@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type,misc"
 """Tests for the multi-tier CacheService."""
 
 from __future__ import annotations
@@ -12,6 +13,11 @@ from naas_abi_core.services.cache.CachePort import (
     ICacheAdapter,
 )
 from naas_abi_core.services.cache.CacheService import CacheService, TIER_HOT, TIER_COLD
+from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
+    CacheDeleted,
+    CacheError,
+    CacheSet,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -360,3 +366,152 @@ def test_decorator_non_matching_key_builder_args() -> None:
     # Cached (same x + z)
     assert fn(x="test", y="yolo") == "test_toto_toto"
     assert fn(x="test", y="yolo", force_cache_refresh=True) == "test_yolo_toto"
+
+
+# ---------------------------------------------------------------------------
+# Event emission
+# ---------------------------------------------------------------------------
+
+
+class _FakeEventService:
+    def __init__(self) -> None:
+        self.published: list = []
+
+    def publish(self, event) -> None:
+        self.published.append(event)
+
+
+class _FakeServices:
+    """Minimal stand-in for IEngine.Services exposing only what CacheService uses."""
+
+    def __init__(self, events: _FakeEventService | None = None) -> None:
+        self._events = events
+
+    def events_available(self) -> bool:
+        return self._events is not None
+
+    @property
+    def events(self) -> _FakeEventService:
+        assert self._events is not None
+        return self._events
+
+
+def _wired_hot_cold():
+    hot_adapter = CacheMemoryAdapter()
+    cold_adapter = CacheMemoryAdapter()
+    svc = CacheService(
+        adapters=[(TIER_HOT, hot_adapter), (TIER_COLD, cold_adapter)]
+    )
+    events = _FakeEventService()
+    svc.set_services(_FakeServices(events))
+    return hot_adapter, cold_adapter, svc, events
+
+
+def test_events_not_emitted_when_unwired() -> None:
+    """No services attached → no exceptions, no events, normal operation."""
+    cache = _single_cold()
+    cache.set_json("k", {"v": 1})
+    cache.delete("k")  # no crash even though no events service
+
+
+def test_events_not_emitted_when_events_unavailable() -> None:
+    cache = _single_cold()
+    cache.set_services(_FakeServices(events=None))  # services wired but no events
+    cache.set_json("k", {"v": 1})
+    cache.delete("k")  # must not raise
+
+
+def test_set_emits_cache_set_on_default_tier() -> None:
+    _, _, cache, events = _wired_hot_cold()
+    cache.set_json("k", {"v": 1})
+
+    assert len(events.published) == 1
+    evt = events.published[0]
+    assert isinstance(evt, CacheSet)
+    assert evt.key == "k"
+    assert evt.tier == TIER_COLD
+    assert evt.data_type == DataType.JSON.value
+    assert evt.size_bytes == len('{"v": 1}')
+
+
+def test_set_hot_emits_cache_set_with_hot_tier() -> None:
+    _, _, cache, events = _wired_hot_cold()
+    cache.hot.set_text("session", "abc")
+
+    assert len(events.published) == 1
+    evt = events.published[0]
+    assert isinstance(evt, CacheSet)
+    assert evt.tier == TIER_HOT
+    assert evt.data_type == DataType.TEXT.value
+
+
+def test_delete_emits_cache_deleted_per_tier_holding_the_key() -> None:
+    _, _, cache, events = _wired_hot_cold()
+    cache.hot.set_text("k", "x")
+    cache.cold.set_text("k", "x")
+    events.published.clear()
+
+    cache.delete("k")
+
+    deleted = [e for e in events.published if isinstance(e, CacheDeleted)]
+    assert len(deleted) == 2
+    assert {e.tier for e in deleted} == {TIER_HOT, TIER_COLD}
+
+
+def test_delete_missing_does_not_emit() -> None:
+    _, _, cache, events = _wired_hot_cold()
+    cache.delete("never_set")
+
+    assert events.published == []
+
+
+def test_set_if_absent_only_emits_when_wrote() -> None:
+    _, _, cache, events = _wired_hot_cold()
+
+    assert cache.set_json_if_absent("k", {"v": 1}) is True
+    events_after_first = list(events.published)
+    assert len(events_after_first) == 1
+    assert isinstance(events_after_first[0], CacheSet)
+
+    assert cache.set_json_if_absent("k", {"v": 2}) is False
+    # Still only the first event — no CacheSet emitted on the no-op
+    assert len(events.published) == 1
+
+
+def test_adapter_failure_emits_cache_error_and_reraises() -> None:
+    cold_adapter = CacheMemoryAdapter()
+    svc = CacheService(
+        adapters=[(TIER_HOT, _BrokenAdapter()), (TIER_COLD, cold_adapter)]
+    )
+    events = _FakeEventService()
+    svc.set_services(_FakeServices(events))
+
+    # set on hot raises; CacheError must fire for the hot tier
+    try:
+        svc.hot.set_text("k", "v")
+        assert False, "expected OSError"
+    except OSError:
+        pass
+
+    errors = [e for e in events.published if isinstance(e, CacheError)]
+    assert len(errors) == 1
+    err = errors[0]
+    assert err.tier == TIER_HOT
+    assert err.operation == "set"
+    assert err.key == "k"
+    assert "Redis" in (err.message or "")
+
+
+def test_publisher_exception_does_not_break_mutation() -> None:
+    """If the EventService blows up, the cache write must still succeed."""
+
+    class _ExplodingEvents:
+        def publish(self, event):
+            raise RuntimeError("event bus down")
+
+    cache = _single_cold()
+    cache.set_services(_FakeServices(events=_ExplodingEvents()))
+
+    # Must not raise — cache write is authoritative, event publication is best-effort
+    cache.set_json("k", {"v": 1})
+    assert cache.get("k") == {"v": 1}
