@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.47.0 (2026-05-26)
+
+### Documentation
+
+- **event**: Add README covering event creation, publish/subscribe, query, and filter DSL
+  ([`64ad241`](https://github.com/jupyter-naas/abi/commit/64ad241d40b77114c7e70eefe52387ec30afe616))
+
+
 ## v1.46.0 (2026-05-26)
 
 ### Features

@@ -123,8 +123,11 @@ const EDGE_COLORS: Record<string, string> = {
 };
 
 const DEFAULT_NODE_BOX_WIDTH = 128;
-const DEFAULT_NODE_BOX_HEIGHT = 88;
-const DEFAULT_MAX_CHARS_PER_LINE = 14;
+const DEFAULT_NODE_MIN_HEIGHT = 64;
+const DEFAULT_MAX_CHARS_PER_LINE = 16;
+const DEFAULT_MAX_LABEL_LINES = 4;
+const NODE_LABEL_LINE_HEIGHT = 14;
+const NODE_LABEL_FONT_SIZE = 11;
 
 // Spacing constants for hierarchical layout
 const LR_LEVEL_GAP   = 260; // px between depth levels  (main axis = x)
@@ -415,12 +418,24 @@ function computeHierarchicalPositions(
   return positions;
 }
 
-function wrapLabelTwoLines(label: string, maxCharsPerLine = DEFAULT_MAX_CHARS_PER_LINE): string {
-  const normalized = (label ?? '').trim().replace(/\s+/g, ' ');
-  if (!normalized) return '';
-  if (normalized.length <= maxCharsPerLine) return normalized;
+function hardBreakToken(token: string, maxCharsPerLine: number): string[] {
+  if (token.length <= maxCharsPerLine) return [token];
+  const chunks: string[] = [];
+  let rest = token;
+  while (rest.length > maxCharsPerLine) {
+    chunks.push(rest.slice(0, maxCharsPerLine));
+    rest = rest.slice(maxCharsPerLine);
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
 
-  const words = normalized.split(' ');
+function wrapWordLabel(
+  label: string,
+  maxCharsPerLine: number,
+  maxLines: number,
+): string[] {
+  const words = label.split(' ');
   const lines: string[] = [];
   let current = '';
 
@@ -432,24 +447,118 @@ function wrapLabelTwoLines(label: string, maxCharsPerLine = DEFAULT_MAX_CHARS_PE
     }
 
     if (current) lines.push(current);
-    current = word;
-    if (lines.length === 2) break;
+    if (lines.length >= maxLines) break;
+
+    if (word.length <= maxCharsPerLine) {
+      current = word;
+      continue;
+    }
+
+    const chunks = hardBreakToken(word, maxCharsPerLine);
+    for (let i = 0; i < chunks.length && lines.length < maxLines; i++) {
+      if (i === chunks.length - 1 && lines.length < maxLines) {
+        current = chunks[i];
+      } else {
+        lines.push(chunks[i]);
+      }
+    }
+    current = lines.length >= maxLines ? '' : current;
+    if (lines.length >= maxLines) break;
   }
-  if (lines.length < 2 && current) lines.push(current);
 
-  const line1 = lines[0] ?? '';
-  let line2 = lines[1] ?? '';
+  if (lines.length < maxLines && current) lines.push(current);
+  return lines.slice(0, maxLines);
+}
 
-  if (!line2 && words.length > 1) {
-    // Hard split if we couldn't build a second line from words.
-    line2 = normalized.slice(line1.length).trim();
+/** Break URI/path labels at slashes so segments stay readable inside nodes. */
+function wrapPathLabel(
+  path: string,
+  maxCharsPerLine: number,
+  maxLines: number,
+): string[] {
+  const trimmed = path.trim();
+  const segments: string[] = [];
+  if (trimmed.startsWith('/')) {
+    for (const part of trimmed.split('/').filter(Boolean)) {
+      segments.push(segments.length === 0 ? `/${part}` : part);
+    }
+  } else {
+    segments.push(...trimmed.split('/').filter(Boolean));
   }
 
-  if (line2.length > maxCharsPerLine) {
-    line2 = `${line2.slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`;
+  const lines: string[] = [];
+  let current = '';
+
+  const flush = () => {
+    if (current) lines.push(current);
+    current = '';
+  };
+
+  for (const segment of segments) {
+    if (lines.length >= maxLines) break;
+
+    const joiner = current && !current.endsWith('/') ? '/' : '';
+    const candidate = current ? `${current}${joiner}${segment}` : segment;
+
+    if (candidate.length <= maxCharsPerLine) {
+      current = candidate;
+      continue;
+    }
+
+    flush();
+    if (lines.length >= maxLines) break;
+
+    if (segment.length <= maxCharsPerLine) {
+      current = segment;
+      continue;
+    }
+
+    const chunks = hardBreakToken(segment, maxCharsPerLine);
+    for (let i = 0; i < chunks.length && lines.length < maxLines; i++) {
+      if (i === chunks.length - 1) current = chunks[i];
+      else lines.push(chunks[i]);
+    }
   }
 
-  return line2 ? `${line1}\n${line2}` : line1;
+  flush();
+  return lines.slice(0, maxLines);
+}
+
+function wrapNodeLabelLines(
+  label: string,
+  maxCharsPerLine = DEFAULT_MAX_CHARS_PER_LINE,
+  maxLines = DEFAULT_MAX_LABEL_LINES,
+): string[] {
+  const normalized = (label ?? '').trim().replace(/\s+/g, ' ');
+  if (!normalized) return [];
+  if (normalized.length <= maxCharsPerLine) return [normalized];
+
+  const isPathLike = normalized.includes('/');
+  const lines = isPathLike
+    ? wrapPathLabel(normalized, maxCharsPerLine, maxLines)
+    : wrapWordLabel(normalized, maxCharsPerLine, maxLines);
+
+  if (lines.length > 0) return lines;
+
+  return hardBreakToken(normalized, maxCharsPerLine).slice(0, maxLines);
+}
+
+function computeNodeCardDimensions(
+  lines: string[],
+  hasLogo: boolean,
+): { width: number; height: number } {
+  const lineCount = Math.max(1, lines.length);
+  const longestLine = Math.max(...lines.map((l) => l.length), 8);
+  const approxCharWidth = 6.2;
+  const width = Math.min(
+    220,
+    Math.max(DEFAULT_NODE_BOX_WIDTH, Math.ceil(longestLine * approxCharWidth) + 24),
+  );
+  const pad = 10;
+  const logoBlock = hasLogo ? 32 + 14 : 0;
+  const textBlock = lineCount * NODE_LABEL_LINE_HEIGHT + 10;
+  const height = Math.max(DEFAULT_NODE_MIN_HEIGHT, pad + logoBlock + textBlock + pad);
+  return { width, height };
 }
 
 function escapeXml(text: string): string {
@@ -466,11 +575,11 @@ function nodeCardSvgDataUri(args: {
   height: number;
   background: string;
   border: string;
-  label: string;
+  lines: string[];
   logoDataUri?: string;
 }): string {
-  const { width, height, background, border, label, logoDataUri } = args;
-  const [line1, line2] = label.split('\n');
+  const { width, height, background, border, lines, logoDataUri } = args;
+  const labelLines = lines.length > 0 ? lines : [''];
 
   // Layout
   const pad = 10;
@@ -479,11 +588,18 @@ function nodeCardSvgDataUri(args: {
   const logoX = Math.round((width - logoSize) / 2);
   const logoY = pad;
 
-  // Text below the logo (or centered if no logo)
-  const textStartY = hasLogo ? logoY + logoSize + 20 : Math.round(height / 2) + 6;
-  const lineHeight = 16;
-  const textY1 = line2 ? textStartY - 6 : textStartY;
-  const textY2 = textY1 + lineHeight;
+  const textBlockHeight = labelLines.length * NODE_LABEL_LINE_HEIGHT;
+  const textStartY = hasLogo
+    ? logoY + logoSize + 16
+    : Math.round((height - textBlockHeight) / 2) + NODE_LABEL_FONT_SIZE;
+
+  const centerX = Math.round(width / 2);
+  const tspans = labelLines
+    .map((line, index) => {
+      const dy = index === 0 ? 0 : NODE_LABEL_LINE_HEIGHT;
+      return `<tspan x="${centerX}" dy="${dy}">${escapeXml(line)}</tspan>`;
+    })
+    .join('');
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
@@ -493,11 +609,10 @@ function nodeCardSvgDataUri(args: {
       ? `<image href="${escapeXml(logoDataUri!)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet" />`
       : ''
   }
-  <text x="${Math.round(width / 2)}" y="${textY1}" text-anchor="middle"
+  <text x="${centerX}" y="${textStartY}" text-anchor="middle"
         font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif"
-        font-size="13" font-weight="600" fill="#ffffff">
-    <tspan x="${Math.round(width / 2)}" dy="0">${escapeXml(line1 ?? '')}</tspan>
-    ${line2 ? `<tspan x="${Math.round(width / 2)}" dy="${lineHeight}">${escapeXml(line2)}</tspan>` : ''}
+        font-size="${NODE_LABEL_FONT_SIZE}" font-weight="600" fill="#ffffff">
+    ${tspans}
   </text>
 </svg>`;
 
@@ -684,14 +799,15 @@ export function VisNetwork({
   const toVisNode = useCallback((node: GraphNode): Node => {
     const colors = resolveBFOColor(node, nodesByIri) ?? BFO_COLORS['Entity'];
     const logoUrl = getNodeLogoUrl(node);
-    const wrapped = wrapLabelTwoLines(node.label);
+    const labelLines = wrapNodeLabelLines(node.label);
     const logoDataUri = logoUrl ? logoDataByUrl[logoUrl] : undefined;
+    const { width, height } = computeNodeCardDimensions(labelLines, Boolean(logoDataUri));
     const image = nodeCardSvgDataUri({
-      width: DEFAULT_NODE_BOX_WIDTH,
-      height: DEFAULT_NODE_BOX_HEIGHT,
+      width,
+      height,
       background: colors.background,
       border: colors.border,
-      label: wrapped,
+      lines: labelLines,
       logoDataUri,
     });
 

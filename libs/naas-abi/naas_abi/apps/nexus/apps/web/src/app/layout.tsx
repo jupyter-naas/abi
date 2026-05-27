@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import Script from 'next/script';
+import { AnalyticsPageTracker } from '@/components/analytics-page-tracker';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
@@ -99,6 +100,7 @@ export default function RootLayout({
         >
           <TenantProvider>
             <WebSocketProvider>
+              <AnalyticsPageTracker />
               {children}
             </WebSocketProvider>
           </TenantProvider>
