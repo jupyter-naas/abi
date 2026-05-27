@@ -1,0 +1,89 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix ts: <http://ontology.naas.ai/abi/triple_store/> .
+
+ts:TripleStoreEventOntology a owl:Ontology ;
+  dc:title "Triple Store Event Ontology"@en ;
+  dc:description "Events emitted by the TripleStoreService when triples are inserted/removed, graphs are mutated, or schemas are loaded/removed."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.triple_store" ;
+  abi:ontologyResource "ontologies/modules/TripleStoreEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/TripleStoreEventOntology.py" ;
+  dc11:date "2026-05-27"^^xsd:date .
+
+ts:TriplesInserted a owl:Class ;
+    rdfs:label "TriplesInserted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when triples are successfully inserted into a named graph."@en .
+
+ts:TriplesRemoved a owl:Class ;
+    rdfs:label "TriplesRemoved"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when triples are successfully removed from a named graph."@en .
+
+ts:GraphCreated a owl:Class ;
+    rdfs:label "GraphCreated"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a named graph is successfully created."@en .
+
+ts:GraphCleared a owl:Class ;
+    rdfs:label "GraphCleared"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a named graph is successfully cleared."@en .
+
+ts:GraphDropped a owl:Class ;
+    rdfs:label "GraphDropped"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a named graph is successfully dropped."@en .
+
+ts:SchemaLoaded a owl:Class ;
+    rdfs:label "SchemaLoaded"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a schema file is successfully loaded into the triple store."@en .
+
+ts:SchemaRemoved a owl:Class ;
+    rdfs:label "SchemaRemoved"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a schema file is successfully removed from the triple store."@en .
+
+ts:TripleStoreError a owl:Class ;
+    rdfs:label "TripleStoreError"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a triple-store mutation operation raises an exception."@en .
+
+ts:graphName a owl:DatatypeProperty ;
+    rdfs:label "graph name"@en ;
+    rdfs:domain ts:TriplesInserted, ts:TriplesRemoved, ts:GraphCreated, ts:GraphCleared, ts:GraphDropped, ts:TripleStoreError ;
+    rdfs:range xsd:string ;
+    skos:definition "URI of the named graph the operation targeted."@en .
+
+ts:tripleCount a owl:DatatypeProperty ;
+    rdfs:label "triple count"@en ;
+    rdfs:domain ts:TriplesInserted, ts:TriplesRemoved ;
+    rdfs:range xsd:integer ;
+    skos:definition "Number of triples the operation processed."@en .
+
+ts:filepath a owl:DatatypeProperty ;
+    rdfs:label "filepath"@en ;
+    rdfs:domain ts:SchemaLoaded, ts:SchemaRemoved, ts:TripleStoreError ;
+    rdfs:range xsd:string ;
+    skos:definition "Path to the schema file the operation targeted."@en .
+
+ts:operation a owl:DatatypeProperty ;
+    rdfs:label "operation"@en ;
+    rdfs:domain ts:TripleStoreError ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the triple-store operation that failed (e.g. 'insert', 'remove', 'create_graph', 'load_schema')."@en .
+
+ts:message a owl:DatatypeProperty ;
+    rdfs:label "message"@en ;
+    rdfs:domain ts:TripleStoreError ;
+    rdfs:range xsd:string ;
+    skos:definition "String representation of the exception raised by the adapter."@en .
