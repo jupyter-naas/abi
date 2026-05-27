@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.8.1 (2026-05-27)
+
+### Bug Fixes
+
+- **nexus/web**: Workspace switch from chat page now redirects reliably
+  ([`06d174f`](https://github.com/jupyter-naas/abi/commit/06d174f7d609bb04338e92d80e2aa07ac9e48502))
+
+
 ## v2.8.0 (2026-05-27)
 
 ### Features
