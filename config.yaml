@@ -74,6 +74,24 @@ modules:
                 members:
                   - email: "admin@example.com"
                     role: "owner"
+              - name: "Alpha"
+                slug: "alpha"
+                owner_email: "admin@example.com"
+                members:
+                  - email: "admin@example.com"
+                    role: "owner"
+              - name: "Beta"
+                slug: "beta"
+                owner_email: "admin@example.com"
+                members:
+                  - email: "admin@example.com"
+                    role: "owner"
+              - name: "Gamma"
+                slug: "gamma"
+                owner_email: "admin@example.com"
+                members:
+                  - email: "admin@example.com"
+                    role: "owner"
   
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true

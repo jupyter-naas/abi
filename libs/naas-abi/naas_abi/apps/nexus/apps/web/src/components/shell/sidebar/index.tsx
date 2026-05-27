@@ -52,7 +52,6 @@ export function Sidebar() {
   const {
     workspaces,
     currentWorkspaceId,
-    selectWorkspace,
     activePanelSection,
     setActivePanelSection,
   } = useWorkspaceStore();
@@ -305,7 +304,6 @@ export function Sidebar() {
               <button
                 key={workspace.id}
                 onClick={() => {
-                  selectWorkspace(workspace.id);
                   setWorkspaceMenuOpen(false);
                   router.push(`/workspace/${workspace.id}/chat`);
                 }}
