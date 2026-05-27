@@ -1,0 +1,85 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix vs: <http://ontology.naas.ai/abi/vector_store/> .
+
+vs:VectorStoreEventOntology a owl:Ontology ;
+  dc:title "Vector Store Event Ontology"@en ;
+  dc:description "Events emitted by the VectorStoreService when collections or documents are mutated."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.vector_store" ;
+  abi:ontologyResource "ontologies/modules/VectorStoreEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/VectorStoreEventOntology.py" ;
+  dc11:date "2026-05-27"^^xsd:date .
+
+# CollectionEnsured: published after VectorStoreService.ensure_collection() succeeds.
+vs:CollectionEnsured a owl:Class ;
+    rdfs:label "CollectionEnsured"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a vector store collection is ensured (created or already present)."@en .
+
+# DocumentsAdded: published after VectorStoreService.add_documents() succeeds.
+vs:DocumentsAdded a owl:Class ;
+    rdfs:label "DocumentsAdded"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when documents are successfully added to a collection."@en .
+
+# DocumentUpdated: published after VectorStoreService.update_document() succeeds.
+vs:DocumentUpdated a owl:Class ;
+    rdfs:label "DocumentUpdated"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a document in a collection is successfully updated."@en .
+
+# DocumentsDeleted: published after VectorStoreService.delete_documents() succeeds.
+vs:DocumentsDeleted a owl:Class ;
+    rdfs:label "DocumentsDeleted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when documents are successfully removed from a collection."@en .
+
+# CollectionDeleted: published after VectorStoreService.delete_collection() succeeds.
+vs:CollectionDeleted a owl:Class ;
+    rdfs:label "CollectionDeleted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a collection is successfully removed from the vector store."@en .
+
+# VectorStoreError: published when a mutation operation against the vector store raises.
+vs:VectorStoreError a owl:Class ;
+    rdfs:label "VectorStoreError"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a vector store mutation raises an exception."@en .
+
+vs:collectionName a owl:DatatypeProperty ;
+    rdfs:label "collection name"@en ;
+    rdfs:domain vs:CollectionEnsured, vs:DocumentsAdded, vs:DocumentUpdated, vs:DocumentsDeleted, vs:CollectionDeleted, vs:VectorStoreError ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the vector store collection the operation targeted."@en .
+
+vs:documentCount a owl:DatatypeProperty ;
+    rdfs:label "document count"@en ;
+    rdfs:domain vs:DocumentsAdded, vs:DocumentsDeleted ;
+    rdfs:range xsd:integer ;
+    skos:definition "Number of documents affected by the operation."@en .
+
+vs:documentId a owl:DatatypeProperty ;
+    rdfs:label "document id"@en ;
+    rdfs:domain vs:DocumentUpdated ;
+    rdfs:range xsd:string ;
+    skos:definition "Identifier of the document the operation targeted."@en .
+
+vs:operation a owl:DatatypeProperty ;
+    rdfs:label "operation"@en ;
+    rdfs:domain vs:VectorStoreError ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the vector store operation that failed (e.g. 'add_documents', 'delete_collection')."@en .
+
+vs:message a owl:DatatypeProperty ;
+    rdfs:label "message"@en ;
+    rdfs:domain vs:VectorStoreError ;
+    rdfs:range xsd:string ;
+    skos:definition "String representation of the exception raised by the adapter."@en .
