@@ -8,11 +8,30 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
+# Locator annotations: tell onto2py where this ontology lives in the Python
+# package tree so downstream ontologies can import it by its canonical IRI
+# (a spec-compliant owl:imports target) and still resolve correctly inside
+# editable installs, wheels, and zipped packages.
+abi:pythonPackage a owl:AnnotationProperty ;
+  rdfs:label "python package"@en ;
+  rdfs:comment "Dotted Python package used as the importlib.resources root for this ontology's files."@en .
+
+abi:ontologyResource a owl:AnnotationProperty ;
+  rdfs:label "ontology resource"@en ;
+  rdfs:comment "Path to this ontology's .ttl file, relative to abi:pythonPackage."@en .
+
+abi:pythonResource a owl:AnnotationProperty ;
+  rdfs:label "python resource"@en ;
+  rdfs:comment "Path to this ontology's generated .py file, relative to abi:pythonPackage. Used to build the dotted module for `from <module> import <Class>`."@en .
+
 abi:EventService a owl:Ontology ;
   dc:title "Event Service Ontology"@en ;
   dc:description "Base ontology for engine events. Defines LogProcess as the root class for all events published through the EventService."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "All event types published through the EventService must be rdfs:subClassOf abi:LogProcess." ;
+  abi:pythonPackage "naas_abi_core.services.event" ;
+  abi:ontologyResource "ontologies/modules/EventOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/EventOntology.py" ;
   dc11:date "2026-05-22"^^xsd:date .
 
 # Reference: BFO Process (parent class — included for the generator to resolve the hierarchy).
