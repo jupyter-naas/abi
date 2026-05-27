@@ -1,4 +1,4 @@
-from naas_abi.ontologies.modules.BFO7BucketsProcessOntology import (
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
     Disposition as _Disposition,
 )
 

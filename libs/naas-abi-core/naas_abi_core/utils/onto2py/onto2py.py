@@ -1,6 +1,8 @@
 import hashlib
+import importlib.util
 import io
 import os
+import pkgutil
 import re
 import subprocess
 import sys
@@ -8,13 +10,108 @@ import tempfile
 from dataclasses import dataclass, field
 from importlib import resources as importlib_resources
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import rdflib
 from rdflib import BNode
 from rdflib.collection import Collection
 
+# Ontology checker lives in the parent utils/ directory next to this package.
+_UTILS_DIR = str(Path(__file__).resolve().parent.parent)
+if _UTILS_DIR not in sys.path:
+    sys.path.insert(0, _UTILS_DIR)
+
+
+def _run_ontology_check(ttl_file_path: str) -> None:
+    """
+    Run the static ontology checker on *ttl_file_path* before code generation.
+
+    Raises ValueError listing every ERROR-severity issue found.
+    Skipped silently if either of these is true:
+      - ABI_SKIP_ONTOLOGY_CHECK=1 is set (emergency bypass)
+      - The checker module cannot be imported (missing dep)
+    """
+    if os.environ.get("ABI_SKIP_ONTOLOGY_CHECK") == "1":
+        return
+
+    try:
+        import ontology_checker  # type: ignore[import-not-found]
+    except ImportError:
+        return
+
+    try:
+        report = ontology_checker.check(
+            source_path=ttl_file_path,
+            layers=["static"],
+            raise_error=False,
+            no_raw=True,
+        )
+    except FileNotFoundError:
+        raise
+    except Exception as exc:
+        # Never let a checker bug block onto2py — log and continue.
+        print(
+            f"⚠️  ontology_checker raised during validation of {ttl_file_path}: {exc}",
+            file=sys.stderr,
+        )
+        return
+
+    static = report.get("static", {}) or {}
+    if static.get("skipped"):
+        return
+
+    errors: List[Dict[str, Any]] = static.get("errors", []) or []
+    if not errors:
+        return
+
+    lines = [f"Ontology validation failed for {ttl_file_path}:"]
+    for issue in errors:
+        lines.append(
+            f"  [{issue.get('category', 'ERROR')}] "
+            f"{issue.get('subject', '?')}: {issue.get('message', '')}"
+        )
+    raise ValueError("\n".join(lines))
+
+
 _CACHE_MARKER_PREFIX = "# onto2py-source-sha256: "
+# Bump this when the generator output format changes so previously cached
+# .py files are invalidated even when the source TTL hash matches.
+_CACHE_KEY_VERSION = "3-annotation-locator"
+
+# Annotation properties that let an ontology declare *where* it lives in the
+# Python package tree, so cross-package `owl:imports <https://canonical-iri>`
+# can resolve without leaking non-standard URI schemes into the TTL.
+_ABI_PYTHON_PACKAGE = rdflib.URIRef("http://ontology.naas.ai/abi/pythonPackage")
+_ABI_ONTOLOGY_RESOURCE = rdflib.URIRef("http://ontology.naas.ai/abi/ontologyResource")
+_ABI_PYTHON_RESOURCE = rdflib.URIRef("http://ontology.naas.ai/abi/pythonResource")
+
+
+@dataclass
+class OntologyLocator:
+    """How to load an indexed ontology.
+
+    Either ``ttl_path`` (filesystem) is set, or the importlib triple
+    (``python_package`` + ``ontology_resource``) is set, or both. When both
+    are present the importlib path wins so we keep working inside wheels.
+    """
+    ttl_path: Optional[Path] = None
+    python_package: Optional[str] = None
+    ontology_resource: Optional[str] = None
+    python_resource: Optional[str] = None
+
+
+# Module-level caches for owl:imports resolution. Reused across calls so a
+# multi-file generation pass doesn't re-walk the ontology tree for every TTL.
+_IMPORT_FILE_CACHE: Dict[Tuple[str, str], Optional[OntologyLocator]] = {}
+_IMPORT_GRAPH_CACHE: Dict[str, Optional[rdflib.Graph]] = {}
+# Index of every ontology IRI declared under a given search root, mapped to
+# its locator. Built lazily on first lookup so we only walk each ontologies
+# tree once per process.
+_ONTOLOGY_INDEX_CACHE: Dict[str, Dict[str, OntologyLocator]] = {}
+# Cross-package index built by scanning every installed `naas_abi*` package.
+# Lets an ontology in one package resolve `owl:imports` of an ontology that
+# lives in a sibling package, without filesystem-relative paths.
+_GLOBAL_ONTOLOGY_INDEX: Optional[Dict[str, OntologyLocator]] = None
 
 
 @dataclass
@@ -570,8 +667,377 @@ def extract_restriction_properties(
             class_info.property_uris[prop_name] = str(prop_uri)
 
 
-_PYTHON_IMPORT_SCHEME = "python://"
+def _find_ontology_search_root(ttl_path: Path) -> Path:
+    """Find the directory to search for sibling TTL files declaring ontology IRIs.
+
+    Looks for the nearest ancestor named 'ontologies' (so we can search the
+    entire subtree across modules/imports/sandbox), or fall back to the TTL
+    file's own parent.
+    """
+    for parent in ttl_path.parents:
+        if parent.name == "ontologies":
+            return parent
+    for parent in ttl_path.parents:
+        candidate = parent / "ontologies"
+        if candidate.is_dir():
+            return candidate
+    return ttl_path.parent
+
+
+def _parse_ttl_cached(ttl_file: Path) -> Optional[rdflib.Graph]:
+    """Parse a TTL file once and cache the resulting graph."""
+    key = str(ttl_file.resolve())
+    if key in _IMPORT_GRAPH_CACHE:
+        return _IMPORT_GRAPH_CACHE[key]
+    try:
+        graph = rdflib.Graph()
+        graph.parse(str(ttl_file), format="turtle")
+        _IMPORT_GRAPH_CACHE[key] = graph
+        return graph
+    except Exception:
+        _IMPORT_GRAPH_CACHE[key] = None
+        return None
+
+
+def _locator_from_graph(
+    graph: rdflib.Graph,
+    ontology: rdflib.term.Node,
+    ttl_file: Path,
+) -> OntologyLocator:
+    """Build a locator from an `owl:Ontology` subject's annotations.
+
+    Reads the optional ``abi:pythonPackage`` / ``abi:ontologyResource`` /
+    ``abi:pythonResource`` annotations declared on the ontology subject; any
+    that are missing simply stay ``None`` so the filesystem fallback applies.
+    """
+    locator = OntologyLocator(ttl_path=ttl_file)
+    for obj in graph.objects(ontology, _ABI_PYTHON_PACKAGE):
+        locator.python_package = str(obj).strip()
+        break
+    for obj in graph.objects(ontology, _ABI_ONTOLOGY_RESOURCE):
+        locator.ontology_resource = str(obj).strip()
+        break
+    for obj in graph.objects(ontology, _ABI_PYTHON_RESOURCE):
+        locator.python_resource = str(obj).strip()
+        break
+    return locator
+
+
+def _index_ttl_file(
+    ttl_file: Path,
+    index: Dict[str, OntologyLocator],
+    OWL: rdflib.Namespace,
+    RDF: rdflib.Namespace,
+) -> None:
+    """Parse `ttl_file` and add its ontology IRIs (and version IRIs) to `index`."""
+    graph = _parse_ttl_cached(ttl_file)
+    if graph is None:
+        return
+    for ontology in graph.subjects(RDF.type, OWL.Ontology):
+        if isinstance(ontology, BNode):
+            continue
+        locator = _locator_from_graph(graph, ontology, ttl_file)
+        index.setdefault(str(ontology), locator)
+        for version_iri in graph.objects(ontology, OWL.versionIRI):
+            if isinstance(version_iri, rdflib.URIRef):
+                index.setdefault(str(version_iri), locator)
+
+
+def _build_ontology_index(
+    search_root: Path,
+    OWL: rdflib.Namespace,
+    RDF: rdflib.Namespace,
+) -> Dict[str, OntologyLocator]:
+    """Walk `search_root` once and index every ontology IRI it declares.
+
+    A TTL file's "ontology IRIs" are the subjects of `(?, rdf:type, owl:Ontology)`
+    plus any `owl:versionIRI` objects on those subjects (so callers can import
+    by either the canonical IRI or a versioned form). Locator annotations on
+    each ontology are captured at indexing time so resolution can dispatch to
+    ``importlib.resources`` when present.
+    """
+    key = str(search_root.resolve())
+    if key in _ONTOLOGY_INDEX_CACHE:
+        return _ONTOLOGY_INDEX_CACHE[key]
+
+    index: Dict[str, OntologyLocator] = {}
+    for ttl_file in search_root.rglob("*.ttl"):
+        _index_ttl_file(ttl_file, index, OWL, RDF)
+
+    _ONTOLOGY_INDEX_CACHE[key] = index
+    return index
+
+
+def _discover_naas_abi_package_roots() -> List[Path]:
+    """Return the on-disk roots of every importable `naas_abi*` package.
+
+    Works for both editable checkouts (where each package lives under
+    ``libs/<dist>/<package>/``) and wheel installs (where it lives under
+    ``site-packages/<package>/``). We rely on ``pkgutil.iter_modules`` so
+    discovery doesn't require importing the packages.
+    """
+    roots: List[Path] = []
+    seen: Set[str] = set()
+    for _finder, name, ispkg in pkgutil.iter_modules():
+        if not ispkg or not name.startswith("naas_abi"):
+            continue
+        try:
+            spec = importlib.util.find_spec(name)
+        except (ImportError, ValueError):
+            continue
+        if spec is None or not spec.submodule_search_locations:
+            continue
+        for loc in spec.submodule_search_locations:
+            resolved = str(Path(loc).resolve())
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            roots.append(Path(loc))
+    return roots
+
+
+def _build_global_ontology_index(
+    OWL: rdflib.Namespace,
+    RDF: rdflib.Namespace,
+) -> Dict[str, OntologyLocator]:
+    """Index every ontology declared inside any installed `naas_abi*` package.
+
+    Built once per process; subsequent calls return the cached dict. The walk
+    is opt-in via lookup — callers that resolve a local relative import don't
+    pay for it.
+    """
+    global _GLOBAL_ONTOLOGY_INDEX
+    if _GLOBAL_ONTOLOGY_INDEX is not None:
+        return _GLOBAL_ONTOLOGY_INDEX
+
+    index: Dict[str, OntologyLocator] = {}
+    for root in _discover_naas_abi_package_roots():
+        for ttl_file in root.rglob("*.ttl"):
+            _index_ttl_file(ttl_file, index, OWL, RDF)
+
+    _GLOBAL_ONTOLOGY_INDEX = index
+    return index
+
+
+def _find_ttl_for_ontology(
+    ontology_iri: str,
+    search_root: Path,
+    OWL: rdflib.Namespace,
+    RDF: rdflib.Namespace,
+) -> Optional[OntologyLocator]:
+    """Find a locator for `ontology_iri`.
+
+    Looks first under `search_root` (the importer's local ontology tree), then
+    falls back to the global cross-package index so an ontology in package A
+    can import an ontology declared in package B by its canonical IRI.
+    """
+    key = (ontology_iri, str(search_root))
+    if key in _IMPORT_FILE_CACHE:
+        return _IMPORT_FILE_CACHE[key]
+
+    local = _build_ontology_index(search_root, OWL, RDF)
+    found = local.get(ontology_iri.strip())
+    if found is None:
+        glob = _build_global_ontology_index(OWL, RDF)
+        found = glob.get(ontology_iri.strip())
+    _IMPORT_FILE_CACHE[key] = found
+    return found
+
+
+def _resolve_owl_imports(
+    g: rdflib.Graph,
+    ttl_file_path: Optional[str],
+    OWL: rdflib.Namespace,
+    RDF: rdflib.Namespace,
+) -> List[Path]:
+    """Recursively resolve `owl:imports` declarations into the given graph.
+
+    For each `owl:imports <IRI>` triple, search for a sibling TTL file whose
+    declared ontology IRI matches (`<IRI> a owl:Ontology` or `owl:versionIRI`).
+    Merge that file's triples into `g` and continue resolving any nested
+    imports. Imports we can't locate locally are skipped with a warning.
+
+    Returns the list of TTL files that were merged in (in resolution order).
+    """
+    if ttl_file_path is None:
+        return []
+
+    main_path = Path(ttl_file_path).resolve()
+    search_root = _find_ontology_search_root(main_path)
+
+    visited_iris: Set[str] = set()
+    merged_files: List[Path] = []
+    queue: List[rdflib.Graph] = [g]
+
+    while queue:
+        current = queue.pop(0)
+        for imp_uri in list(current.objects(None, OWL.imports)):
+            imp_str = str(imp_uri)
+            if imp_str in visited_iris:
+                continue
+            visited_iris.add(imp_str)
+
+            locator = _find_ttl_for_ontology(imp_str, search_root, OWL, RDF)
+            imp_path = _materialize_locator_ttl(locator) if locator else None
+            if imp_path is None:
+                print(
+                    f"⚠️  onto2py: could not resolve owl:imports <{imp_str}> "
+                    f"under {search_root}; skipping"
+                )
+                continue
+            if imp_path.resolve() == main_path:
+                continue
+
+            imp_graph = _parse_ttl_cached(imp_path)
+            if imp_graph is None:
+                continue
+
+            for t in imp_graph:
+                g.add(t)
+            merged_files.append(imp_path)
+            queue.append(imp_graph)
+
+    return merged_files
+
+
+def _collect_declared_class_uris(
+    graph: rdflib.Graph,
+    RDF: rdflib.Namespace,
+    OWL: rdflib.Namespace,
+    RDFS: rdflib.Namespace,
+) -> Set[str]:
+    """Return the URI strings of non-blank classes declared in `graph`."""
+    out: Set[str] = set()
+    for cls in graph.subjects(RDF.type, OWL.Class):
+        if not isinstance(cls, BNode):
+            out.add(str(cls))
+    for cls in graph.subjects(RDF.type, RDFS.Class):
+        if not isinstance(cls, BNode):
+            out.add(str(cls))
+    return out
+
+
+def _collect_declared_property_uris(
+    graph: rdflib.Graph,
+    RDF: rdflib.Namespace,
+    OWL: rdflib.Namespace,
+) -> Set[str]:
+    """Return the URI strings of non-blank properties declared in `graph`."""
+    out: Set[str] = set()
+    for prop in graph.subjects(RDF.type, OWL.ObjectProperty):
+        if not isinstance(prop, BNode):
+            out.add(str(prop))
+    for prop in graph.subjects(RDF.type, OWL.DatatypeProperty):
+        if not isinstance(prop, BNode):
+            out.add(str(prop))
+    return out
+
+
+def _filter_unresolved_range_classes(
+    classes: Dict[str, "ClassInfo"],
+    properties: Dict[str, "PropertyInfo"],
+) -> None:
+    """Strip class names from object-property ranges that won't be emitted.
+
+    `range_classes` is keyed by Python class name. When that name does not
+    correspond to a class we're emitting in this file, referencing it in a
+    `Union[...]` annotation produces a `NameError`/`PydanticUndefinedAnnotation`.
+    Drop those keys — the generator always seeds object-property unions with
+    `{str, URIRef}` so the resulting annotation stays valid.
+    """
+    known_class_names: Set[str] = {ci.name for ci in classes.values()}
+
+    def _filter(prop: "PropertyInfo") -> None:
+        if prop.property_type != "object":
+            return
+        for cls_name in list(prop.range_classes.keys()):
+            # "URIRef" is a sentinel injected by get_property_range for
+            # owl:Class / owl:Thing ranges; always preserve it.
+            if cls_name == "URIRef":
+                continue
+            if cls_name not in known_class_names:
+                del prop.range_classes[cls_name]
+
+    for prop_info in properties.values():
+        _filter(prop_info)
+    for class_info in classes.values():
+        for prop_info in class_info.properties:
+            _filter(prop_info)
+
+
+def _collect_external_references(
+    main_graph: rdflib.Graph,
+    merged_graph: rdflib.Graph,
+    main_class_uris: Set[str],
+    main_prop_uris: Set[str],
+    RDF: rdflib.Namespace,
+    OWL: rdflib.Namespace,
+    RDFS: rdflib.Namespace,
+) -> Tuple[Set[str], Set[str]]:
+    """Find classes/properties referenced in `main_graph` but defined in imports.
+
+    A URI counts as "referenced" if it appears as the object of any triple in
+    `main_graph` (this naturally covers rdfs:subClassOf, rdfs:domain/range,
+    owl:someValuesFrom/allValuesFrom/onClass/onProperty, owl:unionOf list
+    members, etc. because blank-node structures live in `main_graph` too).
+    """
+    external_classes: Set[str] = set()
+    external_props: Set[str] = set()
+
+    for _s, _p, obj in main_graph:
+        if not isinstance(obj, rdflib.URIRef):
+            continue
+        obj_str = str(obj)
+        if obj_str not in main_class_uris and (
+            (obj, RDF.type, OWL.Class) in merged_graph
+            or (obj, RDF.type, RDFS.Class) in merged_graph
+        ):
+            external_classes.add(obj_str)
+        if obj_str not in main_prop_uris and (
+            (obj, RDF.type, OWL.ObjectProperty) in merged_graph
+            or (obj, RDF.type, OWL.DatatypeProperty) in merged_graph
+        ):
+            external_props.add(obj_str)
+
+    return external_classes, external_props
+
+
 _FILE_IMPORT_SCHEME = "file://"
+
+
+def _materialize_locator_ttl(locator: OntologyLocator) -> Optional[Path]:
+    """Return a filesystem path for `locator`'s TTL.
+
+    Prefers ``importlib.resources`` when the ontology carries the locator
+    annotations — that keeps cross-package imports working in editable
+    installs, wheels, and zipped distributions alike. Falls back to the
+    discovered on-disk path otherwise.
+    """
+    if locator.python_package and locator.ontology_resource:
+        try:
+            traversable = importlib_resources.files(
+                locator.python_package
+            ).joinpath(locator.ontology_resource)
+            with importlib_resources.as_file(traversable) as fs_path:
+                return Path(fs_path).resolve()
+        except (ModuleNotFoundError, FileNotFoundError):
+            pass
+    return locator.ttl_path
+
+
+def _python_module_for_locator(locator: OntologyLocator) -> Optional[str]:
+    """Compute the dotted Python module of the generated `.py` for `locator`.
+
+    Uses the explicit ``abi:pythonPackage`` + ``abi:pythonResource``
+    annotations when both are present; otherwise returns ``None`` so the
+    caller can fall back to path-based derivation.
+    """
+    if not (locator.python_package and locator.python_resource):
+        return None
+    resource = locator.python_resource.strip().lstrip("/")
+    stem = resource[:-3] if resource.endswith(".py") else resource
+    dotted = stem.replace("/", ".").replace("\\", ".")
+    return f"{locator.python_package}.{dotted}" if dotted else locator.python_package
 
 # Matches Turtle's `owl:imports <iri>` (and the rare full-IRI form
 # `<http://www.w3.org/2002/07/owl#imports> <iri>`). Compact prefixed-name
@@ -586,61 +1052,63 @@ def _quick_extract_owl_imports(content: str) -> List[str]:
     """Find owl:imports IRIs in a TTL string without invoking rdflib.
 
     Used to compute the cache key before deciding whether to parse. Only
-    angle-bracketed IRIs are recognized.
+    angle-bracketed IRIs are recognized. TTL line comments (``#`` to EOL)
+    are stripped first so example imports inside comments don't fool the
+    regex into trying to resolve them.
 
-    Traditional remote ontology IRIs (``http://`` / ``https://``) are
-    filtered out — onto2py does not fetch remote ontologies; those IRIs
-    are kept in the TTL purely as RDF-level references. Only resolvable
-    forms (``python://``, ``file://``, plain paths) are returned.
+    ``http(s)://`` IRIs are kept: resolved against the global ontology index
+    at resolve time. If no installed package declares the IRI, the import
+    is skipped with a warning rather than failing.
     """
-    iris = _OWL_IMPORTS_RE.findall(content)
-    return [iri for iri in iris if not _is_remote_import(iri)]
-
-
-def _is_remote_import(iri: str) -> bool:
-    """Return True for IRIs we deliberately don't resolve.
-
-    Traditional OWL ontologies are identified by ``http(s)://`` IRIs and
-    are not expected to be fetched at codegen time. ``python://`` is *not*
-    remote — it's a local importlib.resources reference that happens to
-    use a URL-like scheme.
-    """
-    return iri.startswith(("http://", "https://"))
+    stripped = "\n".join(line.split("#", 1)[0] for line in content.splitlines())
+    return _OWL_IMPORTS_RE.findall(stripped)
 
 
 def _resolve_owl_import(
     iri: str, importer_ttl_path: Optional[Path]
-) -> Tuple[str, str]:
+) -> Optional[Tuple[str, str]]:
     """Resolve an ``owl:imports`` IRI to (ttl_content, generated_python_module).
 
     Supported forms:
 
-    - ``python://<dotted.module.path>/<resource.ttl>`` — resolved via
-      ``importlib.resources.files(...)`` so it works equally well in
-      editable installs, wheel installs, and zipped packages. The Python
-      module of the generated ``.py`` is ``<dotted.module.path>.<stem>``.
+    - ``http(s)://<ontology IRI>`` — resolved against an index of every
+      ontology declared inside any installed ``naas_abi*`` package. When the
+      indexed ontology carries the locator annotations
+      (``abi:pythonPackage`` + ``abi:ontologyResource`` /
+      ``abi:pythonResource``), the TTL is loaded through
+      ``importlib.resources`` and the generated-`.py` module is derived from
+      those annotations. Falls back to the on-disk TTL path otherwise.
+      Returns ``None`` if no installed package declares the IRI — the caller
+      treats this as "skip with warning" so traditional remote-only imports
+      (e.g. ``bfo-core.ttl``) don't fail the build.
     - ``file://<absolute path>`` or a plain filesystem path — read directly
       from disk. Relative paths are resolved against the importing TTL's
       directory. The generated Python module is derived by walking up to the
-      first ``naas_abi*`` ancestor directory and joining the parts (the same
-      rule onto2py uses for class-file imports).
+      first ``naas_abi*`` ancestor directory and joining the parts.
 
     The Python module is *not* the importer's module — it points at the
     already-generated ``.py`` of the imported ontology, so the importer can
     emit ``from <that module> import <ClassName>``.
     """
-    if iri.startswith(_PYTHON_IMPORT_SCHEME):
-        rest = iri[len(_PYTHON_IMPORT_SCHEME):]
-        module_path, _, resource = rest.rpartition("/")
-        if not module_path or not resource:
-            raise ValueError(
-                f"Invalid python:// import {iri!r}: expected "
-                "python://<module.path>/<resource.ttl>"
+    if iri.startswith(("http://", "https://")):
+        OWL = rdflib.Namespace("http://www.w3.org/2002/07/owl#")
+        RDF = rdflib.Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
+        if importer_ttl_path is not None:
+            search_root = _find_ontology_search_root(
+                Path(importer_ttl_path).resolve()
             )
-        traversable = importlib_resources.files(module_path).joinpath(resource)
-        with importlib_resources.as_file(traversable) as fs_path:
-            content = Path(fs_path).read_text()
-        py_module = f"{module_path}.{Path(resource).stem}"
+        else:
+            search_root = Path.cwd()
+        locator = _find_ttl_for_ontology(iri, search_root, OWL, RDF)
+        if locator is None:
+            return None
+        ttl_path = _materialize_locator_ttl(locator)
+        if ttl_path is None:
+            return None
+        content = ttl_path.read_text()
+        py_module = _python_module_for_locator(locator) or _path_to_python_module(
+            ttl_path
+        )
         return content, py_module
 
     if iri.startswith(_FILE_IMPORT_SCHEME):
@@ -859,6 +1327,9 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
         ttl_file_path = ttl_file
         with open(ttl_file, "r") as f:
             content = f.read()
+        # Validate ontology structure before generating Python.
+        # Raises ValueError listing every ERROR-severity issue.
+        _run_ontology_check(ttl_file_path)
     else:
         content = ttl_file.read()
 
@@ -869,15 +1340,19 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     import_records: List[Tuple[str, str]] = []
     for imported_iri in _quick_extract_owl_imports(content):
         try:
-            import_content, py_module = _resolve_owl_import(
-                imported_iri, importer_path
-            )
+            resolved = _resolve_owl_import(imported_iri, importer_path)
         except Exception as exc:
             raise ValueError(
                 f"Failed to resolve owl:imports {imported_iri!r} from "
                 f"{ttl_file_path}: {exc}"
             ) from exc
-        import_records.append((import_content, py_module))
+        if resolved is None:
+            print(
+                f"⚠️  onto2py: could not resolve owl:imports <{imported_iri}> "
+                f"from {ttl_file_path}; skipping"
+            )
+            continue
+        import_records.append(resolved)
 
     # Cache check: hash includes the importer's content AND every imported
     # TTL's content, so any upstream ontology change busts the cache.
@@ -887,6 +1362,8 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
         for import_content, _py_module in sorted(import_records):
             hasher.update(b"\x00")
             hasher.update(import_content.encode("utf-8"))
+        hasher.update(b"\x00")
+        hasher.update(_CACHE_KEY_VERSION.encode("utf-8"))
         combined_hash = hasher.hexdigest()
         cached_code = _read_cached_python(ttl_file_path, combined_hash)
         if cached_code is not None:
@@ -922,6 +1399,14 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     }
     add_metadata_properties(g, local_classes)
 
+    # Drop range classes that point to types we won't emit. This happens when
+    # an emitted class (typically pulled in from an import because it's
+    # referenced as a property range / restriction value) carries properties
+    # whose ranges reach further into the import hierarchy. Without this
+    # filter, the generated Python file references undefined type names and
+    # Pydantic fails with PydanticUndefinedAnnotation at import time.
+    _filter_unresolved_range_classes(classes, properties)
+
     # Generate Python code
     python_code = generate_python_code(classes, properties)
 
@@ -929,13 +1414,16 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     if ttl_file_path:
         py_file = Path(ttl_file_path).with_suffix(".py")
 
-        # Embed the combined source hash (importer + all owl:imports content)
-        # so future calls short-circuit only when *both* sides are unchanged.
+        # Embed the combined source hash (importer + all owl:imports content +
+        # generator version) so future calls short-circuit only when every
+        # input AND the generator's output format are unchanged.
         marker_hasher = hashlib.sha256()
         marker_hasher.update(content.encode("utf-8"))
         for import_content, _py_module in sorted(import_records):
             marker_hasher.update(b"\x00")
             marker_hasher.update(import_content.encode("utf-8"))
+        marker_hasher.update(b"\x00")
+        marker_hasher.update(_CACHE_KEY_VERSION.encode("utf-8"))
         ttl_hash = marker_hasher.hexdigest()
         python_code_with_marker = (
             f"{_CACHE_MARKER_PREFIX}{ttl_hash}\n{python_code}"

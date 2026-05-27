@@ -73,6 +73,41 @@ export interface FileInfo {
   source?: string; // Storage source ID
 }
 
+export interface StarredItem {
+  path: string;
+  name: string;
+  type: 'file' | 'folder';
+  source: string; // activeSource value (my-drive, workspace, etc.)
+  workspaceId: string;
+}
+
+export interface StarredNavigation {
+  source: string;
+  path: string;
+  previewPath?: string; // for files: open preview after navigating to parent folder
+}
+
+const STARRED_STORAGE_KEY = 'nexus-starred-files';
+
+const getInitialStarredItems = (): StarredItem[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(STARRED_STORAGE_KEY);
+    return stored ? (JSON.parse(stored) as StarredItem[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveStarredItems = (items: StarredItem[]): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STARRED_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // ignore storage errors
+  }
+};
+
 export interface FileContent {
   path: string;
   content: string;
@@ -105,6 +140,12 @@ interface FilesState {
   // Synced folders
   syncedFolders: SyncedFolder[];
 
+  // Starred items (persisted in localStorage)
+  starredItems: StarredItem[];
+
+  // Pending starred navigation: set by sidebar, consumed by the files page
+  starredNavigation: StarredNavigation | null;
+
   // Upload progress (for folder / multi-file uploads)
   uploadProgress: {
     active: boolean;
@@ -124,6 +165,11 @@ interface FilesState {
   setActiveFile: (path: string | null) => void;
   setFileContent: (path: string, content: string) => void;
   
+  // Starred item actions
+  starItem: (item: StarredItem) => void;
+  unstarItem: (path: string, workspaceId: string) => void;
+  setStarredNavigation: (nav: StarredNavigation | null) => void;
+
   // Storage source actions
   toggleCategory: (category: StorageCategory) => void;
   toggleSource: (sourceId: string) => void;
@@ -191,7 +237,29 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   // Synced folders
   syncedFolders: [] as SyncedFolder[],
 
+  starredItems: getInitialStarredItems(),
+  starredNavigation: null,
+
   uploadProgress: null,
+
+  starItem: (item) => set((state) => {
+    if (state.starredItems.some((i) => i.path === item.path && i.workspaceId === item.workspaceId)) {
+      return state;
+    }
+    const newItems = [...state.starredItems, item];
+    saveStarredItems(newItems);
+    return { starredItems: newItems };
+  }),
+
+  unstarItem: (path, workspaceId) => set((state) => {
+    const newItems = state.starredItems.filter(
+      (i) => !(i.path === path && i.workspaceId === workspaceId)
+    );
+    saveStarredItems(newItems);
+    return { starredItems: newItems };
+  }),
+
+  setStarredNavigation: (nav) => set({ starredNavigation: nav }),
 
   setFiles: (files) => set({ files }),
   setCurrentPath: (currentPath) => set({ currentPath }),
