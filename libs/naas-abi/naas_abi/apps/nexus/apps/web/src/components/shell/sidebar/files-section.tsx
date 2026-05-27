@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { ChevronRight, Folder, HardDrive, Server } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronRight, File, Folder, HardDrive, Server, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFilesStore } from '@/stores/files';
@@ -18,6 +18,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const systemDriveEnabled = Boolean(currentWorkspace?.systemDriveEnabled);
   const workspaceRole = currentWorkspace?.currentUserRole;
   const isWorkspaceAdmin = workspaceRole === 'owner' || workspaceRole === 'admin';
+  const [starredExpanded, setStarredExpanded] = useState(true);
   const {
     expandedCategories: fileExpandedCategories,
     toggleCategory: toggleFileCategory,
@@ -25,7 +26,14 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     setActiveSource,
     syncedFolders,
     fetchLocalFiles,
+    starredItems,
+    unstarItem,
+    setStarredNavigation,
   } = useFilesStore();
+
+  const workspaceStarredItems = starredItems.filter(
+    (i) => i.workspaceId === currentWorkspaceId
+  );
 
   return (
     <CollapsibleSection
@@ -138,6 +146,77 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
               </button>
             ))}
 
+          </div>
+        )}
+      </div>
+
+      {/* Starred section */}
+      <div className="mt-1 space-y-0.5">
+        <button
+          onClick={() => setStarredExpanded((v) => !v)}
+          className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          <ChevronRight
+            size={12}
+            className={cn('transition-transform', starredExpanded && 'rotate-90')}
+          />
+          <Star size={11} className="text-amber-400 fill-amber-400" />
+          <span className="flex-1 truncate text-left">Starred</span>
+          {workspaceStarredItems.length > 0 && (
+            <span className="text-[10px]">{workspaceStarredItems.length}</span>
+          )}
+        </button>
+        {starredExpanded && (
+          <div className="ml-3 space-y-0.5">
+            {workspaceStarredItems.length === 0 ? (
+              <p className="px-2 py-1 text-[11px] text-muted-foreground">No starred items yet</p>
+            ) : (
+              workspaceStarredItems.map((item) => (
+                <div
+                  key={`${item.workspaceId}:${item.source}:${item.path}`}
+                  className="group flex items-center gap-0.5"
+                >
+                  <button
+                    onClick={() => {
+                      const filesPath = getWorkspacePath(currentWorkspaceId, '/files');
+                      if (item.type === 'folder') {
+                        setStarredNavigation({ source: item.source, path: item.path });
+                      } else {
+                        const parentPath = item.path.includes('/')
+                          ? item.path.substring(0, item.path.lastIndexOf('/'))
+                          : '';
+                        setStarredNavigation({
+                          source: item.source,
+                          path: parentPath,
+                          previewPath: item.path,
+                        });
+                      }
+                      router.push(filesPath);
+                    }}
+                    className={cn(
+                      'flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                      'hover:bg-workspace-accent-10',
+                      activeSource === item.source && 'text-workspace-accent'
+                    )}
+                    title={item.path}
+                  >
+                    {item.type === 'folder' ? (
+                      <Folder size={12} className="flex-shrink-0 text-muted-foreground" />
+                    ) : (
+                      <File size={12} className="flex-shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="flex-1 truncate text-left">{item.name}</span>
+                  </button>
+                  <button
+                    title="Remove from starred"
+                    onClick={() => unstarItem(item.path, item.workspaceId)}
+                    className="hidden h-5 w-5 flex-shrink-0 items-center justify-center rounded text-amber-400 hover:text-amber-500 group-hover:flex"
+                  >
+                    <Star size={11} className="fill-current" />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

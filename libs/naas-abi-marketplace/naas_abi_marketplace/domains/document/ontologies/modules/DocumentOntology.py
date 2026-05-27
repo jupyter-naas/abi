@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 1102fc426e7b6f970a004b24ef8d32247b2e0e9455ee73d21b927f7e4433c601
+# onto2py-source-sha256: 6f929b7b4857a4aeaf951ecb08d73c430b9237b201ce1a31cef590ff9e3071e8
 from __future__ import annotations
 
 import datetime
@@ -309,90 +309,60 @@ class RDFEntity(BaseModel):
         return g
 
 
-class File(RDFEntity):
+class Chunk(RDFEntity):
     """
-    File
+    Chunk
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/File"
-    _name: ClassVar[str] = "File"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Chunk"
+    _name: ClassVar[str] = "Chunk"
     _property_uris: ClassVar[dict] = {
-        "accessed_time": "http://ontology.naas.ai/abi/document/accessed_time",
+        "chunk_file_path": "http://ontology.naas.ai/abi/document/file_path",
+        "chunk_index": "http://ontology.naas.ai/abi/document/chunk_index",
+        "collection_name": "http://ontology.naas.ai/abi/document/collection_name",
+        "content": "http://ontology.naas.ai/abi/document/content",
         "created": "http://purl.org/dc/terms/created",
-        "created_time": "http://ontology.naas.ai/abi/document/created_time",
         "creator": "http://purl.org/dc/terms/creator",
-        "derivedFrom": "http://ontology.naas.ai/abi/document/derivedFrom",
-        "embodies": "http://ontology.naas.ai/abi/document/embodies",
-        "encoding": "http://ontology.naas.ai/abi/document/encoding",
-        "file_name": "http://ontology.naas.ai/abi/document/name",
-        "file_path": "http://ontology.naas.ai/abi/document/path",
-        "file_size_bytes": "http://ontology.naas.ai/abi/document/file_size_bytes",
-        "hasChunk": "http://ontology.naas.ai/abi/document/hasChunk",
+        "embedding_id": "http://ontology.naas.ai/abi/document/embedding_id",
+        "isChunkOf": "http://ontology.naas.ai/abi/document/isChunkOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "mime_type": "http://ontology.naas.ai/abi/document/mime_type",
-        "modified_time": "http://ontology.naas.ai/abi/document/modified_time",
-        "permissions": "http://ontology.naas.ai/abi/document/permissions",
-        "processedBy": "http://ontology.naas.ai/abi/document/processedBy",
-        "sha256": "http://ontology.naas.ai/abi/document/sha256",
     }
-    _object_properties: ClassVar[set[str]] = {
-        "derivedFrom",
-        "embodies",
-        "hasChunk",
-        "processedBy",
-    }
+    _object_properties: ClassVar[set[str]] = {"isChunkOf"}
 
     # Data properties
-    file_path: Optional[
-        Annotated[str, Field(description="The path of the document.")]
-    ] = None
-    file_name: Optional[
-        Annotated[str, Field(description="The name of the document.")]
-    ] = None
-    mime_type: Optional[
-        Annotated[str, Field(description="The MIME type of the document.")]
-    ] = None
-    file_size_bytes: Optional[
-        Annotated[int, Field(description="The size of the document in bytes.")]
-    ] = None
-    created_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The created timestamp of the document."),
-        ]
-    ] = None
-    modified_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The last modified timestamp of the document."),
-        ]
-    ] = None
-    accessed_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The last accessed timestamp of the document."),
-        ]
-    ] = None
-    permissions: Optional[
+    embedding_id: Optional[
         Annotated[
             str,
             Field(
-                description="The file permissions of the document in Unix-like notation."
+                description="The identifier of the vector embedding stored in the vector store."
             ),
         ]
     ] = None
-    encoding: Optional[
+    content: Optional[
+        Annotated[str, Field(description="The text content of a chunk.")]
+    ] = None
+    chunk_index: Optional[
+        Annotated[
+            int,
+            Field(
+                description="The zero-based position of the chunk within its source document."
+            ),
+        ]
+    ] = None
+    chunk_file_path: Optional[
         Annotated[
             str,
             Field(
-                description="The detected character encoding of the document when applicable."
+                description="The file path of the source document from which this chunk was derived."
             ),
         ]
     ] = None
-    sha256: Optional[
+    collection_name: Optional[
         Annotated[
             str,
-            Field(description="The SHA-256 checksum (hex) of the document content."),
+            Field(
+                description="The name of the vector store collection in which this chunk's embedding is stored."
+            ),
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
@@ -406,30 +376,38 @@ class File(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    derivedFrom: Optional[
+    isChunkOf: Optional[
         Annotated[
             List[Union[File, URIRef, str]],
-            Field(description="A file is derived from another file."),
+            Field(description="A chunk is derived from a source file."),
         ]
     ] = None
-    embodies: Optional[
-        Annotated[
-            List[Union[Document, URIRef, str]],
-            Field(description="A file embodies a document."),
-        ]
-    ] = None
-    hasChunk: Optional[
-        Annotated[
-            List[Union[Chunk, URIRef, str]],
-            Field(description="A file has one or more chunks."),
-        ]
-    ] = None
-    processedBy: Optional[
-        Annotated[
-            List[Union[Processor, URIRef, str]],
-            Field(description="A file is processed by a processor."),
-        ]
-    ] = None
+
+
+class Processor(RDFEntity):
+    """
+    Processor
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Processor"
+    _name: ClassVar[str] = "Processor"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
 
 
 class Document(RDFEntity):
@@ -474,85 +452,89 @@ class Document(RDFEntity):
     ] = None
 
 
-class Processor(RDFEntity):
+class File(RDFEntity):
     """
-    Processor
+    File
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Processor"
-    _name: ClassVar[str] = "Processor"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/File"
+    _name: ClassVar[str] = "File"
     _property_uris: ClassVar[dict] = {
+        "accessed_time": "http://ontology.naas.ai/abi/document/accessed_time",
         "created": "http://purl.org/dc/terms/created",
+        "created_time": "http://ontology.naas.ai/abi/document/created_time",
         "creator": "http://purl.org/dc/terms/creator",
+        "derivedFrom": "http://ontology.naas.ai/abi/document/derivedFrom",
+        "embodies": "http://ontology.naas.ai/abi/document/embodies",
+        "encoding": "http://ontology.naas.ai/abi/document/encoding",
+        "file_name": "http://ontology.naas.ai/abi/document/name",
+        "file_path": "http://ontology.naas.ai/abi/document/path",
+        "file_size_bytes": "http://ontology.naas.ai/abi/document/file_size_bytes",
+        "hasChunk": "http://ontology.naas.ai/abi/document/hasChunk",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "mime_type": "http://ontology.naas.ai/abi/document/mime_type",
+        "modified_time": "http://ontology.naas.ai/abi/document/modified_time",
+        "permissions": "http://ontology.naas.ai/abi/document/permissions",
+        "processedBy": "http://ontology.naas.ai/abi/document/processedBy",
+        "sha256": "http://ontology.naas.ai/abi/document/sha256",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {
+        "derivedFrom",
+        "embodies",
+        "hasChunk",
+        "processedBy",
+    }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-
-class Chunk(RDFEntity):
-    """
-    Chunk
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Chunk"
-    _name: ClassVar[str] = "Chunk"
-    _property_uris: ClassVar[dict] = {
-        "chunk_file_path": "http://ontology.naas.ai/abi/document/file_path",
-        "chunk_index": "http://ontology.naas.ai/abi/document/chunk_index",
-        "collection_name": "http://ontology.naas.ai/abi/document/collection_name",
-        "content": "http://ontology.naas.ai/abi/document/content",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "embedding_id": "http://ontology.naas.ai/abi/document/embedding_id",
-        "isChunkOf": "http://ontology.naas.ai/abi/document/isChunkOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"isChunkOf"}
-
-    # Data properties
-    content: Optional[
-        Annotated[str, Field(description="The text content of a chunk.")]
-    ] = None
-    chunk_index: Optional[
+    accessed_time: Optional[
         Annotated[
-            int,
-            Field(
-                description="The zero-based position of the chunk within its source document."
-            ),
+            datetime.datetime,
+            Field(description="The last accessed timestamp of the document."),
         ]
     ] = None
-    embedding_id: Optional[
+    permissions: Optional[
         Annotated[
             str,
             Field(
-                description="The identifier of the vector embedding stored in the vector store."
+                description="The file permissions of the document in Unix-like notation."
             ),
         ]
     ] = None
-    chunk_file_path: Optional[
+    mime_type: Optional[
+        Annotated[str, Field(description="The MIME type of the document.")]
+    ] = None
+    file_size_bytes: Optional[
+        Annotated[int, Field(description="The size of the document in bytes.")]
+    ] = None
+    file_name: Optional[
+        Annotated[str, Field(description="The name of the document.")]
+    ] = None
+    file_path: Optional[
+        Annotated[str, Field(description="The path of the document.")]
+    ] = None
+    created_time: Optional[
         Annotated[
-            str,
-            Field(
-                description="The file path of the source document from which this chunk was derived."
-            ),
+            datetime.datetime,
+            Field(description="The created timestamp of the document."),
         ]
     ] = None
-    collection_name: Optional[
+    modified_time: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="The last modified timestamp of the document."),
+        ]
+    ] = None
+    sha256: Optional[
+        Annotated[
+            str,
+            Field(description="The SHA-256 checksum (hex) of the document content."),
+        ]
+    ] = None
+    encoding: Optional[
         Annotated[
             str,
             Field(
-                description="The name of the vector store collection in which this chunk's embedding is stored."
+                description="The detected character encoding of the document when applicable."
             ),
         ]
     ] = None
@@ -567,16 +549,34 @@ class Chunk(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    isChunkOf: Optional[
+    derivedFrom: Optional[
         Annotated[
             List[Union[File, URIRef, str]],
-            Field(description="A chunk is derived from a source file."),
+            Field(description="A file is derived from another file."),
+        ]
+    ] = None
+    embodies: Optional[
+        Annotated[
+            List[Union[Document, URIRef, str]],
+            Field(description="A file embodies a document."),
+        ]
+    ] = None
+    hasChunk: Optional[
+        Annotated[
+            List[Union[Chunk, URIRef, str]],
+            Field(description="A file has one or more chunks."),
+        ]
+    ] = None
+    processedBy: Optional[
+        Annotated[
+            List[Union[Processor, URIRef, str]],
+            Field(description="A file is processed by a processor."),
         ]
     ] = None
 
 
 # Rebuild models to resolve forward references
-File.model_rebuild()
-Document.model_rebuild()
-Processor.model_rebuild()
 Chunk.model_rebuild()
+Processor.model_rebuild()
+Document.model_rebuild()
+File.model_rebuild()

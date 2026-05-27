@@ -15,13 +15,12 @@ from typing import (
     get_origin,
 )
 
-from pydantic import BaseModel, Field, ValidationError
-from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import OWL, RDF, RDFS, XSD
-
 from naas_abi_core.services.event.ontologies.modules.EventOntology import (
     LogProcess,
 )
+from pydantic import BaseModel, Field, ValidationError
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")

@@ -1,7 +1,8 @@
 import json
+import pickle
 from datetime import datetime
 from io import BytesIO
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
 import pandas as pd
 import yaml
@@ -464,4 +465,42 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving PowerPoint presentation to {dir_path}: {e}")
+            return dir_path, file_name
+
+    def get_pickle(self, dir_path: str, file_name: str) -> Any | None:
+        """
+        Get a pickled Python object from storage.
+
+        SECURITY: ``pickle.loads`` will execute arbitrary code embedded in
+        the byte stream. Only call this on objects written by trusted
+        producers in the same trust boundary.
+        """
+        try:
+            content = self.__storage_service.get_object(dir_path, file_name)
+            if content is None:
+                return None
+            return pickle.loads(content)  # nosec B301 — trusted internal storage only
+        except Exception as e:
+            logger.warning(f"Error getting pickle from {dir_path}/{file_name}: {e}")
+            return None
+
+    def save_pickle(
+        self, obj: Any, dir_path: str, file_name: str, copy: bool = True
+    ) -> Tuple[str, str]:
+        """
+        Pickle a Python object and save it to storage.
+        """
+        try:
+            content = pickle.dumps(obj)
+            self.__storage_service.put_object(
+                prefix=dir_path, key=file_name, content=content
+            )
+            if copy:
+                self.__make_copy(dir_path, file_name, content)
+            logger.debug(
+                f"[save_pickle] File successfully written to storage: {dir_path}/{file_name}"
+            )
+            return dir_path, file_name
+        except Exception as e:
+            logger.error(f"Error saving pickle to {dir_path}: {e}")
             return dir_path, file_name

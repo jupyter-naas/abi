@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v2.7.1 (2026-05-27)
+
+### Bug Fixes
+
+- **naas-abi**: Include analytics app manifest.json in wheel
+  ([`c9bdde8`](https://github.com/jupyter-naas/abi/commit/c9bdde85886516f875e8a315036a8ac29e915995))
+
+
+## v2.7.0 (2026-05-26)
+
+### Chores
+
+- Update naas-abi packages version and add langchain-aws dependency
+  ([`cf41b96`](https://github.com/jupyter-naas/abi/commit/cf41b96782ee38e80771238d2fb242c7c51d330d))
+
+### Features
+
+- **analytics**: Reduce recent events limit and increase rebuild debounce
+  ([`cf41b96`](https://github.com/jupyter-naas/abi/commit/cf41b96782ee38e80771238d2fb242c7c51d330d))
+
+
+## v2.6.0 (2026-05-26)
+
+### Refactoring
+
+- **bus**: Split into publish/subscribe + enqueue/dequeue
+  ([`0ff1a66`](https://github.com/jupyter-naas/abi/commit/0ff1a66c67707a80f9181c831d849acc9c984dff))
+
+
 ## v2.5.0 (2026-05-26)
 
 
