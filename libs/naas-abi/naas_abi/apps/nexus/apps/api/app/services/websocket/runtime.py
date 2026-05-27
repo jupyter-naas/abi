@@ -83,11 +83,29 @@ async def connect(sid, environ, auth):
         logger.warning("[WS] Token revoked; rejecting connection")
         return False
 
+    # Resolve the user's superadmin flag once at connect time so the
+    # admin-events room gate doesn't have to re-query on every event.
+    is_superadmin = False
+    try:
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
+            AuthSecondaryAdapterPostgres,
+        )
+
+        async with AsyncSessionLocal() as db:
+            adapter = AuthSecondaryAdapterPostgres(db=db)
+            record = await adapter.get_user_by_id(user_id)
+            if record is not None:
+                is_superadmin = bool(record.is_superadmin)
+    except Exception:
+        logger.exception("[WS] failed to resolve user record for sid=%s", sid)
+
     logger.info(f"[WS] Client connected sid={sid} user={user_id}")
 
     # Store user_id with session
     async with sio.session(sid) as session:
         session["user_id"] = user_id
+        session["is_superadmin"] = is_superadmin
         session["workspaces"] = set()
 
     return True
@@ -296,6 +314,57 @@ async def cursor_position(sid, data):
         room=f"workspace:{workspace_id}",
         skip_sid=sid,
     )
+
+
+@sio.event
+async def join_admin_events(sid, data=None):
+    """Subscribe a connected client to the platform admin event stream.
+
+    Membership is gated by ``user.is_superadmin`` (set via the ``users``
+    section of ``config.yaml``); non-superadmins receive an error and are
+    not added to the room. Once joined, the client receives every
+    ``platform_event`` emitted by the EventService relay.
+    """
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
+        AuthSecondaryAdapterPostgres,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.websocket.admin_events import (
+        ADMIN_EVENTS_ROOM,
+    )
+
+    async with sio.session(sid) as session:
+        user_id = session.get("user_id")
+
+    # Re-check is_superadmin against the DB on every join (don't trust the
+    # cached connect-time flag — the user may have been promoted after their
+    # socket connected).
+    is_superadmin = False
+    try:
+        async with AsyncSessionLocal() as db:
+            adapter = AuthSecondaryAdapterPostgres(db=db)
+            record = await adapter.get_user_by_id(user_id) if user_id else None
+            is_superadmin = bool(record.is_superadmin) if record else False
+    except Exception:
+        logger.exception("[WS] admin events: failed to refresh superadmin flag sid=%s", sid)
+
+    if not is_superadmin:
+        logger.warning("[WS] admin events join denied sid=%s user=%s", sid, user_id)
+        return {"error": "superadmin required"}
+
+    sio.enter_room(sid, ADMIN_EVENTS_ROOM)
+    logger.info("[WS] admin events join sid=%s user=%s room=%s", sid, user_id, ADMIN_EVENTS_ROOM)
+    return {"status": "joined", "room": ADMIN_EVENTS_ROOM}
+
+
+@sio.event
+async def leave_admin_events(sid, data=None):
+    from naas_abi.apps.nexus.apps.api.app.services.websocket.admin_events import (
+        ADMIN_EVENTS_ROOM,
+    )
+
+    sio.leave_room(sid, ADMIN_EVENTS_ROOM)
+    return {"status": "left", "room": ADMIN_EVENTS_ROOM}
 
 
 def get_workspace_presence(workspace_id: str) -> list[str]:

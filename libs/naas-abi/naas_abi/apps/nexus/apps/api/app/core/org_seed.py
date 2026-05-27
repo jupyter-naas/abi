@@ -222,6 +222,7 @@ async def _upsert_users(
                 company=user_cfg.company,
                 role=user_cfg.role,
                 bio=user_cfg.bio,
+                is_superadmin=user_cfg.is_superadmin,
                 created_at=now,
                 updated_at=now,
             )
@@ -249,6 +250,17 @@ async def _upsert_users(
                 "User email=%s already exists; skipping config-driven updates",
                 normalized_email,
             )
+            # is_superadmin is the one config-driven field we always
+            # reconcile, so an admin can promote/demote users via config.yaml
+            # without recreating the account.
+            if bool(user.is_superadmin) != bool(user_cfg.is_superadmin):
+                user.is_superadmin = user_cfg.is_superadmin
+                user.updated_at = now
+                logger.info(
+                    "Reconciled is_superadmin=%s for email=%s from config",
+                    user_cfg.is_superadmin,
+                    normalized_email,
+                )
 
         users_by_email[normalized_email] = user
 
