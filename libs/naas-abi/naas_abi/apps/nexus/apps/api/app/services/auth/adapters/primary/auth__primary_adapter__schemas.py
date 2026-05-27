@@ -36,6 +36,7 @@ class User(UserBase):
     company: str | None = None
     role: str | None = None
     bio: str | None = None
+    is_superadmin: bool = False
 
 
 class UserInDB(User):
