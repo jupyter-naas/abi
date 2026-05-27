@@ -12,7 +12,10 @@ os:ObjectStorageEventOntology a owl:Ontology ;
   dc:title "Object Storage Event Ontology"@en ;
   dc:description "Events emitted by the ObjectStorageService when objects are written to or removed from the store."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
-  owl:imports <python://naas_abi_core.services.event.ontologies.modules/EventOntology.ttl> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.object_storage" ;
+  abi:ontologyResource "ontologies/modules/ObjectStorageEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/ObjectStorageEventOntology.py" ;
   dc11:date "2026-05-26"^^xsd:date .
 
 # ObjectPut: published after ObjectStorageService.put_object() succeeds.

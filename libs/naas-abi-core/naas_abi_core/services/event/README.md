@@ -23,7 +23,11 @@ The contract `EventService` cares about:
 
 ### 1. Write a TTL
 
-Create a `.ttl` file in your domain's `ontologies/modules/` directory. The two things that matter: an `owl:imports` pointing at the EventOntology TTL, and a `rdfs:subClassOf abi:LogProcess` on each event class.
+Create a `.ttl` file in your domain's `ontologies/modules/` directory. Three things matter:
+
+1. `owl:imports <http://ontology.naas.ai/abi/EventService>` so `LogProcess` is pulled from the canonical EventOntology (not regenerated locally).
+2. `rdfs:subClassOf abi:LogProcess` on each event class.
+3. The `abi:pythonPackage` / `abi:ontologyResource` / `abi:pythonResource` locator annotations on your own `owl:Ontology` declaration, so any *other* module can in turn `owl:imports` your ontology by its canonical IRI.
 
 ```ttl
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -37,7 +41,10 @@ Create a `.ttl` file in your domain's `ontologies/modules/` directory. The two t
 
 mydomain:MyDomainEvents a owl:Ontology ;
   dc:title "My domain events"@en ;
-  owl:imports <python://naas_abi_core.services.event.ontologies.modules/EventOntology.ttl> .
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "my_module" ;
+  abi:ontologyResource "ontologies/modules/MyDomainEvents.ttl" ;
+  abi:pythonResource   "ontologies/modules/MyDomainEvents.py" .
 
 mydomain:UserRegistered a owl:Class ;
     rdfs:label "UserRegistered"@en ;
@@ -55,7 +62,7 @@ mydomain:source a owl:DatatypeProperty ;
     rdfs:range xsd:string .
 ```
 
-**Why `python://`?** It's an `importlib.resources`-based locator that works the same in editable installs, wheels, and zipped packages — it doesn't break the moment your TTL lives inside a `.venv`. Plain relative paths (e.g. `<../other/Foo.ttl>`) also work for intra-package references. Remote HTTP IRIs (BFO, etc.) are deliberately skipped — they're RDF-level references, not codegen inputs.
+**Why `<http://ontology.naas.ai/abi/EventService>`?** That's the canonical IRI of the EventOntology — a normal, spec-compliant `owl:imports` target. onto2py keeps an index of every ontology declared by an installed `naas_abi*` package; when an `owl:imports` IRI matches one in the index, the TTL is loaded through `importlib.resources` (via the `abi:pythonPackage` / `abi:ontologyResource` annotations on that ontology), so it works the same in editable installs, wheels, and zipped packages. Plain relative paths (e.g. `<../other/Foo.ttl>`) also work for intra-package references. Remote HTTP IRIs that no installed package declares (BFO, etc.) are skipped — they're RDF-level references, not codegen inputs.
 
 ### 2. Generate the Python module
 
