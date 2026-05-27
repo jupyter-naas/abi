@@ -6,6 +6,7 @@ import os
 import re
 import threading
 import uuid
+from contextvars import copy_context
 
 # Dataclass imports for configuration
 from dataclasses import dataclass, field
@@ -56,6 +57,21 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
+from naas_abi_core.engine.context import get_default_event_service
+from naas_abi_core.services.agent.context import (
+    agent_chat_id,
+    agent_user_id,
+    agent_workspace_id,
+)
+from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
+    AgentAIMessageEmitted,
+    AgentInvocationCompleted,
+    AgentModelCalled,
+    AgentRouted,
+    AgentToolCalled,
+    AgentToolResponded,
+    AgentUserMessageReceived,
+)
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from sse_starlette.sse import EventSourceResponse
@@ -1134,27 +1150,109 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
     def workflow(self) -> StateGraph:
         return self._workflow
 
+    def _identity(self) -> dict[str, Any]:
+        """Snapshot the per-request identity ContextVars (set by API layer)."""
+        return {
+            "user_id": agent_user_id.get(),
+            "chat_id": agent_chat_id.get() or self._state.thread_id,
+            "workspace_id": agent_workspace_id.get(),
+        }
+
+    def _publish_agent_event(self, event: Any) -> None:
+        """Best-effort publish to the process-wide EventService.
+
+        Silently no-ops when no EventService is configured (tests, library use
+        outside a loaded engine). Failures in the EventService must never
+        break the conversation flow.
+        """
+        events = get_default_event_service()
+        if events is None:
+            return
+        try:
+            events.publish(event)
+        except Exception as exc:
+            logger.warning(f"Agent '{self._name}': failed to publish event: {exc}")
+
+    def _stringify_content(self, value: Any) -> str | None:
+        """Coerce a LangChain message content (str, list of blocks, or None) to a string for event storage."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        try:
+            import json
+            return json.dumps(value, default=str)
+        except Exception:
+            return str(value)
+
     def _notify_tool_usage(self, message: AnyMessage):
         self._event_queue.put(ToolUsageEvent(payload=message))
         self._on_tool_usage(message)
+        identity = self._identity()
+        import json
+        for call in getattr(message, "tool_calls", []) or []:
+            args = call.get("args") if isinstance(call, dict) else getattr(call, "args", None)
+            try:
+                args_str = json.dumps(args, default=str) if args is not None else None
+            except Exception:
+                args_str = str(args)
+            self._publish_agent_event(
+                AgentToolCalled(
+                    agent_name=self._name,
+                    tool_name=call.get("name") if isinstance(call, dict) else getattr(call, "name", None),
+                    tool_call_id=call.get("id") if isinstance(call, dict) else getattr(call, "id", None),
+                    tool_args=args_str,
+                    **identity,
+                )
+            )
 
     def _notify_tool_response(self, message: AnyMessage):
         self._event_queue.put(ToolResponseEvent(payload=message))
         self._on_tool_response(message)
+        content = self._stringify_content(getattr(message, "content", None))
+        self._publish_agent_event(
+            AgentToolResponded(
+                agent_name=self._name,
+                tool_name=getattr(message, "name", None),
+                tool_call_id=getattr(message, "tool_call_id", None),
+                content=content,
+                content_length=len(content) if content is not None else None,
+                **self._identity(),
+            )
+        )
 
     def _notify_ai_message(self, message: AnyMessage, agent_name: str):
         self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
         self._on_ai_message(message, agent_name)
+        content = self._stringify_content(getattr(message, "content", None))
+        self._publish_agent_event(
+            AgentAIMessageEmitted(
+                agent_name=agent_name,
+                content=content,
+                content_length=len(content) if content is not None else None,
+                **self._identity(),
+            )
+        )
 
     def _notify_call_model(self, agent_name: str):
         self._event_queue.put(CallModelEvent(payload=agent_name, agent_name=agent_name))
         self._on_call_model(agent_name)
+        self._publish_agent_event(
+            AgentModelCalled(agent_name=agent_name, **self._identity())
+        )
 
     def _notify_agent_routing(self, agent_name: str):
         self._event_queue.put(
             AgentRoutingEvent(payload=agent_name, agent_name=agent_name)
         )
         self._on_agent_routing(agent_name)
+        self._publish_agent_event(
+            AgentRouted(
+                agent_name=self._name,
+                routed_to=agent_name,
+                **self._identity(),
+            )
+        )
 
     def _sync_event_queue_with_subagents(self):
         """Ensure all nested sub-agents publish runtime events to the same queue."""
@@ -1220,6 +1318,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         Yields:
             str: The model's response text
         """
+        prompt_str = self._stringify_content(prompt)
+        self._publish_agent_event(
+            AgentUserMessageReceived(
+                agent_name=self._name,
+                content=prompt_str,
+                content_length=len(prompt_str) if prompt_str is not None else None,
+                **self._identity(),
+            )
+        )
+
         notified = {}
 
         for chunk in self.graph.stream(
@@ -1352,6 +1460,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         else:
             content = str(last_message) if last_message is not None else ""
         # content = list(chunks[-1].values())[0]["messages"][-1].content
+
+        completion_content = self._stringify_content(content)
+        self._publish_agent_event(
+            AgentInvocationCompleted(
+                agent_name=self._name,
+                content=completion_content,
+                content_length=len(completion_content) if completion_content is not None else None,
+                **self._identity(),
+            )
+        )
 
         return content
 
@@ -1494,7 +1612,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         from threading import Thread
 
-        thread = Thread(target=run_invoke)
+        # Carry identity ContextVars across the thread boundary
+        # so events published from inside invoke() stay tagged with the caller's
+        # request scope. Raw Thread() does not inherit context by default.
+        ctx = copy_context()
+        thread = Thread(target=ctx.run, args=(run_invoke,))
         thread.start()
 
         final_state = None
