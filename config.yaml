@@ -59,6 +59,7 @@ modules:
         users:
           - email: "admin@example.com"
             name: "Dev Admin"
+            is_superadmin: true
         organizations:
           - name: "Dev"
             slug: "dev"
