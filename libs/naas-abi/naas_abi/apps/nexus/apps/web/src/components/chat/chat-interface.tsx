@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffe
 import { createPortal } from 'react-dom';
 import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
@@ -594,14 +594,22 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversationId]);
 
+  const pathname = usePathname();
+
   // Keep the URL in sync with the active conversation so each conversation has a shareable link.
+  // Guarded against firing mid-workspace-switch: only rewrite the URL when the
+  // pathname already points at the current workspace's chat route. Otherwise a
+  // pending navigation to a different workspace (router.push from the sidebar)
+  // would race with this effect and get reverted.
   useEffect(() => {
     if (!mounted) return;
     if (!currentWorkspaceId) return;
     const base = `/workspace/${currentWorkspaceId}/chat`;
+    if (!pathname || !pathname.startsWith(`${base}`)) return;
     const target = activeConversationId ? `${base}/${activeConversationId}` : base;
+    if (pathname === target) return;
     router.replace(target, { scroll: false });
-  }, [activeConversationId, mounted, currentWorkspaceId, router]);
+  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname]);
 
   // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
   const activeConversationTitle = useWorkspaceStore((s) =>
