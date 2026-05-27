@@ -232,6 +232,7 @@ class UserSeedConfig(BaseModel):
     company: str | None = None
     role: str | None = None
     bio: str | None = None
+    is_superadmin: bool = False
     store_credentials_in_secrets: bool = True
 
 

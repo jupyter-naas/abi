@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings,
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings, Activity,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
@@ -68,6 +69,7 @@ export function Sidebar() {
   const canOntology = useFeature('ontology');
   const canGraph = useFeature('graph');
   const canSettingsWorkspace = useFeature('settings.workspace');
+  const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
   useEffect(() => {
     setMounted(true);
@@ -248,6 +250,25 @@ export function Sidebar() {
           expanded ? 'px-2' : 'items-center px-2'
         )}
       >
+        {isSuperadmin && (() => {
+          const active = pathname.startsWith('/admin');
+          return (
+            <button
+              key="admin-events"
+              onClick={() => router.push('/admin/events')}
+              title={!expanded ? 'Platform events' : undefined}
+              className={cn(
+                'flex items-center rounded-lg transition-all',
+                'hover:bg-workspace-accent-10 hover:text-workspace-accent',
+                active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
+                expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+              )}
+            >
+              <span className="flex-shrink-0"><Activity size={18} /></span>
+              {expanded && <span className="truncate text-sm font-medium">Platform events</span>}
+            </button>
+          );
+        })()}
         {BOTTOM_SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
           const active = isSectionActive(section);
           return (
