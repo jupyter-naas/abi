@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.50.1 (2026-05-28)
+
+### Bug Fixes
+
+- **core**: Handle disabled soft deps and bedrock content
+  ([`7ed3777`](https://github.com/jupyter-naas/abi/commit/7ed3777046e40b3636546f49f99c3acd75dd416f))
+
+
 ## v1.50.0 (2026-05-28)
 
 ### Features
