@@ -7,14 +7,47 @@ from typing import Any, Optional, Tuple
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from naas_abi_core import logger
+from naas_abi_core.engine.context import get_default_model_registry
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 
 from .VectorStore import VectorStore
 
 cache = CacheFactory.CacheFS_find_storage(subpath="intent_mapper")
+
+
+def _resolve_default_embedding_model() -> Embeddings:
+    """Resolve the embedding model when a caller passes ``embedding_model=None``.
+
+    Always goes through the process-wide ``ModelRegistry``. Raises if no
+    default is configured — the caller must either set
+    ``services.model_registry.default_embedding_model`` in the engine config
+    or pass an explicit ``embedding_model=`` argument. This intentionally
+    refuses to silently instantiate a bare ``OpenAIEmbeddings()`` so that
+    "where does this api key come from?" stays answerable from the config.
+    """
+    registry = get_default_model_registry()
+    if registry is None:
+        raise RuntimeError(
+            "IntentMapper needs a process-wide ModelRegistry to resolve "
+            "embedding_model=None — load the engine via Engine.load() first, "
+            "or pass embedding_model= explicitly."
+        )
+    return registry.get_default_embedding_model().model
+
+
+def _resolve_default_chat_model() -> BaseChatModel:
+    """Resolve the chat model used by the IntentMapper's classifier when
+    ``model=None``. Same policy as :func:`_resolve_default_embedding_model`."""
+    registry = get_default_model_registry()
+    if registry is None:
+        raise RuntimeError(
+            "IntentMapper needs a process-wide ModelRegistry to resolve "
+            "model=None — load the engine via Engine.load() first, or pass "
+            "model= explicitly."
+        )
+    return registry.get_default_chat_model().model
 
 
 class IntentScope(Enum):
@@ -57,10 +90,8 @@ class IntentMapper:
         embedding_workers: int = 4,
     ):
         self.intents = intents
-        self._embedding_model = embedding_model or OpenAIEmbeddings(
-            model="text-embedding-3-large"
-        )
-        self.model = model or ChatOpenAI(model="gpt-4.1-mini")
+        self._embedding_model = embedding_model or _resolve_default_embedding_model()
+        self.model = model or _resolve_default_chat_model()
         self.vector_store = None
         self.embedding_workers = max(1, int(embedding_workers))
 

@@ -1,18 +1,24 @@
+from langchain_anthropic import ChatAnthropic
+from pydantic import SecretStr
+
+from naas_abi_core.models.Model import ModelProvider
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
+)
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-# from pydantic import model_validator
 
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
-        services=[ObjectStorageService],
+        services=[ObjectStorageService, ModelRegistryService],
     )
 
     class Configuration(ModuleConfiguration):
@@ -27,16 +33,26 @@ class ABIModule(BaseModule):
         anthropic_api_key: str
         datastore_path: str = "claude"
 
-        # @model_validator(mode="after")
-        # def validate_configuration(self):
-        #     if self.anthropic_api_key is None and self.openrouter_api_key is None:
-        #         raise ValueError(
-        #             "ANTHROPIC_API_KEY or OPENROUTER_API_KEY must be provided"
-        #         )
-        #     if self.global_config.ai_mode == "cloud" and (
-        #         not self.anthropic_api_key and not self.openrouter_api_key
-        #     ):
-        #         raise ValueError(
-        #             "if AI_MODE is cloud, ANTHROPIC_API_KEY and OPENROUTER_API_KEY must be provided"
-        #         )
-        #     return self
+    def on_load(self):
+        # BaseModule.on_load auto-discovers and registers every model file
+        # under ``models/*.py`` that exposes CANONICAL_ID + model.
+        super().on_load()
+
+        # We only need to register the generic provider factory used for
+        # off-catalog ids (model ids the module doesn't ship a concrete file
+        # for).
+        api_key = SecretStr(self.configuration.anthropic_api_key)
+
+        def anthropic_chat_factory(provider_model_id: str) -> ChatAnthropic:
+            return ChatAnthropic(
+                model_name=provider_model_id,
+                temperature=0,
+                max_retries=2,
+                api_key=api_key,
+                timeout=None,
+                stop=None,
+            )
+
+        self.engine.services.model_registry.register_chat_provider(
+            ModelProvider.ANTHROPIC, anthropic_chat_factory
+        )
