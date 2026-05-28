@@ -1,6 +1,5 @@
 from typing import Optional
 
-from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
@@ -91,9 +90,6 @@ Respond only based on what your available agents and tools can actually deliver.
             "cta": "/marketplace",
         },
     ]
-    model = "gpt-4.1-mini"
-    provider = "openai"
-
     # @staticmethod
     # def build_suggestions(cls: type) -> list[dict[str, str]]:
     #     from naas_abi import ABIModule
@@ -118,26 +114,6 @@ Respond only based on what your available agents and tools can actually deliver.
     #     return suggestions
 
     # suggestions: list[dict[str, str]] = build_suggestions(cls=AbiAgent)
-
-    @staticmethod
-    def get_model(
-        api_key: str,
-        model_name: str = "gpt-4.1-mini",
-        base_url: str = "https://api.openai.com/v1",
-        provider: str = "openai",
-    ) -> ChatModel:
-        from langchain_openai import ChatOpenAI
-        from pydantic import SecretStr
-
-        return ChatModel(
-            model_id=model_name,
-            provider=provider,
-            model=ChatOpenAI(
-                model=model_name,
-                base_url=base_url,
-                api_key=SecretStr(api_key),
-            ),
-        )
 
     @staticmethod
     def get_tools(cls) -> list:
@@ -291,10 +267,10 @@ Respond only based on what your available agents and tools can actually deliver.
     ) -> "AbiAgent":
         from naas_abi import ABIModule
 
-        api_key = (
-            ABIModule.get_instance()
-            .engine.modules["naas_abi_marketplace.ai.chatgpt"]
-            .configuration.openai_api_key
+        abi_module = ABIModule.get_instance()
+        chat_model = abi_module.engine.services.model_registry.get_chat_model(
+            abi_module.configuration.abi_agent_model,
+            provider=abi_module.configuration.abi_agent_provider,
         )
 
         tools = cls.get_tools(cls=cls)
@@ -320,9 +296,7 @@ Respond only based on what your available agents and tools can actually deliver.
         return cls(
             name=cls.name,
             description=cls.description,
-            chat_model=cls.get_model(
-                api_key=api_key, model_name=cls.model, provider=cls.provider
-            ),
+            chat_model=chat_model,
             tools=tools,
             agents=agents,
             intents=intents,
