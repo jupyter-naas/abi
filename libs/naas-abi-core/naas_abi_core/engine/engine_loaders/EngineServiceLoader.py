@@ -98,6 +98,10 @@ class EngineServiceLoader:
             events=self.__configuration.services.event.load()
             if self._should_load_service(EventService, services_to_load)
             else None,
+            # Always loaded: the registry is a cheap in-memory store that
+            # modules populate during their on_load. Any module declaring a
+            # ModelRegistryService dependency must be able to register against it.
+            model_registry=self.__configuration.services.model_registry.load(),
         )
         services.wire_services()
         return services
