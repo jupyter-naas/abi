@@ -140,6 +140,11 @@ class EngineModuleLoader:
             None,
         )
 
+        # Soft dependency explicitly present but disabled in config should be
+        # treated as absent.
+        if module_config is not None and is_soft_module and not module_config.enabled:
+            return {}
+
         if module_config is None and not is_soft_module:
             raise ValueError(f"Module {module_name} not found in configuration")
         elif module_config is None and is_soft_module:
@@ -226,9 +231,9 @@ class EngineModuleLoader:
     ) -> Dict[str, BaseModule]:
         self.__modules: Dict[str, BaseModule] = {}
 
-        if self.__module_dependencies is None:
-            # Call this to hydrate the __module_dependencies attribute.
-            self.__module_dependencies = self.get_modules_dependencies(module_names)
+        # Recompute dependencies on each load to avoid stale module lists when
+        # config toggles modules (e.g. enabled -> disabled) during dev reloads.
+        self.__module_dependencies = self.get_modules_dependencies(module_names)
 
         assert self.__module_dependencies is not None, (
             "Module dependencies are not set after getting modules dependencies"

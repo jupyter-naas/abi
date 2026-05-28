@@ -213,8 +213,13 @@ You: code a project
                 return intent
         return None
 
+    def _embedding_cache_namespace(self) -> str:
+        model_name = getattr(self._embedding_model, "model", None)
+        model_id = getattr(self._embedding_model, "model_id", None)
+        return f"{type(self._embedding_model).__name__}:{model_name}:{model_id}"
+
     @cache(
-        lambda self, texts: f"embed_documents_{texts}",
+        lambda self, texts: f"embed_documents_{self._embedding_cache_namespace()}_{texts}",
         cache_type=DataType.PICKLE,
     )
     def _embed_documents(self, texts: list[str]) -> list[list[float]]:
