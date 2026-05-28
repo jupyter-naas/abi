@@ -187,11 +187,13 @@ class ABIModule(BaseModule):
             return self
 
     def on_load(self):
+        # BaseModule.on_load auto-discovers every models/*.py file that
+        # exposes CANONICAL_ID + model and registers them.
         super().on_load()
 
+        # Register the bedrock chat factory for off-catalog model ids.
         from langchain_aws import ChatBedrockConverse
 
-        registry = self.engine.services.model_registry
         cfg = self.configuration
 
         def bedrock_chat_factory(provider_model_id: str) -> ChatBedrockConverse:
@@ -205,21 +207,6 @@ class ABIModule(BaseModule):
                 max_tokens=None,
             )
 
-        registry.register_chat_provider(ModelProvider.BEDROCK, bedrock_chat_factory)
-
-        # Importing each model file triggers its eager ChatModel construction
-        # (which calls ABIModule.get_instance() — safe inside on_load).
-        from naas_abi_marketplace.ai.bedrock.models import (
-            claude_haiku_3_5_bedrock,
-            claude_sonnet_4_bedrock,
-            llama_3_3_70b_bedrock,
-            nova_pro_bedrock,
+        self.engine.services.model_registry.register_chat_provider(
+            ModelProvider.BEDROCK, bedrock_chat_factory
         )
-
-        for module in (
-            claude_haiku_3_5_bedrock,
-            claude_sonnet_4_bedrock,
-            llama_3_3_70b_bedrock,
-            nova_pro_bedrock,
-        ):
-            registry.register(module.CANONICAL_ID, module.model)
