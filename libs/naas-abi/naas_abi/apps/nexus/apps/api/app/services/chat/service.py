@@ -8,6 +8,10 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
+    AuthPersistencePort,
+    AuthUserRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
     CompleteChatResult,
@@ -106,10 +110,82 @@ _MULTI_AGENT_NOTICE = (
 )
 
 
+def _render_user_context_block(user: AuthUserRecord) -> str:
+    fields: list[tuple[str, str | None]] = [
+        ("Name", user.name),
+        ("Email", user.email),
+        ("Company", user.company),
+        ("Role", user.role),
+        ("Bio", user.bio),
+    ]
+    lines = [f"- {label}: {value}" for label, value in fields if value]
+    if not lines:
+        return ""
+    return (
+        "\n\nYou are speaking with the following user. Use this profile to "
+        "personalize your responses naturally; do not repeat it back verbatim "
+        "unless asked.\n" + "\n".join(lines)
+    )
+
+
 class ChatService:
-    def __init__(self, adapter: ChatPersistencePort, iam_service: IAMService | None = None):
+    def __init__(
+        self,
+        adapter: ChatPersistencePort,
+        iam_service: IAMService | None = None,
+        auth_adapter: AuthPersistencePort | None = None,
+    ):
         self.adapter = adapter
         self.iam_service = iam_service
+        self.auth_adapter = auth_adapter
+
+    async def build_system_prompt(
+        self,
+        agent: str,
+        explicit_system_prompt: str | None,
+        prior_messages: list,
+        user_id: str | None,
+    ) -> str:
+        system_prompt = explicit_system_prompt or AGENT_SYSTEM_PROMPTS.get(
+            agent, AGENT_SYSTEM_PROMPTS["aia"]
+        )
+        has_prior_assistant = any(
+            getattr(m, "role", None) == "assistant" for m in prior_messages
+        )
+        if has_prior_assistant:
+            system_prompt += _MULTI_AGENT_NOTICE
+            return system_prompt
+
+        addendum = await self.build_user_context_addendum(prior_messages, user_id)
+        return system_prompt + addendum
+
+    async def build_user_context_addendum(
+        self,
+        prior_messages: list,
+        user_id: str | None,
+    ) -> str:
+        """Return the user-profile addendum to inject on the first conversation turn.
+
+        Returns empty string when:
+        - a prior assistant message exists (not the first turn),
+        - no auth adapter is wired,
+        - no user_id is provided,
+        - the lookup fails or returns no user.
+        """
+        has_prior_assistant = any(
+            getattr(m, "role", None) == "assistant" for m in prior_messages
+        )
+        if has_prior_assistant:
+            return ""
+        if self.auth_adapter is None or not user_id:
+            return ""
+        try:
+            user = await self.auth_adapter.get_user_by_id(user_id)
+        except Exception:
+            return ""
+        if user is None:
+            return ""
+        return _render_user_context_block(user)
 
     def _inject_chat_vector_context(
         self,
@@ -583,12 +659,12 @@ class ChatService:
                     conversation_id=conversation_id,
                     user_id=context.actor_user_id,
                 )
-                system_prompt = request.system_prompt or AGENT_SYSTEM_PROMPTS.get(
-                    request.agent,
-                    AGENT_SYSTEM_PROMPTS["aia"],
+                system_prompt = await self.build_system_prompt(
+                    agent=request.agent,
+                    explicit_system_prompt=request.system_prompt,
+                    prior_messages=list(request.messages or []),
+                    user_id=context.actor_user_id,
                 )
-                if request.messages and any(m.role == "assistant" for m in request.messages):
-                    system_prompt += _MULTI_AGENT_NOTICE
 
                 response_content = await complete_with_provider(
                     messages=provider_messages,
