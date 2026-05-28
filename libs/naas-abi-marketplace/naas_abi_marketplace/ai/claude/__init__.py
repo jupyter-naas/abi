@@ -34,9 +34,13 @@ class ABIModule(BaseModule):
         datastore_path: str = "claude"
 
     def on_load(self):
+        # BaseModule.on_load auto-discovers and registers every model file
+        # under ``models/*.py`` that exposes CANONICAL_ID + model.
         super().on_load()
 
-        registry = self.engine.services.model_registry
+        # We only need to register the generic provider factory used for
+        # off-catalog ids (model ids the module doesn't ship a concrete file
+        # for).
         api_key = SecretStr(self.configuration.anthropic_api_key)
 
         def anthropic_chat_factory(provider_model_id: str) -> ChatAnthropic:
@@ -49,26 +53,6 @@ class ABIModule(BaseModule):
                 stop=None,
             )
 
-        registry.register_chat_provider(ModelProvider.ANTHROPIC, anthropic_chat_factory)
-
-        # Eagerly importing the model modules triggers ChatModel construction
-        # at the top of each file (which in turn requires ``ABIModule.get_instance()``
-        # to have been called — guaranteed since we are inside on_load, after __init__).
-        from naas_abi_marketplace.ai.claude.models import (
-            claude_haiku_4_5,
-            claude_opus_4,
-            claude_opus_4_1,
-            claude_sonnet_3_7,
-            claude_sonnet_4,
-            claude_sonnet_4_5,
+        self.engine.services.model_registry.register_chat_provider(
+            ModelProvider.ANTHROPIC, anthropic_chat_factory
         )
-
-        for module in (
-            claude_haiku_4_5,
-            claude_opus_4,
-            claude_opus_4_1,
-            claude_sonnet_3_7,
-            claude_sonnet_4,
-            claude_sonnet_4_5,
-        ):
-            registry.register(module.CANONICAL_ID, module.model)

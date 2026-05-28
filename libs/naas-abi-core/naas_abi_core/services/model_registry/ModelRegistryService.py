@@ -48,15 +48,16 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         self,
         default_chat_model: Optional[str] = None,
         default_embedding_model: Optional[str] = None,
-        default_provider: Optional[str] = None,
     ) -> None:
         super().__init__()
         self._default_chat_model = _norm(default_chat_model)
         self._default_embedding_model = _norm(default_embedding_model)
-        self._default_provider = _norm(default_provider)
 
-        # canonical_id -> { provider -> Model }
-        self._models: dict[str, dict[str, Model]] = {}
+        # canonical_id -> { provider -> [Model, ...] }
+        # Multiple entries per (canonical_id, provider) are allowed: the first
+        # registered wins on lookup. Callers that need a specific variant can
+        # import the model file directly and bypass the registry.
+        self._models: dict[str, dict[str, list[Model]]] = {}
         self._chat_providers: dict[str, ChatProviderFactory] = {}
         self._embedding_providers: dict[str, EmbeddingProviderFactory] = {}
 
@@ -71,12 +72,7 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         assert cid is not None
         provider = model.provider
         bucket = self._models.setdefault(cid, {})
-        if provider in bucket:
-            raise ValueError(
-                f"Model already registered for canonical_id={cid!r} "
-                f"provider={provider!r}"
-            )
-        bucket[provider] = model
+        bucket.setdefault(provider, []).append(model)
 
     def register_chat_provider(
         self,
@@ -105,12 +101,19 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         if not bucket:
             return None
         if provider is not None:
-            if provider in bucket:
-                return bucket[provider]
+            entries = bucket.get(provider)
+            if entries:
+                return entries[0]
             # Provider pinned but not present — fall back to any other provider
-            # that has this canonical id registered.
-            return next(iter(bucket.values()))
-        return next(iter(bucket.values()))
+            # that has this canonical id registered (first one wins).
+            for other_entries in bucket.values():
+                if other_entries:
+                    return other_entries[0]
+            return None
+        for entries in bucket.values():
+            if entries:
+                return entries[0]
+        return None
 
     def get(
         self,
@@ -121,7 +124,17 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         assert cid is not None
         prov = _norm(provider)
 
-        if prov is not None and prov not in self._chat_providers and prov not in self._embedding_providers and prov not in {m.provider for bucket in self._models.values() for m in bucket.values()}:
+        if (
+            prov is not None
+            and prov not in self._chat_providers
+            and prov not in self._embedding_providers
+            and prov not in {
+                model.provider
+                for bucket in self._models.values()
+                for entries in bucket.values()
+                for model in entries
+            }
+        ):
             raise ProviderNotConfiguredError(
                 f"Provider {prov!r} has no registered models or factories"
             )
@@ -176,20 +189,22 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
 
     # ------------------------------------------------------------------ off-catalog
 
-    def _resolve_off_catalog_provider(self, requested: Optional[str]) -> str:
-        # Caller-pinned provider wins over the configured default.
-        target = requested or self._default_provider
-        if target is None:
+    @staticmethod
+    def _require_off_catalog_provider(
+        canonical_id: str, requested_provider: Optional[str]
+    ) -> str:
+        if requested_provider is None:
             raise ModelNotFoundError(
-                "Model is not registered and no default_provider is configured "
-                "for off-catalog routing"
+                f"Model {canonical_id!r} is not registered. To use it anyway, "
+                f"pass provider= explicitly so the registry knows which provider "
+                f"factory to route through."
             )
-        return target
+        return requested_provider
 
     def _build_off_catalog_chat(
         self, canonical_id: str, requested_provider: Optional[str]
     ) -> ChatModel:
-        provider = self._resolve_off_catalog_provider(requested_provider)
+        provider = self._require_off_catalog_provider(canonical_id, requested_provider)
         factory = self._chat_providers.get(provider)
         if factory is None:
             raise ModelNotFoundError(
@@ -202,7 +217,7 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     def _build_off_catalog_embedding(
         self, canonical_id: str, requested_provider: Optional[str]
     ) -> EmbeddingModel:
-        provider = self._resolve_off_catalog_provider(requested_provider)
+        provider = self._require_off_catalog_provider(canonical_id, requested_provider)
         factory = self._embedding_providers.get(provider)
         if factory is None:
             raise ModelNotFoundError(
@@ -260,14 +275,19 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         bucket = self._models.get(canonical_id)
         if not bucket:
             return False
-        return any(getattr(m, "model_type", None) == model_type for m in bucket.values())
+        return any(
+            getattr(m, "model_type", None) == model_type
+            for entries in bucket.values()
+            for m in entries
+        )
 
     # ------------------------------------------------------------------ introspection
 
     def list_models(self) -> list[Model]:
         out: list[Model] = []
         for bucket in self._models.values():
-            out.extend(bucket.values())
+            for entries in bucket.values():
+                out.extend(entries)
         return out
 
     def list_canonical_ids(self) -> list[str]:
