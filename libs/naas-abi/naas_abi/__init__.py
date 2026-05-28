@@ -391,7 +391,7 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
-            "naas_abi_marketplace.ai.chatgpt",
+            "naas_abi_marketplace.ai.chatgpt#soft",
             "naas_abi_marketplace.ai.claude#soft",
             "naas_abi_marketplace.ai.deepseek#soft",
             "naas_abi_marketplace.ai.gemini#soft",
@@ -523,6 +523,11 @@ class ABIModule(BaseModule):
         # and bedrock modules), set this to disambiguate. Leave None to take
         # whichever provider registered first.
         abi_agent_provider: str | None = None
+
+        # Canonical model id used by OntologyEngineerAgent. Same registry
+        # semantics as ``abi_agent_model``.
+        ontology_engineer_model: str = "gpt-5.1"
+        ontology_engineer_provider: str | None = None
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
