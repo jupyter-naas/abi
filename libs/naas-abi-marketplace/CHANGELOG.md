@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.27.0 (2026-05-28)
+
+### Features
+
+- Add new models and change bedrock default
+  ([`2c4082b`](https://github.com/jupyter-naas/abi/commit/2c4082b840cc59bf16f5b27168b70762adfbc4ad))
+
+
 ## v1.26.0 (2026-05-27)
 
 ### Features
