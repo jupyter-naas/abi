@@ -1,9 +1,10 @@
 from langchain_aws import ChatBedrockConverse
 from naas_abi_marketplace.ai.bedrock import ABIModule
-from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.models.Model import CanonicalModelId, ChatModel, ModelProvider
 
+CANONICAL_ID = CanonicalModelId.CLAUDE_HAIKU_3_5
 MODEL_ID = "anthropic.claude-3-5-haiku-20241022-v1:0"
-PROVIDER = "bedrock"
+PROVIDER = ModelProvider.BEDROCK
 
 _config = ABIModule.get_instance().configuration
 

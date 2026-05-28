@@ -42,6 +42,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueServi
     KeyValueAdapterPythonConfiguration,
     KeyValueServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ModelRegistryService import (
+    ModelRegistryServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
     ObjectStorageAdapterConfiguration,
     ObjectStorageAdapterFSConfiguration,
@@ -148,6 +151,9 @@ class ServicesConfiguration(BaseModel):
             adapter="sqlite",
             config=EventAdapterSqliteConfiguration().model_dump(),
         )
+    )
+    model_registry: ModelRegistryServiceConfiguration = (
+        ModelRegistryServiceConfiguration()
     )
     cache: CacheServiceConfiguration = CacheServiceConfiguration(
         adapters=[

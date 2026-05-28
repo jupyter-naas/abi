@@ -1,9 +1,10 @@
 from langchain_aws import ChatBedrockConverse
 from naas_abi_marketplace.ai.bedrock import ABIModule
-from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.models.Model import CanonicalModelId, ChatModel, ModelProvider
 
+CANONICAL_ID = CanonicalModelId.LLAMA_3_3_70B
 MODEL_ID = "meta.llama3-3-70b-instruct-v1:0"
-PROVIDER = "bedrock"
+PROVIDER = ModelProvider.BEDROCK
 
 _config = ABIModule.get_instance().configuration
 

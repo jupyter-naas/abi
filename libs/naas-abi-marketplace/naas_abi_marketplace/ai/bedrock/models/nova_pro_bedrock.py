@@ -1,9 +1,10 @@
 from langchain_aws import ChatBedrockConverse
 from naas_abi_marketplace.ai.bedrock import ABIModule
-from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.models.Model import CanonicalModelId, ChatModel, ModelProvider
 
+CANONICAL_ID = CanonicalModelId.NOVA_PRO
 MODEL_ID = "amazon.nova-pro-v1:0"
-PROVIDER = "bedrock"
+PROVIDER = ModelProvider.BEDROCK
 
 _config = ABIModule.get_instance().configuration
 

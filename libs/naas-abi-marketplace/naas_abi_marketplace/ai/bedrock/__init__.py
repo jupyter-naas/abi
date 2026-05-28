@@ -2,10 +2,14 @@ import logging
 import os
 from typing import Optional
 
+from naas_abi_core.models.Model import ModelProvider
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
     ModuleDependencies,
+)
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
 )
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -22,7 +26,7 @@ class BedrockValidationError(RuntimeError):
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
-        services=[ObjectStorageService],
+        services=[ObjectStorageService, ModelRegistryService],
     )
 
     class Configuration(ModuleConfiguration):
@@ -181,3 +185,41 @@ class ABIModule(BaseModule):
                     ) from exc
 
             return self
+
+    def on_load(self):
+        super().on_load()
+
+        from langchain_aws import ChatBedrockConverse
+
+        registry = self.engine.services.model_registry
+        cfg = self.configuration
+
+        def bedrock_chat_factory(provider_model_id: str) -> ChatBedrockConverse:
+            return ChatBedrockConverse(
+                model=provider_model_id,
+                region_name=cfg.region_name,
+                aws_access_key_id=cfg.aws_access_key_id,
+                aws_secret_access_key=cfg.aws_secret_access_key,
+                aws_session_token=cfg.aws_session_token,
+                temperature=0,
+                max_tokens=None,
+            )
+
+        registry.register_chat_provider(ModelProvider.BEDROCK, bedrock_chat_factory)
+
+        # Importing each model file triggers its eager ChatModel construction
+        # (which calls ABIModule.get_instance() — safe inside on_load).
+        from naas_abi_marketplace.ai.bedrock.models import (
+            claude_haiku_3_5_bedrock,
+            claude_sonnet_4_bedrock,
+            llama_3_3_70b_bedrock,
+            nova_pro_bedrock,
+        )
+
+        for module in (
+            claude_haiku_3_5_bedrock,
+            claude_sonnet_4_bedrock,
+            llama_3_3_70b_bedrock,
+            nova_pro_bedrock,
+        ):
+            registry.register(module.CANONICAL_ID, module.model)

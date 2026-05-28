@@ -1,10 +1,11 @@
 from langchain_anthropic import ChatAnthropic
 from naas_abi_marketplace.ai.claude import ABIModule
-from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.models.Model import CanonicalModelId, ChatModel, ModelProvider
 from pydantic import SecretStr
 
+CANONICAL_ID = CanonicalModelId.CLAUDE_HAIKU_4_5
 MODEL_ID = "claude-haiku-4-5-20251001"
-PROVIDER = "anthropic"
+PROVIDER = ModelProvider.ANTHROPIC
 
 model: ChatModel = ChatModel(
     model_id=MODEL_ID,
