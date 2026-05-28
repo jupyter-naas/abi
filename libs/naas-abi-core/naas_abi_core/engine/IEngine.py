@@ -8,6 +8,9 @@ from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
+)
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -36,6 +39,7 @@ class IEngine:
         __cache: CacheService | None
         __events: EventService | None
         __activity_log: ActivityLogService | None
+        __model_registry: ModelRegistryService | None
 
         def __init__(
             self,
@@ -49,6 +53,7 @@ class IEngine:
             cache: CacheService | None = None,
             events: EventService | None = None,
             activity_log: ActivityLogService | None = None,
+            model_registry: ModelRegistryService | None = None,
         ):
             self.__object_storage = object_storage
             self.__triple_store = triple_store
@@ -60,6 +65,7 @@ class IEngine:
             self.__cache = cache
             self.__events = events
             self.__activity_log = activity_log
+            self.__model_registry = model_registry
 
         @property
         def kv(self) -> KeyValueService:
@@ -132,6 +138,16 @@ class IEngine:
             return self.__activity_log is not None
 
         @property
+        def model_registry(self) -> ModelRegistryService:
+            assert self.__model_registry is not None, (
+                "Model registry service is not initialized"
+            )
+            return self.__model_registry
+
+        def model_registry_available(self) -> bool:
+            return self.__model_registry is not None
+
+        @property
         def all(
             self,
         ) -> List[
@@ -146,6 +162,7 @@ class IEngine:
                 CacheService | None,
                 EventService | None,
                 ActivityLogService | None,
+                ModelRegistryService | None,
             ]
         ]:
             return [
@@ -159,6 +176,7 @@ class IEngine:
                 self.__cache,
                 self.__events,
                 self.__activity_log,
+                self.__model_registry,
             ]
 
         def wire_services(self) -> None:

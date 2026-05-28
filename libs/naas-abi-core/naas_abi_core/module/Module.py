@@ -10,6 +10,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import Global
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.integration.integration import Integration
 from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
+from naas_abi_core.module.ModuleModelLoader import ModuleModelLoader
 from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLoader
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
 from naas_abi_core.orchestrations.Orchestrations import Orchestrations
@@ -147,6 +148,16 @@ class BaseModule(Generic[TConfig]):
         self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(
             self.__class__
         )
+
+        # Auto-discover models from <module_root>/models/*.py when the module
+        # has been granted access to the registry. Subclasses that need
+        # subtler control (e.g. lazy construction, custom provider factories)
+        # still call ``registry.register(...)`` / ``register_chat_provider(...)``
+        # from their own on_load — registration is additive.
+        if self._engine.services.model_registry_available():
+            ModuleModelLoader.load_models(
+                self.__class__, self._engine.services.model_registry
+            )
 
     def on_initialized(self):
         """

@@ -2,10 +2,14 @@ import logging
 import os
 from typing import Optional
 
+from naas_abi_core.models.Model import ModelProvider
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
     ModuleDependencies,
+)
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
 )
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -22,7 +26,7 @@ class BedrockValidationError(RuntimeError):
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
-        services=[ObjectStorageService],
+        services=[ObjectStorageService, ModelRegistryService],
     )
 
     class Configuration(ModuleConfiguration):
@@ -181,3 +185,28 @@ class ABIModule(BaseModule):
                     ) from exc
 
             return self
+
+    def on_load(self):
+        # BaseModule.on_load auto-discovers every models/*.py file that
+        # exposes CANONICAL_ID + model and registers them.
+        super().on_load()
+
+        # Register the bedrock chat factory for off-catalog model ids.
+        from langchain_aws import ChatBedrockConverse
+
+        cfg = self.configuration
+
+        def bedrock_chat_factory(provider_model_id: str) -> ChatBedrockConverse:
+            return ChatBedrockConverse(
+                model=provider_model_id,
+                region_name=cfg.region_name,
+                aws_access_key_id=cfg.aws_access_key_id,
+                aws_secret_access_key=cfg.aws_secret_access_key,
+                aws_session_token=cfg.aws_session_token,
+                temperature=0,
+                max_tokens=None,
+            )
+
+        self.engine.services.model_registry.register_chat_provider(
+            ModelProvider.BEDROCK, bedrock_chat_factory
+        )
