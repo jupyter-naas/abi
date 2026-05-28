@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.10.0 (2026-05-28)
+
+### Features
+
+- **chat**: Inject user profile context on first chat turn
+  ([`0c58f5b`](https://github.com/jupyter-naas/abi/commit/0c58f5b9f008d927128fc7fb0c1672d3f95a4d08))
+
+
 ## v2.9.0 (2026-05-28)
 
 ### Features
