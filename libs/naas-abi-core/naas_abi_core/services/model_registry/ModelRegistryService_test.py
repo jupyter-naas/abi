@@ -97,11 +97,19 @@ def test_register_accepts_provider_enum_or_string() -> None:
     assert reg.get("my-model", provider="openai") is m
 
 
-def test_register_duplicate_provider_pair_raises() -> None:
+def test_register_duplicate_provider_pair_is_allowed_first_wins() -> None:
+    """Registering twice under the same (canonical_id, provider) is permitted —
+    auto-discovery can hit the same model from multiple files. The first
+    registered wins on lookup; callers that need a specific variant import
+    the file directly."""
     reg = ModelRegistryService()
-    reg.register("foo", _chat_model("foo", "openai"))
-    with pytest.raises(ValueError, match="already registered"):
-        reg.register("foo", _chat_model("foo", "openai"))
+    first = _chat_model("foo", "openai")
+    second = _chat_model("foo", "openai")
+    reg.register("foo", first)
+    reg.register("foo", second)  # no exception
+
+    assert reg.get("foo", provider="openai") is first
+    assert len(reg.list_models()) == 2
 
 
 def test_register_same_canonical_id_different_providers_is_fine() -> None:
@@ -155,49 +163,42 @@ def test_provider_pinned_lookup_falls_back_when_provider_configured_but_lacks_mo
 # ---------------------------------------------------------------------------
 
 
-def test_off_catalog_uses_default_provider_chat_factory() -> None:
+def test_off_catalog_uses_explicit_provider_chat_factory() -> None:
     captured: dict[str, Any] = {}
 
     def factory(model_id: str) -> FakeListChatModel:
         captured["model_id"] = model_id
         return FakeListChatModel(responses=["off"])
 
-    reg = ModelRegistryService(default_provider="openai")
+    reg = ModelRegistryService()
     reg.register_chat_provider("openai", factory)
 
-    result = reg.get_chat_model("totally-new-model")
+    result = reg.get_chat_model("totally-new-model", provider="openai")
     assert isinstance(result, ChatModel)
     assert result.provider == "openai"
     assert result.model_id == "totally-new-model"
     assert captured["model_id"] == "totally-new-model"
 
 
-def test_off_catalog_without_default_provider_fails() -> None:
+def test_off_catalog_without_provider_fails() -> None:
+    """Off-catalog ids must come with an explicit provider= — the registry
+    refuses to guess."""
     reg = ModelRegistryService()
-    with pytest.raises(ModelNotFoundError, match="no default_provider"):
+    reg.register_chat_provider("openai", lambda mid: FakeListChatModel(responses=["x"]))
+    with pytest.raises(ModelNotFoundError, match="not registered"):
         reg.get_chat_model("unknown")
 
 
-def test_off_catalog_without_provider_factory_fails() -> None:
-    reg = ModelRegistryService(default_provider="openai")
+def test_off_catalog_with_provider_but_no_factory_fails() -> None:
+    reg = ModelRegistryService()
     with pytest.raises(ModelNotFoundError, match="no registered chat factory"):
-        reg.get_chat_model("unknown")
+        reg.get_chat_model("unknown", provider="openai")
 
 
-def test_off_catalog_caller_supplied_provider_overrides_default() -> None:
-    reg = ModelRegistryService(default_provider="openai")
-    reg.register_chat_provider("openai", lambda mid: FakeListChatModel(responses=["o"]))
-    reg.register_chat_provider(
-        "openrouter", lambda mid: FakeListChatModel(responses=["r"])
-    )
-    got = reg.get_chat_model("unknown-id", provider="openrouter")
-    assert got.provider == "openrouter"
-
-
-def test_off_catalog_embedding_uses_embedding_factory() -> None:
-    reg = ModelRegistryService(default_provider="openai")
+def test_off_catalog_embedding_uses_explicit_provider_factory() -> None:
+    reg = ModelRegistryService()
     reg.register_embedding_provider("openai", lambda mid: _FakeEmbeddings(mid))
-    got = reg.get_embedding_model("text-embedding-new")
+    got = reg.get_embedding_model("text-embedding-new", provider="openai")
     assert isinstance(got, EmbeddingModel)
     assert got.provider == "openai"
     assert got.model_id == "text-embedding-new"

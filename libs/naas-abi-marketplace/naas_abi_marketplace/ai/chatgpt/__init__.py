@@ -38,9 +38,11 @@ class ABIModule(BaseModule):
         datastore_path: str = "chatgpt"
 
     def on_load(self):
+        # BaseModule.on_load auto-discovers every models/*.py file that
+        # exposes CANONICAL_ID + model and registers them.
         super().on_load()
 
-        registry = self.engine.services.model_registry
+        # Register the openai chat factory for off-catalog model ids.
         api_key = SecretStr(self.configuration.openai_api_key)
 
         def openai_chat_factory(provider_model_id: str) -> ChatOpenAI:
@@ -52,14 +54,9 @@ class ABIModule(BaseModule):
                 api_key=api_key,
             )
 
-        registry.register_chat_provider(ModelProvider.OPENAI, openai_chat_factory)
-
-        # Importing each model file triggers its eager ChatModel construction
-        # (which itself calls ``ABIModule.get_instance()`` — safe here, we are
-        # in ``on_load`` so ``__init__`` already populated the instance map).
-        from naas_abi_marketplace.ai.chatgpt.models import gpt_4_1_mini
-
-        registry.register(gpt_4_1_mini.CANONICAL_ID, gpt_4_1_mini.model)
+        self.engine.services.model_registry.register_chat_provider(
+            ModelProvider.OPENAI, openai_chat_factory
+        )
 
     def on_initialized(self):
         super().on_initialized()

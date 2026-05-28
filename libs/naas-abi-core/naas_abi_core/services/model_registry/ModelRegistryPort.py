@@ -8,10 +8,9 @@ The registry holds two kinds of entries, contributed by modules at load time:
   (or ``Embeddings``) constructors used to instantiate *off-catalog* models
   (canonical ids not registered with the registry).
 
-Lookups are permissive: ``get(canonical_id)`` returns a registered Model when
-one matches; otherwise, if a default provider is configured and has a factory,
-the registry builds a Model on the fly using the canonical id as the
-provider-specific id.
+Lookups: ``get(canonical_id)`` returns a registered Model when one matches.
+For off-catalog ids (not registered), the caller must pass ``provider=`` so
+the registry knows which provider's factory to route through.
 """
 
 from __future__ import annotations
@@ -101,12 +100,13 @@ class IModelRegistry:
         - With ``provider``: returns the exact registered entry for
           ``(canonical_id, provider)`` if present; otherwise, if any other
           provider has a registered entry for ``canonical_id``, returns that
-          (fallback). Raises ``ModelNotFoundError`` if neither exists.
+          (fallback); otherwise, if ``provider`` has a registered chat
+          factory, builds an off-catalog model on the fly. Raises
+          ``ModelNotFoundError`` if none of those apply.
         - Without ``provider``: returns the first registered entry for
-          ``canonical_id``. If none is registered, falls back to the configured
-          default provider's chat factory, treating ``canonical_id`` as the
-          provider-specific id. Raises ``ModelNotFoundError`` if no factory is
-          available.
+          ``canonical_id`` if any exists. Raises ``ModelNotFoundError`` if the
+          canonical id is unregistered — off-catalog lookups require an
+          explicit ``provider=`` so the registry knows which factory to use.
         """
         raise NotImplementedError
 
@@ -116,7 +116,7 @@ class IModelRegistry:
         provider: Optional[ModelProviderLike] = None,
     ) -> ChatModel:
         """Like ``get`` but constrained to ``ChatModel``. Off-catalog lookups
-        use the default provider's chat factory."""
+        require an explicit ``provider=`` and use that provider's chat factory."""
         raise NotImplementedError
 
     def get_embedding_model(
@@ -125,7 +125,8 @@ class IModelRegistry:
         provider: Optional[ModelProviderLike] = None,
     ) -> EmbeddingModel:
         """Like ``get`` but constrained to ``EmbeddingModel``. Off-catalog
-        lookups use the default provider's embedding factory."""
+        lookups require an explicit ``provider=`` and use that provider's
+        embedding factory."""
         raise NotImplementedError
 
     # ------------------------------------------------------------------ defaults

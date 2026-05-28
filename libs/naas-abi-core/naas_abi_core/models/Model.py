@@ -70,6 +70,44 @@ CanonicalModelIdLike = Union[CanonicalModelId, str]
 ModelProviderLike = Union[ModelProvider, str]
 
 
+class ModelDefinition:
+    """Declarative marker for files under ``<module>/models/``.
+
+    Each model file under a module's ``models/`` directory should define
+    exactly one subclass of ``ModelDefinition`` whose body sets:
+
+    * ``CANONICAL_ID`` — a :class:`CanonicalModelId` or raw string.
+    * ``model`` — a :class:`Model` (typically :class:`ChatModel` or
+      :class:`EmbeddingModel`) instance.
+
+    ``MODEL_ID`` and ``PROVIDER`` are not required by the loader (the
+    ``provider`` and provider-specific ``model_id`` live on the ``Model``
+    instance itself), but defining them as class attributes is the
+    idiomatic shape — they make the file self-documenting and let the
+    ``model`` assignment reference them locally.
+
+    Example::
+
+        class GptFourOneMini(ModelDefinition):
+            CANONICAL_ID = CanonicalModelId.GPT_4_1_MINI
+            MODEL_ID = "gpt-4.1-mini"
+            PROVIDER = ModelProvider.OPENAI
+
+            model: ChatModel = ChatModel(
+                model_id=MODEL_ID,
+                provider=PROVIDER,
+                model=ChatOpenAI(model=MODEL_ID, ...),
+            )
+
+    The :class:`ModuleModelLoader` finds every ``ModelDefinition`` subclass
+    defined in the module's ``models/`` directory and calls
+    ``registry.register(CANONICAL_ID, model)`` for each one.
+    """
+
+    CANONICAL_ID: CanonicalModelIdLike
+    model: "Model"
+
+
 class Model:
     model_id: Annotated[str, Field(description="Provider-specific model identifier")]
     provider: Annotated[
