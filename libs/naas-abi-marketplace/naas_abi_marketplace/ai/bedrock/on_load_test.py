@@ -59,18 +59,39 @@ def _make_module():
     return module, registry
 
 
-def test_on_load_registers_all_four_bedrock_models() -> None:
+def test_on_load_registers_all_bedrock_models() -> None:
     module, registry = _make_module()
     module.on_load()
 
     expected = {
+        # Chat
         CanonicalModelId.CLAUDE_SONNET_4,
         CanonicalModelId.CLAUDE_HAIKU_3_5,
         CanonicalModelId.LLAMA_3_3_70B,
         CanonicalModelId.NOVA_PRO,
+        CanonicalModelId.GEMINI_2_5_PRO,
+        CanonicalModelId.GEMMA_3_27B_IT,
+        CanonicalModelId.GPT_OSS_120B,
+        # Embedding
+        CanonicalModelId.TITAN_EMBED_TEXT_V2,
     }
     registered = set(registry.list_canonical_ids())
     assert {str(c) for c in expected} <= registered
+
+
+def test_titan_embed_registers_as_embedding_model() -> None:
+    """First end-to-end check of the embedding side of the registry."""
+    from naas_abi_core.models.Model import EmbeddingModel
+
+    module, registry = _make_module()
+    module.on_load()
+
+    got = registry.get_embedding_model(
+        CanonicalModelId.TITAN_EMBED_TEXT_V2, provider=ModelProvider.BEDROCK
+    )
+    assert isinstance(got, EmbeddingModel)
+    assert got.provider == ModelProvider.BEDROCK
+    assert got.model_id == "amazon.titan-embed-text-v2:0"
 
 
 def test_bedrock_models_are_pinned_to_bedrock_provider() -> None:

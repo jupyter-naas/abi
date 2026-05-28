@@ -1,7 +1,7 @@
-from langchain_openai import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings
 from naas_abi_core.models.Model import (
     CanonicalModelId,
-    ChatModel,
+    EmbeddingModel,
     ModelDefinition,
     ModelProvider,
 )
@@ -9,20 +9,20 @@ from naas_abi_marketplace.ai.chatgpt import ABIModule
 from pydantic import SecretStr
 
 
-class O3DeepResearchModel(ModelDefinition):
-    CANONICAL_ID = CanonicalModelId.O3_DEEP_RESEARCH
-    MODEL_ID = "o3-deep-research"
+class TextEmbedding3LargeModel(ModelDefinition):
+    CANONICAL_ID = CanonicalModelId.TEXT_EMBEDDING_3_LARGE
+    MODEL_ID = "text-embedding-3-large"
     PROVIDER = ModelProvider.OPENAI
 
-    model: ChatModel = ChatModel(
+    model: EmbeddingModel = EmbeddingModel(
         model_id=MODEL_ID,
         provider=PROVIDER,
-        model=ChatOpenAI(
+        model=OpenAIEmbeddings(
             model=MODEL_ID,
-            temperature=0,
             api_key=SecretStr(ABIModule.get_instance().configuration.openai_api_key),
         ),
     )
 
 
-model: ChatModel = O3DeepResearchModel.model
+# Back-compat for direct importers.
+model: EmbeddingModel = TextEmbedding3LargeModel.model

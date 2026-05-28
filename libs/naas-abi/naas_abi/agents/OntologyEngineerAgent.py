@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Optional
 
 from langchain_core.embeddings import Embeddings
-from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -74,29 +73,6 @@ Use the following ontology as the primary grounding source:
 - If uncertainty remains, ask a focused clarification question before generating ontology artifacts.
 </constraints>
 """
-    model = "gpt-5.1"
-    provider = "openai"
-
-    @staticmethod
-    def get_model(
-        api_key: str,
-        model_name: str = "gpt-5.1",
-        base_url: str = "https://api.openai.com/v1",
-        provider: str = "openai",
-    ) -> ChatModel:
-        from langchain_openai import ChatOpenAI
-        from pydantic import SecretStr
-
-        return ChatModel(
-            model_id=model_name,
-            provider=provider,
-            model=ChatOpenAI(
-                model=model_name,
-                base_url=base_url,
-                api_key=SecretStr(api_key),
-            ),
-        )
-
     @staticmethod
     def get_bfo_7_buckets_ontology() -> str:
         ontology_path = (
@@ -123,10 +99,10 @@ Use the following ontology as the primary grounding source:
     ) -> "OntologyEngineerAgent":
         from naas_abi import ABIModule
 
-        api_key = (
-            ABIModule.get_instance()
-            .engine.modules["naas_abi_marketplace.ai.chatgpt"]
-            .configuration.openai_api_key
+        abi_module = ABIModule.get_instance()
+        chat_model = abi_module.engine.services.model_registry.get_chat_model(
+            abi_module.configuration.ontology_engineer_model,
+            provider=abi_module.configuration.ontology_engineer_provider,
         )
 
         if agent_shared_state is None:
@@ -142,9 +118,7 @@ Use the following ontology as the primary grounding source:
         return cls(
             name=cls.name,
             description=cls.description,
-            chat_model=cls.get_model(
-                api_key=api_key, model_name=cls.model, provider=cls.provider
-            ),
+            chat_model=chat_model,
             tools=[],
             agents=[],
             intents=[],

@@ -1,7 +1,10 @@
 from typing import Dict, List
 
 from naas_abi_core import logger
-from naas_abi_core.engine.context import set_default_event_service
+from naas_abi_core.engine.context import (
+    set_default_event_service,
+    set_default_model_registry,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
     EngineConfiguration
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import \
@@ -81,15 +84,20 @@ class Engine(IEngine):
         else:
             logger.debug("No triple store available, skipping ontology loading")
 
-        # Publish the EventService as the process-wide infra event sink so
-        # cross-cutting consumers (Agent, background threads) can emit events
-        # without an engine handle. Intentionally narrow: only EventService is
-        # exposed globally — every other service stays behind EngineProxy and
-        # the module dependency-declaration system.
+        # Publish the EventService + ModelRegistry as process-wide accessors
+        # for cross-cutting consumers (agents, background threads, library
+        # code without an engine handle). All other services stay behind
+        # EngineProxy and the module dependency-declaration system; see
+        # ``engine/context.py`` for the rationale.
         if self.__services.events_available():
             set_default_event_service(self.__services.events)
         else:
             set_default_event_service(None)
+
+        if self.__services.model_registry_available():
+            set_default_model_registry(self.__services.model_registry)
+        else:
+            set_default_model_registry(None)
 
         logger.debug("Initializing engine")
         self.on_initialized()

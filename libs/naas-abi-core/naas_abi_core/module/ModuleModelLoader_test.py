@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import sys
 import textwrap
-import types
 from pathlib import Path
-
-from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from naas_abi_core.module.ModuleModelLoader import ModuleModelLoader
 from naas_abi_core.services.model_registry.ModelRegistryService import (
@@ -183,7 +180,3 @@ def test_loader_used_via_baseModule_on_load_smoke(tmp_path: Path) -> None:
     assert result == 1
 
 
-# Silence the type checker about the unused import — used dynamically in the
-# generated model files.
-_ = FakeListChatModel
-_ = types

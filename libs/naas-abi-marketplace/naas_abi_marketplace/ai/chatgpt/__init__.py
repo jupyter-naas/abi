@@ -1,6 +1,4 @@
-import os
-
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import SecretStr
 
 from naas_abi_core.models.Model import ModelProvider
@@ -58,7 +56,9 @@ class ABIModule(BaseModule):
             ModelProvider.OPENAI, openai_chat_factory
         )
 
-    def on_initialized(self):
-        super().on_initialized()
-        # We setup the OPENAI_API_KEY environment variable as OpenAI SDK requires it. Also, the IntentMapper will fallback to using OpenAI so it need to be in the environment.
-        os.environ["OPENAI_API_KEY"] = self.configuration.openai_api_key
+        def openai_embedding_factory(provider_model_id: str) -> OpenAIEmbeddings:
+            return OpenAIEmbeddings(model=provider_model_id, api_key=api_key)
+
+        self.engine.services.model_registry.register_embedding_provider(
+            ModelProvider.OPENAI, openai_embedding_factory
+        )

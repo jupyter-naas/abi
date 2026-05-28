@@ -51,18 +51,37 @@ class CanonicalModelId(StrEnum):
     # Chat — Amazon family
     NOVA_PRO = "nova-pro"
 
+    # Embedding — Amazon family
+    TITAN_EMBED_TEXT_V2 = "titan-embed-text-v2"
+
+    # Embedding — OpenAI family
+    TEXT_EMBEDDING_3_LARGE = "text-embedding-3-large"
+    TEXT_EMBEDDING_3_SMALL = "text-embedding-3-small"
+
     # Chat — OpenAI family
     GPT_5 = "gpt-5"
     GPT_5_MINI = "gpt-5-mini"
+    GPT_5_NANO = "gpt-5-nano"
+    GPT_5_1 = "gpt-5.1"
     GPT_5_1_MINI = "gpt-5.1-mini"
+    GPT_5_2 = "gpt-5.2"
     GPT_4_1 = "gpt-4.1"
     GPT_4_1_MINI = "gpt-4.1-mini"
+    GPT_4O = "gpt-4o"
+    O3_MINI = "o3-mini"
+    O3_DEEP_RESEARCH = "o3-deep-research"
+    O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research"
 
     # Chat — Google family
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    GEMINI_2_5_PRO = "gemini-2.5-pro"
+    GEMMA_3_27B_IT = "gemma-3-27b-it"
 
     # Chat — xAI family
     GROK_4 = "grok-4"
+
+    # Chat — OpenAI open-weights
+    GPT_OSS_120B = "gpt-oss-120b"
 
 
 # Type aliases for registry call sites — accept enum or raw string.

@@ -84,10 +84,50 @@ def embed_many_hash(
 # ---------------------------------------------------------------------------
 
 def _build_openai_embedder(embedding_model: str, embedding_dimension: int):
-    """Lazily import and create an OpenAIEmbeddings instance."""
-    from langchain_openai import OpenAIEmbeddings
+    """Build an Embeddings instance for ``embedding_model``.
 
-    kwargs: dict = {"model": embedding_model}
+    Resolution order:
+    1. Process-wide ``ModelRegistry`` — if a module registered an
+       ``EmbeddingModel`` under this canonical id, return its langchain
+       ``Embeddings`` instance with api_key already plumbed by the owning
+       module. Lets nexus transparently use Bedrock Titan, Cohere, OpenAI
+       text-embedding-3-large, etc. depending on which provider modules
+       the user enabled.
+    2. Off-catalog (canonical id not registered, e.g. the
+       ``text-embedding-3-small`` variant): build an ``OpenAIEmbeddings``
+       directly, pulling ``OPENAI_API_KEY`` from the engine's **secret
+       service** (not ``os.environ``) so the api key still flows from the
+       configured ``services.secret`` adapter. The custom ``dimensions``
+       kwarg is preserved because text-embedding-3-* supports it.
+
+    Raises ``RuntimeError`` if neither resolution succeeds.
+    """
+    from naas_abi_core.engine.context import get_default_model_registry
+
+    registry = get_default_model_registry()
+    if registry is not None:
+        try:
+            return registry.get_embedding_model(embedding_model).model
+        except Exception:
+            # Not registered — fall through to off-catalog OpenAI construction.
+            pass
+
+    from naas_abi import ABIModule  # avoid a top-level cycle
+
+    secret_service = ABIModule.get_instance().engine.services.secret
+    api_key = secret_service.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            f"Cannot build an embedder for {embedding_model!r}: not registered "
+            f"in the ModelRegistry and no OPENAI_API_KEY is available via the "
+            f"engine's secret service. Either register the embedding model in "
+            f"a provider module or add OPENAI_API_KEY to your secret store."
+        )
+
+    from langchain_openai import OpenAIEmbeddings
+    from pydantic import SecretStr
+
+    kwargs: dict = {"model": embedding_model, "api_key": SecretStr(api_key)}
     # text-embedding-3-* supports a custom `dimensions` parameter
     if "3-" in embedding_model and embedding_dimension > 0:
         kwargs["dimensions"] = embedding_dimension
