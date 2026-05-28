@@ -436,9 +436,32 @@ class Agent(Expose):
             agent_configuration: Optional[AgentConfiguration]: The configuration of the agent.
 
         Returns:
-        raise NotImplementedError("This method is not implemented")
+            Agent: A new instance of the agent.
         """
         raise NotImplementedError("This method is not implemented")
+
+    @staticmethod
+    def _content_to_text(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str) and text:
+                        parts.append(text)
+                        continue
+                    reasoning = item.get("reasoning_content")
+                    if isinstance(reasoning, dict):
+                        reasoning_text = reasoning.get("text")
+                        if isinstance(reasoning_text, str) and reasoning_text:
+                            continue
+                elif isinstance(item, str) and item:
+                    parts.append(item)
+            if parts:
+                return "\n".join(parts)
+        return str(content)
 
     def __init__(
         self,
@@ -1636,7 +1659,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 elif isinstance(message, AIMessageEvent):
                     yield {
                         "event": "ai_message",
-                        "data": str(message.payload.content),
+                        "data": self._content_to_text(message.payload.content),
                     }
                 elif isinstance(message, CallModelEvent):
                     yield {
@@ -1664,7 +1687,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             except Empty:
                 pass
 
-        response = final_state
+        response = self._content_to_text(final_state)
         logger.debug(f"Response: {response}")
 
         # Use a buffer to handle text chunks
