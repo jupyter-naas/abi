@@ -283,6 +283,12 @@ def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
         if origin not in extra_list:
             extra_list.append(origin)
     env["ABI_CORS_EXTRA_ORIGINS"] = ",".join(extra_list)
+    # Ensure Nexus API builds magic-link URLs against the dynamically allocated
+    # local web port used by `abi dev up`.
+    env["FRONTEND_URL"] = f"http://127.0.0.1:{nexus_port}"
+    # Keep config-templated frontend URLs in sync when they reference
+    # {{ secret.PUBLIC_WEB_HOST }}.
+    env["PUBLIC_WEB_HOST"] = f"127.0.0.1:{nexus_port}"
     cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
     return _spawn(spec, cmd, _project_root(), env)
 
