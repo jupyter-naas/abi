@@ -20,7 +20,6 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
 )
-from naas_abi.apps.nexus.apps.api.app.services.chat.service import AGENT_SYSTEM_PROMPTS
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     stream_with_abi_inprocess,
@@ -40,15 +39,6 @@ OPENAI_COMPATIBLE = [
     "perplexity",
 ]
 SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", *OPENAI_COMPATIBLE]
-
-MULTI_AGENT_NOTICE = (
-    "\n\n🔄 CRITICAL MULTI-AGENT NOTICE: You are in a conversation where MULTIPLE different AI models "
-    "have responded. You are currently responding as the SELECTED agent. Previous assistant responses "
-    "may be from DIFFERENT AI agents (Grok, Claude, Qwen, etc.). DO NOT claim authorship of other "
-    "agents' responses. DO NOT apologize for what other AIs said. DO NOT correct other AIs' identities. "
-    "When asked 'who are you?', ONLY identify yourself based on YOUR model, not what previous agents "
-    "said. Each assistant message may be from a different AI - treat them as separate participants."
-)
 
 
 async def stream_chat_response(
@@ -115,16 +105,21 @@ async def stream_chat_response(
                     conversation_id=conversation_id,
                     user_id=current_user.id,
                 )
+                prior_messages = list(request.messages or [])
+                system_prompt = await registry.chat.build_system_prompt(
+                    agent=request.agent,
+                    explicit_system_prompt=request.system_prompt,
+                    prior_messages=prior_messages,
+                    user_id=current_user.id,
+                )
+                user_context_preamble = await registry.chat.build_user_context_addendum(
+                    prior_messages=prior_messages,
+                    user_id=current_user.id,
+                )
             await db.commit()
         except Exception:
             await db.rollback()
             raise
-
-    system_prompt = request.system_prompt or AGENT_SYSTEM_PROMPTS.get(
-        request.agent, AGENT_SYSTEM_PROMPTS["aia"]
-    )
-    if request.messages and any(m.role == "assistant" for m in request.messages):
-        system_prompt += MULTI_AGENT_NOTICE
 
     # search_context = await run_search_if_needed(request)
     # if search_context:
@@ -235,6 +230,7 @@ async def stream_chat_response(
                         provider_messages,
                         provider_config,
                         thread_id=conversation_id,
+                        user_context_preamble=user_context_preamble,
                     )
                 ):
                     inprocess_emitted = True
