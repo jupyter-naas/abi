@@ -80,6 +80,15 @@ uv pip install "naas-abi-marketplace[ai-bedrock]"
 | `models/claude_haiku_3_5_bedrock.py` | `anthropic.claude-3-5-haiku-20241022-v1:0` |
 | `models/llama_3_3_70b_bedrock.py` | `meta.llama3-3-70b-instruct-v1:0` |
 | `models/nova_pro_bedrock.py` | `amazon.nova-pro-v1:0` |
+| `models/gemini_2_5_pro_bedrock.py` | `us.google.gemini-2-5-pro-v1:0` |
+| `models/gemma_3_27b_it_bedrock.py` | `google.gemma-3-27b-it-v1:0` |
+| `models/gpt_oss_120b_bedrock.py` | `openai.gpt-oss-120b-1:0` |
+
+## Embedding Models
+
+| File | Bedrock Model ID |
+| --- | --- |
+| `models/titan_embed_text_v2_bedrock.py` | `amazon.titan-embed-text-v2:0` |
 
 Each model is exposed as a `naas_abi_core.models.Model.ChatModel` and wraps
 `langchain_aws.ChatBedrockConverse` so it can be dropped into any LangChain / LangGraph
@@ -88,7 +97,7 @@ pipeline.
 ## Agent
 
 `agents/BedrockAgent.py` exposes a `create_agent()` factory returning an `IntentAgent`
-that defaults to Claude Sonnet 4 on Bedrock. Swap the imported model to use another
+that defaults to Gemma 3 27B Instruct on Bedrock. Swap the imported model to use another
 foundation model.
 
 ## Requirements

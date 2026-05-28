@@ -56,6 +56,8 @@ SERVICE_PORT_BASES = {
 
 NEXUS_ROOT = Path("libs/naas-abi/naas_abi/apps/nexus")
 NEXUS_WEB_DIR = NEXUS_ROOT / "apps" / "web"
+ALT_NEXUS_ROOT = Path(".abi") / NEXUS_ROOT
+ALT_NEXUS_WEB_DIR = ALT_NEXUS_ROOT / "apps" / "web"
 
 # Order matters: oxigraph must come up before api/dagster, since they connect
 # to it on boot. nexus-web is independent of oxigraph but ordered last so
@@ -306,12 +308,16 @@ def _launch_dagster(spec: ServiceSpec, ports: dict[str, int]) -> int:
 
 
 def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
-    web_dir = _project_root() / NEXUS_WEB_DIR
-    nexus_root = _project_root() / NEXUS_ROOT
+    root = _project_root()
+    _ensure_nexus_web_sources(root)
+
+    web_dir = root / NEXUS_WEB_DIR
+    nexus_root = root / NEXUS_ROOT
     if not web_dir.exists():
         raise click.ClickException(
             f"Nexus web directory not found: {web_dir}. "
-            "Check that the naas-abi package is checked out."
+            "Check that the naas-abi package is checked out under "
+            "`libs/naas-abi`."
         )
 
     runner = shutil.which("pnpm") or shutil.which("npx")
@@ -356,6 +362,46 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
     else:
         cmd = [runner, "next", "dev", "--port", str(spec.port)]
     return _spawn(spec, cmd, web_dir, env)
+
+
+def _ensure_nexus_web_sources(project_root: Path) -> None:
+    web_dir = project_root / NEXUS_WEB_DIR
+    if web_dir.exists():
+        return
+
+    alt_web_dir = project_root / ALT_NEXUS_WEB_DIR
+    if not alt_web_dir.exists():
+        gitmodules_path = project_root / ".gitmodules"
+        if gitmodules_path.exists():
+            result = subprocess.run(
+                ["git", "submodule", "update", "--init", "--recursive", ".abi"],
+                cwd=str(project_root),
+            )
+            if result.returncode != 0:
+                raise click.ClickException(
+                    "Failed to initialize `.abi` submodule. "
+                    "Run `git submodule update --init --recursive .abi` and retry."
+                )
+
+    alt_web_dir = project_root / ALT_NEXUS_WEB_DIR
+    if not alt_web_dir.exists():
+        return
+
+    libs_dir = project_root / "libs"
+    libs_dir.mkdir(parents=True, exist_ok=True)
+    expected_link = project_root / "libs" / "naas-abi"
+    alt_package_root = project_root / ".abi" / "libs" / "naas-abi"
+
+    if expected_link.exists():
+        return
+
+    try:
+        expected_link.symlink_to(alt_package_root.relative_to(expected_link.parent))
+    except Exception as exc:
+        raise click.ClickException(
+            "Failed to create `libs/naas-abi` symlink to `.abi/libs/naas-abi`. "
+            "Create it manually and retry."
+        ) from exc
 
 
 # Readiness paths per service. Empty string == skip probing.
