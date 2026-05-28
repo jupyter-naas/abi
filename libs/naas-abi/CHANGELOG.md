@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.9.0 (2026-05-28)
+
+### Features
+
+- **core**: Add ModelRegistry and migrate AbiAgent + claude/chatgpt/bedrock to use it
+  ([`7e8cf70`](https://github.com/jupyter-naas/abi/commit/7e8cf7066bc00b6c3390494fcb1fe67e92040f50))
+
+- **core**: Full ModelRegistry adoption — context singleton, auto-discovery, no env-var bridges
+  ([`b583ca2`](https://github.com/jupyter-naas/abi/commit/b583ca2506b0bcb033144e03f5bd59fe5431f273))
+
+
 ## v2.8.1 (2026-05-27)
 
 ### Bug Fixes
