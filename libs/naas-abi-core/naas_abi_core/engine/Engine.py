@@ -63,6 +63,11 @@ class Engine(IEngine):
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
         logger.debug("Engine modules loaded")
 
+        if self.__services.model_registry_available():
+            # Modules registered their models during on_load; now hard-fail if
+            # any configured default cannot be resolved against the registry.
+            self.__services.model_registry.validate_defaults()
+
         if self.__services.triple_store_available():
             if not self.__configuration.global_config.skip_ontology_loading:
                 logger.debug("Loading engine ontologies")

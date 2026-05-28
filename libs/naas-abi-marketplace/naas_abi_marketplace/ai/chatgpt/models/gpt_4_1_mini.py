@@ -1,10 +1,11 @@
 from langchain_openai import ChatOpenAI
-from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.models.Model import CanonicalModelId, ChatModel, ModelProvider
 from naas_abi_marketplace.ai.chatgpt import ABIModule
 from pydantic import SecretStr
 
+CANONICAL_ID = CanonicalModelId.GPT_4_1_MINI
 MODEL_ID = "gpt-4.1-mini"
-PROVIDER = "openai"
+PROVIDER = ModelProvider.OPENAI
 
 
 model: ChatModel = ChatModel(

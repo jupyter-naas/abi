@@ -1,17 +1,77 @@
 from datetime import datetime
-from enum import Enum
-from typing import Annotated, Optional
+from enum import Enum, StrEnum
+from typing import Annotated, Optional, Union
 
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import Field
 
 
 class ModelType(Enum):
     CHAT = "chat"
+    EMBEDDING = "embedding"
+
+
+class ModelProvider(StrEnum):
+    """Well-known providers. Registry calls accept either this enum or a raw string."""
+
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    BEDROCK = "bedrock"
+    OLLAMA = "ollama"
+    MISTRAL = "mistral"
+    META = "meta"
+    XAI = "xai"
+    PERPLEXITY = "perplexity"
+    OPENROUTER = "openrouter"
+    ALIBABA = "alibaba"
+    QWEN = "qwen"
+
+
+class CanonicalModelId(StrEnum):
+    """Well-known canonical model identifiers used by ABI across providers.
+
+    The registry accepts this enum or any raw string; modules contribute the
+    actual (canonical_id, provider, provider_model_id) mappings at load time.
+    """
+
+    # Chat — Anthropic family
+    CLAUDE_SONNET_4_5 = "claude-sonnet-4.5"
+    CLAUDE_SONNET_4 = "claude-sonnet-4"
+    CLAUDE_SONNET_3_7 = "claude-sonnet-3.7"
+    CLAUDE_OPUS_4_1 = "claude-opus-4.1"
+    CLAUDE_OPUS_4 = "claude-opus-4"
+    CLAUDE_HAIKU_4_5 = "claude-haiku-4.5"
+    CLAUDE_HAIKU_3_5 = "claude-haiku-3.5"
+
+    # Chat — Meta family
+    LLAMA_3_3_70B = "llama-3.3-70b"
+
+    # Chat — Amazon family
+    NOVA_PRO = "nova-pro"
+
+    # Chat — OpenAI family
+    GPT_5 = "gpt-5"
+    GPT_5_MINI = "gpt-5-mini"
+    GPT_5_1_MINI = "gpt-5.1-mini"
+    GPT_4_1 = "gpt-4.1"
+    GPT_4_1_MINI = "gpt-4.1-mini"
+
+    # Chat — Google family
+    GEMINI_2_5_FLASH = "gemini-2.5-flash"
+
+    # Chat — xAI family
+    GROK_4 = "grok-4"
+
+
+# Type aliases for registry call sites — accept enum or raw string.
+CanonicalModelIdLike = Union[CanonicalModelId, str]
+ModelProviderLike = Union[ModelProvider, str]
 
 
 class Model:
-    model_id: Annotated[str, Field(description="Unique identifier for the model")]
+    model_id: Annotated[str, Field(description="Provider-specific model identifier")]
     provider: Annotated[
         str,
         Field(
@@ -148,3 +208,55 @@ class ChatModel(Model):
         )
         self.model_type = ModelType.CHAT
         self.context_window = context_window
+
+
+class EmbeddingModel(Model):
+    """Embedding model — wraps a LangChain ``Embeddings`` implementation."""
+
+    model: Embeddings  # type: ignore[assignment]
+    dimensions: Annotated[
+        Optional[int],
+        Field(description="Output embedding dimensionality, if known"),
+    ]
+    model_type: ModelType = ModelType.EMBEDDING
+
+    def __init__(
+        self,
+        model_id: str,
+        provider: str,
+        model: Embeddings,
+        dimensions: Optional[int] = None,
+        name: Optional[str] = None,
+        owner: Optional[str] = None,
+        description: Optional[str] = None,
+        image: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        canonical_slug: Optional[str] = None,
+        hugging_face_id: Optional[str] = None,
+        pricing: Optional[dict] = None,
+        architecture: Optional[dict] = None,
+        top_provider: Optional[dict] = None,
+        per_request_limits: Optional[dict] = None,
+        supported_parameters: Optional[list] = None,
+        default_parameters: Optional[dict] = None,
+    ):
+        # Bypass parent's typed-as-BaseChatModel attribute assignment by
+        # initializing fields directly — Embeddings is not a BaseChatModel.
+        self.model_id = model_id
+        self.provider = provider
+        self.model = model  # type: ignore[assignment]
+        self.name = name
+        self.owner = owner
+        self.description = description
+        self.image = image
+        self.created_at = created_at
+        self.canonical_slug = canonical_slug
+        self.hugging_face_id = hugging_face_id
+        self.pricing = pricing
+        self.architecture = architecture
+        self.top_provider = top_provider
+        self.per_request_limits = per_request_limits
+        self.supported_parameters = supported_parameters
+        self.default_parameters = default_parameters
+        self.dimensions = dimensions
+        self.model_type = ModelType.EMBEDDING
