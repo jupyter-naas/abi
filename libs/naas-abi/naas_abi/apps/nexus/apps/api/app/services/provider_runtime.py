@@ -1303,8 +1303,14 @@ async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
     thread_id: str,
+    user_context_preamble: str | None = None,
 ) -> AsyncGenerator[str | dict[str, Any], None]:
-    """Stream chat by invoking ABI agent directly in-process."""
+    """Stream chat by invoking ABI agent directly in-process.
+
+    ``user_context_preamble`` is prepended to the latest user message (separated
+    by a blank line) so first-turn profile context reaches agents that ignore
+    custom system prompts.
+    """
     import asyncio
     import json
 
@@ -1322,6 +1328,9 @@ async def stream_with_abi_inprocess(
         logger.warning("No user message found in conversation")
         yield "Error: No user message to send"
         return
+
+    if user_context_preamble:
+        latest_user_message = f"{user_context_preamble.strip()}\n\n{latest_user_message}"
 
     agent_name = config.model
     agent = _resolve_inprocess_abi_agent(agent_name)
