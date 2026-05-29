@@ -1272,12 +1272,12 @@ def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
 
     template_state = getattr(template, "state", None)
     supervisor = getattr(template_state, "supervisor_agent", None)
-    current_active_agent = getattr(template_state, "current_active_agent", None)
+    # current_active_agent = getattr(template_state, "current_active_agent", None)
 
     fresh_state = AgentSharedState(
         thread_id=str(thread_id) if thread_id else "1",
         supervisor_agent=supervisor,
-        current_active_agent=current_active_agent,
+        # current_active_agent=current_active_agent,
     )
     fresh_queue: Queue = Queue()
     return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
