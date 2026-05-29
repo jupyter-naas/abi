@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v2.10.1 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Isolate in-process ABI agent instance per request to prevent cross-conversation state
+  leakage
+  ([`af7bdd9`](https://github.com/jupyter-naas/abi/commit/af7bdd9088d38413f359819ef7ac3e39462de948))
+
+- **account**: Improve error handling and payload structure in ProfilePage
+  ([`a00b112`](https://github.com/jupyter-naas/abi/commit/a00b112fbaaa364e7caf506ddea0dd330ec7cd57))
+
+- **api/analytics**: Increase debounce seconds from 10 to 60
+  ([`2703521`](https://github.com/jupyter-naas/abi/commit/2703521fd59f6935b5924f4863fec4e7a247f8f7))
+
+
 ## v2.10.0 (2026-05-28)
 
 ### Features
