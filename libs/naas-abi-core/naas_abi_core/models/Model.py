@@ -83,6 +83,9 @@ class CanonicalModelId(StrEnum):
     # Chat — OpenAI open-weights
     GPT_OSS_120B = "gpt-oss-120b"
 
+    # Chat - Qwen family
+    QWEN_3_6 = "qwen-3.6"
+
 
 # Type aliases for registry call sites — accept enum or raw string.
 CanonicalModelIdLike = Union[CanonicalModelId, str]
