@@ -60,6 +60,12 @@ function initialFilters(): FilterValue {
 function buildQuery(filters: FilterValue): string {
   const p = new URLSearchParams();
   p.set('scenario_id', filters.scenario_id);
+  if (filters.workspace_id && filters.workspace_id !== 'all') {
+    p.set('workspace_id', filters.workspace_id);
+  }
+  if (filters.user_email && filters.user_email !== 'all') {
+    p.set('user_email', filters.user_email);
+  }
   return p.toString();
 }
 

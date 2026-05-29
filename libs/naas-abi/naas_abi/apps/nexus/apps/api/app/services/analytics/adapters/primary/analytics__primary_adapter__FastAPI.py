@@ -107,27 +107,35 @@ async def get_scenarios(
 @router.get("/overview", response_model=OverviewResponse)
 async def get_overview(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
+    workspace_id: str | None = Query(None),
+    user_email: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> OverviewResponse:
-    return service.get_overview(scenario_id=scenario_id)
+    return service.get_overview(
+        scenario_id=scenario_id, workspace_id=workspace_id, user_email=user_email
+    )
 
 
 @router.get("/users", response_model=UsersResponse)
 async def get_users(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
+    workspace_id: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> UsersResponse:
-    return service.get_users(scenario_id=scenario_id)
+    return service.get_users(scenario_id=scenario_id, workspace_id=workspace_id)
 
 
 @router.get("/users/{email:path}", response_model=UserDetail)
 async def get_user_detail(
     email: str,
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
+    workspace_id: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> UserDetail:
     try:
-        return service.get_user_detail(email, scenario_id=scenario_id)
+        return service.get_user_detail(
+            email, scenario_id=scenario_id, workspace_id=workspace_id
+        )
     except UserDetailNotFound as exc:
         raise HTTPException(
             status_code=404, detail="No data for user in selected range"
@@ -137,31 +145,50 @@ async def get_user_detail(
 @router.get("/sessions", response_model=SessionsResponse)
 async def get_sessions(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
+    workspace_id: str | None = Query(None),
+    user_email: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> SessionsResponse:
-    return service.get_sessions(scenario_id=scenario_id)
+    return service.get_sessions(
+        scenario_id=scenario_id, workspace_id=workspace_id, user_email=user_email
+    )
 
 
 @router.get("/pages", response_model=PagesResponse)
 async def get_pages(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
+    workspace_id: str | None = Query(None),
+    user_email: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> PagesResponse:
-    return service.get_pages(scenario_id=scenario_id)
+    return service.get_pages(
+        scenario_id=scenario_id, workspace_id=workspace_id, user_email=user_email
+    )
 
 
 @router.get("/workspaces", response_model=WorkspacesResponse)
 async def get_workspaces(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
+    workspace_id: str | None = Query(None),
+    user_email: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> WorkspacesResponse:
-    return service.get_workspaces(scenario_id=scenario_id)
+    return service.get_workspaces(
+        scenario_id=scenario_id, workspace_id=workspace_id, user_email=user_email
+    )
 
 
 @router.get("/events", response_model=EventsResponse)
 async def get_events(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     limit: int = Query(200, ge=1, le=1000),
+    workspace_id: str | None = Query(None),
+    user_email: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> EventsResponse:
-    return service.get_events(scenario_id=scenario_id, limit=limit)
+    return service.get_events(
+        scenario_id=scenario_id,
+        limit=limit,
+        workspace_id=workspace_id,
+        user_email=user_email,
+    )
