@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
 
+const BIO_MAX_LENGTH = 2000;
+
 type FastApiValidationError = {
   loc?: (string | number)[];
   msg?: string;
@@ -288,13 +290,26 @@ export default function ProfilePage() {
           </div>
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">Bio</label>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="block text-sm font-medium">Bio</label>
+            <span
+              className={cn(
+                'text-xs',
+                bio.length > BIO_MAX_LENGTH
+                  ? 'text-destructive'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {bio.length} / {BIO_MAX_LENGTH}
+            </span>
+          </div>
           <textarea
             value={bio}
-            onChange={(e) => setBio(e.target.value)}
+            onChange={(e) => setBio(e.target.value.slice(0, BIO_MAX_LENGTH))}
             placeholder="Tell us about yourself..."
-            rows={3}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
+            rows={12}
+            maxLength={BIO_MAX_LENGTH}
+            className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-blue-500/30"
           />
         </div>
       </div>
