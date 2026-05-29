@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.51.0 (2026-05-29)
+
+### Features
+
+- **models**: Add QWEN_3_6 to CanonicalModelId enum
+  ([`60078f7`](https://github.com/jupyter-naas/abi/commit/60078f724c50162243e866661a4e0efb3e3b9091))
+
+
 ## v1.50.1 (2026-05-28)
 
 ### Bug Fixes
