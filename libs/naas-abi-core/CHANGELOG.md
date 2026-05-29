@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.52.0 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Preserve template supervisor when duplicating in-process agent
+  ([`a9bcad3`](https://github.com/jupyter-naas/abi/commit/a9bcad38c1641358ad9be7d1fc713b038743f2dd))
+
+- **agent**: Strip inbound handoff artifacts from messages
+  ([`b7c4187`](https://github.com/jupyter-naas/abi/commit/b7c41870d524b0a5966154a2b39d6bf0dd60b2c7))
+
+### Features
+
+- **agent**: Persist routing state across HTTP turns for agent delegation
+  ([`f85cb62`](https://github.com/jupyter-naas/abi/commit/f85cb6256fdc4b88910093d7b9ba78458dc01ae3))
+
+
 ## v1.51.0 (2026-05-29)
 
 ### Features
