@@ -955,6 +955,77 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             )
             return response
 
+    def _strip_inbound_handoff_artifacts(
+        self, messages: list[AnyMessage]
+    ) -> list[AnyMessage]:
+        """Hide the parent's `transfer_to_<self>` call/response pair from the sub-agent's LLM.
+
+        When a supervisor hands off to this agent, two artifacts end up in the
+        propagated message history:
+        1. An AIMessage carrying a ``transfer_to_<self>`` tool_call (from the
+           supervisor's LLM).
+        2. A ToolMessage with content ``__handoff__:<self>`` produced by
+           ``make_handoff_tool``.
+
+        Both are plumbing the sub-agent's LLM does not need to see, and the
+        second one in particular reads as a success signal — small models
+        pattern-match it to "task complete, just respond" and skip the real
+        tool call (the symptom: a fabricated success message with no
+        underlying tool result). This helper removes both so the sub-agent
+        sees a clean user/assistant transcript.
+
+        Outbound handoffs that this agent emitted itself (to its OWN
+        sub-agents) are left untouched.
+
+        The original ``state["messages"]`` is not mutated — this only adjusts
+        what the LLM sees on this turn.
+        """
+        if not messages:
+            return messages
+
+        target_name = f"transfer_to_{self._name}"
+        inbound_ids: set[str] = set()
+        for m in messages:
+            if (
+                isinstance(m, ToolMessage)
+                and isinstance(getattr(m, "name", None), str)
+                and m.name == target_name
+            ):
+                tcid = getattr(m, "tool_call_id", None)
+                if isinstance(tcid, str):
+                    inbound_ids.add(tcid)
+
+        if not inbound_ids:
+            return messages
+
+        cleaned: list[AnyMessage] = []
+        for m in messages:
+            if (
+                isinstance(m, ToolMessage)
+                and getattr(m, "tool_call_id", None) in inbound_ids
+            ):
+                continue
+            if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
+                kept = [
+                    tc for tc in m.tool_calls if tc.get("id") not in inbound_ids
+                ]
+                if len(kept) != len(m.tool_calls):
+                    content_empty = (not m.content) or (
+                        isinstance(m.content, str) and not m.content.strip()
+                    )
+                    if not kept and content_empty:
+                        continue
+                    m = AIMessage(
+                        content=m.content,
+                        tool_calls=kept,
+                        id=m.id,
+                        additional_kwargs=dict(
+                            getattr(m, "additional_kwargs", {}) or {}
+                        ),
+                    )
+            cleaned.append(m)
+        return cleaned
+
     def call_model(
         self,
         state: ABIAgentState,
@@ -965,6 +1036,12 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         # Inserting system prompt before messages.
         messages = state["messages"]
+        if (
+            self._state.supervisor_agent is not None
+            and self._state.supervisor_agent.strip() != ""
+            and self._state.supervisor_agent != self._name
+        ):
+            messages = self._strip_inbound_handoff_artifacts(messages)
         if state["system_prompt"]:
             messages = [
                 SystemMessage(content=state["system_prompt"]),
