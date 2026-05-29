@@ -969,7 +969,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             messages = [
                 SystemMessage(content=state["system_prompt"]),
             ] + messages
-        # logger.debug(f"Messages before calling model: {messages}")
+        logger.debug(f"Messages before calling model: {messages}")
 
         # Calling model
         try:
@@ -1204,6 +1204,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return value
         try:
             import json
+
             return json.dumps(value, default=str)
         except Exception:
             return str(value)
@@ -1213,8 +1214,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         self._on_tool_usage(message)
         identity = self._identity()
         import json
+
         for call in getattr(message, "tool_calls", []) or []:
-            args = call.get("args") if isinstance(call, dict) else getattr(call, "args", None)
+            args = (
+                call.get("args")
+                if isinstance(call, dict)
+                else getattr(call, "args", None)
+            )
             try:
                 args_str = json.dumps(args, default=str) if args is not None else None
             except Exception:
@@ -1222,8 +1228,12 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             self._publish_agent_event(
                 AgentToolCalled(
                     agent_name=self._name,
-                    tool_name=call.get("name") if isinstance(call, dict) else getattr(call, "name", None),
-                    tool_call_id=call.get("id") if isinstance(call, dict) else getattr(call, "id", None),
+                    tool_name=call.get("name")
+                    if isinstance(call, dict)
+                    else getattr(call, "name", None),
+                    tool_call_id=call.get("id")
+                    if isinstance(call, dict)
+                    else getattr(call, "id", None),
                     tool_args=args_str,
                     **identity,
                 )
@@ -1489,7 +1499,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             AgentInvocationCompleted(
                 agent_name=self._name,
                 content=completion_content,
-                content_length=len(completion_content) if completion_content is not None else None,
+                content_length=len(completion_content)
+                if completion_content is not None
+                else None,
                 **self._identity(),
             )
         )

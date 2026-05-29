@@ -1254,18 +1254,14 @@ def _resolve_inprocess_abi_agent(agent_name: str):
 def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
     """Return a per-request copy of the cached template agent.
 
-    The resolver in ``_resolve_inprocess_abi_agent`` caches a single shared
-    instance per factory. Executing requests against that shared instance
-    causes cross-conversation contamination: ``agent.state`` and the
-    ``_event_queue`` are instance attributes, so two overlapping requests
-    clobber each other's thread_id and read each other's events. This helper
-    mirrors what ``Agent.as_api`` does for the regular HTTP route — build a
-    fresh ``AgentSharedState`` and ``Queue`` per request, then ``duplicate``
-    the template. The template stays warm; only the execution context is
-    isolated.
-
-    Falls back to the template itself if duplication is not available
-    (defensive — every Agent class in naas_abi_core implements ``duplicate``).
+    The resolver caches a single shared instance per factory. Running requests
+    against it causes cross-conversation contamination: ``agent.state`` and
+    the event queue are instance attributes, so overlapping requests clobber
+    each other. Mirror what ``Agent.as_api`` does — build a fresh queue per
+    request and a state that carries the template's ``supervisor_agent``
+    forward. ``Agent.duplicate`` propagates the new state recursively to
+    every sub-agent, so dropping ``supervisor_agent`` here would strip the
+    supervision flag from every sub-agent and break routing/handoff.
     """
     from queue import Queue
 
@@ -1274,13 +1270,15 @@ def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
     if not hasattr(template, "duplicate"):
         return template
 
-    fresh_state = AgentSharedState(thread_id=str(thread_id) if thread_id else None)
+    template_state = getattr(template, "state", None)
+    supervisor = getattr(template_state, "supervisor_agent", None)
+
+    fresh_state = AgentSharedState(
+        thread_id=str(thread_id) if thread_id else "1",
+        supervisor_agent=supervisor,
+    )
     fresh_queue: Queue = Queue()
-    try:
-        return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
-    except TypeError:
-        # Some agent classes ignore the queue kwarg or have a narrower signature.
-        return template.duplicate(agent_shared_state=fresh_state)
+    return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
 
 
 def _extract_opencode_ui_event(event: dict[str, Any]) -> dict[str, Any] | None:
