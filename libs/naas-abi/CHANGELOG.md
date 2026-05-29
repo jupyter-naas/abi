@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.11.1 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Preserve template supervisor when duplicating in-process agent
+  ([`a9bcad3`](https://github.com/jupyter-naas/abi/commit/a9bcad38c1641358ad9be7d1fc713b038743f2dd))
+
+- **api**: Propagate current_active_agent in duplicate_inprocess_agent
+  ([`7de688f`](https://github.com/jupyter-naas/abi/commit/7de688f9a9cc669a0fa41d96f5006b665acad6e6))
+
+- **provider_runtime**: Comment out current_active_agent usage in _duplicate_inprocess_agent
+  ([`6297b57`](https://github.com/jupyter-naas/abi/commit/6297b57c99e76c1280ac9e06af0aaed034e4f1a3))
+
+
 ## v2.11.0 (2026-05-29)
 
 ### Features
