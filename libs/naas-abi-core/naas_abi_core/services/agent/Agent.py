@@ -285,6 +285,12 @@ class AgentSharedState:
 
 class ABIAgentState(MessagesState):
     system_prompt: str
+    # Routing state persisted through the LangGraph checkpointer so that agent
+    # delegation survives across separate HTTP turns (each turn rebuilds the
+    # agent tree with a fresh AgentSharedState, so in-memory routing alone is
+    # lost between requests).
+    current_active_agent: Optional[str]
+    supervisor_agent: Optional[str]
 
 
 @dataclass
@@ -788,6 +794,19 @@ class Agent(Expose):
         Returns:
             Command: Command to goto the current active agent
         """
+        # Restore routing from the checkpointed graph state. Within a single
+        # long-lived instance ``self._state`` is already authoritative, so we
+        # only hydrate when it is empty — which is exactly the case at the start
+        # of a new HTTP turn, where the agent tree was freshly duplicated with a
+        # blank AgentSharedState. This is what makes a prior handoff survive
+        # across requests instead of falling back to the supervisor every turn.
+        persisted_active = state.get("current_active_agent")
+        if persisted_active is not None and self._state.current_active_agent is None:
+            self._state.set_current_active_agent(persisted_active)
+        persisted_supervisor = state.get("supervisor_agent")
+        if persisted_supervisor is not None and self._state.supervisor_agent is None:
+            self._state.set_supervisor_agent(persisted_supervisor)
+
         # Log the current active agent
         logger.debug(f"😏 Supervisor agent: '{self._state.supervisor_agent}'")
         logger.debug(f"🟢 Active agent: '{self._state.current_active_agent}'")
@@ -824,7 +843,10 @@ class Agent(Expose):
                 self._notify_agent_routing(agent_name)
                 return Command(
                     goto=agent_name,
-                    update={"messages": state["messages"]},
+                    update={
+                        "messages": state["messages"],
+                        "current_active_agent": agent_name,
+                    },
                 )
             else:
                 logger.debug(f"❌ Agent '{at_mention}' not found")
@@ -1034,6 +1056,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         logger.debug(f"🧠 Calling model for agent '{self._name}'")
         self._notify_call_model(self._name)
 
+        # Persist routing into the checkpointed graph state so that the next
+        # HTTP turn (which rebuilds the agent tree from scratch) restores who is
+        # currently handling the conversation instead of resetting to the
+        # supervisor. A handoff downstream (see make_handoff_tool) overrides
+        # this value within the same step.
+        routing_update: dict[str, Any] = {
+            "current_active_agent": self._state.current_active_agent,
+            "supervisor_agent": self._state.supervisor_agent,
+        }
+
         # Inserting system prompt before messages.
         messages = state["messages"]
         if (
@@ -1056,11 +1088,12 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return Command(
                 goto="__end__",
                 update={
+                    **routing_update,
                     "messages": [
                         AIMessage(
                             content=f"I'm sorry, I encountered an error while processing your request:\n\n{e}"
                         )
-                    ]
+                    ],
                 },
             )
         logger.debug(f"Model response: {response}")
@@ -1079,12 +1112,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             #### ----->  A solution would be to rebuild the state to make sure that the following message of a tool call it the response of that call. If we do that we should theroetically be able to call multiple tools at once, which would be more effective.
             # response.tool_calls = [response.tool_calls[0]]
 
-            return Command(goto="call_tools", update={"messages": [response]})
+            return Command(
+                goto="call_tools",
+                update={**routing_update, "messages": [response]},
+            )
 
         if self._markdown_pretty_display:
             logger.debug("Applying Markdown pretty display to response")
             response = self._pretty_display_markdown(response)
-        return Command(goto="__end__", update={"messages": [response]})
+        return Command(
+            goto="__end__",
+            update={**routing_update, "messages": [response]},
+        )
 
     def call_tools(self, state: ABIAgentState) -> list[Command]:
         # Check if messages are present in the state.
@@ -1121,7 +1160,37 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         for tool_call in tool_calls:
             tool_name: str = tool_call["name"]
             logger.debug(f"🛠️  Calling tool: {tool_name}")
-            tool_: BaseTool = self._tools_by_name[tool_name]
+
+            # Guard against hallucinated / out-of-scope tool names. A raw dict
+            # lookup here would raise KeyError and kill the whole invoke thread
+            # (the user sees a generic crash). Instead, surface a ToolMessage the
+            # model can read so it can self-correct on the next loop.
+            tool_ = self._tools_by_name.get(tool_name)
+            if tool_ is None:
+                available = sorted(self._tools_by_name.keys())
+                logger.error(
+                    f"🚨 Agent '{self._name}' tried to call unknown tool "
+                    f"'{tool_name}'. Available tools: {available}"
+                )
+                had_tool_error = True
+                results.append(
+                    Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=(
+                                        f"Tool '{tool_name}' is not available to "
+                                        f"agent '{self._name}'. Available tools: "
+                                        f"{available}"
+                                    ),
+                                    name=tool_name,
+                                    tool_call_id=tool_call["id"],
+                                )
+                            ]
+                        },
+                    )
+                )
+                continue
 
             tool_input_fields = tool_.get_input_schema().model_json_schema()[
                 "properties"
@@ -1881,7 +1950,13 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
             # This is the state update that the agent `agent_name` will see when it is invoked.
             # We're passing agent's FULL internal message history AND adding a tool message to make sure
             # the resulting chat history is valid. See the paragraph above for more information.
-            update={"messages": state["messages"] + [tool_message]},
+            # ``current_active_agent`` is persisted through the checkpointer so the
+            # delegation is restored on the next turn instead of routing back to
+            # the supervisor.
+            update={
+                "messages": state["messages"] + [tool_message],
+                "current_active_agent": agent_name,
+            },
         )
 
     assert isinstance(handoff_to_agent, BaseTool)
