@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.11.0 (2026-05-29)
+
+### Features
+
+- **account**: Increase user bio max length to 2000 characters
+  ([`3c8fbec`](https://github.com/jupyter-naas/abi/commit/3c8fbec4d663e9a3815b852562d271004b061b59))
+
+
 ## v2.10.1 (2026-05-29)
 
 ### Bug Fixes
