@@ -64,7 +64,7 @@ REF_WORKSPACES_FILE = "ref-workspaces.json"
 
 RECENT_EVENTS_LIMIT = 100
 
-_REBUILD_DEBOUNCE_SECONDS = 10
+_REBUILD_DEBOUNCE_SECONDS = 60
 
 _CHAT_CONV_PATH_RE = re.compile(r"/chat/(conv-[^/?#]+)")
 
