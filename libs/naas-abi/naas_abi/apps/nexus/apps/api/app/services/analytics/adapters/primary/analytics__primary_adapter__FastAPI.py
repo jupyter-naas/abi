@@ -15,6 +15,9 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary impo
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     AnalyticsEvent,
+    ChatDetail,
+    ChatMessage,
+    ChatsResponse,
     EventsResponse,
     IngestResponse,
     Metadata,
@@ -32,6 +35,8 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.service import (
     DEFAULT_SCENARIO_ID,
     AnalyticsService,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
+from naas_abi.apps.nexus.apps.api.app.services.registry import get_service_registry
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
 router = APIRouter()
@@ -191,4 +196,50 @@ async def get_events(
         limit=limit,
         workspace_id=workspace_id,
         user_email=user_email,
+    )
+
+
+@router.get("/chats", response_model=ChatsResponse)
+async def get_chats(
+    scenario_id: str = Query(DEFAULT_SCENARIO_ID),
+    workspace_id: str | None = Query(None),
+    user_email: str | None = Query(None),
+    service: AnalyticsService = Depends(get_analytics_service),
+) -> ChatsResponse:
+    return service.get_chats(
+        scenario_id=scenario_id, workspace_id=workspace_id, user_email=user_email
+    )
+
+
+@router.get("/chats/{conversation_id}", response_model=ChatDetail)
+async def get_chat_detail(
+    conversation_id: str,
+    registry=Depends(get_service_registry),
+) -> ChatDetail:
+    chat_service: ChatService = registry.chat
+    conversation = await chat_service.adapter.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    records = await chat_service.adapter.list_messages_by_conversation(conversation_id)
+
+    messages = [
+        ChatMessage(
+            id=m.id,
+            role=m.role,
+            content=m.content,
+            agent=m.agent,
+            created_at=m.created_at.isoformat() if m.created_at else None,
+        )
+        for m in records
+    ]
+
+    return ChatDetail(
+        conversation_id=conversation.id,
+        workspace_id=conversation.workspace_id,
+        user_id=conversation.user_id,
+        title=conversation.title,
+        agent=conversation.agent,
+        created_at=conversation.created_at.isoformat() if conversation.created_at else None,
+        updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
+        messages=messages,
     )

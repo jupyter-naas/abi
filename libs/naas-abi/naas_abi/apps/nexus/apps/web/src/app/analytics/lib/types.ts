@@ -128,3 +128,37 @@ export interface OverviewResponse {
   workspace_activity: WorkspaceRow[];
   recent_activity: AnalyticsEvent[];
 }
+
+export interface ChatRow {
+  conversation_id: string;
+  title: string;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  user_email?: string | null;
+  first_viewed_at: string;
+  last_viewed_at: string;
+  page_views: number;
+}
+
+export interface ChatsResponse {
+  chats: ChatRow[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | string;
+  content: string;
+  agent?: string | null;
+  created_at?: string | null;
+}
+
+export interface ChatDetail {
+  conversation_id: string;
+  workspace_id: string;
+  user_id: string;
+  title: string;
+  agent: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  messages: ChatMessage[];
+}
