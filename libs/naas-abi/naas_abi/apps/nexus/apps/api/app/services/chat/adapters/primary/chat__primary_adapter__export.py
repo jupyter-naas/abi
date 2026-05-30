@@ -54,9 +54,19 @@ def export_conversation_as_response(
                 content += f"Execution time: {meta['execution_time']:.1f}s\n"
             steps = meta.get("steps", [])
             if steps:
-                content += f"Steps ({len(steps)}): " + ", ".join(
-                    s.get("tool_name", "") for s in steps
-                ) + "\n"
+                content += "Steps:\n"
+                for s in steps:
+                    prefix = s.get("prefix") or "Tool"
+                    name = s.get("tool_name") or ""
+                    status = s.get("status") or ""
+                    content += f"  - [{prefix}] {name} — {status}\n"
+                    if s.get("input"):
+                        content += f"      input: {s['input']}\n"
+                    if s.get("output"):
+                        content += f"      output: {s['output']}\n"
+                content += "\n"
+            if msg.role == "assistant":
+                content += "Message:\n"
             content += f"{msg.content}\n"
             content += f"\n{'-' * 80}\n\n"
 
