@@ -791,11 +791,12 @@ class AnalyticsService:
         for conv_id, evts in by_conv.items():
             evts.sort(key=lambda e: e.get("timestamp", ""))
             first, last = evts[0], evts[-1]
-            base_title = last.get("page_title") or first.get("page_title") or conv_id
+            # Title is the conversation_id itself — the chat list is keyed on
+            # the conversation, not on the (often duplicated) "Chat" page title.
             rows.append(
                 ChatRow(
                     conversation_id=conv_id,
-                    title=_decorate_page_title(base_title, last.get("page_path") or ""),
+                    title=conv_id,
                     workspace_id=last.get("workspace_id"),
                     workspace_name=last.get("workspace_name"),
                     user_email=last.get("user_email"),

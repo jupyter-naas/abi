@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   BarChart3,
   Check,
   Clock,
   Copy,
-  Download,
   Eye,
   FileText,
   Globe,
@@ -19,6 +19,7 @@ import {
   Repeat,
   TrendingUp,
   Users,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, FilterBar, type FilterValue } from './components/filter-bar';
@@ -34,6 +35,7 @@ import type {
   AnalyticsEvent,
   ChatDetail,
   ChatMessage,
+  ChatMessageStep,
   ChatsResponse,
   OverviewResponse,
   PageRow,
@@ -53,8 +55,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'sessions', label: 'Sessions' },
   { key: 'pages', label: 'Pages' },
   { key: 'workspaces', label: 'Workspaces' },
-  { key: 'events', label: 'Events' },
   { key: 'chats', label: 'Chats' },
+  { key: 'events', label: 'Events' },
 ];
 
 function initialFilters(): FilterValue {
@@ -953,6 +955,10 @@ function ChatsSection({
   );
   const [openId, setOpenId] = useState<string | null>(null);
 
+  if (openId) {
+    return <ChatDetailFullPage conversationId={openId} onClose={() => setOpenId(null)} />;
+  }
+
   if (loading && !data) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
   const chats = data?.chats ?? [];
@@ -966,56 +972,69 @@ function ChatsSection({
         <EmptyBlock>No chat page views in this range.</EmptyBlock>
       ) : (
         <ul className="-mx-5 -my-5 divide-y divide-border/50">
-          {chats.map((c) => {
-            const expanded = openId === c.conversation_id;
-            return (
-              <li key={c.conversation_id}>
-                <button
-                  onClick={() => setOpenId(expanded ? null : c.conversation_id)}
-                  className={cn(
-                    'flex w-full items-start gap-3 px-5 py-3 text-left text-sm transition-colors',
-                    'hover:bg-muted/40',
-                    expanded && 'bg-muted/40',
-                  )}
-                >
-                  <MessageSquare size={14} className="mt-0.5 text-workspace-accent flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{c.title}</div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                      {c.user_email && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onUserPick(c.user_email as string);
-                          }}
-                          className="hover:text-foreground hover:underline"
-                        >
-                          {c.user_email}
-                        </button>
-                      )}
-                      {c.workspace_name && <span>· {c.workspace_name}</span>}
-                      <span>· {c.page_views} view{c.page_views === 1 ? '' : 's'}</span>
-                      <span className="font-mono opacity-70">· {c.conversation_id}</span>
-                    </div>
+          {chats.map((c) => (
+            <li key={c.conversation_id}>
+              <button
+                onClick={() => setOpenId(c.conversation_id)}
+                className={cn(
+                  'flex w-full items-start gap-3 px-5 py-3 text-left text-sm transition-colors',
+                  'hover:bg-muted/40',
+                )}
+              >
+                <MessageSquare size={14} className="mt-0.5 text-workspace-accent flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2 min-w-0">
+                    <span className="font-mono text-xs font-medium truncate">
+                      {c.conversation_id}
+                    </span>
+                    - {c.chat_title && (
+                      <span className="truncate text-sm font-medium">{c.chat_title}</span>
+                    )}
                   </div>
-                  <span className="flex-shrink-0 text-right text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDateTime(c.last_viewed_at)}
-                  </span>
-                </button>
-                {expanded && <ChatDetailPanel conversationId={c.conversation_id} />}
-              </li>
-            );
-          })}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                    {c.user_email && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUserPick(c.user_email as string);
+                        }}
+                        className="hover:text-foreground hover:underline"
+                      >
+                        {c.user_email}
+                      </button>
+                    )}
+                    {c.workspace_name && <span>· {c.workspace_name}</span>}
+                    <span>· {c.page_views} view{c.page_views === 1 ? '' : 's'}</span>
+                    <span>
+                      · {c.message_count} message{c.message_count === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                </div>
+                <span className="flex-shrink-0 text-right text-xs text-muted-foreground whitespace-nowrap">
+                  {formatDateTime(c.last_viewed_at)}
+                </span>
+              </button>
+            </li>
+          ))}
         </ul>
       )}
     </Card>
   );
 }
 
-function ChatDetailPanel({ conversationId }: { conversationId: string }) {
+function ChatDetailFullPage({
+  conversationId,
+  onClose,
+}: {
+  conversationId: string;
+  onClose: () => void;
+}) {
   const [data, setData] = useState<ChatDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<null | 'copy'>(null);
+  const [copied, setCopied] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1040,132 +1059,163 @@ function ChatDetailPanel({ conversationId }: { conversationId: string }) {
     };
   }, [conversationId]);
 
-  if (loading)
-    return (
-      <div className="bg-muted/20 px-5 py-4 text-xs text-muted-foreground">
-        <Loader2 size={12} className="mr-2 inline animate-spin" />
-        Loading conversation…
-      </div>
-    );
-  if (error)
-    return (
-      <div className="bg-muted/20 px-5 py-4 text-xs text-destructive">
-        Could not load conversation: {error}
-      </div>
-    );
-  if (!data) return null;
-
-  if (data.messages.length === 0) {
-    return (
-      <div className="bg-muted/20 px-5 py-4 text-xs text-muted-foreground">
-        Conversation has no stored messages.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3 bg-muted/20 px-5 py-4">
-      <ChatExportToolbar conversation={data} />
-      {data.messages.map((m) => (
-        <ChatMessageBubble key={m.id} message={m} />
-      ))}
-    </div>
-  );
-}
-
-function formatChatAsText(conversation: ChatDetail): string {
-  const header = [
-    `Title: ${conversation.title}`,
-    `Conversation ID: ${conversation.conversation_id}`,
-    `Agent: ${conversation.agent}`,
-    `Workspace: ${conversation.workspace_id}`,
-    `User: ${conversation.user_id}`,
-    conversation.created_at ? `Created: ${conversation.created_at}` : null,
-    conversation.updated_at ? `Updated: ${conversation.updated_at}` : null,
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  const body = conversation.messages
-    .map((m) => {
-      const ts = m.created_at ? ` [${m.created_at}]` : '';
-      const agent = m.agent ? ` (${m.agent})` : '';
-      return `--- ${m.role.toUpperCase()}${agent}${ts} ---\n${m.content}`;
-    })
-    .join('\n\n');
-
-  return `${header}\n\n${body}\n`;
-}
-
-function ChatExportToolbar({ conversation }: { conversation: ChatDetail }) {
-  const [copied, setCopied] = useState(false);
-
   const handleCopy = async () => {
+    if (!data) return;
+    setExportError(null);
+    setExporting('copy');
     try {
-      await navigator.clipboard.writeText(formatChatAsText(conversation));
+      const text = buildChatExportText(data);
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+          document.execCommand('copy');
+        } finally {
+          document.body.removeChild(ta);
+        }
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Fallback for older browsers / non-secure contexts.
-      const ta = document.createElement('textarea');
-      ta.value = formatChatAsText(conversation);
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try {
-        document.execCommand('copy');
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      } catch {
-        // give up silently
-      }
-      document.body.removeChild(ta);
+    } catch (e) {
+      setExportError(String((e as Error)?.message ?? e));
+    } finally {
+      setExporting(null);
     }
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([formatChatAsText(conversation)], {
-      type: 'text/plain;charset=utf-8',
-    });
-    const safeSlug = (conversation.title || conversation.conversation_id)
-      .replace(/[^a-z0-9-_]+/gi, '_')
-      .slice(0, 80);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${safeSlug || conversation.conversation_id}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 pb-2">
-      <button
-        onClick={handleCopy}
-        className={cn(
-          'flex h-8 items-center gap-1.5 border border-border bg-background px-2.5 text-xs transition-colors',
-          'hover:border-foreground/20 hover:bg-muted/40',
-        )}
-      >
-        {copied ? <Check size={12} /> : <Copy size={12} />}
-        <span>{copied ? 'Copied' : 'Copy'}</span>
-      </button>
-      <button
-        onClick={handleDownload}
-        className={cn(
-          'flex h-8 items-center gap-1.5 border border-border bg-background px-2.5 text-xs transition-colors',
-          'hover:border-foreground/20 hover:bg-muted/40',
-        )}
-      >
-        <Download size={12} />
-        <span>Export .txt</span>
-      </button>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={onClose}
+            className={cn(
+              'flex h-9 items-center gap-1.5 border border-border bg-background px-2.5 text-sm transition-colors',
+              'hover:border-foreground/20 hover:bg-muted/40',
+            )}
+            title="Back to chat list"
+          >
+            <ArrowLeft size={14} />
+            <span>Back</span>
+          </button>
+          <div className="min-w-0">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Conversation</div>
+            <div className="font-mono text-sm font-medium truncate">{conversationId}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {exportError && <span className="text-xs text-destructive">{exportError}</span>}
+          <button
+            onClick={handleCopy}
+            disabled={exporting !== null || !data}
+            className={cn(
+              'flex h-9 items-center gap-1.5 border border-border bg-background px-2.5 text-sm transition-colors',
+              'hover:border-foreground/20 hover:bg-muted/40 disabled:opacity-60',
+            )}
+            title="Copy as text"
+          >
+            {exporting === 'copy' ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : copied ? (
+              <Check size={14} />
+            ) : (
+              <Copy size={14} />
+            )}
+            <span>{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+          <button
+            onClick={onClose}
+            className={cn(
+              'flex h-9 w-9 items-center justify-center border border-border bg-background transition-colors',
+              'hover:border-foreground/20 hover:bg-muted/40',
+            )}
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+
+      {loading && !data && <LoadingBlock label="Loading conversation" />}
+      {error && <ErrorBlock message={error} />}
+      {data && (
+        <Card
+          title={data.title || conversationId}
+          subtitle={`${data.messages.length} message(s) · agent: ${data.agent}`}
+        >
+          {data.messages.length === 0 ? (
+            <EmptyBlock>Conversation has no stored messages.</EmptyBlock>
+          ) : (
+            <div className="space-y-4">
+              {data.messages.map((m) => (
+                <ChatMessageBubble key={m.id} message={m} />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
+}
+
+// Mirrors the backend ``export_conversation_as_response`` txt branch (in
+// ``chat__primary_adapter__export.py``). Kept client-side so the Export
+// button works even if the analytics API server hasn't been restarted to
+// pick up the new admin export route. The output is byte-for-byte identical
+// to what the chat-interface Export button produces.
+function buildChatExportText(conversation: ChatDetail): string {
+  const SEP_TOP = '='.repeat(80);
+  const SEP_BTW = '-'.repeat(80);
+  const title = conversation.title || 'Untitled Conversation';
+  const exportedAt = new Date().toISOString();
+
+  let out = `Conversation: ${title}\n`;
+  out += `ID: ${conversation.conversation_id}\n`;
+  out += `Exported: ${exportedAt}\n`;
+  out += `User: ${conversation.user_id}\n`;
+  out += `Workspace: ${conversation.workspace_id}\n`;
+  out += `Messages: ${conversation.messages.length}\n`;
+  out += `\n${SEP_TOP}\n\n`;
+
+  for (const msg of conversation.messages) {
+    let role = msg.role.toUpperCase();
+    if (msg.role === 'assistant' && msg.agent) {
+      role = `ASSISTANT (${msg.agent})`;
+    }
+    out += `[${role}]\n`;
+    if (msg.created_at) out += `Timestamp: ${msg.created_at}\n`;
+    const exec = msg.metadata?.execution_time;
+    if (typeof exec === 'number') {
+      out += `Execution time: ${exec.toFixed(1)}s\n`;
+    }
+    const steps = msg.metadata?.steps ?? [];
+    if (steps.length > 0) {
+      out += 'Steps:\n';
+      for (const s of steps) {
+        const prefix = s.prefix || 'Tool';
+        const name = s.tool_name || '';
+        const status = s.status || '';
+        out += `  - [${prefix}] ${name} — ${status}\n`;
+        if (s.input) out += `      input: ${s.input}\n`;
+        if (s.output) out += `      output: ${s.output}\n`;
+      }
+      out += '\n';
+    }
+    if (msg.role === 'assistant') {
+      out += 'Message:\n';
+    }
+    out += `${msg.content}\n`;
+    out += `\n${SEP_BTW}\n\n`;
+  }
+
+  return out;
 }
 
 function ChatMessageBubble({ message }: { message: ChatMessage }) {
@@ -1181,14 +1231,64 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
     isSystem && 'border-border/60 bg-muted/40 text-muted-foreground',
   );
 
+  const steps = message.metadata?.steps ?? [];
+  const executionTime = message.metadata?.execution_time;
+
   return (
     <div className={cn('flex flex-col gap-1', align)}>
       <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
         <span className="font-semibold">{message.role}</span>
         {message.agent && <span>· {message.agent}</span>}
         {message.created_at && <span>· {formatDateTime(message.created_at)}</span>}
+        {typeof executionTime === 'number' && executionTime > 0 && (
+          <span>· {executionTime.toFixed(1)}s</span>
+        )}
       </div>
+      {steps.length > 0 && <ChatStepsList steps={steps} alignEnd={isUser} />}
       <div className={bubble}>{message.content || <span className="opacity-50">(empty)</span>}</div>
+    </div>
+  );
+}
+
+function ChatStepsList({ steps, alignEnd }: { steps: ChatMessageStep[]; alignEnd: boolean }) {
+  return (
+    <div className={cn('flex max-w-[85%] flex-col gap-1', alignEnd && 'items-end')}>
+      <ul className="w-full space-y-1.5 border border-border/60 bg-background/60 p-2 text-xs">
+        {steps.map((s, i) => (
+          <li key={i} className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {s.prefix}
+              </span>
+              <span className="font-medium">{s.tool_name}</span>
+              <span
+                className={cn(
+                  'ml-auto text-[10px] uppercase tracking-wide',
+                  s.status === 'done' && 'text-emerald-600',
+                  s.status === 'running' && 'text-amber-600',
+                  s.status === 'error' && 'text-destructive',
+                )}
+              >
+                {s.status}
+              </span>
+            </div>
+            {s.input && (
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+                <span className="font-semibold uppercase tracking-wide">input</span>
+                {'\n'}
+                {s.input}
+              </pre>
+            )}
+            {s.output && (
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+                <span className="font-semibold uppercase tracking-wide">output</span>
+                {'\n'}
+                {s.output}
+              </pre>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

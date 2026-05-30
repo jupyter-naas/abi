@@ -9,6 +9,9 @@ here.
 
 from __future__ import annotations
 
+import json
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary import (
     AnalyticsSecondaryAdapterObjectStorage,
@@ -35,11 +38,26 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.service import (
     DEFAULT_SCENARIO_ID,
     AnalyticsService,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__export import (
+    export_conversation_as_response,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.registry import get_service_registry
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _parse_message_metadata(raw: str | None) -> dict | None:
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.debug("Unparseable message metadata; skipping")
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _get_object_storage(request: Request) -> ObjectStorageService:
@@ -205,10 +223,22 @@ async def get_chats(
     workspace_id: str | None = Query(None),
     user_email: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
+    registry=Depends(get_service_registry),
 ) -> ChatsResponse:
-    return service.get_chats(
+    response = service.get_chats(
         scenario_id=scenario_id, workspace_id=workspace_id, user_email=user_email
     )
+    if response.chats:
+        chat_service: ChatService = registry.chat
+        ids = [c.conversation_id for c in response.chats]
+        counts = await chat_service.adapter.count_messages_for_conversations(ids)
+        chats_by_id = await chat_service.adapter.list_conversations_by_ids(ids)
+        for row in response.chats:
+            row.message_count = counts.get(row.conversation_id, 0)
+            chat = chats_by_id.get(row.conversation_id)
+            if chat is not None:
+                row.chat_title = chat.title
+    return response
 
 
 @router.get("/chats/{conversation_id}", response_model=ChatDetail)
@@ -229,6 +259,7 @@ async def get_chat_detail(
             content=m.content,
             agent=m.agent,
             created_at=m.created_at.isoformat() if m.created_at else None,
+            metadata=_parse_message_metadata(m.metadata_),
         )
         for m in records
     ]
@@ -242,4 +273,31 @@ async def get_chat_detail(
         created_at=conversation.created_at.isoformat() if conversation.created_at else None,
         updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
         messages=messages,
+    )
+
+
+@router.get("/chats/{conversation_id}/export")
+async def export_chat(
+    conversation_id: str,
+    format: str = Query("txt", pattern="^(txt|json|md)$"),
+    registry=Depends(get_service_registry),
+):
+    """Admin export of a conversation for the analytics UI.
+
+    Delegates to the same ``export_conversation_as_response`` helper the chat
+    interface uses, so the analytics download and the in-chat download produce
+    byte-identical files.
+    """
+    chat_service: ChatService = registry.chat
+    conversation = await chat_service.adapter.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    messages = await chat_service.adapter.list_messages_by_conversation(conversation_id)
+    return export_conversation_as_response(
+        conversation_id=conversation_id,
+        format=format,
+        user_id=conversation.user_id,
+        conversation=conversation,
+        messages=messages,
+        messages_metadata=None,
     )

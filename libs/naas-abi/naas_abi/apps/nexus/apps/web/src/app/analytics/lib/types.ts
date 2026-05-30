@@ -132,16 +132,33 @@ export interface OverviewResponse {
 export interface ChatRow {
   conversation_id: string;
   title: string;
+  chat_title?: string | null;
   workspace_id?: string | null;
   workspace_name?: string | null;
   user_email?: string | null;
   first_viewed_at: string;
   last_viewed_at: string;
   page_views: number;
+  message_count: number;
 }
 
 export interface ChatsResponse {
   chats: ChatRow[];
+}
+
+export interface ChatMessageStep {
+  tool_name: string;
+  prefix: string;
+  status: string;
+  input?: string | null;
+  output?: string | null;
+}
+
+export interface ChatMessageMetadata {
+  execution_time?: number | null;
+  steps?: ChatMessageStep[];
+  sources?: string[];
+  [key: string]: unknown;
 }
 
 export interface ChatMessage {
@@ -150,6 +167,7 @@ export interface ChatMessage {
   content: string;
   agent?: string | null;
   created_at?: string | null;
+  metadata?: ChatMessageMetadata | null;
 }
 
 export interface ChatDetail {
