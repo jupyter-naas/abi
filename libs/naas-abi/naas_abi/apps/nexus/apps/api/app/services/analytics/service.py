@@ -31,6 +31,8 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     AnalyticsEvent,
     AnalyticsStoragePort,
+    ChatRow,
+    ChatsResponse,
     EventsResponse,
     FileStats,
     Metadata,
@@ -758,6 +760,52 @@ class AnalyticsService:
         )
         events = slice_data.get("events", []) if isinstance(slice_data, dict) else []
         return EventsResponse.model_validate({"events": events[:limit]})
+
+    def get_chats(
+        self,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        workspace_id: str | None = None,
+        user_email: str | None = None,
+    ) -> ChatsResponse:
+        """List chat conversations derived from ``page_viewed`` events on
+        ``/chat/conv-...`` paths.
+
+        Each row groups every page view in the scenario window for one
+        conversation. Workspace / user filters narrow the scope so the
+        analytics UI can drill into a specific tenant or user.
+        """
+        events = self._filter_events(
+            self._load_window_events(scenario_id), workspace_id, user_email
+        )
+        by_conv: dict[str, list[dict]] = defaultdict(list)
+        for e in events:
+            if e.get("event_name") != "page_viewed":
+                continue
+            path = e.get("page_path") or ""
+            m = _CHAT_CONV_PATH_RE.search(path)
+            if not m:
+                continue
+            by_conv[m.group(1)].append(e)
+
+        rows: list[ChatRow] = []
+        for conv_id, evts in by_conv.items():
+            evts.sort(key=lambda e: e.get("timestamp", ""))
+            first, last = evts[0], evts[-1]
+            base_title = last.get("page_title") or first.get("page_title") or conv_id
+            rows.append(
+                ChatRow(
+                    conversation_id=conv_id,
+                    title=_decorate_page_title(base_title, last.get("page_path") or ""),
+                    workspace_id=last.get("workspace_id"),
+                    workspace_name=last.get("workspace_name"),
+                    user_email=last.get("user_email"),
+                    first_viewed_at=first.get("timestamp") or "",
+                    last_viewed_at=last.get("timestamp") or "",
+                    page_views=len(evts),
+                )
+            )
+        rows.sort(key=lambda r: r.last_viewed_at, reverse=True)
+        return ChatsResponse(chats=rows)
 
     # --- helpers -----------------------------------------------------------
 

@@ -5,12 +5,16 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Check,
   Clock,
+  Copy,
+  Download,
   Eye,
   FileText,
   Globe,
   Layers,
   Loader2,
+  MessageSquare,
   Mouse,
   Repeat,
   TrendingUp,
@@ -28,6 +32,9 @@ import { formatDateTime, formatDuration, formatNumber, formatRelative } from './
 import { getApiUrl } from '@/lib/config';
 import type {
   AnalyticsEvent,
+  ChatDetail,
+  ChatMessage,
+  ChatsResponse,
   OverviewResponse,
   PageRow,
   Scenario,
@@ -38,7 +45,7 @@ import type {
   WorkspaceRow,
 } from './lib/types';
 
-type Tab = 'overview' | 'users' | 'sessions' | 'pages' | 'workspaces' | 'events';
+type Tab = 'overview' | 'users' | 'sessions' | 'pages' | 'workspaces' | 'events' | 'chats';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
@@ -47,6 +54,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'pages', label: 'Pages' },
   { key: 'workspaces', label: 'Workspaces' },
   { key: 'events', label: 'Events' },
+  { key: 'chats', label: 'Chats' },
 ];
 
 function initialFilters(): FilterValue {
@@ -112,14 +120,14 @@ export default function AnalyticsPage() {
 
   const isUserDetail = filters.user_email !== 'all';
 
-  // Only Overview and Events are meaningful in user-detail mode.
+  // Only Overview, Events and Chats are meaningful in user-detail mode.
   const visibleTabs = isUserDetail
-    ? TABS.filter((t) => t.key === 'overview' || t.key === 'events')
+    ? TABS.filter((t) => t.key === 'overview' || t.key === 'events' || t.key === 'chats')
     : TABS;
 
   // If the user picks a specific email while on a now-hidden tab, snap back.
   useEffect(() => {
-    if (isUserDetail && tab !== 'overview' && tab !== 'events') {
+    if (isUserDetail && tab !== 'overview' && tab !== 'events' && tab !== 'chats') {
       setTab('overview');
     }
   }, [isUserDetail, tab]);
@@ -187,7 +195,7 @@ export default function AnalyticsPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8">
-        {isUserDetail && tab !== 'events' && tab !== 'overview' ? (
+        {isUserDetail && tab !== 'events' && tab !== 'overview' && tab !== 'chats' ? (
           <UserDetailSection filters={filters} onClear={() => setFilters({ ...filters, user_email: 'all' })} />
         ) : null}
 
@@ -206,6 +214,7 @@ export default function AnalyticsPage() {
         {tab === 'pages' && !isUserDetail && <PagesSection filters={filters} />}
         {tab === 'workspaces' && !isUserDetail && <WorkspacesSection filters={filters} />}
         {tab === 'events' && <EventsSection filters={filters} />}
+        {tab === 'chats' && <ChatsSection filters={filters} onUserPick={handleUserPick} />}
       </main>
     </div>
   );
@@ -923,6 +932,263 @@ function UserDetailSection({
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Chats
+// ---------------------------------------------------------------------------
+
+function ChatsSection({
+  filters,
+  onUserPick,
+}: {
+  filters: FilterValue;
+  onUserPick: (email: string) => void;
+}) {
+  const { data, loading, error } = useAnalytics<ChatsResponse>(
+    '/api/analytics/chats',
+    filters,
+  );
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  if (loading && !data) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+  const chats = data?.chats ?? [];
+
+  return (
+    <Card
+      title="Chats"
+      subtitle={`${chats.length.toLocaleString()} conversation(s) viewed in this range`}
+    >
+      {chats.length === 0 ? (
+        <EmptyBlock>No chat page views in this range.</EmptyBlock>
+      ) : (
+        <ul className="-mx-5 -my-5 divide-y divide-border/50">
+          {chats.map((c) => {
+            const expanded = openId === c.conversation_id;
+            return (
+              <li key={c.conversation_id}>
+                <button
+                  onClick={() => setOpenId(expanded ? null : c.conversation_id)}
+                  className={cn(
+                    'flex w-full items-start gap-3 px-5 py-3 text-left text-sm transition-colors',
+                    'hover:bg-muted/40',
+                    expanded && 'bg-muted/40',
+                  )}
+                >
+                  <MessageSquare size={14} className="mt-0.5 text-workspace-accent flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{c.title}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      {c.user_email && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUserPick(c.user_email as string);
+                          }}
+                          className="hover:text-foreground hover:underline"
+                        >
+                          {c.user_email}
+                        </button>
+                      )}
+                      {c.workspace_name && <span>· {c.workspace_name}</span>}
+                      <span>· {c.page_views} view{c.page_views === 1 ? '' : 's'}</span>
+                      <span className="font-mono opacity-70">· {c.conversation_id}</span>
+                    </div>
+                  </div>
+                  <span className="flex-shrink-0 text-right text-xs text-muted-foreground whitespace-nowrap">
+                    {formatDateTime(c.last_viewed_at)}
+                  </span>
+                </button>
+                {expanded && <ChatDetailPanel conversationId={c.conversation_id} />}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function ChatDetailPanel({ conversationId }: { conversationId: string }) {
+  const [data, setData] = useState<ChatDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetch(`${getApiUrl()}/api/analytics/chats/${encodeURIComponent(conversationId)}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Request failed (${r.status})`);
+        return r.json();
+      })
+      .then((d: ChatDetail) => {
+        if (!cancelled) setData(d);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(String(e?.message ?? e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
+
+  if (loading)
+    return (
+      <div className="bg-muted/20 px-5 py-4 text-xs text-muted-foreground">
+        <Loader2 size={12} className="mr-2 inline animate-spin" />
+        Loading conversation…
+      </div>
+    );
+  if (error)
+    return (
+      <div className="bg-muted/20 px-5 py-4 text-xs text-destructive">
+        Could not load conversation: {error}
+      </div>
+    );
+  if (!data) return null;
+
+  if (data.messages.length === 0) {
+    return (
+      <div className="bg-muted/20 px-5 py-4 text-xs text-muted-foreground">
+        Conversation has no stored messages.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 bg-muted/20 px-5 py-4">
+      <ChatExportToolbar conversation={data} />
+      {data.messages.map((m) => (
+        <ChatMessageBubble key={m.id} message={m} />
+      ))}
+    </div>
+  );
+}
+
+function formatChatAsText(conversation: ChatDetail): string {
+  const header = [
+    `Title: ${conversation.title}`,
+    `Conversation ID: ${conversation.conversation_id}`,
+    `Agent: ${conversation.agent}`,
+    `Workspace: ${conversation.workspace_id}`,
+    `User: ${conversation.user_id}`,
+    conversation.created_at ? `Created: ${conversation.created_at}` : null,
+    conversation.updated_at ? `Updated: ${conversation.updated_at}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const body = conversation.messages
+    .map((m) => {
+      const ts = m.created_at ? ` [${m.created_at}]` : '';
+      const agent = m.agent ? ` (${m.agent})` : '';
+      return `--- ${m.role.toUpperCase()}${agent}${ts} ---\n${m.content}`;
+    })
+    .join('\n\n');
+
+  return `${header}\n\n${body}\n`;
+}
+
+function ChatExportToolbar({ conversation }: { conversation: ChatDetail }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(formatChatAsText(conversation));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Fallback for older browsers / non-secure contexts.
+      const ta = document.createElement('textarea');
+      ta.value = formatChatAsText(conversation);
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      } catch {
+        // give up silently
+      }
+      document.body.removeChild(ta);
+    }
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([formatChatAsText(conversation)], {
+      type: 'text/plain;charset=utf-8',
+    });
+    const safeSlug = (conversation.title || conversation.conversation_id)
+      .replace(/[^a-z0-9-_]+/gi, '_')
+      .slice(0, 80);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeSlug || conversation.conversation_id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2 pb-2">
+      <button
+        onClick={handleCopy}
+        className={cn(
+          'flex h-8 items-center gap-1.5 border border-border bg-background px-2.5 text-xs transition-colors',
+          'hover:border-foreground/20 hover:bg-muted/40',
+        )}
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+        <span>{copied ? 'Copied' : 'Copy'}</span>
+      </button>
+      <button
+        onClick={handleDownload}
+        className={cn(
+          'flex h-8 items-center gap-1.5 border border-border bg-background px-2.5 text-xs transition-colors',
+          'hover:border-foreground/20 hover:bg-muted/40',
+        )}
+      >
+        <Download size={12} />
+        <span>Export .txt</span>
+      </button>
+    </div>
+  );
+}
+
+function ChatMessageBubble({ message }: { message: ChatMessage }) {
+  const isUser = message.role === 'user';
+  const isAssistant = message.role === 'assistant';
+  const isSystem = message.role === 'system';
+
+  const align = isUser ? 'items-end' : 'items-start';
+  const bubble = cn(
+    'max-w-[85%] whitespace-pre-wrap break-words border px-3 py-2 text-sm',
+    isUser && 'border-workspace-accent/30 bg-workspace-accent-5',
+    isAssistant && 'border-border bg-background',
+    isSystem && 'border-border/60 bg-muted/40 text-muted-foreground',
+  );
+
+  return (
+    <div className={cn('flex flex-col gap-1', align)}>
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="font-semibold">{message.role}</span>
+        {message.agent && <span>· {message.agent}</span>}
+        {message.created_at && <span>· {formatDateTime(message.created_at)}</span>}
+      </div>
+      <div className={bubble}>{message.content || <span className="opacity-50">(empty)</span>}</div>
     </div>
   );
 }
