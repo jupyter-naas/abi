@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Request
@@ -254,4 +255,29 @@ async def persist_stream_content(
                     message_id=assistant_msg_id,
                     content=full_response,
                 )
+        await db.commit()
+
+
+async def persist_stream_metadata(
+    user_id: str,
+    conversation_id: str,
+    assistant_msg_id: str,
+    metadata: dict[str, Any],
+) -> None:
+    """Write accumulated step metadata for a streaming assistant message.
+
+    Acts as a backend-side safety net: even if the frontend never sends its
+    final ``PATCH …/metadata`` call (because the user navigated away or the
+    socket dropped), the tool / agent steps observed during the stream still
+    end up persisted on ``messages.metadata_`` and remain available to the
+    analytics chat detail view.
+    """
+    async with AsyncSessionLocal() as db:
+        with bind_registry(db) as registry:
+            await registry.chat.update_message_metadata(
+                context=system_request_context(user_id),
+                conversation_id=conversation_id,
+                message_id=assistant_msg_id,
+                metadata=metadata,
+            )
         await db.commit()

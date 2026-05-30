@@ -189,19 +189,21 @@ class EventsResponse(BaseModel):
 class ChatRow(BaseModel):
     """One conversation surfaced from analytics ``page_viewed`` events.
 
-    Derived purely from the analytics event stream — no chat-service join.
-    The row carries enough metadata to render a tab list and to fetch the
-    full conversation (messages) on demand via ``/api/analytics/chats/{id}``.
+    Derived from the analytics event stream and enriched at request time with
+    ``message_count`` and ``chat_title`` from the chat database (single
+    grouped/IN queries batched over every conversation in the list).
     """
 
     conversation_id: str
     title: str
+    chat_title: str | None = None
     workspace_id: str | None = None
     workspace_name: str | None = None
     user_email: str | None = None
     first_viewed_at: str
     last_viewed_at: str
     page_views: int
+    message_count: int = 0
 
 
 class ChatsResponse(BaseModel):
@@ -209,13 +211,19 @@ class ChatsResponse(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    """Single message in a conversation (analytics-facing projection)."""
+    """Single message in a conversation (analytics-facing projection).
+
+    ``metadata`` mirrors the JSON persisted on ``messages.metadata_`` — most
+    importantly the ``steps`` list (tool calls, tool responses, agent routing
+    steps) that drives the activity stream of an assistant turn.
+    """
 
     id: str
     role: str
     content: str
     agent: str | None = None
     created_at: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class ChatDetail(BaseModel):
