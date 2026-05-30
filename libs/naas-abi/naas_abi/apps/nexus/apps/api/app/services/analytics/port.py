@@ -186,6 +186,51 @@ class EventsResponse(BaseModel):
     events: list[AnalyticsEvent]
 
 
+class ChatRow(BaseModel):
+    """One conversation surfaced from analytics ``page_viewed`` events.
+
+    Derived purely from the analytics event stream — no chat-service join.
+    The row carries enough metadata to render a tab list and to fetch the
+    full conversation (messages) on demand via ``/api/analytics/chats/{id}``.
+    """
+
+    conversation_id: str
+    title: str
+    workspace_id: str | None = None
+    workspace_name: str | None = None
+    user_email: str | None = None
+    first_viewed_at: str
+    last_viewed_at: str
+    page_views: int
+
+
+class ChatsResponse(BaseModel):
+    chats: list[ChatRow]
+
+
+class ChatMessage(BaseModel):
+    """Single message in a conversation (analytics-facing projection)."""
+
+    id: str
+    role: str
+    content: str
+    agent: str | None = None
+    created_at: str | None = None
+
+
+class ChatDetail(BaseModel):
+    """Conversation + its messages, served to the analytics UI."""
+
+    conversation_id: str
+    workspace_id: str
+    user_id: str
+    title: str
+    agent: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+
 class Scenario(BaseModel):
     """A pre-computed analytics time window.
 
@@ -236,6 +281,10 @@ class AnalyticsDomainError(Exception):
 
 
 class UserDetailNotFound(AnalyticsDomainError):
+    pass
+
+
+class ChatNotFound(AnalyticsDomainError):
     pass
 
 
