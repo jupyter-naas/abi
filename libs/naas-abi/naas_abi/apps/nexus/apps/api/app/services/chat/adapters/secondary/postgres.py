@@ -17,7 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatPersistencePort,
     ChatSecretRecord,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -178,6 +178,31 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
             .order_by(MessageModel.created_at)
         )
         return [self._to_message_record(row) for row in result.scalars().all()]
+
+    async def count_messages_for_conversations(
+        self, conversation_ids: list[str]
+    ) -> dict[str, int]:
+        if not conversation_ids:
+            return {}
+        result = await self.db.execute(
+            select(MessageModel.conversation_id, func.count(MessageModel.id))
+            .where(MessageModel.conversation_id.in_(conversation_ids))
+            .group_by(MessageModel.conversation_id)
+        )
+        counts = {cid: int(count) for cid, count in result.all()}
+        # Conversations with zero rows must still appear in the map so callers
+        # can render "0 messages" without falling back to "unknown".
+        return {cid: counts.get(cid, 0) for cid in conversation_ids}
+
+    async def list_conversations_by_ids(
+        self, conversation_ids: list[str]
+    ) -> dict[str, ChatConversationRecord]:
+        if not conversation_ids:
+            return {}
+        result = await self.db.execute(
+            select(ConversationModel).where(ConversationModel.id.in_(conversation_ids))
+        )
+        return {row.id: self._to_conversation_record(row) for row in result.scalars().all()}
 
     async def create_message(
         self,

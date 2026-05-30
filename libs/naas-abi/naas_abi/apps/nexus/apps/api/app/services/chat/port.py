@@ -117,6 +117,20 @@ class ChatPersistencePort(ABC):
         pass
 
     @abstractmethod
+    async def count_messages_for_conversations(
+        self, conversation_ids: list[str]
+    ) -> dict[str, int]:
+        """Return message count keyed by conversation id (single round-trip)."""
+        pass
+
+    @abstractmethod
+    async def list_conversations_by_ids(
+        self, conversation_ids: list[str]
+    ) -> dict[str, ChatConversationRecord]:
+        """Return existing conversations keyed by id (single round-trip)."""
+        pass
+
+    @abstractmethod
     async def create_message(
         self,
         message_id: str,
