@@ -2,13 +2,13 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
@@ -658,6 +658,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     const conv = useWorkspaceStore
       .getState()
       .conversations.find((c) => c.id === activeConversationId);
+    // Skip fetch for locally-created drafts — they don't exist on the backend yet.
+    if (conv?.isDraft) return;
     // If this thread came from backend list (no messages loaded yet), fetch full history.
     if (!conv || conv.messages.length === 0) {
       void loadConversationMessages(activeConversationId);
@@ -1429,8 +1431,10 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const systemPrompt = agentData?.systemPrompt || null;
       
       // If this is an existing thread with no local history loaded yet, fetch it first.
+      // Skip for drafts — they don't exist on the backend until the first send.
       if (
         existingConversationBeforeSend &&
+        !existingConversationBeforeSend.isDraft &&
         conversationId.startsWith('conv-') &&
         existingConversationBeforeSend.messages.length === 0
       ) {
@@ -1472,11 +1476,16 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           activityLine: 'Processing...',
           // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
         });
-        // Capture placeholder message id for controls
+        // Capture placeholder message id for controls. We keep it in a local
+        // variable AND in React state — the SSE handler runs inside the same
+        // async function so it can't rely on the freshly-set state (closures
+        // capture stale values).
+        let assistantMessageIdRef: string | null = null;
         {
           const convNow = useWorkspaceStore.getState().conversations.find(c => c.id === conversationId);
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
-          setStreamingMessageId(lastMsg?.id || null);
+          assistantMessageIdRef = lastMsg?.id || null;
+          setStreamingMessageId(assistantMessageIdRef);
         }
         // Setup connecting indicator
         gotFirstTokenRef.current = false;
@@ -1737,6 +1746,26 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 const parsed = JSON.parse(data);
                 if (parsed.sources && Array.isArray(parsed.sources)) {
                   streamSources = parsed.sources as string[];
+                }
+
+                // First frame swap: the backend emits the real DB uuid for the
+                // assistant row on the opening event. Replace the local
+                // placeholder id so subsequent PATCHes (metadata, feedback)
+                // hit the real row. We use the local ``assistantMessageIdRef``
+                // because the React state ``streamingMessageId`` captured in
+                // this closure is stale (the setState before the SSE loop
+                // hasn't flushed yet).
+                if (typeof parsed.assistant_message_id === 'string' && parsed.assistant_message_id) {
+                  const backendId = parsed.assistant_message_id as string;
+                  if (assistantMessageIdRef && assistantMessageIdRef !== backendId) {
+                    useWorkspaceStore.getState().renameMessageId(
+                      conversationId!,
+                      assistantMessageIdRef,
+                      backendId,
+                    );
+                    setStreamingMessageId(backendId);
+                    assistantMessageIdRef = backendId;
+                  }
                 }
 
                 if (parseEvent(parsed as Record<string, unknown>)) {
@@ -3574,10 +3603,137 @@ const MessageBubble = React.memo(function MessageBubble({
             )}
           </div>
         )}
+
+        {/* Per-message actions */}
+        {!isUser && !isStillProcessing && (
+          <AssistantMessageActions message={message} />
+        )}
+        {isUser && <UserMessageActions message={message} />}
       </div>
     </div>
   );
 });
+
+function CopyMessageButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    const text = typeof content === 'string' ? content : '';
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy message"
+      className="flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40"
+    >
+      {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+    </button>
+  );
+}
+
+function UserMessageActions({ message }: { message: Message }) {
+  return (
+    <div className="mt-1 flex items-center text-muted-foreground">
+      <CopyMessageButton content={message.content} />
+    </div>
+  );
+}
+
+function AssistantMessageActions({ message }: { message: Message }) {
+  const updateMessageFeedback = useWorkspaceStore((s) => s.updateMessageFeedback);
+  const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
+  const [busy, setBusy] = useState<null | 'like' | 'dislike'>(null);
+  const feedback = message.feedback ?? null;
+
+  const sendFeedback = async (next: MessageFeedback | null) => {
+    if (!activeConversationId) return;
+    const prev = feedback;
+    const which: 'like' | 'dislike' = next ?? (prev === 'like' ? 'like' : 'dislike');
+    setBusy(which);
+    // Optimistic local update; rolled back on failure.
+    updateMessageFeedback(activeConversationId, message.id, next);
+    try {
+      const { authFetch } = await import('@/stores/auth');
+      const res = await authFetch(
+        `${getApiBase()}/api/analytics/chats/${encodeURIComponent(activeConversationId)}/messages/${encodeURIComponent(message.id)}/feedback`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedback: next }),
+        },
+      );
+      if (!res.ok) throw new Error(`Save failed (${res.status})`);
+    } catch (error) {
+      console.error('Failed to save feedback:', error);
+      updateMessageFeedback(activeConversationId, message.id, prev);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggle = (value: MessageFeedback) => {
+    void sendFeedback(feedback === value ? null : value);
+  };
+
+  return (
+    <div className="mt-1 flex items-center text-muted-foreground">
+      <CopyMessageButton content={message.content} />
+      <button
+        onClick={() => toggle('like')}
+        disabled={busy !== null}
+        title={feedback === 'like' ? 'Remove like' : 'Like'}
+        className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+          feedback === 'like' ? 'text-emerald-600 border-emerald-600/40 bg-emerald-50/40' : ''
+        }`}
+      >
+        {busy === 'like' ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <ThumbsUp
+            size={12}
+            fill={feedback === 'like' ? 'currentColor' : 'none'}
+            strokeWidth={feedback === 'like' ? 1.5 : 2}
+          />
+        )}
+      </button>
+      <button
+        onClick={() => toggle('dislike')}
+        disabled={busy !== null}
+        title={feedback === 'dislike' ? 'Remove dislike' : 'Dislike'}
+        className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+          feedback === 'dislike' ? 'text-red-600 border-red-600/40 bg-red-50/40' : ''
+        }`}
+      >
+        {busy === 'dislike' ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <ThumbsDown
+            size={12}
+            fill={feedback === 'dislike' ? 'currentColor' : 'none'}
+            strokeWidth={feedback === 'dislike' ? 1.5 : 2}
+          />
+        )}
+      </button>
+    </div>
+  );
+}
 
 /**
  * Voice recorder UI that replaces the chat composer while the user records

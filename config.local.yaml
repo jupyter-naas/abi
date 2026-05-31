@@ -203,6 +203,13 @@ modules:
 #      vector_store -> "python"         (in-memory)
 #      kv           -> "python"         (in-memory)
 services:
+  # Q: How could I setup default models?
+  # A: Set the default chat and embedding models.
+
+  model_registry:
+    default_chat_model: "gpt-4.1-mini"
+    default_embedding_model: "text-embedding-3-large"
+
   # Q: How does the app read secret values at startup?
   # A: The dotenv adapter reads every `secret.X` from your .env file.
   secret:
