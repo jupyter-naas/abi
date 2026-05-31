@@ -52,6 +52,9 @@ def export_conversation_as_response(
             meta = _parse_metadata(msg, (messages_metadata or {}).get(msg.id))
             if meta.get("execution_time") is not None:
                 content += f"Execution time: {meta['execution_time']:.1f}s\n"
+            feedback = meta.get("feedback")
+            if feedback in ("like", "dislike"):
+                content += f"Feedback: {feedback}\n"
             steps = meta.get("steps", [])
             if steps:
                 content += "Steps:\n"

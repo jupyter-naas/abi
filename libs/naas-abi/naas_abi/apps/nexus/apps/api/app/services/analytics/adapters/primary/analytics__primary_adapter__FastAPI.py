@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary import (
@@ -44,6 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.registry import get_service_registry
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -274,6 +276,51 @@ async def get_chat_detail(
         updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
         messages=messages,
     )
+
+
+class ChatFeedbackUpdate(BaseModel):
+    """Body for ``PATCH /chats/{cid}/messages/{mid}/feedback``.
+
+    ``feedback=None`` clears any previously set value, so the UI can toggle a
+    thumbs-up off by sending ``{"feedback": null}``.
+    """
+
+    feedback: Literal["like", "dislike"] | None = None
+
+
+@router.patch("/chats/{conversation_id}/messages/{message_id}/feedback")
+async def update_chat_message_feedback(
+    conversation_id: str,
+    message_id: str,
+    payload: ChatFeedbackUpdate,
+    registry=Depends(get_service_registry),
+):
+    """Admin-side feedback toggle for an assistant message.
+
+    Reads the message's current metadata, merges (or removes) the ``feedback``
+    key, and writes it back. Used by the analytics chat detail view so
+    reviewers can flag bad / good AI responses; the value is also picked up
+    by the export helper and the analytics list.
+    """
+    chat_service: ChatService = registry.chat
+    messages = await chat_service.adapter.list_messages_by_conversation(conversation_id)
+    target = next((m for m in messages if m.id == message_id), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    existing = _parse_message_metadata(target.metadata_) or {}
+    if payload.feedback is None:
+        existing.pop("feedback", None)
+    else:
+        existing["feedback"] = payload.feedback
+
+    updated = await chat_service.adapter.update_message_metadata(
+        message_id=message_id,
+        metadata=json.dumps(existing),
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"status": "updated", "feedback": payload.feedback}
 
 
 @router.get("/chats/{conversation_id}/export")

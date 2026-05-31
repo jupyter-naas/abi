@@ -365,7 +365,21 @@ async def stream_chat_response(
                 logger.warning("Failed to persist stream metadata", exc_info=True)
 
         try:
-            yield f'data: {{"conversation_id": "{conversation_id}"}}\n\n'
+            # Include ``assistant_message_id`` on the very first frame so the
+            # frontend can swap its client-side placeholder id for the real DB
+            # uuid. Downstream PATCH calls (metadata, feedback) need the DB id
+            # — without this, the frontend's local id never matches the row in
+            # ``messages`` and every PATCH 404s silently.
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "conversation_id": conversation_id,
+                        "assistant_message_id": assistant_msg_id,
+                    }
+                )
+                + "\n\n"
+            )
             if context_sources:
                 yield f"data: {json.dumps({'sources': context_sources})}\n\n"
             # if search_context:

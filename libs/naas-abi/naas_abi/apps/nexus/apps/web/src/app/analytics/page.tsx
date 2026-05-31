@@ -17,6 +17,8 @@ import {
   MessageSquare,
   Mouse,
   Repeat,
+  ThumbsDown,
+  ThumbsUp,
   TrendingUp,
   Users,
   X,
@@ -1195,6 +1197,10 @@ function buildChatExportText(conversation: ChatDetail): string {
     if (typeof exec === 'number') {
       out += `Execution time: ${exec.toFixed(1)}s\n`;
     }
+    const fb = msg.metadata?.feedback;
+    if (fb === 'like' || fb === 'dislike') {
+      out += `Feedback: ${fb}\n`;
+    }
     const steps = msg.metadata?.steps ?? [];
     if (steps.length > 0) {
       out += 'Steps:\n';
@@ -1233,6 +1239,7 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
 
   const steps = message.metadata?.steps ?? [];
   const executionTime = message.metadata?.execution_time;
+  const feedback = message.metadata?.feedback;
 
   return (
     <div className={cn('flex flex-col gap-1', align)}>
@@ -1242,6 +1249,18 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
         {message.created_at && <span>· {formatDateTime(message.created_at)}</span>}
         {typeof executionTime === 'number' && executionTime > 0 && (
           <span>· {executionTime.toFixed(1)}s</span>
+        )}
+        {isAssistant && feedback === 'like' && (
+          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+            <ThumbsUp size={10} fill="currentColor" strokeWidth={1.5} />
+            Liked
+          </span>
+        )}
+        {isAssistant && feedback === 'dislike' && (
+          <span className="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">
+            <ThumbsDown size={10} fill="currentColor" strokeWidth={1.5} />
+            Disliked
+          </span>
         )}
       </div>
       {steps.length > 0 && <ChatStepsList steps={steps} alignEnd={isUser} />}
