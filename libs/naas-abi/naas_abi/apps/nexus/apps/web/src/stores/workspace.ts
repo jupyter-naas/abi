@@ -89,6 +89,10 @@ export interface Conversation {
   pinned?: boolean;
   archived?: boolean;
   projectId?: string;
+  // True for conversations created locally that have not yet been persisted
+  // to the backend. Cleared once a message is sent or the conversation is
+  // confirmed via syncWorkspaceConversations / loadConversationMessages.
+  isDraft?: boolean;
 }
 
 export interface Project {
@@ -386,6 +390,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       updatedAt: new Date(),
       pinned: false,
       projectId,
+      isDraft: true,
     };
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
@@ -419,6 +424,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                 conv.messages.length === 0 && message.role === 'user'
                   ? message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '')
                   : conv.title,
+              isDraft: false,
             }
           : conv
       ),
