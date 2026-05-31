@@ -57,6 +57,8 @@ export interface ToolCall {
   output?: string;
 }
 
+export type MessageFeedback = 'like' | 'dislike';
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -70,6 +72,7 @@ export interface Message {
   thinkingDuration?: number; // Duration in seconds the AI spent "thinking"
   executionTime?: number; // Total seconds from request sent to response complete
   sources?: string[]; // filenames of RAG documents used to answer
+  feedback?: MessageFeedback | null; // Reviewer thumbs up/down, persisted on metadata_
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -86,6 +89,10 @@ export interface Conversation {
   pinned?: boolean;
   archived?: boolean;
   projectId?: string;
+  // True for conversations created locally that have not yet been persisted
+  // to the backend. Cleared once a message is sent or the conversation is
+  // confirmed via syncWorkspaceConversations / loadConversationMessages.
+  isDraft?: boolean;
 }
 
 export interface Project {
@@ -224,6 +231,16 @@ interface WorkspaceState {
     toolCalls?: ToolCall[] | null,
     executionTime?: number,
   ) => void;
+  updateMessageFeedback: (
+    conversationId: string,
+    messageId: string,
+    feedback: MessageFeedback | null,
+  ) => void;
+  renameMessageId: (
+    conversationId: string,
+    oldMessageId: string,
+    newMessageId: string,
+  ) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
   renameConversation: (id: string, newTitle: string) => void;
@@ -278,6 +295,7 @@ type ApiChatMessage = {
   content: string;
   agent?: string | null;
   created_at?: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 type ApiConversation = {
@@ -292,13 +310,17 @@ type ApiConversation = {
   messages?: ApiChatMessage[];
 };
 
-const mapApiMessage = (message: ApiChatMessage): Message => ({
-  id: message.id,
-  role: message.role,
-  content: message.content,
-  timestamp: new Date(message.created_at || Date.now()),
-  agent: message.agent || undefined,
-});
+const mapApiMessage = (message: ApiChatMessage): Message => {
+  const fb = message.metadata?.feedback;
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    timestamp: new Date(message.created_at || Date.now()),
+    agent: message.agent || undefined,
+    feedback: fb === 'like' || fb === 'dislike' ? fb : null,
+  };
+};
 
 const mapApiConversation = (conversation: ApiConversation): Conversation => ({
   id: conversation.id,
@@ -368,6 +390,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       updatedAt: new Date(),
       pinned: false,
       projectId,
+      isDraft: true,
     };
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
@@ -401,6 +424,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                 conv.messages.length === 0 && message.role === 'user'
                   ? message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '')
                   : conv.title,
+              isDraft: false,
             }
           : conv
       ),
@@ -429,6 +453,37 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               updatedAt: new Date(),
             }
           : conv
+      ),
+    }));
+  },
+
+  updateMessageFeedback: (conversationId, messageId, feedback) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: conv.messages.map((msg) =>
+                msg.id === messageId ? { ...msg, feedback } : msg,
+              ),
+            }
+          : conv,
+      ),
+    }));
+  },
+
+  renameMessageId: (conversationId, oldMessageId, newMessageId) => {
+    if (!oldMessageId || !newMessageId || oldMessageId === newMessageId) return;
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: conv.messages.map((msg) =>
+                msg.id === oldMessageId ? { ...msg, id: newMessageId } : msg,
+              ),
+            }
+          : conv,
       ),
     }));
   },
