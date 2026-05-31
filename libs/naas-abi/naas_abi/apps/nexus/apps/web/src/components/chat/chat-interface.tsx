@@ -658,6 +658,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     const conv = useWorkspaceStore
       .getState()
       .conversations.find((c) => c.id === activeConversationId);
+    // Skip fetch for locally-created drafts — they don't exist on the backend yet.
+    if (conv?.isDraft) return;
     // If this thread came from backend list (no messages loaded yet), fetch full history.
     if (!conv || conv.messages.length === 0) {
       void loadConversationMessages(activeConversationId);
@@ -1429,8 +1431,10 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const systemPrompt = agentData?.systemPrompt || null;
       
       // If this is an existing thread with no local history loaded yet, fetch it first.
+      // Skip for drafts — they don't exist on the backend until the first send.
       if (
         existingConversationBeforeSend &&
+        !existingConversationBeforeSend.isDraft &&
         conversationId.startsWith('conv-') &&
         existingConversationBeforeSend.messages.length === 0
       ) {
