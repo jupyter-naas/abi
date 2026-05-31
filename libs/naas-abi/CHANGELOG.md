@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v2.12.0 (2026-05-31)
+
+### Bug Fixes
+
+- **workspace**: Add support for draft conversations
+  ([`6f4d49d`](https://github.com/jupyter-naas/abi/commit/6f4d49d2695fa47c8b94ceafdeff95cf9b889bd6))
+
+### Features
+
+- **analytics**: Add chat conversations overview and detail support
+  ([`bb19316`](https://github.com/jupyter-naas/abi/commit/bb19316948b265b7d763ec72902c0368d03ba7d2))
+
+- **analytics**: Add workspace and user_email filters to analytics endpoints and service
+  ([`e9de126`](https://github.com/jupyter-naas/abi/commit/e9de126e5cd93e5259162ce97c9b1f529d1310a0))
+
+- **analytics chat**: Enrich analytics chat list and detail view
+  ([`bf8e2ff`](https://github.com/jupyter-naas/abi/commit/bf8e2ffeeb241b54c6cff16462f6d38be573cd2f))
+
+- **chat**: Add feedback feature for assistant messages
+  ([`6422624`](https://github.com/jupyter-naas/abi/commit/642262465cb30813a333d478da21956faee3e714))
+
+- **chat**: Enhance export_conversation_as_response with detailed steps and message display
+  ([`c664643`](https://github.com/jupyter-naas/abi/commit/c66464381e48d7a2b52aba5979feba3a6afd0cdb))
+
+
 ## v2.11.1 (2026-05-29)
 
 ### Bug Fixes
