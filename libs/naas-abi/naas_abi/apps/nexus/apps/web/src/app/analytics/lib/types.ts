@@ -154,10 +154,13 @@ export interface ChatMessageStep {
   output?: string | null;
 }
 
+export type ChatMessageFeedback = 'like' | 'dislike';
+
 export interface ChatMessageMetadata {
   execution_time?: number | null;
   steps?: ChatMessageStep[];
   sources?: string[];
+  feedback?: ChatMessageFeedback | null;
   [key: string]: unknown;
 }
 
