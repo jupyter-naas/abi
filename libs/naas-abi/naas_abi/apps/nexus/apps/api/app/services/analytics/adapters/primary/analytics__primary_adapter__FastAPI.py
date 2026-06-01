@@ -282,10 +282,18 @@ class ChatFeedbackUpdate(BaseModel):
     """Body for ``PATCH /chats/{cid}/messages/{mid}/feedback``.
 
     ``feedback=None`` clears any previously set value, so the UI can toggle a
-    thumbs-up off by sending ``{"feedback": null}``.
+    thumbs-up off by sending ``{"feedback": null}``. The optional details
+    fields (``feedback_type``, ``feedback_detail``, ``feedback_severity``)
+    are only persisted alongside a ``dislike`` and are cleared on like / null.
     """
 
     feedback: Literal["like", "dislike"] | None = None
+    feedback_type: str | None = None
+    feedback_detail: str | None = None
+    feedback_severity: int | None = None
+
+
+_FEEDBACK_DETAIL_KEYS = ("feedback_type", "feedback_detail", "feedback_severity")
 
 
 @router.patch("/chats/{conversation_id}/messages/{message_id}/feedback")
@@ -311,8 +319,26 @@ async def update_chat_message_feedback(
     existing = _parse_message_metadata(target.metadata_) or {}
     if payload.feedback is None:
         existing.pop("feedback", None)
+        for key in _FEEDBACK_DETAIL_KEYS:
+            existing.pop(key, None)
     else:
         existing["feedback"] = payload.feedback
+        if payload.feedback == "dislike":
+            if payload.feedback_type:
+                existing["feedback_type"] = payload.feedback_type
+            else:
+                existing.pop("feedback_type", None)
+            if payload.feedback_detail:
+                existing["feedback_detail"] = payload.feedback_detail
+            else:
+                existing.pop("feedback_detail", None)
+            if payload.feedback_severity is not None:
+                existing["feedback_severity"] = payload.feedback_severity
+            else:
+                existing.pop("feedback_severity", None)
+        else:
+            for key in _FEEDBACK_DETAIL_KEYS:
+                existing.pop(key, None)
 
     updated = await chat_service.adapter.update_message_metadata(
         message_id=message_id,
@@ -320,7 +346,13 @@ async def update_chat_message_feedback(
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Message not found")
-    return {"status": "updated", "feedback": payload.feedback}
+    return {
+        "status": "updated",
+        "feedback": payload.feedback,
+        "feedback_type": existing.get("feedback_type"),
+        "feedback_detail": existing.get("feedback_detail"),
+        "feedback_severity": existing.get("feedback_severity"),
+    }
 
 
 @router.get("/chats/{conversation_id}/export")
