@@ -17,7 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatPersistencePort,
     ChatSecretRecord,
 )
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -172,10 +172,18 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         return True
 
     async def list_messages_by_conversation(self, conversation_id: str) -> list[ChatMessageRecord]:
+        # Streaming writes the user row and the paired assistant row with the
+        # same ``created_at``; without a deterministic tie-breaker the pair can
+        # surface assistant-first. Order user < assistant < system on ties.
+        role_order = case(
+            (MessageModel.role == "user", 0),
+            (MessageModel.role == "assistant", 1),
+            else_=2,
+        )
         result = await self.db.execute(
             select(MessageModel)
             .where(MessageModel.conversation_id == conversation_id)
-            .order_by(MessageModel.created_at)
+            .order_by(MessageModel.created_at, role_order, MessageModel.id)
         )
         return [self._to_message_record(row) for row in result.scalars().all()]
 

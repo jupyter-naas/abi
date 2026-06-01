@@ -1200,6 +1200,20 @@ function buildChatExportText(conversation: ChatDetail): string {
     const fb = msg.metadata?.feedback;
     if (fb === 'like' || fb === 'dislike') {
       out += `Feedback: ${fb}\n`;
+      if (fb === 'dislike') {
+        const fbType = msg.metadata?.feedback_type;
+        if (typeof fbType === 'string' && fbType) {
+          out += `Feedback type: ${fbType}\n`;
+        }
+        const fbSeverity = msg.metadata?.feedback_severity;
+        if (typeof fbSeverity === 'number') {
+          out += `Feedback severity: ${fbSeverity}/5\n`;
+        }
+        const fbDetail = msg.metadata?.feedback_detail;
+        if (typeof fbDetail === 'string' && fbDetail) {
+          out += `Feedback detail: ${fbDetail}\n`;
+        }
+      }
     }
     const steps = msg.metadata?.steps ?? [];
     if (steps.length > 0) {
@@ -1240,6 +1254,15 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
   const steps = message.metadata?.steps ?? [];
   const executionTime = message.metadata?.execution_time;
   const feedback = message.metadata?.feedback;
+  const feedbackType = message.metadata?.feedback_type;
+  const feedbackDetail = message.metadata?.feedback_detail;
+  const feedbackSeverity = message.metadata?.feedback_severity;
+  const hasFeedbackDetails =
+    isAssistant &&
+    feedback === 'dislike' &&
+    ((typeof feedbackType === 'string' && feedbackType) ||
+      (typeof feedbackDetail === 'string' && feedbackDetail) ||
+      typeof feedbackSeverity === 'number');
 
   return (
     <div className={cn('flex flex-col gap-1', align)}>
@@ -1265,9 +1288,42 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
       </div>
       {steps.length > 0 && <ChatStepsList steps={steps} alignEnd={isUser} />}
       <div className={bubble}>{message.content || <span className="opacity-50">(empty)</span>}</div>
+      {hasFeedbackDetails && (
+        <div className="max-w-[85%] space-y-1 border border-red-200 bg-red-50/40 px-3 py-2 text-xs text-red-900">
+          {typeof feedbackType === 'string' && feedbackType && (
+            <div>
+              <span className="font-semibold uppercase tracking-wide text-[10px]">Type:</span>{' '}
+              {ANALYTICS_FEEDBACK_TYPE_LABELS[feedbackType] ?? feedbackType}
+            </div>
+          )}
+          {typeof feedbackSeverity === 'number' && (
+            <div>
+              <span className="font-semibold uppercase tracking-wide text-[10px]">Severity:</span>{' '}
+              {feedbackSeverity}/5
+            </div>
+          )}
+          {typeof feedbackDetail === 'string' && feedbackDetail && (
+            <div className="whitespace-pre-wrap">
+              <span className="font-semibold uppercase tracking-wide text-[10px]">Detail:</span>{' '}
+              {feedbackDetail}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+const ANALYTICS_FEEDBACK_TYPE_LABELS: Record<string, string> = {
+  inaccurate: 'Inaccurate response',
+  off_topic: 'Off topic',
+  hallucination: 'Hallucination / made-up information',
+  incomplete: 'Incomplete response',
+  unjustified_refusal: 'Unjustified refusal',
+  tone: 'Inappropriate style or tone',
+  harmful: 'Harmful or problematic content',
+  other: 'Other',
+};
 
 function ChatStepsList({ steps, alignEnd }: { steps: ChatMessageStep[]; alignEnd: boolean }) {
   return (

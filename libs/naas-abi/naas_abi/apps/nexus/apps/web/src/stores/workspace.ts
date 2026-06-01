@@ -59,6 +59,12 @@ export interface ToolCall {
 
 export type MessageFeedback = 'like' | 'dislike';
 
+export interface MessageFeedbackDetails {
+  type?: string | null;
+  detail?: string | null;
+  severity?: number | null;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -73,6 +79,7 @@ export interface Message {
   executionTime?: number; // Total seconds from request sent to response complete
   sources?: string[]; // filenames of RAG documents used to answer
   feedback?: MessageFeedback | null; // Reviewer thumbs up/down, persisted on metadata_
+  feedbackDetails?: MessageFeedbackDetails | null; // Extended dislike details (type/detail/severity)
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -235,6 +242,7 @@ interface WorkspaceState {
     conversationId: string,
     messageId: string,
     feedback: MessageFeedback | null,
+    details?: MessageFeedbackDetails | null,
   ) => void;
   renameMessageId: (
     conversationId: string,
@@ -311,7 +319,15 @@ type ApiConversation = {
 };
 
 const mapApiMessage = (message: ApiChatMessage): Message => {
-  const fb = message.metadata?.feedback;
+  const meta = message.metadata ?? {};
+  const fb = meta.feedback;
+  const fbType = meta.feedback_type;
+  const fbDetail = meta.feedback_detail;
+  const fbSeverity = meta.feedback_severity;
+  const hasDetails =
+    typeof fbType === 'string' ||
+    typeof fbDetail === 'string' ||
+    typeof fbSeverity === 'number';
   return {
     id: message.id,
     role: message.role,
@@ -319,6 +335,13 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     timestamp: new Date(message.created_at || Date.now()),
     agent: message.agent || undefined,
     feedback: fb === 'like' || fb === 'dislike' ? fb : null,
+    feedbackDetails: hasDetails
+      ? {
+          type: typeof fbType === 'string' ? fbType : null,
+          detail: typeof fbDetail === 'string' ? fbDetail : null,
+          severity: typeof fbSeverity === 'number' ? fbSeverity : null,
+        }
+      : null,
   };
 };
 
@@ -457,14 +480,21 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }));
   },
 
-  updateMessageFeedback: (conversationId, messageId, feedback) => {
+  updateMessageFeedback: (conversationId, messageId, feedback, details) => {
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
           ? {
               ...conv,
               messages: conv.messages.map((msg) =>
-                msg.id === messageId ? { ...msg, feedback } : msg,
+                msg.id === messageId
+                  ? {
+                      ...msg,
+                      feedback,
+                      feedbackDetails:
+                        details === undefined ? msg.feedbackDetails : details,
+                    }
+                  : msg,
               ),
             }
           : conv,
