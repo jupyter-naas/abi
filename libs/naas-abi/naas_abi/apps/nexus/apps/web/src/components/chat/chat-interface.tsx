@@ -8,7 +8,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
@@ -3656,19 +3656,179 @@ function UserMessageActions({ message }: { message: Message }) {
   );
 }
 
+const FEEDBACK_TYPE_OPTIONS = [
+  { value: 'inaccurate', label: 'Inaccurate response' },
+  { value: 'off_topic', label: 'Off topic' },
+  { value: 'hallucination', label: 'Hallucination / made-up information' },
+  { value: 'incomplete', label: 'Incomplete response' },
+  { value: 'unjustified_refusal', label: 'Unjustified refusal' },
+  { value: 'tone', label: 'Inappropriate style or tone' },
+  { value: 'harmful', label: 'Harmful or problematic content' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+function FeedbackDislikeDialog({
+  open,
+  initialDetails,
+  submitting,
+  onSubmit,
+  onCancel,
+}: {
+  open: boolean;
+  initialDetails: MessageFeedbackDetails | null;
+  submitting: boolean;
+  onSubmit: (details: MessageFeedbackDetails) => void;
+  onCancel: () => void;
+}) {
+  const [type, setType] = useState<string>('');
+  const [detail, setDetail] = useState<string>('');
+  const [severity, setSeverity] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setType(initialDetails?.type ?? '');
+      setDetail(initialDetails?.detail ?? '');
+      setSeverity(initialDetails?.severity ?? null);
+    }
+  }, [open, initialDetails]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) onCancel();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, submitting, onCancel]);
+
+  if (!open) return null;
+
+  const handleSubmit = () => {
+    onSubmit({
+      type: type.trim() ? type : null,
+      detail: detail.trim() ? detail.trim() : null,
+      severity: severity ?? null,
+    });
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+        onClick={() => !submitting && onCancel()}
+      />
+      <div className="relative z-10 mx-4 w-full max-w-md animate-in zoom-in-95 fade-in duration-200">
+        <div className="rounded-xl border border-border bg-background p-6 shadow-2xl">
+          <h3 className="text-base font-semibold text-foreground">Provide negative feedback</h3>
+
+          <div className="mt-4 space-y-1">
+            <label className="text-sm text-foreground">
+              What type of issue would you like to report? (optional)
+            </label>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-full rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+            >
+              <option value="">Select...</option>
+              {FEEDBACK_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-4 space-y-1">
+            <label className="text-sm text-foreground">
+              Please provide details: (optional)
+            </label>
+            <textarea
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+              rows={4}
+              className="w-full resize-none rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+              placeholder="Describe the issue you encountered..."
+            />
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <label className="text-sm text-foreground">
+              How unsatisfactory was this response?
+            </label>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((value) => {
+                const active = severity !== null && value <= severity;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSeverity(severity === value ? null : value)}
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center rounded-md border text-sm transition-colors',
+                      active
+                        ? 'border-red-600/40 bg-red-50/40 text-red-600'
+                        : 'border-border text-muted-foreground hover:bg-muted/40',
+                    )}
+                    aria-label={`Severity ${value}`}
+                  >
+                    {value}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              1 = slightly unsatisfactory · 5 = completely unsatisfactory
+            </p>
+          </div>
+
+          <p className="mt-4 text-xs text-muted-foreground">
+            By submitting this report, you send the entire current conversation to our team to help
+            us improve our models.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              onClick={onCancel}
+              disabled={submitting}
+              className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90 disabled:opacity-60"
+            >
+              {submitting && <Loader2 size={12} className="animate-spin" />}
+              Submit
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function AssistantMessageActions({ message }: { message: Message }) {
   const updateMessageFeedback = useWorkspaceStore((s) => s.updateMessageFeedback);
   const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
   const [busy, setBusy] = useState<null | 'like' | 'dislike'>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const feedback = message.feedback ?? null;
+  const feedbackDetails = message.feedbackDetails ?? null;
 
-  const sendFeedback = async (next: MessageFeedback | null) => {
-    if (!activeConversationId) return;
+  const sendFeedback = async (
+    next: MessageFeedback | null,
+    details: MessageFeedbackDetails | null,
+  ) => {
+    if (!activeConversationId) return false;
     const prev = feedback;
+    const prevDetails = feedbackDetails;
     const which: 'like' | 'dislike' = next ?? (prev === 'like' ? 'like' : 'dislike');
     setBusy(which);
-    // Optimistic local update; rolled back on failure.
-    updateMessageFeedback(activeConversationId, message.id, next);
+    updateMessageFeedback(activeConversationId, message.id, next, details);
     try {
       const { authFetch } = await import('@/stores/auth');
       const res = await authFetch(
@@ -3676,62 +3836,97 @@ function AssistantMessageActions({ message }: { message: Message }) {
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ feedback: next }),
+          body: JSON.stringify({
+            feedback: next,
+            feedback_type: details?.type ?? null,
+            feedback_detail: details?.detail ?? null,
+            feedback_severity: details?.severity ?? null,
+          }),
         },
       );
       if (!res.ok) throw new Error(`Save failed (${res.status})`);
+      return true;
     } catch (error) {
       console.error('Failed to save feedback:', error);
-      updateMessageFeedback(activeConversationId, message.id, prev);
+      updateMessageFeedback(activeConversationId, message.id, prev, prevDetails);
+      return false;
     } finally {
       setBusy(null);
     }
   };
 
-  const toggle = (value: MessageFeedback) => {
-    void sendFeedback(feedback === value ? null : value);
+  const handleLikeClick = () => {
+    if (feedback === 'like') {
+      void sendFeedback(null, null);
+    } else {
+      void sendFeedback('like', null);
+    }
+  };
+
+  const handleDislikeClick = () => {
+    if (feedback === 'dislike') {
+      void sendFeedback(null, null);
+      return;
+    }
+    setDialogOpen(true);
+  };
+
+  const handleDialogSubmit = async (details: MessageFeedbackDetails) => {
+    const ok = await sendFeedback('dislike', details);
+    if (ok) setDialogOpen(false);
   };
 
   return (
-    <div className="mt-1 flex items-center text-muted-foreground">
-      <CopyMessageButton content={message.content} />
-      <button
-        onClick={() => toggle('like')}
-        disabled={busy !== null}
-        title={feedback === 'like' ? 'Remove like' : 'Like'}
-        className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
-          feedback === 'like' ? 'text-emerald-600 border-emerald-600/40 bg-emerald-50/40' : ''
-        }`}
-      >
-        {busy === 'like' ? (
-          <Loader2 size={12} className="animate-spin" />
-        ) : (
-          <ThumbsUp
-            size={12}
-            fill={feedback === 'like' ? 'currentColor' : 'none'}
-            strokeWidth={feedback === 'like' ? 1.5 : 2}
-          />
-        )}
-      </button>
-      <button
-        onClick={() => toggle('dislike')}
-        disabled={busy !== null}
-        title={feedback === 'dislike' ? 'Remove dislike' : 'Dislike'}
-        className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
-          feedback === 'dislike' ? 'text-red-600 border-red-600/40 bg-red-50/40' : ''
-        }`}
-      >
-        {busy === 'dislike' ? (
-          <Loader2 size={12} className="animate-spin" />
-        ) : (
-          <ThumbsDown
-            size={12}
-            fill={feedback === 'dislike' ? 'currentColor' : 'none'}
-            strokeWidth={feedback === 'dislike' ? 1.5 : 2}
-          />
-        )}
-      </button>
-    </div>
+    <>
+      <div className="mt-1 flex items-center text-muted-foreground">
+        <CopyMessageButton content={message.content} />
+        <button
+          onClick={handleLikeClick}
+          disabled={busy !== null}
+          title={feedback === 'like' ? 'Remove like' : 'Like'}
+          className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+            feedback === 'like' ? 'text-emerald-600 border-emerald-600/40 bg-emerald-50/40' : ''
+          }`}
+        >
+          {busy === 'like' ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <ThumbsUp
+              size={12}
+              fill={feedback === 'like' ? 'currentColor' : 'none'}
+              strokeWidth={feedback === 'like' ? 1.5 : 2}
+            />
+          )}
+        </button>
+        <button
+          onClick={handleDislikeClick}
+          disabled={busy !== null}
+          title={feedback === 'dislike' ? 'Remove dislike' : 'Dislike'}
+          className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+            feedback === 'dislike' ? 'text-red-600 border-red-600/40 bg-red-50/40' : ''
+          }`}
+        >
+          {busy === 'dislike' ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <ThumbsDown
+              size={12}
+              fill={feedback === 'dislike' ? 'currentColor' : 'none'}
+              strokeWidth={feedback === 'dislike' ? 1.5 : 2}
+            />
+          )}
+        </button>
+      </div>
+      <FeedbackDislikeDialog
+        open={dialogOpen}
+        initialDetails={feedbackDetails}
+        submitting={busy === 'dislike'}
+        onSubmit={handleDialogSubmit}
+        onCancel={() => {
+          if (busy !== 'dislike') setDialogOpen(false);
+        }}
+      />
+    </>
   );
 }
 

@@ -161,6 +161,9 @@ export interface ChatMessageMetadata {
   steps?: ChatMessageStep[];
   sources?: string[];
   feedback?: ChatMessageFeedback | null;
+  feedback_type?: string | null;
+  feedback_detail?: string | null;
+  feedback_severity?: number | null;
   [key: string]: unknown;
 }
 
