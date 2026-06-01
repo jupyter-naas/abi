@@ -132,7 +132,7 @@ def _render_user_context_block(
     ]
     technical_lines = [f"- {label}: {value}" for label, value in technical_fields if value]
     technical_block = (
-        ("\n\nTechnical context (do not expose to the user):\n" + "\n".join(technical_lines))
+        ("\n\nTechnical context:\n" + "\n".join(technical_lines))
         if technical_lines
         else ""
     )
