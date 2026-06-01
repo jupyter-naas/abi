@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.14.0 (2026-06-01)
+
+### Bug Fixes
+
+- **chat-service**: Reword technical context block message
+  ([`be06316`](https://github.com/jupyter-naas/abi/commit/be063167b91a1a956a71a8986b15beb70f362b52))
+
+### Features
+
+- **chat**: Add workspace and conversation context to user profile rendering
+  ([`b39953b`](https://github.com/jupyter-naas/abi/commit/b39953b1fcf394b725e12973302f92820dab28a8))
+
+
 ## v2.13.0 (2026-06-01)
 
 ### Bug Fixes
