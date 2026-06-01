@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.13.0 (2026-06-01)
+
+### Bug Fixes
+
+- **postgres**: Ensure deterministic ordering of messages by role and creation time
+  ([`8322086`](https://github.com/jupyter-naas/abi/commit/83220861b0fb3b9e85b067286771175ff0dbf487))
+
+### Features
+
+- **analytics**: Add extended negative feedback details (type, detail, severity) for chat messages
+  ([`2ea3252`](https://github.com/jupyter-naas/abi/commit/2ea3252f8b2d1fa6f267ecec6ec3f505e050f32e))
+
+
 ## v2.12.0 (2026-05-31)
 
 ### Bug Fixes
