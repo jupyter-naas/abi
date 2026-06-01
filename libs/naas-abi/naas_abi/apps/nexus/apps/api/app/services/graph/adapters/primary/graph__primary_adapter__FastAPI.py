@@ -32,10 +32,32 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.graph.personal_graph_service import (
+    get_personal_graph_service,
+    is_personal_graph_uri,
+    personal_graph_owner,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
     GraphService,
     _detect_rdf_format,
 )
+
+
+def _assert_personal_graph_access(graph_uri: str, current_user_id: str) -> None:
+    """Reject access to another user's personal graph.
+
+    Personal graphs (URIs under ``/graph/personal/<user_id>``) are only
+    accessible by their owning user. Non-personal URIs pass through.
+    """
+    owner = personal_graph_owner(graph_uri)
+    if owner is None:
+        return
+    if owner != current_user_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Graph not found",
+        )
+
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -86,20 +108,32 @@ async def list_graphs(
 ) -> list[GraphPack]:
     """List all graphs available in the triple store and nexus ontology graph."""
     await require_workspace_access(current_user.id, workspace_id)
+
+    # Ensure the caller's "My Graph" exists so it appears in the list even
+    # before they have any chat events (best-effort: a failed bootstrap
+    # shouldn't break listing).
+    try:
+        get_personal_graph_service().ensure_personal_graph(current_user.id)
+    except Exception:
+        pass
+
     try:
         graphs = await graph_service.list_graphs(workspace_id=workspace_id)
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return [
-        GraphPack(
-            role_label=pack.role_label,
-            graphs=[
-                GraphInfo(id=g.id, uri=g.uri, label=g.label, role_label=g.role_label)
-                for g in pack.graphs
-            ],
-        )
-        for pack in graphs
-    ]
+
+    packed: list[GraphPack] = []
+    for pack in graphs:
+        filtered_graphs = [
+            GraphInfo(id=g.id, uri=g.uri, label=g.label, role_label=g.role_label)
+            for g in pack.graphs
+            # Hide personal graphs owned by other users.
+            if not is_personal_graph_uri(g.uri)
+            or personal_graph_owner(g.uri) == current_user.id
+        ]
+        if filtered_graphs:
+            packed.append(GraphPack(role_label=pack.role_label, graphs=filtered_graphs))
+    return packed
 
 
 @router.post("/create")
@@ -129,6 +163,7 @@ async def clear_graph(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     await require_workspace_access(current_user.id, payload.workspace_id)
+    _assert_personal_graph_access(payload.uri, current_user.id)
     try:
         await graph_service.clear_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
     except GraphProtectedError as exc:
@@ -145,6 +180,7 @@ async def delete_graph(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     await require_workspace_access(current_user.id, payload.workspace_id)
+    _assert_personal_graph_access(payload.uri, current_user.id)
     try:
         await graph_service.delete_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
     except GraphProtectedError as exc:
@@ -162,6 +198,7 @@ async def create_individual(
 ) -> GraphNode:
     """Insert a new individual into the given named graph."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    _assert_personal_graph_access(payload.graph_uri, current_user.id)
     try:
         node = await graph_service.create_individual(
             workspace_id=payload.workspace_id,
@@ -186,6 +223,7 @@ async def delete_individual(
 ) -> dict[str, str]:
     """Delete an individual: remove every triple where it is subject or object in the graph."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    _assert_personal_graph_access(payload.graph_uri, current_user.id)
     try:
         await graph_service.delete_individual(
             workspace_id=payload.workspace_id,
@@ -209,6 +247,7 @@ async def get_graph_overview(
 ) -> GraphOverview:
     """Get overview of a given graph."""
     await require_workspace_access(current_user.id, workspace_id)
+    _assert_personal_graph_access(graph_uri, current_user.id)
     try:
         overview = await graph_service.get_graph_overview(
             workspace_id=workspace_id, graph_uri=graph_uri, limit=limit
@@ -231,6 +270,7 @@ async def get_graph_network(
 ) -> GraphData:
     """Get all nodes and edges for a given graph."""
     await require_workspace_access(current_user.id, workspace_id)
+    _assert_personal_graph_access(graph_uri, current_user.id)
     try:
         network = await graph_service.get_graph_network(
             workspace_id=workspace_id, graph_uri=graph_uri, limit=limit
@@ -254,6 +294,7 @@ async def search_graph_network(
 ) -> GraphData:
     """Search nodes by label within a graph. Returns matching individuals and their edges."""
     await require_workspace_access(current_user.id, workspace_id)
+    _assert_personal_graph_access(graph_uri, current_user.id)
     try:
         result = await graph_service.search_network(
             workspace_id=workspace_id,
@@ -282,6 +323,7 @@ async def export_graph(
     exhausted, then returns the merged Turtle document with bound namespaces.
     """
     await require_workspace_access(current_user.id, workspace_id)
+    _assert_personal_graph_access(graph_uri, current_user.id)
     try:
         ttl_content, triple_count = await graph_service.export_graph_as_ttl(
             workspace_id=workspace_id,
@@ -354,6 +396,7 @@ async def import_graph_file(
     Returns ``{"status": "imported", "count": N}`` where N is the number of triples inserted.
     """
     await require_workspace_access(current_user.id, workspace_id)
+    _assert_personal_graph_access(graph_uri, current_user.id)
     content = await file.read()
     fmt = _detect_rdf_format(file.filename or "")
     try:
@@ -385,6 +428,8 @@ async def get_network_parents(
     Call once per progressive expansion level.
     """
     await require_workspace_access(current_user.id, workspace_id)
+    for name in graph_names:
+        _assert_personal_graph_access(name, current_user.id)
     try:
         result = await graph_service.get_network_parents(
             workspace_id=workspace_id,
