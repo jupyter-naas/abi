@@ -1,8 +1,6 @@
-# onto2py-source-sha256: 5f0e0f5c0462441a9c639410a2691ba450cf1c8e035545b7b0d19fab12babb00
 from __future__ import annotations
 
 import datetime
-import os
 import uuid
 from typing import (
     Annotated,
@@ -29,6 +27,10 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Site,
     TemporalInstant,
     TemporalRegion,
+)
+from naas_abi_core.services.event.ontologies.modules.EventOntology import (
+    LogProcess,
+    Process,
 )
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
@@ -320,273 +322,6 @@ class RDFEntity(BaseModel):
                         g.add((subject, URIRef(prop_uri), Literal(prop_value)))
 
         return g
-
-
-class VisitSession(RDFEntity):
-    """
-    Visit Session
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/VisitSession"
-    _name: ClassVar[str] = "Visit Session"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creates": "http://ontology.naas.ai/nexus/creates",
-        "creator": "http://purl.org/dc/terms/creator",
-        "event_id": "http://ontology.naas.ai/nexus/event_id",
-        "has_session_interval": "http://ontology.naas.ai/nexus/hasSessionInterval",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
-        "session_id": "http://ontology.naas.ai/nexus/session_id",
-        "started_by": "http://ontology.naas.ai/nexus/startedBy",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "creates",
-        "has_session_interval",
-        "occurs_in",
-        "started_by",
-    }
-
-    # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    session_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    creates: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
-            ),
-        ]
-    ] = None
-    has_session_interval: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSessionInterval, str]],
-            Field(
-                description="Relates a visit-session process to the temporal interval that bounds its start and end."
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[URIRef, UserSite, str]],
-            Field(
-                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
-            ),
-        ]
-    ] = None
-    started_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a visit-session process to the user account that started it."
-            ),
-        ]
-    ] = None
-
-
-class PageView(RDFEntity):
-    """
-    Page View
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/PageView"
-    _name: ClassVar[str] = "Page View"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "event_id": "http://ontology.naas.ai/nexus/event_id",
-        "has_visited_page": "http://ontology.naas.ai/nexus/hasVisitedPage",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occurs_during_session": "http://ontology.naas.ai/nexus/occursDuringSession",
-        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
-        "occurs_in_workspace": "http://ontology.naas.ai/nexus/occursInWorkspace",
-        "referrer": "http://ontology.naas.ai/nexus/referrer",
-        "viewed_at": "http://ontology.naas.ai/nexus/viewedAt",
-        "viewed_by": "http://ontology.naas.ai/nexus/viewedBy",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "has_visited_page",
-        "occurs_during_session",
-        "occurs_in",
-        "occurs_in_workspace",
-        "viewed_at",
-        "viewed_by",
-    }
-
-    # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    referrer: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The HTTP referrer (originating page or host) recorded at the time of a page-view process."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    has_visited_page: Optional[
-        Annotated[
-            List[Union[Page, URIRef, str]],
-            Field(
-                description="Relates a page-view process to the page artifact (generically dependent continuant) that the user viewed during that process."
-            ),
-        ]
-    ] = None
-    occurs_during_session: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSession, str]],
-            Field(
-                description="Relates a page-view process to the visit session of which it is a temporal part."
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[URIRef, UserSite, str]],
-            Field(
-                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
-            ),
-        ]
-    ] = None
-    occurs_in_workspace: Optional[
-        Annotated[
-            List[Union[URIRef, Workspace, str]],
-            Field(
-                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
-            ),
-        ]
-    ] = None
-    viewed_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a page-view process to the temporal instant at which the view occurred."
-            ),
-        ]
-    ] = None
-    viewed_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a page-view process to the user account that participates in it."
-            ),
-        ]
-    ] = None
-
-
-class Logout(RDFEntity):
-    """
-    Logout
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Logout"
-    _name: ClassVar[str] = "Logout"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "created_by": "http://ontology.naas.ai/nexus/createdBy",
-        "creator": "http://purl.org/dc/terms/creator",
-        "event_id": "http://ontology.naas.ai/nexus/event_id",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "terminates": "http://ontology.naas.ai/nexus/terminates",
-        "terminates_session": "http://ontology.naas.ai/nexus/terminatesSession",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "created_by",
-        "occupiesTemporalRegion",
-        "terminates",
-        "terminates_session",
-    }
-
-    # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    created_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a platform process to the agent (user or person) who initiated it."
-            ),
-        ]
-    ] = None
-    occupiesTemporalRegion: Optional[
-        Annotated[List[Union[LogoutInterval, URIRef, str]], Field()]
-    ] = None
-    terminates: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a logout process to the session artifact it terminates."
-            ),
-        ]
-    ] = None
-    terminates_session: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSession, str]],
-            Field(
-                description="Relates a logout process to the visit session it terminates."
-            ),
-        ]
-    ] = None
 
 
 class Server(MaterialEntity, RDFEntity):
@@ -1132,6 +867,8 @@ class Conversation(GenericallyDependentContinuant, RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Conversation"
     _name: ClassVar[str] = "Conversation"
     _property_uris: ClassVar[dict] = {
+        "agent": "http://ontology.naas.ai/nexus/agent",
+        "conversation_id": "http://ontology.naas.ai/nexus/conversation_id",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
@@ -1140,6 +877,7 @@ class Conversation(GenericallyDependentContinuant, RDFEntity):
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_conversation_of": "http://ontology.naas.ai/nexus/isConversationOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "title": "http://ontology.naas.ai/nexus/title",
     }
     _object_properties: ClassVar[set[str]] = {
         "generically_depends_on",
@@ -1150,6 +888,28 @@ class Conversation(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a conversation artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    agent: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Identifier of the agent associated with a conversation or message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    title: Optional[
+        Annotated[
+            str,
+            Field(description="Display title of a conversation in the Nexus platform."),
+        ]
+    ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Optional[
         Annotated[
@@ -1211,6 +971,8 @@ class Message(GenericallyDependentContinuant, RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Message"
     _name: ClassVar[str] = "Message"
     _property_uris: ClassVar[dict] = {
+        "agent": "http://ontology.naas.ai/nexus/agent",
+        "content": "http://ontology.naas.ai/nexus/content",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
@@ -1218,6 +980,8 @@ class Message(GenericallyDependentContinuant, RDFEntity):
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_message_of": "http://ontology.naas.ai/nexus/isMessageOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "message_id": "http://ontology.naas.ai/nexus/message_id",
+        "role": "http://ontology.naas.ai/nexus/role",
     }
     _object_properties: ClassVar[set[str]] = {
         "generically_depends_on",
@@ -1227,6 +991,38 @@ class Message(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
+    message_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a message artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    role: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Role of the message author within a conversation (user, assistant, system)."
+            ),
+        ]
+    ] = None
+    content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The textual content of a message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    agent: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Identifier of the agent associated with a conversation or message in the Nexus platform."
+            ),
+        ]
+    ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Optional[
         Annotated[
@@ -3833,7 +3629,6 @@ class FrontEndEvent(Process, RDFEntity):
     _name: ClassVar[str] = "Front End Event"
     _property_uris: ClassVar[dict] = {
         "browser": "http://ontology.naas.ai/nexus/browser",
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "country": "http://ontology.naas.ai/nexus/country",
         "created": "http://purl.org/dc/terms/created",
         "created_at": "http://ontology.naas.ai/nexus/createdAt",
@@ -3841,13 +3636,9 @@ class FrontEndEvent(Process, RDFEntity):
         "device": "http://ontology.naas.ai/nexus/device",
         "event_id": "http://ontology.naas.ai/nexus/event_id",
         "event_name": "http://ontology.naas.ai/nexus/event_name",
-        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
         "page_path": "http://ontology.naas.ai/nexus/page_path",
         "page_title": "http://ontology.naas.ai/nexus/page_title",
-        "realizes": "http://ontology.naas.ai/abi/realizes",
         "referrer": "http://ontology.naas.ai/nexus/referrer",
         "session_id": "http://ontology.naas.ai/nexus/session_id",
         "timestamp": "http://ontology.naas.ai/nexus/timestamp",
@@ -3856,14 +3647,7 @@ class FrontEndEvent(Process, RDFEntity):
         "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
         "workspace_name": "http://ontology.naas.ai/nexus/workspace_name",
     }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "created_at",
-        "has_participant",
-        "occupies_temporal_region",
-        "occurs_in",
-        "realizes",
-    }
+    _object_properties: ClassVar[set[str]] = {"created_at"}
 
     # Data properties
     user_id: Optional[
@@ -3989,49 +3773,11 @@ class FrontEndEvent(Process, RDFEntity):
     ] = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
     created_at: Optional[
         Annotated[
             List[Union[TemporalInstant, URIRef, str]],
             Field(
                 description="Relates a platform process to the temporal instant at which it occurred."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
             ),
         ]
     ] = None
@@ -4045,29 +3791,19 @@ class CreateUser(Process, RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/CreateUser"
     _name: ClassVar[str] = "Create User"
     _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "created_at": "http://ontology.naas.ai/nexus/createdAt",
         "created_by": "http://ontology.naas.ai/nexus/createdBy",
         "created_for": "http://ontology.naas.ai/nexus/createdFor",
         "creates": "http://ontology.naas.ai/nexus/creates",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
-        "realizes": "http://ontology.naas.ai/abi/realizes",
     }
     _object_properties: ClassVar[set[str]] = {
-        "concretizes",
         "created_at",
         "created_by",
         "created_for",
         "creates",
-        "has_participant",
-        "occupies_temporal_region",
-        "occurs_in",
-        "realizes",
     }
 
     # Data properties
@@ -4086,14 +3822,6 @@ class CreateUser(Process, RDFEntity):
     ] = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
     created_at: Optional[
         Annotated[
             List[Union[TemporalInstant, URIRef, str]],
@@ -4126,36 +3854,6 @@ class CreateUser(Process, RDFEntity):
             ),
         ]
     ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
 
 
 class CreateWorkspace(Process, RDFEntity):
@@ -4166,28 +3864,14 @@ class CreateWorkspace(Process, RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/CreateWorkspace"
     _name: ClassVar[str] = "Create Workspace"
     _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "created_at": "http://ontology.naas.ai/nexus/createdAt",
         "created_by": "http://ontology.naas.ai/nexus/createdBy",
         "creates": "http://ontology.naas.ai/nexus/creates",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
-        "realizes": "http://ontology.naas.ai/abi/realizes",
     }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "created_at",
-        "created_by",
-        "creates",
-        "has_participant",
-        "occupies_temporal_region",
-        "occurs_in",
-        "realizes",
-    }
+    _object_properties: ClassVar[set[str]] = {"created_at", "created_by", "creates"}
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
@@ -4205,14 +3889,6 @@ class CreateWorkspace(Process, RDFEntity):
     ] = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
     created_at: Optional[
         Annotated[
             List[Union[TemporalInstant, URIRef, str]],
@@ -4237,36 +3913,6 @@ class CreateWorkspace(Process, RDFEntity):
             ),
         ]
     ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
 
 
 class AddUserToWorkspace(Process, RDFEntity):
@@ -4277,28 +3923,14 @@ class AddUserToWorkspace(Process, RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/AddUserToWorkspace"
     _name: ClassVar[str] = "Add User to Workspace"
     _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "created_at": "http://ontology.naas.ai/nexus/createdAt",
         "created_by": "http://ontology.naas.ai/nexus/createdBy",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
-        "realizes": "http://ontology.naas.ai/abi/realizes",
         "updates": "http://ontology.naas.ai/nexus/updates",
     }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "created_at",
-        "created_by",
-        "has_participant",
-        "occupies_temporal_region",
-        "occurs_in",
-        "realizes",
-        "updates",
-    }
+    _object_properties: ClassVar[set[str]] = {"created_at", "created_by", "updates"}
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
@@ -4316,14 +3948,6 @@ class AddUserToWorkspace(Process, RDFEntity):
     ] = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
     created_at: Optional[
         Annotated[
             List[Union[TemporalInstant, URIRef, str]],
@@ -4337,36 +3961,6 @@ class AddUserToWorkspace(Process, RDFEntity):
             List[Union[Person, URIRef, str]],
             Field(
                 description="Relates a platform process to the agent (user or person) who initiated it."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
             ),
         ]
     ] = None
@@ -4388,29 +3982,21 @@ class Login(Process, RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Login"
     _name: ClassVar[str] = "Login"
     _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "created_by": "http://ontology.naas.ai/nexus/createdBy",
         "creates": "http://ontology.naas.ai/nexus/creates",
         "creator": "http://purl.org/dc/terms/creator",
         "event_id": "http://ontology.naas.ai/nexus/event_id",
-        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
         "initiates_session": "http://ontology.naas.ai/nexus/initiatesSession",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
         "realizes": "http://ontology.naas.ai/nexus/realizes",
     }
     _object_properties: ClassVar[set[str]] = {
-        "concretizes",
         "created_by",
         "creates",
-        "has_participant",
         "initiates_session",
         "occupiesTemporalRegion",
-        "occupies_temporal_region",
-        "occurs_in",
         "realizes",
     }
 
@@ -4438,14 +4024,6 @@ class Login(Process, RDFEntity):
     ] = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
     created_by: Optional[
         Annotated[
             List[Union[URIRef, User, str]],
@@ -4462,12 +4040,6 @@ class Login(Process, RDFEntity):
             ),
         ]
     ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
     initiates_session: Optional[
         Annotated[
             List[Union[URIRef, VisitSession, str]],
@@ -4478,22 +4050,6 @@ class Login(Process, RDFEntity):
     ] = None
     occupiesTemporalRegion: Optional[
         Annotated[List[Union[LoginInterval, URIRef, str]], Field()]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
     ] = None
     realizes: Optional[
         Annotated[
@@ -4597,6 +4153,77 @@ class LogoutInterval(TemporalRegion, RDFEntity):
     ] = None
 
 
+class MessageProcessingInterval(TemporalRegion, RDFEntity):
+    """
+    Message Processing Interval
+    """
+
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/nexus/MessageProcessingInterval"
+    )
+    _name: ClassVar[str] = "Message Processing Interval"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_first_instant": "http://ontology.naas.ai/abi/hasFirstInstant",
+        "has_last_instant": "http://ontology.naas.ai/abi/hasLastInstant",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "processing_ended_at": "http://ontology.naas.ai/nexus/processingEndedAt",
+        "processing_started_at": "http://ontology.naas.ai/nexus/processingStartedAt",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "has_first_instant",
+        "has_last_instant",
+        "processing_ended_at",
+        "processing_started_at",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    has_first_instant: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(description="t has first instant t' =Def t' first instant of t"),
+        ]
+    ] = None
+    has_last_instant: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(description="t has last instant t' =Def t' last instant of t"),
+        ]
+    ] = None
+    processing_ended_at: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(
+                description="Relates a message-processing interval to the temporal instant at which the agent finished producing the response."
+            ),
+        ]
+    ] = None
+    processing_started_at: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(
+                description="Relates a message-processing interval to the temporal instant at which the agent began producing the response."
+            ),
+        ]
+    ] = None
+
+
 class VisitSessionInterval(TemporalRegion, RDFEntity):
     """
     Visit Session Interval
@@ -4666,10 +4293,1370 @@ class VisitSessionInterval(TemporalRegion, RDFEntity):
     ] = None
 
 
+class VisitSession(Process, RDFEntity):
+    """
+    Visit Session
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/VisitSession"
+    _name: ClassVar[str] = "Visit Session"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creates": "http://ontology.naas.ai/nexus/creates",
+        "creator": "http://purl.org/dc/terms/creator",
+        "event_id": "http://ontology.naas.ai/nexus/event_id",
+        "has_session_interval": "http://ontology.naas.ai/nexus/hasSessionInterval",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
+        "session_id": "http://ontology.naas.ai/nexus/session_id",
+        "started_by": "http://ontology.naas.ai/nexus/startedBy",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "creates",
+        "has_session_interval",
+        "occurs_in",
+        "started_by",
+    }
+
+    # Data properties
+    event_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
+            ),
+        ]
+    ] = None
+    session_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    creates: Optional[
+        Annotated[
+            List[Union[Session, URIRef, str]],
+            Field(
+                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
+            ),
+        ]
+    ] = None
+    has_session_interval: Optional[
+        Annotated[
+            List[Union[URIRef, VisitSessionInterval, str]],
+            Field(
+                description="Relates a visit-session process to the temporal interval that bounds its start and end."
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[URIRef, UserSite, str]],
+            Field(
+                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
+            ),
+        ]
+    ] = None
+    started_by: Optional[
+        Annotated[
+            List[Union[URIRef, User, str]],
+            Field(
+                description="Relates a visit-session process to the user account that started it."
+            ),
+        ]
+    ] = None
+
+
+class PageView(Process, RDFEntity):
+    """
+    Page View
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/PageView"
+    _name: ClassVar[str] = "Page View"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "event_id": "http://ontology.naas.ai/nexus/event_id",
+        "has_visited_page": "http://ontology.naas.ai/nexus/hasVisitedPage",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occurs_during_session": "http://ontology.naas.ai/nexus/occursDuringSession",
+        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
+        "occurs_in_workspace": "http://ontology.naas.ai/nexus/occursInWorkspace",
+        "referrer": "http://ontology.naas.ai/nexus/referrer",
+        "viewed_at": "http://ontology.naas.ai/nexus/viewedAt",
+        "viewed_by": "http://ontology.naas.ai/nexus/viewedBy",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "has_visited_page",
+        "occurs_during_session",
+        "occurs_in",
+        "occurs_in_workspace",
+        "viewed_at",
+        "viewed_by",
+    }
+
+    # Data properties
+    event_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
+            ),
+        ]
+    ] = None
+    referrer: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The HTTP referrer (originating page or host) recorded at the time of a page-view process."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    has_visited_page: Optional[
+        Annotated[
+            List[Union[Page, URIRef, str]],
+            Field(
+                description="Relates a page-view process to the page artifact (generically dependent continuant) that the user viewed during that process."
+            ),
+        ]
+    ] = None
+    occurs_during_session: Optional[
+        Annotated[
+            List[Union[URIRef, VisitSession, str]],
+            Field(
+                description="Relates a page-view process to the visit session of which it is a temporal part."
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[URIRef, UserSite, str]],
+            Field(
+                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
+            ),
+        ]
+    ] = None
+    occurs_in_workspace: Optional[
+        Annotated[
+            List[Union[URIRef, Workspace, str]],
+            Field(
+                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    viewed_at: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(
+                description="Relates a page-view process to the temporal instant at which the view occurred."
+            ),
+        ]
+    ] = None
+    viewed_by: Optional[
+        Annotated[
+            List[Union[URIRef, User, str]],
+            Field(
+                description="Relates a page-view process to the user account that participates in it."
+            ),
+        ]
+    ] = None
+
+
+class Logout(Process, RDFEntity):
+    """
+    Logout
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Logout"
+    _name: ClassVar[str] = "Logout"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "created_by": "http://ontology.naas.ai/nexus/createdBy",
+        "creator": "http://purl.org/dc/terms/creator",
+        "event_id": "http://ontology.naas.ai/nexus/event_id",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "terminates": "http://ontology.naas.ai/nexus/terminates",
+        "terminates_session": "http://ontology.naas.ai/nexus/terminatesSession",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "created_by",
+        "occupiesTemporalRegion",
+        "terminates",
+        "terminates_session",
+    }
+
+    # Data properties
+    event_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    created_by: Optional[
+        Annotated[
+            List[Union[URIRef, User, str]],
+            Field(
+                description="Relates a platform process to the agent (user or person) who initiated it."
+            ),
+        ]
+    ] = None
+    occupiesTemporalRegion: Optional[
+        Annotated[List[Union[LogoutInterval, URIRef, str]], Field()]
+    ] = None
+    terminates: Optional[
+        Annotated[
+            List[Union[Session, URIRef, str]],
+            Field(
+                description="Relates a logout process to the session artifact it terminates."
+            ),
+        ]
+    ] = None
+    terminates_session: Optional[
+        Annotated[
+            List[Union[URIRef, VisitSession, str]],
+            Field(
+                description="Relates a logout process to the visit session it terminates."
+            ),
+        ]
+    ] = None
+
+
+class Status(Quality, RDFEntity):
+    """
+    Status
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Status"
+    _name: ClassVar[str] = "Status"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
+        "is_status_of": "http://ontology.naas.ai/nexus/isStatusOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participates_in": "http://ontology.naas.ai/abi/participatesIn",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "inheres_in",
+        "is_status_of",
+        "participates_in",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    inheres_in: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+            ),
+        ]
+    ] = None
+    is_status_of: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="Relates a status quality to the platform artifact in which it inheres."
+            ),
+        ]
+    ] = None
+    participates_in: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(
+                description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
+            ),
+        ]
+    ] = None
+
+
+class UserPromptRole(MessageRole, RDFEntity):
+    """
+    User Prompt Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/UserPromptRole"
+    _name: ClassVar[str] = "User Prompt Role"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
+        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
+        "is_message_role_of": "http://ontology.naas.ai/nexus/isMessageRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "has_realization",
+        "inheres_in",
+        "is_message_role_of",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    has_realization: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(description="b has realization c =Def c realizes b"),
+        ]
+    ] = None
+    inheres_in: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+            ),
+        ]
+    ] = None
+    is_message_role_of: Optional[
+        Annotated[
+            List[Union[Message, URIRef, str]],
+            Field(
+                description="Relates a message role to the message of which it is the role-side concretization."
+            ),
+        ]
+    ] = None
+
+
+class AgentResponseRole(MessageRole, RDFEntity):
+    """
+    Agent Response Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/AgentResponseRole"
+    _name: ClassVar[str] = "Agent Response Role"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
+        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
+        "is_message_role_of": "http://ontology.naas.ai/nexus/isMessageRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "has_realization",
+        "inheres_in",
+        "is_message_role_of",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    has_realization: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(description="b has realization c =Def c realizes b"),
+        ]
+    ] = None
+    inheres_in: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+            ),
+        ]
+    ] = None
+    is_message_role_of: Optional[
+        Annotated[
+            List[Union[Message, URIRef, str]],
+            Field(
+                description="Relates a message role to the message of which it is the role-side concretization."
+            ),
+        ]
+    ] = None
+
+
+class CreateConversation(LogProcess, Process, RDFEntity):
+    """
+    Create Conversation
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/CreateConversation"
+    _name: ClassVar[str] = "Create Conversation"
+    _property_uris: ClassVar[dict] = {
+        "agent": "http://ontology.naas.ai/nexus/agent",
+        "conversation_id": "http://ontology.naas.ai/nexus/conversation_id",
+        "created": "http://purl.org/dc/terms/created",
+        "created_at": "http://ontology.naas.ai/nexus/createdAt",
+        "created_by": "http://ontology.naas.ai/nexus/createdBy",
+        "creates": "http://ontology.naas.ai/nexus/creates",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
+        "occurs_in_workspace": "http://ontology.naas.ai/nexus/occursInWorkspace",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+        "sent_by": "http://ontology.naas.ai/nexus/sentBy",
+        "title": "http://ontology.naas.ai/nexus/title",
+        "user_id": "http://ontology.naas.ai/nexus/user_id",
+        "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "created_at",
+        "created_by",
+        "creates",
+        "occurs_in",
+        "occurs_in_workspace",
+        "realizes",
+        "sent_by",
+    }
+
+    # Data properties
+    user_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the user account in the Nexus platform."
+            ),
+        ]
+    ] = None
+    workspace_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a workspace in the Nexus platform."
+            ),
+        ]
+    ] = None
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a conversation artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    agent: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Identifier of the agent associated with a conversation or message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    title: Optional[
+        Annotated[
+            str,
+            Field(description="Display title of a conversation in the Nexus platform."),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    created_at: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(
+                description="Relates a platform process to the temporal instant at which it occurred."
+            ),
+        ]
+    ] = None
+    created_by: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a platform process to the agent (user or person) who initiated it."
+            ),
+        ]
+    ] = None
+    creates: Optional[
+        Annotated[
+            List[Union[Conversation, URIRef, str]],
+            Field(
+                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[URIRef, UserSite, str]],
+            Field(
+                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
+            ),
+        ]
+    ] = None
+    occurs_in_workspace: Optional[
+        Annotated[
+            List[Union[URIRef, Workspace, str]],
+            Field(
+                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    realizes: Optional[
+        Annotated[List[Union[ConversationRole, URIRef, str]], Field()]
+    ] = None
+    sent_by: Optional[
+        Annotated[
+            List[Union[URIRef, User, str]],
+            Field(
+                description="Relates a message-creation process to the user account that participates in it as sender."
+            ),
+        ]
+    ] = None
+
+
+class CreateMessage(LogProcess, Process, RDFEntity):
+    """
+    Create Message
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/CreateMessage"
+    _name: ClassVar[str] = "Create Message"
+    _property_uris: ClassVar[dict] = {
+        "agent": "http://ontology.naas.ai/nexus/agent",
+        "content": "http://ontology.naas.ai/nexus/content",
+        "conversation_id": "http://ontology.naas.ai/nexus/conversation_id",
+        "created": "http://purl.org/dc/terms/created",
+        "created_at": "http://ontology.naas.ai/abi/createdAt",
+        "creates": "http://ontology.naas.ai/nexus/creates",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "message_id": "http://ontology.naas.ai/nexus/message_id",
+        "occurs_in_conversation": "http://ontology.naas.ai/nexus/occursInConversation",
+        "occurs_in_workspace": "http://ontology.naas.ai/nexus/occursInWorkspace",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+        "role": "http://ontology.naas.ai/nexus/role",
+        "user_id": "http://ontology.naas.ai/nexus/user_id",
+        "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "creates",
+        "occurs_in_conversation",
+        "occurs_in_workspace",
+        "realizes",
+    }
+
+    # Data properties
+    user_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the user account in the Nexus platform."
+            ),
+        ]
+    ] = None
+    workspace_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a workspace in the Nexus platform."
+            ),
+        ]
+    ] = None
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a conversation artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    message_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a message artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    role: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Role of the message author within a conversation (user, assistant, system)."
+            ),
+        ]
+    ] = None
+    content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The textual content of a message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    agent: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Identifier of the agent associated with a conversation or message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    created_at: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    creates: Optional[
+        Annotated[
+            List[Union[Message, URIRef, str]],
+            Field(
+                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
+            ),
+        ]
+    ] = None
+    occurs_in_conversation: Optional[
+        Annotated[
+            List[Union[Conversation, URIRef, str]],
+            Field(
+                description="Relates a platform process (such as a message creation) to the conversation generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    occurs_in_workspace: Optional[
+        Annotated[
+            List[Union[URIRef, Workspace, str]],
+            Field(
+                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    realizes: Optional[Annotated[List[Union[MessageRole, URIRef, str]], Field()]] = None
+
+
+class UpdateConversation(LogProcess, Process, RDFEntity):
+    """
+    Update Conversation
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/UpdateConversation"
+    _name: ClassVar[str] = "Update Conversation"
+    _property_uris: ClassVar[dict] = {
+        "agent": "http://ontology.naas.ai/nexus/agent",
+        "conversation_id": "http://ontology.naas.ai/nexus/conversation_id",
+        "created": "http://purl.org/dc/terms/created",
+        "created_at": "http://ontology.naas.ai/abi/createdAt",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "title": "http://ontology.naas.ai/nexus/title",
+        "user_id": "http://ontology.naas.ai/nexus/user_id",
+        "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    user_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the user account in the Nexus platform."
+            ),
+        ]
+    ] = None
+    workspace_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a workspace in the Nexus platform."
+            ),
+        ]
+    ] = None
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a conversation artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    agent: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Identifier of the agent associated with a conversation or message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    title: Optional[
+        Annotated[
+            str,
+            Field(description="Display title of a conversation in the Nexus platform."),
+        ]
+    ] = None
+    created_at: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+
+class DeleteConversation(LogProcess, Process, RDFEntity):
+    """
+    Delete Conversation
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/DeleteConversation"
+    _name: ClassVar[str] = "Delete Conversation"
+    _property_uris: ClassVar[dict] = {
+        "conversation_id": "http://ontology.naas.ai/nexus/conversation_id",
+        "created": "http://purl.org/dc/terms/created",
+        "created_at": "http://ontology.naas.ai/abi/createdAt",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "user_id": "http://ontology.naas.ai/nexus/user_id",
+        "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    user_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the user account in the Nexus platform."
+            ),
+        ]
+    ] = None
+    workspace_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a workspace in the Nexus platform."
+            ),
+        ]
+    ] = None
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a conversation artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    created_at: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+
+class UpdateMessage(LogProcess, Process, RDFEntity):
+    """
+    Update Message
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/UpdateMessage"
+    _name: ClassVar[str] = "Update Message"
+    _property_uris: ClassVar[dict] = {
+        "agent": "http://ontology.naas.ai/nexus/agent",
+        "content": "http://ontology.naas.ai/nexus/content",
+        "conversation_id": "http://ontology.naas.ai/nexus/conversation_id",
+        "created": "http://purl.org/dc/terms/created",
+        "created_at": "http://ontology.naas.ai/abi/createdAt",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "message_id": "http://ontology.naas.ai/nexus/message_id",
+        "role": "http://ontology.naas.ai/nexus/role",
+        "user_id": "http://ontology.naas.ai/nexus/user_id",
+        "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    user_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the user account in the Nexus platform."
+            ),
+        ]
+    ] = None
+    workspace_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a workspace in the Nexus platform."
+            ),
+        ]
+    ] = None
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a conversation artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    message_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a message artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    role: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Role of the message author within a conversation (user, assistant, system)."
+            ),
+        ]
+    ] = None
+    content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The textual content of a message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    agent: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Identifier of the agent associated with a conversation or message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    created_at: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+
+class SendUserPrompt(CreateMessage, RDFEntity):
+    """
+    Send User Prompt
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/SendUserPrompt"
+    _name: ClassVar[str] = "Send User Prompt"
+    _property_uris: ClassVar[dict] = {
+        "agent": "http://ontology.naas.ai/nexus/agent",
+        "content": "http://ontology.naas.ai/nexus/content",
+        "conversation_id": "http://ontology.naas.ai/nexus/conversation_id",
+        "created": "http://purl.org/dc/terms/created",
+        "created_at": "http://ontology.naas.ai/abi/createdAt",
+        "created_by": "http://ontology.naas.ai/nexus/createdBy",
+        "creates": "http://ontology.naas.ai/nexus/creates",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "message_id": "http://ontology.naas.ai/nexus/message_id",
+        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
+        "occurs_in_conversation": "http://ontology.naas.ai/nexus/occursInConversation",
+        "occurs_in_workspace": "http://ontology.naas.ai/nexus/occursInWorkspace",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+        "role": "http://ontology.naas.ai/nexus/role",
+        "sent_at": "http://ontology.naas.ai/nexus/sentAt",
+        "sent_by": "http://ontology.naas.ai/nexus/sentBy",
+        "user_id": "http://ontology.naas.ai/nexus/user_id",
+        "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "created_by",
+        "creates",
+        "occurs_in",
+        "occurs_in_conversation",
+        "occurs_in_workspace",
+        "realizes",
+        "sent_at",
+        "sent_by",
+    }
+
+    # Data properties
+    user_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the user account in the Nexus platform."
+            ),
+        ]
+    ] = None
+    workspace_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a workspace in the Nexus platform."
+            ),
+        ]
+    ] = None
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a conversation artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    message_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a message artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    role: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Role of the message author within a conversation (user, assistant, system)."
+            ),
+        ]
+    ] = None
+    content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The textual content of a message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    agent: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Identifier of the agent associated with a conversation or message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    created_at: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    created_by: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a platform process to the agent (user or person) who initiated it."
+            ),
+        ]
+    ] = None
+    creates: Optional[
+        Annotated[
+            List[Union[Message, URIRef, str]],
+            Field(
+                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[URIRef, UserSite, str]],
+            Field(
+                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
+            ),
+        ]
+    ] = None
+    occurs_in_conversation: Optional[
+        Annotated[
+            List[Union[Conversation, URIRef, str]],
+            Field(
+                description="Relates a platform process (such as a message creation) to the conversation generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    occurs_in_workspace: Optional[
+        Annotated[
+            List[Union[URIRef, Workspace, str]],
+            Field(
+                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    realizes: Optional[Annotated[List[Union[URIRef, UserPromptRole, str]], Field()]] = (
+        None
+    )
+    sent_at: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(
+                description="Relates a user message-creation process to the temporal instant at which the message was sent by the user."
+            ),
+        ]
+    ] = None
+    sent_by: Optional[
+        Annotated[
+            List[Union[URIRef, User, str]],
+            Field(
+                description="Relates a message-creation process to the user account that participates in it as sender."
+            ),
+        ]
+    ] = None
+
+
+class SendAgentResponse(CreateMessage, RDFEntity):
+    """
+    Send Agent Response
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/SendAgentResponse"
+    _name: ClassVar[str] = "Send Agent Response"
+    _property_uris: ClassVar[dict] = {
+        "agent": "http://ontology.naas.ai/nexus/agent",
+        "content": "http://ontology.naas.ai/nexus/content",
+        "conversation_id": "http://ontology.naas.ai/nexus/conversation_id",
+        "created": "http://purl.org/dc/terms/created",
+        "created_at": "http://ontology.naas.ai/abi/createdAt",
+        "creates": "http://ontology.naas.ai/nexus/creates",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "message_id": "http://ontology.naas.ai/nexus/message_id",
+        "occurs_in_conversation": "http://ontology.naas.ai/nexus/occursInConversation",
+        "occurs_in_workspace": "http://ontology.naas.ai/nexus/occursInWorkspace",
+        "processed_by": "http://ontology.naas.ai/nexus/processedBy",
+        "processed_during": "http://ontology.naas.ai/nexus/processedDuring",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+        "role": "http://ontology.naas.ai/nexus/role",
+        "user_id": "http://ontology.naas.ai/nexus/user_id",
+        "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "creates",
+        "occurs_in_conversation",
+        "occurs_in_workspace",
+        "processed_by",
+        "processed_during",
+        "realizes",
+    }
+
+    # Data properties
+    user_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the user account in the Nexus platform."
+            ),
+        ]
+    ] = None
+    workspace_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a workspace in the Nexus platform."
+            ),
+        ]
+    ] = None
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a conversation artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    message_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a message artifact in the Nexus platform."
+            ),
+        ]
+    ] = None
+    role: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Role of the message author within a conversation (user, assistant, system)."
+            ),
+        ]
+    ] = None
+    content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The textual content of a message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    agent: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Identifier of the agent associated with a conversation or message in the Nexus platform."
+            ),
+        ]
+    ] = None
+    created_at: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    creates: Optional[
+        Annotated[
+            List[Union[Message, URIRef, str]],
+            Field(
+                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
+            ),
+        ]
+    ] = None
+    occurs_in_conversation: Optional[
+        Annotated[
+            List[Union[Conversation, URIRef, str]],
+            Field(
+                description="Relates a platform process (such as a message creation) to the conversation generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    occurs_in_workspace: Optional[
+        Annotated[
+            List[Union[URIRef, Workspace, str]],
+            Field(
+                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    processed_by: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(
+                description="Relates an agent message-creation process to the agent that produces the response as participant."
+            ),
+        ]
+    ] = None
+    processed_during: Optional[
+        Annotated[
+            List[Union[MessageProcessingInterval, URIRef, str]],
+            Field(
+                description="Relates an agent message-creation process to the temporal interval during which the agent processed and produced the response."
+            ),
+        ]
+    ] = None
+    realizes: Optional[
+        Annotated[List[Union[AgentResponseRole, URIRef, str]], Field()]
+    ] = None
+
+
 # Rebuild models to resolve forward references
-VisitSession.model_rebuild()
-PageView.model_rebuild()
-Logout.model_rebuild()
 Server.model_rebuild()
 NexusOrganization.model_rebuild()
 DeploymentSite.model_rebuild()
@@ -4720,4 +5707,18 @@ AddUserToWorkspace.model_rebuild()
 Login.model_rebuild()
 LoginInterval.model_rebuild()
 LogoutInterval.model_rebuild()
+MessageProcessingInterval.model_rebuild()
 VisitSessionInterval.model_rebuild()
+VisitSession.model_rebuild()
+PageView.model_rebuild()
+Logout.model_rebuild()
+Status.model_rebuild()
+UserPromptRole.model_rebuild()
+AgentResponseRole.model_rebuild()
+CreateConversation.model_rebuild()
+CreateMessage.model_rebuild()
+UpdateConversation.model_rebuild()
+DeleteConversation.model_rebuild()
+UpdateMessage.model_rebuild()
+SendUserPrompt.model_rebuild()
+SendAgentResponse.model_rebuild()

@@ -12,6 +12,7 @@
 
 nexus:PlatformOntology a owl:Ontology ;
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
   dc:title "Nexus Platform Ontology"@en ;
   dc:description "Ontology for the Nexus platform."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
@@ -765,6 +766,62 @@ nexus:isSessionContextOf a owl:ObjectProperty ;
     rdfs:domain nexus:UserSite ;
     rdfs:range nexus:Session .
 
+# WHEN — message-creation process occurred at a temporal instant (user prompt)
+nexus:sentAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occupiesTemporalRegion ;
+    rdfs:label "sent at"@en ;
+    skos:definition "Relates a user message-creation process to the temporal instant at which the message was sent by the user."@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:TemporalInstant .
+
+# WHEN — agent message-creation process occupies a bounded processing temporal region
+nexus:processedDuring a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occupiesTemporalRegion ;
+    rdfs:label "processed during"@en ;
+    skos:definition "Relates an agent message-creation process to the temporal interval during which the agent processed and produced the response."@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range nexus:MessageProcessingInterval .
+
+# WHEN — start instant of an agent message processing interval
+nexus:processingStartedAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasFirstInstant ;
+    rdfs:label "processing started at"@en ;
+    skos:definition "Relates a message-processing interval to the temporal instant at which the agent began producing the response."@en ;
+    rdfs:domain nexus:MessageProcessingInterval ;
+    rdfs:range abi:TemporalInstant .
+
+# WHEN — end instant of an agent message processing interval
+nexus:processingEndedAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasLastInstant ;
+    rdfs:label "processing ended at"@en ;
+    skos:definition "Relates a message-processing interval to the temporal instant at which the agent finished producing the response."@en ;
+    rdfs:domain nexus:MessageProcessingInterval ;
+    rdfs:range abi:TemporalInstant .
+
+# WHO ↔ WHAT — message-creation process has the sending user account as participant
+nexus:sentBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "sent by"@en ;
+    skos:definition "Relates a message-creation process to the user account that participates in it as sender."@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range nexus:User .
+
+# WHO ↔ WHAT — agent response process has the producing agent as participant
+nexus:processedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "processed by"@en ;
+    skos:definition "Relates an agent message-creation process to the agent that produces the response as participant."@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range nexus:Agent .
+
+# HOW WE KNOW — process occurs in the context of a conversation artifact
+nexus:occursInConversation a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    rdfs:label "occurs in conversation"@en ;
+    skos:definition "Relates a platform process (such as a message creation) to the conversation generic context in which it occurs."@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range nexus:Conversation .
+
 #################################################################
 #    Classes
 #################################################################
@@ -1350,6 +1407,36 @@ nexus:MessageRole a owl:Class ;
           owl:allValuesFrom nexus:Message
         ] .
 
+# WHY bucket — message role for a user-authored prompt message
+nexus:UserPromptRole a owl:Class ;
+    rdfs:label "User Prompt Role"@en ;
+    skos:definition "A message role that concretizes a message authored by a user (a user prompt) within a conversation in the Nexus platform."@en ;
+    skos:example "Alice's prompt role on her first message"@en ;
+    rdfs:subClassOf nexus:MessageRole ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMessageRoleOf ;
+          owl:someValuesFrom nexus:Message
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMessageRoleOf ;
+          owl:allValuesFrom nexus:Message
+        ] .
+
+# WHY bucket — message role for an agent-produced response message
+nexus:AgentResponseRole a owl:Class ;
+    rdfs:label "Agent Response Role"@en ;
+    skos:definition "A message role that concretizes a message produced by an agent (a response) within a conversation in the Nexus platform."@en ;
+    skos:example "Assistant answer role on the model reply"@en ;
+    rdfs:subClassOf nexus:MessageRole ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMessageRoleOf ;
+          owl:someValuesFrom nexus:Message
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMessageRoleOf ;
+          owl:allValuesFrom nexus:Message
+        ] .
+
 nexus:AgentRole a owl:Class ;
     rdfs:label "Agent Role"@en ;
     skos:definition "A role associated with an agent as a configured software assistant in the Nexus platform."@en ;
@@ -1627,6 +1714,30 @@ nexus:LogoutInterval a owl:Class ;
     skos:example "Logout interval for Alice at 2026-05-21 10:22:00 to 10:22:01"@en ;
     rdfs:subClassOf abi:TemporalRegion .
 
+# WHEN — temporal interval bounding an agent's message processing
+nexus:MessageProcessingInterval a owl:Class ;
+    rdfs:label "Message Processing Interval"@en ;
+    skos:altLabel "Agent Processing Interval"@en ;
+    skos:definition "A one-dimensional temporal region that bounds the time an agent spent processing a request and producing a response message, delimited by a start instant and an end instant logged by the agent."@en ;
+    skos:example "Agent processing interval from 2026-06-01 09:14:02 to 09:14:07"@en ;
+    rdfs:subClassOf abi:TemporalRegion ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:processingStartedAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:processingStartedAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:processingEndedAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:processingEndedAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] .
+
 # WHEN — temporal interval bounding a visit session
 nexus:VisitSessionInterval a owl:Class ;
     rdfs:label "Visit Session Interval"@en ;
@@ -1740,6 +1851,192 @@ nexus:Logout a owl:Class ;
           owl:someValuesFrom nexus:VisitSession
         ] .
 
+# WHAT — process by which a user opens a new conversation in the platform
+# Covers the BFO 7 buckets: WHAT (process), WHEN (TemporalInstant), WHO (Person + User),
+# WHERE (UserSite), HOW WE KNOW (Workspace, Conversation as GDC artifacts), WHY (ConversationRole).
+nexus:CreateConversation a owl:Class ;
+    rdfs:label "Create Conversation"@en ;
+    skos:altLabel "Open Conversation"@en , "Start Conversation"@en ;
+    skos:definition "A logged process by which a person, operating through a user account, opens a new conversation artifact within a workspace of the Nexus platform. Subclass of abi:LogProcess so EventService can publish instances."@en ;
+    skos:example "Alice opens a new chat thread in the Naas Main Workspace on 2026-06-01 at 09:14"@en ;
+    rdfs:subClassOf abi:LogProcess , bfo:BFO_0000015 ,
+        # WHEN — occurs at a temporal instant
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] ,
+        # WHO (material entity) — initiated by a person
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdBy ;
+          owl:someValuesFrom abi:Person
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdBy ;
+          owl:allValuesFrom abi:Person
+        ] ,
+        # WHO (GDC participant) — through a user account
+        [ a owl:Restriction ;
+          owl:onProperty nexus:sentBy ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:sentBy ;
+          owl:allValuesFrom nexus:User
+        ] ,
+        # WHERE — occurs at a user-side site
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursIn ;
+          owl:allValuesFrom nexus:UserSite
+        ] ,
+        # HOW WE KNOW (GDC) — within a workspace
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursInWorkspace ;
+          owl:someValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursInWorkspace ;
+          owl:allValuesFrom nexus:Workspace
+        ] ,
+        # HOW WE KNOW (GDC) — creates the conversation artifact
+        [ a owl:Restriction ;
+          owl:onProperty nexus:creates ;
+          owl:someValuesFrom nexus:Conversation
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:creates ;
+          owl:allValuesFrom nexus:Conversation
+        ] ,
+        # WHY (Role) — realizes a conversation role concretizing the new conversation
+        [ a owl:Restriction ;
+          owl:onProperty abi:realizes ;
+          owl:someValuesFrom nexus:ConversationRole
+        ] .
+
+# WHAT — abstract parent process for creating any message within a conversation.
+# Subclassed by SendUserPrompt (user-authored) and SendAgentResponse (agent-produced).
+# Covers the BFO 7 buckets at the parent level via Conversation/Workspace/Message GDCs and MessageRole.
+nexus:CreateMessage a owl:Class ;
+    rdfs:label "Create Message"@en ;
+    skos:altLabel "Add Message"@en ;
+    skos:definition "A logged process by which a new message artifact is added to an existing conversation in the Nexus platform; the message may be authored by a user or produced by an agent. Subclass of abi:LogProcess so EventService can publish instances."@en ;
+    skos:example "Alice sends a prompt to the assistant", "The assistant produces a reply"@en ;
+    rdfs:subClassOf abi:LogProcess , bfo:BFO_0000015 ,
+        # HOW WE KNOW (GDC) — occurs in a conversation
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursInConversation ;
+          owl:someValuesFrom nexus:Conversation
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursInConversation ;
+          owl:allValuesFrom nexus:Conversation
+        ] ,
+        # HOW WE KNOW (GDC) — within a workspace
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursInWorkspace ;
+          owl:someValuesFrom nexus:Workspace
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursInWorkspace ;
+          owl:allValuesFrom nexus:Workspace
+        ] ,
+        # HOW WE KNOW (GDC) — creates a message artifact
+        [ a owl:Restriction ;
+          owl:onProperty nexus:creates ;
+          owl:someValuesFrom nexus:Message
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:creates ;
+          owl:allValuesFrom nexus:Message
+        ] ,
+        # WHY (Role) — realizes a message role concretizing the new message
+        [ a owl:Restriction ;
+          owl:onProperty abi:realizes ;
+          owl:someValuesFrom nexus:MessageRole
+        ] .
+
+# WHAT — user-authored prompt message-creation process (subclass of CreateMessage)
+# WHEN is a TemporalInstant (sentAt); the message role realized is a UserPromptRole.
+nexus:SendUserPrompt a owl:Class ;
+    rdfs:label "Send User Prompt"@en ;
+    skos:altLabel "Create User Message"@en , "Send User Message"@en ;
+    skos:definition "A user-initiated message-creation process: a person, operating through a user account, sends a prompt message in an existing conversation at a single temporal instant."@en ;
+    skos:example "Alice sends 'Summarize this paper' on 2026-06-01 at 09:14:02"@en ;
+    rdfs:subClassOf nexus:CreateMessage ,
+        # WHEN — sent at a temporal instant
+        [ a owl:Restriction ;
+          owl:onProperty nexus:sentAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:sentAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] ,
+        # WHO (material entity) — by a person
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdBy ;
+          owl:someValuesFrom abi:Person
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdBy ;
+          owl:allValuesFrom abi:Person
+        ] ,
+        # WHO (GDC participant) — sender user account
+        [ a owl:Restriction ;
+          owl:onProperty nexus:sentBy ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:sentBy ;
+          owl:allValuesFrom nexus:User
+        ] ,
+        # WHERE — at a user-side site
+        [ a owl:Restriction ;
+          owl:onProperty nexus:occursIn ;
+          owl:allValuesFrom nexus:UserSite
+        ] ,
+        # WHY (Role) — realizes a user prompt role
+        [ a owl:Restriction ;
+          owl:onProperty abi:realizes ;
+          owl:someValuesFrom nexus:UserPromptRole
+        ] .
+
+# WHAT — agent-produced response message-creation process (subclass of CreateMessage)
+# WHEN is a TemporalRegion (MessageProcessingInterval with processingStartedAt/processingEndedAt);
+# the message role realized is an AgentResponseRole.
+nexus:SendAgentResponse a owl:Class ;
+    rdfs:label "Send Agent Response"@en ;
+    skos:altLabel "Create Agent Message"@en , "Send Agent Message"@en ;
+    skos:definition "An agent-initiated message-creation process: an agent processes a prompt and produces a response message in an existing conversation; the processing unfolds over a bounded temporal interval logged by the agent."@en ;
+    skos:example "The assistant agent generates a reply between 2026-06-01 09:14:02 and 09:14:07"@en ;
+    rdfs:subClassOf nexus:CreateMessage ,
+        # WHEN — occupies a bounded message processing interval
+        [ a owl:Restriction ;
+          owl:onProperty nexus:processedDuring ;
+          owl:someValuesFrom nexus:MessageProcessingInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:processedDuring ;
+          owl:allValuesFrom nexus:MessageProcessingInterval
+        ] ,
+        # WHO (GDC participant) — produced by an agent
+        [ a owl:Restriction ;
+          owl:onProperty nexus:processedBy ;
+          owl:someValuesFrom nexus:Agent
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:processedBy ;
+          owl:allValuesFrom nexus:Agent
+        ] ,
+        # WHY (Role) — realizes an agent response role
+        [ a owl:Restriction ;
+          owl:onProperty abi:realizes ;
+          owl:someValuesFrom nexus:AgentResponseRole
+        ] .
+
 #################################################################
 #    Data Properties
 #################################################################
@@ -1844,7 +2141,7 @@ nexus:model_id a owl:DatatypeProperty ;
 
 nexus:user_id a owl:DatatypeProperty ;
     rdfs:label "user id"@en ;
-    rdfs:domain nexus:User, nexus:FrontEndEvent ;
+    rdfs:domain nexus:User, nexus:FrontEndEvent, nexus:CreateConversation, nexus:UpdateConversation, nexus:DeleteConversation, nexus:CreateMessage, nexus:UpdateMessage ;
     rdfs:range xsd:string ;
     skos:definition "The unique identifier of the user account in the Nexus platform."@en ;
     skos:example "usr_01HXYZ", "42a3f9c1-1234-5678-abcd-ef0123456789" .
@@ -1890,7 +2187,7 @@ nexus:session_id a owl:DatatypeProperty ;
 
 nexus:workspace_id a owl:DatatypeProperty ;
     rdfs:label "workspace id"@en ;
-    rdfs:domain nexus:Workspace, nexus:FrontEndEvent ;
+    rdfs:domain nexus:Workspace, nexus:FrontEndEvent, nexus:CreateConversation, nexus:UpdateConversation, nexus:DeleteConversation, nexus:CreateMessage, nexus:UpdateMessage ;
     rdfs:range xsd:string ;
     skos:definition "The unique identifier of a workspace in the Nexus platform."@en ;
     skos:example "ws-ee0d7c1d56b2" .
@@ -1949,3 +2246,122 @@ nexus:referrer a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "The HTTP referrer (originating page or host) recorded at the time of a page-view process."@en ;
     skos:example "nexus.localhost", "https://google.com" .
+
+#################################################################
+#    Personal Knowledge Graph — lifecycle status quality
+#################################################################
+
+# HOW IT IS (Quality) — lifecycle status borne by a platform artifact
+nexus:Status a owl:Class ;
+    rdfs:label "Status"@en ;
+    skos:definition "A quality that a platform artifact bears, indicating whether the artifact is currently active in the platform or has been logically removed (deleted)."@en ;
+    skos:example "Active status of a conversation", "Deleted status of a message"@en ;
+    rdfs:subClassOf abi:Quality ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isStatusOf ;
+          owl:someValuesFrom abi:GenericallyDependentContinuant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isStatusOf ;
+          owl:allValuesFrom abi:GenericallyDependentContinuant
+        ] .
+
+# Object property: GDC artifact bears a Status quality
+nexus:hasStatus a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf nexus:isStatusOf ;
+    rdfs:label "has status"@en ;
+    skos:definition "Relates a platform artifact (generically dependent continuant) to the status quality it currently bears."@en ;
+    rdfs:domain abi:GenericallyDependentContinuant ;
+    rdfs:range nexus:Status .
+
+nexus:isStatusOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf nexus:hasStatus ;
+    rdfs:label "is status of"@en ;
+    skos:definition "Relates a status quality to the platform artifact in which it inheres."@en ;
+    rdfs:domain nexus:Status ;
+    rdfs:range abi:GenericallyDependentContinuant .
+
+# Status named individuals — the two values used by the personal-graph indexer
+nexus:ActiveStatus a owl:NamedIndividual , nexus:Status ;
+    rdfs:label "Active"@en ;
+    skos:definition "The status borne by a platform artifact that is currently active in the platform."@en .
+
+nexus:DeletedStatus a owl:NamedIndividual , nexus:Status ;
+    rdfs:label "Deleted"@en ;
+    skos:definition "The status borne by a platform artifact that has been logically removed; the artifact and its history remain in the graph."@en .
+
+#################################################################
+#    Personal Knowledge Graph — chat lifecycle events (LogProcess)
+#################################################################
+
+# CreateConversation and CreateMessage are defined above as logged processes
+# (rdfs:subClassOf abi:LogProcess). The three classes below cover the remaining
+# lifecycle events that the personal-graph indexer materializes. All are
+# subclasses of abi:LogProcess so EventService can publish instances; the
+# bfo:BFO_0000015 second parent gives the bucket-mapping validator a direct
+# trace to the BFO process root without needing cross-package import
+# resolution at validation time.
+
+nexus:UpdateConversation a owl:Class ;
+    rdfs:label "Update Conversation"@en ;
+    skos:definition "A logged process that records the update of a conversation artifact (title, pinned, archived, agent) by a user in the Nexus platform."@en ;
+    rdfs:subClassOf abi:LogProcess , bfo:BFO_0000015 .
+
+nexus:DeleteConversation a owl:Class ;
+    rdfs:label "Delete Conversation"@en ;
+    skos:definition "A logged process that records the logical deletion of a conversation artifact by a user in the Nexus platform. The conversation individual is preserved; its status quality is set to Deleted."@en ;
+    rdfs:subClassOf abi:LogProcess , bfo:BFO_0000015 .
+
+nexus:UpdateMessage a owl:Class ;
+    rdfs:label "Update Message"@en ;
+    skos:definition "A logged process that records the update of the content or metadata of a message in the Nexus platform."@en ;
+    rdfs:subClassOf abi:LogProcess , bfo:BFO_0000015 .
+
+# Data properties carried by chat lifecycle events
+nexus:conversation_id a owl:DatatypeProperty ;
+    rdfs:label "conversation id"@en ;
+    rdfs:domain nexus:Conversation, nexus:CreateConversation, nexus:UpdateConversation, nexus:DeleteConversation, nexus:CreateMessage, nexus:UpdateMessage ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier of a conversation artifact in the Nexus platform."@en ;
+    skos:example "conv-9af3c1b2e0d7" .
+
+nexus:message_id a owl:DatatypeProperty ;
+    rdfs:label "message id"@en ;
+    rdfs:domain nexus:Message, nexus:CreateMessage, nexus:UpdateMessage ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier of a message artifact in the Nexus platform."@en ;
+    skos:example "msg-1c2b3a4d5e6f" .
+
+nexus:role a owl:DatatypeProperty ;
+    rdfs:label "role"@en ;
+    rdfs:domain nexus:Message, nexus:CreateMessage, nexus:UpdateMessage ;
+    rdfs:range xsd:string ;
+    skos:definition "Role of the message author within a conversation (user, assistant, system)."@en ;
+    skos:example "user", "assistant", "system" .
+
+nexus:content a owl:DatatypeProperty ;
+    rdfs:label "content"@en ;
+    rdfs:domain nexus:Message, nexus:CreateMessage, nexus:UpdateMessage ;
+    rdfs:range xsd:string ;
+    skos:definition "The textual content of a message in the Nexus platform."@en .
+
+nexus:agent a owl:DatatypeProperty ;
+    rdfs:label "agent"@en ;
+    rdfs:domain nexus:Conversation, nexus:Message, nexus:CreateConversation, nexus:UpdateConversation, nexus:CreateMessage, nexus:UpdateMessage ;
+    rdfs:range xsd:string ;
+    skos:definition "Identifier of the agent associated with a conversation or message in the Nexus platform."@en ;
+    skos:example "aia", "bob", "abi" .
+
+nexus:title a owl:DatatypeProperty ;
+    rdfs:label "title"@en ;
+    rdfs:domain nexus:Conversation, nexus:CreateConversation, nexus:UpdateConversation ;
+    rdfs:range xsd:string ;
+    skos:definition "Display title of a conversation in the Nexus platform."@en .
+
+# Named individual: the role a personal knowledge graph bears, surfaced as
+# its own pack in the /graph/list response so the UI groups them together.
+nexus:PersonalKnowledgeGraphRole a owl:NamedIndividual , nexus:KnowledgeGraphRole ;
+    rdfs:label "Personal"@en ;
+    skos:definition "The role borne by a per-user knowledge graph (\"My Graph\"), visible only to its owning user."@en .

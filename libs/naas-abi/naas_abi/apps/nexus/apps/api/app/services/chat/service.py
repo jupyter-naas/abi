@@ -45,6 +45,41 @@ from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     complete_chat as complete_with_provider,
 )
 from naas_abi.apps.nexus.apps.api.app.services.secrets_crypto import decrypt_secret_value
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
+    CreateConversation as CreateConversationEvent,
+)
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
+    CreateMessage as CreateMessageEvent,
+)
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
+    DeleteConversation as DeleteConversationEvent,
+)
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
+    UpdateConversation as UpdateConversationEvent,
+)
+from naas_abi.ontologies.modules.NexusPlatformOntology import (
+    UpdateMessage as UpdateMessageEvent,
+)
+
+_logger = logging.getLogger(__name__)
+
+
+def _publish_chat_event(event: Any) -> None:
+    """Fire-and-forget publish to the engine's EventService.
+
+    Chat persistence is the source of truth; event publishing is best-effort.
+    Any failure (engine not initialized, bus down, codec error) is logged but
+    must never propagate — a missed event must not break the chat request.
+    """
+    try:
+        from naas_abi import ABIModule
+
+        engine = ABIModule.get_instance().engine
+        if not engine.services.events_available():
+            return
+        engine.services.events.publish(event)
+    except Exception as exc:  # pragma: no cover - best-effort logging
+        _logger.warning("Failed to publish chat event %s: %s", type(event).__name__, exc)
 
 
 @dataclass
@@ -307,7 +342,7 @@ class ChatService:
     ) -> ChatConversationRecord:
         await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
         conv_id = conversation_id or f"conv-{uuid4().hex[:12]}"
-        return await self.adapter.create_conversation(
+        record = await self.adapter.create_conversation(
             conversation_id=conv_id,
             workspace_id=workspace_id,
             user_id=context.actor_user_id,
@@ -315,6 +350,17 @@ class ChatService:
             agent=agent,
             now=now,
         )
+        _publish_chat_event(
+            CreateConversationEvent(
+                user_id=context.actor_user_id,
+                workspace_id=workspace_id,
+                conversation_id=conv_id,
+                title=title,
+                agent=agent,
+                created=now,
+            )
+        )
+        return record
 
     async def get_conversation(
         self,
@@ -528,7 +574,7 @@ class ChatService:
         agent: str | None = None,
         message_id: str | None = None,
     ) -> str:
-        await self._ensure_conversation_access(
+        conversation = await self._ensure_conversation_access(
             context,
             conversation_id,
             action="chat.message.create",
@@ -541,6 +587,18 @@ class ChatService:
             content=content,
             agent=agent,
             created_at=created_at,
+        )
+        _publish_chat_event(
+            CreateMessageEvent(
+                user_id=context.actor_user_id,
+                workspace_id=conversation.workspace_id,
+                conversation_id=conversation_id,
+                message_id=msg_id,
+                role=role,
+                content=content,
+                agent=agent,
+                created=created_at,
+            )
         )
         return msg_id
 
@@ -576,12 +634,23 @@ class ChatService:
         message_id: str,
         content: str,
     ) -> bool:
-        await self._ensure_conversation_access(
+        conversation = await self._ensure_conversation_access(
             context,
             conversation_id,
             action="chat.message.update",
         )
-        return await self.adapter.update_message_content(message_id, content)
+        updated = await self.adapter.update_message_content(message_id, content)
+        if updated:
+            _publish_chat_event(
+                UpdateMessageEvent(
+                    user_id=context.actor_user_id,
+                    workspace_id=conversation.workspace_id,
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    content=content,
+                )
+            )
+        return updated
 
     async def finalize_streaming_response(
         self,
@@ -732,7 +801,7 @@ class ChatService:
         pinned: bool | None = None,
         archived: bool | None = None,
     ) -> None:
-        await self._ensure_conversation_access(
+        conversation = await self._ensure_conversation_access(
             context,
             conversation_id,
             action="chat.conversation.update",
@@ -744,19 +813,37 @@ class ChatService:
             pinned=pinned,
             archived=archived,
         )
+        _publish_chat_event(
+            UpdateConversationEvent(
+                user_id=context.actor_user_id,
+                workspace_id=conversation.workspace_id,
+                conversation_id=conversation_id,
+                title=title if title is not None else conversation.title,
+                agent=conversation.agent,
+            )
+        )
 
     async def delete_conversation_with_messages(
         self,
         context: RequestContext,
         conversation_id: str,
     ) -> bool:
-        await self._ensure_conversation_access(
+        conversation = await self._ensure_conversation_access(
             context,
             conversation_id,
             action="chat.conversation.delete",
         )
         await self.adapter.delete_messages_by_conversation(conversation_id)
-        return await self.adapter.delete_conversation(conversation_id)
+        deleted = await self.adapter.delete_conversation(conversation_id)
+        if deleted:
+            _publish_chat_event(
+                DeleteConversationEvent(
+                    user_id=context.actor_user_id,
+                    workspace_id=conversation.workspace_id,
+                    conversation_id=conversation_id,
+                )
+            )
+        return deleted
 
     async def get_agent(
         self,

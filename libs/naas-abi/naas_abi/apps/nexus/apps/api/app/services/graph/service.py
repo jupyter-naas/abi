@@ -30,9 +30,19 @@ from rdflib.query import ResultRow
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/graph")
 
-GRAPH_BASE_URI = URIRef(
-    ABIModule.get_instance().configuration.nexus_config.ontology_base_uri + "graph/"
-)
+
+def _graph_base_uri() -> URIRef:
+    """Lazily compute the per-tenant graph base URI.
+
+    Deferred from module import so the package can be imported in unit tests
+    that don't run a full ABIModule engine; only the methods that actually
+    mint new graph URIs depend on the engine config.
+    """
+    return URIRef(
+        ABIModule.get_instance().configuration.nexus_config.ontology_base_uri + "graph/"
+    )
+
+
 NEXUS_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/nexus")
 SCHEMA_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/schema")
 
@@ -558,7 +568,7 @@ class GraphService:
         store = self._get_triple_store()
         graph_label = label.strip()
         graph_id = _slugify(graph_label)
-        new_graph_uri = GRAPH_BASE_URI + graph_id
+        new_graph_uri = _graph_base_uri() + graph_id
         store.create_graph(new_graph_uri)
         new_graph = KnowledgeGraph(_uri=new_graph_uri, label=graph_label, creator=user_id)
         if description:

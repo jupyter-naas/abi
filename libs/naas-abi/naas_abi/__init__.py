@@ -617,6 +617,18 @@ class ABIModule(BaseModule):
         if self.engine.services.activity_log_available():
             app.state.activity_log_service = self.engine.services.activity_log
 
+        # Subscribe the personal-graph indexer to chat lifecycle events so
+        # every conversation/message touched through the chat service lands
+        # as RDF in the user's "My Graph".
+        if self.engine.services.events_available():
+            from naas_abi.apps.nexus.apps.api.app.services.graph.personal_graph_service import (
+                get_personal_graph_service,
+            )
+
+            get_personal_graph_service().register_subscribers(
+                self.engine.services.events
+            )
+
         from naas_abi.apps.nexus.apps.api.app.main import create_app
 
         create_app(app)
