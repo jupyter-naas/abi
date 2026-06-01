@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.52.1 (2026-06-01)
+
+### Bug Fixes
+
+- Remove unused agent functions from default_tools.py
+  ([`2ac4f24`](https://github.com/jupyter-naas/abi/commit/2ac4f24c3921d3e151ed346b80b1321e1deeb2af))
+
+### Documentation
+
+- **model-registry**: Add service README
+  ([`8fd4638`](https://github.com/jupyter-naas/abi/commit/8fd46382a11d5131b420ec4ae08908e23f317908))
+
+
 ## v1.52.0 (2026-05-29)
 
 ### Bug Fixes
