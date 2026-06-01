@@ -223,6 +223,7 @@ export default function OrgLoginPage() {
           ) : branding ? (
             <>
               {branding.logoRectangleUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={branding.logoRectangleUrl}
                   alt={branding.name}
@@ -231,6 +232,7 @@ export default function OrgLoginPage() {
               ) : (
                 <div className="flex items-center gap-3">
                   {branding.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={branding.logoUrl}
                       alt={branding.name}

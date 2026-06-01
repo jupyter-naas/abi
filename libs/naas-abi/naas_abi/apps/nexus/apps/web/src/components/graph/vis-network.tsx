@@ -919,6 +919,7 @@ export function VisNetwork({
         networkRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Track if initial stabilization is done
