@@ -245,8 +245,8 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const { agents } = useAgentsStore();
   const safeAgents = Array.isArray(agents) ? agents : [];
 
-  const allConversations = getWorkspaceConversations() ?? [];
-  const safeProjects = Array.isArray(projects) ? projects : [];
+  const allConversations = useMemo(() => getWorkspaceConversations() ?? [], [getWorkspaceConversations]);
+  const safeProjects = useMemo(() => (Array.isArray(projects) ? projects : []), [projects]);
   const conversations = useMemo(() => allConversations.filter((c) => !c.archived), [allConversations]);
   const isChatRoute = pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/chat'));
 

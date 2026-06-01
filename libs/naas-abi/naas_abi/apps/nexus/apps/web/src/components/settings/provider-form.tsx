@@ -74,6 +74,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
     if (type === 'ollama' || type === 'abi') {
       fetchOllamaModels();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, endpoint]);
 
   const fetchOllamaModels = async () => {

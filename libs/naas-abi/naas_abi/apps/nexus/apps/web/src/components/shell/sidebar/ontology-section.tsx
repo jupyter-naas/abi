@@ -170,6 +170,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
     };
 
     fetchOntologyFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
