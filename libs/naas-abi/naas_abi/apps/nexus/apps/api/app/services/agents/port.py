@@ -20,6 +20,7 @@ class AgentRecord:
     logo_url: str | None
     created_at: datetime
     updated_at: datetime
+    is_default: bool = False
     suggestions: list[dict] | None = None
     intents: list[dict[str, str]] | None = None
 
@@ -58,6 +59,7 @@ class AgentUpdateInput:
     model_id: str | None = None
     logo_url: str | None = None
     enabled: bool | None = None
+    is_default: bool | None = None
     model: str | None = None
 
 
