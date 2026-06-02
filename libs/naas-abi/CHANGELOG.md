@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.15.0 (2026-06-02)
+
+### Features
+
+- **agent**: Add support for default agents with atomic update in Postgres adapter
+  ([`15da825`](https://github.com/jupyter-naas/abi/commit/15da825e4bd96fc522cec91490bd02ed47b73e15))
+
+
 ## v2.14.1 (2026-06-02)
 
 ### Bug Fixes
