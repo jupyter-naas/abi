@@ -111,6 +111,11 @@ modules:
     config:
       datastore_path: "sec_gov"
       user_agent: "NAAS-ABI-Marketplace/1.0 (abi@naas.ai)"
+
+  - module: naas_abi_marketplace.applications.x
+    enabled: true
+    config:
+      bearer_token: "{{ secret.X_BEARER_TOKEN }}"
   
   - module: naas_abi_marketplace.applications.openrouter
     enabled: true
