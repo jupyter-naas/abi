@@ -247,33 +247,72 @@ def _build_local_ontology_index(search_root: str) -> dict[str, str]:
     return index
 
 
-def _find_project_root(base_dir: str) -> str:
+def _find_project_roots(base_dir: str) -> list[str]:
     """
-    Walk up from *base_dir* until we find a directory containing a project
-    marker (pyproject.toml / .git / Makefile). Returns that dir, or *base_dir*
-    if nothing is found.
+    Walk up from *base_dir* collecting every directory that contains a project
+    marker (pyproject.toml / .git / Makefile). Returns roots ordered innermost
+    first, falling back to *base_dir* if nothing is found.
+
+    A workspace like .abi/ contains nested packages (libs/naas-abi/,
+    libs/naas-abi-marketplace/) each with their own pyproject.toml. An
+    ontology in one package may import an ontology declared in a sibling
+    package, so we need to search the whole chain — not just the innermost
+    project root.
     """
+    roots: list[str] = []
     current = os.path.abspath(base_dir)
     while True:
         if any(
             os.path.exists(os.path.join(current, marker))
             for marker in ("pyproject.toml", ".git", "Makefile")
         ):
-            return current
+            roots.append(current)
         parent = os.path.dirname(current)
         if parent == current:
-            return os.path.abspath(base_dir)
+            break
         current = parent
+    return roots or [os.path.abspath(base_dir)]
+
+
+# Python packages known to ship ontology TTL files alongside their source.
+# Indexed lazily and only when an import IRI doesn't resolve on the filesystem.
+_ONTOLOGY_PACKAGES = ("naas_abi", "naas_abi_core", "naas_abi_marketplace")
+
+
+def _resolve_via_installed_package(iri_str: str) -> str | None:
+    """
+    Find an installed Python package that ships an ontologies/ tree and look
+    for a .ttl whose owl:Ontology IRI matches *iri_str*. Used as a fallback
+    when the import IRI is not declared in any local-filesystem package — e.g.
+    `naas-abi` is installed via pip but its source is not on disk.
+    """
+    import importlib.util
+
+    for pkg in _ONTOLOGY_PACKAGES:
+        try:
+            spec = importlib.util.find_spec(pkg)
+        except (ImportError, ValueError):
+            continue
+        if spec is None or not spec.submodule_search_locations:
+            continue
+        for pkg_dir in spec.submodule_search_locations:
+            index = _build_local_ontology_index(pkg_dir)
+            if iri_str in index:
+                return index[iri_str]
+    return None
 
 
 def _resolve_local_import(iri_str: str, base_dir: str) -> str | None:
     """
     Look for a local .ttl file whose `<X> a owl:Ontology` triple matches *iri_str*.
-    Indexes the entire project root (once, cached).
+    Searches every project root reachable from *base_dir* (innermost first), then
+    falls back to installed Python packages that ship ontologies.
     """
-    project_root = _find_project_root(base_dir)
-    index = _build_local_ontology_index(project_root)
-    return index.get(iri_str)
+    for project_root in _find_project_roots(base_dir):
+        index = _build_local_ontology_index(project_root)
+        if iri_str in index:
+            return index[iri_str]
+    return _resolve_via_installed_package(iri_str)
 
 
 def _load_import(import_iri: URIRef, base_dir: str) -> tuple[Graph | None, str, str]:
