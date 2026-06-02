@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import Script from 'next/script';
 import { AnalyticsPageTracker } from '@/components/analytics-page-tracker';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -7,14 +7,18 @@ import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: '../../public/fonts/Inter-Variable.woff2',
   variable: '--font-inter',
+  display: 'swap',
+  weight: '100 900',
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
+const jetbrainsMono = localFont({
+  src: '../../public/fonts/JetBrainsMono-Variable.woff2',
   variable: '--font-mono',
+  display: 'swap',
+  weight: '100 800',
 });
 
 const DEFAULT_TITLE = 'ABI Nexus | naas.ai';

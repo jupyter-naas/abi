@@ -79,24 +79,62 @@ def with_event_service_override(
 
 
 _default_model_registry: "IModelRegistry | None" = None
+# Flips to True the moment ``Engine.load()`` finishes binding (or explicitly
+# clearing) the singleton — i.e. after every module's ``on_load`` has run and
+# after ``validate_defaults``. Until then, ``get_default_model_registry()``
+# raises rather than returning a half-populated registry. This is what fences
+# off the common footgun of a module reaching for the global accessor from
+# inside its own ``on_load`` and getting back a registry that has only
+# whatever modules happened to have loaded so far.
+_default_model_registry_ready: bool = False
 _model_registry_override: ContextVar["IModelRegistry | None"] = ContextVar(
     "model_registry_override", default=None
 )
 
 
 def set_default_model_registry(registry: "IModelRegistry | None") -> None:
-    """Bind the process-wide ModelRegistry. Called by ``Engine.load()``."""
-    global _default_model_registry
+    """Bind (or unbind) the process-wide ModelRegistry and mark it ready.
+
+    Called by ``Engine.load()`` exactly once per load, after every module's
+    ``on_load`` has finished and after ``validate_defaults``. Module code must
+    not call this directly. Passing ``None`` records "this engine has no
+    registry" — a valid post-init state, distinct from "the engine hasn't
+    loaded yet" (which keeps the ready flag False).
+    """
+    global _default_model_registry, _default_model_registry_ready
     _default_model_registry = registry
+    _default_model_registry_ready = True
 
 
 def get_default_model_registry() -> "IModelRegistry | None":
-    """Return the ModelRegistry to use right now, or ``None`` if not configured.
+    """Return the process-wide ModelRegistry, or ``None`` if the engine has
+    no registry configured.
 
-    Checks the per-context override first, then falls back to the
-    process-wide default.
+    Raises ``RuntimeError`` if called before ``Engine.load()`` has finished
+    binding the singleton — typically because a module's ``on_load`` reached
+    for the registry through this accessor instead of via
+    ``self._engine.services.model_registry``. During ``on_load`` use the
+    proxy; this global accessor is for ``on_initialized`` hooks and
+    request-time / runtime code, where every module is guaranteed to have
+    already registered.
+
+    The per-context override (used by tests / hypothetical multi-engine
+    setups) bypasses the ready check, so test fixtures can install a fake
+    without going through Engine.load.
     """
-    return _model_registry_override.get() or _default_model_registry
+    override = _model_registry_override.get()
+    if override is not None:
+        return override
+    if not _default_model_registry_ready:
+        raise RuntimeError(
+            "Process-wide ModelRegistry is not ready: get_default_model_registry() "
+            "was called before Engine.load() finished loading all modules. Module "
+            "on_load callbacks must use self._engine.services.model_registry "
+            "instead — the global accessor is intentionally fenced off until "
+            "after on_load completes so callers can trust the registry is fully "
+            "populated."
+        )
+    return _default_model_registry
 
 
 @contextmanager
