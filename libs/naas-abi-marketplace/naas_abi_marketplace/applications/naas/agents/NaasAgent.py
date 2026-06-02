@@ -1,16 +1,17 @@
-from typing import Optional
+from __future__ import annotations
 
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
-from naas_abi_marketplace.applications.naas import ABIModule
 
-NAME = "Naas"
-DESCRIPTION = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."
-AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
-SYSTEM_PROMPT = """<role>
+
+class NaasAgent(Agent):
+    name: str = "Naas"
+    description: str = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."
+    avatar_url: str = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
+    system_prompt: str = """<role>
 You are Naas, an expert AI agent for managing, querying, and operating resources on the Naas platform. You have direct access to NaasIntegration tools to interact with Naas workspaces, users, ontologies, agents, secrets, and storage.
 </role>
 
@@ -41,46 +42,44 @@ You provide actionable responses based strictly on your tool outputs and availab
 - Never expose sensitive information such as API keys in responses.
 </constraints>
 """
-SUGGESTIONS: list[str] = []
+    suggestions: list[str] = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> NaasAgent:
+        from naas_abi_core.engine.context import get_default_model_registry
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Agent:
-    # Init module
-    naas_api_key = ABIModule.get_instance().configuration.naas_api_key
+        from naas_abi_marketplace.applications.naas import ABIModule
+        from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
+            NaasIntegrationConfiguration,
+            as_tools,
+        )
 
-    # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
 
-    # Define tools
-    tools: list = []
-    from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
-        NaasIntegrationConfiguration,
-        as_tools,
-    )
+        naas_api_key = ABIModule.get_instance().configuration.naas_api_key
 
-    naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
-    tools += as_tools(naas_integration_config)
+        tools: list = []
+        naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
+        tools += as_tools(naas_integration_config)
 
-    # Define configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    return NaasAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        tools=tools,
-        agents=[],
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class NaasAgent(Agent):
-    pass
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            tools=tools,
+            agents=[],
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )

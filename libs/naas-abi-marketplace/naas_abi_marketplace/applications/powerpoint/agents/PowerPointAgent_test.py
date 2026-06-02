@@ -1,12 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.powerpoint.agents.PowerPointAgent import (
-    create_agent,
-)
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.powerpoint.agents.PowerPointAgent import (
+        PowerPointAgent,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.powerpoint"])
+
+    return PowerPointAgent.New()
 
 
 def test_powerpoint_agent(agent):

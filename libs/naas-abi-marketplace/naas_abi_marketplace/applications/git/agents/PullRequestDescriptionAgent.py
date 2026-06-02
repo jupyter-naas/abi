@@ -1,7 +1,6 @@
 from typing import Optional
 
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -35,15 +34,15 @@ Where <branch_name_number> is the number at the beginning of the branch name.
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "PullRequestDescriptionAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_marketplace.applications.git import ABIModule
-        from pydantic import SecretStr
 
         module = ABIModule.get_instance()
-        secret = module.engine.services.secret
         object_storage = module.engine.services.object_storage
-        model = ChatOpenAI(
-            model=cls.model, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-        )
+
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        model = registry.get_default_chat_model()
 
         @tool(description="Get the git diff and the branch name")
         def git_diff() -> str:
