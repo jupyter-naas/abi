@@ -1,6 +1,5 @@
 import hashlib
-import json
-import os
+import json as _json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -21,6 +20,9 @@ from rdflib import Graph, Namespace, URIRef
 from rdflib.namespace import RDFS
 
 from naas_abi_marketplace.applications.x import X_NAMESPACE
+from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+    XIntegration,
+)
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     SearchInterval,
     SearchQuery,
@@ -54,41 +56,49 @@ class XSearchRecentTweetsPipelineConfiguration(PipelineConfiguration):
     """Configuration for XSearchRecentTweetsPipeline.
 
     Attributes:
+        x_integration: The XIntegration used to call the X v2 recent-search
+            endpoint at run time.
         triple_store: Service used to check for already-ingested individuals
             (label-based existence check) and to persist new triples.
         graph_name: Named graph in the triple store where tweets are written.
-        datastore_path: Directory holding the JSON files produced by the
-            XIntegration.search_recent_tweets cache.
     """
 
+    x_integration: XIntegration
     triple_store: ITripleStoreService
     graph_name: URIRef = URIRef(f"{X_NAMESPACE}graph")
-    datastore_path: str = "storage/datastore/x/search_recent_tweets"
 
 
 class XSearchRecentTweetsPipelineParameters(PipelineParameters):
-    result_set_id: Annotated[
+    query: Annotated[
         str,
         Field(
             description=(
-                "8-character hex digest identifying the cached search result "
-                "(matches the JSON filename in the datastore, e.g. '21dcaa8c')."
+                "X v2 search query (1-4096 chars) — see "
+                "https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query"
             ),
-            example="21dcaa8c",
+            example="(from:TwitterDev OR from:TwitterAPI) has:media -is:retweet",
         ),
     ]
-    query_string: Optional[
-        Annotated[
-            str,
-            Field(
-                description=(
-                    "The X v2 search query that produced the result set. "
-                    "Used to materialise the SearchQuery individual."
-                ),
-                example="Roland Garros lang:en",
+    options: Annotated[
+        dict,
+        Field(
+            default_factory=dict,
+            description=(
+                "Optional keyword arguments forwarded to "
+                "XIntegration.search_recent_tweets — any subset of: "
+                "start_time, end_time, since_id, until_id, max_results, "
+                "sort_order, tweet_fields, expansions, media_fields, "
+                "poll_fields, user_fields, place_fields, max_pages."
             ),
-        ]
-    ] = None
+            example={
+                "start_time": "2026-05-26T00:00:00Z",
+                "end_time": "2026-06-02T00:00:00Z",
+                "max_results": 100,
+                "sort_order": "recency",
+                "max_pages": 1,
+            },
+        ),
+    ]
     persist: Annotated[
         bool,
         Field(
@@ -100,15 +110,37 @@ class XSearchRecentTweetsPipelineParameters(PipelineParameters):
     ] = True
 
 
-class XSearchRecentTweetsPipeline(Pipeline):
-    """Maps a cached X search_recent_tweets JSON file into the X ontology graph.
+# Recognised keyword arguments accepted by XIntegration.search_recent_tweets.
+_SEARCH_OPTION_KEYS = frozenset(
+    {
+        "start_time",
+        "end_time",
+        "since_id",
+        "until_id",
+        "max_results",
+        "sort_order",
+        "tweet_fields",
+        "expansions",
+        "media_fields",
+        "poll_fields",
+        "user_fields",
+        "place_fields",
+        "max_pages",
+    }
+)
 
-    For each tweet in the JSON it creates a ``Tweet`` individual linked to its
-    author ``XUser``, ``TweetPublicMetrics``, and ``TweetLanguage``; all tweets
-    are linked to a ``SearchResultSet`` produced by a ``SearchRecentTweets``
-    process that uses a ``SearchQuery``. URIs are deterministic so re-runs are
-    idempotent, and each individual is skipped when one with the same label
-    already lives in the configured named graph.
+
+class XSearchRecentTweetsPipeline(Pipeline):
+    """Calls XIntegration.search_recent_tweets and maps the result to the graph.
+
+    For every tweet returned by the X v2 ``GET /2/tweets/search/recent``
+    endpoint, the pipeline creates a ``Tweet`` individual linked to its author
+    ``XUser``, ``TweetPublicMetrics`` and ``TweetLanguage``; all tweets are
+    linked to a ``SearchResultSet`` produced by a ``SearchRecentTweets``
+    process that uses a ``SearchQuery``. URIs are deterministic (derived from
+    the X-side identifiers plus a hash of the request parameters) so re-runs
+    are idempotent, and each individual is skipped when one with the same
+    ``rdfs:label`` already lives in the configured named graph.
     """
 
     __configuration: XSearchRecentTweetsPipelineConfiguration
@@ -124,6 +156,20 @@ class XSearchRecentTweetsPipeline(Pipeline):
         safe = re.sub(r"[^A-Za-z0-9_\-]", "_", stable_id)
         return f"{X_NAMESPACE}{class_name}/{safe}"
 
+    @staticmethod
+    def _params_hash(query: str, options: dict) -> str:
+        """8-char md5 of (query + sorted options).
+
+        Mirrors the cache-key convention used by
+        ``XIntegration.search_recent_tweets`` so a pipeline run that targets
+        the same request reuses the same SearchResultSet / SearchRecentTweets
+        IRIs across executions.
+        """
+        payload = {"query": query, **{k: options.get(k) for k in sorted(options)}}
+        return hashlib.md5(
+            _json.dumps(payload, sort_keys=True, default=str).encode()
+        ).hexdigest()[:8]
+
     def _label_exists(self, label: str, class_uri: str) -> bool:
         """Return True iff an instance of *class_uri* with *label* already exists.
 
@@ -133,15 +179,18 @@ class XSearchRecentTweetsPipeline(Pipeline):
         entity.
         """
         escaped = label.replace("\\", "\\\\").replace('"', '\\"')
-        query = (
+        sparql = (
             f"ASK {{ GRAPH <{self.__configuration.graph_name}> {{ "
             f"?s a <{class_uri}> ; "
             f"<{RDFS.label}> \"{escaped}\" . }} }}"
         )
         try:
-            return bool(self.__configuration.triple_store.query(query).askAnswer)
+            return bool(self.__configuration.triple_store.query(sparql).askAnswer)
         except Exception as exc:  # noqa: BLE001
-            logger.warning(f"XSearchRecentTweetsPipeline: label-existence ASK failed ({exc}); assuming absent")
+            logger.warning(
+                f"XSearchRecentTweetsPipeline: label-existence ASK failed "
+                f"({exc}); assuming absent"
+            )
             return False
 
     # ----- Per-entity builders --------------------------------------------------
@@ -153,7 +202,9 @@ class XSearchRecentTweetsPipeline(Pipeline):
         graph = Graph() if self._label_exists(label, XUser._class_uri) else user.rdf()
         return user, graph
 
-    def _build_metrics(self, tweet_id: str, metrics: dict) -> tuple[TweetPublicMetrics, Graph]:
+    def _build_metrics(
+        self, tweet_id: str, metrics: dict
+    ) -> tuple[TweetPublicMetrics, Graph]:
         label = f"Public metrics of tweet {tweet_id}"
         uri = self._uri("TweetPublicMetrics", f"metrics-{tweet_id}")
         instance = TweetPublicMetrics(
@@ -173,7 +224,9 @@ class XSearchRecentTweetsPipeline(Pipeline):
         )
         return instance, graph
 
-    def _build_language(self, lang_code: Optional[str], tweet: Tweet) -> Optional[tuple[TweetLanguage, Graph]]:
+    def _build_language(
+        self, lang_code: Optional[str], tweet: Tweet
+    ) -> Optional[tuple[TweetLanguage, Graph]]:
         if not lang_code:
             return None
         label = f"Tweet language {lang_code}"
@@ -191,24 +244,18 @@ class XSearchRecentTweetsPipeline(Pipeline):
         )
         return instance, graph
 
-    def _build_tweet(
-        self,
-        record: dict,
-        result_set_uri: str,
-    ) -> Graph:
+    def _build_tweet(self, record: dict, result_set_uri: str) -> Graph:
         tweet_id = record["id"]
         author_id = record.get("author_id", "")
         tweet_label = f"Tweet {tweet_id}"
         tweet_uri = self._uri("Tweet", tweet_id)
-
-        created_at = self._parse_dt(record.get("created_at"))
 
         tweet = Tweet(
             _uri=tweet_uri,
             label=tweet_label,
             tweet_id=tweet_id,
             tweet_text=record.get("text"),
-            tweet_created_at=created_at,
+            tweet_created_at=self._parse_dt(record.get("created_at")),
             edit_history_tweet_id=self._first(record.get("edit_history_tweet_ids")),
             is_contained_in_search_result_set=[URIRef(result_set_uri)],
         )
@@ -243,15 +290,32 @@ class XSearchRecentTweetsPipeline(Pipeline):
 
     def run(self, parameters: XSearchRecentTweetsPipelineParameters) -> Graph:  # type: ignore[override]
         if not isinstance(parameters, XSearchRecentTweetsPipelineParameters):
-            raise ValueError("Parameters must be of type XSearchRecentTweetsPipelineParameters")
+            raise ValueError(
+                "Parameters must be of type XSearchRecentTweetsPipelineParameters"
+            )
 
-        json_path = os.path.join(
-            self.__configuration.datastore_path, f"{parameters.result_set_id}.json"
+        # Forward only recognised keys so an unexpected key fails fast at the
+        # boundary rather than deep inside the integration.
+        unknown = set(parameters.options) - _SEARCH_OPTION_KEYS
+        if unknown:
+            raise ValueError(
+                f"Unknown options for search_recent_tweets: {sorted(unknown)}. "
+                f"Accepted keys: {sorted(_SEARCH_OPTION_KEYS)}"
+            )
+
+        logger.info(
+            f"XSearchRecentTweetsPipeline: calling search_recent_tweets("
+            f"query={parameters.query!r}, options={parameters.options})"
         )
-        logger.info(f"XSearchRecentTweetsPipeline: loading tweets from {json_path}")
-        with open(json_path, encoding="utf-8") as f:
-            tweets: list[dict] = json.load(f)
-        logger.info(f"XSearchRecentTweetsPipeline: read {len(tweets)} tweets from {json_path}")
+        tweets: list[dict] = self.__configuration.x_integration.search_recent_tweets(
+            parameters.query, **parameters.options
+        )
+        logger.info(f"XSearchRecentTweetsPipeline: fetched {len(tweets)} tweets")
+
+        # Deterministic id for the *result set* of this request — used as the
+        # stable URI fragment for the SearchResultSet / SearchInterval /
+        # SearchRecentTweets process individuals.
+        result_set_id = self._params_hash(parameters.query, parameters.options)
 
         graph = Graph()
         graph.bind("x", Namespace(X_NAMESPACE))
@@ -262,46 +326,55 @@ class XSearchRecentTweetsPipeline(Pipeline):
             graph += platform.rdf()
 
         # SearchQuery
-        query_string = parameters.query_string or ""
-        query_hash = hashlib.md5(query_string.encode()).hexdigest()[:8] if query_string else parameters.result_set_id
-        query_label = (
-            f"Search Query: {query_string}" if query_string else f"Search Query {query_hash}"
-        )
+        query_hash = hashlib.md5(parameters.query.encode()).hexdigest()[:8]
+        query_label = f"Search Query: {parameters.query}"
         query = SearchQuery(
             _uri=self._uri("SearchQuery", query_hash),
             label=query_label,
-            query_string=query_string or None,
+            query_string=parameters.query,
+            start_time=self._parse_dt(parameters.options.get("start_time")),
+            end_time=self._parse_dt(parameters.options.get("end_time")),
+            since_id=parameters.options.get("since_id"),
+            until_id=parameters.options.get("until_id"),
+            max_results=parameters.options.get("max_results"),
+            sort_order=parameters.options.get("sort_order"),
+            max_pages=parameters.options.get("max_pages"),
+            tweet_fields=self._join(parameters.options.get("tweet_fields")),
+            expansions=self._join(parameters.options.get("expansions")),
+            media_fields=self._join(parameters.options.get("media_fields")),
+            poll_fields=self._join(parameters.options.get("poll_fields")),
+            user_fields=self._join(parameters.options.get("user_fields")),
+            place_fields=self._join(parameters.options.get("place_fields")),
         )
         if not self._label_exists(query_label, SearchQuery._class_uri):
             graph += query.rdf()
 
         # SearchResultSet
-        rs_label = f"Search Result Set {parameters.result_set_id}"
-        rs_uri = self._uri("SearchResultSet", parameters.result_set_id)
+        rs_label = f"Search Result Set {result_set_id}"
+        rs_uri = self._uri("SearchResultSet", result_set_id)
         result_set = SearchResultSet(
             _uri=rs_uri,
             label=rs_label,
-            result_set_id=parameters.result_set_id,
+            result_set_id=result_set_id,
             result_count=len(tweets),
-            datastore_path=json_path,
         )
         if not self._label_exists(rs_label, SearchResultSet._class_uri):
             graph += result_set.rdf()
 
         # SearchInterval (one instant — the run time)
         now = datetime.now(timezone.utc)
-        interval_label = f"Search Interval {parameters.result_set_id}"
+        interval_label = f"Search Interval {result_set_id}"
         interval = SearchInterval(
-            _uri=self._uri("SearchInterval", parameters.result_set_id),
+            _uri=self._uri("SearchInterval", result_set_id),
             label=interval_label,
         )
         if not self._label_exists(interval_label, SearchInterval._class_uri):
             graph += interval.rdf()
 
         # SearchRecentTweets process linking it all together
-        process_label = f"Search Recent Tweets {parameters.result_set_id}"
+        process_label = f"Search Recent Tweets {result_set_id}"
         process = SearchRecentTweets(
-            _uri=self._uri("SearchRecentTweets", parameters.result_set_id),
+            _uri=self._uri("SearchRecentTweets", result_set_id),
             label=process_label,
             uses_search_query=[URIRef(query._uri)],
             produces_search_result=[URIRef(result_set._uri)],
@@ -316,7 +389,9 @@ class XSearchRecentTweetsPipeline(Pipeline):
         for record in tweets:
             graph += self._build_tweet(record, result_set_uri=result_set._uri)
 
-        logger.info(f"XSearchRecentTweetsPipeline: produced graph with {len(graph)} triples")
+        logger.info(
+            f"XSearchRecentTweetsPipeline: produced graph with {len(graph)} triples"
+        )
 
         if parameters.persist:
             self.__configuration.triple_store.insert(
@@ -335,8 +410,10 @@ class XSearchRecentTweetsPipeline(Pipeline):
     def _parse_dt(value: Any) -> Optional[datetime]:
         if not value:
             return None
+        if isinstance(value, datetime):
+            return value
         try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
         except (TypeError, ValueError):
             return None
 
@@ -348,6 +425,16 @@ class XSearchRecentTweetsPipeline(Pipeline):
             return value
         return None
 
+    @staticmethod
+    def _join(value: Any) -> Optional[str]:
+        """Render a list-valued X v2 expansion field as the comma-joined form
+        stored on SearchQuery (matching the wire format sent to the API)."""
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return ",".join(str(v) for v in value) or None
+        return str(value)
+
     # ----- Framework hooks ------------------------------------------------------
 
     def as_tools(self) -> list[BaseTool]:
@@ -355,14 +442,15 @@ class XSearchRecentTweetsPipeline(Pipeline):
             StructuredTool(
                 name="x_add_recent_tweets_to_graph",
                 description=(
-                    "Map a cached X search_recent_tweets JSON file into the "
-                    "ABI knowledge graph as Tweet, XUser, TweetPublicMetrics, "
-                    "TweetLanguage, SearchQuery, SearchResultSet and "
-                    "SearchRecentTweets individuals."
+                    "Call XIntegration.search_recent_tweets with the given "
+                    "query (and optional X v2 parameters) and map the result "
+                    "into the ABI knowledge graph as Tweet, XUser, "
+                    "TweetPublicMetrics, TweetLanguage, SearchQuery, "
+                    "SearchResultSet and SearchRecentTweets individuals."
                 ),
-                func=lambda **kwargs: self.run(XSearchRecentTweetsPipelineParameters(**kwargs)).serialize(
-                    format="turtle"
-                ),
+                func=lambda **kwargs: self.run(
+                    XSearchRecentTweetsPipelineParameters(**kwargs)
+                ).serialize(format="turtle"),
                 args_schema=XSearchRecentTweetsPipelineParameters,
             )
         ]
