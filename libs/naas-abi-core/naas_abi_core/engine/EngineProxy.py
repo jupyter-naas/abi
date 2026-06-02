@@ -141,16 +141,17 @@ class ServicesProxy:
 
     @property
     def model_registry(self) -> ModelRegistryService:
-        self.__ensure_access(ModelRegistryService)
-
+        # ModelRegistryService is intentionally exempt from
+        # ``__ensure_access`` (see ``engine/context.py`` for the rationale):
+        # the registry is a process-wide catalog every consumer should be able
+        # to query, both via this proxy and via ``get_default_model_registry``.
+        # Restricting it here would force every module that ships a ``models/``
+        # directory — or that simply wants to resolve the default chat model —
+        # to declare an otherwise-meaningless service dependency.
         return self.__engine.services.model_registry
 
     def model_registry_available(self) -> bool:
-        if (
-            not self.__unlocked
-            and ModelRegistryService not in self.__module_dependencies.services
-        ):
-            return False
+        # No dependency-declaration check on purpose — see ``model_registry``.
         return self.__engine.services.model_registry_available()
 
 
