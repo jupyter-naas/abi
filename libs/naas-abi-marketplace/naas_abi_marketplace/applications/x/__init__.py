@@ -8,6 +8,9 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
 from naas_abi_core.services.secret.Secret import Secret
+from naas_abi_core.services.triple_store.TripleStoreService import (
+    TripleStoreService,
+)
 
 X_NAMESPACE = "http://ontology.naas.ai/x/"
 
@@ -16,8 +19,9 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_marketplace.ai.chatgpt",
+            "naas_abi_core.modules.templatablesparqlquery",
         ],
-        services=[ObjectStorageService, Secret],
+        services=[ObjectStorageService, Secret, TripleStoreService],
     )
 
     class Configuration(ModuleConfiguration):
