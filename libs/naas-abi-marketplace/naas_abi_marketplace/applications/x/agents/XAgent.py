@@ -14,13 +14,15 @@ class XAgent(Agent):
     name: str = "X Agent"
     description: str = (
         "Helps you explore X (Twitter) — users, timelines, follows, "
-        "and recent tweet search via the v2 API."
+        "and recent tweet search via the v2 API, plus SPARQL questions "
+        "over tweets already ingested into the ABI knowledge graph."
     )
     system_prompt: str = """
 You are an X (Twitter) Agent with read-only access to the X v2 API via
-bearer-token authentication.
+bearer-token authentication, plus a set of SPARQL tools to query tweets
+already ingested into the ABI knowledge graph.
 
-You can:
+X v2 API tools — use them when the user asks about something **live** on X:
 - Look up users by handle (`x_get_user_by_username`) or numeric ID (`x_get_user_by_id`).
 - Bulk-fetch up to 100 users in one call (`x_get_users_by_ids`, `x_get_users_by_usernames`).
 - Read a user's timeline (`x_get_user_tweets`), mentions (`x_get_user_mentions`),
@@ -30,14 +32,38 @@ You can:
 - Search tweets from the last 7 days (`x_search_recent_tweets`) using X v2 query
   syntax (operators like `lang:en`, `-is:retweet`, `from:user`).
 
+Graph SPARQL tools — use them when the user asks about tweets **already
+collected** in the ABI knowledge graph (i.e. analytical / aggregate
+questions over previously-ingested data):
+- `find_top_liked_tweets`, `find_top_retweeted_tweets`,
+  `find_top_impression_tweets`, `find_top_engaging_tweets` — engagement
+  rankings with a `limit`.
+- `find_tweets_by_author` — tweets by a specific `author_id`.
+- `find_tweets_containing_keyword` — substring match on tweet text.
+- `find_tweets_in_language` — filter by BCP 47 `lang_code`.
+- `find_tweets_since` — tweets created after a UTC `since` timestamp.
+- `find_tweet_by_id` — full record for one `tweet_id`.
+- `find_top_authors_by_tweet_count` — most prolific authors.
+- `find_language_distribution` — tweet count per detected language.
+
+Routing rules:
+- "Most liked / retweeted / viewed / engaging tweets" → graph tool.
+- "Top authors / language distribution / tweets containing X / tweets since X" → graph tool.
+- "What does @handle look like / fetch tweets now / who follows X" → API tool.
+- If asked an analytical question and the graph turns out empty, fall back
+  to calling `x_search_recent_tweets` and explain that no ingested data
+  was available.
+
 Operating guidelines:
 - Strip any leading `@` from handles before passing them as `username`.
-- When an endpoint needs a numeric `user_id`, resolve it first with
+- When an X v2 endpoint needs a numeric `user_id`, resolve it first with
   `x_get_user_by_username` unless the user already provided an ID.
 - Do not exceed 100 IDs/usernames per call for bulk endpoints.
-- Default `max_pages=1` on paginated endpoints; only paginate further when the
-  user explicitly asks for more.
-- Provide concise responses that summarise what the API returned.
+- Default `max_pages=1` on paginated X v2 endpoints; only paginate further
+  when the user explicitly asks for more.
+- For graph tools, pass a sensible `limit` (default 10) unless the user
+  specifies one.
+- Provide concise responses that summarise what the tool returned.
 
 Constraints:
 - Use only the provided X tools — do not call other APIs or fabricate data.
@@ -45,6 +71,43 @@ Constraints:
   retweet, explain that those write actions are not available.
 """
     model = "gpt-4.1-mini"
+
+    @classmethod
+    def get_tools(cls) -> list:
+        """Load the X SPARQL competency-question tools from the templatable
+        SPARQL query module. The tools are loaded by name so adding a new
+        query to ``XSparqlQueries.ttl`` requires registering its label here
+        as well."""
+        from naas_abi_core.module.Module import BaseModule
+        from naas_abi_core.modules.templatablesparqlquery import (
+            ABIModule as TemplatableSparqlQueryABIModule,
+        )
+
+        from naas_abi_marketplace.applications.x import ABIModule
+
+        templatable_sparql_query_module: BaseModule = (
+            ABIModule.get_instance().engine.modules[
+                "naas_abi_core.modules.templatablesparqlquery"
+            ]
+        )
+        assert isinstance(
+            templatable_sparql_query_module, TemplatableSparqlQueryABIModule
+        ), "TemplatableSparqlQueryABIModule must be a subclass of BaseModule"
+
+        x_sparql_tools = [
+            "find_top_liked_tweets",
+            "find_top_retweeted_tweets",
+            "find_top_impression_tweets",
+            "find_top_engaging_tweets",
+            "find_tweets_by_author",
+            "find_tweets_containing_keyword",
+            "find_tweets_in_language",
+            "find_tweets_since",
+            "find_tweet_by_id",
+            "find_top_authors_by_tweet_count",
+            "find_language_distribution",
+        ]
+        return list(templatable_sparql_query_module.get_tools(x_sparql_tools))
 
     @classmethod
     def New(
@@ -57,6 +120,8 @@ Constraints:
         from naas_abi_marketplace.applications.x import ABIModule
         from naas_abi_marketplace.applications.x.integrations.XIntegration import (
             XIntegrationConfiguration,
+        )
+        from naas_abi_marketplace.applications.x.integrations.XIntegration import (
             as_tools as XIntegration_tools,
         )
 
@@ -71,6 +136,7 @@ Constraints:
             bearer_token=module.configuration.bearer_token
         )
         tools = list(XIntegration_tools(x_integration_config))
+        tools += cls.get_tools()
 
         if agent_configuration is None:
             agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
