@@ -1,13 +1,260 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Circle, Server } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Circle, Server, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { useAgentsStore, type Agent } from '@/stores/agents';
+import { useAgentsStore, RESERVED_AGENT_TYPES, type Agent } from '@/stores/agents';
 import { useServersStore } from '@/stores/servers';
+import { useConfirm } from '@/components/ui/dialogs';
 import { useParams, useRouter } from 'next/navigation';
+
+// Statically declared so Tailwind's content scanner picks up all class names.
+// Indexed by deterministic hash of the type label.
+const TYPE_PALETTE: Array<{ bg: string; text: string; hover: string }> = [
+  { bg: 'bg-sky-100 dark:bg-sky-950', text: 'text-sky-700 dark:text-sky-300', hover: 'hover:bg-sky-100 hover:text-sky-700 dark:hover:bg-sky-950 dark:hover:text-sky-300' },
+  { bg: 'bg-emerald-100 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-300', hover: 'hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-950 dark:hover:text-emerald-300' },
+  { bg: 'bg-amber-100 dark:bg-amber-950', text: 'text-amber-700 dark:text-amber-300', hover: 'hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-950 dark:hover:text-amber-300' },
+  { bg: 'bg-rose-100 dark:bg-rose-950', text: 'text-rose-700 dark:text-rose-300', hover: 'hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-950 dark:hover:text-rose-300' },
+  { bg: 'bg-violet-100 dark:bg-violet-950', text: 'text-violet-700 dark:text-violet-300', hover: 'hover:bg-violet-100 hover:text-violet-700 dark:hover:bg-violet-950 dark:hover:text-violet-300' },
+  { bg: 'bg-teal-100 dark:bg-teal-950', text: 'text-teal-700 dark:text-teal-300', hover: 'hover:bg-teal-100 hover:text-teal-700 dark:hover:bg-teal-950 dark:hover:text-teal-300' },
+  { bg: 'bg-orange-100 dark:bg-orange-950', text: 'text-orange-700 dark:text-orange-300', hover: 'hover:bg-orange-100 hover:text-orange-700 dark:hover:bg-orange-950 dark:hover:text-orange-300' },
+  { bg: 'bg-pink-100 dark:bg-pink-950', text: 'text-pink-700 dark:text-pink-300', hover: 'hover:bg-pink-100 hover:text-pink-700 dark:hover:bg-pink-950 dark:hover:text-pink-300' },
+];
+
+const RESERVED_TYPE_COLORS: Record<string, { bg: string; text: string; hover: string }> = {
+  Default: {
+    bg: 'bg-blue-100 dark:bg-blue-950',
+    text: 'text-blue-700 dark:text-blue-300',
+    hover: 'hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-950 dark:hover:text-blue-300',
+  },
+  Custom: {
+    bg: 'bg-purple-100 dark:bg-purple-950',
+    text: 'text-purple-700 dark:text-purple-300',
+    hover: 'hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-950 dark:hover:text-purple-300',
+  },
+};
+
+function getTypeColor(label: string): { bg: string; text: string; hover: string } {
+  const reserved = RESERVED_TYPE_COLORS[label];
+  if (reserved) return reserved;
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0;
+  return TYPE_PALETTE[Math.abs(hash) % TYPE_PALETTE.length];
+}
+
+function AgentTypeSelect({
+  agent,
+  currentType,
+  customTypes,
+  onPickDefault,
+  onPickType,
+  onCreateType,
+}: {
+  agent: Agent;
+  currentType: string;
+  customTypes: string[];
+  onPickDefault: (agent: Agent) => void | Promise<void>;
+  onPickType: (agent: Agent, type: string) => void;
+  onCreateType: (name: string) => string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setQuery('');
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect();
+        setPopoverPos({ top: rect.bottom + 4, left: rect.left });
+      }
+      setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      setPopoverPos(null);
+    }
+  }, [open]);
+
+  // Recompute position on scroll/resize while open so the popover follows the trigger.
+  useEffect(() => {
+    if (!open) return;
+    const reposition = () => {
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect();
+        setPopoverPos({ top: rect.bottom + 4, left: rect.left });
+      }
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [open]);
+
+  const allTypes = useMemo(
+    () => [...RESERVED_AGENT_TYPES, ...customTypes],
+    [customTypes]
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allTypes;
+    return allTypes.filter((t) => t.toLowerCase().includes(q));
+  }, [allTypes, query]);
+
+  const trimmed = query.trim();
+  const canCreate =
+    trimmed.length > 0 &&
+    !allTypes.some((t) => t.toLowerCase() === trimmed.toLowerCase());
+
+  const color = getTypeColor(currentType);
+  const disabled = !agent.enabled;
+
+  const handlePick = (type: string) => {
+    setOpen(false);
+    if (type === currentType) return;
+    if (type === 'Default') {
+      void onPickDefault(agent);
+      return;
+    }
+    if (agent.isDefault) {
+      // Demotion blocked — promote another agent instead.
+      return;
+    }
+    onPickType(agent, type);
+  };
+
+  const handleCreate = () => {
+    if (!canCreate) return;
+    const created = onCreateType(trimmed);
+    if (!created) return;
+    setOpen(false);
+    if (agent.isDefault) return; // Won't demote
+    onPickType(agent, created);
+  };
+
+  return (
+    <div className="inline-block">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (disabled) return;
+          setOpen((v) => !v);
+        }}
+        disabled={disabled}
+        title={disabled ? 'Enable agent to change type' : 'Change type'}
+        className={cn(
+          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors',
+          color.bg,
+          color.text,
+          !disabled && 'cursor-pointer hover:opacity-80',
+          disabled && 'opacity-60 cursor-not-allowed'
+        )}
+      >
+        {currentType}
+      </button>
+
+      {open && popoverPos && typeof document !== 'undefined' && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[9998]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+          />
+          <div
+            style={{ top: popoverPos.top, left: popoverPos.left }}
+            className="fixed z-[9999] w-56 rounded-md border border-border bg-popover p-1 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (canCreate) {
+                    handleCreate();
+                  } else if (filtered.length > 0) {
+                    handlePick(filtered[0]);
+                  }
+                } else if (e.key === 'Escape') {
+                  setOpen(false);
+                }
+              }}
+              placeholder="Search or create type..."
+              className="mb-1 w-full rounded border-0 bg-muted px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+            />
+            <div className="max-h-60 overflow-y-auto">
+              {filtered.map((type) => {
+                const c = getTypeColor(type);
+                const isSelected = type === currentType;
+                const wouldDemote =
+                  agent.isDefault && type !== 'Default';
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handlePick(type)}
+                    disabled={wouldDemote}
+                    title={
+                      wouldDemote
+                        ? 'To change the default, promote another agent to "Default" first'
+                        : undefined
+                    }
+                    className={cn(
+                      'flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs',
+                      !wouldDemote && 'hover:bg-accent cursor-pointer',
+                      wouldDemote && 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
+                        c.bg,
+                        c.text
+                      )}
+                    >
+                      {type}
+                    </span>
+                    {isSelected && <Check size={12} className="text-muted-foreground" />}
+                  </button>
+                );
+              })}
+              {filtered.length === 0 && !canCreate && (
+                <p className="px-2 py-1.5 text-xs text-muted-foreground">No matching type</p>
+              )}
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-accent"
+                >
+                  <Plus size={12} className="text-muted-foreground" />
+                  <span>
+                    Create{' '}
+                    <span className="font-medium text-foreground">&ldquo;{trimmed}&rdquo;</span>
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
+}
 
 const getApiBase = () => getApiUrl();
 
@@ -55,8 +302,39 @@ export default function AgentsPage() {
   });
 
   const { providers } = useIntegrationsStore();
-  const { agents, addAgent, deleteAgent, toggleAgent, fetchAgents } = useAgentsStore();
+  const {
+    agents,
+    addAgent,
+    deleteAgent,
+    toggleAgent,
+    setDefaultAgent,
+    fetchAgents,
+    customTypes,
+    agentTypeOverrides,
+    addCustomType,
+    setAgentTypeOverride,
+  } = useAgentsStore();
   const { fetchServers } = useServersStore();
+  const { confirm: confirmSwitchDefault, dialog: confirmDialog } = useConfirm();
+
+  const getAgentTypeLabel = (agent: Agent): string => {
+    if (agent.isDefault) return 'Default';
+    return agentTypeOverrides[agent.id] ?? 'Custom';
+  };
+
+  const handlePromoteToDefault = async (agent: Agent) => {
+    const currentDefault = agents.find((a) => a.isDefault && a.id !== agent.id);
+    if (currentDefault) {
+      const ok = await confirmSwitchDefault({
+        title: 'Switch default agent?',
+        description: `You are about to switch the default agent from "${currentDefault.name}" to "${agent.name}".\n\nNew chats will use "${agent.name}" going forward.`,
+        confirmLabel: 'Switch',
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    await setDefaultAgent(agent.id);
+  };
 
   // Fetch agents from database
   useEffect(() => {
@@ -137,7 +415,6 @@ export default function AgentsPage() {
     // Determine source based on provider or model_id prefix
     if (agent.provider === 'abi') return 'ABI Server';
     if (agent.provider) return agent.provider.toUpperCase();
-    if (agent.isDefault) return 'Built-in';
     return 'Model Registry';
   };
 
@@ -393,15 +670,15 @@ export default function AgentsPage() {
                             </div>
                           )}
                         </td>
-                        <td className="p-3">
-                          <span className={cn(
-                            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
-                            agent.isDefault
-                              ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-                              : 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
-                          )}>
-                            {agent.isDefault ? 'Default' : 'Custom'}
-                          </span>
+                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                          <AgentTypeSelect
+                            agent={agent}
+                            currentType={getAgentTypeLabel(agent)}
+                            customTypes={customTypes}
+                            onPickDefault={handlePromoteToDefault}
+                            onPickType={(a, type) => setAgentTypeOverride(a.id, type)}
+                            onCreateType={addCustomType}
+                          />
                         </td>
                         <td className="p-3">
                           <button
@@ -435,18 +712,16 @@ export default function AgentsPage() {
                             >
                               <Pencil size={14} />
                             </button>
-                            {!agent.isDefault && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteAgent(agent.id);
-                                }}
-                                className="rounded p-1.5 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950"
-                                title="Delete"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteAgent(agent.id);
+                              }}
+                              className="rounded p-1.5 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -458,6 +733,7 @@ export default function AgentsPage() {
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

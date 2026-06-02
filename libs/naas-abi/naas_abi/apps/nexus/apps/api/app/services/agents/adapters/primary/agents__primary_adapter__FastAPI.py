@@ -366,6 +366,7 @@ async def update_agent(
             system_prompt=updates.system_prompt,
             model_id=updates.model,
             enabled=updates.enabled,
+            is_default=updates.is_default,
         ),
     )
     if updated_agent is None:

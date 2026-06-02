@@ -12,7 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.port import (
     AgentUpdateInput,
     InferenceServerRecord,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -48,6 +48,7 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             provider=str(model.provider),
             logo_url=str(model.logo_url),
             enabled=bool(model.enabled),
+            is_default=bool(model.is_default),
             created_at=datetime.fromisoformat(str(model.created_at)),
             updated_at=datetime.fromisoformat(str(model.updated_at)),
         )
@@ -157,6 +158,20 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             agent_model.logo_url = str(updates.logo_url)
         if updates.enabled is not None:
             agent_model.enabled = bool(updates.enabled)
+        if updates.is_default is not None:
+            new_default = bool(updates.is_default)
+            if new_default:
+                # Atomically clear any other default in this workspace before
+                # promoting this one. Guarantees the "at most one default" invariant.
+                await self.db.execute(
+                    update(AgentConfigModel)
+                    .where(
+                        AgentConfigModel.workspace_id == agent_model.workspace_id,
+                        AgentConfigModel.id != agent_model.id,
+                    )
+                    .values(is_default=0)
+                )
+            agent_model.is_default = 1 if new_default else 0
 
         await self.db.commit()
         await self.db.refresh(agent_model)

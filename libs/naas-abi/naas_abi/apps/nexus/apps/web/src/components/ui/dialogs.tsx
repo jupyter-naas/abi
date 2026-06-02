@@ -235,7 +235,7 @@ export function ConfirmDialog({
       <div className="rounded-xl border border-border bg-background p-6 shadow-2xl">
         <h3 className="text-base font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{description}</p>
         )}
         <div className="mt-6 flex justify-end gap-2">
           <button
