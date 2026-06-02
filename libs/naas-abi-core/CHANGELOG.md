@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.52.2 (2026-06-02)
+
+### Bug Fixes
+
+- **model_registry**: Exempt ModelRegistryService from dependency checks and improve error messages
+  ([#1006](https://github.com/jupyter-naas/abi/pull/1006),
+  [`73d33a5`](https://github.com/jupyter-naas/abi/commit/73d33a5f21a4764d1daf975836e5b25e7e689e7f))
+
+- **model_registry**: Fence get_default_model_registry until after Engine.load
+  ([#1006](https://github.com/jupyter-naas/abi/pull/1006),
+  [`73d33a5`](https://github.com/jupyter-naas/abi/commit/73d33a5f21a4764d1daf975836e5b25e7e689e7f))
+
+
 ## v1.52.1 (2026-06-01)
 
 ### Bug Fixes
