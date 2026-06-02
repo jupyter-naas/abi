@@ -68,7 +68,7 @@ export interface Agent {
   tools: string[]; // Array of enabled tool IDs
   capabilities: AgentCapabilities; // Agent capabilities (memory, reasoning, vision)
   intentMappings: IntentMapping[]; // Intent to action mappings
-  isDefault: boolean; // Can't be deleted
+  isDefault: boolean; // Workspace's default agent for new chats — at most one per workspace
   createdAt: Date;
   updatedAt: Date;
 }
@@ -76,19 +76,31 @@ export interface Agent {
 // Re-fetch agents at most once every 5 minutes per workspace
 const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 
+// Reserved type names that always appear in the type selector.
+// "Default" is the workspace's default-chat agent (backend-backed via is_default).
+// "Custom" is the neutral fallback when no override is set.
+export const RESERVED_AGENT_TYPES = ['Default', 'Custom'] as const;
+
 interface AgentsState {
   agents: Agent[];
   /** Timestamp (ms) of the last successful fetch per workspaceId */
   lastFetchedAt: Record<string, number>;
+  /** User-created agent type labels beyond the reserved ones, frontend-only. */
+  customTypes: string[];
+  /** Per-agent type override (agentId → type label). Ignored when isDefault is true. */
+  agentTypeOverrides: Record<string, string>;
 
   // Actions
   addAgent: (agent: Omit<Agent, 'id' | 'isDefault' | 'createdAt' | 'updatedAt'>) => Promise<string>;
   updateAgent: (id: string, updates: Partial<Omit<Agent, 'id' | 'isDefault' | 'createdAt'>>) => Promise<void>;
   deleteAgent: (id: string) => Promise<void>;
   toggleAgent: (id: string) => Promise<void>; // Toggle enabled state
+  setDefaultAgent: (id: string) => Promise<void>; // Promote one agent as workspace default
   setAgentProvider: (agentId: string, providerId: string | null) => void;
   getAgent: (id: string) => Agent | undefined;
   fetchAgents: (workspaceId: string, force?: boolean) => Promise<void>;
+  addCustomType: (name: string) => string | null;
+  setAgentTypeOverride: (agentId: string, type: string | null) => void;
 
   // Auto-create agents from enabled providers
   syncAgentsFromProviders: (enabledProviderIds: string[], providerNames: Record<string, string>) => void;
@@ -112,6 +124,8 @@ export const useAgentsStore = create<AgentsState>()(
     (set, get) => ({
       agents: [],
       lastFetchedAt: {},
+      customTypes: [],
+      agentTypeOverrides: {},
 
       fetchAgents: async (workspaceId: string, force = false) => {
         // Skip if we fetched recently for this workspace (unless forced)
@@ -165,7 +179,7 @@ export const useAgentsStore = create<AgentsState>()(
                       target: typeof intent.intent_target === 'string' ? intent.intent_target : '',
                     }))
                 : [],
-              isDefault: false,
+              isDefault: a.is_default === true || a.is_default === 1,
               createdAt: new Date(a.created_at),
               updatedAt: new Date(a.updated_at),
             }));
@@ -174,23 +188,24 @@ export const useAgentsStore = create<AgentsState>()(
               lastFetchedAt: { ...get().lastFetchedAt, [workspaceId]: Date.now() },
             });
 
-            // Reset selectedAgent if it's not in the new agent list
+            // Pick the best agent to surface in the chat UI.
+            // Priority: workspace default → SupervisorAgent (id "abi") → first enabled.
+            const pickPreferred = (): Agent | undefined => {
+              const defaultAgent = formattedAgents.find(a => a.isDefault && a.enabled);
+              if (defaultAgent) return defaultAgent;
+              const abiAgent = formattedAgents.find(a => a.id === 'abi' && a.enabled);
+              if (abiAgent) return abiAgent;
+              return formattedAgents.find(a => a.enabled);
+            };
+
             const { useWorkspaceStore } = await import('./workspace');
             const currentSelected = useWorkspaceStore.getState().selectedAgent;
             if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
-              // Select SupervisorAgent if available, otherwise first enabled agent
-              const abiAgent = formattedAgents.find(a => a.id === 'abi' && a.enabled);
-              const firstEnabled = abiAgent || formattedAgents.find(a => a.enabled);
-              if (firstEnabled) {
-                useWorkspaceStore.getState().setSelectedAgent(firstEnabled.id);
-              }
+              const preferred = pickPreferred();
+              if (preferred) useWorkspaceStore.getState().setSelectedAgent(preferred.id);
             } else if (!currentSelected && formattedAgents.length > 0) {
-              // No agent selected, prefer SupervisorAgent, fallback to first enabled agent
-              const abiAgent = formattedAgents.find(a => a.id === 'abi' && a.enabled);
-              const firstEnabled = abiAgent || formattedAgents.find(a => a.enabled);
-              if (firstEnabled) {
-                useWorkspaceStore.getState().setSelectedAgent(firstEnabled.id);
-              }
+              const preferred = pickPreferred();
+              if (preferred) useWorkspaceStore.getState().setSelectedAgent(preferred.id);
             }
           }
         } catch (error) {
@@ -252,9 +267,9 @@ export const useAgentsStore = create<AgentsState>()(
           const { authFetch } = await import('./auth');
           const { getApiUrl } = await import('@/lib/config');
           const API_BASE = getApiUrl();
-          
+
           const agent = get().agents.find(a => a.id === id);
-          if (agent && !agent.isDefault) {
+          if (agent) {
             const response = await authFetch(`${API_BASE}/api/agents/${id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
@@ -267,7 +282,7 @@ export const useAgentsStore = create<AgentsState>()(
                 logo_url: updates.logoUrl,
               }),
             });
-            
+
             if (!response.ok) {
               console.error('Failed to update agent on server');
             }
@@ -275,7 +290,7 @@ export const useAgentsStore = create<AgentsState>()(
         } catch (error) {
           console.error('Failed to update agent on server:', error);
         }
-        
+
         set((state) => ({
           agents: state.agents.map((a) =>
             a.id === id ? { ...a, ...updates, updatedAt: new Date() } : a
@@ -289,24 +304,91 @@ export const useAgentsStore = create<AgentsState>()(
           const { authFetch } = await import('./auth');
           const { getApiUrl } = await import('@/lib/config');
           const API_BASE = getApiUrl();
-          
-          const agent = get().agents.find(a => a.id === id);
-          if (agent && !agent.isDefault) {
-            const response = await authFetch(`${API_BASE}/api/agents/${id}`, {
-              method: 'DELETE',
-            });
-            
-            if (!response.ok) {
-              console.error('Failed to delete agent on server');
-            }
+
+          const response = await authFetch(`${API_BASE}/api/agents/${id}`, {
+            method: 'DELETE',
+          });
+
+          if (!response.ok) {
+            console.error('Failed to delete agent on server');
           }
         } catch (error) {
           console.error('Failed to delete agent on server:', error);
         }
-        
+
         set((state) => ({
-          agents: state.agents.filter((a) => a.id !== id || a.isDefault),
+          agents: state.agents.filter((a) => a.id !== id),
         }));
+      },
+
+      setDefaultAgent: async (id) => {
+        const agent = get().agents.find(a => a.id === id);
+        if (!agent) return;
+
+        // Optimistic: flip locally first so the UI updates instantly.
+        const previousState = get().agents;
+        set((state) => ({
+          agents: state.agents.map((a) => ({
+            ...a,
+            isDefault: a.id === id,
+            updatedAt: a.id === id ? new Date() : a.updatedAt,
+          })),
+        }));
+
+        try {
+          const { authFetch } = await import('./auth');
+          const { getApiUrl } = await import('@/lib/config');
+          const API_BASE = getApiUrl();
+
+          const response = await authFetch(`${API_BASE}/api/agents/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_default: true }),
+          });
+
+          if (!response.ok) {
+            console.error('Failed to set default agent on server');
+            set({ agents: previousState });
+            alert('Failed to set default agent');
+            return;
+          }
+
+          // Sync selectedAgent in workspace store to the new default so the
+          // next "New Chat" picks it up immediately.
+          const { useWorkspaceStore } = await import('./workspace');
+          useWorkspaceStore.getState().setSelectedAgent(id);
+        } catch (error) {
+          console.error('Failed to set default agent on server:', error);
+          set({ agents: previousState });
+          alert('Failed to set default agent: ' + error);
+        }
+      },
+
+      addCustomType: (name) => {
+        const trimmed = name.trim();
+        if (!trimmed) return null;
+        const collides = (RESERVED_AGENT_TYPES as readonly string[]).some(
+          (t) => t.toLowerCase() === trimmed.toLowerCase()
+        );
+        if (collides) return null;
+        const existing = get().customTypes.find(
+          (t) => t.toLowerCase() === trimmed.toLowerCase()
+        );
+        if (existing) return existing;
+        set((state) => ({ customTypes: [...state.customTypes, trimmed] }));
+        return trimmed;
+      },
+
+      setAgentTypeOverride: (agentId, type) => {
+        set((state) => {
+          const next = { ...state.agentTypeOverrides };
+          if (!type || type === 'Custom') {
+            delete next[agentId];
+          } else {
+            next[agentId] = type;
+          }
+          return { agentTypeOverrides: next };
+        });
       },
 
       toggleAgent: async (id) => {
