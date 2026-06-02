@@ -149,11 +149,15 @@ class BaseModule(Generic[TConfig]):
             self.__class__
         )
 
-        # Auto-discover models from <module_root>/models/*.py when the module
-        # has been granted access to the registry. Subclasses that need
-        # subtler control (e.g. lazy construction, custom provider factories)
-        # still call ``registry.register(...)`` / ``register_chat_provider(...)``
-        # from their own on_load — registration is additive.
+        # Auto-discover models from <module_root>/models/*.py whenever the
+        # engine has a registry. ``ModelRegistryService`` is intentionally NOT
+        # gated by ``ModuleDependencies`` — every module can publish to and
+        # query the registry without declaring it (see
+        # ``engine/context.py`` + ``EngineProxy.model_registry`` for the
+        # rationale). Subclasses that need subtler control (lazy construction,
+        # custom provider factories) still call ``registry.register(...)`` /
+        # ``register_chat_provider(...)`` from their own on_load — registration
+        # is additive.
         if self._engine.services.model_registry_available():
             ModuleModelLoader.load_models(
                 self.__class__, self._engine.services.model_registry
