@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v2.14.1 (2026-06-02)
+
+### Bug Fixes
+
+- **nexus/web**: Vendor Inter and JetBrains Mono via next/font/local
+  ([#1001](https://github.com/jupyter-naas/abi/pull/1001),
+  [`04bb429`](https://github.com/jupyter-naas/abi/commit/04bb4295e16e121da6b936f3bccd3ae77da60164))
+
+### Chores
+
+- **claude**: Allowlist uv/npm/pnpm cache dirs in sandbox
+  ([#1001](https://github.com/jupyter-naas/abi/pull/1001),
+  [`04bb429`](https://github.com/jupyter-naas/abi/commit/04bb4295e16e121da6b936f3bccd3ae77da60164))
+
+
 ## v2.14.0 (2026-06-01)
 
 ### Bug Fixes
