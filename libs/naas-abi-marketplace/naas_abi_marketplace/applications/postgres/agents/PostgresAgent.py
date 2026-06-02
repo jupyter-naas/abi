@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
@@ -8,12 +10,12 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "PostgreSQL"
-DESCRIPTION = "A PostgreSQL Assistant for managing database operations."
-MODEL = "gpt-4"
-TEMPERATURE = 0
-AVATAR_URL = "https://www.postgresql.org/media/img/about/press/elephant.png"
-SYSTEM_PROMPT = """
+
+class PostgresAgent(IntentAgent):
+    name: str = "PostgreSQL"
+    description: str = "A PostgreSQL Assistant for managing database operations."
+    avatar_url: str = "https://www.postgresql.org/media/img/about/press/elephant.png"
+    system_prompt: str = """
 ## Role
 You are a PostgreSQL Assistant with access to PostgresIntegration tools.
 
@@ -44,72 +46,68 @@ You operate within a secure environment with authenticated access to PostgreSQL 
 - Always cite data sources and explain methodology used
 """
 
-SUGGESTIONS: list[str] = []
+    suggestions: list[str] = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "PostgresAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
+        from naas_abi_marketplace.applications.postgres import ABIModule
+        from naas_abi_marketplace.applications.postgres.integrations.PostgresIntegration import (
+            PostgresIntegrationConfiguration,
+            as_tools,
+        )
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
-    # Set model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+        module = ABIModule.get_instance()
+        integration_config = PostgresIntegrationConfiguration(
+            host=module.configuration.postgres_host,
+            port=int(module.configuration.postgres_port),
+            database=module.configuration.postgres_dbname,
+            user=module.configuration.postgres_user,
+            password=module.configuration.postgres_password,
+        )
+        tools: list = as_tools(integration_config)
 
-    # Set shared state
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
+        intents: list = [
+            Intent(
+                intent_value="Execute a SQL query",
+                intent_type=IntentType.TOOL,
+                intent_target="postgres_query",
+            ),
+            Intent(
+                intent_value="Show database schema",
+                intent_type=IntentType.TOOL,
+                intent_target="postgres_schema",
+            ),
+            Intent(
+                intent_value="List tables",
+                intent_type=IntentType.TOOL,
+                intent_target="postgres_tables",
+            ),
+        ]
 
-    tools: list = []
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Add integration based on available credentials
-    from naas_abi_marketplace.applications.postgres import ABIModule
-    from naas_abi_marketplace.applications.postgres.integrations.PostgresIntegration import (
-        PostgresIntegrationConfiguration,
-        as_tools,
-    )
-
-    integration_config = PostgresIntegrationConfiguration(
-        host=ABIModule.get_instance().configuration.postgres_host,
-        port=int(ABIModule.get_instance().configuration.postgres_port),
-        database=ABIModule.get_instance().configuration.postgres_dbname,
-        user=ABIModule.get_instance().configuration.postgres_user,
-        password=ABIModule.get_instance().configuration.postgres_password,
-    )
-    tools += as_tools(integration_config)
-
-    intents: list = [
-        Intent(
-            intent_value="Execute a SQL query",
-            intent_type=IntentType.TOOL,
-            intent_target="postgres_query",
-        ),
-        Intent(
-            intent_value="Show database schema",
-            intent_type=IntentType.TOOL,
-            intent_target="postgres_schema",
-        ),
-        Intent(
-            intent_value="List tables",
-            intent_type=IntentType.TOOL,
-            intent_target="postgres_tables",
-        ),
-    ]
-
-    return PostgresAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        tools=tools,
-        agents=[],
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class PostgresAgent(IntentAgent):
-    pass
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            agents=[],
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )

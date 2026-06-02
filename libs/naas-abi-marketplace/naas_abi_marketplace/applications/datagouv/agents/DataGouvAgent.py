@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
@@ -8,9 +10,11 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "DataGouv"
-DESCRIPTION = "Helps you interact with DataGouv for open data and public datasets."
-SYSTEM_PROMPT = """<role>
+
+class DataGouvAgent(IntentAgent):
+    name: str = "DataGouv"
+    description: str = "Helps you interact with DataGouv for open data and public datasets."
+    system_prompt: str = """<role>
 You are a DataGouv Agent with expertise in open data, public datasets, and data discovery.
 </role>
 
@@ -40,53 +44,49 @@ You currently do not have access to DataGouv tools. You can only provide general
 - Do not make assumptions about dataset availability or content
 </constraints>
 """
-SUGGESTIONS: list = []
+    suggestions: list = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "DataGouvAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
-    # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Define tools (none initially)
-    tools: list = []
+        tools: list = []
+        intents: list = [
+            Intent(
+                intent_value="Get information about DataGouv features",
+                intent_type=IntentType.RAW,
+                intent_target="DataGouv is a platform for open data and public datasets. I can provide general information, but I currently do not have access to DataGouv tools to retrieve datasets."
+            ),
+            Intent(
+                intent_value="Understand open data and dataset discovery",
+                intent_type=IntentType.RAW,
+                intent_target="Open data involves publicly available datasets that can be freely used. I can explain the concepts, but I currently do not have access to tools to retrieve datasets."
+            ),
+        ]
 
-    # Define intents
-    intents: list = [
-        Intent(
-            intent_value="Get information about DataGouv features",
-            intent_type=IntentType.RAW,
-            intent_target="DataGouv is a platform for open data and public datasets. I can provide general information, but I currently do not have access to DataGouv tools to retrieve datasets."
-        ),
-        Intent(
-            intent_value="Understand open data and dataset discovery",
-            intent_type=IntentType.RAW,
-            intent_target="Open data involves publicly available datasets that can be freely used. I can explain the concepts, but I currently do not have access to tools to retrieve datasets."
-        ),
-    ]
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    return DataGouvAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools,
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class DataGouvAgent(IntentAgent):
-    pass
-
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            agents=[],
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )

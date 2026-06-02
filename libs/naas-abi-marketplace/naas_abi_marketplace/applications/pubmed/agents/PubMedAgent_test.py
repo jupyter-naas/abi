@@ -1,10 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.pubmed.agents.PubMedAgent import create_agent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.pubmed.agents.PubMedAgent import (
+        PubMedAgent,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.pubmed"])
+
+    return PubMedAgent.New()
 
 
 def test_agent_name(agent):
