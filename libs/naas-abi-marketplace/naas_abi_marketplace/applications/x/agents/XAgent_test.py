@@ -92,8 +92,12 @@ def _tool_call_names(agent: XAgent) -> set[str]:
 
 
 def _assert_routed_to(
-    agent: XAgent, prompt: str, expected: set[str], forbidden: set[str] = frozenset()
+    agent: XAgent,
+    prompt: str,
+    expected: set[str],
+    forbidden: set[str] | None = None,
 ):
+    forbidden = forbidden or set()
     result = agent.invoke(prompt)
     assert result is not None, f"Agent returned None for prompt {prompt!r}"
     called = _tool_call_names(agent)
