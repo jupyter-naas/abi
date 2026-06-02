@@ -17,7 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatPersistencePort,
     ChatSecretRecord,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -172,12 +172,45 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         return True
 
     async def list_messages_by_conversation(self, conversation_id: str) -> list[ChatMessageRecord]:
+        # Streaming writes the user row and the paired assistant row with the
+        # same ``created_at``; without a deterministic tie-breaker the pair can
+        # surface assistant-first. Order user < assistant < system on ties.
+        role_order = case(
+            (MessageModel.role == "user", 0),
+            (MessageModel.role == "assistant", 1),
+            else_=2,
+        )
         result = await self.db.execute(
             select(MessageModel)
             .where(MessageModel.conversation_id == conversation_id)
-            .order_by(MessageModel.created_at)
+            .order_by(MessageModel.created_at, role_order, MessageModel.id)
         )
         return [self._to_message_record(row) for row in result.scalars().all()]
+
+    async def count_messages_for_conversations(
+        self, conversation_ids: list[str]
+    ) -> dict[str, int]:
+        if not conversation_ids:
+            return {}
+        result = await self.db.execute(
+            select(MessageModel.conversation_id, func.count(MessageModel.id))
+            .where(MessageModel.conversation_id.in_(conversation_ids))
+            .group_by(MessageModel.conversation_id)
+        )
+        counts = {cid: int(count) for cid, count in result.all()}
+        # Conversations with zero rows must still appear in the map so callers
+        # can render "0 messages" without falling back to "unknown".
+        return {cid: counts.get(cid, 0) for cid in conversation_ids}
+
+    async def list_conversations_by_ids(
+        self, conversation_ids: list[str]
+    ) -> dict[str, ChatConversationRecord]:
+        if not conversation_ids:
+            return {}
+        result = await self.db.execute(
+            select(ConversationModel).where(ConversationModel.id.in_(conversation_ids))
+        )
+        return {row.id: self._to_conversation_record(row) for row in result.scalars().all()}
 
     async def create_message(
         self,

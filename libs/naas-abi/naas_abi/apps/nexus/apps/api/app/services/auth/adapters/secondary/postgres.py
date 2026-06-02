@@ -51,6 +51,7 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             company=model.company,
             role=model.role,
             bio=model.bio,
+            is_superadmin=bool(model.is_superadmin),
             created_at=model.created_at,
         )
 

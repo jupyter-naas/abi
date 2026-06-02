@@ -1,6 +1,10 @@
 from typing import Dict, List
 
 from naas_abi_core import logger
+from naas_abi_core.engine.context import (
+    set_default_event_service,
+    set_default_model_registry,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
     EngineConfiguration
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import \
@@ -62,6 +66,11 @@ class Engine(IEngine):
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
         logger.debug("Engine modules loaded")
 
+        if self.__services.model_registry_available():
+            # Modules registered their models during on_load; now hard-fail if
+            # any configured default cannot be resolved against the registry.
+            self.__services.model_registry.validate_defaults()
+
         if self.__services.triple_store_available():
             if not self.__configuration.global_config.skip_ontology_loading:
                 logger.debug("Loading engine ontologies")
@@ -74,6 +83,21 @@ class Engine(IEngine):
                 logger.debug("Skipping ontology loading")
         else:
             logger.debug("No triple store available, skipping ontology loading")
+
+        # Publish the EventService + ModelRegistry as process-wide accessors
+        # for cross-cutting consumers (agents, background threads, library
+        # code without an engine handle). All other services stay behind
+        # EngineProxy and the module dependency-declaration system; see
+        # ``engine/context.py`` for the rationale.
+        if self.__services.events_available():
+            set_default_event_service(self.__services.events)
+        else:
+            set_default_event_service(None)
+
+        if self.__services.model_registry_available():
+            set_default_model_registry(self.__services.model_registry)
+        else:
+            set_default_model_registry(None)
 
         logger.debug("Initializing engine")
         self.on_initialized()

@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v1.28.0 (2026-05-28)
+
+### Features
+
+- **core**: Add ModelRegistry and migrate AbiAgent + claude/chatgpt/bedrock to use it
+  ([`7e8cf70`](https://github.com/jupyter-naas/abi/commit/7e8cf7066bc00b6c3390494fcb1fe67e92040f50))
+
+- **core**: Full ModelRegistry adoption — context singleton, auto-discovery, no env-var bridges
+  ([`b583ca2`](https://github.com/jupyter-naas/abi/commit/b583ca2506b0bcb033144e03f5bd59fe5431f273))
+
+### Refactoring
+
+- **core**: Drop default_provider, allow multi-register, add ModuleModelLoader + ModelDefinition
+  ([`5b92b37`](https://github.com/jupyter-naas/abi/commit/5b92b37c179a5ede7255073ca2b2f57d4edb6b2a))
+
+
+## v1.27.0 (2026-05-28)
+
+### Features
+
+- Add new models and change bedrock default
+  ([`2c4082b`](https://github.com/jupyter-naas/abi/commit/2c4082b840cc59bf16f5b27168b70762adfbc4ad))
+
+
+## v1.26.0 (2026-05-27)
+
+### Features
+
+- **core**: Publish typed events from cache, bus, email, keyvalue, secret, triple_store,
+  vector_store
+  ([`ed97217`](https://github.com/jupyter-naas/abi/commit/ed972173c198f2d05b5a327231ed66045de7dc55))
+
+
 ## v1.25.0 (2026-05-26)
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
+from typing import Any
 
 from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User
@@ -13,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     build_provider_messages_with_agents,
     get_or_create_conversation,
     persist_stream_content,
+    persist_stream_metadata,
     request_context,
     resolve_provider,
     # run_search_if_needed,
@@ -20,7 +22,6 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
 )
-from naas_abi.apps.nexus.apps.api.app.services.chat.service import AGENT_SYSTEM_PROMPTS
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     stream_with_abi_inprocess,
@@ -41,14 +42,119 @@ OPENAI_COMPATIBLE = [
 ]
 SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", *OPENAI_COMPATIBLE]
 
-MULTI_AGENT_NOTICE = (
-    "\n\n🔄 CRITICAL MULTI-AGENT NOTICE: You are in a conversation where MULTIPLE different AI models "
-    "have responded. You are currently responding as the SELECTED agent. Previous assistant responses "
-    "may be from DIFFERENT AI agents (Grok, Claude, Qwen, etc.). DO NOT claim authorship of other "
-    "agents' responses. DO NOT apologize for what other AIs said. DO NOT correct other AIs' identities. "
-    "When asked 'who are you?', ONLY identify yourself based on YOUR model, not what previous agents "
-    "said. Each assistant message may be from a different AI - treat them as separate participants."
-)
+
+def _format_tool_name(raw: str) -> str:
+    words = raw.replace("_", " ").split()
+    return " ".join(w[0].upper() + w[1:] for w in words if w)
+
+
+def _label_tool(raw_tool: str) -> tuple[str, str]:
+    """Mirror the frontend ``formatToolLabel`` so server-persisted steps line
+    up with what the UI computes locally (``prefix`` is the discriminator the
+    analytics renderer keys off)."""
+    if raw_tool.startswith("transfer_to"):
+        target = raw_tool[len("transfer_to") :].lstrip("_")
+        return "Routing to", _format_tool_name(target or raw_tool)
+    return "Tool", _format_tool_name(raw_tool)
+
+
+def _ingest_stream_event_into_steps(
+    event_dict: dict[str, Any], steps: list[dict[str, Any]]
+) -> None:
+    """Apply a single SSE event to the running step accumulator.
+
+    Mirrors the logic in ``chat-interface.tsx`` (``handleToolStartEvent`` /
+    ``handleToolResponseEvent`` / ``handleAgentStepEvent``) so the server
+    builds the same step list the frontend would build, independently of
+    whether the frontend ever sends its final ``PATCH …/metadata``.
+    """
+    event_name = str(event_dict.get("event") or "").strip()
+
+    if event_name in {"tool", "tool_usage"}:
+        raw_tool = str(event_dict.get("tool") or "").strip()
+        if not raw_tool:
+            return
+        input_val = event_dict.get("input")
+        input_str = str(input_val) if input_val else None
+        prefix, name = _label_tool(raw_tool)
+        last = steps[-1] if steps else None
+        if (
+            last
+            and last.get("status") == "running"
+            and last.get("_raw_name") == raw_tool
+        ):
+            if input_str and not last.get("input"):
+                last["input"] = input_str
+            return
+        if last and last.get("status") == "running":
+            last["status"] = "done"
+        steps.append(
+            {
+                "tool_name": name,
+                "prefix": prefix,
+                "status": "running",
+                "input": input_str,
+                "output": None,
+                "_raw_name": raw_tool,
+            }
+        )
+        return
+
+    if event_name == "tool_response":
+        output = event_dict.get("output") or event_dict.get("content")
+        if not output:
+            return
+        output_str = str(output).strip()
+        if not output_str:
+            return
+        running_idx = -1
+        recent_idx = -1
+        for idx in range(len(steps) - 1, -1, -1):
+            if steps[idx].get("prefix") == "Tool":
+                if recent_idx == -1:
+                    recent_idx = idx
+                if steps[idx].get("status") == "running":
+                    running_idx = idx
+                    break
+        target_idx = running_idx if running_idx != -1 else recent_idx
+        if target_idx == -1:
+            return
+        steps[target_idx]["status"] = "done"
+        steps[target_idx]["output"] = output_str
+        return
+
+    if event_name in {"call_model", "agent_calling", "agent_routing"}:
+        raw_agent = str(event_dict.get("agent") or "").strip()
+        if not raw_agent:
+            return
+        agent_name = _format_tool_name(raw_agent)
+        if not agent_name:
+            return
+        last = steps[-1] if steps else None
+        if last and last.get("status") == "running":
+            last["status"] = "done"
+        label = (
+            "Thinking"
+            if event_name in {"call_model", "agent_calling"}
+            else f"Routing to {agent_name}"
+        )
+        steps.append(
+            {
+                "tool_name": label,
+                "prefix": "Agent",
+                "status": "running",
+                "input": None,
+                "output": None,
+                "_raw_name": f"{event_name}:{raw_agent}",
+            }
+        )
+
+
+def _strip_internal_step_keys(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop server-only bookkeeping fields (e.g. ``_raw_name``) before
+    persisting so the shape matches the existing ``MessageStep`` schema and
+    the frontend's PATCH payload."""
+    return [{k: v for k, v in step.items() if not k.startswith("_")} for step in steps]
 
 
 async def stream_chat_response(
@@ -103,6 +209,19 @@ async def stream_chat_response(
                     current_user=current_user,
                     now=now,
                 )
+                # Tag agent-emitted events (AgentToolCalled, AgentAIMessageEmitted, …)
+                # with request identity. Set on the request's asyncio context so
+                # nested awaits and the Thread spawned by Agent.stream_invoke
+                # (which uses copy_context) inherit them.
+                from naas_abi_core.services.agent.context import (
+                    agent_chat_id,
+                    agent_user_id,
+                    agent_workspace_id,
+                )
+                agent_user_id.set(str(current_user.id))
+                agent_chat_id.set(str(conversation_id))
+                if request.workspace_id is not None:
+                    agent_workspace_id.set(str(request.workspace_id))
                 provider_messages = await build_provider_messages_with_agents(
                     request=request,
                     context=request_context(current_user),
@@ -115,16 +234,21 @@ async def stream_chat_response(
                     conversation_id=conversation_id,
                     user_id=current_user.id,
                 )
+                prior_messages = list(request.messages or [])
+                system_prompt = await registry.chat.build_system_prompt(
+                    agent=request.agent,
+                    explicit_system_prompt=request.system_prompt,
+                    prior_messages=prior_messages,
+                    user_id=current_user.id,
+                )
+                user_context_preamble = await registry.chat.build_user_context_addendum(
+                    prior_messages=prior_messages,
+                    user_id=current_user.id,
+                )
             await db.commit()
         except Exception:
             await db.rollback()
             raise
-
-    system_prompt = request.system_prompt or AGENT_SYSTEM_PROMPTS.get(
-        request.agent, AGENT_SYSTEM_PROMPTS["aia"]
-    )
-    if request.messages and any(m.role == "assistant" for m in request.messages):
-        system_prompt += MULTI_AGENT_NOTICE
 
     # search_context = await run_search_if_needed(request)
     # if search_context:
@@ -172,6 +296,11 @@ async def stream_chat_response(
         flush_interval_seconds = 0.75
         min_chars_per_flush = 512
         buffered_chars = 0
+        stream_started_at = loop.time()
+        # Step accumulator — mirrors the frontend's ``streamToolCalls`` so the
+        # tool / agent activity for this turn is captured on the server even
+        # if the frontend never PATCHes its final metadata payload.
+        steps: list[dict[str, Any]] = []
 
         async def maybe_flush_incremental() -> None:
             nonlocal last_flush, buffered_chars
@@ -204,6 +333,7 @@ async def stream_chat_response(
                     payload = {"content": chunk}
                 elif isinstance(chunk, dict):
                     payload = chunk
+                    _ingest_stream_event_into_steps(chunk, steps)
                 else:
                     continue
 
@@ -211,8 +341,45 @@ async def stream_chat_response(
                 yield yield_data
                 await maybe_flush_incremental()
 
+        async def persist_final_metadata() -> None:
+            if not assistant_msg_id:
+                return
+            # Mark any leftover running steps as done — same finalisation the
+            # frontend applies before its PATCH.
+            for step in steps:
+                if step.get("status") == "running":
+                    step["status"] = "done"
+            metadata = {
+                "execution_time": round(loop.time() - stream_started_at, 3),
+                "steps": _strip_internal_step_keys(steps),
+                "sources": list(context_sources) if context_sources else [],
+            }
+            try:
+                await persist_stream_metadata(
+                    user_id=current_user.id,
+                    conversation_id=conversation_id,
+                    assistant_msg_id=assistant_msg_id,
+                    metadata=metadata,
+                )
+            except Exception:
+                logger.warning("Failed to persist stream metadata", exc_info=True)
+
         try:
-            yield f'data: {{"conversation_id": "{conversation_id}"}}\n\n'
+            # Include ``assistant_message_id`` on the very first frame so the
+            # frontend can swap its client-side placeholder id for the real DB
+            # uuid. Downstream PATCH calls (metadata, feedback) need the DB id
+            # — without this, the frontend's local id never matches the row in
+            # ``messages`` and every PATCH 404s silently.
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "conversation_id": conversation_id,
+                        "assistant_message_id": assistant_msg_id,
+                    }
+                )
+                + "\n\n"
+            )
             if context_sources:
                 yield f"data: {json.dumps({'sources': context_sources})}\n\n"
             # if search_context:
@@ -235,6 +402,7 @@ async def stream_chat_response(
                         provider_messages,
                         provider_config,
                         thread_id=conversation_id,
+                        user_context_preamble=user_context_preamble,
                     )
                 ):
                     inprocess_emitted = True
@@ -264,6 +432,7 @@ async def stream_chat_response(
                     )
                 except Exception:
                     logger.error("Failed to finalize stream messages to DB", exc_info=True)
+                await persist_final_metadata()
 
             yield "data: [DONE]\n\n"
         except Exception as exc:
@@ -285,6 +454,7 @@ async def stream_chat_response(
                         full_response=full_response,
                         touch_conversation=True,
                     )
+                    await persist_final_metadata()
             except Exception:
                 logger.warning("Failed to persist partial content on error", exc_info=True)
             yield f'data: {{"error": "{escaped_error}"}}\n\n'

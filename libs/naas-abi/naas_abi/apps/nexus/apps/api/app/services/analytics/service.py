@@ -31,6 +31,8 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     AnalyticsEvent,
     AnalyticsStoragePort,
+    ChatRow,
+    ChatsResponse,
     EventsResponse,
     FileStats,
     Metadata,
@@ -64,7 +66,7 @@ REF_WORKSPACES_FILE = "ref-workspaces.json"
 
 RECENT_EVENTS_LIMIT = 100
 
-_REBUILD_DEBOUNCE_SECONDS = 10
+_REBUILD_DEBOUNCE_SECONDS = 60
 
 _CHAT_CONV_PATH_RE = re.compile(r"/chat/(conv-[^/?#]+)")
 
@@ -584,7 +586,49 @@ class AnalyticsService:
             return fallback
         return raw.get(scenario_id, fallback)
 
-    def get_overview(self, scenario_id: str = DEFAULT_SCENARIO_ID) -> OverviewResponse:
+    @staticmethod
+    def _filter_events(
+        events: list[dict],
+        workspace_id: str | None = None,
+        user_email: str | None = None,
+    ) -> list[dict]:
+        """Apply optional workspace / user filters. ``"all"`` and empty are no-ops."""
+        out = events
+        if workspace_id and workspace_id != "all":
+            out = [e for e in out if e.get("workspace_id") == workspace_id]
+        if user_email and user_email != "all":
+            out = [e for e in out if e.get("user_email") == user_email]
+        return out
+
+    def _load_window_events(self, scenario_id: str) -> list[dict]:
+        """All raw events that fall inside the named scenario's window."""
+        raw = self._storage.load_json(EVENTS_FILE, fallback={"events": []})
+        events = raw.get("events", []) if isinstance(raw, dict) else []
+        for s in self.get_scenarios().scenarios:
+            if s.scenario_id == scenario_id:
+                return _filter_events_to_window(events, s.date_start, s.date_end)
+        return events
+
+    def _has_filters(self, workspace_id: str | None, user_email: str | None) -> bool:
+        return bool(
+            (workspace_id and workspace_id != "all")
+            or (user_email and user_email != "all")
+        )
+
+    def get_overview(
+        self,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        workspace_id: str | None = None,
+        user_email: str | None = None,
+    ) -> OverviewResponse:
+        if self._has_filters(workspace_id, user_email):
+            events = self._filter_events(
+                self._load_window_events(scenario_id), workspace_id, user_email
+            )
+            sessions = _build_sessions(events)
+            days = self._days_for_scenario(scenario_id)
+            return OverviewResponse.model_validate(_build_overview(events, sessions, days))
+
         raw = self._storage.load_json(OVERVIEW_FILE, fallback={})
         if isinstance(raw, dict) and scenario_id in raw:
             return OverviewResponse.model_validate(raw[scenario_id])
@@ -593,43 +637,176 @@ class AnalyticsService:
         days = self._days_for_scenario(scenario_id)
         return OverviewResponse.model_validate(_build_overview([], [], days))
 
-    def get_users(self, scenario_id: str = DEFAULT_SCENARIO_ID) -> UsersResponse:
+    def get_users(
+        self,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        workspace_id: str | None = None,
+    ) -> UsersResponse:
+        # The directory drives the FE dropdown and stays unfiltered; only the
+        # tabular rows are scoped to the workspace filter.
+        directory = self._storage.load_json(REF_USERS_FILE, fallback=[])
+        if not isinstance(directory, list):
+            directory = []
+
+        if workspace_id and workspace_id != "all":
+            events = self._filter_events(
+                self._load_window_events(scenario_id), workspace_id=workspace_id
+            )
+            return UsersResponse.model_validate(
+                {"users": _build_user_rows(events), "directory": directory}
+            )
+
         slice_data = self._load_scenario_slice(
-            USERS_FILE, scenario_id, fallback={"users": [], "directory": []}
+            USERS_FILE, scenario_id, fallback={"users": [], "directory": directory}
         )
         return UsersResponse.model_validate(slice_data)
 
-    def get_user_detail(self, email: str, scenario_id: str = DEFAULT_SCENARIO_ID) -> UserDetail:
+    def get_user_detail(
+        self,
+        email: str,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        workspace_id: str | None = None,
+    ) -> UserDetail:
         decoded = urllib.parse.unquote(email)
+
+        if workspace_id and workspace_id != "all":
+            events = self._filter_events(
+                self._load_window_events(scenario_id),
+                workspace_id=workspace_id,
+                user_email=decoded,
+            )
+            details = _build_user_detail_map(events)
+            if decoded not in details:
+                raise UserDetailNotFound(decoded)
+            return UserDetail.model_validate(details[decoded])
+
         scenario_data = self._load_scenario_slice(USER_DETAILS_FILE, scenario_id, fallback={})
         if not isinstance(scenario_data, dict) or decoded not in scenario_data:
             raise UserDetailNotFound(decoded)
         return UserDetail.model_validate(scenario_data[decoded])
 
-    def get_sessions(self, scenario_id: str = DEFAULT_SCENARIO_ID) -> SessionsResponse:
+    def get_sessions(
+        self,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        workspace_id: str | None = None,
+        user_email: str | None = None,
+    ) -> SessionsResponse:
+        if self._has_filters(workspace_id, user_email):
+            events = self._filter_events(
+                self._load_window_events(scenario_id), workspace_id, user_email
+            )
+            return SessionsResponse.model_validate({"sessions": _build_sessions(events)})
+
         slice_data = self._load_scenario_slice(
             SESSIONS_FILE, scenario_id, fallback={"sessions": []}
         )
         return SessionsResponse.model_validate(slice_data)
 
-    def get_pages(self, scenario_id: str = DEFAULT_SCENARIO_ID) -> PagesResponse:
+    def get_pages(
+        self,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        workspace_id: str | None = None,
+        user_email: str | None = None,
+    ) -> PagesResponse:
+        if self._has_filters(workspace_id, user_email):
+            events = self._filter_events(
+                self._load_window_events(scenario_id), workspace_id, user_email
+            )
+            return PagesResponse.model_validate({"pages": _build_page_rows(events)})
+
         slice_data = self._load_scenario_slice(PAGES_FILE, scenario_id, fallback={"pages": []})
         return PagesResponse.model_validate(slice_data)
 
-    def get_workspaces(self, scenario_id: str = DEFAULT_SCENARIO_ID) -> WorkspacesResponse:
+    def get_workspaces(
+        self,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        workspace_id: str | None = None,
+        user_email: str | None = None,
+    ) -> WorkspacesResponse:
+        # Directory drives the FE dropdown and stays unfiltered.
+        directory = self._storage.load_json(REF_WORKSPACES_FILE, fallback=[])
+        if not isinstance(directory, list):
+            directory = []
+
+        if self._has_filters(workspace_id, user_email):
+            events = self._filter_events(
+                self._load_window_events(scenario_id), workspace_id, user_email
+            )
+            return WorkspacesResponse.model_validate(
+                {"workspaces": _build_workspace_rows(events), "directory": directory}
+            )
+
         slice_data = self._load_scenario_slice(
-            WORKSPACES_FILE, scenario_id, fallback={"workspaces": [], "directory": []}
+            WORKSPACES_FILE, scenario_id, fallback={"workspaces": [], "directory": directory}
         )
         return WorkspacesResponse.model_validate(slice_data)
 
     def get_events(
-        self, scenario_id: str = DEFAULT_SCENARIO_ID, limit: int = 200
+        self,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        limit: int = 200,
+        workspace_id: str | None = None,
+        user_email: str | None = None,
     ) -> EventsResponse:
+        if self._has_filters(workspace_id, user_email):
+            events = self._filter_events(
+                self._load_window_events(scenario_id), workspace_id, user_email
+            )
+            events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+            return EventsResponse.model_validate({"events": events[:limit]})
+
         slice_data = self._load_scenario_slice(
             RECENT_EVENTS_FILE, scenario_id, fallback={"events": []}
         )
         events = slice_data.get("events", []) if isinstance(slice_data, dict) else []
         return EventsResponse.model_validate({"events": events[:limit]})
+
+    def get_chats(
+        self,
+        scenario_id: str = DEFAULT_SCENARIO_ID,
+        workspace_id: str | None = None,
+        user_email: str | None = None,
+    ) -> ChatsResponse:
+        """List chat conversations derived from ``page_viewed`` events on
+        ``/chat/conv-...`` paths.
+
+        Each row groups every page view in the scenario window for one
+        conversation. Workspace / user filters narrow the scope so the
+        analytics UI can drill into a specific tenant or user.
+        """
+        events = self._filter_events(
+            self._load_window_events(scenario_id), workspace_id, user_email
+        )
+        by_conv: dict[str, list[dict]] = defaultdict(list)
+        for e in events:
+            if e.get("event_name") != "page_viewed":
+                continue
+            path = e.get("page_path") or ""
+            m = _CHAT_CONV_PATH_RE.search(path)
+            if not m:
+                continue
+            by_conv[m.group(1)].append(e)
+
+        rows: list[ChatRow] = []
+        for conv_id, evts in by_conv.items():
+            evts.sort(key=lambda e: e.get("timestamp", ""))
+            first, last = evts[0], evts[-1]
+            # Title is the conversation_id itself — the chat list is keyed on
+            # the conversation, not on the (often duplicated) "Chat" page title.
+            rows.append(
+                ChatRow(
+                    conversation_id=conv_id,
+                    title=conv_id,
+                    workspace_id=last.get("workspace_id"),
+                    workspace_name=last.get("workspace_name"),
+                    user_email=last.get("user_email"),
+                    first_viewed_at=first.get("timestamp") or "",
+                    last_viewed_at=last.get("timestamp") or "",
+                    page_views=len(evts),
+                )
+            )
+        rows.sort(key=lambda r: r.last_viewed_at, reverse=True)
+        return ChatsResponse(chats=rows)
 
     # --- helpers -----------------------------------------------------------
 

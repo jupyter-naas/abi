@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.43.1 (2026-05-28)
+
+### Bug Fixes
+
+- **dev**: Use dynamic nexus url for magic links
+  ([`af984c1`](https://github.com/jupyter-naas/abi/commit/af984c1978aa946736555390c6abdb9e956c18bd))
+
+
+## v1.43.0 (2026-05-28)
+
+### Features
+
+- Add new models and change bedrock default
+  ([`2c4082b`](https://github.com/jupyter-naas/abi/commit/2c4082b840cc59bf16f5b27168b70762adfbc4ad))
+
+
 ## v1.42.2 (2026-05-26)
 
 ### Bug Fixes

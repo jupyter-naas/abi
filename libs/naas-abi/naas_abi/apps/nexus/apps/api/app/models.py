@@ -153,6 +153,7 @@ class UserModel(Base):
     company = Column(String, nullable=True)
     role = Column(String, nullable=True)
     bio = Column(String, nullable=True)
+    is_superadmin = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

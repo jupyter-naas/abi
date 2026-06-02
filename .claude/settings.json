@@ -4,5 +4,8 @@
     "network": {
       "allowedDomains": ["fonts.googleapis.com", "fonts.gstatic.com"]
     }
+  },
+  "permissions": {
+    "deny": ["Read(./docs/**)"]
   }
 }

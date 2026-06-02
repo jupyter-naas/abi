@@ -2,6 +2,136 @@
 
 <!-- version list -->
 
+## v2.14.0 (2026-06-01)
+
+### Bug Fixes
+
+- **chat-service**: Reword technical context block message
+  ([`be06316`](https://github.com/jupyter-naas/abi/commit/be063167b91a1a956a71a8986b15beb70f362b52))
+
+### Features
+
+- **chat**: Add workspace and conversation context to user profile rendering
+  ([`b39953b`](https://github.com/jupyter-naas/abi/commit/b39953b1fcf394b725e12973302f92820dab28a8))
+
+
+## v2.13.0 (2026-06-01)
+
+### Bug Fixes
+
+- **postgres**: Ensure deterministic ordering of messages by role and creation time
+  ([`8322086`](https://github.com/jupyter-naas/abi/commit/83220861b0fb3b9e85b067286771175ff0dbf487))
+
+### Features
+
+- **analytics**: Add extended negative feedback details (type, detail, severity) for chat messages
+  ([`2ea3252`](https://github.com/jupyter-naas/abi/commit/2ea3252f8b2d1fa6f267ecec6ec3f505e050f32e))
+
+
+## v2.12.0 (2026-05-31)
+
+### Bug Fixes
+
+- **workspace**: Add support for draft conversations
+  ([`6f4d49d`](https://github.com/jupyter-naas/abi/commit/6f4d49d2695fa47c8b94ceafdeff95cf9b889bd6))
+
+### Features
+
+- **analytics**: Add chat conversations overview and detail support
+  ([`bb19316`](https://github.com/jupyter-naas/abi/commit/bb19316948b265b7d763ec72902c0368d03ba7d2))
+
+- **analytics**: Add workspace and user_email filters to analytics endpoints and service
+  ([`e9de126`](https://github.com/jupyter-naas/abi/commit/e9de126e5cd93e5259162ce97c9b1f529d1310a0))
+
+- **analytics chat**: Enrich analytics chat list and detail view
+  ([`bf8e2ff`](https://github.com/jupyter-naas/abi/commit/bf8e2ffeeb241b54c6cff16462f6d38be573cd2f))
+
+- **chat**: Add feedback feature for assistant messages
+  ([`6422624`](https://github.com/jupyter-naas/abi/commit/642262465cb30813a333d478da21956faee3e714))
+
+- **chat**: Enhance export_conversation_as_response with detailed steps and message display
+  ([`c664643`](https://github.com/jupyter-naas/abi/commit/c66464381e48d7a2b52aba5979feba3a6afd0cdb))
+
+
+## v2.11.1 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Preserve template supervisor when duplicating in-process agent
+  ([`a9bcad3`](https://github.com/jupyter-naas/abi/commit/a9bcad38c1641358ad9be7d1fc713b038743f2dd))
+
+- **api**: Propagate current_active_agent in duplicate_inprocess_agent
+  ([`7de688f`](https://github.com/jupyter-naas/abi/commit/7de688f9a9cc669a0fa41d96f5006b665acad6e6))
+
+- **provider_runtime**: Comment out current_active_agent usage in _duplicate_inprocess_agent
+  ([`6297b57`](https://github.com/jupyter-naas/abi/commit/6297b57c99e76c1280ac9e06af0aaed034e4f1a3))
+
+
+## v2.11.0 (2026-05-29)
+
+### Features
+
+- **account**: Increase user bio max length to 2000 characters
+  ([`3c8fbec`](https://github.com/jupyter-naas/abi/commit/3c8fbec4d663e9a3815b852562d271004b061b59))
+
+
+## v2.10.1 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Isolate in-process ABI agent instance per request to prevent cross-conversation state
+  leakage
+  ([`af7bdd9`](https://github.com/jupyter-naas/abi/commit/af7bdd9088d38413f359819ef7ac3e39462de948))
+
+- **account**: Improve error handling and payload structure in ProfilePage
+  ([`a00b112`](https://github.com/jupyter-naas/abi/commit/a00b112fbaaa364e7caf506ddea0dd330ec7cd57))
+
+- **api/analytics**: Increase debounce seconds from 10 to 60
+  ([`2703521`](https://github.com/jupyter-naas/abi/commit/2703521fd59f6935b5924f4863fec4e7a247f8f7))
+
+
+## v2.10.0 (2026-05-28)
+
+### Features
+
+- **chat**: Inject user profile context on first chat turn
+  ([`0c58f5b`](https://github.com/jupyter-naas/abi/commit/0c58f5b9f008d927128fc7fb0c1672d3f95a4d08))
+
+
+## v2.9.0 (2026-05-28)
+
+### Features
+
+- **core**: Add ModelRegistry and migrate AbiAgent + claude/chatgpt/bedrock to use it
+  ([`7e8cf70`](https://github.com/jupyter-naas/abi/commit/7e8cf7066bc00b6c3390494fcb1fe67e92040f50))
+
+- **core**: Full ModelRegistry adoption — context singleton, auto-discovery, no env-var bridges
+  ([`b583ca2`](https://github.com/jupyter-naas/abi/commit/b583ca2506b0bcb033144e03f5bd59fe5431f273))
+
+
+## v2.8.1 (2026-05-27)
+
+### Bug Fixes
+
+- **nexus/web**: Workspace switch from chat page now redirects reliably
+  ([`06d174f`](https://github.com/jupyter-naas/abi/commit/06d174f7d609bb04338e92d80e2aa07ac9e48502))
+
+
+## v2.8.0 (2026-05-27)
+
+### Features
+
+- **agent**: Emit chat events to EventService + identity ContextVars
+  ([`4e9bfae`](https://github.com/jupyter-naas/abi/commit/4e9bfae4bdac73f390031323faf8544a21923c34))
+
+- **core**: Publish typed events from cache, bus, email, keyvalue, secret, triple_store,
+  vector_store
+  ([`ed97217`](https://github.com/jupyter-naas/abi/commit/ed972173c198f2d05b5a327231ed66045de7dc55))
+
+- **nexus**: Admin live event stream + superadmin user flag
+  ([`1d124e9`](https://github.com/jupyter-naas/abi/commit/1d124e9a91c2800a3176b25fe7de54c7d5b46beb))
+
+
 ## v2.7.1 (2026-05-27)
 
 ### Bug Fixes

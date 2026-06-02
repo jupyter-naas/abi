@@ -2,6 +2,87 @@
 
 <!-- version list -->
 
+## v1.52.1 (2026-06-01)
+
+### Bug Fixes
+
+- Remove unused agent functions from default_tools.py
+  ([`2ac4f24`](https://github.com/jupyter-naas/abi/commit/2ac4f24c3921d3e151ed346b80b1321e1deeb2af))
+
+### Documentation
+
+- **model-registry**: Add service README
+  ([`8fd4638`](https://github.com/jupyter-naas/abi/commit/8fd46382a11d5131b420ec4ae08908e23f317908))
+
+
+## v1.52.0 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Preserve template supervisor when duplicating in-process agent
+  ([`a9bcad3`](https://github.com/jupyter-naas/abi/commit/a9bcad38c1641358ad9be7d1fc713b038743f2dd))
+
+- **agent**: Strip inbound handoff artifacts from messages
+  ([`b7c4187`](https://github.com/jupyter-naas/abi/commit/b7c41870d524b0a5966154a2b39d6bf0dd60b2c7))
+
+### Features
+
+- **agent**: Persist routing state across HTTP turns for agent delegation
+  ([`f85cb62`](https://github.com/jupyter-naas/abi/commit/f85cb6256fdc4b88910093d7b9ba78458dc01ae3))
+
+
+## v1.51.0 (2026-05-29)
+
+### Features
+
+- **models**: Add QWEN_3_6 to CanonicalModelId enum
+  ([`60078f7`](https://github.com/jupyter-naas/abi/commit/60078f724c50162243e866661a4e0efb3e3b9091))
+
+
+## v1.50.1 (2026-05-28)
+
+### Bug Fixes
+
+- **core**: Handle disabled soft deps and bedrock content
+  ([`7ed3777`](https://github.com/jupyter-naas/abi/commit/7ed3777046e40b3636546f49f99c3acd75dd416f))
+
+
+## v1.50.0 (2026-05-28)
+
+### Features
+
+- **core**: Add ModelRegistry and migrate AbiAgent + claude/chatgpt/bedrock to use it
+  ([`7e8cf70`](https://github.com/jupyter-naas/abi/commit/7e8cf7066bc00b6c3390494fcb1fe67e92040f50))
+
+- **core**: Full ModelRegistry adoption — context singleton, auto-discovery, no env-var bridges
+  ([`b583ca2`](https://github.com/jupyter-naas/abi/commit/b583ca2506b0bcb033144e03f5bd59fe5431f273))
+
+### Refactoring
+
+- **core**: Drop default_provider, allow multi-register, add ModuleModelLoader + ModelDefinition
+  ([`5b92b37`](https://github.com/jupyter-naas/abi/commit/5b92b37c179a5ede7255073ca2b2f57d4edb6b2a))
+
+
+## v1.49.0 (2026-05-27)
+
+### Features
+
+- **agent**: Emit chat events to EventService + identity ContextVars
+  ([`4e9bfae`](https://github.com/jupyter-naas/abi/commit/4e9bfae4bdac73f390031323faf8544a21923c34))
+
+- **core**: Publish typed events from cache, bus, email, keyvalue, secret, triple_store,
+  vector_store
+  ([`ed97217`](https://github.com/jupyter-naas/abi/commit/ed972173c198f2d05b5a327231ed66045de7dc55))
+
+
+## v1.48.0 (2026-05-27)
+
+### Features
+
+- **onto2py**: Resolve cross-package owl:imports via locator annotations
+  ([`ee86802`](https://github.com/jupyter-naas/abi/commit/ee868028cc52f9edd3271f16550ba1f495cc8fe7))
+
+
 ## v1.47.0 (2026-05-26)
 
 ### Documentation

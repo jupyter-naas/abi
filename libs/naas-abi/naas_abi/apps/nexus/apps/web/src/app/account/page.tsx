@@ -6,6 +6,31 @@ import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
 
+const BIO_MAX_LENGTH = 2000;
+
+type FastApiValidationError = {
+  loc?: (string | number)[];
+  msg?: string;
+};
+
+function formatApiError(err: unknown, fallback: string): string {
+  if (!err || typeof err !== 'object') return fallback;
+  const detail = (err as { detail?: unknown }).detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    const messages = (detail as FastApiValidationError[])
+      .map((d) => {
+        const field = Array.isArray(d?.loc)
+          ? d.loc.filter((p) => p !== 'body').join('.')
+          : '';
+        return field ? `${field}: ${d?.msg ?? ''}`.trim() : (d?.msg ?? '');
+      })
+      .filter(Boolean);
+    if (messages.length) return messages.join('\n');
+  }
+  return fallback;
+}
+
 export default function ProfilePage() {
   const authUser = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -72,8 +97,8 @@ export default function ProfilePage() {
           setUser({ ...authUser, avatar: fullUrl });
         }
       } else {
-        const error = await response.json();
-        alert(`Upload failed: ${error.detail || 'Unknown error'}`);
+        const error = await response.json().catch(() => ({}));
+        alert(`Upload failed: ${formatApiError(error, 'Unknown error')}`);
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -98,8 +123,8 @@ export default function ProfilePage() {
           setUser({ ...authUser, avatar: undefined });
         }
       } else {
-        const error = await response.json();
-        alert(`Remove failed: ${error.detail || 'Unknown error'}`);
+        const error = await response.json().catch(() => ({}));
+        alert(`Remove failed: ${formatApiError(error, 'Unknown error')}`);
       }
     } catch (error) {
       console.error('Remove avatar error:', error);
@@ -110,16 +135,28 @@ export default function ProfilePage() {
   const handleSave = async () => {
     try {
       const { authFetch } = await import('@/stores/auth');
+      // Only include fields the user actually filled in. The backend's
+      // UserUpdate enforces min_length on name/email, so sending "" would
+      // fail validation even when the user only wanted to update bio/role.
+      const payload: Record<string, string> = {};
+      const trimmedName = name.trim();
+      const trimmedEmail = email.trim();
+      if (trimmedName) payload.name = trimmedName;
+      if (trimmedEmail) payload.email = trimmedEmail;
+      payload.company = company.trim();
+      payload.role = role.trim();
+      payload.bio = bio.trim();
+
       const response = await authFetch('/api/auth/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, company, role, bio }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        const err = await response.json();
-          alert(err.detail || 'Failed to save profile');
-          return;
+        const err = await response.json().catch(() => ({}));
+        alert(formatApiError(err, 'Failed to save profile'));
+        return;
       }
 
       const updated = await response.json();
@@ -253,13 +290,26 @@ export default function ProfilePage() {
           </div>
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">Bio</label>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="block text-sm font-medium">Bio</label>
+            <span
+              className={cn(
+                'text-xs',
+                bio.length > BIO_MAX_LENGTH
+                  ? 'text-destructive'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {bio.length} / {BIO_MAX_LENGTH}
+            </span>
+          </div>
           <textarea
             value={bio}
-            onChange={(e) => setBio(e.target.value)}
+            onChange={(e) => setBio(e.target.value.slice(0, BIO_MAX_LENGTH))}
             placeholder="Tell us about yourself..."
-            rows={3}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
+            rows={12}
+            maxLength={BIO_MAX_LENGTH}
+            className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-blue-500/30"
           />
         </div>
       </div>

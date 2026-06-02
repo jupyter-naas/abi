@@ -20,8 +20,14 @@ Example:
 
 from typing import Any, Dict, List
 
+from naas_abi_core import logger
 from naas_abi_core.services.secret.SecretPorts import (ISecretAdapter,
                                                        ISecretService)
+from naas_abi_core.services.secret.ontologies.modules.SecretEventOntology import (
+    SecretError,
+    SecretRemoved,
+    SecretSet,
+)
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -45,6 +51,17 @@ class Secret(ServiceBase, ISecretService):
     def __init__(self, adapters: List[ISecretAdapter]):
         super().__init__()
         self.__adapters = adapters
+
+    def __publish_event(self, event: object) -> None:
+        if not self.services_wired:
+            return
+        if not self.services.events_available():
+            return
+        try:
+            self.services.events.publish(event)
+        except Exception as exc:
+            # Secret operations are the source of truth; event logging must never break them.
+            logger.warning(f"Secret: failed to publish event: {exc}")
 
     def get(self, key: str, default: Any = None) -> str:
         """Retrieve a secret value by its key.
@@ -91,8 +108,15 @@ class Secret(ServiceBase, ISecretService):
             >>> secret_service = Secret([EnvVarSecretAdapter(), FileSecretAdapter()])
             >>> secret_service.set("API_KEY", "your-secret-api-key")
         """
-        for adapter in self.__adapters:
-            adapter.set(key, value)
+        try:
+            for adapter in self.__adapters:
+                adapter.set(key, value)
+        except Exception as exc:
+            self.__publish_event(
+                SecretError(key=key, operation="set", message=str(exc))
+            )
+            raise
+        self.__publish_event(SecretSet(key=key))
 
     def remove(self, key: str):
         """Remove a secret key from all configured adapters.
@@ -111,8 +135,15 @@ class Secret(ServiceBase, ISecretService):
             >>> secret_service = Secret([EnvVarSecretAdapter(), FileSecretAdapter()])
             >>> secret_service.remove("OLD_API_KEY")
         """
-        for adapter in self.__adapters:
-            adapter.remove(key)
+        try:
+            for adapter in self.__adapters:
+                adapter.remove(key)
+        except Exception as exc:
+            self.__publish_event(
+                SecretError(key=key, operation="remove", message=str(exc))
+            )
+            raise
+        self.__publish_event(SecretRemoved(key=key))
 
     def list(self) -> Dict[str, str | None]:
         """Retrieve all secrets from all configured adapters.

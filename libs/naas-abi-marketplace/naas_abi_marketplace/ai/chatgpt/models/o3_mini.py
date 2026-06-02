@@ -1,17 +1,28 @@
 from langchain_openai import ChatOpenAI
-from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.models.Model import (
+    CanonicalModelId,
+    ChatModel,
+    ModelDefinition,
+    ModelProvider,
+)
 from naas_abi_marketplace.ai.chatgpt import ABIModule
 from pydantic import SecretStr
 
-MODEL_ID = "o3-mini"
-PROVIDER = "openai"
 
-model: ChatModel = ChatModel(
-    model_id=MODEL_ID,
-    provider=PROVIDER,
-    model=ChatOpenAI(
-        model=MODEL_ID,
-        temperature=0,
-        api_key=SecretStr(ABIModule.get_instance().configuration.openai_api_key),
-    ),
-)
+class O3MiniModel(ModelDefinition):
+    CANONICAL_ID = CanonicalModelId.O3_MINI
+    MODEL_ID = "o3-mini"
+    PROVIDER = ModelProvider.OPENAI
+
+    model: ChatModel = ChatModel(
+        model_id=MODEL_ID,
+        provider=PROVIDER,
+        model=ChatOpenAI(
+            model=MODEL_ID,
+            temperature=0,
+            api_key=SecretStr(ABIModule.get_instance().configuration.openai_api_key),
+        ),
+    )
+
+
+model: ChatModel = O3MiniModel.model

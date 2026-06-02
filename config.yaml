@@ -59,6 +59,7 @@ modules:
         users:
           - email: "admin@example.com"
             name: "Dev Admin"
+            is_superadmin: true
         organizations:
           - name: "Dev"
             slug: "dev"
@@ -69,6 +70,24 @@ modules:
             workspaces:
               - name: "Default"
                 slug: "default"
+                owner_email: "admin@example.com"
+                members:
+                  - email: "admin@example.com"
+                    role: "owner"
+              - name: "Alpha"
+                slug: "alpha"
+                owner_email: "admin@example.com"
+                members:
+                  - email: "admin@example.com"
+                    role: "owner"
+              - name: "Beta"
+                slug: "beta"
+                owner_email: "admin@example.com"
+                members:
+                  - email: "admin@example.com"
+                    role: "owner"
+              - name: "Gamma"
+                slug: "gamma"
                 owner_email: "admin@example.com"
                 members:
                   - email: "admin@example.com"
@@ -141,6 +160,12 @@ modules:
         priority_option_id: "4fb76f2d"
   
 services:
+  # ModelRegistry defaults. Auto-resolved against models registered by the
+  # enabled provider modules at boot — if the canonical id below isn't
+  # registered after all modules load, ``Engine.load()`` hard-fails.
+  model_registry:
+    default_chat_model: "gpt-4.1-mini"
+    default_embedding_model: "text-embedding-3-large"
   secret:
     secret_adapters:
       - adapter: "dotenv"
