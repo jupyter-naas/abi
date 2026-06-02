@@ -1,4 +1,5 @@
 import hashlib
+import json as json_module
 import os
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -85,10 +86,20 @@ class XIntegration(Integration):
                 params=params or {},
                 json=json,
             )
-            response.raise_for_status()
-            return response.json()
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"X API request failed: {str(e)}")
+
+        if not response.ok:
+            try:
+                body = response.json()
+                detail = json_module.dumps(body, ensure_ascii=False)
+            except ValueError:
+                detail = response.text
+            raise IntegrationConnectionError(
+                f"X API {response.status_code} {response.reason} for {url} — {detail}"
+            )
+
+        return response.json()
 
     def _get_all_items(
         self,
@@ -411,34 +422,120 @@ class XIntegration(Integration):
     # ----------------------------------------------------------------- search
 
     @cache(
-        lambda self, query, max_results=100, max_pages=1: (
+        lambda self, query, start_time=None, end_time=None, since_id=None, until_id=None, max_results=100, sort_order=None, tweet_fields=None, expansions=None, media_fields=None, poll_fields=None, user_fields=None, place_fields=None, max_pages=1: (
             "search_recent_tweets_"
-            + hashlib.md5(query.encode()).hexdigest()[:8]
-            + f"_{max_results}_{max_pages}"
+            + hashlib.md5(
+                json_module.dumps(
+                    {
+                        "query": query,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "since_id": since_id,
+                        "until_id": until_id,
+                        "max_results": max_results,
+                        "sort_order": sort_order,
+                        "tweet_fields": sorted(tweet_fields) if tweet_fields else None,
+                        "expansions": sorted(expansions) if expansions else None,
+                        "media_fields": sorted(media_fields) if media_fields else None,
+                        "poll_fields": sorted(poll_fields) if poll_fields else None,
+                        "user_fields": sorted(user_fields) if user_fields else None,
+                        "place_fields": sorted(place_fields) if place_fields else None,
+                        "max_pages": max_pages,
+                    },
+                    sort_keys=True,
+                    default=str,
+                ).encode()
+            ).hexdigest()[:8]
         ),
         cache_type=DataType.JSON,
-        ttl=timedelta(days=1),
+        ttl=timedelta(hours=1),
     )
     def search_recent_tweets(
         self,
         query: str,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        since_id: Optional[str] = None,
+        until_id: Optional[str] = None,
         max_results: int = 100,
+        sort_order: Optional[str] = "recency",
+        tweet_fields: Optional[List[str]] = None,
+        expansions: Optional[List[str]] = None,
+        media_fields: Optional[List[str]] = None,
+        poll_fields: Optional[List[str]] = None,
+        user_fields: Optional[List[str]] = None,
+        place_fields: Optional[List[str]] = None,
         max_pages: Optional[int] = 1,
     ) -> List[Dict]:
         """Search tweets from the last 7 days.
 
         Endpoint: GET /2/tweets/search/recent
+
+        Args:
+            query (str): X v2 search query (1-4096 chars), e.g. "(from:TwitterDev
+                OR from:TwitterAPI) has:media -is:retweet".
+            start_time (str, optional): Oldest UTC timestamp (YYYY-MM-DDTHH:mm:ssZ),
+                inclusive.
+            end_time (str, optional): Newest UTC timestamp (YYYY-MM-DDTHH:mm:ssZ),
+                exclusive.
+            since_id (str, optional): Only return tweets with an ID greater than this.
+            until_id (str, optional): Only return tweets with an ID less than this.
+            max_results (int): Results per page, 10-100. Defaults to 100.
+            sort_order (str, optional): "recency" or "relevancy".
+            tweet_fields (list[str], optional): Fields to include on each Tweet object
+                (sent as `tweet.fields`).
+            expansions (list[str], optional): Object expansions (e.g. "author_id",
+                "referenced_tweets.id").
+            media_fields (list[str], optional): Fields on expanded Media objects
+                (sent as `media.fields`).
+            poll_fields (list[str], optional): Fields on expanded Poll objects
+                (sent as `poll.fields`).
+            user_fields (list[str], optional): Fields on expanded User objects
+                (sent as `user.fields`).
+            place_fields (list[str], optional): Fields on expanded Place objects
+                (sent as `place.fields`).
+            max_pages (int, optional): Pages of results to fetch (None to exhaust).
+                Defaults to 1.
+
+        Returns:
+            list[Dict]: Concatenated `data` items across all fetched pages.
         """
+        params: Dict = {"query": query, "max_results": max_results}
+        if start_time is not None:
+            params["start_time"] = start_time
+        if end_time is not None:
+            params["end_time"] = end_time
+        if since_id is not None:
+            params["since_id"] = since_id
+        if until_id is not None:
+            params["until_id"] = until_id
+        if sort_order is not None:
+            params["sort_order"] = sort_order
+        if tweet_fields:
+            params["tweet.fields"] = ",".join(tweet_fields)
+        if expansions:
+            params["expansions"] = ",".join(expansions)
+        if media_fields:
+            params["media.fields"] = ",".join(media_fields)
+        if poll_fields:
+            params["poll.fields"] = ",".join(poll_fields)
+        if user_fields:
+            params["user.fields"] = ",".join(user_fields)
+        if place_fields:
+            params["place.fields"] = ",".join(place_fields)
+
         tweets = self._get_all_items(
             "tweets/search/recent",
-            params={"query": query, "max_results": max_results},
+            params=params,
             max_pages=max_pages,
         )
-        query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
+        params_hash = hashlib.md5(
+            json_module.dumps(params, sort_keys=True, default=str).encode()
+        ).hexdigest()[:8]
         self.__storage_utils.save_json(
             tweets,
             os.path.join(self.__configuration.datastore_path, "search_recent_tweets"),
-            f"{query_hash}.json",
+            f"{params_hash}.json",
         )
         return tweets
 
@@ -482,11 +579,46 @@ def as_tools(configuration: XIntegrationConfiguration):
     class SearchRecentTweetsSchema(BaseModel):
         query: str = Field(
             ...,
-            description="X v2 search query (e.g. 'python lang:en -is:retweet')",
+            description="X v2 search query (1-4096 chars), e.g. 'python lang:en -is:retweet'",
         )
-        max_results: int = Field(100, description="Results per page (cap 100)")
+        start_time: Optional[str] = Field(
+            None,
+            description="Oldest UTC timestamp YYYY-MM-DDTHH:mm:ssZ (inclusive)",
+        )
+        end_time: Optional[str] = Field(
+            None,
+            description="Newest UTC timestamp YYYY-MM-DDTHH:mm:ssZ (exclusive)",
+        )
+        since_id: Optional[str] = Field(
+            None, description="Only return tweets with an ID greater than this"
+        )
+        until_id: Optional[str] = Field(
+            None, description="Only return tweets with an ID less than this"
+        )
+        max_results: int = Field(100, description="Results per page, 10-100")
+        sort_order: Optional[str] = Field(None, description="'recency' or 'relevancy'")
+        tweet_fields: Optional[List[str]] = Field(
+            None,
+            description="Tweet object fields (e.g. ['created_at', 'public_metrics', 'lang'])",
+        )
+        expansions: Optional[List[str]] = Field(
+            None,
+            description="Object expansions (e.g. ['author_id', 'referenced_tweets.id'])",
+        )
+        media_fields: Optional[List[str]] = Field(
+            None, description="Media object fields when media is expanded"
+        )
+        poll_fields: Optional[List[str]] = Field(
+            None, description="Poll object fields when polls are expanded"
+        )
+        user_fields: Optional[List[str]] = Field(
+            None, description="User object fields when author is expanded"
+        )
+        place_fields: Optional[List[str]] = Field(
+            None, description="Place object fields when geo is expanded"
+        )
         max_pages: Optional[int] = Field(
-            1, description="Maximum number of pages to fetch"
+            1, description="Maximum number of pages to fetch (None to exhaust)"
         )
 
     return [
@@ -579,9 +711,22 @@ def as_tools(configuration: XIntegrationConfiguration):
         StructuredTool(
             name="x_search_recent_tweets",
             description="Search tweets posted in the last 7 days using X v2 search syntax.",
-            func=lambda query, max_results=100, max_pages=1: (
+            func=lambda query, start_time=None, end_time=None, since_id=None, until_id=None, max_results=100, sort_order=None, tweet_fields=None, expansions=None, media_fields=None, poll_fields=None, user_fields=None, place_fields=None, max_pages=1: (
                 integration.search_recent_tweets(
-                    query, max_results=max_results, max_pages=max_pages
+                    query,
+                    start_time=start_time,
+                    end_time=end_time,
+                    since_id=since_id,
+                    until_id=until_id,
+                    max_results=max_results,
+                    sort_order=sort_order,
+                    tweet_fields=tweet_fields,
+                    expansions=expansions,
+                    media_fields=media_fields,
+                    poll_fields=poll_fields,
+                    user_fields=user_fields,
+                    place_fields=place_fields,
+                    max_pages=max_pages,
                 )
             ),
             args_schema=SearchRecentTweetsSchema,
