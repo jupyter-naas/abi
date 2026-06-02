@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from typing import Optional
+
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -7,9 +10,11 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "WhatsApp_Business"
-DESCRIPTION = "Helps you interact with WhatsApp Business for business messaging and customer communication."
-SYSTEM_PROMPT = """<role>
+
+class WhatsAppBusinessAgent(IntentAgent):
+    name: str = "WhatsApp_Business"
+    description: str = "Helps you interact with WhatsApp Business for business messaging and customer communication."
+    system_prompt: str = """<role>
 You are a WhatsApp Business Agent with expertise in business messaging, customer communication, and conversation management.
 </role>
 
@@ -39,53 +44,49 @@ You currently do not have access to WhatsApp Business tools. You can only provid
 - Do not make assumptions about message delivery or conversation status
 </constraints>
 """
-SUGGESTIONS: list = []
+    suggestions: list = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "WhatsAppBusinessAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
-    # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Define tools (none initially)
-    tools: list = []
+        tools: list = []
+        intents: list = [
+            Intent(
+                intent_value="Get information about WhatsApp Business features",
+                intent_type=IntentType.RAW,
+                intent_target="WhatsApp Business provides messaging services for businesses to communicate with customers. I can provide general information, but I currently do not have access to WhatsApp Business tools to send messages."
+            ),
+            Intent(
+                intent_value="Understand business messaging and customer communication",
+                intent_type=IntentType.RAW,
+                intent_target="Business messaging involves sending messages, managing conversations, and interacting with customers. I can explain the concepts, but I currently do not have access to tools to send messages."
+            ),
+        ]
 
-    # Define intents
-    intents: list = [
-        Intent(
-            intent_value="Get information about WhatsApp Business features",
-            intent_type=IntentType.RAW,
-            intent_target="WhatsApp Business provides messaging services for businesses to communicate with customers. I can provide general information, but I currently do not have access to WhatsApp Business tools to send messages."
-        ),
-        Intent(
-            intent_value="Understand business messaging and customer communication",
-            intent_type=IntentType.RAW,
-            intent_target="Business messaging involves sending messages, managing conversations, and interacting with customers. I can explain the concepts, but I currently do not have access to tools to send messages."
-        ),
-    ]
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    return WhatsAppBusinessAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools,
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class WhatsAppBusinessAgent(IntentAgent):
-    pass
-
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            agents=[],
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )
