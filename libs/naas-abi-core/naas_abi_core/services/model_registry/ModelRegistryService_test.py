@@ -254,6 +254,46 @@ def test_validate_defaults_rejects_wrong_model_type_for_chat_default() -> None:
         reg.validate_defaults()
 
 
+def test_validate_defaults_error_message_is_actionable() -> None:
+    """The error must name the config key, point at the likely root cause
+    (module not enabled / soft dep), and list what IS registered so the user
+    can spot a typo or pick a valid id."""
+    reg = ModelRegistryService(
+        default_chat_model="gpt-4.1-mini",
+        default_embedding_model="text-embedding-3-large",
+    )
+    reg.register("gpt-5.1-mini", _chat_model("gpt-5.1-mini", "openai"))
+    reg.register("text-embedding-3", _embedding_model("openai", "text-embedding-3"))
+
+    with pytest.raises(DefaultModelNotResolvedError) as exc_info:
+        reg.validate_defaults()
+    msg = str(exc_info.value)
+
+    # Names the configured ids and the config keys.
+    assert "'gpt-4.1-mini'" in msg
+    assert "'text-embedding-3-large'" in msg
+    assert "services.model_registry.default_chat_model" in msg
+    assert "services.model_registry.default_embedding_model" in msg
+
+    # Points at the likely root cause.
+    assert "modules:" in msg
+    assert "soft" in msg
+
+    # Shows what IS currently registered so the user can fix the config.
+    assert "'gpt-5.1-mini'" in msg
+    assert "'text-embedding-3'" in msg
+
+
+def test_validate_defaults_error_message_handles_empty_registry() -> None:
+    """When nothing is registered at all, the 'currently registered' line
+    must still render — '(none)' — not crash or omit the hint."""
+    reg = ModelRegistryService(default_chat_model="gpt-4.1-mini")
+    with pytest.raises(DefaultModelNotResolvedError) as exc_info:
+        reg.validate_defaults()
+    msg = str(exc_info.value)
+    assert "currently registered chat model ids: (none)" in msg
+
+
 # ---------------------------------------------------------------------------
 # Introspection
 # ---------------------------------------------------------------------------
