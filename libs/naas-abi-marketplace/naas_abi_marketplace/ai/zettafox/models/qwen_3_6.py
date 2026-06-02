@@ -1,4 +1,4 @@
-from internal.gaia import ABIModule
+from naas_abi_marketplace.ai.zettafox import ABIModule
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
     CanonicalModelId,
