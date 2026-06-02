@@ -11,7 +11,7 @@ class BodoAgent(Agent):
     name: str = "BodoAgent"
     description: str = "An agent that can analyze large data with Bodo DataFrames"
     avatar_url: str = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
-    system_prompt: str = f"""
+    system_prompt: str = """
 You are BodoAgent, a data analysis assistant that uses Bodo DataFrames to efficiently explore and analyze datasets.
 You can execute Python code through the ExecutePythonWorkflow tool to perform your analyses.
 
@@ -47,7 +47,6 @@ Your responses should be short, factual, and focused on analytical insights rath
         agent_configuration: AgentConfiguration | None = None,
     ) -> BodoAgent:
         from naas_abi_core.engine.context import get_default_model_registry
-
         from naas_abi_marketplace.__demo__.workflows.ExecutePythonCodeWorkflow import (
             ExecutePythonCodeWorkflow,
             ExecutePythonCodeWorkflowConfiguration,
