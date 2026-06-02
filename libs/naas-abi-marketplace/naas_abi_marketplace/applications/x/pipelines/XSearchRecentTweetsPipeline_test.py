@@ -1,6 +1,10 @@
 import pytest
 from naas_abi_core import logger
 from naas_abi_marketplace.applications.x import ABIModule
+from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+    XIntegration,
+    XIntegrationConfiguration,
+)
 from naas_abi_marketplace.applications.x.pipelines.XSearchRecentTweetsPipeline import (
     XSearchRecentTweetsPipeline,
     XSearchRecentTweetsPipelineConfiguration,
@@ -8,16 +12,19 @@ from naas_abi_marketplace.applications.x.pipelines.XSearchRecentTweetsPipeline i
 )
 
 module = ABIModule.get_instance()
+bearer_token = module.configuration.bearer_token
 triple_store_service = module.engine.services.triple_store
 
-# Cached search_recent_tweets fixture produced by XIntegration.
-RESULT_SET_ID = "21dcaa8c"
-QUERY_STRING = "Roland Garros lang:en"
+# Stable public fixtures used across tests.
+QUERY = "python lang:en"
+OPTIONS = {"max_results": 10, "max_pages": 1, "sort_order": "recency"}
 
 
 @pytest.fixture
 def pipeline() -> XSearchRecentTweetsPipeline:
+    x_integration = XIntegration(XIntegrationConfiguration(bearer_token=bearer_token))
     configuration = XSearchRecentTweetsPipelineConfiguration(
+        x_integration=x_integration,
         triple_store=triple_store_service,
     )
     return XSearchRecentTweetsPipeline(configuration)
@@ -26,8 +33,8 @@ def pipeline() -> XSearchRecentTweetsPipeline:
 def test_run(pipeline: XSearchRecentTweetsPipeline):
     graph = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
-            result_set_id=RESULT_SET_ID,
-            query_string=QUERY_STRING,
+            query=QUERY,
+            options=OPTIONS,
             persist=False,
         )
     )
@@ -41,8 +48,8 @@ def test_run_emits_search_recent_tweets_individual(
 ):
     graph = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
-            result_set_id=RESULT_SET_ID,
-            query_string=QUERY_STRING,
+            query=QUERY,
+            options=OPTIONS,
             persist=False,
         )
     )
@@ -68,8 +75,8 @@ def test_run_emits_search_recent_tweets_individual(
 def test_run_emits_tweets(pipeline: XSearchRecentTweetsPipeline):
     graph = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
-            result_set_id=RESULT_SET_ID,
-            query_string=QUERY_STRING,
+            query=QUERY,
+            options=OPTIONS,
             persist=False,
         )
     )
@@ -90,19 +97,30 @@ def test_run_emits_tweets(pipeline: XSearchRecentTweetsPipeline):
     logger.info(f"Total Tweet individuals: {tweet_count}")
 
 
+def test_run_rejects_unknown_option(pipeline: XSearchRecentTweetsPipeline):
+    with pytest.raises(ValueError, match="Unknown options"):
+        pipeline.run(
+            XSearchRecentTweetsPipelineParameters(
+                query=QUERY,
+                options={"max_results": 10, "not_a_real_option": True},
+                persist=False,
+            )
+        )
+
+
 def test_rerun_is_idempotent(pipeline: XSearchRecentTweetsPipeline):
-    """A second run on the same fixture should not duplicate already-stored individuals."""
+    """A second run on the same query should not duplicate already-stored individuals."""
     first = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
-            result_set_id=RESULT_SET_ID,
-            query_string=QUERY_STRING,
+            query=QUERY,
+            options=OPTIONS,
             persist=True,
         )
     )
     second = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
-            result_set_id=RESULT_SET_ID,
-            query_string=QUERY_STRING,
+            query=QUERY,
+            options=OPTIONS,
             persist=False,
         )
     )
@@ -112,5 +130,6 @@ def test_rerun_is_idempotent(pipeline: XSearchRecentTweetsPipeline):
         f"({len(first)}); label-based dedup did not take effect."
     )
     logger.info(
-        f"First run: {len(first)} triples, second run (after persist): {len(second)} triples"
+        f"First run: {len(first)} triples, "
+        f"second run (after persist): {len(second)} triples"
     )
