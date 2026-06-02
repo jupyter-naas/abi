@@ -9,6 +9,8 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 )
 from naas_abi_core.services.secret.Secret import Secret
 
+X_NAMESPACE = "http://ontology.naas.ai/x/"
+
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
