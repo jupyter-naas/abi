@@ -453,6 +453,8 @@ async def discovery_instances(
             domain_relations_count=i.domain_relations_count,
             range_relations_count=i.range_relations_count,
             properties_count=i.properties_count,
+            bfo_bucket_uri=i.bfo_bucket_uri,
+            bfo_bucket_label=i.bfo_bucket_label,
         )
         for i in instances
     ]

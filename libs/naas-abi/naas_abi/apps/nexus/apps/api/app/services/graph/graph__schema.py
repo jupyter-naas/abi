@@ -96,6 +96,8 @@ class DiscoveryInstanceData:
     domain_relations_count: int = 0
     range_relations_count: int = 0
     properties_count: int = 0
+    bfo_bucket_uri: str = ""
+    bfo_bucket_label: str = ""
 
 
 @dataclass(frozen=True)

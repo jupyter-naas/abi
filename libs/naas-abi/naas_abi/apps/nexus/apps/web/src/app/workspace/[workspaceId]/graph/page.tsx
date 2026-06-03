@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
+import { BFO_BUCKET_DEFS, getBfoBucket } from '@/lib/bfo-buckets';
 import { authFetch } from '@/stores/auth';
 import {
   useKnowledgeGraphStore,
@@ -94,6 +95,8 @@ interface ApiDiscoveryInstance {
   domain_relations_count?: number;
   range_relations_count?: number;
   properties_count?: number;
+  bfo_bucket_uri?: string;
+  bfo_bucket_label?: string;
 }
 
 interface ApiDiscoveryRelationType {
@@ -302,6 +305,23 @@ export default function GraphPage() {
   const [selectedPropertyUris, setSelectedPropertyUris] =
     useState<string[]>(DEFAULT_PROPERTY_URIS);
   const [selectedRelationUris, setSelectedRelationUris] = useState<string[]>([]);
+  const [selectedBucketUris, setSelectedBucketUris] = useState<string[]>([]);
+
+  const availableBuckets = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const inst of instances) {
+      if (inst.bfo_bucket_uri && !seen.has(inst.bfo_bucket_uri)) {
+        seen.set(inst.bfo_bucket_uri, inst.bfo_bucket_label || compactUri(inst.bfo_bucket_uri));
+      }
+    }
+    return Array.from(seen.entries())
+      .map(([uri, label]) => ({ uri, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [instances]);
+
+  useEffect(() => {
+    setSelectedBucketUris(availableBuckets.map((b) => b.uri));
+  }, [availableBuckets]);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -506,6 +526,10 @@ export default function GraphPage() {
 
   const filteredInstances = useMemo(() => {
     let result = instances;
+    if (selectedBucketUris.length > 0) {
+      const bucketSet = new Set(selectedBucketUris);
+      result = result.filter((i) => i.bfo_bucket_uri && bucketSet.has(i.bfo_bucket_uri));
+    }
     for (const [colId, filter] of Object.entries(columnFilters)) {
       const search = filter.search.trim().toLowerCase();
       result = result.filter((inst) => {
@@ -540,7 +564,7 @@ export default function GraphPage() {
       });
     }
     return result;
-  }, [instances, columnFilters, sortState]);
+  }, [instances, selectedBucketUris, columnFilters, sortState]);
 
   const workingInstanceUris = useMemo(() => {
     if (selectedInstanceUris.size > 0) {
@@ -804,6 +828,7 @@ export default function GraphPage() {
     setSelectedClassUris([]);
     setSelectedPropertyUris(DEFAULT_PROPERTY_URIS);
     setSelectedRelationUris([]);
+    setSelectedBucketUris(availableBuckets.map((b) => b.uri));
     setSearch('');
     setSelectedInstanceUris(new Set());
     setColumnFilters({});
@@ -969,6 +994,14 @@ export default function GraphPage() {
                 selectedPropertyUris={selectedPropertyUris}
                 onToggleProperty={toggleProperty}
                 onSetSelectedProperties={setSelectedPropertyUris}
+                availableBuckets={availableBuckets}
+                selectedBucketUris={selectedBucketUris}
+                onToggleBucket={(uri) =>
+                  setSelectedBucketUris((prev) =>
+                    prev.includes(uri) ? prev.filter((u) => u !== uri) : [...prev, uri]
+                  )
+                }
+                onSetSelectedBuckets={setSelectedBucketUris}
                 instances={instances}
                 filteredInstances={filteredInstances}
                 instancesLoading={instancesLoading}
@@ -1151,6 +1184,10 @@ interface DiscoveryPaneProps {
   selectedClassUris: string[];
   onToggleClass: (uri: string) => void;
   onSetSelectedClasses: (uris: string[]) => void;
+  availableBuckets: { uri: string; label: string }[];
+  selectedBucketUris: string[];
+  onToggleBucket: (uri: string) => void;
+  onSetSelectedBuckets: (uris: string[]) => void;
   properties: ApiDiscoveryProperty[];
   propertiesLoading: boolean;
   selectedPropertyUris: string[];
@@ -1217,6 +1254,10 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     selectedClassUris,
     onToggleClass,
     onSetSelectedClasses,
+    availableBuckets,
+    selectedBucketUris,
+    onToggleBucket,
+    onSetSelectedBuckets,
     properties,
     propertiesLoading,
     selectedPropertyUris,
@@ -1330,6 +1371,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     { id: 'uri', label: 'uri' },
     { id: RDFS_LABEL, label: 'rdfs:label' },
     { id: 'class', label: 'class' },
+    { id: 'bfo_bucket', label: 'BFO bucket' },
     { id: 'domain_relations', label: '→' },
     { id: 'range_relations', label: '←' },
     { id: 'properties', label: 'properties' },
@@ -1390,7 +1432,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 px-4 py-2">
+        <div className="grid grid-cols-4 gap-3 px-4 py-2">
           <GraphFilter
             graphs={graphs}
             activeGraph={activeGraph}
@@ -1409,6 +1451,18 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             onToggle={onToggleClass}
             onSetSelected={onSetSelectedClasses}
             emptyMessage="No classes in this graph."
+          />
+          <CheckboxFilter
+            label="BFO 7 Buckets"
+            loading={false}
+            options={availableBuckets.map((b) => {
+              const def = getBfoBucket(b.uri);
+              return { uri: b.uri, label: def ? `${def.label} · ${def.type}` : b.label, hint: def?.label };
+            })}
+            selected={selectedBucketUris}
+            onToggle={onToggleBucket}
+            onSetSelected={onSetSelectedBuckets}
+            emptyMessage="No BFO buckets found."
           />
           <CheckboxFilter
             label="Properties"
@@ -1719,6 +1773,8 @@ function PreviewExportMenu({
         label: i.label,
         class_uri: i.class_uri,
         class_label: i.class_label,
+        bfo_bucket_uri: i.bfo_bucket_uri || '',
+        bfo_bucket_label: i.bfo_bucket_label || '',
       })),
       relations: relations.map((r) => ({
         domain_uri: r.domain_uri,
@@ -1738,9 +1794,9 @@ function PreviewExportMenu({
     const rows: string[] = [];
     if (instances.length > 0) {
       rows.push('# Instances');
-      rows.push('uri,label,class_uri,class_label');
+      rows.push('uri,label,class_uri,class_label,bfo_bucket_uri,bfo_bucket_label');
       for (const i of instances)
-        rows.push([i.uri, i.label, i.class_uri, i.class_label].map(csvCell).join(','));
+        rows.push([i.uri, i.label, i.class_uri, i.class_label, i.bfo_bucket_uri || '', i.bfo_bucket_label || ''].map(csvCell).join(','));
     }
     if (relations.length > 0) {
       if (rows.length > 0) rows.push('');
@@ -1828,6 +1884,7 @@ function PreviewTable({
                 <th className="border-b px-3 py-1.5 text-left font-medium">URI</th>
                 <th className="border-b px-3 py-1.5 text-left font-medium">Label</th>
                 <th className="border-b px-3 py-1.5 text-left font-medium">Class</th>
+                <th className="border-b px-3 py-1.5 text-left font-medium">BFO Bucket</th>
               </tr>
             </thead>
             <tbody>
@@ -1836,6 +1893,7 @@ function PreviewTable({
                   <td className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]" title={inst.uri}>{inst.uri}</td>
                   <td className="max-w-[200px] truncate px-3 py-1.5" title={inst.label}>{inst.label}</td>
                   <td className="max-w-[200px] truncate px-3 py-1.5" title={inst.class_uri}>{inst.class_label || compactUri(inst.class_uri)}</td>
+                  <td className="max-w-[200px] px-3 py-1.5"><BfoBucketBadge uri={inst.bfo_bucket_uri} label={inst.bfo_bucket_label} /></td>
                 </tr>
               ))}
             </tbody>
@@ -2064,12 +2122,32 @@ function InstanceInspector({
 
 // ── Tables ───────────────────────────────────────────────────────────────────
 
+function BfoBucketBadge({ uri, label }: { uri?: string; label?: string }) {
+  const bucket = getBfoBucket(uri);
+  if (!bucket && !label) return <span className="text-muted-foreground">—</span>;
+  const color = bucket?.color ?? '#9ca3af';
+  const shortLabel = bucket?.label ?? label ?? '—';
+  const typeName = bucket?.type ?? label ?? '';
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+        style={{ backgroundColor: color }}
+      >
+        {shortLabel}
+      </span>
+      <span className="truncate text-xs text-muted-foreground">{typeName}</span>
+    </span>
+  );
+}
+
 function getInstanceColumnValue(
   inst: ApiDiscoveryInstance,
   columnId: string
 ): string {
   if (columnId === 'uri') return inst.uri;
   if (columnId === 'class') return inst.class_label || compactUri(inst.class_uri);
+  if (columnId === 'bfo_bucket') return inst.bfo_bucket_label || compactUri(inst.bfo_bucket_uri || '') || '';
   if (columnId === RDFS_LABEL)
     return inst.label || inst.properties[RDFS_LABEL] || compactUri(inst.uri);
   if (columnId === 'domain_relations') return String(inst.domain_relations_count ?? 0);
@@ -2225,6 +2303,8 @@ function InstancesTable({
                   >
                     {col.id === 'uri' ? (
                       <span className="font-mono text-[11px]">{value}</span>
+                    ) : col.id === 'bfo_bucket' ? (
+                      <BfoBucketBadge uri={inst.bfo_bucket_uri} label={inst.bfo_bucket_label} />
                     ) : (
                       value
                     )}

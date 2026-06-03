@@ -7,19 +7,11 @@ import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
 
-// BFO 7 Buckets color scheme (simplified)
-const BFO_COLORS = {
-  'Material Entity': { background: '#3b82f6', border: '#2563eb', highlight: '#60a5fa' },
-  'Process': { background: '#22c55e', border: '#16a34a', highlight: '#4ade80' },
-  'Temporal Region': { background: '#a855f7', border: '#9333ea', highlight: '#c084fc' },
-  'Site': { background: '#f97316', border: '#ea580c', highlight: '#fb923c' },
-  'Quality': { background: '#ec4899', border: '#db2777', highlight: '#f472b6' },
-  'Realizable': { background: '#eab308', border: '#ca8a04', highlight: '#facc15' },
-  'GDC': { background: '#06b6d4', border: '#0891b2', highlight: '#22d3ee' },
-  'Entity': { background: '#6b7280', border: '#4b5563', highlight: '#9ca3af' },
-  'Unknown': { background: '#9ca3af', border: '#6b7280', highlight: '#d1d5db' },
-};
+const BFO_COLORS: Record<string, { background: string; border: string; highlight: string }> = Object.fromEntries(
+  BFO_BUCKET_DEFS.map((d) => [d.type, { background: d.color, border: d.border, highlight: d.color }])
+);
 
 // BFO URI → color bucket (full URI and short ID forms)
 const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
@@ -1354,18 +1346,6 @@ export function VisNetwork({
     </>
   );
 }
-
-export const BFO_BUCKET_DEFS = [
-  { type: 'Material Entity', label: 'Who', description: 'Objects, people, organizations' },
-  { type: 'Process', label: 'What', description: 'Events, activities, changes' },
-  { type: 'Temporal Region', label: 'When', description: 'Time periods, instants' },
-  { type: 'Site', label: 'Where', description: 'Locations, places' },
-  { type: 'Quality', label: 'How it is', description: 'Properties, attributes' },
-  { type: 'Realizable', label: 'Why', description: 'Roles & dispositions' },
-  { type: 'GDC', label: 'How we know', description: 'Documents, data, plans' },
-  { type: 'Entity', label: 'Entity', description: 'Entity' },
-  { type: 'Unknown', label: 'Unknown', description: 'Unclassified or unresolved bucket' },
-];
 
 export function BFOBucketFilters({
   activeBuckets,
