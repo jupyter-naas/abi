@@ -196,12 +196,19 @@ class ISearchService(ABC):
         filters: dict[str, Any] | None = None,
         limit: int = 50,
         timeout: float = 10.0,
+        bypass_cache: bool = False,
     ) -> Iterator[SearchEvent]:
         """Federate the query across `sources` (default: all registered).
 
         Yields a stream of events so the caller can render results as they
         arrive. One slow source does not block the others — each source runs
         with its own timeout and errors are isolated as `SourceError` events.
+
+        `bypass_cache` forces a fresh fetch from every selected source (the
+        cache is still REFRESHED with the new result, so the next normal
+        caller benefits). Use it from a "refresh" button in the UI; default
+        callers should leave it False so the short hot-cache TTL absorbs
+        the typing-fast / two-tabs cases.
         """
 
     @abstractmethod

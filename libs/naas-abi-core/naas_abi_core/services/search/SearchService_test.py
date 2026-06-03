@@ -123,3 +123,20 @@ def test_cache_hit_second_query_reuses_results():
     list(service.search("same"))
 
     assert calls["n"] == 1
+
+
+def test_bypass_cache_forces_refetch():
+    calls = {"n": 0}
+
+    class _CountingSource(_StaticSource):
+        def search(self, query: str, **kw: Any) -> Iterator[SearchHit]:
+            calls["n"] += 1
+            return super().search(query, **kw)
+
+    service = SearchService(cache_ttl_seconds=60.0)
+    service.register_source(_CountingSource("a", [_hit("a", "1")]))
+
+    list(service.search("same"))
+    list(service.search("same", bypass_cache=True))
+
+    assert calls["n"] == 2

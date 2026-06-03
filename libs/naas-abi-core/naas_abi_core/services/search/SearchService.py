@@ -15,18 +15,27 @@ Design notes:
   their own and publish `SearchIndexFailed` / `DocumentIndexed` via
   EventService when they update. Keeps the dependency arrow clean:
   `search → events → bus`; nothing imports `search`.
-- A tiny TTL cache fronts each source so repeated queries (especially for
-  rate-limited external sources like DuckDuckGo) don't hammer them.
+- A short-TTL hot cache fronts each source so repeated queries (especially
+  for rate-limited external sources like DuckDuckGo) don't hammer them. Uses
+  `services.cache.hot` when the service is engine-wired (process-shared,
+  survives restarts when backed by Redis); falls back to a process-local
+  dict otherwise so unit tests don't need an engine.
 """
 
 from __future__ import annotations
 
+import datetime
+import hashlib
 import queue
 import threading
 import time
 from typing import Any, Iterator
 
 from naas_abi_core import logger
+from naas_abi_core.services.cache.CachePort import (
+    CacheExpiredError,
+    CacheNotFoundError,
+)
 from naas_abi_core.services.search.SearchPorts import (
     Exceptions,
     Hit,
@@ -47,23 +56,23 @@ from naas_abi_core.services.ServiceBase import ServiceBase
 
 
 _SENTINEL = object()
+_CACHE_KEY_PREFIX = "search:v1:"
 
 
-class _TTLCache:
-    """Tiny per-source TTL cache keyed by (query, filters, limit).
+class _LocalTTLCache:
+    """Process-local TTL cache used when the engine cache isn't wired.
 
-    Held inside the SearchService so each source benefits regardless of how
-    it was implemented. TTL is short by default because search results need
-    to reflect recent index updates within seconds, not minutes.
+    Kept intentionally small — when running under a wired engine, the
+    `CacheService.hot` tier (Redis-backed in prod) handles caching with
+    process-sharing and durability the local dict can't provide.
     """
 
-    def __init__(self, ttl_seconds: float = 30.0, max_entries: int = 256):
-        self._ttl = ttl_seconds
+    def __init__(self, max_entries: int = 256):
         self._max = max_entries
-        self._store: dict[tuple, tuple[float, list[SearchHit]]] = {}
+        self._store: dict[str, tuple[float, list[SearchHit]]] = {}
         self._lock = threading.Lock()
 
-    def get(self, key: tuple) -> list[SearchHit] | None:
+    def get(self, key: str) -> list[SearchHit] | None:
         with self._lock:
             entry = self._store.get(key)
             if entry is None:
@@ -74,20 +83,26 @@ class _TTLCache:
                 return None
             return list(hits)
 
-    def put(self, key: tuple, hits: list[SearchHit]) -> None:
+    def put(self, key: str, hits: list[SearchHit], ttl_seconds: float) -> None:
         with self._lock:
             if len(self._store) >= self._max:
-                # Cheap eviction: drop arbitrary key. Good enough for a 256-
-                # entry cache; replace with LRU when usage demands it.
                 self._store.pop(next(iter(self._store)))
-            self._store[key] = (time.monotonic() + self._ttl, list(hits))
+            self._store[key] = (time.monotonic() + ttl_seconds, list(hits))
 
 
 class SearchService(ServiceBase, ISearchService):
-    def __init__(self, cache_ttl_seconds: float = 30.0):
+    def __init__(self, cache_ttl_seconds: float = 10.0):
+        """Federator.
+
+        `cache_ttl_seconds` defaults to a short window (10s). Search results
+        need to reflect recent index updates within seconds — a longer TTL
+        means a user typing then re-querying immediately would see stale
+        hits. Bumped per-call via the `bypass_cache` flag on `search()`.
+        """
         super().__init__()
         self._sources: dict[str, ISearchSource] = {}
-        self._cache = _TTLCache(ttl_seconds=cache_ttl_seconds)
+        self._cache_ttl_seconds = cache_ttl_seconds
+        self._local_cache = _LocalTTLCache()
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -123,6 +138,7 @@ class SearchService(ServiceBase, ISearchService):
         filters: dict[str, Any] | None = None,
         limit: int = 50,
         timeout: float = 10.0,
+        bypass_cache: bool = False,
     ) -> Iterator[SearchEvent]:
         with self._lock:
             selected_names = (
@@ -149,7 +165,7 @@ class SearchService(ServiceBase, ISearchService):
             t = threading.Thread(
                 target=self._run_source,
                 name=f"search-{source.name}",
-                args=(source, query, filters, limit, timeout, event_q),
+                args=(source, query, filters, limit, timeout, bypass_cache, event_q),
                 daemon=True,
             )
             t.start()
@@ -186,6 +202,7 @@ class SearchService(ServiceBase, ISearchService):
         filters: dict[str, Any] | None,
         limit: int,
         timeout: float,
+        bypass_cache: bool,
         event_q: "queue.Queue[Any]",
     ) -> None:
         """Worker body: emit SourceStarted, drain hits, emit Finished/Error.
@@ -196,19 +213,20 @@ class SearchService(ServiceBase, ISearchService):
         start = time.monotonic()
         event_q.put(SourceStarted(source=source.name))
         try:
-            cache_key = (source.name, query, _hashable(filters), limit)
-            cached = self._cache.get(cache_key)
-            if cached is not None:
-                for h in cached:
-                    event_q.put(Hit(hit=h))
-                event_q.put(
-                    SourceFinished(
-                        source=source.name,
-                        count=len(cached),
-                        duration_ms=(time.monotonic() - start) * 1000.0,
+            cache_key = self._cache_key(source.name, query, filters, limit)
+            if not bypass_cache:
+                cached = self._cache_get(cache_key)
+                if cached is not None:
+                    for h in cached:
+                        event_q.put(Hit(hit=h))
+                    event_q.put(
+                        SourceFinished(
+                            source=source.name,
+                            count=len(cached),
+                            duration_ms=(time.monotonic() - start) * 1000.0,
+                        )
                     )
-                )
-                return
+                    return
 
             hits: list[SearchHit] = []
             for hit in _with_timeout(
@@ -220,7 +238,7 @@ class SearchService(ServiceBase, ISearchService):
                 hits.append(hit)
                 if len(hits) >= limit:
                     break
-            self._cache.put(cache_key, hits)
+            self._cache_put(cache_key, hits)
             event_q.put(
                 SourceFinished(
                     source=source.name,
@@ -260,6 +278,49 @@ class SearchService(ServiceBase, ISearchService):
             )
         )
         return count
+
+    # ------------------------------------------------------------------
+    # cache helpers
+    # ------------------------------------------------------------------
+
+    def _cache_key(
+        self,
+        source_name: str,
+        query: str,
+        filters: dict[str, Any] | None,
+        limit: int,
+    ) -> str:
+        # Hash the variable parts so the key stays bounded regardless of
+        # filter dict size or query length. SHA-256 is overkill collision-
+        # wise but it's what the rest of the codebase reaches for and the
+        # cost is negligible vs. the SPARQL/HTTP work it gates.
+        parts = (source_name, query, _hashable(filters), limit)
+        digest = hashlib.sha256(repr(parts).encode("utf-8")).hexdigest()[:32]
+        return f"{_CACHE_KEY_PREFIX}{source_name}:{digest}"
+
+    def _cache_get(self, key: str) -> list[SearchHit] | None:
+        # Engine-wired path: shared across processes (Redis-backed in prod).
+        if self.services_wired:
+            try:
+                if self.services.cache_available():
+                    ttl = datetime.timedelta(seconds=self._cache_ttl_seconds)
+                    return self.services.cache.hot.get(key, ttl=ttl)
+            except (CacheNotFoundError, CacheExpiredError):
+                return None
+            except Exception as exc:
+                # Cache must never break search. Fall through to local.
+                logger.warning(f"SearchService: cache get failed for {key}: {exc}")
+        return self._local_cache.get(key)
+
+    def _cache_put(self, key: str, hits: list[SearchHit]) -> None:
+        if self.services_wired:
+            try:
+                if self.services.cache_available():
+                    self.services.cache.hot.set_pickle(key, hits)
+                    return
+            except Exception as exc:
+                logger.warning(f"SearchService: cache put failed for {key}: {exc}")
+        self._local_cache.put(key, hits, ttl_seconds=self._cache_ttl_seconds)
 
     # ------------------------------------------------------------------
     # internals

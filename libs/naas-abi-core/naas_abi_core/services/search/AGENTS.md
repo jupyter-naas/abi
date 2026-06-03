@@ -52,7 +52,7 @@ SearchFinished  → once
 
 Each source runs in its own thread and feeds a shared queue; one slow/failed source does NOT block the others. Per-source timeout bounds the "unreachable" case without truncating slow-but-streaming sources.
 
-Caching is per-source TTL (default 30s) keyed by `(source, query, filters, limit)`. Short TTL because results must reflect recent index updates within seconds.
+Caching is per-source TTL (default **10s**) keyed by `(source, query, filters, limit)`. When the service is engine-wired it uses `services.cache.hot` (Redis-backed in prod — shared across processes); otherwise it falls back to a process-local dict so unit tests don't need an engine. Pass `bypass_cache=True` on `search()` to force a fresh fetch — the cache is still refreshed with the new result so the next normal caller benefits.
 
 ## Indexing path
 
