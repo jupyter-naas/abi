@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
@@ -7,11 +9,12 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from naas_abi_marketplace.applications.exchangeratesapi import ABIModule
 
-NAME = "ExchangeRatesAPI"
-DESCRIPTION = "Helps you interact with ExchangeRatesAPI for currency exchange rate information."
-SYSTEM_PROMPT = """<role>
+
+class ExchangeRatesAPIAgent(IntentAgent):
+    name: str = "ExchangeRatesAPI"
+    description: str = "Helps you interact with ExchangeRatesAPI for currency exchange rate information."
+    system_prompt: str = """<role>
 You are an ExchangeRatesAPI Agent with expertise in currency exchange rates and financial data.
 </role>
 
@@ -45,64 +48,63 @@ You currently do not have access to ExchangeRatesAPI tools. You can only provide
 - Do not make assumptions about specific exchange rates
 </constraints>
 """
-SUGGESTIONS: list = []
+    suggestions: list = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "ExchangeRatesAPIAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
+        from naas_abi_marketplace.applications.exchangeratesapi import ABIModule
+        from naas_abi_marketplace.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration import (
+            ExchangeratesapiIntegrationConfiguration,
+            as_tools,
+        )
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
-    # Init
-    module = ABIModule.get_instance()
-    api_key = module.configuration.exchangeratesapi_api_key
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+        module = ABIModule.get_instance()
+        api_key = module.configuration.exchangeratesapi_api_key
 
-    # Define tools (none initially)
-    tools: list = []
-    from naas_abi_marketplace.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration import (
-        as_tools,
-        ExchangeratesapiIntegrationConfiguration,
-    )
-    integration_config = ExchangeratesapiIntegrationConfiguration(api_key=api_key)
-    tools += as_tools(integration_config)
+        tools: list = []
+        integration_config = ExchangeratesapiIntegrationConfiguration(api_key=api_key)
+        tools += as_tools(integration_config)
 
-    # Define intents
-    intents: list = [
-        Intent(
-            intent_value="Get exchange rate information",
-            intent_type=IntentType.RAW,
-            intent_target="I can provide general information about exchange rates and currency conversion. However, I currently do not have access to ExchangeRatesAPI tools to retrieve real-time data."
-        ),
-        Intent(
-            intent_value="Understand currency conversion",
-            intent_type=IntentType.RAW,
-            intent_target="Currency conversion involves converting one currency to another using current exchange rates. I can explain the concepts, but I currently do not have access to tools to perform actual conversions."
-        ),
-    ]
+        intents: list = [
+            Intent(
+                intent_value="Get exchange rate information",
+                intent_type=IntentType.RAW,
+                intent_target="I can provide general information about exchange rates and currency conversion. However, I currently do not have access to ExchangeRatesAPI tools to retrieve real-time data."
+            ),
+            Intent(
+                intent_value="Understand currency conversion",
+                intent_type=IntentType.RAW,
+                intent_target="Currency conversion involves converting one currency to another using current exchange rates. I can explain the concepts, but I currently do not have access to tools to perform actual conversions."
+            ),
+        ]
 
-    # Set configuration
-    system_prompt = SYSTEM_PROMPT.replace("[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools]))
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=system_prompt)
+        system_prompt = cls.system_prompt.replace(
+            "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+        )
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    return ExchangeRatesAPIAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        tools=tools,
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class ExchangeRatesAPIAgent(IntentAgent):
-    pass
-
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            agents=[],
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )

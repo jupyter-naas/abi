@@ -52,6 +52,30 @@ class Engine(IEngine):
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
 
     def load(self, module_names: List[str] = []):
+        # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
+        # pass a narrow ``module_names`` to skip the cost of loading every
+        # enabled module. The in-memory ModelRegistry only sees models from
+        # modules whose ``on_load`` actually ran, so a narrow load that
+        # excludes the AI provider modules leaves the configured defaults
+        # (``services.model_registry.default_chat_model`` /
+        # ``default_embedding_model``) unregistered — and ``validate_defaults``
+        # below would then hard-fail boot. Expand the load set with every
+        # enabled module that ships ``ModelDefinition`` subclasses so the
+        # registry's configured defaults are always present, regardless of
+        # which entry point asked the engine to load.
+        if module_names:
+            model_providers = (
+                self.__engine_module_loader.get_model_providing_modules()
+            )
+            extra = [m for m in model_providers if m not in module_names]
+            if extra:
+                logger.debug(
+                    f"Engine.load: expanding module_names with model "
+                    f"providers {extra} so the model registry's configured "
+                    f"defaults are resolvable."
+                )
+                module_names = [*module_names, *extra]
+
         module_dependencies = self.__engine_module_loader.get_modules_dependencies(
             module_names
         )

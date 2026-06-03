@@ -1,10 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.exchangeratesapi.agents.ExchangeRatesAPIAgent import create_agent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.exchangeratesapi.agents.ExchangeRatesAPIAgent import (
+        ExchangeRatesAPIAgent,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.exchangeratesapi"])
+
+    return ExchangeRatesAPIAgent.New()
 
 
 def test_agent_name(agent):
