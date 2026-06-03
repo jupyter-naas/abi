@@ -558,11 +558,16 @@ class NexusPlatformPipeline(Pipeline):
                     org_uri = provider_by_label[provider_name]
                 else:
                     import uuid as _uuid
+
                     new_org_uri = URIRef(f"http://ontology.naas.ai/abi/{_uuid.uuid4()}")
                     inserted_graph.add((new_org_uri, RDF.type, _CCO_ORGANIZATION))
                     inserted_graph.add((new_org_uri, RDF.type, OWL.NamedIndividual))
-                    inserted_graph.add((new_org_uri, RDFS.label, Literal(provider_name)))
-                    inserted_graph.add((new_org_uri, _NEXUS_HAS_CAPABILITIES, _NEXUS_AI_MODEL_PROVIDER))
+                    inserted_graph.add(
+                        (new_org_uri, RDFS.label, Literal(provider_name))
+                    )
+                    inserted_graph.add(
+                        (new_org_uri, _NEXUS_HAS_CAPABILITIES, _NEXUS_AI_MODEL_PROVIDER)
+                    )
                     provider_by_label[provider_name] = new_org_uri
                     org_uri = new_org_uri
 
@@ -697,7 +702,7 @@ class NexusPlatformPipeline(Pipeline):
 
         graph += self.initialize_nexus_graphs(_dry_run=True)
         graph += self.initialize_nexus_agents(_dry_run=True)
-        graph += self.initialize_nexus_graph_views(_dry_run=True)
+        # graph += self.initialize_nexus_graph_views(_dry_run=True)
 
         self.__storage_utils.save_triples(
             graph=graph,
