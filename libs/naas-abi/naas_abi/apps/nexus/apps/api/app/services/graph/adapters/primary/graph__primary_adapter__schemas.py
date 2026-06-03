@@ -102,6 +102,7 @@ class DiscoveryInstance(BaseModel):
     class_label: str
     properties: dict[str, str] = Field(default_factory=dict)
     relations_count: int = 0
+    properties_count: int = 0
 
 
 class DiscoveryRelationType(BaseModel):

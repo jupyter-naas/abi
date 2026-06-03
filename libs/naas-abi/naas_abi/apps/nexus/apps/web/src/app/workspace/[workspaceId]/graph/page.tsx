@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Database,
   Download,
   FileUp,
   Filter,
@@ -18,6 +19,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Share2,
   Trash2,
   Upload,
   X,
@@ -88,6 +90,7 @@ interface ApiDiscoveryInstance {
   class_label: string;
   properties: Record<string, string>;
   relations_count?: number;
+  properties_count?: number;
 }
 
 interface ApiDiscoveryRelationType {
@@ -482,11 +485,15 @@ export default function GraphPage() {
     }
     if (sortState) {
       const dir = sortState.direction === 'asc' ? 1 : -1;
-      const isNumeric = sortState.column === 'relations';
+      const isNumeric = sortState.column === 'relations' || sortState.column === 'properties';
       result = [...result].sort((a, b) => {
         if (isNumeric) {
-          const av = a.relations_count ?? 0;
-          const bv = b.relations_count ?? 0;
+          const av = sortState.column === 'properties'
+            ? (a.properties_count ?? 0)
+            : (a.relations_count ?? 0);
+          const bv = sortState.column === 'properties'
+            ? (b.properties_count ?? 0)
+            : (b.relations_count ?? 0);
           if (av < bv) return -1 * dir;
           if (av > bv) return 1 * dir;
           return 0;
@@ -1231,12 +1238,14 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
 
   const [instancesCollapsed, setInstancesCollapsed] = useState(false);
   const [relationsCollapsed, setRelationsCollapsed] = useState(false);
+  const [networkCollapsed, setNetworkCollapsed] = useState(false);
 
   const baseColumns = [
     { id: 'uri', label: 'uri' },
     { id: RDFS_LABEL, label: 'rdfs:label' },
     { id: 'class', label: 'class' },
     { id: 'relations', label: 'relations' },
+    { id: 'properties', label: 'properties' },
   ];
 
   const propertyColumns = selectedPropertyUris
@@ -1332,16 +1341,15 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
         </div>
       </div>
 
-      {/* Two-column layout: tables (left) + graph (right) */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-1 flex-col overflow-hidden border-r">
+      {/* Single-column layout: Instances → Relations → Network */}
+      <div className="flex flex-1 flex-col overflow-hidden">
           {/* Table 1: Instances */}
           <section
             className={cn(
               'flex flex-col overflow-hidden',
               instancesCollapsed
                 ? 'shrink-0'
-                : 'min-h-[40%] flex-1'
+                : 'min-h-[35%] flex-1'
             )}
           >
             <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
@@ -1356,7 +1364,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 ) : (
                   <ChevronDown size={14} className="text-muted-foreground" />
                 )}
-                <Filter size={14} className="text-muted-foreground" />
+                <Database size={14} className="text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Instances</h3>
                 <span className="text-xs text-muted-foreground">
                   {filteredInstances.length} / {instances.length}
@@ -1474,36 +1482,59 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             </div>
             )}
           </section>
-        </div>
 
-        {/* Right: Graph */}
-        <aside className="flex w-[44%] min-w-[420px] max-w-[760px] flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-900">
+        {/* Table 3: Network */}
+        <section
+          className={cn(
+            'flex flex-col overflow-hidden border-t',
+            networkCollapsed
+              ? 'shrink-0'
+              : 'min-h-[300px] flex-1'
+          )}
+        >
           <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
-            <h3 className="text-sm font-semibold">Network preview</h3>
-            <span className="text-xs text-muted-foreground">
-              {graphNodes.length} / {GRAPH_MAX_NODES} nodes ·{' '}
-              {graphEdges.length} / {GRAPH_MAX_EDGES} edges
-            </span>
-          </header>
-          <div className="flex-1">
-            {graphNodes.length === 0 ? (
-              <EmptyState
-                icon={Filter}
-                text="Select rows in the Instances and Relations tables to populate the network."
-              />
-            ) : (
-              <VisNetwork
-                nodes={graphNodes}
-                edges={graphEdges}
-                selectedNodeId={highlightedNodeUri}
-                onNodeSelect={onSelectNode}
-                onEdgeSelect={() => {}}
-                physicsEnabled={true}
-                stabilizeKey={stabilizeKey}
-              />
+            <button
+              type="button"
+              onClick={() => setNetworkCollapsed((v) => !v)}
+              className="flex items-center gap-2 text-left hover:text-workspace-accent"
+              title={networkCollapsed ? 'Expand' : 'Collapse'}
+            >
+              {networkCollapsed ? (
+                <ChevronRight size={14} className="text-muted-foreground" />
+              ) : (
+                <ChevronDown size={14} className="text-muted-foreground" />
+              )}
+              <Share2 size={14} className="text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Network preview</h3>
+            </button>
+            {!networkCollapsed && (
+              <span className="text-xs text-muted-foreground">
+                {graphNodes.length} / {GRAPH_MAX_NODES} nodes ·{' '}
+                {graphEdges.length} / {GRAPH_MAX_EDGES} edges
+              </span>
             )}
-          </div>
-        </aside>
+          </header>
+          {!networkCollapsed && (
+            <div className="flex-1">
+              {graphNodes.length === 0 ? (
+                <EmptyState
+                  icon={Filter}
+                  text="Select rows in the Instances and Relations tables to populate the network."
+                />
+              ) : (
+                <VisNetwork
+                  nodes={graphNodes}
+                  edges={graphEdges}
+                  selectedNodeId={highlightedNodeUri}
+                  onNodeSelect={onSelectNode}
+                  onEdgeSelect={() => {}}
+                  physicsEnabled={true}
+                  stabilizeKey={stabilizeKey}
+                />
+              )}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
@@ -1520,6 +1551,7 @@ function getInstanceColumnValue(
   if (columnId === RDFS_LABEL)
     return inst.label || inst.properties[RDFS_LABEL] || compactUri(inst.uri);
   if (columnId === 'relations') return String(inst.relations_count ?? 0);
+  if (columnId === 'properties') return String(inst.properties_count ?? 0);
   return formatPropertyValue(inst.properties[columnId]);
 }
 
