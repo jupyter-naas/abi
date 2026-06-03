@@ -79,6 +79,7 @@ const FileItem = React.memo(function FileItem({
         inputRef.current.select();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing]);
 
   const handleRename = () => {
