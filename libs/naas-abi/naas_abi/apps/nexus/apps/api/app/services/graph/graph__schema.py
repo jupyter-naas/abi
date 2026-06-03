@@ -94,6 +94,7 @@ class DiscoveryInstanceData:
     class_label: str
     properties: dict[str, str]
     relations_count: int = 0
+    properties_count: int = 0
 
 
 @dataclass(frozen=True)

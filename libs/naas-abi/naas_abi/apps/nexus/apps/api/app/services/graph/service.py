@@ -264,6 +264,44 @@ def _fetch_relation_counts(
     return counts
 
 
+def _fetch_data_property_counts(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    subject_uris: list[str],
+) -> dict[str, int]:
+    """Count datatype-property assertions per subject (triples where o is a Literal)."""
+    if not subject_uris:
+        return {}
+    subj_values = " ".join(f"<{uri}>" for uri in subject_uris)
+    query = f"""
+    SELECT ?s (COUNT(*) AS ?total) WHERE {{
+        VALUES ?g {{ <{graph_uri}> }}
+        GRAPH ?g {{
+            VALUES ?s {{ {subj_values} }}
+            ?s ?p ?o .
+            FILTER(isLiteral(?o))
+        }}
+    }}
+    GROUP BY ?s
+    """
+    counts: dict[str, int] = {}
+    try:
+        for row in triple_store.query(query):
+            if not isinstance(row, ResultRow):
+                continue
+            s_value = getattr(row, "s", None)
+            total_value = getattr(row, "total", None)
+            if s_value is None or total_value is None:
+                continue
+            try:
+                counts[str(s_value)] = int(total_value)
+            except (ValueError, TypeError):
+                continue
+    except Exception:
+        return {}
+    return counts
+
+
 def _get_subjects_graph_batch(
     triple_store: TripleStoreService,
     subject_uris: list[str],
@@ -1375,6 +1413,7 @@ class GraphService:
             ]
         )
         relation_counts = _fetch_relation_counts(store, graph_uri, subject_uris)
+        data_property_counts = _fetch_data_property_counts(store, graph_uri, subject_uris)
 
         results: list[DiscoveryInstanceData] = []
         for subject_uri, class_uri in instances:
@@ -1391,6 +1430,7 @@ class GraphService:
                     class_label=class_label,
                     properties=prop_values.get(subject_uri, {}),
                     relations_count=relation_counts.get(subject_uri, 0),
+                    properties_count=data_property_counts.get(subject_uri, 0),
                 )
             )
         results.sort(key=lambda d: d.label.lower())

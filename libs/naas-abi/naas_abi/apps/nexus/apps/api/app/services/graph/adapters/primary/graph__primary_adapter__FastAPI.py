@@ -448,6 +448,7 @@ async def discovery_instances(
             class_label=i.class_label,
             properties=i.properties,
             relations_count=i.relations_count,
+            properties_count=i.properties_count,
         )
         for i in instances
     ]
