@@ -12,8 +12,6 @@ from naas_abi_core.services.triple_store.TripleStoreService import (
     TripleStoreService,
 )
 
-X_NAMESPACE = "http://ontology.naas.ai/x/"
-
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
@@ -36,6 +34,8 @@ class ABIModule(BaseModule):
 
         bearer_token: str
         datastore_path: str = "x"
+        ontology_namespace: str = "http://ontology.naas.ai/x/"
+        graph_name: str = f"{ontology_namespace}graph"
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

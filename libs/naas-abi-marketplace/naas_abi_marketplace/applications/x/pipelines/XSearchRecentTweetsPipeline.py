@@ -15,10 +15,6 @@ from naas_abi_core.pipeline import (
 )
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
-from pydantic import Field
-from rdflib import Graph, Namespace, URIRef
-from rdflib.namespace import RDFS
-
 from naas_abi_marketplace.applications.x import X_NAMESPACE
 from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     XIntegration,
@@ -34,6 +30,9 @@ from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     XPlatform,
     XUser,
 )
+from pydantic import Field
+from rdflib import Graph, Namespace, URIRef
+from rdflib.namespace import RDFS
 
 X_PLATFORM_URI = f"{X_NAMESPACE}XPlatform/x.com"
 
@@ -65,7 +64,7 @@ class XSearchRecentTweetsPipelineConfiguration(PipelineConfiguration):
 
     x_integration: XIntegration
     triple_store: ITripleStoreService
-    graph_name: URIRef = URIRef(f"{X_NAMESPACE}graph")
+    graph_name: URIRef
 
 
 class XSearchRecentTweetsPipelineParameters(PipelineParameters):
@@ -182,7 +181,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
         sparql = (
             f"ASK {{ GRAPH <{self.__configuration.graph_name}> {{ "
             f"?s a <{class_uri}> ; "
-            f"<{RDFS.label}> \"{escaped}\" . }} }}"
+            f'<{RDFS.label}> "{escaped}" . }} }}'
         )
         try:
             return bool(self.__configuration.triple_store.query(sparql).askAnswer)
