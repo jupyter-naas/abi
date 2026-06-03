@@ -69,6 +69,54 @@ class GraphNetworkData:
     edges: list[GraphEdgeData]
 
 
+# ── Discovery (Notion/Excel-like exploration) ────────────────────────────────
+
+
+@dataclass(frozen=True)
+class DiscoveryClassData:
+    uri: str
+    label: str
+    count: int
+
+
+@dataclass(frozen=True)
+class DiscoveryPropertyData:
+    uri: str
+    label: str
+    kind: str  # "datatype" | "annotation"
+
+
+@dataclass(frozen=True)
+class DiscoveryInstanceData:
+    uri: str
+    label: str
+    class_uri: str
+    class_label: str
+    properties: dict[str, str]
+    relations_count: int = 0
+
+
+@dataclass(frozen=True)
+class DiscoveryRelationTypeData:
+    uri: str
+    label: str
+    count: int
+
+
+@dataclass(frozen=True)
+class DiscoveryRelationRowData:
+    relation_uri: str
+    relation_label: str
+    domain_uri: str
+    domain_label: str
+    domain_class_uri: str
+    domain_class_label: str
+    range_uri: str
+    range_label: str
+    range_class_uri: str
+    range_class_label: str
+
+
 @dataclass(frozen=True)
 class GraphAnalysisData:
     total_triples: int

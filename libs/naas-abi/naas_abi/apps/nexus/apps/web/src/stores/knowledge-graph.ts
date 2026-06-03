@@ -48,6 +48,13 @@ export interface GraphTripleFilter {
   object_uri: string;
 }
 
+export interface DiscoveryViewState {
+  classUris: string[];
+  propertyUris: string[];
+  relationUris: string[];
+  search: string;
+}
+
 export interface GraphView {
   id: string;
   name: string;
@@ -58,6 +65,7 @@ export interface GraphView {
   graphIds?: string[];
   query?: string; // For SPARQL views
   filters?: GraphTripleFilter[];
+  discovery?: DiscoveryViewState;
   layout?: 'force' | 'hierarchical' | 'circular' | 'grid';
   createdAt: Date;
 }
