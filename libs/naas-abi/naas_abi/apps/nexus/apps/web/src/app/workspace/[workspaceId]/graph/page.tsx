@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Download,
   FileUp,
@@ -182,7 +183,6 @@ export default function GraphPage() {
     selectGraph,
     setVisibleGraphs,
     views,
-    setViews,
     activeSavedViewId,
     setActiveSavedView,
     createSavedView,
@@ -264,7 +264,6 @@ export default function GraphPage() {
   const [instances, setInstances] = useState<ApiDiscoveryInstance[]>([]);
   const [instancesLoading, setInstancesLoading] = useState(false);
   const [instancesError, setInstancesError] = useState<string | null>(null);
-  const [relationTypes, setRelationTypes] = useState<ApiDiscoveryRelationType[]>([]);
   const [relationsLoading, setRelationsLoading] = useState(false);
   const [relations, setRelations] = useState<ApiDiscoveryRelationRow[]>([]);
   const [relationsError, setRelationsError] = useState<string | null>(null);
@@ -396,12 +395,9 @@ export default function GraphPage() {
         const data = (await res.json()) as ApiDiscoveryProperty[];
         if (!cancelled) {
           setProperties(data);
-          // Keep selection intact, but ensure rdfs:label remains selected.
-          setSelectedPropertyUris((prev) => {
-            const next = prev.length === 0 ? DEFAULT_PROPERTY_URIS : prev;
-            if (!next.includes(RDFS_LABEL)) return [...next, RDFS_LABEL];
-            return next;
-          });
+          setSelectedPropertyUris((prev) =>
+            prev.length === 0 ? DEFAULT_PROPERTY_URIS : prev
+          );
         }
       } catch {
         if (!cancelled) setProperties([]);
@@ -417,8 +413,10 @@ export default function GraphPage() {
   // ── Load instances when filters/search change ──────────────────────────────
 
   useEffect(() => {
-    if (!activeGraph) {
+    if (!activeGraph || selectedPropertyUris.length === 0) {
       setInstances([]);
+      setInstancesLoading(false);
+      setInstancesError(null);
       return;
     }
     let cancelled = false;
@@ -558,7 +556,6 @@ export default function GraphPage() {
 
   useEffect(() => {
     if (!activeGraph || workingInstanceUris.length === 0) {
-      setRelationTypes([]);
       prevSelectedInstancesKeyRef.current = selectedInstancesKey;
       return;
     }
@@ -581,7 +578,6 @@ export default function GraphPage() {
         if (!res.ok) throw new Error(`status ${res.status}`);
         const data = (await res.json()) as ApiDiscoveryRelationType[];
         if (!cancelled) {
-          setRelationTypes(data);
           setSelectedRelationUris((prev) => {
             if (data.length === 0) return [];
             // When the user just changed their explicit row selection, show
@@ -597,7 +593,7 @@ export default function GraphPage() {
           });
         }
       } catch {
-        if (!cancelled) setRelationTypes([]);
+        // ignore — discovery is best-effort
       }
     })();
     return () => {
@@ -681,7 +677,7 @@ export default function GraphPage() {
       if (!inst) continue;
       nodesByUri.set(uri, {
         id: uri,
-        label: inst.label,
+        label: inst.label || compactUri(inst.uri),
         type: inst.class_label || compactUri(inst.class_uri),
         properties: {
           ...inst.properties,
@@ -751,12 +747,6 @@ export default function GraphPage() {
 
   const toggleProperty = (uri: string) => {
     setSelectedPropertyUris((prev) =>
-      prev.includes(uri) ? prev.filter((u) => u !== uri) : [...prev, uri]
-    );
-  };
-
-  const toggleRelation = (uri: string) => {
-    setSelectedRelationUris((prev) =>
       prev.includes(uri) ? prev.filter((u) => u !== uri) : [...prev, uri]
     );
   };
@@ -1239,6 +1229,9 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     }
   }, [graphCompositionKey]);
 
+  const [instancesCollapsed, setInstancesCollapsed] = useState(false);
+  const [relationsCollapsed, setRelationsCollapsed] = useState(false);
+
   const baseColumns = [
     { id: 'uri', label: 'uri' },
     { id: RDFS_LABEL, label: 'rdfs:label' },
@@ -1326,13 +1319,14 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             loading={propertiesLoading}
             options={properties.map((p) => ({
               uri: p.uri,
-              label: p.label,
+              label: p.label || compactUri(p.uri),
               hint: p.kind,
             }))}
             selected={selectedPropertyUris}
             onToggle={onToggleProperty}
             onSetSelected={onSetSelectedProperties}
-            requiredUris={[RDFS_LABEL]}
+            minSelected={1}
+            minSelectedWarning="Select at least one property for search to work."
             emptyMessage="No properties found."
           />
         </div>
@@ -1342,24 +1336,49 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden border-r">
           {/* Table 1: Instances */}
-          <section className="flex min-h-[40%] flex-1 flex-col overflow-hidden">
+          <section
+            className={cn(
+              'flex flex-col overflow-hidden',
+              instancesCollapsed
+                ? 'shrink-0'
+                : 'min-h-[40%] flex-1'
+            )}
+          >
             <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
-              <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInstancesCollapsed((v) => !v)}
+                className="flex items-center gap-2 text-left hover:text-workspace-accent"
+                title={instancesCollapsed ? 'Expand' : 'Collapse'}
+              >
+                {instancesCollapsed ? (
+                  <ChevronRight size={14} className="text-muted-foreground" />
+                ) : (
+                  <ChevronDown size={14} className="text-muted-foreground" />
+                )}
                 <Filter size={14} className="text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Instances</h3>
                 <span className="text-xs text-muted-foreground">
                   {filteredInstances.length} / {instances.length}
                   {selectedInstanceUris.size > 0 && ` · ${selectedInstanceUris.size} selected`}
                 </span>
-              </div>
-              <ColumnVisibilityMenu
-                columns={allColumns}
-                hidden={hiddenColumns}
-                onChange={onHiddenColumnsChange}
-              />
+              </button>
+              {!instancesCollapsed && (
+                <ColumnVisibilityMenu
+                  columns={allColumns}
+                  hidden={hiddenColumns}
+                  onChange={onHiddenColumnsChange}
+                />
+              )}
             </header>
+            {!instancesCollapsed && (
             <div className="flex-1 overflow-auto">
-              {instancesError ? (
+              {selectedPropertyUris.length === 0 ? (
+                <EmptyState
+                  icon={AlertCircle}
+                  text="Select at least one property for search to work."
+                />
+              ) : instancesError ? (
                 <EmptyState icon={AlertCircle} text={instancesError} />
               ) : instancesLoading ? (
                 <EmptyState icon={Loader2} text="Searching..." spinning />
@@ -1389,19 +1408,40 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 />
               )}
             </div>
+            )}
           </section>
 
           {/* Table 2: Relations */}
-          <section className="flex min-h-[35%] flex-1 flex-col overflow-hidden border-t">
+          <section
+            className={cn(
+              'flex flex-col overflow-hidden border-t',
+              relationsCollapsed
+                ? 'shrink-0'
+                : 'min-h-[35%] flex-1'
+            )}
+          >
             <header className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
-              <ArrowRight size={14} className="text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Relations</h3>
-              <span className="text-xs text-muted-foreground">
-                {filteredRelations.length} / {relations.length}
-                {selectedRelationRowKeys.size > 0 &&
-                  ` · ${selectedRelationRowKeys.size} selected`}
-              </span>
+              <button
+                type="button"
+                onClick={() => setRelationsCollapsed((v) => !v)}
+                className="flex items-center gap-2 text-left hover:text-workspace-accent"
+                title={relationsCollapsed ? 'Expand' : 'Collapse'}
+              >
+                {relationsCollapsed ? (
+                  <ChevronRight size={14} className="text-muted-foreground" />
+                ) : (
+                  <ChevronDown size={14} className="text-muted-foreground" />
+                )}
+                <ArrowRight size={14} className="text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Relations</h3>
+                <span className="text-xs text-muted-foreground">
+                  {filteredRelations.length} / {relations.length}
+                  {selectedRelationRowKeys.size > 0 &&
+                    ` · ${selectedRelationRowKeys.size} selected`}
+                </span>
+              </button>
             </header>
+            {!relationsCollapsed && (
             <div className="flex-1 overflow-auto">
               {relationsError ? (
                 <EmptyState icon={AlertCircle} text={relationsError} />
@@ -1432,6 +1472,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 />
               )}
             </div>
+            )}
           </section>
         </div>
 
@@ -1476,7 +1517,8 @@ function getInstanceColumnValue(
 ): string {
   if (columnId === 'uri') return inst.uri;
   if (columnId === 'class') return inst.class_label || compactUri(inst.class_uri);
-  if (columnId === RDFS_LABEL) return inst.label || inst.properties[RDFS_LABEL] || '';
+  if (columnId === RDFS_LABEL)
+    return inst.label || inst.properties[RDFS_LABEL] || compactUri(inst.uri);
   if (columnId === 'relations') return String(inst.relations_count ?? 0);
   return formatPropertyValue(inst.properties[columnId]);
 }
@@ -2041,6 +2083,8 @@ function CheckboxFilter({
   onToggle,
   onSetSelected,
   requiredUris,
+  minSelected,
+  minSelectedWarning,
   emptyMessage,
 }: {
   label: string;
@@ -2050,6 +2094,8 @@ function CheckboxFilter({
   onToggle: (uri: string) => void;
   onSetSelected: (uris: string[]) => void;
   requiredUris?: string[];
+  minSelected?: number;
+  minSelectedWarning?: string;
   emptyMessage?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -2153,6 +2199,14 @@ function CheckboxFilter({
               </span>
             </label>
           )}
+          {minSelected !== undefined &&
+            selected.length < minSelected &&
+            minSelectedWarning && (
+              <div className="flex items-center gap-1.5 border-b bg-amber-50 px-3 py-1.5 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                <AlertCircle size={12} />
+                {minSelectedWarning}
+              </div>
+            )}
           <div className="max-h-56 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <p className="px-3 py-4 text-center text-xs text-muted-foreground">
