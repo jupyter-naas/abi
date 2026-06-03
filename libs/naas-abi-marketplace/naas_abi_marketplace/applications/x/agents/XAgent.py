@@ -11,11 +11,18 @@ from naas_abi_core.services.agent.Agent import (
 
 
 class XAgent(Agent):
-    name: str = "X Agent"
+    name: str = "X"
     description: str = (
         "Helps you explore X (Twitter) — users, timelines, follows, "
         "and recent tweet search via the v2 API, plus SPARQL questions "
         "over tweets already ingested into the ABI knowledge graph."
+    )
+    # Wikimedia Commons hosts the canonical 2023 X logo. The Special:FilePath
+    # URL is content-addressed and redirects to a stable upload.wikimedia.org
+    # CDN URL — using the resolved CDN URL directly avoids the 302 hop.
+    logo_url: str = (
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/"
+        "X_logo_2023_original.svg/250px-X_logo_2023_original.svg.png"
     )
     system_prompt: str = """
 You are an X (Twitter) Agent with read-only access to the X v2 API via

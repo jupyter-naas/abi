@@ -345,7 +345,7 @@ intentMapping:findLanguageDistributionQuery a intentMapping:TemplatableSparqlQue
 
 intentMapping:findTweetsBySearchQueryQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_tweets_by_search_query"@en ;
-    intentMapping:intentDescription "Return tweets ingested by a specific X v2 search query (the verbatim query_string used by XSearchRecentTweetsPipeline / the orchestration). Use this to answer 'list the tweets we have ingested for filter <query>'." ;
+    intentMapping:intentDescription "Return tweets ingested by an X v2 search query whose query_string contains the given substring (case-insensitive). Pass any fragment of the configured X v2 query — e.g. 'anthropic', 'openai', '\"llm\"', or '-is:retweet'. Pass an empty string to return tweets from every ingested query. Use this to answer 'list the tweets we have ingested for filter <query>' or 'show me tweets about <topic> we already have'." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -355,7 +355,8 @@ intentMapping:findTweetsBySearchQueryQuery a intentMapping:TemplatableSparqlQuer
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?query rdf:type x:SearchQuery ;
-                   x:query_string "{{ query_string }}" .
+                   x:query_string ?queryString .
+            FILTER(CONTAINS(LCASE(STR(?queryString)), LCASE('''{{ query_substring }}''')))
             ?process rdf:type x:SearchRecentTweets ;
                      x:usesSearchQuery ?query ;
                      x:producesSearchResult ?resultSet .
@@ -376,7 +377,7 @@ intentMapping:findTweetsBySearchQueryQuery a intentMapping:TemplatableSparqlQuer
         ORDER BY DESC(?createdAt)
         LIMIT {{ limit }}
     """ ;
-    intentMapping:hasArgument intentMapping:xQueryStringArg ;
+    intentMapping:hasArgument intentMapping:xQuerySubstringArg ;
     intentMapping:hasArgument intentMapping:xLimitArg .
 
 intentMapping:listIngestedSearchQueriesQuery a intentMapping:TemplatableSparqlQuery ;
