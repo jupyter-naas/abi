@@ -1,10 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.pennylane.agents.PennylaneAgent import create_agent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.pennylane.agents.PennylaneAgent import (
+        PennylaneAgent,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.pennylane"])
+
+    return PennylaneAgent.New()
 
 
 def test_agent_name(agent):

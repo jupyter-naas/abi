@@ -3,26 +3,25 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
-from naas_abi_core.services.object_storage.ObjectStorageService import (
-    ObjectStorageService,
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
 )
-from naas_abi_core.services.secret.Secret import Secret
 
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
-        services=[ObjectStorageService, Secret],
+        services=[ModelRegistryService],
     )
 
     class Configuration(ModuleConfiguration):
         """
         Configuration example:
 
-        module: naas_abi_marketplace.applications.git
+        module: naas_abi_marketplace.ai.zettafox
         enabled: true
         config:
-            datastore_path: "git"
+            qwen_litellm_auth_header: "{{ secret.QWEN_LITELLM_AUTH_HEADER }}"
         """
 
-        datastore_path: str = "git"
+        qwen_litellm_auth_header: str

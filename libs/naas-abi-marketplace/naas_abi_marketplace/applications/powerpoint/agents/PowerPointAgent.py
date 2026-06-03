@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from datetime import datetime
 from queue import Queue
@@ -37,13 +39,28 @@ from naas_abi_marketplace.applications.powerpoint.workflows.CreatePresentationFr
     CreatePresentationFromTemplateWorkflowParameters,
 )
 
-NAME = "PowerPoint"
-DESCRIPTION = "An agent specialized in creating PowerPoint presentations."
-AVATAR_URL = "https://static.vecteezy.com/system/resources/thumbnails/017/396/831/small/microsoft-power-point-mobile-apps-logo-free-png.png"
-SYSTEM_PROMPT = """
+
+class PowerPointState(ABIAgentState):
+    """State class for PowerPoint presentation creation conversations.
+
+    Extends ABIAgentState to include PowerPoint-specific information that tracks
+    the presentation creation process throughout the conversation flow.
+
+    Attributes:
+        presentation_data (dict): Presentation data parsed from markdown
+    """
+
+    presentation_data: dict
+
+
+class PowerPointAgent(Agent):
+    name: str = "PowerPoint"
+    description: str = "An agent specialized in creating PowerPoint presentations."
+    avatar_url: str = "https://static.vecteezy.com/system/resources/thumbnails/017/396/831/small/microsoft-power-point-mobile-apps-logo-free-png.png"
+    system_prompt: str = """
 <role>
-You are PowerPoint, an agent that converts a user brief into a fully structured PowerPoint presentation using slides structure from template. 
-You never invent facts; you structure, adapt, and clearly label content from the brief. 
+You are PowerPoint, an agent that converts a user brief into a fully structured PowerPoint presentation using slides structure from template.
+You never invent facts; you structure, adapt, and clearly label content from the brief.
 </role>
 
 <objective>
@@ -79,28 +96,28 @@ You will be provided with a template structure and user brief.
   - If audience or objective are partially described, acknowledge what's known and only ask about missing details
   - Never ask about information that was already clearly provided
 
-- Generate slides structure from user brief and validate with user. 
+- Generate slides structure from user brief and validate with user.
 Example:
     - Slide 0 - Title: Description
     - Slide 1 - Title: Description
     - Slide 2 - Title: Description
 
-- Populate each slides with detailed content and template slide to use with 'shape_alt_text' guidance if provided and return result in markdown format. 
+- Populate each slides with detailed content and template slide to use with 'shape_alt_text' guidance if provided and return result in markdown format.
 Example:
 \n**PresentationTitle: [Title]**\n
 ```markdown
 ### Slide 1: Presentation Overview
 TemplateSlideUri: ppt:Slide0
-\nTitle: 
-\nSubtitle: 
-\nDate: 
+\nTitle:
+\nSubtitle:
+\nDate:
 \n\n
 ### Slide 2: Market Dynamics
 TemplateSlideUri: ppt:Slide1
-\nTitle: 
-\nSubtitle: 
-\nQuestion: 
-\nContent: 
+\nTitle:
+\nSubtitle:
+\nQuestion:
+\nContent:
 \n\nSources:
 \n\n
 ```
@@ -122,76 +139,64 @@ TemplateSlideUri: ppt:Slide1
 Slides structure from template:
 [TEMPLATE_STRUCTURE]
 """
+    suggestions: list[str] = []
 
-SUGGESTIONS: list[str] = []
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "PowerPointAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
 
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        model = registry.get_default_chat_model()
 
-class PowerPointState(ABIAgentState):
-    """State class for PowerPoint presentation creation conversations.
+        # Define tools
+        tools: list = []
+        # from naas_abi_core.modules.templatablesparqlquery import get_tools
+        # templates_tools = [
+        #     "powerpoint_search_presentation_by_name",
+        #     "powerpoint_get_slide_by_uri",
+        #     "powerpoint_get_shape_by_uri",
+        #     "powerpoint_get_all_text_content_by_presentation",
+        # ]
+        # tools += get_tools(templates_tools)
 
-    Extends ABIAgentState to include PowerPoint-specific information that tracks
-    the presentation creation process throughout the conversation flow.
+        # Set configuration
+        system_prompt = cls.system_prompt.replace(
+            "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+        )
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=system_prompt)
 
-    Attributes:
-        presentation_data (dict): Presentation data parsed from markdown
-    """
+        # Set shared state
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    presentation_data: dict
+        # Set default datastore and template paths
+        datastore_path = "datastore/powerpoint/presentations"
+        template_path = (
+            "src/marketplace/applications/powerpoint/templates/TemplateNaasPPT.pptx"
+        )
+        module: ABIModule = ABIModule.get_instance()
+        workspace_id = module.configuration.workspace_id
+        storage_name = module.configuration.storage_name
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=model,
+            datastore_path=datastore_path,
+            template_path=template_path,
+            workspace_id=workspace_id,
+            storage_name=storage_name,
+            tools=tools,
+            memory=MemorySaver(),
+            state=agent_shared_state,
+            configuration=agent_configuration,
+        )
 
-
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Agent:
-    # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
-
-    # Define tools
-    tools: list = []
-    # from naas_abi_core.modules.templatablesparqlquery import get_tools
-    # templates_tools = [
-    #     "powerpoint_search_presentation_by_name",
-    #     "powerpoint_get_slide_by_uri",
-    #     "powerpoint_get_shape_by_uri",
-    #     "powerpoint_get_all_text_content_by_presentation",
-    # ]
-    # tools += get_tools(templates_tools)
-
-    # Set configuration
-    system_prompt = SYSTEM_PROMPT.replace(
-        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
-    )
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=system_prompt)
-
-    # Set shared state
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
-
-    # Set default datastore and template paths
-    datastore_path = "datastore/powerpoint/presentations"
-    template_path = (
-        "src/marketplace/applications/powerpoint/templates/TemplateNaasPPT.pptx"
-    )
-    module: ABIModule = ABIModule.get_instance()
-    workspace_id = module.configuration.workspace_id
-    storage_name = module.configuration.storage_name
-    return PowerPointAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        datastore_path=datastore_path,
-        template_path=template_path,
-        workspace_id=workspace_id,
-        storage_name=storage_name,
-        tools=tools,
-        memory=MemorySaver(),
-        state=agent_shared_state,
-        configuration=agent_configuration,
-    )
-
-
-class PowerPointAgent(Agent):
     def __init__(
         self,
         name: str,
@@ -431,7 +436,7 @@ class PowerPointAgent(Agent):
     The last AI message should be a question to validate the presentation draft.
 
     You must answer **"true"** if the user explicitly or implicitly approves the presentation draft with content.
-                                                        
+
     You must answer **"false"** if:
     - The user has questions or concerns about the structure
     - The user wants modifications
@@ -481,7 +486,7 @@ Input:
 
 Instructions:
 1. Understand the shapes structure from template_json.
-2. Map the text in markdown content to corresponding shape by updating the "text" field of the shape. 
+2. Map the text in markdown content to corresponding shape by updating the "text" field of the shape.
     If unable to find a match but you have 'text' or 'shape_alt_text' with value, try to fill it with your knowledge of the content and shape or return empty string '" "'.
 3. Maintain all other shape properties from template (shape_id, shape_type, etc.)
 4. Return the extact same JSON format.
@@ -689,7 +694,7 @@ But we were unable to download URL from Naas. Please contact your support team w
 
 ```markdown
 ## Bug Report
-### Title: 
+### Title:
 Failed to get download URL after presentation creation
 
 ### Description:
@@ -698,7 +703,7 @@ We were unable to get the download URL after creating the presentation:
 - Storage path: {self.__datastore_path}
 - Presentation URI: {presentation_uri}
 
-### Priority: 
+### Priority:
 High
 ```
 """
