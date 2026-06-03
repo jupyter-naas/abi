@@ -93,7 +93,8 @@ class DiscoveryInstanceData:
     class_uri: str
     class_label: str
     properties: dict[str, str]
-    relations_count: int = 0
+    domain_relations_count: int = 0
+    range_relations_count: int = 0
     properties_count: int = 0
 
 
@@ -116,6 +117,7 @@ class DiscoveryRelationRowData:
     range_label: str
     range_class_uri: str
     range_class_label: str
+    role: str = "domain"  # "domain" = working instance is subject; "range" = working instance is object
 
 
 @dataclass(frozen=True)

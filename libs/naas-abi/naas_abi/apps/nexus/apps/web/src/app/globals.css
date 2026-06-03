@@ -216,6 +216,10 @@ html {
   background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 5%, transparent);
 }
 
+.bg-workspace-accent-20 {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 20%, transparent);
+}
+
 /* Border with workspace accent color */
 .border-workspace-accent {
   border-color: var(--workspace-accent, #22c55e);

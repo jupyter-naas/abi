@@ -305,6 +305,46 @@ def _fetch_data_property_counts(
     return counts
 
 
+def _fetch_range_relation_counts(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    object_uris: list[str],
+) -> dict[str, int]:
+    """Count incoming object-property edges per instance (triples where ?o is the instance)."""
+    if not object_uris:
+        return {}
+    obj_values = " ".join(f"<{uri}>" for uri in object_uris)
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    SELECT ?o (COUNT(*) AS ?total) WHERE {{
+        VALUES ?g {{ <{graph_uri}> }}
+        GRAPH ?g {{
+            VALUES ?o {{ {obj_values} }}
+            ?s ?p ?o .
+            FILTER(?p != rdf:type)
+            FILTER(isIRI(?s))
+        }}
+    }}
+    GROUP BY ?o
+    """
+    counts: dict[str, int] = {}
+    try:
+        for row in triple_store.query(query):
+            if not isinstance(row, ResultRow):
+                continue
+            o_value = getattr(row, "o", None)
+            total_value = getattr(row, "total", None)
+            if o_value is None or total_value is None:
+                continue
+            try:
+                counts[str(o_value)] = int(total_value)
+            except (ValueError, TypeError):
+                continue
+    except Exception:
+        return {}
+    return counts
+
+
 def _get_subjects_graph_batch(
     triple_store: TripleStoreService,
     subject_uris: list[str],
@@ -1415,7 +1455,8 @@ class GraphService:
                 "http://www.w3.org/2000/01/rdf-schema#label"
             ]
         )
-        relation_counts = _fetch_relation_counts(store, graph_uri, subject_uris)
+        domain_counts = _fetch_relation_counts(store, graph_uri, subject_uris)
+        range_counts = _fetch_range_relation_counts(store, graph_uri, subject_uris)
         data_property_counts = _fetch_data_property_counts(store, graph_uri, subject_uris)
 
         results: list[DiscoveryInstanceData] = []
@@ -1432,7 +1473,8 @@ class GraphService:
                     class_uri=class_uri,
                     class_label=class_label,
                     properties=prop_values.get(subject_uri, {}),
-                    relations_count=relation_counts.get(subject_uri, 0),
+                    domain_relations_count=domain_counts.get(subject_uri, 0),
+                    range_relations_count=range_counts.get(subject_uri, 0),
                     properties_count=data_property_counts.get(subject_uri, 0),
                 )
             )
@@ -1629,7 +1671,28 @@ class GraphService:
             return []
         store = self._get_triple_store()
         values = " ".join(f"<{uri}>" for uri in instance_uris)
-        query = f"""
+        counts: dict[str, int] = {}
+
+        def _run_agg(sparql: str) -> None:
+            try:
+                for row in store.query(sparql):
+                    if not isinstance(row, ResultRow):
+                        continue
+                    p_value = getattr(row, "p", None)
+                    if p_value is None:
+                        continue
+                    p_uri = str(p_value)
+                    total_value = getattr(row, "total", None)
+                    try:
+                        count = int(total_value) if total_value is not None else 0
+                    except (ValueError, TypeError):
+                        count = 0
+                    counts[p_uri] = counts.get(p_uri, 0) + count
+            except Exception:
+                pass
+
+        # Domain: instances as subjects
+        _run_agg(f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         SELECT ?p (COUNT(*) AS ?total)
         WHERE {{
@@ -1642,32 +1705,41 @@ class GraphService:
             FILTER(isIRI(?o))
         }}
         GROUP BY ?p
-        ORDER BY DESC(?total)
-        """
-        counts: dict[str, int] = {}
-        try:
-            for row in store.query(query):
-                if not isinstance(row, ResultRow):
-                    continue
-                p_value = getattr(row, "p", None)
-                if p_value is None:
-                    continue
-                p_uri = str(p_value)
-                total_value = getattr(row, "total", None)
-                try:
-                    count = int(total_value) if total_value is not None else 0
-                except (ValueError, TypeError):
-                    count = 0
-                counts[p_uri] = counts.get(p_uri, 0) + count
-        except Exception:
-            counts = {}
+        """)
 
-        # Fallback: if aggregation returned nothing, scan distinct predicates.
+        # Range: instances as objects
+        _run_agg(f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        SELECT ?p (COUNT(*) AS ?total)
+        WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                VALUES ?o {{ {values} }}
+                ?s ?p ?o .
+            }}
+            FILTER(?p != rdf:type)
+            FILTER(isIRI(?s))
+        }}
+        GROUP BY ?p
+        """)
+
+        # Fallback: if aggregation returned nothing, scan distinct predicates (domain + range).
         if not counts:
-            distinct_query = f"""
+            def _run_distinct(sparql: str) -> None:
+                try:
+                    for row in store.query(sparql):
+                        if not isinstance(row, ResultRow):
+                            continue
+                        p_value = getattr(row, "p", None)
+                        if p_value is None:
+                            continue
+                        counts[str(p_value)] = counts.get(str(p_value), 0) + 1
+                except Exception:
+                    pass
+
+            _run_distinct(f"""
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-            SELECT DISTINCT ?p ?s ?o
-            WHERE {{
+            SELECT DISTINCT ?p WHERE {{
                 VALUES ?g {{ <{graph_uri}> }}
                 GRAPH ?g {{
                     VALUES ?s {{ {values} }}
@@ -1676,18 +1748,19 @@ class GraphService:
                 FILTER(?p != rdf:type)
                 FILTER(isIRI(?o))
             }}
-            """
-            try:
-                for row in store.query(distinct_query):
-                    if not isinstance(row, ResultRow):
-                        continue
-                    p_value = getattr(row, "p", None)
-                    if p_value is None:
-                        continue
-                    p_uri = str(p_value)
-                    counts[p_uri] = counts.get(p_uri, 0) + 1
-            except Exception:
-                pass
+            """)
+            _run_distinct(f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            SELECT DISTINCT ?p WHERE {{
+                VALUES ?g {{ <{graph_uri}> }}
+                GRAPH ?g {{
+                    VALUES ?o {{ {values} }}
+                    ?s ?p ?o .
+                }}
+                FILTER(?p != rdf:type)
+                FILTER(isIRI(?s))
+            }}
+            """)
 
         results: list[DiscoveryRelationTypeData] = []
         for uri, count in counts.items():
@@ -1731,76 +1804,77 @@ class GraphService:
         if not instance_uris:
             return []
         store = self._get_triple_store()
-        subj_values = " ".join(f"<{uri}>" for uri in instance_uris)
+        inst_values = " ".join(f"<{uri}>" for uri in instance_uris)
         pred_clause = ""
         if relation_uris:
             pred_values = " ".join(f"<{uri}>" for uri in relation_uris)
             pred_clause = f"VALUES ?p {{ {pred_values} }}"
-        query = f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        SELECT ?s ?p ?o ?sLabel ?oLabel ?sClass ?oClass
-        WHERE {{
-            VALUES ?g {{ <{graph_uri}> }}
-            GRAPH ?g {{
-                VALUES ?s {{ {subj_values} }}
-                {pred_clause}
-                ?s ?p ?o .
-                OPTIONAL {{ ?s rdfs:label ?sLabel . }}
-                OPTIONAL {{ ?o rdfs:label ?oLabel . }}
-                OPTIONAL {{
-                    ?s rdf:type ?sClass .
-                    FILTER(?sClass != owl:NamedIndividual && isIRI(?sClass))
+
+        def _build_rel_query(inst_constraint: str, iri_filter: str) -> str:
+            return f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            SELECT ?s ?p ?o ?sLabel ?oLabel ?sClass ?oClass
+            WHERE {{
+                VALUES ?g {{ <{graph_uri}> }}
+                GRAPH ?g {{
+                    {inst_constraint}
+                    {pred_clause}
+                    ?s ?p ?o .
+                    OPTIONAL {{ ?s rdfs:label ?sLabel . }}
+                    OPTIONAL {{ ?o rdfs:label ?oLabel . }}
+                    OPTIONAL {{
+                        ?s rdf:type ?sClass .
+                        FILTER(?sClass != owl:NamedIndividual && isIRI(?sClass))
+                    }}
+                    OPTIONAL {{
+                        ?o rdf:type ?oClass .
+                        FILTER(?oClass != owl:NamedIndividual && isIRI(?oClass))
+                    }}
                 }}
-                OPTIONAL {{
-                    ?o rdf:type ?oClass .
-                    FILTER(?oClass != owl:NamedIndividual && isIRI(?oClass))
-                }}
+                FILTER(?p != rdf:type)
+                FILTER({iri_filter})
             }}
-            FILTER(?p != rdf:type)
-            FILTER(isIRI(?o))
-        }}
-        LIMIT {int(limit)}
-        """
+            LIMIT {int(limit)}
+            """
+
+        domain_query = _build_rel_query(
+            f"VALUES ?s {{ {inst_values} }}", "isIRI(?o)"
+        )
+        range_query = _build_rel_query(
+            f"VALUES ?o {{ {inst_values} }}", "isIRI(?s)"
+        )
+
         rows: list[DiscoveryRelationRowData] = []
-        seen: set[tuple[str, str, str]] = set()
-        result_iter = []
-        try:
-            result_iter = list(store.query(query))
-        except Exception:
-            result_iter = []
-        for row in result_iter:
-            if not isinstance(row, ResultRow):
-                continue
-            s_value = getattr(row, "s", None)
-            p_value = getattr(row, "p", None)
-            o_value = getattr(row, "o", None)
+        # (role, domain_uri, relation_uri, range_uri) to deduplicate within each role
+        seen: set[tuple[str, str, str, str]] = set()
+
+        def _build_row(result_row: ResultRow, role: str) -> DiscoveryRelationRowData | None:
+            s_value = getattr(result_row, "s", None)
+            p_value = getattr(result_row, "p", None)
+            o_value = getattr(result_row, "o", None)
             if s_value is None or p_value is None or o_value is None:
-                continue
+                return None
             domain_uri = str(s_value)
             relation_uri = str(p_value)
             range_uri = str(o_value)
-            key = (domain_uri, relation_uri, range_uri)
+            key = (role, domain_uri, relation_uri, range_uri)
             if key in seen:
-                continue
+                return None
             seen.add(key)
-            s_label_val = getattr(row, "sLabel", None)
-            o_label_val = getattr(row, "oLabel", None)
-            domain_label = (
-                str(s_label_val) if s_label_val else _uri_fragment(domain_uri)
-            )
-            range_label = (
-                str(o_label_val) if o_label_val else _uri_fragment(range_uri)
-            )
+            s_label_val = getattr(result_row, "sLabel", None)
+            o_label_val = getattr(result_row, "oLabel", None)
+            domain_label = str(s_label_val) if s_label_val else _uri_fragment(domain_uri)
+            range_label = str(o_label_val) if o_label_val else _uri_fragment(range_uri)
             try:
                 relation_label = _get_ontology_label(store, relation_uri)
             except Exception:
                 relation_label = ""
             if not relation_label or relation_label == relation_uri:
                 relation_label = _uri_fragment(relation_uri) or relation_uri
-            s_class_val = getattr(row, "sClass", None)
-            o_class_val = getattr(row, "oClass", None)
+            s_class_val = getattr(result_row, "sClass", None)
+            o_class_val = getattr(result_row, "oClass", None)
             domain_class_uri = str(s_class_val) if s_class_val else ""
             range_class_uri = str(o_class_val) if o_class_val else ""
             domain_class_label = ""
@@ -1815,18 +1889,30 @@ class GraphService:
                     range_class_label = _get_ontology_label(store, range_class_uri)
                 except Exception:
                     range_class_label = ""
-            rows.append(
-                DiscoveryRelationRowData(
-                    relation_uri=relation_uri,
-                    relation_label=relation_label,
-                    domain_uri=domain_uri,
-                    domain_label=domain_label,
-                    domain_class_uri=domain_class_uri,
-                    domain_class_label=domain_class_label or _uri_fragment(domain_class_uri),
-                    range_uri=range_uri,
-                    range_label=range_label,
-                    range_class_uri=range_class_uri,
-                    range_class_label=range_class_label or _uri_fragment(range_class_uri),
-                )
+            return DiscoveryRelationRowData(
+                relation_uri=relation_uri,
+                relation_label=relation_label,
+                domain_uri=domain_uri,
+                domain_label=domain_label,
+                domain_class_uri=domain_class_uri,
+                domain_class_label=domain_class_label or _uri_fragment(domain_class_uri),
+                range_uri=range_uri,
+                range_label=range_label,
+                range_class_uri=range_class_uri,
+                range_class_label=range_class_label or _uri_fragment(range_class_uri),
+                role=role,
             )
+
+        for sparql, role in ((domain_query, "domain"), (range_query, "range")):
+            try:
+                result_iter = list(store.query(sparql))
+            except Exception:
+                result_iter = []
+            for r in result_iter:
+                if not isinstance(r, ResultRow):
+                    continue
+                built = _build_row(r, role)
+                if built is not None:
+                    rows.append(built)
+
         return rows
