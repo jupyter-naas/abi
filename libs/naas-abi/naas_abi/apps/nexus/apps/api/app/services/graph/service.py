@@ -1454,6 +1454,12 @@ class GraphService:
                 "http://www.w3.org/2000/01/rdf-schema#label"
             )
             label = label_value or _uri_fragment(subject_uri)
+            bfo_bucket_uri = _get_bfo_parent_for_class(store, class_uri) or ""
+            bfo_bucket_label = (
+                _get_ontology_label(store, bfo_bucket_uri) or _uri_fragment(bfo_bucket_uri)
+                if bfo_bucket_uri
+                else ""
+            )
             results.append(
                 DiscoveryInstanceData(
                     uri=subject_uri,
@@ -1464,6 +1470,8 @@ class GraphService:
                     domain_relations_count=domain_counts.get(subject_uri, 0),
                     range_relations_count=range_counts.get(subject_uri, 0),
                     properties_count=data_property_counts.get(subject_uri, 0),
+                    bfo_bucket_uri=bfo_bucket_uri,
+                    bfo_bucket_label=bfo_bucket_label,
                 )
             )
         results.sort(key=lambda d: d.label.lower())
