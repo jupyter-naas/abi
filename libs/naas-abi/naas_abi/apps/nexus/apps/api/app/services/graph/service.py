@@ -120,8 +120,8 @@ def _get_ontology_label(triple_store: TripleStoreService, uri: str) -> str:
     """
     for row in triple_store.query(query):
         assert isinstance(row, ResultRow)
-        return str(row.label) if row.label else uri
-    return uri
+        return str(row.label) if row.label else uri.split("/")[-1].split("#")[-1]
+    return uri.split("/")[-1].split("#")[-1]
 
 
 @_cache(
@@ -151,12 +151,7 @@ def _get_bfo_parent_for_class(triple_store: TripleStoreService, class_uri: str) 
 def _uri_fragment(uri: str) -> str:
     if not uri:
         return ""
-    for sep in ("#", "/"):
-        if sep in uri:
-            tail = uri.rsplit(sep, 1)[-1]
-            if tail:
-                return tail
-    return uri
+    return uri.split("/")[-1].split("#")[-1]
 
 
 @_cache(
@@ -372,9 +367,7 @@ def _get_subjects_graph_batch(
             where_clauses.append("?s ?p0 ?o0 .")
         else:
             construct_clauses.append(f"?o{i - 1} ?p{i} ?o{i} .")
-            where_clauses.append(
-                f"OPTIONAL {{ ?o{i - 1} ?p{i} ?o{i} . FILTER(isIRI(?o{i - 1})) }}"
-            )
+            where_clauses.append(f"OPTIONAL {{ ?o{i - 1} ?p{i} ?o{i} . FILTER(isIRI(?o{i - 1})) }}")
 
     sparql = f"""
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -438,9 +431,7 @@ def _build_network_from_subject_graph(
             nodes[subject_uri][_get_ontology_label(triple_store, str(p))] = str(o)
         elif isinstance(o, URIRef) and p != RDF.type:
             object_uri = str(o)
-            edge_id = hashlib.sha256(
-                f"{subject_uri}|{str(p)}|{object_uri}".encode()
-            ).hexdigest()
+            edge_id = hashlib.sha256(f"{subject_uri}|{str(p)}|{object_uri}".encode()).hexdigest()
             if edge_id not in edges:
                 object_label_value = subject_graph.value(URIRef(object_uri), RDFS.label)
                 object_label = str(object_label_value) if object_label_value else object_uri
@@ -1011,7 +1002,14 @@ class GraphService:
                     subject_category[s_str] = new_cat
 
         # Second pass: accumulate triples and collect unique subject sets per category
-        _cats = ("named_individual", "class", "object_property", "datatype_property", "restriction", "unknown")
+        _cats = (
+            "named_individual",
+            "class",
+            "object_property",
+            "datatype_property",
+            "restriction",
+            "unknown",
+        )
         triple_counts: dict[str, int] = dict.fromkeys(_cats, 0)
         subject_sets: dict[str, set[str]] = {c: set() for c in _cats}
 
@@ -1197,16 +1195,10 @@ class GraphService:
 
     # ── Discovery ─────────────────────────────────────────────────────────────
 
-    async def discover_classes(
-        self, workspace_id: str, graph_uri: str
-    ) -> list[DiscoveryClassData]:
-        return await asyncio.to_thread(
-            self._discover_classes_sync, workspace_id, graph_uri
-        )
+    async def discover_classes(self, workspace_id: str, graph_uri: str) -> list[DiscoveryClassData]:
+        return await asyncio.to_thread(self._discover_classes_sync, workspace_id, graph_uri)
 
-    def _discover_classes_sync(
-        self, workspace_id: str, graph_uri: str
-    ) -> list[DiscoveryClassData]:
+    def _discover_classes_sync(self, workspace_id: str, graph_uri: str) -> list[DiscoveryClassData]:
         store = self._get_triple_store()
         query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -1283,9 +1275,7 @@ class GraphService:
                 label = ""
             if not label or label == class_uri:
                 label = _uri_fragment(class_uri) or class_uri
-            results.append(
-                DiscoveryClassData(uri=class_uri, label=label, count=count)
-            )
+            results.append(DiscoveryClassData(uri=class_uri, label=label, count=count))
         results.sort(key=lambda d: (-d.count, d.label.lower()))
         return results
 
@@ -1310,9 +1300,7 @@ class GraphService:
             values = " ".join(f"<{uri}>" for uri in class_uris)
             class_filter = f"VALUES ?cls {{ {values} }} ?s rdf:type ?cls ."
         else:
-            class_filter = (
-                "?s rdf:type ?cls . FILTER(?cls != owl:NamedIndividual && isIRI(?cls))"
-            )
+            class_filter = "?s rdf:type ?cls . FILTER(?cls != owl:NamedIndividual && isIRI(?cls))"
         query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -1354,7 +1342,7 @@ class GraphService:
             if uri in seen:
                 continue
             seen.add(uri)
-            label = _get_ontology_label(store, uri) or _uri_fragment(uri)
+            label = _get_ontology_label(store, uri)
             kind = _classify_property(store, uri)
             results.append(DiscoveryPropertyData(uri=uri, label=label, kind=kind))
         results.sort(key=lambda d: d.label.lower())
@@ -1367,7 +1355,7 @@ class GraphService:
         class_uris: list[str],
         property_uris: list[str],
         search: str,
-        limit: int = 200,
+        limit: int | None = None,
     ) -> list[DiscoveryInstanceData]:
         return await asyncio.to_thread(
             self._discover_instances_sync,
@@ -1386,7 +1374,7 @@ class GraphService:
         class_uris: list[str],
         property_uris: list[str],
         search: str,
-        limit: int,
+        limit: int | None,
     ) -> list[DiscoveryInstanceData]:
         store = self._get_triple_store()
 
@@ -1399,9 +1387,7 @@ class GraphService:
         search_clause = ""
         if search and search.strip():
             escaped = _escape_sparql_string(search.strip().lower())
-            search_props = property_uris or [
-                "http://www.w3.org/2000/01/rdf-schema#label"
-            ]
+            search_props = property_uris or ["http://www.w3.org/2000/01/rdf-schema#label"]
             search_values = " ".join(f"<{uri}>" for uri in search_props)
             search_clause = f"""
             {{
@@ -1411,6 +1397,7 @@ class GraphService:
             }}
             """
 
+        limit_clause = f"LIMIT {int(limit)}" if limit is not None else ""
         query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -1425,7 +1412,7 @@ class GraphService:
                 {search_clause}
             }}
         }}
-        LIMIT {int(limit)}
+        {limit_clause}
         """
 
         instances: list[tuple[str, str]] = []
@@ -1451,9 +1438,10 @@ class GraphService:
 
         subject_uris = [s for s, _c in instances]
         prop_values = _fetch_property_values(
-            store, graph_uri, subject_uris, property_uris or [
-                "http://www.w3.org/2000/01/rdf-schema#label"
-            ]
+            store,
+            graph_uri,
+            subject_uris,
+            property_uris or ["http://www.w3.org/2000/01/rdf-schema#label"],
         )
         domain_counts = _fetch_relation_counts(store, graph_uri, subject_uris)
         range_counts = _fetch_range_relation_counts(store, graph_uri, subject_uris)
@@ -1552,7 +1540,9 @@ class GraphService:
                     continue
                 pred_uri = str(p)
                 p_label_val = getattr(row, "pLabel", None)
-                pred_label = str(p_label_val) if p_label_val is not None else _uri_fragment(pred_uri)
+                pred_label = (
+                    str(p_label_val) if p_label_val is not None else _uri_fragment(pred_uri)
+                )
                 data_properties.append(
                     DiscoveryDataProperty(
                         predicate_uri=pred_uri,
@@ -1595,9 +1585,13 @@ class GraphService:
                     DiscoveryInspectorRelation(
                         role="domain",
                         predicate_uri=pred_uri,
-                        predicate_label=str(p_label_val) if p_label_val is not None else _uri_fragment(pred_uri),
+                        predicate_label=str(p_label_val)
+                        if p_label_val is not None
+                        else _uri_fragment(pred_uri),
                         other_uri=other_uri,
-                        other_label=str(o_label_val) if o_label_val is not None else _uri_fragment(other_uri),
+                        other_label=str(o_label_val)
+                        if o_label_val is not None
+                        else _uri_fragment(other_uri),
                     )
                 )
         except Exception:
@@ -1634,9 +1628,13 @@ class GraphService:
                     DiscoveryInspectorRelation(
                         role="range",
                         predicate_uri=pred_uri,
-                        predicate_label=str(p_label_val) if p_label_val is not None else _uri_fragment(pred_uri),
+                        predicate_label=str(p_label_val)
+                        if p_label_val is not None
+                        else _uri_fragment(pred_uri),
                         other_uri=other_uri,
-                        other_label=str(s_label_val) if s_label_val is not None else _uri_fragment(other_uri),
+                        other_label=str(s_label_val)
+                        if s_label_val is not None
+                        else _uri_fragment(other_uri),
                     )
                 )
         except Exception:
@@ -1725,6 +1723,7 @@ class GraphService:
 
         # Fallback: if aggregation returned nothing, scan distinct predicates (domain + range).
         if not counts:
+
             def _run_distinct(sparql: str) -> None:
                 try:
                     for row in store.query(sparql):
@@ -1770,9 +1769,7 @@ class GraphService:
                 label = ""
             if not label or label == uri:
                 label = _uri_fragment(uri) or uri
-            results.append(
-                DiscoveryRelationTypeData(uri=uri, label=label, count=count)
-            )
+            results.append(DiscoveryRelationTypeData(uri=uri, label=label, count=count))
         results.sort(key=lambda d: (-d.count, d.label.lower()))
         return results
 
@@ -1782,7 +1779,7 @@ class GraphService:
         graph_uri: str,
         instance_uris: list[str],
         relation_uris: list[str],
-        limit: int = 200,
+        limit: int | None = None,
     ) -> list[DiscoveryRelationRowData]:
         return await asyncio.to_thread(
             self._discover_relations_sync,
@@ -1799,7 +1796,7 @@ class GraphService:
         graph_uri: str,
         instance_uris: list[str],
         relation_uris: list[str],
-        limit: int,
+        limit: int | None,
     ) -> list[DiscoveryRelationRowData]:
         if not instance_uris:
             return []
@@ -1809,6 +1806,8 @@ class GraphService:
         if relation_uris:
             pred_values = " ".join(f"<{uri}>" for uri in relation_uris)
             pred_clause = f"VALUES ?p {{ {pred_values} }}"
+
+        rel_limit_clause = f"LIMIT {int(limit)}" if limit is not None else ""
 
         def _build_rel_query(inst_constraint: str, iri_filter: str) -> str:
             return f"""
@@ -1836,15 +1835,11 @@ class GraphService:
                 FILTER(?p != rdf:type)
                 FILTER({iri_filter})
             }}
-            LIMIT {int(limit)}
+            {rel_limit_clause}
             """
 
-        domain_query = _build_rel_query(
-            f"VALUES ?s {{ {inst_values} }}", "isIRI(?o)"
-        )
-        range_query = _build_rel_query(
-            f"VALUES ?o {{ {inst_values} }}", "isIRI(?s)"
-        )
+        domain_query = _build_rel_query(f"VALUES ?s {{ {inst_values} }}", "isIRI(?o)")
+        range_query = _build_rel_query(f"VALUES ?o {{ {inst_values} }}", "isIRI(?s)")
 
         rows: list[DiscoveryRelationRowData] = []
         # (role, domain_uri, relation_uri, range_uri) to deduplicate within each role
