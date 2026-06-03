@@ -101,8 +101,38 @@ class DiscoveryInstance(BaseModel):
     class_uri: str
     class_label: str
     properties: dict[str, str] = Field(default_factory=dict)
-    relations_count: int = 0
+    domain_relations_count: int = 0
+    range_relations_count: int = 0
     properties_count: int = 0
+
+
+class DiscoveryDataPropertyItem(BaseModel):
+    predicate_uri: str
+    predicate_label: str
+    value: str
+
+
+class DiscoveryInspectorRelationItem(BaseModel):
+    role: str
+    predicate_uri: str
+    predicate_label: str
+    other_uri: str
+    other_label: str
+
+
+class DiscoveryInstanceDetail(BaseModel):
+    uri: str
+    label: str
+    class_uri: str
+    class_label: str
+    data_properties: list[DiscoveryDataPropertyItem] = Field(default_factory=list)
+    relations: list[DiscoveryInspectorRelationItem] = Field(default_factory=list)
+
+
+class DiscoveryInstanceDetailRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    instance_uri: str = Field(..., min_length=1)
 
 
 class DiscoveryRelationType(BaseModel):
@@ -122,6 +152,7 @@ class DiscoveryRelationRow(BaseModel):
     range_label: str
     range_class_uri: str
     range_class_label: str
+    role: str = "domain"
 
 
 class DiscoveryPropertiesRequest(BaseModel):

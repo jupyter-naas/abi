@@ -16,7 +16,11 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
     DiscoveryClass,
+    DiscoveryDataPropertyItem,
+    DiscoveryInspectorRelationItem,
     DiscoveryInstance,
+    DiscoveryInstanceDetail,
+    DiscoveryInstanceDetailRequest,
     DiscoveryInstancesRequest,
     DiscoveryPropertiesRequest,
     DiscoveryProperty,
@@ -447,11 +451,54 @@ async def discovery_instances(
             class_uri=i.class_uri,
             class_label=i.class_label,
             properties=i.properties,
-            relations_count=i.relations_count,
+            domain_relations_count=i.domain_relations_count,
+            range_relations_count=i.range_relations_count,
             properties_count=i.properties_count,
         )
         for i in instances
     ]
+
+
+@router.post("/discovery/instance-detail")
+async def discovery_instance_detail(
+    payload: DiscoveryInstanceDetailRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> DiscoveryInstanceDetail:
+    """Fetch full detail for a single instance: all data properties and relations."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        detail = await graph_service.discover_instance_detail(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            instance_uri=payload.instance_uri,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return DiscoveryInstanceDetail(
+        uri=detail.uri,
+        label=detail.label,
+        class_uri=detail.class_uri,
+        class_label=detail.class_label,
+        data_properties=[
+            DiscoveryDataPropertyItem(
+                predicate_uri=dp.predicate_uri,
+                predicate_label=dp.predicate_label,
+                value=dp.value,
+            )
+            for dp in detail.data_properties
+        ],
+        relations=[
+            DiscoveryInspectorRelationItem(
+                role=r.role,
+                predicate_uri=r.predicate_uri,
+                predicate_label=r.predicate_label,
+                other_uri=r.other_uri,
+                other_label=r.other_label,
+            )
+            for r in detail.relations
+        ],
+    )
 
 
 @router.post("/discovery/relation-types")
@@ -506,6 +553,7 @@ async def discovery_relations(
             range_label=r.range_label,
             range_class_uri=r.range_class_uri,
             range_class_label=r.range_class_label,
+            role=r.role,
         )
         for r in relations
     ]
