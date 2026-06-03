@@ -3,7 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import os
 import tempfile
-from typing import List, Optional, cast
+from typing import List, Optional
 
 from langchain_core.tools import BaseTool, Tool, tool
 from naas_abi_core.services.agent.Agent import (
@@ -68,8 +68,7 @@ You must always display the request results as a Markdown table.
             return "PDFs downloaded and saved."
 
         pipeline = PubMedPipeline(PubMedPipelineConfiguration())
-        tools = pipeline.as_tools()
-        tools = cast(list[Tool | BaseTool | Agent], [cast(BaseTool, t) for t in tools]) + [download_pdf]
+        tools: list[Tool | BaseTool | Agent] = [*pipeline.as_tools(), download_pdf]
 
         if agent_configuration is None:
             agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
