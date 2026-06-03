@@ -255,8 +255,11 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         if self._default_chat_model is not None:
             if not self._has_registered(self._default_chat_model, ModelType.CHAT):
                 errors.append(
-                    f"default_chat_model={self._default_chat_model!r} is not registered "
-                    f"as a chat model"
+                    self._build_unresolved_default_message(
+                        config_key="default_chat_model",
+                        configured_id=self._default_chat_model,
+                        model_type=ModelType.CHAT,
+                    )
                 )
 
         if self._default_embedding_model is not None:
@@ -264,12 +267,47 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
                 self._default_embedding_model, ModelType.EMBEDDING
             ):
                 errors.append(
-                    f"default_embedding_model={self._default_embedding_model!r} is not "
-                    f"registered as an embedding model"
+                    self._build_unresolved_default_message(
+                        config_key="default_embedding_model",
+                        configured_id=self._default_embedding_model,
+                        model_type=ModelType.EMBEDDING,
+                    )
                 )
 
         if errors:
-            raise DefaultModelNotResolvedError("; ".join(errors))
+            raise DefaultModelNotResolvedError("\n\n".join(errors))
+
+    def _build_unresolved_default_message(
+        self,
+        config_key: str,
+        configured_id: str,
+        model_type: ModelType,
+    ) -> str:
+        type_label = "chat" if model_type == ModelType.CHAT else "embedding"
+        article = "a" if model_type == ModelType.CHAT else "an"
+        registered = sorted(self._registered_ids_for_type(model_type))
+        registered_line = (
+            ", ".join(repr(i) for i in registered) if registered else "(none)"
+        )
+        return (
+            f"{config_key}={configured_id!r} is not registered as {article} {type_label} model.\n"
+            f"  → set in your engine config under services.model_registry.{config_key}, "
+            f"but no loaded module registered {article} {type_label} model with this id.\n"
+            f"  → likely cause: the module that ships {configured_id!r} is not enabled "
+            f"in your `modules:` config (or is declared as a `#soft` dependency that "
+            f"hasn't been explicitly enabled). Add or enable that module, or change "
+            f"{config_key} to one of the registered ids below.\n"
+            f"  → currently registered {type_label} model ids: {registered_line}"
+        )
+
+    def _registered_ids_for_type(self, model_type: ModelType) -> set[str]:
+        return {
+            canonical_id
+            for canonical_id, bucket in self._models.items()
+            for entries in bucket.values()
+            for m in entries
+            if getattr(m, "model_type", None) == model_type
+        }
 
     def _has_registered(self, canonical_id: str, model_type: ModelType) -> bool:
         bucket = self._models.get(canonical_id)
