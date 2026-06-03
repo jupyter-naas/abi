@@ -12,7 +12,10 @@ from typing import Any
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     DiscoveryClassData,
+    DiscoveryDataProperty,
+    DiscoveryInspectorRelation,
     DiscoveryInstanceData,
+    DiscoveryInstanceDetailData,
     DiscoveryPropertyData,
     DiscoveryRelationRowData,
     DiscoveryRelationTypeData,
@@ -1435,6 +1438,176 @@ class GraphService:
             )
         results.sort(key=lambda d: d.label.lower())
         return results
+
+    async def discover_instance_detail(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        instance_uri: str,
+    ) -> DiscoveryInstanceDetailData:
+        return await asyncio.to_thread(
+            self._discover_instance_detail_sync, workspace_id, graph_uri, instance_uri
+        )
+
+    def _discover_instance_detail_sync(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        instance_uri: str,
+    ) -> DiscoveryInstanceDetailData:
+        store = self._get_triple_store()
+
+        # Label and class
+        label = _get_ontology_label(store, instance_uri) or _uri_fragment(instance_uri)
+        class_uri = ""
+        class_label = ""
+        class_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT ?cls WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                <{instance_uri}> rdf:type ?cls .
+                FILTER(isIRI(?cls))
+                FILTER(?cls != owl:NamedIndividual)
+            }}
+        }}
+        LIMIT 1
+        """
+        try:
+            for row in store.query(class_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                cls = getattr(row, "cls", None)
+                if cls:
+                    class_uri = str(cls)
+                    class_label = _get_ontology_label(store, class_uri) or _uri_fragment(class_uri)
+                    break
+        except Exception:
+            pass
+
+        # All literal (data) properties — fetch predicate labels inline
+        data_properties: list[DiscoveryDataProperty] = []
+        dp_query = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?p ?pLabel ?o WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                <{instance_uri}> ?p ?o .
+                FILTER(isLiteral(?o))
+            }}
+            OPTIONAL {{ ?p rdfs:label ?pLabel . }}
+        }}
+        ORDER BY ?p
+        """
+        try:
+            for row in store.query(dp_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                p = getattr(row, "p", None)
+                o = getattr(row, "o", None)
+                if p is None or o is None:
+                    continue
+                pred_uri = str(p)
+                p_label_val = getattr(row, "pLabel", None)
+                pred_label = str(p_label_val) if p_label_val is not None else _uri_fragment(pred_uri)
+                data_properties.append(
+                    DiscoveryDataProperty(
+                        predicate_uri=pred_uri,
+                        predicate_label=pred_label,
+                        value=str(o),
+                    )
+                )
+        except Exception:
+            pass
+
+        # Outgoing relations (instance is domain/subject)
+        inspector_relations: list[DiscoveryInspectorRelation] = []
+        out_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?p ?pLabel ?o ?oLabel WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                <{instance_uri}> ?p ?o .
+                FILTER(?p != rdf:type)
+                FILTER(isIRI(?o))
+            }}
+            OPTIONAL {{ ?p rdfs:label ?pLabel . }}
+            OPTIONAL {{ ?o rdfs:label ?oLabel . }}
+        }}
+        """
+        try:
+            for row in store.query(out_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                p = getattr(row, "p", None)
+                o = getattr(row, "o", None)
+                if p is None or o is None:
+                    continue
+                pred_uri = str(p)
+                other_uri = str(o)
+                p_label_val = getattr(row, "pLabel", None)
+                o_label_val = getattr(row, "oLabel", None)
+                inspector_relations.append(
+                    DiscoveryInspectorRelation(
+                        role="domain",
+                        predicate_uri=pred_uri,
+                        predicate_label=str(p_label_val) if p_label_val is not None else _uri_fragment(pred_uri),
+                        other_uri=other_uri,
+                        other_label=str(o_label_val) if o_label_val is not None else _uri_fragment(other_uri),
+                    )
+                )
+        except Exception:
+            pass
+
+        # Incoming relations (instance is range/object)
+        in_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?s ?sLabel ?p ?pLabel WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                ?s ?p <{instance_uri}> .
+                FILTER(?p != rdf:type)
+                FILTER(isIRI(?s))
+            }}
+            OPTIONAL {{ ?p rdfs:label ?pLabel . }}
+            OPTIONAL {{ ?s rdfs:label ?sLabel . }}
+        }}
+        """
+        try:
+            for row in store.query(in_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                s = getattr(row, "s", None)
+                p = getattr(row, "p", None)
+                if s is None or p is None:
+                    continue
+                pred_uri = str(p)
+                other_uri = str(s)
+                p_label_val = getattr(row, "pLabel", None)
+                s_label_val = getattr(row, "sLabel", None)
+                inspector_relations.append(
+                    DiscoveryInspectorRelation(
+                        role="range",
+                        predicate_uri=pred_uri,
+                        predicate_label=str(p_label_val) if p_label_val is not None else _uri_fragment(pred_uri),
+                        other_uri=other_uri,
+                        other_label=str(s_label_val) if s_label_val is not None else _uri_fragment(other_uri),
+                    )
+                )
+        except Exception:
+            pass
+
+        return DiscoveryInstanceDetailData(
+            uri=instance_uri,
+            label=label,
+            class_uri=class_uri,
+            class_label=class_label,
+            data_properties=data_properties,
+            relations=inspector_relations,
+        )
 
     async def discover_relation_types(
         self,
