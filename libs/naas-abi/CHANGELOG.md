@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.15.1 (2026-06-03)
+
+### Code Style
+
+- Add eslint-disable-next-line for next/no-img-element in multiple files
+  ([`f4934d5`](https://github.com/jupyter-naas/abi/commit/f4934d5343c9d13d12260d102f3940dff5aa5116))
+
+
 ## v2.15.0 (2026-06-02)
 
 ### Features
