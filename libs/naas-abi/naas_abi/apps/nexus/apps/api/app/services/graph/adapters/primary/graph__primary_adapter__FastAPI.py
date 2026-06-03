@@ -15,6 +15,15 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     get_graph_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
+    DiscoveryClass,
+    DiscoveryInstance,
+    DiscoveryInstancesRequest,
+    DiscoveryPropertiesRequest,
+    DiscoveryProperty,
+    DiscoveryRelationRow,
+    DiscoveryRelationsRequest,
+    DiscoveryRelationType,
+    DiscoveryRelationTypesRequest,
     GraphAnalysis,
     GraphClear,
     GraphCreate,
@@ -368,6 +377,137 @@ async def import_graph_file(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to import file: {exc}") from exc
     return {"status": "imported", "count": count}
+
+
+# ── Discovery endpoints ──────────────────────────────────────────────────────
+
+
+@router.get("/discovery/classes")
+async def discovery_classes(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryClass]:
+    """List RDF classes that have NamedIndividuals in the given graph."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        classes = await graph_service.discover_classes(
+            workspace_id=workspace_id, graph_uri=graph_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
+
+
+@router.post("/discovery/properties")
+async def discovery_properties(
+    payload: DiscoveryPropertiesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryProperty]:
+    """List datatype/annotation properties used by instances of the given classes."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        properties = await graph_service.discover_properties(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            class_uris=payload.class_uris,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties
+    ]
+
+
+@router.post("/discovery/instances")
+async def discovery_instances(
+    payload: DiscoveryInstancesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryInstance]:
+    """Search instances matching selected classes / properties / global search query."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        instances = await graph_service.discover_instances(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            class_uris=payload.class_uris,
+            property_uris=payload.property_uris,
+            search=payload.search,
+            limit=payload.limit,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryInstance(
+            uri=i.uri,
+            label=i.label,
+            class_uri=i.class_uri,
+            class_label=i.class_label,
+            properties=i.properties,
+            relations_count=i.relations_count,
+        )
+        for i in instances
+    ]
+
+
+@router.post("/discovery/relation-types")
+async def discovery_relation_types(
+    payload: DiscoveryRelationTypesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryRelationType]:
+    """List object-property relation types found for selected/visible instances."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        relation_types = await graph_service.discover_relation_types(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            instance_uris=payload.instance_uris,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryRelationType(uri=r.uri, label=r.label, count=r.count)
+        for r in relation_types
+    ]
+
+
+@router.post("/discovery/relations")
+async def discovery_relations(
+    payload: DiscoveryRelationsRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryRelationRow]:
+    """List concrete relation rows (domain → predicate → range) for selected instances."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        relations = await graph_service.discover_relations(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            instance_uris=payload.instance_uris,
+            relation_uris=payload.relation_uris,
+            limit=payload.limit,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryRelationRow(
+            relation_uri=r.relation_uri,
+            relation_label=r.relation_label,
+            domain_uri=r.domain_uri,
+            domain_label=r.domain_label,
+            domain_class_uri=r.domain_class_uri,
+            domain_class_label=r.domain_class_label,
+            range_uri=r.range_uri,
+            range_label=r.range_label,
+            range_class_uri=r.range_class_uri,
+            range_class_label=r.range_class_label,
+        )
+        for r in relations
+    ]
 
 
 @router.get("/network/parents")

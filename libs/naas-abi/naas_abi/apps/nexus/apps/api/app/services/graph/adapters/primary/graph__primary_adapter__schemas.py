@@ -80,6 +80,78 @@ class GraphData(BaseModel):
     edges: list[GraphEdge]
 
 
+# ── Discovery schemas ────────────────────────────────────────────────────────
+
+
+class DiscoveryClass(BaseModel):
+    uri: str
+    label: str
+    count: int
+
+
+class DiscoveryProperty(BaseModel):
+    uri: str
+    label: str
+    kind: str
+
+
+class DiscoveryInstance(BaseModel):
+    uri: str
+    label: str
+    class_uri: str
+    class_label: str
+    properties: dict[str, str] = Field(default_factory=dict)
+    relations_count: int = 0
+
+
+class DiscoveryRelationType(BaseModel):
+    uri: str
+    label: str
+    count: int
+
+
+class DiscoveryRelationRow(BaseModel):
+    relation_uri: str
+    relation_label: str
+    domain_uri: str
+    domain_label: str
+    domain_class_uri: str
+    domain_class_label: str
+    range_uri: str
+    range_label: str
+    range_class_uri: str
+    range_class_label: str
+
+
+class DiscoveryPropertiesRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    class_uris: list[str] = Field(default_factory=list)
+
+
+class DiscoveryInstancesRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    class_uris: list[str] = Field(default_factory=list)
+    property_uris: list[str] = Field(default_factory=list)
+    search: str = ""
+    limit: int = Field(default=200, ge=1, le=2000)
+
+
+class DiscoveryRelationTypesRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    instance_uris: list[str] = Field(default_factory=list)
+
+
+class DiscoveryRelationsRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    instance_uris: list[str] = Field(default_factory=list)
+    relation_uris: list[str] = Field(default_factory=list)
+    limit: int = Field(default=200, ge=1, le=2000)
+
+
 class GraphAnalysis(BaseModel):
     total_triples: int
     total_subjects: int
