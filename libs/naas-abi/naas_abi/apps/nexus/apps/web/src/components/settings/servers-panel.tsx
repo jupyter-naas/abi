@@ -106,11 +106,13 @@ export function ServersPanel() {
   }, [mounted, currentWorkspaceId, fetchServers, setCurrentWorkspace]);
 
   // Check all servers after fetching
+  const firstServerId = servers.length > 0 ? servers[0]?.id : null;
   useEffect(() => {
     if (mounted && servers.length > 0) {
       checkAllServers();
     }
-  }, [mounted, servers.length > 0 ? servers[0]?.id : null]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, firstServerId]);
 
   const handleAdd = async () => {
     if (!newServer.name.trim() || !newServer.endpoint.trim()) return;

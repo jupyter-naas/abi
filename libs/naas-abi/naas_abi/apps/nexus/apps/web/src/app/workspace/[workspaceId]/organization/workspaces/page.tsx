@@ -100,6 +100,7 @@ export default function OrganizationWorkspacesPage() {
               <div className="mb-4 flex items-start justify-between">
                 {logo ? (
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-transparent">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={logo} alt={workspace.name} className="h-12 w-12 rounded-xl object-contain" />
                   </div>
                 ) : (

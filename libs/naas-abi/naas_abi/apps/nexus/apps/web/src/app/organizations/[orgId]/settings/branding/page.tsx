@@ -426,6 +426,7 @@ export default function BrandingPage() {
         {loginBgImageUrl && (
           <div className="rounded-lg border border-dashed border-muted-foreground/30 p-2">
             <p className="mb-1 text-xs text-muted-foreground">Preview</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={loginBgImageUrl} alt="Background" className="h-24 w-full rounded object-cover" />
           </div>
         )}

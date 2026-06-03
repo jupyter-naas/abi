@@ -140,12 +140,14 @@ export default function ForgotPasswordPage() {
             {(tenant.logo_rectangle_url || tenant.logo_url || tenant.logo_emoji) && (
               <div className="mb-6 flex items-center justify-center">
                 {tenant.logo_rectangle_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={tenant.logo_rectangle_url}
                     alt={tenant.tab_title}
                     className="h-24 max-w-full object-contain"
                   />
                 ) : tenant.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={tenant.logo_url}
                     alt={tenant.tab_title}

@@ -894,6 +894,7 @@ export default function GraphPage() {
         setLoading(false);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, selectedGraphId, visibleGraphIds, activeSavedView]);
 
   const loadFromApiRef = useRef(loadFromApi);
@@ -1689,6 +1690,7 @@ export default function GraphPage() {
     } finally {
       setLoadingNextParentLevel(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentsLevels, hierarchyByLevel, loadingNextParentLevel, nodes, selectedGraphId, visibleGraphIds, workspaceId]);
 
   const canExpandParentsMore =
