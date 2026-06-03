@@ -1,11 +1,11 @@
 import pytest
 from naas_abi_core.services.agent.IntentAgent import IntentScope, IntentType
-from naas_abi_marketplace.applications.nebari.agents.NebariAgent import create_agent
+from naas_abi_marketplace.applications.nebari.agents.NebariAgent import NebariAgent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    return NebariAgent.New()
 
 
 def test_agent_name(agent):

@@ -1,15 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.sanax.agents.SanaxAgent import create_agent
 
 
 @pytest.fixture
 def agent():
-    pytest.main(
-        [
-            "src/marketplace/applications/sanax/pipelines/SanaxLinkedInSalesNavigatorExtractorPipeline_test.py"
-        ]
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.sanax.agents.SanaxAgent import (
+        SanaxAgent,
     )
-    return create_agent()
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.sanax"])
+
+    return SanaxAgent.New()
 
 
 def test_get_all_people(agent):

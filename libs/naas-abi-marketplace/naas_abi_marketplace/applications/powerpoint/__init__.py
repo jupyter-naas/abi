@@ -12,7 +12,6 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
-            "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_marketplace.applications.naas",
         ],
         services=[TripleStoreService, ObjectStorageService],
