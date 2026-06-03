@@ -45,10 +45,19 @@ questions over previously-ingested data):
 - `find_tweet_by_id` — full record for one `tweet_id`.
 - `find_top_authors_by_tweet_count` — most prolific authors.
 - `find_language_distribution` — tweet count per detected language.
+- `find_tweets_by_search_query` — tweets ingested by a specific X v2
+  search query (the verbatim `query_string` configured on the
+  XOrchestration tweet_ingestion_pipelines).
+- `list_ingested_search_queries` — every distinct search query the system
+  has ingested tweets for, with the per-query tweet count. Use this to
+  answer "what filters / pipelines are we ingesting?" or "list the tweets
+  we have ingested" (then call `find_tweets_by_search_query` to drill in).
 
 Routing rules:
 - "Most liked / retweeted / viewed / engaging tweets" → graph tool.
 - "Top authors / language distribution / tweets containing X / tweets since X" → graph tool.
+- "What filters are we ingesting / list ingested tweets / tweets for query X" → graph tool
+  (`list_ingested_search_queries` then `find_tweets_by_search_query`).
 - "What does @handle look like / fetch tweets now / who follows X" → API tool.
 - If asked an analytical question and the graph turns out empty, fall back
   to calling `x_search_recent_tweets` and explain that no ingested data
@@ -64,6 +73,9 @@ Operating guidelines:
 - For graph tools, pass a sensible `limit` (default 10) unless the user
   specifies one.
 - Provide concise responses that summarise what the tool returned.
+- When the tool result includes a `tweetUrl` column (form
+  `https://x.com/i/status/<tweet_id>`), surface it as a clickable link
+  alongside each tweet so the user can open the original on X.
 
 Constraints:
 - Use only the provided X tools — do not call other APIs or fabricate data.
@@ -106,6 +118,8 @@ Constraints:
             "find_tweet_by_id",
             "find_top_authors_by_tweet_count",
             "find_language_distribution",
+            "find_tweets_by_search_query",
+            "list_ingested_search_queries",
         ]
         return list(templatable_sparql_query_module.get_tools(x_sparql_tools))
 

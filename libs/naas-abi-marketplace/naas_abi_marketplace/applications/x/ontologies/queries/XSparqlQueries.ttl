@@ -22,7 +22,7 @@ intentMapping:findTopLikedTweetsQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetId ?text ?authorId ?createdAt ?likeCount ?retweetCount ?replyCount ?impressionCount
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?likeCount ?retweetCount ?replyCount ?impressionCount
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?tweet rdf:type x:Tweet ;
@@ -35,6 +35,7 @@ intentMapping:findTopLikedTweetsQuery a intentMapping:TemplatableSparqlQuery ;
             OPTIONAL { ?metrics x:retweet_count ?retweetCount . }
             OPTIONAL { ?metrics x:reply_count ?replyCount . }
             OPTIONAL { ?metrics x:impression_count ?impressionCount . }
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
           }
         }
         ORDER BY DESC(?likeCount)
@@ -50,7 +51,7 @@ intentMapping:findTopRetweetedTweetsQuery a intentMapping:TemplatableSparqlQuery
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetId ?text ?authorId ?createdAt ?retweetCount ?likeCount ?quoteCount ?impressionCount
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?retweetCount ?likeCount ?quoteCount ?impressionCount
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?tweet rdf:type x:Tweet ;
@@ -63,6 +64,7 @@ intentMapping:findTopRetweetedTweetsQuery a intentMapping:TemplatableSparqlQuery
             OPTIONAL { ?metrics x:like_count ?likeCount . }
             OPTIONAL { ?metrics x:quote_count ?quoteCount . }
             OPTIONAL { ?metrics x:impression_count ?impressionCount . }
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
           }
         }
         ORDER BY DESC(?retweetCount)
@@ -78,7 +80,7 @@ intentMapping:findTopImpressionTweetsQuery a intentMapping:TemplatableSparqlQuer
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetId ?text ?authorId ?createdAt ?impressionCount ?likeCount ?retweetCount
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?impressionCount ?likeCount ?retweetCount
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?tweet rdf:type x:Tweet ;
@@ -90,6 +92,7 @@ intentMapping:findTopImpressionTweetsQuery a intentMapping:TemplatableSparqlQuer
             OPTIONAL { ?tweet x:isAuthoredBy ?author . ?author x:author_id ?authorId . }
             OPTIONAL { ?metrics x:like_count ?likeCount . }
             OPTIONAL { ?metrics x:retweet_count ?retweetCount . }
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
           }
         }
         ORDER BY DESC(?impressionCount)
@@ -105,7 +108,7 @@ intentMapping:findTopEngagingTweetsQuery a intentMapping:TemplatableSparqlQuery 
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetId ?text ?authorId ?createdAt ?engagement ?likeCount ?retweetCount ?replyCount ?quoteCount
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?engagement ?likeCount ?retweetCount ?replyCount ?quoteCount
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?tweet rdf:type x:Tweet ;
@@ -116,6 +119,7 @@ intentMapping:findTopEngagingTweetsQuery a intentMapping:TemplatableSparqlQuery 
                      x:reply_count   ?replyCount ;
                      x:quote_count   ?quoteCount .
             BIND((?likeCount + ?retweetCount + ?replyCount + ?quoteCount) AS ?engagement)
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
             OPTIONAL { ?tweet x:isAuthoredBy ?author . ?author x:author_id ?authorId . }
@@ -138,13 +142,14 @@ intentMapping:findTweetsByAuthorQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetId ?text ?createdAt ?likeCount ?retweetCount ?impressionCount
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?createdAt ?likeCount ?retweetCount ?impressionCount
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?author x:author_id "{{ author_id }}" .
             ?tweet  rdf:type x:Tweet ;
                     x:tweet_id ?tweetId ;
                     x:isAuthoredBy ?author .
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
             OPTIONAL {
@@ -169,13 +174,14 @@ intentMapping:findTweetsContainingKeywordQuery a intentMapping:TemplatableSparql
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetId ?text ?authorId ?createdAt ?likeCount ?retweetCount
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?likeCount ?retweetCount
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:tweet_text ?text .
             FILTER(CONTAINS(LCASE(STR(?text)), LCASE("{{ keyword }}")))
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
             OPTIONAL { ?tweet x:isAuthoredBy ?author . ?author x:author_id ?authorId . }
             OPTIONAL {
@@ -200,7 +206,7 @@ intentMapping:findTweetsInLanguageQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetId ?text ?authorId ?createdAt
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?lang rdf:type x:TweetLanguage ;
@@ -208,6 +214,7 @@ intentMapping:findTweetsInLanguageQuery a intentMapping:TemplatableSparqlQuery ;
                   abi:inheresIn ?tweet .
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId .
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
             OPTIONAL { ?tweet x:isAuthoredBy ?author . ?author x:author_id ?authorId . }
@@ -228,13 +235,14 @@ intentMapping:findTweetsSinceQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetId ?text ?authorId ?createdAt ?likeCount
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?likeCount
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:tweet_created_at ?createdAt .
             FILTER(?createdAt >= "{{ since }}"^^xsd:dateTime)
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:isAuthoredBy ?author . ?author x:author_id ?authorId . }
             OPTIONAL {
@@ -258,11 +266,12 @@ intentMapping:findTweetByIdQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?text ?authorId ?createdAt ?lang ?likeCount ?retweetCount ?replyCount ?quoteCount ?bookmarkCount ?impressionCount
+        SELECT DISTINCT ?tweet ?tweetUrl ?text ?authorId ?createdAt ?lang ?likeCount ?retweetCount ?replyCount ?quoteCount ?bookmarkCount ?impressionCount
         WHERE {
           GRAPH <http://ontology.naas.ai/x/graph> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id "{{ tweet_id }}" .
+            BIND(CONCAT("https://x.com/i/status/", "{{ tweet_id }}") AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
             OPTIONAL { ?tweet x:isAuthoredBy ?author . ?author x:author_id ?authorId . }
@@ -330,6 +339,73 @@ intentMapping:findLanguageDistributionQuery a intentMapping:TemplatableSparqlQue
     """ ;
     intentMapping:hasArgument intentMapping:xLimitArg .
 
+#-----------------------------------------------------------------
+# Ingestion / search-query lookup
+#-----------------------------------------------------------------
+
+intentMapping:findTweetsBySearchQueryQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_tweets_by_search_query"@en ;
+    intentMapping:intentDescription "Return tweets ingested by a specific X v2 search query (the verbatim query_string used by XSearchRecentTweetsPipeline / the orchestration). Use this to answer 'list the tweets we have ingested for filter <query>'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX x:    <http://ontology.naas.ai/x/>
+
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?likeCount ?retweetCount
+        WHERE {
+          GRAPH <http://ontology.naas.ai/x/graph> {
+            ?query rdf:type x:SearchQuery ;
+                   x:query_string "{{ query_string }}" .
+            ?process rdf:type x:SearchRecentTweets ;
+                     x:usesSearchQuery ?query ;
+                     x:producesSearchResult ?resultSet .
+            ?tweet rdf:type x:Tweet ;
+                   x:tweet_id ?tweetId ;
+                   x:isContainedInSearchResultSet ?resultSet .
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
+            OPTIONAL { ?tweet x:tweet_text ?text . }
+            OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
+            OPTIONAL { ?tweet x:isAuthoredBy ?author . ?author x:author_id ?authorId . }
+            OPTIONAL {
+              ?tweet x:hasPublicMetrics ?metrics .
+              OPTIONAL { ?metrics x:like_count ?likeCount . }
+              OPTIONAL { ?metrics x:retweet_count ?retweetCount . }
+            }
+          }
+        }
+        ORDER BY DESC(?createdAt)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:xQueryStringArg ;
+    intentMapping:hasArgument intentMapping:xLimitArg .
+
+intentMapping:listIngestedSearchQueriesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_ingested_search_queries"@en ;
+    intentMapping:intentDescription "Return every distinct X v2 search query the system has ingested tweets for, with the number of tweets collected per query. Use this to answer 'what filters / queries have we ingested?' or 'what tweet ingestion pipelines are active?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:    <http://ontology.naas.ai/x/>
+
+        SELECT ?queryString (COUNT(DISTINCT ?tweet) AS ?tweetCount)
+        WHERE {
+          GRAPH <http://ontology.naas.ai/x/graph> {
+            ?query rdf:type x:SearchQuery ;
+                   x:query_string ?queryString .
+            OPTIONAL {
+              ?process rdf:type x:SearchRecentTweets ;
+                       x:usesSearchQuery ?query ;
+                       x:producesSearchResult ?resultSet .
+              ?tweet rdf:type x:Tweet ;
+                     x:isContainedInSearchResultSet ?resultSet .
+            }
+          }
+        }
+        GROUP BY ?queryString
+        ORDER BY DESC(?tweetCount)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:xLimitArg .
+
 #################################################################
 #  Query arguments
 #################################################################
@@ -369,3 +445,9 @@ intentMapping:xTweetIdArg a intentMapping:QueryArgument ;
     intentMapping:argumentDescription "Numeric tweet identifier (the `id` field returned by the X v2 API)." ;
     intentMapping:validationPattern "^[0-9]+$" ;
     intentMapping:validationFormat "x_tweet_id" .
+
+intentMapping:xQueryStringArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "query_string" ;
+    intentMapping:argumentDescription "Verbatim X v2 search query string previously used to ingest tweets (e.g. 'python lang:en -is:retweet')." ;
+    intentMapping:validationPattern "." ;
+    intentMapping:validationFormat "string" .

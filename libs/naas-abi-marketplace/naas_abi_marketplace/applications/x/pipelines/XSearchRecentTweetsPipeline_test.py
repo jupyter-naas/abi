@@ -10,10 +10,12 @@ from naas_abi_marketplace.applications.x.pipelines.XSearchRecentTweetsPipeline i
     XSearchRecentTweetsPipelineConfiguration,
     XSearchRecentTweetsPipelineParameters,
 )
+from rdflib import URIRef
 
 module = ABIModule.get_instance()
 bearer_token = module.configuration.bearer_token
 triple_store_service = module.engine.services.triple_store
+graph_name = URIRef(module.configuration.graph_name)
 
 # Stable public fixtures used across tests.
 QUERY = "python lang:en"
@@ -26,6 +28,7 @@ def pipeline() -> XSearchRecentTweetsPipeline:
     configuration = XSearchRecentTweetsPipelineConfiguration(
         x_integration=x_integration,
         triple_store=triple_store_service,
+        graph_name=graph_name,
     )
     return XSearchRecentTweetsPipeline(configuration)
 
