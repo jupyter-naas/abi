@@ -172,6 +172,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(t2);
       clearTimeout(t3);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.tab_title, tenant.favicon_url, pathname]);
 
   // Keep favicon and title persistent: re-apply when something else (e.g. Next.js) changes the icon

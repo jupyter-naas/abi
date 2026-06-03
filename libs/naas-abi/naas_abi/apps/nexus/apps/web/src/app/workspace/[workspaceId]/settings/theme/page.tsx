@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Brush,
   Upload,
-  Image,
+  Image as ImageIcon,
   Check,
   X,
   RefreshCw,
@@ -50,7 +50,7 @@ export default function ThemeSettingsPage() {
       setCustomColor(workspace.theme?.primaryColor || DEFAULT_THEME.primaryColor);
       setLogoUrl(workspace.theme?.logoUrl || '');
     }
-  }, [workspace?.id, workspace?.theme?.primaryColor, workspace?.theme?.logoUrl]);
+  }, [workspace]);
 
   if (!workspace) {
     return (
@@ -159,6 +159,7 @@ export default function ThemeSettingsPage() {
             style={{ backgroundColor: theme.logoUrl ? 'transparent' : theme.primaryColor }}
           >
             {theme.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={theme.logoUrl}
                 alt="Logo"
@@ -178,7 +179,7 @@ export default function ThemeSettingsPage() {
       {/* Logo Settings */}
       <div className="rounded-xl border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Image size={18} className="text-muted-foreground" />
+          <ImageIcon size={18} className="text-muted-foreground" />
           <h3 className="text-lg font-medium">Logo</h3>
         </div>
 
