@@ -119,6 +119,32 @@ class DiscoveryRelationRowData:
 
 
 @dataclass(frozen=True)
+class DiscoveryDataProperty:
+    predicate_uri: str
+    predicate_label: str
+    value: str
+
+
+@dataclass(frozen=True)
+class DiscoveryInspectorRelation:
+    role: str  # "domain" | "range"
+    predicate_uri: str
+    predicate_label: str
+    other_uri: str
+    other_label: str
+
+
+@dataclass(frozen=True)
+class DiscoveryInstanceDetailData:
+    uri: str
+    label: str
+    class_uri: str
+    class_label: str
+    data_properties: list[DiscoveryDataProperty]
+    relations: list[DiscoveryInspectorRelation]
+
+
+@dataclass(frozen=True)
 class GraphAnalysisData:
     total_triples: int
     total_subjects: int
