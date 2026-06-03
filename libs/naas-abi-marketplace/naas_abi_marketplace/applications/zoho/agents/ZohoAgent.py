@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from typing import Optional
+
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -7,9 +10,11 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "Zoho"
-DESCRIPTION = "Helps you interact with Zoho for business applications and CRM operations."
-SYSTEM_PROMPT = """<role>
+
+class ZohoAgent(IntentAgent):
+    name: str = "Zoho"
+    description: str = "Helps you interact with Zoho for business applications and CRM operations."
+    system_prompt: str = """<role>
 You are a Zoho Agent with expertise in business applications, CRM, and productivity tools.
 </role>
 
@@ -39,53 +44,49 @@ You currently do not have access to Zoho tools. You can only provide general inf
 - Do not make assumptions about business data or configurations
 </constraints>
 """
-SUGGESTIONS: list = []
+    suggestions: list = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "ZohoAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
-    # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Define tools (none initially)
-    tools: list = []
+        tools: list = []
+        intents: list = [
+            Intent(
+                intent_value="Get information about Zoho features",
+                intent_type=IntentType.RAW,
+                intent_target="Zoho provides business applications including CRM, email, and productivity tools. I can provide general information, but I currently do not have access to Zoho tools to manage applications."
+            ),
+            Intent(
+                intent_value="Understand CRM and business application management",
+                intent_type=IntentType.RAW,
+                intent_target="Business application management involves managing CRM data, contacts, and workflows. I can explain the concepts, but I currently do not have access to tools to manage applications."
+            ),
+        ]
 
-    # Define intents
-    intents: list = [
-        Intent(
-            intent_value="Get information about Zoho features",
-            intent_type=IntentType.RAW,
-            intent_target="Zoho provides business applications including CRM, email, and productivity tools. I can provide general information, but I currently do not have access to Zoho tools to manage applications."
-        ),
-        Intent(
-            intent_value="Understand CRM and business application management",
-            intent_type=IntentType.RAW,
-            intent_target="Business application management involves managing CRM data, contacts, and workflows. I can explain the concepts, but I currently do not have access to tools to manage applications."
-        ),
-    ]
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    return ZohoAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools,
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class ZohoAgent(IntentAgent):
-    pass
-
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            agents=[],
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )

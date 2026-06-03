@@ -10,7 +10,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
-        modules=["naas_abi_marketplace.ai.chatgpt"],
+        modules=[],
         services=[ObjectStorageService],
     )
 

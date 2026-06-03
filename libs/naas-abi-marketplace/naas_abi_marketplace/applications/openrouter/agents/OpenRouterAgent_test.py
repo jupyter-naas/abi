@@ -1,10 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.openrouter.agents.OpenRouterAgent import create_agent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.openrouter.agents.OpenRouterAgent import (
+        OpenRouterAgent,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.openrouter"])
+
+    return OpenRouterAgent.New()
 
 
 def test_agent_name(agent):
