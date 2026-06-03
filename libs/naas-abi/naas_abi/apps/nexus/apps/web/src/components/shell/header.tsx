@@ -202,6 +202,7 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
             )}
           >
             {displayUser?.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={displayUser.avatar}
                 alt={displayUser.name || 'User'}

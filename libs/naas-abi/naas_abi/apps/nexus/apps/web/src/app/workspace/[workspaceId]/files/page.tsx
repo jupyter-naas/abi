@@ -171,6 +171,7 @@ export default function FilesPage() {
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfViewerFileName, imageViewerFileName, textViewerFileName]);
 
   useEffect(() => {
@@ -1527,6 +1528,7 @@ export default function FilesPage() {
               )}
               {imageViewerUrl && !imageViewerLoading && !imageViewerError && (
                 <div className="flex h-full w-full items-center justify-center p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={imageViewerUrl}
                     alt={imageViewerFileName}

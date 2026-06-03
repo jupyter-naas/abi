@@ -259,12 +259,14 @@ export default function BrandingPage() {
             {logoUrl && (
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">Square</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={logoUrl} alt="Square logo" className="h-12 w-12 rounded-lg object-contain" />
               </div>
             )}
             {logoRectangleUrl && (
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">Rectangle</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={logoRectangleUrl} alt="Rectangle logo" className="h-12 max-w-[200px] object-contain" />
               </div>
             )}
@@ -300,6 +302,7 @@ export default function BrandingPage() {
         {loginBgImageUrl && (
           <div className="rounded-lg border border-dashed border-muted-foreground/30 p-2">
             <p className="mb-1 text-xs text-muted-foreground">Preview</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={loginBgImageUrl} alt="Background" className="h-24 w-full rounded object-cover" />
           </div>
         )}
