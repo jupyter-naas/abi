@@ -1266,9 +1266,16 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     }
   }, [graphCompositionKey]);
 
-  const [instancesCollapsed, setInstancesCollapsed] = useState(false);
-  const [relationsCollapsed, setRelationsCollapsed] = useState(false);
-  const [networkCollapsed, setNetworkCollapsed] = useState(false);
+  const [openSections, setOpenSections] = useState<string[]>(['instances', 'relations']);
+  const instancesCollapsed = !openSections.includes('instances');
+  const relationsCollapsed = !openSections.includes('relations');
+  const networkCollapsed = !openSections.includes('network');
+  const toggleSection = (id: string) =>
+    setOpenSections((prev) => {
+      if (prev.includes(id)) return prev.filter((s) => s !== id);
+      const next = [...prev, id];
+      return next.length > 2 ? next.slice(next.length - 2) : next;
+    });
   const [inspectedInstance, setInspectedInstance] = useState<ApiDiscoveryInstance | null>(null);
 
   const baseColumns = [
@@ -1389,7 +1396,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
               <button
                 type="button"
-                onClick={() => setInstancesCollapsed((v) => !v)}
+                onClick={() => toggleSection('instances')}
                 className="flex items-center gap-2 text-left hover:text-workspace-accent"
                 title={instancesCollapsed ? 'Expand' : 'Collapse'}
               >
@@ -1468,7 +1475,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             <header className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
               <button
                 type="button"
-                onClick={() => setRelationsCollapsed((v) => !v)}
+                onClick={() => toggleSection('relations')}
                 className="flex items-center gap-2 text-left hover:text-workspace-accent"
                 title={relationsCollapsed ? 'Expand' : 'Collapse'}
               >
@@ -1532,7 +1539,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
             <button
               type="button"
-              onClick={() => setNetworkCollapsed((v) => !v)}
+              onClick={() => toggleSection('network')}
               className="flex items-center gap-2 text-left hover:text-workspace-accent"
               title={networkCollapsed ? 'Expand' : 'Collapse'}
             >
