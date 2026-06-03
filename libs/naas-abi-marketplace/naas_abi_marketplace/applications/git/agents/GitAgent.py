@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Optional
 
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -66,14 +65,11 @@ Constraints:
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "GitAgent":
 
-        from naas_abi_marketplace.applications.git import ABIModule
-        from pydantic import SecretStr
+        from naas_abi_core.engine.context import get_default_model_registry
 
-        module = ABIModule.get_instance()
-        secret = module.engine.services.secret
-        model = ChatOpenAI(
-            model=cls.model, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-        )
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        model = registry.get_default_chat_model()
 
         def _run(cmd: list[str]) -> str:
             import subprocess

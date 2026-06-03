@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from typing import Optional
+
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -7,9 +10,11 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "WorldBank"
-DESCRIPTION = "Helps you interact with World Bank data for economic and development indicators."
-SYSTEM_PROMPT = """<role>
+
+class WorldBankAgent(IntentAgent):
+    name: str = "WorldBank"
+    description: str = "Helps you interact with World Bank data for economic and development indicators."
+    system_prompt: str = """<role>
 You are a World Bank Agent with expertise in economic data, development indicators, and global statistics.
 </role>
 
@@ -39,53 +44,49 @@ You currently do not have access to World Bank tools. You can only provide gener
 - Do not make assumptions about economic indicators or statistics
 </constraints>
 """
-SUGGESTIONS: list = []
+    suggestions: list = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "WorldBankAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
-    # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Define tools (none initially)
-    tools: list = []
+        tools: list = []
+        intents: list = [
+            Intent(
+                intent_value="Get information about World Bank data features",
+                intent_type=IntentType.RAW,
+                intent_target="World Bank provides economic data, development indicators, and global statistics. I can provide general information, but I currently do not have access to World Bank tools to retrieve data."
+            ),
+            Intent(
+                intent_value="Understand economic indicators and development data",
+                intent_type=IntentType.RAW,
+                intent_target="Economic indicators include GDP, inflation, and development metrics. I can explain the concepts, but I currently do not have access to tools to retrieve economic data."
+            ),
+        ]
 
-    # Define intents
-    intents: list = [
-        Intent(
-            intent_value="Get information about World Bank data features",
-            intent_type=IntentType.RAW,
-            intent_target="World Bank provides economic data, development indicators, and global statistics. I can provide general information, but I currently do not have access to World Bank tools to retrieve data."
-        ),
-        Intent(
-            intent_value="Understand economic indicators and development data",
-            intent_type=IntentType.RAW,
-            intent_target="Economic indicators include GDP, inflation, and development metrics. I can explain the concepts, but I currently do not have access to tools to retrieve economic data."
-        ),
-    ]
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    return WorldBankAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools,
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class WorldBankAgent(IntentAgent):
-    pass
-
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            agents=[],
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )

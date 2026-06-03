@@ -33,7 +33,6 @@ class ABIModule(BaseModule[_Configuration]):
     Configuration = _Configuration
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
-            "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_marketplace.applications.google_search",
             "naas_abi_marketplace.applications.naas",
             "naas_abi_core.modules.templatablesparqlquery",

@@ -1,12 +1,10 @@
 import pytest
-from naas_abi_marketplace.applications.linkedin.agents.LinkedInAgent import (
-    create_agent as create_linkedin_agent,
-)
+from naas_abi_marketplace.applications.linkedin.agents.LinkedInAgent import LinkedInAgent
 
 
 @pytest.fixture
 def agent():
-    return create_linkedin_agent()
+    return LinkedInAgent.New()
 
 
 def test_search_person_linkedin_url(agent):

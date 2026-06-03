@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
@@ -8,9 +10,11 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "Google Analytics"
-DESCRIPTION = "Helps you interact with Google Analytics for website analytics and data insights."
-SYSTEM_PROMPT = """<role>
+
+class GoogleAnalyticsAgent(IntentAgent):
+    name: str = "Google Analytics"
+    description: str = "Helps you interact with Google Analytics for website analytics and data insights."
+    system_prompt: str = """<role>
 You are a Google Analytics Agent with expertise in web analytics, data analysis, and reporting.
 </role>
 
@@ -40,53 +44,49 @@ You currently do not have access to Google Analytics tools. You can only provide
 - Do not make assumptions about website traffic or metrics
 </constraints>
 """
-SUGGESTIONS: list = []
+    suggestions: list = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "GoogleAnalyticsAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
-    # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Define tools (none initially)
-    tools: list = []
+        tools: list = []
+        intents: list = [
+            Intent(
+                intent_value="Get information about Google Analytics features",
+                intent_type=IntentType.RAW,
+                intent_target="Google Analytics provides website analytics and reporting tools for tracking traffic and user behavior. I can provide general information, but I currently do not have access to Google Analytics tools to retrieve data."
+            ),
+            Intent(
+                intent_value="Understand analytics data and reporting",
+                intent_type=IntentType.RAW,
+                intent_target="Analytics involves tracking website traffic, user behavior, and generating reports. I can explain the concepts, but I currently do not have access to tools to retrieve analytics data."
+            ),
+        ]
 
-    # Define intents
-    intents: list = [
-        Intent(
-            intent_value="Get information about Google Analytics features",
-            intent_type=IntentType.RAW,
-            intent_target="Google Analytics provides website analytics and reporting tools for tracking traffic and user behavior. I can provide general information, but I currently do not have access to Google Analytics tools to retrieve data."
-        ),
-        Intent(
-            intent_value="Understand analytics data and reporting",
-            intent_type=IntentType.RAW,
-            intent_target="Analytics involves tracking website traffic, user behavior, and generating reports. I can explain the concepts, but I currently do not have access to tools to retrieve analytics data."
-        ),
-    ]
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    return GoogleAnalyticsAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools,
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class GoogleAnalyticsAgent(IntentAgent):
-    pass
-
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            agents=[],
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )
