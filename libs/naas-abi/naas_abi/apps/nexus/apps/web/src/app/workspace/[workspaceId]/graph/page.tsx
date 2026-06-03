@@ -746,6 +746,7 @@ export default function GraphPage() {
         properties: {
           ...inst.properties,
           class_uri: inst.class_uri,
+          bfo_parent_iri: inst.bfo_bucket_uri || '',
         },
       });
     }
@@ -763,21 +764,23 @@ export default function GraphPage() {
       if (edges.length >= GRAPH_MAX_EDGES) break;
       // Add domain node if not already in the graph.
       if (!nodesByUri.has(rel.domain_uri) && nodesByUri.size < GRAPH_MAX_NODES) {
+        const domainInst = instances.find((i) => i.uri === rel.domain_uri);
         nodesByUri.set(rel.domain_uri, {
           id: rel.domain_uri,
           label: rel.domain_label || compactUri(rel.domain_uri),
           type: rel.domain_class_label || compactUri(rel.domain_class_uri || ''),
-          properties: { class_uri: rel.domain_class_uri },
+          properties: { class_uri: rel.domain_class_uri, bfo_parent_iri: domainInst?.bfo_bucket_uri || '' },
         });
       }
       if (!nodesByUri.has(rel.domain_uri)) continue;
       // Add range node if not already in the graph.
       if (!nodesByUri.has(rel.range_uri) && nodesByUri.size < GRAPH_MAX_NODES) {
+        const rangeInst = instances.find((i) => i.uri === rel.range_uri);
         nodesByUri.set(rel.range_uri, {
           id: rel.range_uri,
           label: rel.range_label || compactUri(rel.range_uri),
           type: rel.range_class_label || compactUri(rel.range_class_uri || ''),
-          properties: { class_uri: rel.range_class_uri },
+          properties: { class_uri: rel.range_class_uri, bfo_parent_iri: rangeInst?.bfo_bucket_uri || '' },
         });
       }
       if (!nodesByUri.has(rel.range_uri)) continue;
@@ -1318,7 +1321,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   const [openSections, setOpenSections] = useState<string[]>(['instances', 'relations']);
   const instancesCollapsed = !openSections.includes('instances');
   const relationsCollapsed = !openSections.includes('relations');
-  const networkCollapsed = !openSections.includes('network');
   const previewCollapsed = !openSections.includes('preview');
   const toggleSection = (id: string) =>
     setOpenSections((prev) => {
@@ -1332,24 +1334,112 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   useEffect(() => {
     if (activeSavedViewId && activeSavedViewId !== prevAppliedViewIdRef.current) {
       prevAppliedViewIdRef.current = activeSavedViewId;
-      setOpenSections(['network', 'preview']);
+      setOpenSections(['instances', 'preview']);
     }
     if (!activeSavedViewId) {
       prevAppliedViewIdRef.current = null;
     }
   }, [activeSavedViewId]);
 
+  const [networkClosed, setNetworkClosed] = useState(false);
+  const [networkViewMode, setNetworkViewMode] = useState<'individuals' | 'classes'>('individuals');
+
+  const classGraphNodes = useMemo<StoreGraphNode[]>(() => {
+    const classCounts = new Map<string, { label: string; count: number; bfoParentIri: string }>();
+    for (const node of graphNodes) {
+      const classUri = (node.properties?.class_uri as string) || node.type;
+      const existing = classCounts.get(classUri);
+      if (existing) { existing.count++; }
+      else { classCounts.set(classUri, { label: node.type, count: 1, bfoParentIri: (node.properties?.bfo_parent_iri as string) || '' }); }
+    }
+    return Array.from(classCounts.entries()).map(([classUri, { label, count, bfoParentIri }]) => ({
+      id: classUri || label,
+      label: `${label} (${count})`,
+      type: label,
+      properties: { class_uri: classUri, bfo_parent_iri: bfoParentIri },
+    }));
+  }, [graphNodes]);
+
+  const classGraphEdges = useMemo<StoreGraphEdge[]>(() => {
+    const nodeToClass = new Map(graphNodes.map((n) => [n.id, (n.properties?.class_uri as string) || n.type]));
+    const edgeCounts = new Map<string, { domainClass: string; rangeClass: string; label: string; count: number }>();
+    for (const edge of graphEdges) {
+      const domainClass = nodeToClass.get(edge.source) || '';
+      const rangeClass = nodeToClass.get(edge.target) || '';
+      if (!domainClass || !rangeClass) continue;
+      const key = `${domainClass}|${edge.type}|${rangeClass}`;
+      const existing = edgeCounts.get(key);
+      if (existing) { existing.count++; }
+      else { edgeCounts.set(key, { domainClass, rangeClass, label: edge.type, count: 1 }); }
+    }
+    return Array.from(edgeCounts.entries()).map(([key, { domainClass, rangeClass, label, count }]) => ({
+      id: key,
+      source: domainClass,
+      target: rangeClass,
+      type: label,
+      label: `${label} (${count})`,
+    }));
+  }, [graphNodes, graphEdges]);
+
+  const prevGraphNodesLengthRef = useRef(0);
+  useEffect(() => {
+    if (graphNodes.length > 0 && prevGraphNodesLengthRef.current === 0) {
+      setNetworkClosed(false);
+    }
+    prevGraphNodesLengthRef.current = graphNodes.length;
+  }, [graphNodes.length]);
+
   const [instancePage, setInstancePage] = useState(0);
   const [instancePageSize, setInstancePageSize] = useState(20);
   const [relationPage, setRelationPage] = useState(0);
   const [relationPageSize, setRelationPageSize] = useState(20);
 
-  useEffect(() => { setInstancePage(0); }, [filteredInstances]);
+  // Synthesize extra instances from selected relation domain/range URIs not already in filteredInstances.
+  // Computed inside DiscoveryPane to avoid circular dependency with the relations API fetch.
+  const extraInstancesFromRelations = useMemo<ApiDiscoveryInstance[]>(() => {
+    if (selectedRelationRowKeys.size === 0) return [];
+    const existingUris = new Set(filteredInstances.map((i) => i.uri));
+    const extra = new Map<string, ApiDiscoveryInstance>();
+    for (const key of selectedRelationRowKeys) {
+      const rel = filteredRelations.find((r) => relationRowKey(r) === key);
+      if (!rel) continue;
+      for (const [uri, label, class_uri, class_label] of [
+        [rel.domain_uri, rel.domain_label, rel.domain_class_uri ?? '', rel.domain_class_label ?? ''],
+        [rel.range_uri,  rel.range_label,  rel.range_class_uri  ?? '', rel.range_class_label  ?? ''],
+      ] as [string, string, string, string][]) {
+        if (uri && !existingUris.has(uri) && !extra.has(uri)) {
+          extra.set(uri, { uri, label: label || compactUri(uri), class_uri, class_label, properties: {} });
+        }
+      }
+    }
+    return Array.from(extra.values());
+  }, [filteredInstances, filteredRelations, selectedRelationRowKeys]);
+
+  const displayInstances = useMemo(
+    () => (extraInstancesFromRelations.length > 0 ? [...filteredInstances, ...extraInstancesFromRelations] : filteredInstances),
+    [filteredInstances, extraInstancesFromRelations]
+  );
+
+  const selectedInstancesByClass = useMemo(() => {
+    if (selectedInstanceUris.size === 0) return [] as { label: string; count: number }[];
+    const map = new Map<string, { label: string; count: number }>();
+    for (const uri of selectedInstanceUris) {
+      const inst = displayInstances.find((i) => i.uri === uri) ?? instances.find((i) => i.uri === uri);
+      if (!inst) continue;
+      const key = inst.class_uri || inst.class_label;
+      const existing = map.get(key);
+      if (existing) { existing.count++; }
+      else { map.set(key, { label: inst.class_label || compactUri(inst.class_uri), count: 1 }); }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [selectedInstanceUris, displayInstances, instances]);
+
+  useEffect(() => { setInstancePage(0); }, [displayInstances]);
   useEffect(() => { setRelationPage(0); }, [filteredRelations]);
 
   const pagedInstances = useMemo(
-    () => filteredInstances.slice(instancePage * instancePageSize, (instancePage + 1) * instancePageSize),
-    [filteredInstances, instancePage, instancePageSize]
+    () => displayInstances.slice(instancePage * instancePageSize, (instancePage + 1) * instancePageSize),
+    [displayInstances, instancePage, instancePageSize]
   );
 
   const pagedRelations = useMemo(
@@ -1358,8 +1448,8 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   );
 
   const previewInstances = useMemo(
-    () => filteredInstances.filter((i) => selectedInstanceUris.has(i.uri)),
-    [filteredInstances, selectedInstanceUris]
+    () => displayInstances.filter((i) => selectedInstanceUris.has(i.uri)),
+    [displayInstances, selectedInstanceUris]
   );
 
   const previewRelations = useMemo(
@@ -1423,6 +1513,19 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             Save view
           </button>
           <button
+            onClick={() => setNetworkClosed((v) => !v)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted',
+              !networkClosed
+                ? 'border-workspace-accent text-workspace-accent'
+                : 'text-muted-foreground'
+            )}
+            title={networkClosed ? 'Show network preview' : 'Hide network preview'}
+          >
+            <Share2 size={14} />
+            Network
+          </button>
+          <button
             onClick={onClearAll}
             className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
             title="Clear all filters"
@@ -1484,17 +1587,10 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
 
       {/* Main body: tables column + optional inspector panel */}
       <div className="flex flex-1 overflow-hidden">
-      {/* Left: Instances → Relations → Network */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Left: scrollable tables column */}
+      <div className="flex-1 overflow-y-auto">
           {/* Table 1: Instances */}
-          <section
-            className={cn(
-              'flex flex-col overflow-hidden',
-              instancesCollapsed || (!instancesLoading && pagedInstances.length > 0 && pagedInstances.length < instancePageSize)
-                ? 'shrink-0'
-                : 'min-h-[35%] flex-1'
-            )}
-          >
+          <section className="flex flex-col border-b">
             <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
               <button
                 type="button"
@@ -1510,17 +1606,22 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 <Database size={14} className="text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Individuals</h3>
               </button>
-              {!instancesCollapsed && (
-                <ColumnVisibilityMenu
-                  columns={allColumns}
-                  hidden={hiddenColumns}
-                  onChange={onHiddenColumnsChange}
-                />
-              )}
             </header>
+            {!instancesCollapsed && selectedInstancesByClass.length > 0 && (
+              <div className="flex flex-wrap gap-1 border-b bg-muted/20 px-3 py-1.5">
+                {selectedInstancesByClass.map(({ label, count }) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center rounded-full bg-workspace-accent/10 px-2 py-0.5 text-[11px] text-workspace-accent"
+                  >
+                    {label} ({count})
+                  </span>
+                ))}
+              </div>
+            )}
             {!instancesCollapsed && (
             <>
-            <div className="flex-1 overflow-auto">
+            <div className="max-h-[50vh] overflow-auto">
               {selectedPropertyUris.length === 0 ? (
                 <EmptyState
                   icon={AlertCircle}
@@ -1544,7 +1645,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                   onToggle={onToggleInstance}
                   onSetSelected={onSetSelectedInstances}
                   onRowClick={(uri) => {
-                    const inst = filteredInstances.find((i) => i.uri === uri) ?? null;
+                    const inst = displayInstances.find((i) => i.uri === uri) ?? null;
                     setInspectedInstance(inst);
                   }}
                   columnFilters={columnFilters}
@@ -1555,11 +1656,11 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 />
               )}
             </div>
-            {filteredInstances.length > 0 && (
+            {displayInstances.length > 0 && (
               <TablePagination
                 page={instancePage}
                 pageSize={instancePageSize}
-                total={filteredInstances.length}
+                total={displayInstances.length}
                 onPageChange={setInstancePage}
                 onPageSizeChange={(s) => { setInstancePageSize(s); setInstancePage(0); }}
               />
@@ -1569,14 +1670,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           </section>
 
           {/* Table 2: Relations */}
-          <section
-            className={cn(
-              'flex flex-col overflow-hidden border-t',
-              relationsCollapsed || (!relationsLoading && pagedRelations.length > 0 && pagedRelations.length < relationPageSize)
-                ? 'shrink-0'
-                : 'min-h-[35%] flex-1'
-            )}
-          >
+          <section className="flex flex-col border-t border-b">
             <header className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
               <button
                 type="button"
@@ -1595,7 +1689,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             </header>
             {!relationsCollapsed && (
             <>
-            <div className="flex-1 overflow-auto">
+            <div className="max-h-[50vh] overflow-auto">
               {relationsError ? (
                 <EmptyState icon={AlertCircle} text={relationsError} />
               ) : relationsLoading ? (
@@ -1633,68 +1727,8 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             )}
           </section>
 
-        {/* Table 3: Network */}
-        <section
-          className={cn(
-            'flex flex-col overflow-hidden border-t',
-            networkCollapsed
-              ? 'shrink-0'
-              : 'min-h-[300px] flex-1'
-          )}
-        >
-          <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
-            <button
-              type="button"
-              onClick={() => toggleSection('network')}
-              className="flex items-center gap-2 text-left hover:text-workspace-accent"
-              title={networkCollapsed ? 'Expand' : 'Collapse'}
-            >
-              {networkCollapsed ? (
-                <ChevronRight size={14} className="text-muted-foreground" />
-              ) : (
-                <ChevronDown size={14} className="text-muted-foreground" />
-              )}
-              <Share2 size={14} className="text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Network preview</h3>
-            </button>
-            {!networkCollapsed && (
-              <span className="text-xs text-muted-foreground">
-                {graphNodes.length} / {GRAPH_MAX_NODES} nodes ·{' '}
-                {graphEdges.length} / {GRAPH_MAX_EDGES} edges
-              </span>
-            )}
-          </header>
-          {!networkCollapsed && (
-            <div className="flex-1">
-              {graphNodes.length === 0 ? (
-                <EmptyState
-                  icon={Filter}
-                  text="Select rows in the Individuals and Relations tables to populate the network."
-                />
-              ) : (
-                <VisNetwork
-                  nodes={graphNodes}
-                  edges={graphEdges}
-                  selectedNodeId={highlightedNodeUri}
-                  onNodeSelect={onSelectNode}
-                  onEdgeSelect={() => {}}
-                  physicsEnabled={true}
-                  stabilizeKey={stabilizeKey}
-                />
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Table 4: Preview */}
-        <section
-          className={cn(
-            'flex flex-col overflow-hidden border-t',
-            previewCollapsed || (!previewCollapsed && previewInstances.length + previewRelations.length === 0)
-              ? 'shrink-0'
-              : 'min-h-[35%] flex-1'
-          )}
-        >
+        {/* Table 3: Preview */}
+        <section className="flex flex-col border-t">
           <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
             <button
               type="button"
@@ -1715,21 +1749,100 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             )}
           </header>
           {!previewCollapsed && (
-            <div className="flex-1 overflow-auto">
+            <div className="max-h-[50vh] overflow-auto">
               <PreviewTable instances={previewInstances} relations={previewRelations} />
             </div>
           )}
         </section>
       </div>
 
-      {/* Right: Inspector panel */}
-      {inspectedInstance && (
-        <InstanceInspector
-          instance={inspectedInstance}
-          graphUri={activeGraph?.uri ?? ''}
-          workspaceId={workspaceId}
-          onClose={() => setInspectedInstance(null)}
-        />
+      {/* Right panel: Network (when selection exists) or Inspector (when row clicked) */}
+      {(inspectedInstance || !networkClosed) && (
+        <aside className="flex min-w-[45%] w-[45%] flex-col overflow-hidden border-l bg-card">
+          {inspectedInstance ? (
+            <InstanceInspector
+              instance={inspectedInstance}
+              graphUri={activeGraph?.uri ?? ''}
+              workspaceId={workspaceId}
+              onClose={() => setInspectedInstance(null)}
+            />
+          ) : (
+            <>
+              <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+                <div className="flex items-center gap-2">
+                  <Share2 size={14} className="text-muted-foreground" />
+                  <h3 className="text-sm font-semibold">Network preview</h3>
+                </div>
+                <div className="flex items-center gap-3">
+                  {networkViewMode === 'individuals' ? (
+                    <span className="text-xs text-muted-foreground">
+                      {graphNodes.length} / {GRAPH_MAX_NODES} nodes ·{' '}
+                      {graphEdges.length} / {GRAPH_MAX_EDGES} edges
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {classGraphNodes.length} classes · {classGraphEdges.length} relations
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setNetworkClosed(true)}
+                    className="text-muted-foreground hover:text-foreground"
+                    title="Close network panel"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </header>
+              <div className="relative flex-1">
+                {/* View toggle — overlaid top-right of the canvas */}
+                <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded border bg-card/90 text-xs shadow backdrop-blur-sm">
+                  {(['individuals', 'classes'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setNetworkViewMode(mode)}
+                      className={cn(
+                        'px-2 py-1 capitalize',
+                        networkViewMode === mode
+                          ? 'bg-workspace-accent text-white'
+                          : 'text-muted-foreground hover:bg-muted'
+                      )}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+                {graphNodes.length === 0 ? (
+                  <EmptyState
+                    icon={Filter}
+                    text="Select rows in the Individuals and Relations tables to populate the network."
+                  />
+                ) : networkViewMode === 'individuals' ? (
+                  <VisNetwork
+                    nodes={graphNodes}
+                    edges={graphEdges}
+                    selectedNodeId={highlightedNodeUri}
+                    onNodeSelect={onSelectNode}
+                    onEdgeSelect={() => {}}
+                    physicsEnabled={true}
+                    stabilizeKey={stabilizeKey}
+                  />
+                ) : (
+                  <VisNetwork
+                    nodes={classGraphNodes}
+                    edges={classGraphEdges}
+                    selectedNodeId={null}
+                    onNodeSelect={() => {}}
+                    onEdgeSelect={() => {}}
+                    physicsEnabled={true}
+                    stabilizeKey={stabilizeKey}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </aside>
       )}
       </div>
     </div>
@@ -1972,7 +2085,7 @@ function InstanceInspector({
   );
 
   return (
-    <aside className="flex min-w-[45%] w-[45%] flex-col overflow-hidden border-l bg-card">
+    <div className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
       <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
         <div className="flex items-center gap-2">
@@ -2116,7 +2229,7 @@ function InstanceInspector({
           Remove
         </button>
       </footer>
-    </aside>
+    </div>
   );
 }
 
