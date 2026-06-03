@@ -15,6 +15,7 @@ import {
   Download,
   FileUp,
   Filter,
+  Info,
   Loader2,
   RefreshCw,
   Save,
@@ -89,7 +90,8 @@ interface ApiDiscoveryInstance {
   class_uri: string;
   class_label: string;
   properties: Record<string, string>;
-  relations_count?: number;
+  domain_relations_count?: number;
+  range_relations_count?: number;
   properties_count?: number;
 }
 
@@ -110,6 +112,30 @@ interface ApiDiscoveryRelationRow {
   range_label: string;
   range_class_uri: string;
   range_class_label: string;
+  role: 'domain' | 'range';
+}
+
+interface ApiDataPropertyItem {
+  predicate_uri: string;
+  predicate_label: string;
+  value: string;
+}
+
+interface ApiInspectorRelation {
+  role: 'domain' | 'range';
+  predicate_uri: string;
+  predicate_label: string;
+  other_uri: string;
+  other_label: string;
+}
+
+interface ApiInstanceDetail {
+  uri: string;
+  label: string;
+  class_uri: string;
+  class_label: string;
+  data_properties: ApiDataPropertyItem[];
+  relations: ApiInspectorRelation[];
 }
 
 interface GraphImportAnalysis {
@@ -485,15 +511,17 @@ export default function GraphPage() {
     }
     if (sortState) {
       const dir = sortState.direction === 'asc' ? 1 : -1;
-      const isNumeric = sortState.column === 'relations' || sortState.column === 'properties';
+      const numericCols = new Set(['domain_relations', 'range_relations', 'properties']);
+      const isNumeric = numericCols.has(sortState.column);
       result = [...result].sort((a, b) => {
         if (isNumeric) {
-          const av = sortState.column === 'properties'
-            ? (a.properties_count ?? 0)
-            : (a.relations_count ?? 0);
-          const bv = sortState.column === 'properties'
-            ? (b.properties_count ?? 0)
-            : (b.relations_count ?? 0);
+          const col = sortState.column;
+          const av = col === 'domain_relations' ? (a.domain_relations_count ?? 0)
+                   : col === 'range_relations'  ? (a.range_relations_count ?? 0)
+                   : (a.properties_count ?? 0);
+          const bv = col === 'domain_relations' ? (b.domain_relations_count ?? 0)
+                   : col === 'range_relations'  ? (b.range_relations_count ?? 0)
+                   : (b.properties_count ?? 0);
           if (av < bv) return -1 * dir;
           if (av > bv) return 1 * dir;
           return 0;
@@ -1167,6 +1195,8 @@ interface DiscoveryPaneProps {
 }
 
 function DiscoveryPane(props: DiscoveryPaneProps) {
+  const params = useParams();
+  const workspaceId = params.workspaceId as string;
   const {
     graphs,
     activeGraph,
@@ -1239,12 +1269,14 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   const [instancesCollapsed, setInstancesCollapsed] = useState(false);
   const [relationsCollapsed, setRelationsCollapsed] = useState(false);
   const [networkCollapsed, setNetworkCollapsed] = useState(false);
+  const [inspectedInstance, setInspectedInstance] = useState<ApiDiscoveryInstance | null>(null);
 
   const baseColumns = [
     { id: 'uri', label: 'uri' },
     { id: RDFS_LABEL, label: 'rdfs:label' },
     { id: 'class', label: 'class' },
-    { id: 'relations', label: 'relations' },
+    { id: 'domain_relations', label: '→' },
+    { id: 'range_relations', label: '←' },
     { id: 'properties', label: 'properties' },
   ];
 
@@ -1341,7 +1373,9 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
         </div>
       </div>
 
-      {/* Single-column layout: Instances → Relations → Network */}
+      {/* Main body: tables column + optional inspector panel */}
+      <div className="flex flex-1 overflow-hidden">
+      {/* Left: Instances → Relations → Network */}
       <div className="flex flex-1 flex-col overflow-hidden">
           {/* Table 1: Instances */}
           <section
@@ -1404,10 +1438,13 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                   columns={visibleColumns}
                   rows={filteredInstances}
                   selectedUris={selectedInstanceUris}
-                  highlightedUri={highlightedNodeUri}
+                  inspectedUri={inspectedInstance?.uri ?? null}
                   onToggle={onToggleInstance}
                   onSetSelected={onSetSelectedInstances}
-                  onRowClick={(uri) => onSelectNode(uri)}
+                  onRowClick={(uri) => {
+                    const inst = filteredInstances.find((i) => i.uri === uri) ?? null;
+                    setInspectedInstance(inst);
+                  }}
                   columnFilters={columnFilters}
                   onColumnFiltersChange={onColumnFiltersChange}
                   sortState={sortState}
@@ -1536,7 +1573,189 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           )}
         </section>
       </div>
+
+      {/* Right: Inspector panel */}
+      {inspectedInstance && (
+        <InstanceInspector
+          instance={inspectedInstance}
+          graphUri={activeGraph?.uri ?? ''}
+          workspaceId={workspaceId}
+          onClose={() => setInspectedInstance(null)}
+        />
+      )}
+      </div>
     </div>
+  );
+}
+
+// ── Instance inspector ────────────────────────────────────────────────────────
+
+function InstanceInspector({
+  instance,
+  graphUri,
+  workspaceId,
+  onClose,
+}: {
+  instance: ApiDiscoveryInstance;
+  graphUri: string;
+  workspaceId: string;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<ApiInstanceDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [relationsCollapsed, setRelationsCollapsed] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<'domain' | 'range'>('domain');
+
+  useEffect(() => {
+    if (!graphUri || !instance.uri) return;
+    setDetail(null);
+    setLoading(true);
+    void authFetch(`${getApiUrl()}/api/graph/discovery/instance-detail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+        graph_uri: graphUri,
+        instance_uri: instance.uri,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => setDetail(data as ApiInstanceDetail))
+      .catch(() => setDetail(null))
+      .finally(() => setLoading(false));
+  }, [instance.uri, graphUri, workspaceId]);
+
+  const filteredRelations = useMemo(
+    () => (detail?.relations ?? []).filter((r) => r.role === roleFilter),
+    [detail, roleFilter]
+  );
+
+  return (
+    <aside className="flex w-[340px] min-w-[280px] flex-col overflow-hidden border-l bg-card">
+      {/* Header */}
+      <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+        <div className="flex items-center gap-2">
+          <Info size={14} className="text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Inspector</h3>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground"
+          title="Close inspector"
+        >
+          <X size={14} />
+        </button>
+      </header>
+
+      <div className="flex-1 overflow-auto px-4 py-3 space-y-4 text-xs">
+        {/* URI */}
+        <div>
+          <div className="mb-0.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">URI</div>
+          <span className="font-mono break-all text-[11px]">{instance.uri}</span>
+        </div>
+
+        {/* Label */}
+        <div>
+          <div className="mb-0.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">Label</div>
+          <span>{instance.label || '—'}</span>
+        </div>
+
+        {/* Class */}
+        <div>
+          <div className="mb-0.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">Class</div>
+          <div>{instance.class_label || compactUri(instance.class_uri)}</div>
+          <div className="font-mono text-[11px] text-muted-foreground break-all">{instance.class_uri}</div>
+        </div>
+
+        {/* Data properties */}
+        <div>
+          <div className="mb-1 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">
+            Data properties
+          </div>
+          {loading ? (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Loader2 size={12} className="animate-spin" />
+              Loading…
+            </div>
+          ) : detail && detail.data_properties.length > 0 ? (
+            <div className="space-y-2">
+              {detail.data_properties.map((dp, i) => (
+                <div key={`${dp.predicate_uri}-${i}`}>
+                  <div className="text-muted-foreground">{dp.predicate_label}</div>
+                  <div className="break-all">{dp.value}</div>
+                </div>
+              ))}
+            </div>
+          ) : detail ? (
+            <div className="text-muted-foreground">No data properties.</div>
+          ) : null}
+        </div>
+
+        {/* Relations */}
+        <div className="border-t pt-3">
+          <button
+            type="button"
+            onClick={() => setRelationsCollapsed((v) => !v)}
+            className="flex items-center gap-1.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px] hover:text-foreground w-full"
+          >
+            {relationsCollapsed ? (
+              <ChevronRight size={12} />
+            ) : (
+              <ChevronDown size={12} />
+            )}
+            Relations
+            {detail && (
+              <span className="ml-auto normal-case tracking-normal font-normal">
+                {detail.relations.length}
+              </span>
+            )}
+          </button>
+
+          {!relationsCollapsed && (
+            <div className="mt-2 space-y-3">
+              {/* Role toggle */}
+              <div className="flex gap-1">
+                {(['domain', 'range'] as const).map((role) => (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => setRoleFilter(role)}
+                    className={cn(
+                      'rounded px-2 py-0.5 text-[11px] capitalize',
+                      roleFilter === role
+                        ? 'bg-workspace-accent text-white'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/70'
+                    )}
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
+
+              {loading ? (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Loader2 size={12} className="animate-spin" />
+                  Loading…
+                </div>
+              ) : filteredRelations.length === 0 ? (
+                <div className="text-muted-foreground">No {roleFilter} relations.</div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredRelations.map((r, i) => (
+                    <div key={`${r.predicate_uri}-${r.other_uri}-${i}`} className="space-y-0.5">
+                      <div className="text-muted-foreground">{r.predicate_label}</div>
+                      <div>{r.other_label}</div>
+                      <div className="font-mono text-[11px] text-muted-foreground break-all">{r.other_uri}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -1550,7 +1769,8 @@ function getInstanceColumnValue(
   if (columnId === 'class') return inst.class_label || compactUri(inst.class_uri);
   if (columnId === RDFS_LABEL)
     return inst.label || inst.properties[RDFS_LABEL] || compactUri(inst.uri);
-  if (columnId === 'relations') return String(inst.relations_count ?? 0);
+  if (columnId === 'domain_relations') return String(inst.domain_relations_count ?? 0);
+  if (columnId === 'range_relations') return String(inst.range_relations_count ?? 0);
   if (columnId === 'properties') return String(inst.properties_count ?? 0);
   return formatPropertyValue(inst.properties[columnId]);
 }
@@ -1560,7 +1780,7 @@ interface InstancesTableProps {
   rows: ApiDiscoveryInstance[];
   instances: ApiDiscoveryInstance[];
   selectedUris: Set<string>;
-  highlightedUri: string | null;
+  inspectedUri: string | null;
   onToggle: (uri: string) => void;
   onSetSelected: (uris: Set<string>) => void;
   onRowClick: (uri: string) => void;
@@ -1579,7 +1799,7 @@ function InstancesTable({
   rows,
   instances,
   selectedUris,
-  highlightedUri,
+  inspectedUri,
   onToggle,
   onSetSelected,
   onRowClick,
@@ -1662,15 +1882,15 @@ function InstancesTable({
       <tbody>
         {rows.map((inst) => {
           const isSelected = selectedUris.has(inst.uri);
-          const isHighlighted = highlightedUri === inst.uri;
+          const isInspected = inspectedUri === inst.uri;
           return (
             <tr
               key={inst.uri}
               onClick={() => onRowClick(inst.uri)}
               className={cn(
                 'cursor-pointer border-b hover:bg-muted/50',
-                isSelected && 'bg-workspace-accent/10',
-                isHighlighted && 'outline outline-1 outline-workspace-accent'
+                isSelected && 'bg-workspace-accent-10',
+                isInspected && 'bg-workspace-accent-20'
               )}
             >
               <td className="px-2 py-1.5">
@@ -1853,11 +2073,11 @@ function ColumnHeader({
 }
 
 const RELATION_COLUMNS: { id: string; label: string }[] = [
-  { id: 'relation', label: 'relation' },
   { id: 'domain_uri', label: 'domain uri' },
   { id: 'domain', label: 'domain' },
-  { id: 'range_uri', label: 'range uri' },
+  { id: 'relation', label: 'relation' },
   { id: 'range', label: 'range' },
+  { id: 'range_uri', label: 'range uri' },
 ];
 
 function getRelationColumnValue(
@@ -1881,7 +2101,7 @@ function getRelationColumnValue(
 }
 
 function relationRowKey(row: ApiDiscoveryRelationRow): string {
-  return `${row.domain_uri}|${row.relation_uri}|${row.range_uri}`;
+  return `${row.role}|${row.domain_uri}|${row.relation_uri}|${row.range_uri}`;
 }
 
 interface RelationsTableProps {
@@ -2011,12 +2231,6 @@ function RelationsTable({
                 />
               </td>
               <td
-                className="max-w-[200px] truncate px-3 py-1.5 font-medium"
-                title={r.relation_uri}
-              >
-                {r.relation_label || compactUri(r.relation_uri)}
-              </td>
-              <td
                 className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]"
                 title={r.domain_uri}
               >
@@ -2026,13 +2240,19 @@ function RelationsTable({
                 {r.domain_label}
               </td>
               <td
+                className="max-w-[200px] truncate px-3 py-1.5 font-medium"
+                title={r.relation_uri}
+              >
+                {r.relation_label || compactUri(r.relation_uri)}
+              </td>
+              <td className="max-w-[200px] truncate px-3 py-1.5" title={r.range_label}>
+                {r.range_label}
+              </td>
+              <td
                 className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]"
                 title={r.range_uri}
               >
                 {r.range_uri}
-              </td>
-              <td className="max-w-[200px] truncate px-3 py-1.5" title={r.range_label}>
-                {r.range_label}
               </td>
             </tr>
           );
