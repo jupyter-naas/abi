@@ -197,6 +197,7 @@ export function Sidebar() {
           title={currentWorkspace?.name || 'NEXUS'}
         >
           {currentWorkspace?.theme?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={currentWorkspace.theme.logoUrl} alt={currentWorkspace.name} className="h-full w-full object-cover" />
           ) : (
             <span className="text-sm font-bold text-white">
@@ -318,6 +319,7 @@ export function Sidebar() {
                   style={{ backgroundColor: workspace.theme?.primaryColor || '#22c55e' }}
                 >
                   {workspace.theme?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={workspace.theme.logoUrl} alt={workspace.name} className="h-full w-full object-cover" />
                   ) : (
                     <span className="text-xs text-white">
