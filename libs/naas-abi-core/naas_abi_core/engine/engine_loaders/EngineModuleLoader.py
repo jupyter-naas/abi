@@ -1,4 +1,7 @@
 import importlib
+import importlib.util
+import os
+from pathlib import Path
 from typing import Dict, List
 
 import pydantic_core
@@ -195,6 +198,68 @@ class EngineModuleLoader:
         logger.debug(f"Module dependencies for {module_name}: {dependencies}")
 
         return dependencies
+
+    def get_model_providing_modules(self) -> List[str]:
+        """Return the dotted names of every enabled module in config whose
+        package ships ``ModelDefinition`` subclasses under ``models/``.
+
+        These modules MUST be in the load set whenever the engine is asked
+        to load a narrow subset (e.g. ``abi chat <module> <agent>``), because
+        the in-memory ``ModelRegistry`` only knows about models registered by
+        modules whose ``on_load`` actually ran — and ``Engine.load`` then
+        calls ``validate_defaults()`` against the configured defaults
+        (``services.model_registry.default_chat_model`` /
+        ``default_embedding_model``). Without this expansion, asking to chat
+        with a module that does not declare an AI provider as a dependency
+        silently drops the provider module, leaving the configured default
+        unregistered and the engine boot hard-fails.
+
+        Detection is a cheap source-level scan: the module's ``models/``
+        directory is read off the filesystem and ``.py`` files are grepped
+        for the literal ``ModelDefinition`` token. This intentionally avoids
+        importing the model files — that work belongs to ``ModuleModelLoader``
+        during ``on_load``. The ``ai/*/models/`` packages are the only
+        directories that actually ship ``ModelDefinition`` subclasses today;
+        unrelated ``models/`` folders (e.g. ``domains/*/models``) ship
+        pydantic schemas and are correctly skipped by this check.
+        """
+        providers: List[str] = []
+        for module_config in self.__configuration.modules:
+            if not module_config.enabled or not module_config.module:
+                continue
+            if self._module_ships_model_definitions(module_config.module):
+                providers.append(module_config.module)
+        return providers
+
+    @staticmethod
+    def _module_ships_model_definitions(module_dotted: str) -> bool:
+        """Filesystem check: does this dotted module path expose a ``models/``
+        directory containing at least one ``.py`` file that references
+        ``ModelDefinition``? Returns False (not raise) on lookup errors —
+        a missing or broken module is "doesn't ship models" for our purposes
+        and will surface later via the normal import path."""
+        try:
+            spec = importlib.util.find_spec(module_dotted)
+        except (ImportError, ValueError):
+            return False
+        if spec is None or spec.origin is None:
+            return False
+        models_dir = Path(spec.origin).parent / "models"
+        if not models_dir.is_dir():
+            return False
+        for entry in os.listdir(models_dir):
+            if not entry.endswith(".py"):
+                continue
+            if entry == "__init__.py" or entry.endswith("_test.py"):
+                continue
+            path = models_dir / entry
+            try:
+                content = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            if "ModelDefinition" in content:
+                return True
+        return False
 
     def get_modules_dependencies(
         self, module_names: List[str] = []
