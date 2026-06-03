@@ -167,7 +167,6 @@ class DiscoveryInstancesRequest(BaseModel):
     class_uris: list[str] = Field(default_factory=list)
     property_uris: list[str] = Field(default_factory=list)
     search: str = ""
-    limit: int = Field(default=200, ge=1, le=2000)
 
 
 class DiscoveryRelationTypesRequest(BaseModel):
@@ -181,7 +180,6 @@ class DiscoveryRelationsRequest(BaseModel):
     graph_uri: str = Field(..., min_length=1)
     instance_uris: list[str] = Field(default_factory=list)
     relation_uris: list[str] = Field(default_factory=list)
-    limit: int = Field(default=200, ge=1, le=2000)
 
 
 class GraphAnalysis(BaseModel):

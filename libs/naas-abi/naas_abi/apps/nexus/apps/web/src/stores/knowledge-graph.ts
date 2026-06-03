@@ -53,6 +53,8 @@ export interface DiscoveryViewState {
   propertyUris: string[];
   relationUris: string[];
   search: string;
+  selectedInstanceUris: string[];
+  selectedRelationRowKeys: string[];
 }
 
 export interface GraphView {

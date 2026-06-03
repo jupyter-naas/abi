@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   Database,
@@ -16,7 +17,9 @@ import {
   FileUp,
   Filter,
   Info,
+  LayoutList,
   Loader2,
+  Pencil,
   RefreshCw,
   Save,
   Search,
@@ -54,8 +57,6 @@ const DEFAULT_PROPERTY_URIS = ['http://www.w3.org/2000/01/rdf-schema#label'];
 const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 const GRAPH_MAX_NODES = 20;
 const GRAPH_MAX_EDGES = 20;
-const INSTANCE_LIMIT = 200;
-const RELATION_LIMIT = 200;
 const DISCOVERY_DEBOUNCE_MS = 300;
 
 // ── Backend types ────────────────────────────────────────────────────────────
@@ -349,6 +350,12 @@ export default function GraphPage() {
     setSelectedPropertyUris(d.propertyUris.length ? d.propertyUris : DEFAULT_PROPERTY_URIS);
     setSelectedRelationUris(d.relationUris);
     setSearch(d.search);
+    if (d.selectedInstanceUris?.length) {
+      setSelectedInstanceUris(new Set(d.selectedInstanceUris));
+    }
+    if (d.selectedRelationRowKeys?.length) {
+      setSelectedRelationRowKeys(new Set(d.selectedRelationRowKeys));
+    }
   }, [activeSavedView]);
 
   // ── Debounce search ────────────────────────────────────────────────────────
@@ -462,7 +469,6 @@ export default function GraphPage() {
             class_uris: selectedClassUris,
             property_uris: selectedPropertyUris,
             search: debouncedSearch,
-            limit: INSTANCE_LIMIT,
           }),
         });
         if (!res.ok) throw new Error(`Search failed (${res.status})`);
@@ -664,7 +670,6 @@ export default function GraphPage() {
             graph_uri: activeGraph.uri,
             instance_uris: workingInstanceUris,
             relation_uris: selectedRelationUris,
-            limit: RELATION_LIMIT,
           }),
         });
         if (!res.ok) throw new Error(`Relations failed (${res.status})`);
@@ -808,6 +813,7 @@ export default function GraphPage() {
     setRelationSortState(null);
     setSelectedRelationRowKeys(new Set());
     setActiveSavedView(null);
+    lastAppliedViewIdRef.current = null;
   };
 
   const handleSaveView = () => {
@@ -819,6 +825,8 @@ export default function GraphPage() {
       propertyUris: selectedPropertyUris,
       relationUris: selectedRelationUris,
       search: debouncedSearch,
+      selectedInstanceUris: Array.from(selectedInstanceUris),
+      selectedRelationRowKeys: Array.from(selectedRelationRowKeys),
     };
     const view = createSavedView(name, activeGraph ? [activeGraph.id] : [], []);
     updateSavedView(view.id, { discovery });
@@ -1270,6 +1278,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   const instancesCollapsed = !openSections.includes('instances');
   const relationsCollapsed = !openSections.includes('relations');
   const networkCollapsed = !openSections.includes('network');
+  const previewCollapsed = !openSections.includes('preview');
   const toggleSection = (id: string) =>
     setOpenSections((prev) => {
       if (prev.includes(id)) return prev.filter((s) => s !== id);
@@ -1277,6 +1286,45 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       return next.length > 2 ? next.slice(next.length - 2) : next;
     });
   const [inspectedInstance, setInspectedInstance] = useState<ApiDiscoveryInstance | null>(null);
+
+  const prevAppliedViewIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeSavedViewId && activeSavedViewId !== prevAppliedViewIdRef.current) {
+      prevAppliedViewIdRef.current = activeSavedViewId;
+      setOpenSections(['network', 'preview']);
+    }
+    if (!activeSavedViewId) {
+      prevAppliedViewIdRef.current = null;
+    }
+  }, [activeSavedViewId]);
+
+  const [instancePage, setInstancePage] = useState(0);
+  const [instancePageSize, setInstancePageSize] = useState(20);
+  const [relationPage, setRelationPage] = useState(0);
+  const [relationPageSize, setRelationPageSize] = useState(20);
+
+  useEffect(() => { setInstancePage(0); }, [filteredInstances]);
+  useEffect(() => { setRelationPage(0); }, [filteredRelations]);
+
+  const pagedInstances = useMemo(
+    () => filteredInstances.slice(instancePage * instancePageSize, (instancePage + 1) * instancePageSize),
+    [filteredInstances, instancePage, instancePageSize]
+  );
+
+  const pagedRelations = useMemo(
+    () => filteredRelations.slice(relationPage * relationPageSize, (relationPage + 1) * relationPageSize),
+    [filteredRelations, relationPage, relationPageSize]
+  );
+
+  const previewInstances = useMemo(
+    () => filteredInstances.filter((i) => selectedInstanceUris.has(i.uri)),
+    [filteredInstances, selectedInstanceUris]
+  );
+
+  const previewRelations = useMemo(
+    () => filteredRelations.filter((r) => selectedRelationRowKeys.has(relationRowKey(r))),
+    [filteredRelations, selectedRelationRowKeys]
+  );
 
   const baseColumns = [
     { id: 'uri', label: 'uri' },
@@ -1388,7 +1436,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           <section
             className={cn(
               'flex flex-col overflow-hidden',
-              instancesCollapsed
+              instancesCollapsed || (!instancesLoading && pagedInstances.length > 0 && pagedInstances.length < instancePageSize)
                 ? 'shrink-0'
                 : 'min-h-[35%] flex-1'
             )}
@@ -1406,11 +1454,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                   <ChevronDown size={14} className="text-muted-foreground" />
                 )}
                 <Database size={14} className="text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Instances</h3>
-                <span className="text-xs text-muted-foreground">
-                  {filteredInstances.length} / {instances.length}
-                  {selectedInstanceUris.size > 0 && ` · ${selectedInstanceUris.size} selected`}
-                </span>
+                <h3 className="text-sm font-semibold">Individuals</h3>
               </button>
               {!instancesCollapsed && (
                 <ColumnVisibilityMenu
@@ -1421,6 +1465,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
               )}
             </header>
             {!instancesCollapsed && (
+            <>
             <div className="flex-1 overflow-auto">
               {selectedPropertyUris.length === 0 ? (
                 <EmptyState
@@ -1431,19 +1476,15 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 <EmptyState icon={AlertCircle} text={instancesError} />
               ) : instancesLoading ? (
                 <EmptyState icon={Loader2} text="Searching..." spinning />
-              ) : filteredInstances.length === 0 ? (
+              ) : instances.length === 0 ? (
                 <EmptyState
                   icon={Search}
-                  text={
-                    instances.length === 0
-                      ? 'No matching instances. Try selecting fewer classes or clear the search.'
-                      : 'No rows match the current column filters.'
-                  }
+                  text="No matching individuals. Try selecting fewer classes or clear the search."
                 />
               ) : (
                 <InstancesTable
                   columns={visibleColumns}
-                  rows={filteredInstances}
+                  rows={pagedInstances}
                   selectedUris={selectedInstanceUris}
                   inspectedUri={inspectedInstance?.uri ?? null}
                   onToggle={onToggleInstance}
@@ -1460,6 +1501,16 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 />
               )}
             </div>
+            {filteredInstances.length > 0 && (
+              <TablePagination
+                page={instancePage}
+                pageSize={instancePageSize}
+                total={filteredInstances.length}
+                onPageChange={setInstancePage}
+                onPageSizeChange={(s) => { setInstancePageSize(s); setInstancePage(0); }}
+              />
+            )}
+            </>
             )}
           </section>
 
@@ -1467,7 +1518,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           <section
             className={cn(
               'flex flex-col overflow-hidden border-t',
-              relationsCollapsed
+              relationsCollapsed || (!relationsLoading && pagedRelations.length > 0 && pagedRelations.length < relationPageSize)
                 ? 'shrink-0'
                 : 'min-h-[35%] flex-1'
             )}
@@ -1486,37 +1537,28 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 )}
                 <ArrowRight size={14} className="text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Relations</h3>
-                <span className="text-xs text-muted-foreground">
-                  {filteredRelations.length} / {relations.length}
-                  {selectedRelationRowKeys.size > 0 &&
-                    ` · ${selectedRelationRowKeys.size} selected`}
-                </span>
               </button>
             </header>
             {!relationsCollapsed && (
+            <>
             <div className="flex-1 overflow-auto">
               {relationsError ? (
                 <EmptyState icon={AlertCircle} text={relationsError} />
               ) : relationsLoading ? (
                 <EmptyState icon={Loader2} text="Loading..." spinning />
               ) : instances.length === 0 ? (
-                <EmptyState icon={ArrowRight} text="Run a search in the Instances table to see relations." />
+                <EmptyState icon={ArrowRight} text="Run a search in the Individuals table to see relations." />
               ) : relations.length === 0 ? (
                 <EmptyState icon={ArrowRight} text="No relations for the current selection." />
-              ) : filteredRelations.length === 0 ? (
-                <EmptyState
-                  icon={ArrowRight}
-                  text="No relation rows match the current column filters."
-                />
               ) : (
                 <RelationsTable
-                  rows={filteredRelations}
+                  rows={pagedRelations}
                   allRows={relations}
                   selectedRowKeys={selectedRelationRowKeys}
-                  highlightedUri={highlightedNodeUri}
                   onToggleRow={onToggleRelationRow}
                   onSetSelectedRows={onSetSelectedRelationRows}
                   onSelectNode={onSelectNode}
+                  onInspectInstance={setInspectedInstance}
                   columnFilters={relationColumnFilters}
                   onColumnFiltersChange={onRelationColumnFiltersChange}
                   sortState={relationSortState}
@@ -1524,6 +1566,16 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 />
               )}
             </div>
+            {filteredRelations.length > 0 && (
+              <TablePagination
+                page={relationPage}
+                pageSize={relationPageSize}
+                total={filteredRelations.length}
+                onPageChange={setRelationPage}
+                onPageSizeChange={(s) => { setRelationPageSize(s); setRelationPage(0); }}
+              />
+            )}
+            </>
             )}
           </section>
 
@@ -1563,7 +1615,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
               {graphNodes.length === 0 ? (
                 <EmptyState
                   icon={Filter}
-                  text="Select rows in the Instances and Relations tables to populate the network."
+                  text="Select rows in the Individuals and Relations tables to populate the network."
                 />
               ) : (
                 <VisNetwork
@@ -1579,6 +1631,41 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             </div>
           )}
         </section>
+
+        {/* Table 4: Preview */}
+        <section
+          className={cn(
+            'flex flex-col overflow-hidden border-t',
+            previewCollapsed || (!previewCollapsed && previewInstances.length + previewRelations.length === 0)
+              ? 'shrink-0'
+              : 'min-h-[35%] flex-1'
+          )}
+        >
+          <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+            <button
+              type="button"
+              onClick={() => toggleSection('preview')}
+              className="flex items-center gap-2 text-left hover:text-workspace-accent"
+              title={previewCollapsed ? 'Expand' : 'Collapse'}
+            >
+              {previewCollapsed ? (
+                <ChevronRight size={14} className="text-muted-foreground" />
+              ) : (
+                <ChevronDown size={14} className="text-muted-foreground" />
+              )}
+              <LayoutList size={14} className="text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Table preview</h3>
+            </button>
+            {!previewCollapsed && (previewInstances.length > 0 || previewRelations.length > 0) && (
+              <PreviewExportMenu instances={previewInstances} relations={previewRelations} />
+            )}
+          </header>
+          {!previewCollapsed && (
+            <div className="flex-1 overflow-auto">
+              <PreviewTable instances={previewInstances} relations={previewRelations} />
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Right: Inspector panel */}
@@ -1591,6 +1678,195 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
         />
       )}
       </div>
+    </div>
+  );
+}
+
+// ── Preview table + export ────────────────────────────────────────────────────
+
+function downloadBlob(content: string, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function PreviewExportMenu({
+  instances,
+  relations,
+}: {
+  instances: ApiDiscoveryInstance[];
+  relations: ApiDiscoveryRelationRow[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
+  const handleJSON = () => {
+    const data = {
+      instances: instances.map((i) => ({
+        uri: i.uri,
+        label: i.label,
+        class_uri: i.class_uri,
+        class_label: i.class_label,
+      })),
+      relations: relations.map((r) => ({
+        domain_uri: r.domain_uri,
+        domain_label: r.domain_label,
+        relation_uri: r.relation_uri,
+        relation_label: r.relation_label,
+        range_uri: r.range_uri,
+        range_label: r.range_label,
+      })),
+    };
+    downloadBlob(JSON.stringify(data, null, 2), 'preview.json', 'application/json');
+    setOpen(false);
+  };
+
+  const handleCSV = () => {
+    const csvCell = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`;
+    const rows: string[] = [];
+    if (instances.length > 0) {
+      rows.push('# Instances');
+      rows.push('uri,label,class_uri,class_label');
+      for (const i of instances)
+        rows.push([i.uri, i.label, i.class_uri, i.class_label].map(csvCell).join(','));
+    }
+    if (relations.length > 0) {
+      if (rows.length > 0) rows.push('');
+      rows.push('# Relations');
+      rows.push('domain_uri,domain_label,relation_uri,relation_label,range_uri,range_label');
+      for (const r of relations)
+        rows.push(
+          [r.domain_uri, r.domain_label, r.relation_uri, r.relation_label, r.range_uri, r.range_label]
+            .map(csvCell)
+            .join(',')
+        );
+    }
+    downloadBlob(rows.join('\n'), 'preview.csv', 'text/csv');
+    setOpen(false);
+  };
+
+  const handleTTL = () => {
+    const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const lines = [
+      '@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .',
+      '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .',
+      '@prefix owl: <http://www.w3.org/2002/07/owl#> .',
+      '',
+    ];
+    for (const i of instances) {
+      const classTriple = i.class_uri ? `, <${i.class_uri}>` : '';
+      lines.push(`<${i.uri}> a owl:NamedIndividual${classTriple} ;`);
+      lines.push(`    rdfs:label "${esc(i.label)}" .`);
+      lines.push('');
+    }
+    for (const r of relations)
+      lines.push(`<${r.domain_uri}> <${r.relation_uri}> <${r.range_uri}> .`);
+    downloadBlob(lines.join('\n'), 'preview.ttl', 'text/turtle');
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted"
+        title="Export preview"
+      >
+        <Download size={12} />
+        Export
+        <ChevronDown size={11} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-36 rounded-md border bg-background py-1 shadow-lg">
+          <button onClick={handleJSON} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted">JSON</button>
+          <button onClick={handleCSV} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted">CSV</button>
+          <button onClick={handleTTL} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted">Turtle (.ttl)</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PreviewTable({
+  instances,
+  relations,
+}: {
+  instances: ApiDiscoveryInstance[];
+  relations: ApiDiscoveryRelationRow[];
+}) {
+  if (instances.length === 0 && relations.length === 0) {
+    return (
+      <EmptyState
+        icon={LayoutList}
+        text="Check individuals or relations to populate the preview."
+      />
+    );
+  }
+
+  return (
+    <div>
+      {instances.length > 0 && (
+        <>
+          <div className="border-b bg-muted/60 px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Individuals · {instances.length}
+          </div>
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-muted">
+              <tr>
+                <th className="border-b px-3 py-1.5 text-left font-medium">URI</th>
+                <th className="border-b px-3 py-1.5 text-left font-medium">Label</th>
+                <th className="border-b px-3 py-1.5 text-left font-medium">Class</th>
+              </tr>
+            </thead>
+            <tbody>
+              {instances.map((inst) => (
+                <tr key={inst.uri} className="border-b hover:bg-muted/50">
+                  <td className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]" title={inst.uri}>{inst.uri}</td>
+                  <td className="max-w-[200px] truncate px-3 py-1.5" title={inst.label}>{inst.label}</td>
+                  <td className="max-w-[200px] truncate px-3 py-1.5" title={inst.class_uri}>{inst.class_label || compactUri(inst.class_uri)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {relations.length > 0 && (
+        <>
+          <div className={cn('border-b bg-muted/60 px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', instances.length > 0 && 'border-t')}>
+            Relations · {relations.length}
+          </div>
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-muted">
+              <tr>
+                <th className="border-b px-3 py-1.5 text-left font-medium">Domain</th>
+                <th className="border-b px-3 py-1.5 text-left font-medium">Relation</th>
+                <th className="border-b px-3 py-1.5 text-left font-medium">Range</th>
+              </tr>
+            </thead>
+            <tbody>
+              {relations.map((r) => (
+                <tr key={relationRowKey(r)} className="border-b hover:bg-muted/50">
+                  <td className="max-w-[200px] truncate px-3 py-1.5" title={r.domain_uri}>{r.domain_label || compactUri(r.domain_uri)}</td>
+                  <td className="max-w-[200px] truncate px-3 py-1.5 font-medium" title={r.relation_uri}>{r.relation_label || compactUri(r.relation_uri)}</td>
+                  <td className="max-w-[200px] truncate px-3 py-1.5" title={r.range_uri}>{r.range_label || compactUri(r.range_uri)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }
@@ -1638,7 +1914,7 @@ function InstanceInspector({
   );
 
   return (
-    <aside className="flex w-[340px] min-w-[280px] flex-col overflow-hidden border-l bg-card">
+    <aside className="flex min-w-[45%] w-[45%] flex-col overflow-hidden border-l bg-card">
       {/* Header */}
       <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
         <div className="flex items-center gap-2">
@@ -1762,6 +2038,26 @@ function InstanceInspector({
           )}
         </div>
       </div>
+
+      {/* Footer actions */}
+      <footer className="flex shrink-0 items-center gap-2 border-t bg-muted/20 px-4 py-2">
+        <button
+          type="button"
+          disabled
+          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs opacity-50 cursor-not-allowed"
+        >
+          <Pencil size={12} />
+          Edit
+        </button>
+        <button
+          type="button"
+          disabled
+          className="flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-500 opacity-50 cursor-not-allowed"
+        >
+          <Trash2 size={12} />
+          Remove
+        </button>
+      </footer>
     </aside>
   );
 }
@@ -1887,6 +2183,16 @@ function InstancesTable({
         </tr>
       </thead>
       <tbody>
+        {rows.length === 0 && (
+          <tr>
+            <td
+              colSpan={columns.length + 1}
+              className="px-4 py-6 text-center text-xs text-muted-foreground"
+            >
+              No rows match the current filters.
+            </td>
+          </tr>
+        )}
         {rows.map((inst) => {
           const isSelected = selectedUris.has(inst.uri);
           const isInspected = inspectedUri === inst.uri;
@@ -2139,10 +2445,10 @@ interface RelationsTableProps {
   rows: ApiDiscoveryRelationRow[];
   allRows: ApiDiscoveryRelationRow[];
   selectedRowKeys: Set<string>;
-  highlightedUri: string | null;
   onToggleRow: (key: string) => void;
   onSetSelectedRows: (keys: Set<string>) => void;
   onSelectNode: (uri: string | null) => void;
+  onInspectInstance: (inst: ApiDiscoveryInstance) => void;
   columnFilters: Record<string, ColumnFilter>;
   onColumnFiltersChange: (
     updater:
@@ -2157,10 +2463,10 @@ function RelationsTable({
   rows,
   allRows,
   selectedRowKeys,
-  highlightedUri,
   onToggleRow,
   onSetSelectedRows,
   onSelectNode,
+  onInspectInstance,
   columnFilters,
   onColumnFiltersChange,
   sortState,
@@ -2237,18 +2543,25 @@ function RelationsTable({
         </tr>
       </thead>
       <tbody>
+        {rows.length === 0 && (
+          <tr>
+            <td
+              colSpan={RELATION_COLUMNS.length + 1}
+              className="px-4 py-6 text-center text-xs text-muted-foreground"
+            >
+              No rows match the current filters.
+            </td>
+          </tr>
+        )}
         {rows.map((r) => {
           const key = relationRowKey(r);
           const isSelected = selectedRowKeys.has(key);
-          const highlighted =
-            highlightedUri === r.domain_uri || highlightedUri === r.range_uri;
           return (
             <tr
               key={key}
               className={cn(
                 'cursor-pointer border-b hover:bg-muted/50',
-                isSelected && 'bg-workspace-accent/10',
-                highlighted && 'outline outline-1 outline-workspace-accent'
+                isSelected && 'bg-workspace-accent-10'
               )}
               onClick={() => onSelectNode(r.range_uri)}
             >
@@ -2262,12 +2575,17 @@ function RelationsTable({
                 />
               </td>
               <td
-                className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]"
+                className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px] hover:text-workspace-accent hover:underline"
                 title={r.domain_uri}
+                onClick={(e) => { e.stopPropagation(); onInspectInstance({ uri: r.domain_uri, label: r.domain_label, class_uri: r.domain_class_uri, class_label: r.domain_class_label, properties: {} }); }}
               >
                 {r.domain_uri}
               </td>
-              <td className="max-w-[200px] truncate px-3 py-1.5" title={r.domain_label}>
+              <td
+                className="max-w-[200px] truncate px-3 py-1.5 hover:text-workspace-accent hover:underline"
+                title={r.domain_label}
+                onClick={(e) => { e.stopPropagation(); onInspectInstance({ uri: r.domain_uri, label: r.domain_label, class_uri: r.domain_class_uri, class_label: r.domain_class_label, properties: {} }); }}
+              >
                 {r.domain_label}
               </td>
               <td
@@ -2277,12 +2595,17 @@ function RelationsTable({
                 {r.relation_label || compactUri(r.relation_uri)}
               </td>
               <td
-                className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]"
+                className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px] hover:text-workspace-accent hover:underline"
                 title={r.range_uri}
+                onClick={(e) => { e.stopPropagation(); onInspectInstance({ uri: r.range_uri, label: r.range_label, class_uri: r.range_class_uri, class_label: r.range_class_label, properties: {} }); }}
               >
                 {r.range_uri}
               </td>
-              <td className="max-w-[200px] truncate px-3 py-1.5" title={r.range_label}>
+              <td
+                className="max-w-[200px] truncate px-3 py-1.5 hover:text-workspace-accent hover:underline"
+                title={r.range_label}
+                onClick={(e) => { e.stopPropagation(); onInspectInstance({ uri: r.range_uri, label: r.range_label, class_uri: r.range_class_uri, class_label: r.range_class_label, properties: {} }); }}
+              >
                 {r.range_label}
               </td>
             </tr>
@@ -2352,6 +2675,67 @@ function ColumnVisibilityMenu({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Table pagination ─────────────────────────────────────────────────────────
+
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
+
+function TablePagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const start = total === 0 ? 0 : page * pageSize + 1;
+  const end = Math.min((page + 1) * pageSize, total);
+
+  return (
+    <div className="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-1.5 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2">
+        <span>Rows per page:</span>
+        <select
+          value={pageSize}
+          onChange={(e) => onPageSizeChange(Number(e.target.value))}
+          className="rounded border bg-background px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+        >
+          {PAGE_SIZE_OPTIONS.map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="mr-2">{start}–{end} of {total}</span>
+        <button
+          onClick={() => onPageChange(page - 1)}
+          disabled={page === 0}
+          className="rounded p-0.5 hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Previous page"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <span className="min-w-[80px] text-center">
+          Page {page + 1} of {totalPages}
+        </span>
+        <button
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages - 1}
+          className="rounded p-0.5 hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Next page"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
     </div>
   );
 }
