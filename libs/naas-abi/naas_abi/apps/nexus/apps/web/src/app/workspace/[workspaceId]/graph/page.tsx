@@ -1954,6 +1954,7 @@ function ColumnHeader({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLTableCellElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
@@ -1990,6 +1991,31 @@ function ColumnHeader({
 
   const hasFilter = filter.search.length > 0 || filter.excluded.size > 0;
 
+  const displayedValues = useMemo(() => {
+    const t = filter.search.trim().toLowerCase();
+    if (!t) return uniqueValues;
+    return uniqueValues.filter((v) => v.toLowerCase().includes(t));
+  }, [uniqueValues, filter.search]);
+
+  const checkedCount = displayedValues.filter((v) => !filter.excluded.has(v)).length;
+  const allChecked = displayedValues.length > 0 && checkedCount === displayedValues.length;
+  const noneChecked = checkedCount === 0;
+  const indeterminate = !allChecked && !noneChecked;
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+
+  const handleSelectAll = () => {
+    const next = new Set(filter.excluded);
+    if (allChecked) {
+      for (const v of displayedValues) next.add(v);
+    } else {
+      for (const v of displayedValues) next.delete(v);
+    }
+    updateFilter({ excluded: next });
+  };
+
   return (
     <th
       ref={ref}
@@ -2017,42 +2043,40 @@ function ColumnHeader({
         </button>
       </div>
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-64 rounded-md border bg-background p-2 shadow-lg">
-          <input
-            value={filter.search}
-            onChange={(e) => updateFilter({ search: e.target.value })}
-            placeholder="Contains..."
-            className="mb-2 w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
-          />
-          <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
-            <span>Values ({uniqueValues.length})</span>
-            <div className="flex gap-2">
-              <button
-                onClick={() =>
-                  updateFilter({ excluded: new Set<string>() })
-                }
-                className="hover:text-foreground"
-              >
-                All
-              </button>
-              <button
-                onClick={() => updateFilter({ excluded: new Set(uniqueValues) })}
-                className="hover:text-foreground"
-              >
-                None
-              </button>
-            </div>
+        <div className="absolute left-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-md border bg-background shadow-lg">
+          <div className="border-b p-2">
+            <input
+              value={filter.search}
+              onChange={(e) => updateFilter({ search: e.target.value })}
+              placeholder="Filter..."
+              className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+            />
           </div>
-          <div className="max-h-48 overflow-y-auto rounded border bg-muted/30 p-1">
-            {uniqueValues.length === 0 ? (
+          {displayedValues.length > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs font-medium hover:bg-muted">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allChecked && !noneChecked}
+                onChange={handleSelectAll}
+                className="h-3 w-3"
+              />
+              <span className="flex-1">Select all</span>
+              <span className="text-[10px] text-muted-foreground">
+                {checkedCount} / {displayedValues.length}
+              </span>
+            </label>
+          )}
+          <div className="max-h-48 overflow-y-auto py-1">
+            {displayedValues.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No values</p>
             ) : (
-              uniqueValues.map((v) => {
+              displayedValues.map((v) => {
                 const checked = !filter.excluded.has(v);
                 return (
                   <label
                     key={v}
-                    className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-0.5 text-xs hover:bg-muted"
+                    className="flex cursor-pointer items-center gap-2 px-3 py-1 text-xs hover:bg-muted"
                   >
                     <input
                       type="checkbox"
@@ -2065,7 +2089,7 @@ function ColumnHeader({
                       }}
                       className="h-3 w-3"
                     />
-                    <span className="truncate" title={v}>
+                    <span className="flex-1 truncate" title={v}>
                       {v || <em className="text-muted-foreground">empty</em>}
                     </span>
                   </label>
@@ -2083,8 +2107,8 @@ const RELATION_COLUMNS: { id: string; label: string }[] = [
   { id: 'domain_uri', label: 'domain uri' },
   { id: 'domain', label: 'domain' },
   { id: 'relation', label: 'relation' },
-  { id: 'range', label: 'range' },
   { id: 'range_uri', label: 'range uri' },
+  { id: 'range', label: 'range' },
 ];
 
 function getRelationColumnValue(
@@ -2252,14 +2276,14 @@ function RelationsTable({
               >
                 {r.relation_label || compactUri(r.relation_uri)}
               </td>
-              <td className="max-w-[200px] truncate px-3 py-1.5" title={r.range_label}>
-                {r.range_label}
-              </td>
               <td
                 className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]"
                 title={r.range_uri}
               >
                 {r.range_uri}
+              </td>
+              <td className="max-w-[200px] truncate px-3 py-1.5" title={r.range_label}>
+                {r.range_label}
               </td>
             </tr>
           );
