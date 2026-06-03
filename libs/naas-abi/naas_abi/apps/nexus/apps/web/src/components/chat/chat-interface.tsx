@@ -758,8 +758,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   // Abort all polling loops on unmount
   useEffect(() => {
+    const abortRefs = ingestionAbortRefs.current;
     return () => {
-      ingestionAbortRefs.current.forEach((ctrl) => ctrl.abort());
+      abortRefs.forEach((ctrl) => ctrl.abort());
     };
   }, []);
 
@@ -1283,6 +1284,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       setRecordingSeconds(0);
       audioChunksRef.current = [];
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cancelVoiceRecording]);
 
   // Keyboard shortcuts:
