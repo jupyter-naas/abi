@@ -10,6 +10,49 @@ Guidance for coding agents in `/Users/XXXX/abi`.
 - Python target is `>=3.10,<4`.
 - Frontend: Next.js app at `libs/naas-abi/naas_abi/apps/nexus/apps/web` (requires `pnpm`).
 
+## Navigating the Codebase (read this first)
+
+**Before working in any service or domain, read the nearest `AGENTS.md`.** Each one is the canonical reference for that scope — port interface, public API, adapters, factory, test commands, and how to add a new adapter. They are kept up to date in-tree and supersede any external documentation.
+
+Discovery rule:
+
+1. Find the closest `AGENTS.md` walking up from your working file.
+2. If none exists for the scope you're modifying, create one following the structure of the service files below.
+
+## Service Map
+
+Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has its own `AGENTS.md`:
+
+| Service | What it does | AGENTS.md |
+|---|---|---|
+| `activity_log` | Per-actor activity event log (fail-open recording) | [services/activity_log/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/activity_log/AGENTS.md) |
+| `agent` | LLM ↔ tools/sub-agents orchestration, memory, SSE streaming | [services/agent/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/agent/AGENTS.md) |
+| `bus` | Pub/sub + durable work-queue message broker | [services/bus/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/bus/AGENTS.md) |
+| `cache` | Multi-tier (hot/cold) cache with decorator API | [services/cache/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/cache/AGENTS.md) |
+| `email` | Transactional email sending (SMTP / SES / FS) | [services/email/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/email/AGENTS.md) |
+| `event` | Durable typed event log + live pub/sub | [services/event/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/event/AGENTS.md) |
+| `keyvalue` | Bytes-in/out KV store with TTL + atomic CAS/CAD | [services/keyvalue/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/keyvalue/AGENTS.md) |
+| `model_registry` | Canonical-ID catalog of chat/embedding models | [services/model_registry/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/model_registry/AGENTS.md) |
+| `object_storage` | S3-style blob storage (FS / S3 / Naas) | [services/object_storage/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/object_storage/AGENTS.md) |
+| `ontology` | LLM-powered NER against an RDF/OWL ontology | [services/ontology/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/ontology/AGENTS.md) |
+| `secret` | Layered secret store (dotenv / Naas / base64) | [services/secret/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/secret/AGENTS.md) |
+| `triple_store` | RDF/SPARQL named-graph store + view subscriptions | [services/triple_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/triple_store/AGENTS.md) |
+| `vector_store` | Vector DB facade (Qdrant / SQLite-vec) | [services/vector_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/vector_store/AGENTS.md) |
+
+Every service AGENTS.md follows the same structure: **Purpose → Files → Port → Service API → Adapters → Factory → Tests → Adding a new adapter** — so once you've read one, you know how to navigate them all.
+
+## Marketplace Map
+
+The marketplace (`libs/naas-abi-marketplace/`) is a registry of pluggable modules — LLM providers, third-party integrations, and domain expert agents — that extend core. Read its master guide before working in any subdirectory:
+
+| Scope | What's there | AGENTS.md |
+|---|---|---|
+| Marketplace overview | Module shape, categories, config, discovery cheat sheet, how to add a module | [libs/naas-abi-marketplace/AGENTS.md](libs/naas-abi-marketplace/AGENTS.md) |
+| AI provider modules | Claude, ChatGPT, Gemini, Grok, Mistral, Llama, Qwen, DeepSeek, Gemma, Perplexity, Bedrock | `libs/naas-abi-marketplace/naas_abi_marketplace/ai/` |
+| Application integrations | GitHub, LinkedIn, Postgres, Notion, Salesforce, Slack, … (47 apps) | `libs/naas-abi-marketplace/naas_abi_marketplace/applications/` |
+| Domain expert agents | Software Engineer, Accountant, DevOps, Data Engineer, … (24 roles) | `libs/naas-abi-marketplace/naas_abi_marketplace/domains/` |
+| Reference scaffolds | Demo agents, workflows, Streamlit apps, Dagster orchestration | `libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/` |
+
 ## Extra Rules Discovery
 
 - Checked `.cursorrules`: not present.
