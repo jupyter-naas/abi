@@ -1,12 +1,10 @@
 import pytest
-from naas_abi_marketplace.applications.google_search.agents.GoogleSearchAgent import (
-    create_agent as create_google_search_agent,
-)
+from naas_abi_marketplace.applications.google_search.agents.GoogleSearchAgent import GoogleSearchAgent
 
 
 @pytest.fixture
 def agent():
-    return create_google_search_agent()
+    return GoogleSearchAgent.New()
 
 
 def test_search_web_intent(agent):

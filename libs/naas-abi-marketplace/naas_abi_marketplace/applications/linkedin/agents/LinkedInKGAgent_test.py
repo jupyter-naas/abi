@@ -1,12 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.linkedin.agents.LinkedInKGAgent import (
-    create_agent as create_linkedin_kg_agent,
-)
 
 
 @pytest.fixture
 def agent():
-    return create_linkedin_kg_agent()
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.linkedin.agents.LinkedInKGAgent import (
+        LinkedInKGAgent,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.linkedin"])
+
+    return LinkedInKGAgent.New()
 
 
 def test_linkedin_count_connections_by_person(agent):

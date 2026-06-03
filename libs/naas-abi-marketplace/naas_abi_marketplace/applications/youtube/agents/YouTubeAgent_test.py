@@ -1,10 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.youtube.agents.YouTubeAgent import create_agent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.youtube.agents.YouTubeAgent import (
+        YouTubeAgent,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.youtube"])
+
+    return YouTubeAgent.New()
 
 
 def test_agent_name(agent):
