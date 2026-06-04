@@ -38,6 +38,13 @@ X v2 API tools — use them when the user asks about something **live** on X:
 - Fetch one or many tweets by ID (`x_get_tweet_by_id`, `x_get_tweets_by_ids`).
 - Search tweets from the last 7 days (`x_search_recent_tweets`) using X v2 query
   syntax (operators like `lang:en`, `-is:retweet`, `from:user`).
+- Generate a tweet dump *file* (`x_generate_tweet_dump_file`) — calls
+  search_recent_tweets, writes the result as an NDJSON file under
+  `x/dumps/` in object storage, and returns the file's prefix + key.
+  The drop triggers the auto-ingestion sensor, so the same tweets
+  become queryable via the graph tools a few seconds after the file
+  lands. Use this when the user asks for a dataset / export, or when
+  they want the graph back-filled with a deliberate query slice.
 
 Graph SPARQL tools — use them when the user asks about tweets **already
 collected** in the ABI knowledge graph (i.e. analytical / aggregate
@@ -137,6 +144,35 @@ Constraints:
         return list(templatable_sparql_query_module.get_tools(x_sparql_tools))
 
     @classmethod
+    def _get_pipeline_tools(cls, x_integration_config) -> list:
+        """Pipeline tools the agent can invoke directly.
+
+        Only includes pipelines that make sense as agent-facing actions
+        (vs. ones that only run from orchestration sensors). Today that's
+        just the dump-file generator: the user can say "generate a tweet
+        dump for X" and the auto-ingestion sensor will then load the
+        produced file into the graph asynchronously.
+        """
+        from naas_abi_marketplace.applications.x import ABIModule
+        from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+            XIntegration,
+        )
+        from naas_abi_marketplace.applications.x.pipelines.XGenerateTweetDumpPipeline import (
+            XGenerateTweetDumpPipeline,
+            XGenerateTweetDumpPipelineConfiguration,
+        )
+
+        module = ABIModule.get_instance()
+        x_integration = XIntegration(x_integration_config)
+        dump_pipeline = XGenerateTweetDumpPipeline(
+            XGenerateTweetDumpPipelineConfiguration(
+                x_integration=x_integration,
+                object_storage=module.engine.services.object_storage,
+            )
+        )
+        return list(dump_pipeline.as_tools())
+
+    @classmethod
     def New(
         cls,
         agent_shared_state: Optional[AgentSharedState] = None,
@@ -164,6 +200,7 @@ Constraints:
         )
         tools = list(XIntegration_tools(x_integration_config))
         tools += cls.get_tools()
+        tools += cls._get_pipeline_tools(x_integration_config)
 
         if agent_configuration is None:
             agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
