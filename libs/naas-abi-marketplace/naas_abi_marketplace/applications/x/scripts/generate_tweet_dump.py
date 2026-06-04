@@ -2,21 +2,33 @@
 
 The same loop the X agent runs when it calls ``x_generate_tweet_dump_file``,
 exposed as a command-line entry point so operators can produce dumps
-without going through the chat UI:
-
-    uv run python -m naas_abi_marketplace.applications.x.scripts.generate_tweet_dump \\
-        --query "(openai OR anthropic) lang:en -is:retweet" \\
-        --max-pages 5 \\
-        --max-results 100
+without going through the chat UI.
 
 Lives under the X application module (not at repo root) so it ships
 with the module wherever the marketplace package is installed.
 
-The script:
-  1. Boots the ABI engine (so module config + secrets are wired).
-  2. Looks up the X application module and its configured bearer token.
-  3. Instantiates :class:`XGenerateTweetDumpPipeline` and runs it.
-  4. Prints the resulting object-storage prefix + key as JSON to stdout.
+Two invocation styles, pick whichever fits:
+
+  # via the abi CLI's generic "preload engine + run script" wrapper.
+  # The wrapper does Engine().load() and forwards extra args; the
+  # script then just picks up the already-initialised module:
+  abi run script \\
+      libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/scripts/generate_tweet_dump.py \\
+      --query "(openai OR anthropic) lang:en -is:retweet" \\
+      --max-pages 5
+
+  # or standalone, which boots the engine itself:
+  uv run python -m naas_abi_marketplace.applications.x.scripts.generate_tweet_dump \\
+      --query "(openai OR anthropic) lang:en -is:retweet" \\
+      --max-pages 5
+
+Internally the script:
+  1. Looks up the X application module via ``ABIModule.get_instance()``.
+     If that raises ``ValueError`` (module not initialised — i.e. we
+     weren't invoked through ``abi run script``), it falls back to
+     booting the engine itself with ``Engine().load()``.
+  2. Instantiates :class:`XGenerateTweetDumpPipeline` and runs it.
+  3. Prints the resulting prefix + key as JSON on stdout.
 
 Because the pipeline goes through ``ObjectStorageService.put_object``,
 an ``ObjectPut`` event is published as a side effect — so if Dagster's
@@ -96,23 +108,35 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
+def _ensure_engine_loaded():
+    """Return the module instance, booting the engine first if needed.
+
+    When this script is invoked via ``abi run script``, the CLI wrapper
+    has already called ``Engine().load()`` for us — so ``get_instance()``
+    succeeds and we just return. When invoked standalone (``python -m
+    naas_abi_marketplace.applications.x.scripts.generate_tweet_dump``),
+    no engine has been loaded yet, ``get_instance()`` raises
+    ``ValueError("Module … not initialized")``, and we boot the engine
+    ourselves before retrying. Either way the rest of ``main()`` sees a
+    fully-wired module.
+    """
+    from naas_abi_marketplace.applications.x import ABIModule
+
+    try:
+        return ABIModule.get_instance()
+    except ValueError:
+        Engine().load()
+        return ABIModule.get_instance()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
 
-    # Boot the engine using the project's config.yaml — same pattern as
-    # the other scripts in this directory. We can't pin to a single
-    # module here because the engine's default_chat_model /
-    # default_embedding_model live in config.yaml and validate against
-    # whatever modules registered them, so leaving the module list
-    # implicit lets the engine load everything the project's config
-    # declares.
-    engine = Engine()
-    engine.load()
+    module = _ensure_engine_loaded()
 
-    # Defer imports until after engine.load() so module-level singletons
-    # (configuration, services) are populated before the pipeline picks
-    # them up.
-    from naas_abi_marketplace.applications.x import ABIModule
+    # Defer the rest of the imports until after the engine is up — module
+    # globals (configuration, services) are populated during load(), so
+    # importing earlier could pick up half-initialised state on first run.
     from naas_abi_marketplace.applications.x.integrations.XIntegration import (
         XIntegration,
         XIntegrationConfiguration,
@@ -123,14 +147,13 @@ def main(argv: list[str] | None = None) -> int:
         XGenerateTweetDumpPipelineParameters,
     )
 
-    module = ABIModule.get_instance()
     x_integration = XIntegration(
         XIntegrationConfiguration(bearer_token=module.configuration.bearer_token)
     )
 
     config_kwargs: dict = {
         "x_integration": x_integration,
-        "object_storage": engine.services.object_storage,
+        "object_storage": module.engine.services.object_storage,
     }
     if args.output_prefix is not None:
         config_kwargs["output_prefix"] = args.output_prefix
