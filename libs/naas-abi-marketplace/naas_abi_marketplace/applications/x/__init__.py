@@ -79,9 +79,17 @@ class XTweetFileIngestionConfiguration(BaseModel):
     input_prefix: str = Field(
         default="x/uploads",
         description=(
-            "Object-storage prefix to watch. Drop tweet dump files (.json "
-            "/ .ndjson, optionally gzipped) under this prefix and the "
-            "sensor will pick them up on its next tick."
+            "Object-storage prefix to watch. Drop tweet dump files under "
+            "this prefix and the sensor will pick them up on its next "
+            "tick. Accepted shapes (auto-detected): "
+            "(a) one big JSON array of bare tweet dicts — same as the "
+            "files that XIntegration.search_recent_tweets's cache writes "
+            "to ``<datastore_path>/search_recent_tweets/<hash>.json``, so "
+            "point this at that directory to back-fill from the cache; "
+            "(b) one X v2 ``{data:[...], meta:{...}}`` response — what "
+            "you'd get if you piped the API output to a file; "
+            "(c) JSONL of either shape — one tweet per line, or one "
+            "response envelope per line. ``.gz`` variants also work."
         ),
     )
     interval_seconds: int = Field(

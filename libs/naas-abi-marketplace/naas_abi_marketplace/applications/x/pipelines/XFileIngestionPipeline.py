@@ -271,13 +271,34 @@ class XFileIngestionPipeline(Pipeline):
         return h.hexdigest(), size
 
     def _iter_records(self, prefix: str, key: str) -> Iterator[dict]:
-        """Yield tweet dicts from *prefix/key*, agnostic to NDJSON vs array.
+        """Yield individual tweet dicts from *prefix/key*.
 
-        The file is opened once via ``get_object_stream``; the underlying
-        body is gzip-decompressed transparently when the key ends in
-        ``.gz`` or when the magic bytes look gzip-y. Format detection
-        between NDJSON and JSON-array peeks at the first non-whitespace
-        byte: ``[`` => array (ijson), anything else => NDJSON.
+        Accepts three shapes (auto-detected by sniffing the first
+        non-whitespace byte), so we can ingest either raw tweet dumps or
+        the verbatim output of X v2 ``GET /2/tweets/search/recent``:
+
+        1. **NDJSON of envelopes** — most useful for "JSONL of query
+           results". Each line is one X v2 response of the form
+           ``{"data": [...tweets...], "meta": {...}}``. Every tweet inside
+           ``data`` is yielded.
+        2. **NDJSON of tweets** — each line is a bare tweet dict with
+           ``id`` + ``text``. Yielded as-is.
+        3. **JSON array** — either an array of envelopes or an array of
+           tweets, streamed item-by-item via ``ijson``. Same per-item
+           detection as the NDJSON case.
+
+        Gzip-compressed variants (``.gz`` suffix or ``0x1f 0x8b`` magic
+        bytes) are decompressed on the fly.
+        """
+        for raw_record in self._iter_raw_records(prefix, key):
+            yield from _unwrap_envelope(raw_record)
+
+    def _iter_raw_records(self, prefix: str, key: str) -> Iterator[dict]:
+        """Yield the top-level JSON objects in the file (no envelope unwrap).
+
+        ``_iter_records`` then takes care of the envelope semantics. Kept
+        separate so the format-detection logic stays focused on bytes,
+        not on schema.
         """
         with self.__configuration.object_storage.get_object_stream(
             prefix, key
@@ -290,24 +311,21 @@ class XFileIngestionPipeline(Pipeline):
                 wrapped = cast(IO[bytes], _PrependByte(first, stream))
                 yield from ijson.items(wrapped, "item", use_float=True)
             elif first == b"{":
-                # Two cases: (a) NDJSON whose first line happens to start
-                # with `{`, or (b) a single big JSON object with an "items"
-                # / "data" / "tweets" list under one of those keys. We try
-                # NDJSON first (most common for big dumps); if the first
-                # line fails to parse we fall back to ijson on the wrapped
-                # object hunting for a list under `data` or `tweets`.
+                # NDJSON: each line is its own JSON object — either a v2
+                # envelope or a bare tweet. We read line by line; the
+                # unwrap step in _iter_records handles either shape.
                 wrapped = cast(IO[bytes], _PrependByte(first, stream))
                 first_line = self._read_line(wrapped)
                 try:
                     yield json.loads(first_line)
                 except json.JSONDecodeError:
-                    # Fall back to ijson, rewinding via a fresh stream
-                    # because the line we consumed is unrecoverable from
-                    # here. The cost of a second pass for the malformed
-                    # case is acceptable.
+                    # Not NDJSON — the first non-whitespace byte was `{`
+                    # but the rest of the file isn't a line-delimited
+                    # object stream. Treat the whole file as one big
+                    # JSON object and stream tweets out of common
+                    # nesting paths (X v2 envelope / "tweets" wrapper).
                     yield from self._iter_records_via_ijson(prefix, key)
                     return
-                # Continue NDJSON from where we left off
                 for line in self._iter_lines(wrapped):
                     line = line.strip()
                     if not line:
@@ -328,12 +346,15 @@ class XFileIngestionPipeline(Pipeline):
                 )
 
     def _iter_records_via_ijson(self, prefix: str, key: str) -> Iterator[dict]:
-        """Hunt for a tweet list under common nesting paths in a JSON object."""
+        """Hunt for a tweet list under common nesting paths in a JSON object.
+
+        Handles the single-response case where the whole file is one
+        ``GET /2/tweets/search/recent`` response: ``{"data":[...]}``.
+        """
         with self.__configuration.object_storage.get_object_stream(
             prefix, key
         ) as raw:
             stream = self._maybe_decompress(raw, key)
-            # Try the X v2 envelope first: `{"data":[...]}`
             try:
                 yield from ijson.items(stream, "data.item", use_float=True)
                 return
@@ -493,10 +514,14 @@ class XFileIngestionPipeline(Pipeline):
             StructuredTool(
                 name="x_ingest_tweets_from_file",
                 description=(
-                    "Stream an X v2 tweet dump (JSON array, NDJSON, or "
-                    "gzipped variants) from object storage into the ABI "
-                    "knowledge graph. Pass `prefix` + `key`. Dedup'd by "
-                    "sha256 — re-running on the same file is a no-op."
+                    "Stream an X v2 tweet dump from object storage into "
+                    "the ABI knowledge graph. Pass `prefix` + `key`. "
+                    "Accepts (auto-detected): a JSON array of bare "
+                    "tweets (the shape XIntegration.search_recent_tweets's "
+                    "cache writes); a single X v2 response envelope "
+                    "{data:[...], meta:{...}}; or NDJSON of either. "
+                    "`.gz` variants also work. Dedup'd by sha256 — "
+                    "re-running on the same file is a no-op."
                 ),
                 func=lambda **kwargs: self.run(
                     XFileIngestionPipelineParameters(**kwargs)
@@ -517,6 +542,54 @@ class XFileIngestionPipeline(Pipeline):
         if tags is None:
             tags = []
         return None
+
+
+# ----- Envelope unwrapping --------------------------------------------------
+
+
+def _unwrap_envelope(record: dict) -> Iterator[dict]:
+    """Yield individual tweet dicts from one parsed JSON object.
+
+    Three input shapes are recognised; everything else is logged + skipped
+    so a single malformed line never tanks a multi-GB import:
+
+    * **X v2 search_recent_tweets response envelope**:
+      ``{"data": [tweet, ...], "meta": {...}}`` — yield each item of
+      ``data`` that looks like a tweet (a dict).
+    * **Single tweet** with top-level ``id`` + ``text``: yield as-is.
+    * **Includes/expansions-only envelope** (no ``data`` array, just
+      ``includes`` or ``meta``): nothing to yield, skip silently.
+
+    The envelope path also tolerates ``includes`` and ``meta`` siblings
+    of ``data`` — they're just ignored. Per-tweet provenance like the
+    originating ``query`` (when present at the envelope level) is not
+    currently captured: file-level provenance via ``x:TweetFile`` /
+    ``x:TweetFileImport`` already attributes tweets to the source dump.
+    """
+    if not isinstance(record, dict):
+        logger.warning(
+            f"XFileIngestionPipeline: skipping non-object record "
+            f"({type(record).__name__})"
+        )
+        return
+    data = record.get("data")
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict) and "id" in item:
+                yield item
+        return
+    if "id" in record and "text" in record:
+        yield record
+        return
+    # Envelope with only "includes" / "meta" / "errors" — nothing to
+    # ingest but not an error condition (every paginated search has at
+    # least one such response at the tail).
+    if any(k in record for k in ("includes", "meta", "errors")):
+        return
+    logger.warning(
+        f"XFileIngestionPipeline: skipping record of unknown shape, "
+        f"keys={list(record.keys())[:10]}"
+    )
 
 
 # ----- Tiny helpers for "peek then put back" semantics ---------------------
