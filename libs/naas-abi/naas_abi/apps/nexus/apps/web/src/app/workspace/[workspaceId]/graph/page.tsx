@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Code,
   Database,
   Download,
   FileUp,
@@ -27,6 +28,7 @@ import {
   Trash2,
   Upload,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -51,6 +53,14 @@ import {
   type GraphNode as StoreGraphNode,
   type GraphView,
 } from '@/stores/knowledge-graph';
+
+type PreviewType = 'network' | 'sparql' | 'table';
+
+const PREVIEW_TYPE_DEFS: { id: PreviewType; label: string; icon: LucideIcon }[] = [
+  { id: 'network', label: 'Network', icon: Share2 },
+  { id: 'sparql', label: 'Sparql Query', icon: Code },
+  { id: 'table', label: 'Table', icon: LayoutList },
+];
 
 const VisNetwork = dynamic(
   () => import('@/components/graph/vis-network').then((mod) => mod.VisNetwork),
@@ -182,7 +192,9 @@ interface SparqlTriple {
 
 interface ColumnFilter {
   search: string;
-  excluded: Set<string>;
+  // Whitelist of values to keep. Empty = no constraint (all rows shown), which
+  // is why a freshly-loaded table has every column filter unselected.
+  included: Set<string>;
 }
 
 interface SortState {
@@ -562,7 +574,7 @@ export default function GraphPage() {
       const search = filter.search.trim().toLowerCase();
       result = result.filter((inst) => {
         const value = getInstanceColumnValue(inst, colId);
-        if (filter.excluded.has(value)) return false;
+        if (filter.included.size > 0 && !filter.included.has(value)) return false;
         if (search && !value.toLowerCase().includes(search)) return false;
         return true;
       });
@@ -610,7 +622,7 @@ export default function GraphPage() {
       const search = filter.search.trim().toLowerCase();
       result = result.filter((rel) => {
         const value = getRelationColumnValue(rel, colId);
-        if (filter.excluded.has(value)) return false;
+        if (filter.included.size > 0 && !filter.included.has(value)) return false;
         if (search && !value.toLowerCase().includes(search)) return false;
         return true;
       });
@@ -663,10 +675,12 @@ export default function GraphPage() {
         if (!cancelled) {
           setSelectedRelationUris((prev) => {
             if (data.length === 0) return [];
-            // When the user just changed their explicit row selection, show
-            // every relation for the new selection — don't try to preserve a
-            // previous relation-type filter that would hide rows.
-            if (selectionChanged && selectedInstanceUris.size > 0) {
+            // Whenever the user changes their explicit row selection — including
+            // clearing it back to none — show every relation for the resulting
+            // working set. This keeps the relation count identical to the
+            // initial (no-selection) load after a select/deselect round-trip,
+            // instead of preserving a narrower previous relation-type filter.
+            if (selectionChanged) {
               return data.map((d) => d.uri);
             }
             const valid = new Set(data.map((d) => d.uri));
@@ -1620,8 +1634,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   const [openSections, setOpenSections] = useState<string[]>(['instances', 'relations']);
   const instancesCollapsed = !openSections.includes('instances');
   const relationsCollapsed = !openSections.includes('relations');
-  const previewCollapsed = !openSections.includes('preview');
-  const sparqlCollapsed = !openSections.includes('sparql');
   const toggleSection = (id: string) =>
     setOpenSections((prev) => {
       if (prev.includes(id)) return prev.filter((s) => s !== id);
@@ -1634,20 +1646,38 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   useEffect(() => {
     if (activeSavedViewId && activeSavedViewId !== prevAppliedViewIdRef.current) {
       prevAppliedViewIdRef.current = activeSavedViewId;
-      setOpenSections(['instances', 'preview']);
+      setOpenSections(['instances', 'relations']);
     }
     if (!activeSavedViewId) {
       prevAppliedViewIdRef.current = null;
     }
   }, [activeSavedViewId]);
 
-  const [networkClosed, setNetworkClosed] = useState(false);
+  // Right-panel "Preview": up to two of network / sparql / table shown at once.
+  const [selectedPreviews, setSelectedPreviews] = useState<PreviewType[]>(['network']);
+  const [previewSplitOrientation, setPreviewSplitOrientation] =
+    useState<'horizontal' | 'vertical'>('horizontal');
+  const togglePreview = (id: PreviewType) =>
+    setSelectedPreviews((prev) => {
+      if (prev.includes(id)) return prev.filter((p) => p !== id);
+      const next = [...prev, id];
+      // Keep at most two active; dropping the oldest when a third is added.
+      return next.length > 2 ? next.slice(next.length - 2) : next;
+    });
   const [networkViewMode, setNetworkViewMode] = useState<'individuals' | 'classes'>('classes');
 
   // Class preview aggregates EVERY row/relation in the tables — not just the
   // (capped) individuals drawn in the network — so it always reflects the full
   // filtered dataset.
   const classGraphNodes = useMemo<StoreGraphNode[]>(() => {
+    // A class counts as selected when at least one of its individuals is ticked
+    // in the Individuals table — so the Classes view dims the same way.
+    const selectedClassUriSet = new Set<string>();
+    for (const inst of filteredInstances) {
+      if (selectedInstanceUris.has(inst.uri)) {
+        selectedClassUriSet.add(inst.class_uri || inst.class_label || '');
+      }
+    }
     const classCounts = new Map<string, { label: string; count: number; bfoParentIri: string }>();
     for (const inst of filteredInstances) {
       const classUri = inst.class_uri || inst.class_label || '';
@@ -1672,38 +1702,33 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       id: classUri || label,
       label: count > 0 ? `${label} (${count})` : label,
       type: label,
-      properties: { class_uri: classUri, bfo_parent_iri: bfoParentIri },
+      properties: { class_uri: classUri, bfo_parent_iri: bfoParentIri, selected: selectedClassUriSet.has(classUri) },
     }));
-  }, [filteredInstances, filteredRelations]);
+  }, [filteredInstances, filteredRelations, selectedInstanceUris]);
 
   const classGraphEdges = useMemo<StoreGraphEdge[]>(() => {
-    const edgeCounts = new Map<string, { domainClass: string; rangeClass: string; label: string; count: number }>();
+    const edgeCounts = new Map<string, { domainClass: string; rangeClass: string; label: string; count: number; selected: boolean }>();
     for (const rel of filteredRelations) {
       const domainClass = rel.domain_class_uri || rel.domain_class_label || '';
       const rangeClass = rel.range_class_uri || rel.range_class_label || '';
       if (!domainClass || !rangeClass) continue;
       const label = rel.relation_label || compactUri(rel.relation_uri);
       const key = `${domainClass}|${label}|${rangeClass}`;
+      // A class relation is selected when any underlying relation row is ticked.
+      const relSelected = selectedRelationRowKeys.has(relationRowKey(rel));
       const existing = edgeCounts.get(key);
-      if (existing) { existing.count++; }
-      else { edgeCounts.set(key, { domainClass, rangeClass, label, count: 1 }); }
+      if (existing) { existing.count++; existing.selected = existing.selected || relSelected; }
+      else { edgeCounts.set(key, { domainClass, rangeClass, label, count: 1, selected: relSelected }); }
     }
-    return Array.from(edgeCounts.entries()).map(([key, { domainClass, rangeClass, label, count }]) => ({
+    return Array.from(edgeCounts.entries()).map(([key, { domainClass, rangeClass, label, count, selected }]) => ({
       id: key,
       source: domainClass,
       target: rangeClass,
       type: label,
       label: `${label} (${count})`,
+      properties: { selected },
     }));
-  }, [filteredRelations]);
-
-  const prevGraphNodesLengthRef = useRef(0);
-  useEffect(() => {
-    if (graphNodes.length > 0 && prevGraphNodesLengthRef.current === 0) {
-      setNetworkClosed(false);
-    }
-    prevGraphNodesLengthRef.current = graphNodes.length;
-  }, [graphNodes.length]);
+  }, [filteredRelations, selectedRelationRowKeys]);
 
   const [instancePage, setInstancePage] = useState(0);
   const [instancePageSize, setInstancePageSize] = useState(20);
@@ -1863,9 +1888,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       });
     } else {
       const selectedCompact = new Set(Array.from(selectedInstanceUris).map((u) => compactUri(u)));
-      const allSubjects = [...new Set(filteredInstancesRef.current.map((i) => compactUri(i.uri)))];
-      const excluded = new Set(allSubjects.filter((v) => !selectedCompact.has(v)));
-      setTripleColumnFilters((prev) => ({ ...prev, s: { search: '', excluded } }));
+      setTripleColumnFilters((prev) => ({ ...prev, s: { search: '', included: selectedCompact } }));
     }
   }, [selectedInstanceUris, filteredInstances]);
   const [triplePage, setTriplePage] = useState(0);
@@ -1883,7 +1906,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       const s = filter.search.trim().toLowerCase();
       result = result.filter((t) => {
         const val = getTripleColValue(t, col);
-        if (filter.excluded.has(val)) return false;
+        if (filter.included.size > 0 && !filter.included.has(val)) return false;
         if (s && !val.toLowerCase().includes(s)) return false;
         return true;
       });
@@ -1952,12 +1975,144 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     const newFilters: Record<string, ColumnFilter> = {};
     for (const colId of [RDFS_LABEL, 'class']) {
       const selectedVals = new Set(selectedRows.map((i) => getInstanceColumnValue(i, colId)));
-      const allVals = [...new Set(insts.map((i) => getInstanceColumnValue(i, colId)))];
-      const excluded = new Set(allVals.filter((v) => !selectedVals.has(v)));
-      if (excluded.size > 0) newFilters[colId] = { search: '', excluded };
+      if (selectedVals.size > 0) newFilters[colId] = { search: '', included: selectedVals };
     }
     onColumnFiltersChange(newFilters);
   }, [selectedInstanceUris, instances]);
+
+  // Selecting new rows in the tables closes any open inspector (per UX spec:
+  // inspector opens on URI click, closes via its button or on a new selection).
+  const closeInspector = () => setInspectedInstance(null);
+  const handleToggleInstance = (uri: string) => { closeInspector(); onToggleInstance(uri); };
+  const handleSetSelectedInstances = (uris: Set<string>) => { closeInspector(); onSetSelectedInstances(uris); };
+  const handleToggleRelationRow = (key: string) => { closeInspector(); onToggleRelationRow(key); };
+  const handleSetSelectedRelationRows = (keys: Set<string>) => { closeInspector(); onSetSelectedRelationRows(keys); };
+
+  // Render one preview pane body (header + content) that fills its flex cell.
+  const renderPreviewPane = (type: PreviewType) => {
+    if (type === 'network') {
+      return (
+        <>
+          <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+            <div className="flex items-center gap-2">
+              <Share2 size={14} className="text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Network</h3>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {classGraphNodes.length} classes · {displayInstances.length} individuals · {filteredRelations.length} relations
+            </span>
+          </header>
+          <div className="relative min-h-0 flex-1">
+            {/* View toggle — overlaid top-right of the canvas. Hidden entirely
+                when there are too many individuals to draw legibly. */}
+            {individualsViewAvailable && (
+              <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded border bg-card/90 text-xs shadow backdrop-blur-sm">
+                {(['classes', 'individuals'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setNetworkViewMode(mode)}
+                    className={cn(
+                      'px-2 py-1 capitalize',
+                      networkViewMode === mode
+                        ? 'bg-workspace-accent text-white'
+                        : 'text-muted-foreground hover:bg-muted'
+                    )}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            )}
+            {graphNodes.length === 0 ? (
+              <EmptyState
+                icon={Filter}
+                text="Run a search in the Individuals table to populate the network. Tick rows to highlight them."
+              />
+            ) : networkViewMode === 'individuals' ? (
+              <VisNetwork
+                nodes={graphNodes}
+                edges={graphEdges}
+                selectedNodeId={highlightedNodeUri}
+                onNodeSelect={onSelectNode}
+                onEdgeSelect={() => {}}
+                physicsEnabled={true}
+                stabilizeKey={stabilizeKey}
+                circularNodes={true}
+              />
+            ) : (
+              <VisNetwork
+                nodes={classGraphNodes}
+                edges={classGraphEdges}
+                selectedNodeId={null}
+                onNodeSelect={() => {}}
+                onEdgeSelect={() => {}}
+                physicsEnabled={true}
+                stabilizeKey={stabilizeKey}
+              />
+            )}
+          </div>
+        </>
+      );
+    }
+
+    if (type === 'sparql') {
+      return (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <SparqlQueryPreview
+            steps={sparqlSteps}
+            graphUri={activeGraph?.uri ?? ''}
+            collapsed={false}
+            onToggle={() => {}}
+            onRemoveStep={onRemoveStep}
+          />
+        </div>
+      );
+    }
+
+    // type === 'table'
+    return (
+      <>
+        <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <LayoutList size={14} className="text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Table</h3>
+            {allTriples.length > 0 && (
+              <span className="text-xs text-muted-foreground">· {allTriples.length} triple{allTriples.length !== 1 ? 's' : ''}</span>
+            )}
+            {allTriples.length >= MAX_TRIPLES && (
+              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                capped at {MAX_TRIPLES.toLocaleString()}
+              </span>
+            )}
+          </div>
+          {allTriples.length > 0 && (
+            <PreviewExportMenu instances={previewInstances} relations={previewRelations} />
+          )}
+        </header>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <TriplesTable
+            rows={pagedTriples}
+            allRows={allTriples}
+            columnFilters={tripleColumnFilters}
+            onColumnFiltersChange={setTripleColumnFilters}
+            sortState={tripleSortState}
+            onSortStateChange={setTripleSortState}
+            uniqueValues={tripleUniqueValues}
+          />
+        </div>
+        {filteredTriples.length > 0 && (
+          <TablePagination
+            page={triplePage}
+            pageSize={triplePageSize}
+            total={filteredTriples.length}
+            onPageChange={setTriplePage}
+            onPageSizeChange={(s) => { setTriplePageSize(s); setTriplePage(0); }}
+          />
+        )}
+      </>
+    );
+  };
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -2026,8 +2181,20 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             />
           )}
           <button
-            onClick={onOpenSaveDialog}
+            onClick={() => {
+              setTripleColumnFilters({});
+              setTripleSortState(null);
+              onClearAll();
+            }}
             className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+            title="Reset all filters and selections"
+          >
+            <X size={14} />
+            Reset view
+          </button>
+          <button
+            onClick={onOpenSaveDialog}
+            className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
             title="Save current filters as a view"
           >
             <Save size={14} />
@@ -2035,42 +2202,44 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           </button>
         </div>
 
-        {/* Action bar: Reset view + Network */}
+        {/* Action bar: Preview type selector (up to 2 active) */}
         <div className="flex items-center gap-2 px-4 py-2">
-          <button
-            onClick={() => {
-              setTripleColumnFilters({});
-              setTripleSortState(null);
-              onClearAll();
-            }}
-            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            title="Reset all filters and selections"
-          >
-            <X size={14} />
-            Reset view
-          </button>
-          <button
-            onClick={() => setNetworkClosed((v) => !v)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted',
-              !networkClosed
-                ? 'border-workspace-accent text-workspace-accent'
-                : 'text-muted-foreground'
-            )}
-            title={networkClosed ? 'Show network preview' : 'Hide network preview'}
-          >
-            <Share2 size={14} />
-            Network
-          </button>
+          <span className="text-xs font-medium text-muted-foreground">Preview</span>
+          <div className="flex overflow-hidden rounded-md border text-sm">
+            {PREVIEW_TYPE_DEFS.map(({ id, label, icon: Icon }, idx) => {
+              const active = selectedPreviews.includes(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => togglePreview(id)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5',
+                    idx > 0 && 'border-l',
+                    active
+                      ? 'bg-workspace-accent text-white'
+                      : 'text-muted-foreground hover:bg-muted'
+                  )}
+                  title={`${active ? 'Hide' : 'Show'} ${label} preview`}
+                >
+                  <Icon size={14} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {selectedPreviews.length >= 2 && (
+            <span className="text-[11px] text-muted-foreground">2 max</span>
+          )}
         </div>
       </div>
 
       {/* Main body: tables column + optional inspector panel */}
       <div className="flex flex-1 overflow-hidden">
-      {/* Left: scrollable tables column */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Left: Individuals + Relations, split equally */}
+      <div className="flex flex-1 flex-col overflow-hidden">
           {/* Table 1: Instances */}
-          <section className="flex flex-col border-b">
+          <section className={cn('flex flex-col overflow-hidden border-b', instancesCollapsed ? 'shrink-0' : 'min-h-0 flex-1')}>
             <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
               <button
                 type="button"
@@ -2108,7 +2277,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             )}
             {!instancesCollapsed && (
             <>
-            <div className="max-h-[50vh] overflow-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               {selectedPropertyUris.length === 0 ? (
                 <EmptyState
                   icon={AlertCircle}
@@ -2129,8 +2298,8 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                   rows={pagedInstances}
                   selectedUris={selectedInstanceUris}
                   inspectedUri={inspectedInstance?.uri ?? null}
-                  onToggle={onToggleInstance}
-                  onSetSelected={onSetSelectedInstances}
+                  onToggle={handleToggleInstance}
+                  onSetSelected={handleSetSelectedInstances}
                   onRowClick={(uri) => {
                     const inst = displayInstances.find((i) => i.uri === uri) ?? null;
                     setInspectedInstance(inst);
@@ -2157,7 +2326,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           </section>
 
           {/* Table 2: Relations */}
-          <section className="flex flex-col border-t border-b">
+          <section className={cn('flex flex-col overflow-hidden border-t border-b', relationsCollapsed ? 'shrink-0' : 'min-h-0 flex-1')}>
             <header className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
               <button
                 type="button"
@@ -2183,7 +2352,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             </header>
             {!relationsCollapsed && (
             <>
-            <div className="max-h-[50vh] overflow-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               {relationsError ? (
                 <EmptyState icon={AlertCircle} text={relationsError} />
               ) : relationsLoading ? (
@@ -2197,8 +2366,8 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                   rows={pagedRelations}
                   allRows={relations}
                   selectedRowKeys={selectedRelationRowKeys}
-                  onToggleRow={onToggleRelationRow}
-                  onSetSelectedRows={onSetSelectedRelationRows}
+                  onToggleRow={handleToggleRelationRow}
+                  onSetSelectedRows={handleSetSelectedRelationRows}
                   onSelectNode={onSelectNode}
                   onInspectInstance={setInspectedInstance}
                   columnFilters={relationColumnFilters}
@@ -2220,74 +2389,10 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             </>
             )}
           </section>
-
-        {/* Table 3: SPARQL Query Preview */}
-        <SparqlQueryPreview
-          steps={sparqlSteps}
-          graphUri={activeGraph?.uri ?? ''}
-          collapsed={sparqlCollapsed}
-          onToggle={() => toggleSection('sparql')}
-          onRemoveStep={onRemoveStep}
-        />
-
-        {/* Table 4: Triple Preview */}
-        <section className="flex flex-col border-t">
-          <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
-            <button
-              type="button"
-              onClick={() => toggleSection('preview')}
-              className="flex items-center gap-2 text-left hover:text-workspace-accent"
-              title={previewCollapsed ? 'Expand' : 'Collapse'}
-            >
-              {previewCollapsed ? (
-                <ChevronRight size={14} className="text-muted-foreground" />
-              ) : (
-                <ChevronDown size={14} className="text-muted-foreground" />
-              )}
-              <LayoutList size={14} className="text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Table preview</h3>
-              {allTriples.length > 0 && (
-                <span className="text-xs text-muted-foreground">· {allTriples.length} triple{allTriples.length !== 1 ? 's' : ''}</span>
-              )}
-              {allTriples.length >= MAX_TRIPLES && (
-                <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
-                  capped at {MAX_TRIPLES.toLocaleString()}
-                </span>
-              )}
-            </button>
-            {!previewCollapsed && allTriples.length > 0 && (
-              <PreviewExportMenu instances={previewInstances} relations={previewRelations} />
-            )}
-          </header>
-          {!previewCollapsed && (
-            <>
-              <div className="max-h-[50vh] overflow-auto">
-                <TriplesTable
-                  rows={pagedTriples}
-                  allRows={allTriples}
-                  columnFilters={tripleColumnFilters}
-                  onColumnFiltersChange={setTripleColumnFilters}
-                  sortState={tripleSortState}
-                  onSortStateChange={setTripleSortState}
-                  uniqueValues={tripleUniqueValues}
-                />
-              </div>
-              {filteredTriples.length > 0 && (
-                <TablePagination
-                  page={triplePage}
-                  pageSize={triplePageSize}
-                  total={filteredTriples.length}
-                  onPageChange={setTriplePage}
-                  onPageSizeChange={(s) => { setTriplePageSize(s); setTriplePage(0); }}
-                />
-              )}
-            </>
-          )}
-        </section>
       </div>
 
-      {/* Right panel: Network (when selection exists) or Inspector (when row clicked) */}
-      {(inspectedInstance || !networkClosed) && (
+      {/* Right panel: Inspector (when a URI is clicked) or Preview (up to 2 panes) */}
+      {(inspectedInstance || selectedPreviews.length > 0) && (
         <aside className="flex min-w-[45%] w-[45%] flex-col overflow-hidden border-l bg-card">
           {inspectedInstance ? (
             <InstanceInspector
@@ -2298,74 +2403,95 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             />
           ) : (
             <>
-              <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+              <header className="flex items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2">
                 <div className="flex items-center gap-2">
                   <Share2 size={14} className="text-muted-foreground" />
-                  <h3 className="text-sm font-semibold">Network preview</h3>
+                  <h3 className="text-sm font-semibold">Preview</h3>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">
-                    {classGraphNodes.length} classes · {displayInstances.length} individuals ·{' '}
-                    {filteredRelations.length} relations
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="flex overflow-hidden rounded-md border text-xs">
+                    {PREVIEW_TYPE_DEFS.map(({ id, label, icon: Icon }, idx) => {
+                      const active = selectedPreviews.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => togglePreview(id)}
+                          className={cn(
+                            'flex items-center gap-1 px-2 py-1',
+                            idx > 0 && 'border-l',
+                            active
+                              ? 'bg-workspace-accent text-white'
+                              : 'text-muted-foreground hover:bg-muted'
+                          )}
+                          title={`${active ? 'Hide' : 'Show'} ${label}`}
+                        >
+                          <Icon size={12} />
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedPreviews.length === 2 && (
+                    <div className="flex overflow-hidden rounded-md border text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSplitOrientation('horizontal')}
+                        className={cn(
+                          'px-2 py-1',
+                          previewSplitOrientation === 'horizontal'
+                            ? 'bg-workspace-accent text-white'
+                            : 'text-muted-foreground hover:bg-muted'
+                        )}
+                        title="Split side by side"
+                      >
+                        ⬌
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSplitOrientation('vertical')}
+                        className={cn(
+                          'border-l px-2 py-1',
+                          previewSplitOrientation === 'vertical'
+                            ? 'bg-workspace-accent text-white'
+                            : 'text-muted-foreground hover:bg-muted'
+                        )}
+                        title="Split stacked"
+                      >
+                        ⬍
+                      </button>
+                    </div>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setNetworkClosed(true)}
+                    onClick={() => setSelectedPreviews([])}
                     className="text-muted-foreground hover:text-foreground"
-                    title="Close network panel"
+                    title="Close preview panel"
                   >
                     <X size={14} />
                   </button>
                 </div>
               </header>
-              <div className="relative flex-1">
-                {/* View toggle — overlaid top-right of the canvas. Hidden entirely
-                    when there are too many individuals to draw legibly. */}
-                {individualsViewAvailable && (
-                  <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded border bg-card/90 text-xs shadow backdrop-blur-sm">
-                    {(['classes', 'individuals'] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setNetworkViewMode(mode)}
-                        className={cn(
-                          'px-2 py-1 capitalize',
-                          networkViewMode === mode
-                            ? 'bg-workspace-accent text-white'
-                            : 'text-muted-foreground hover:bg-muted'
-                        )}
-                      >
-                        {mode}
-                      </button>
-                    ))}
+              <div
+                className={cn(
+                  'flex min-h-0 flex-1',
+                  selectedPreviews.length === 2 && previewSplitOrientation === 'vertical'
+                    ? 'flex-col'
+                    : 'flex-row'
+                )}
+              >
+                {selectedPreviews.map((type, idx) => (
+                  <div
+                    key={type}
+                    className={cn(
+                      'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden',
+                      idx > 0 &&
+                        (previewSplitOrientation === 'vertical' ? 'border-t' : 'border-l')
+                    )}
+                  >
+                    {renderPreviewPane(type)}
                   </div>
-                )}
-                {graphNodes.length === 0 ? (
-                  <EmptyState
-                    icon={Filter}
-                    text="Run a search in the Individuals table to populate the network. Tick rows to highlight them."
-                  />
-                ) : networkViewMode === 'individuals' ? (
-                  <VisNetwork
-                    nodes={graphNodes}
-                    edges={graphEdges}
-                    selectedNodeId={highlightedNodeUri}
-                    onNodeSelect={onSelectNode}
-                    onEdgeSelect={() => {}}
-                    physicsEnabled={true}
-                    stabilizeKey={stabilizeKey}
-                  />
-                ) : (
-                  <VisNetwork
-                    nodes={classGraphNodes}
-                    edges={classGraphEdges}
-                    selectedNodeId={null}
-                    onNodeSelect={() => {}}
-                    onEdgeSelect={() => {}}
-                    physicsEnabled={true}
-                    stabilizeKey={stabilizeKey}
-                  />
-                )}
+                ))}
               </div>
             </>
           )}
@@ -3060,7 +3186,7 @@ function ColumnHeader({
 
   const filter = columnFilters[column.id] ?? {
     search: '',
-    excluded: new Set<string>(),
+    included: new Set<string>(),
   };
 
   const isSorted = sortState?.column === column.id;
@@ -3071,7 +3197,7 @@ function ColumnHeader({
       ...prev,
       [column.id]: {
         search: next.search ?? filter.search,
-        excluded: next.excluded ?? filter.excluded,
+        included: next.included ?? filter.included,
       },
     }));
   };
@@ -3083,7 +3209,7 @@ function ColumnHeader({
     else onSortStateChange(null);
   };
 
-  const hasFilter = filter.search.length > 0 || filter.excluded.size > 0;
+  const hasFilter = filter.search.length > 0 || filter.included.size > 0;
 
   const displayedValues = useMemo(() => {
     const t = filter.search.trim().toLowerCase();
@@ -3091,7 +3217,7 @@ function ColumnHeader({
     return uniqueValues.filter((v) => v.toLowerCase().includes(t));
   }, [uniqueValues, filter.search]);
 
-  const checkedCount = displayedValues.filter((v) => !filter.excluded.has(v)).length;
+  const checkedCount = displayedValues.filter((v) => filter.included.has(v)).length;
   const allChecked = displayedValues.length > 0 && checkedCount === displayedValues.length;
   const noneChecked = checkedCount === 0;
   const indeterminate = !allChecked && !noneChecked;
@@ -3101,13 +3227,13 @@ function ColumnHeader({
   }, [indeterminate]);
 
   const handleSelectAll = () => {
-    const next = new Set(filter.excluded);
+    const next = new Set(filter.included);
     if (allChecked) {
-      for (const v of displayedValues) next.add(v);
-    } else {
       for (const v of displayedValues) next.delete(v);
+    } else {
+      for (const v of displayedValues) next.add(v);
     }
-    updateFilter({ excluded: next });
+    updateFilter({ included: next });
   };
 
   return (
@@ -3166,7 +3292,7 @@ function ColumnHeader({
               <p className="px-2 py-1 text-xs text-muted-foreground">No values</p>
             ) : (
               displayedValues.map((v) => {
-                const checked = !filter.excluded.has(v);
+                const checked = filter.included.has(v);
                 return (
                   <label
                     key={v}
@@ -3176,10 +3302,10 @@ function ColumnHeader({
                       type="checkbox"
                       checked={checked}
                       onChange={() => {
-                        const next = new Set(filter.excluded);
-                        if (checked) next.add(v);
-                        else next.delete(v);
-                        updateFilter({ excluded: next });
+                        const next = new Set(filter.included);
+                        if (checked) next.delete(v);
+                        else next.add(v);
+                        updateFilter({ included: next });
                       }}
                       className="h-3 w-3"
                     />
