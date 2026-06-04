@@ -127,7 +127,6 @@ class XTweetFileIngestionConfiguration(BaseModel):
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
-            "naas_abi_marketplace.ai.chatgpt",
             "naas_abi_core.modules.templatablesparqlquery",
         ],
         services=[ObjectStorageService, Secret, TripleStoreService],
