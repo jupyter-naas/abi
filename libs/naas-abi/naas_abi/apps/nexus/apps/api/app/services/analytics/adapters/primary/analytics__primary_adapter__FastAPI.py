@@ -19,9 +19,15 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary impo
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     AnalyticsEvent,
+    ChatAgentRow,
+    ChatAnalyticsKpi,
+    ChatAnalyticsResponse,
     ChatDetail,
+    ChatFeedbackRow,
     ChatMessage,
     ChatsResponse,
+    ChatToolRow,
+    ChatTopRow,
     EventsResponse,
     IngestResponse,
     Metadata,
@@ -30,6 +36,7 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     RebuildResponse,
     ScenariosResponse,
     SessionsResponse,
+    TimeseriesPoint,
     UserDetail,
     UserDetailNotFound,
     UsersResponse,
@@ -44,7 +51,9 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.registry import get_service_registry
-from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -83,9 +92,7 @@ def _get_object_storage(request: Request) -> ObjectStorageService:
 def get_analytics_service(
     storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> AnalyticsService:
-    return AnalyticsService(
-        storage=AnalyticsSecondaryAdapterObjectStorage(object_storage=storage)
-    )
+    return AnalyticsService(storage=AnalyticsSecondaryAdapterObjectStorage(object_storage=storage))
 
 
 # ---------------------------------------------------------------------------
@@ -158,13 +165,9 @@ async def get_user_detail(
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> UserDetail:
     try:
-        return service.get_user_detail(
-            email, scenario_id=scenario_id, workspace_id=workspace_id
-        )
+        return service.get_user_detail(email, scenario_id=scenario_id, workspace_id=workspace_id)
     except UserDetailNotFound as exc:
-        raise HTTPException(
-            status_code=404, detail="No data for user in selected range"
-        ) from exc
+        raise HTTPException(status_code=404, detail="No data for user in selected range") from exc
 
 
 @router.get("/sessions", response_model=SessionsResponse)
@@ -243,6 +246,237 @@ async def get_chats(
     return response
 
 
+@router.get("/chat-analytics", response_model=ChatAnalyticsResponse)
+async def get_chat_analytics(
+    scenario_id: str = Query(DEFAULT_SCENARIO_ID),
+    workspace_id: str | None = Query(None),
+    user_email: str | None = Query(None),
+    service: AnalyticsService = Depends(get_analytics_service),
+    registry=Depends(get_service_registry),
+) -> ChatAnalyticsResponse:
+    """Aggregate chat-level KPIs, timeseries and ranked tables for the analytics UI.
+
+    Conversations are sourced directly from the chat DB (by updated_at within
+    the scenario window) so they appear regardless of whether a page_viewed
+    analytics event was recorded.
+    """
+    from collections import defaultdict
+    from datetime import datetime
+
+    # -- Resolve scenario window -----------------------------------------------
+    scenario_days = service._days_for_scenario(scenario_id)
+    zero_series = [TimeseriesPoint(date=d, value=0) for d in scenario_days]
+
+    scenario = next(
+        (s for s in service.get_scenarios().scenarios if s.scenario_id == scenario_id),
+        None,
+    )
+    if scenario is None:
+        return ChatAnalyticsResponse(
+            kpi=ChatAnalyticsKpi(num_chats=0, num_messages=0),
+            messages_over_time=zero_series,
+            chats_over_time=zero_series,
+            top_agents=[],
+            top_tools=[],
+            feedback_distribution=[],
+            top_chats=[],
+        )
+
+    date_start = datetime.fromisoformat(scenario.date_start.replace("Z", "+00:00"))
+    date_end = datetime.fromisoformat(scenario.date_end.replace("Z", "+00:00"))
+
+    chat_service = registry.chat
+
+    # -- Source conversations from the chat DB by updated_at -------------------
+    conv_list = await chat_service.adapter.list_conversations_by_updated_at(
+        date_start=date_start,
+        date_end=date_end,
+        workspace_id=workspace_id if workspace_id and workspace_id != "all" else None,
+    )
+
+    # Apply user_email filter by cross-referencing analytics ref-users.
+    if user_email and user_email != "all":
+        ref: list[dict] = service._storage.load_json("ref-users.json", fallback=[])
+        uid = next(
+            (u.get("user_id") for u in ref if u.get("user_email") == user_email),
+            None,
+        )
+        conv_list = [c for c in conv_list if c.user_id == uid] if uid else []
+
+    if not conv_list:
+        return ChatAnalyticsResponse(
+            kpi=ChatAnalyticsKpi(num_chats=0, num_messages=0),
+            messages_over_time=zero_series,
+            chats_over_time=zero_series,
+            top_agents=[],
+            top_tools=[],
+            feedback_distribution=[],
+            top_chats=[],
+        )
+
+    ids = [c.id for c in conv_list]
+    conversations = {c.id: c for c in conv_list}
+
+    # -- Resolve agent IDs → human-readable names (single round-trip) ---------
+    agent_ids = {c.agent for c in conv_list if c.agent}
+    agent_name_map: dict[str, str] = await chat_service.adapter.list_agent_names_by_ids(agent_ids)
+
+    # -- Batch-fetch counts and messages (sequential — one session, no gather) -
+    counts = await chat_service.adapter.count_messages_for_conversations(ids)
+    messages_by_conv = await chat_service.adapter.list_messages_for_conversations(ids)
+
+    # Hourly or daily buckets depending on the scenario.
+    hourly = scenario_id in ("today", "yesterday")
+    slot_fmt = "%Y-%m-%dT%H" if hourly else "%Y-%m-%d"
+
+    # -- Aggregate over messages -----------------------------------------------
+    likes = dislikes = 0
+    tools_used: dict[str, int] = defaultdict(int)
+    feedback_types: dict[str, int] = defaultdict(int)
+    msgs_by_slot: dict[str, int] = defaultdict(int)
+
+    for _cid, msgs in messages_by_conv.items():
+        for msg in msgs:
+            meta = _parse_message_metadata(msg.metadata_)
+            if meta:
+                fb = meta.get("feedback")
+                if fb == "like":
+                    likes += 1
+                elif fb == "dislike":
+                    dislikes += 1
+                    ft = meta.get("feedback_type")
+                    if ft and isinstance(ft, str):
+                        feedback_types[ft] += 1
+                for step in meta.get("steps") or []:
+                    tool = step.get("tool_name") if isinstance(step, dict) else None
+                    if tool and isinstance(tool, str) and tool.lower() != "thinking":
+                        tools_used[tool] += 1
+            msgs_by_slot[msg.created_at.strftime(slot_fmt)] += 1
+
+    # -- Per-agent aggregation -------------------------------------------------
+    agent_msgs: dict[str, int] = defaultdict(int)
+    agent_chats: dict[str, int] = defaultdict(int)
+    for conv in conv_list:
+        slug = conv.agent or "unknown"
+        agent = agent_name_map.get(slug, slug)
+        agent_chats[agent] += 1
+        agent_msgs[agent] += counts.get(conv.id, 0)
+
+    # -- KPI -------------------------------------------------------------------
+    total_messages = sum(counts.values())
+    most_agent = max(agent_chats, key=lambda a: agent_msgs[a]) if agent_chats else None
+    most_tool = max(tools_used, key=tools_used.__getitem__) if tools_used else None
+
+    kpi = ChatAnalyticsKpi(
+        num_chats=len(conv_list),
+        num_messages=total_messages,
+        messages_liked=likes,
+        messages_disliked=dislikes,
+        agents_used=len(agent_chats),
+        most_agent_used=most_agent,
+        tools_used=len(tools_used),
+        most_tool_used=most_tool,
+    )
+
+    # -- Time series -----------------------------------------------------------
+    chats_by_slot: dict[str, int] = defaultdict(int)
+    for conv in conv_list:
+        chats_by_slot[conv.updated_at.strftime(slot_fmt)] += 1
+
+    if scenario_days:
+        chats_over_time = [
+            TimeseriesPoint(date=d, value=chats_by_slot.get(d, 0)) for d in scenario_days
+        ]
+        messages_over_time = [
+            TimeseriesPoint(date=d, value=msgs_by_slot.get(d, 0)) for d in scenario_days
+        ]
+    else:
+        all_slots = sorted(set(list(chats_by_slot) + list(msgs_by_slot)))
+        chats_over_time = [
+            TimeseriesPoint(date=d, value=chats_by_slot.get(d, 0)) for d in all_slots
+        ]
+        messages_over_time = [
+            TimeseriesPoint(date=d, value=msgs_by_slot.get(d, 0)) for d in all_slots
+        ]
+
+    # -- Ranked tables ---------------------------------------------------------
+    top_agents = sorted(
+        [ChatAgentRow(agent=a, messages=agent_msgs[a], chats=agent_chats[a]) for a in agent_chats],
+        key=lambda r: r.messages,
+        reverse=True,
+    )
+    top_tools = sorted(
+        [ChatToolRow(tool_name=t, uses=u) for t, u in tools_used.items()],
+        key=lambda r: r.uses,
+        reverse=True,
+    )
+    feedback_distribution = sorted(
+        [ChatFeedbackRow(feedback_type=ft, count=cnt) for ft, cnt in feedback_types.items()],
+        key=lambda r: r.count,
+        reverse=True,
+    )
+
+    top_chats: list[ChatTopRow] = []
+    for conv in conv_list:
+        msgs = messages_by_conv.get(conv.id, [])
+        lk = dk = 0
+        last_msg_at: str | None = None
+        for msg in msgs:
+            meta = _parse_message_metadata(msg.metadata_)
+            if meta:
+                fb = meta.get("feedback")
+                if fb == "like":
+                    lk += 1
+                elif fb == "dislike":
+                    dk += 1
+            ts = msg.created_at.isoformat() + "Z"
+            if last_msg_at is None or ts > last_msg_at:
+                last_msg_at = ts
+        top_chats.append(
+            ChatTopRow(
+                conversation_id=conv.id,
+                title=conv.title or conv.id,
+                user_email=None,  # user_id stored, not email — enriched below
+                workspace_name=conv.workspace_id,
+                message_count=counts.get(conv.id, 0),
+                likes=lk,
+                dislikes=dk,
+                agent=agent_name_map.get(conv.agent or "", conv.agent or ""),
+                last_message_at=last_msg_at,
+            )
+        )
+
+    # Enrich user_email from analytics ref-users (best-effort).
+    ref_users: list[dict] = service._storage.load_json("ref-users.json", fallback=[])
+    uid_to_email = {u.get("user_id"): u.get("user_email") for u in ref_users if u.get("user_id")}
+    for row in top_chats:
+        conv = conversations.get(row.conversation_id)
+        if conv:
+            row.user_email = uid_to_email.get(conv.user_id)
+
+    # Enrich workspace_name from analytics ref-workspaces (best-effort).
+    ref_ws: list[dict] = service._storage.load_json("ref-workspaces.json", fallback=[])
+    wsid_to_name = {
+        w.get("workspace_id"): w.get("workspace_name") for w in ref_ws if w.get("workspace_id")
+    }
+    for row in top_chats:
+        conv = conversations.get(row.conversation_id)
+        if conv:
+            row.workspace_name = wsid_to_name.get(conv.workspace_id, conv.workspace_id)
+
+    top_chats.sort(key=lambda r: r.message_count, reverse=True)
+
+    return ChatAnalyticsResponse(
+        kpi=kpi,
+        messages_over_time=messages_over_time,
+        chats_over_time=chats_over_time,
+        top_agents=top_agents,
+        top_tools=top_tools,
+        feedback_distribution=feedback_distribution,
+        top_chats=top_chats,
+    )
+
+
 @router.get("/chats/{conversation_id}", response_model=ChatDetail)
 async def get_chat_detail(
     conversation_id: str,
@@ -260,7 +494,7 @@ async def get_chat_detail(
             role=m.role,
             content=m.content,
             agent=m.agent,
-            created_at=m.created_at.isoformat() if m.created_at else None,
+            created_at=m.created_at.isoformat() + "Z" if m.created_at else None,
             metadata=_parse_message_metadata(m.metadata_),
         )
         for m in records
@@ -272,8 +506,8 @@ async def get_chat_detail(
         user_id=conversation.user_id,
         title=conversation.title,
         agent=conversation.agent,
-        created_at=conversation.created_at.isoformat() if conversation.created_at else None,
-        updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
+        created_at=conversation.created_at.isoformat() + "Z" if conversation.created_at else None,
+        updated_at=conversation.updated_at.isoformat() + "Z" if conversation.updated_at else None,
         messages=messages,
     )
 

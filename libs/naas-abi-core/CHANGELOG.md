@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.53.1 (2026-06-03)
+
+
+## v1.53.0 (2026-06-03)
+
+### Documentation
+
+- **agents**: Scaffold AGENTS.md across services, marketplace, and generated projects
+  ([`ae73bc5`](https://github.com/jupyter-naas/abi/commit/ae73bc57c6299d8d828be6a77990c658176ba07d))
+
+### Features
+
+- **engine**: Auto-load model-providing modules so registry defaults resolve
+  ([#1008](https://github.com/jupyter-naas/abi/pull/1008),
+  [`213662a`](https://github.com/jupyter-naas/abi/commit/213662a060f9aa71cbf109c61cd32a2a00c7dff3))
+
+### Refactoring
+
+- **engine**: Simplify model-provider detection to presence of models/ + .py
+  ([#1008](https://github.com/jupyter-naas/abi/pull/1008),
+  [`213662a`](https://github.com/jupyter-naas/abi/commit/213662a060f9aa71cbf109c61cd32a2a00c7dff3))
+
+
 ## v1.52.2 (2026-06-02)
 
 ### Bug Fixes

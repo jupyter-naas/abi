@@ -202,6 +202,26 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         # can render "0 messages" without falling back to "unknown".
         return {cid: counts.get(cid, 0) for cid in conversation_ids}
 
+    async def list_messages_for_conversations(
+        self, conversation_ids: list[str]
+    ) -> dict[str, list[ChatMessageRecord]]:
+        if not conversation_ids:
+            return {}
+        role_order = case(
+            (MessageModel.role == "user", 0),
+            (MessageModel.role == "assistant", 1),
+            else_=2,
+        )
+        result = await self.db.execute(
+            select(MessageModel)
+            .where(MessageModel.conversation_id.in_(conversation_ids))
+            .order_by(MessageModel.conversation_id, MessageModel.created_at, role_order, MessageModel.id)
+        )
+        by_conv: dict[str, list[ChatMessageRecord]] = {cid: [] for cid in conversation_ids}
+        for row in result.scalars().all():
+            by_conv.setdefault(row.conversation_id, []).append(self._to_message_record(row))
+        return by_conv
+
     async def list_conversations_by_ids(
         self, conversation_ids: list[str]
     ) -> dict[str, ChatConversationRecord]:
@@ -211,6 +231,27 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
             select(ConversationModel).where(ConversationModel.id.in_(conversation_ids))
         )
         return {row.id: self._to_conversation_record(row) for row in result.scalars().all()}
+
+    async def list_conversations_by_updated_at(
+        self,
+        date_start,
+        date_end,
+        workspace_id: str | None = None,
+        limit: int = 500,
+    ) -> list[ChatConversationRecord]:
+        # Strip timezone so the values match the TIMESTAMP WITHOUT TIME ZONE column.
+        start = date_start.replace(tzinfo=None) if hasattr(date_start, "tzinfo") else date_start
+        end = date_end.replace(tzinfo=None) if hasattr(date_end, "tzinfo") else date_end
+        q = (
+            select(ConversationModel)
+            .where(ConversationModel.updated_at >= start)
+            .where(ConversationModel.updated_at <= end)
+        )
+        if workspace_id:
+            q = q.where(ConversationModel.workspace_id == workspace_id)
+        q = q.order_by(ConversationModel.updated_at.desc()).limit(limit)
+        result = await self.db.execute(q)
+        return [self._to_conversation_record(row) for row in result.scalars().all()]
 
     async def create_message(
         self,
