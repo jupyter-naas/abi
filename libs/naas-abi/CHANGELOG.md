@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.16.0 (2026-06-04)
+
+### Features
+
+- **analytics**: Add chat analytics endpoint and UI enhancements
+  ([`727e677`](https://github.com/jupyter-naas/abi/commit/727e67700d8f80e44561a4be572330f53af31103))
+
+
 ## v2.15.1 (2026-06-03)
 
 ### Code Style
