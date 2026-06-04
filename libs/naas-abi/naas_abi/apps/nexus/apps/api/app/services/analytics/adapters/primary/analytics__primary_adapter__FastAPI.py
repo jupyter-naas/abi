@@ -25,9 +25,9 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     ChatDetail,
     ChatFeedbackRow,
     ChatMessage,
+    ChatsResponse,
     ChatToolRow,
     ChatTopRow,
-    ChatsResponse,
     EventsResponse,
     IngestResponse,
     Metadata,
@@ -51,7 +51,9 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.registry import get_service_registry
-from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -90,9 +92,7 @@ def _get_object_storage(request: Request) -> ObjectStorageService:
 def get_analytics_service(
     storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> AnalyticsService:
-    return AnalyticsService(
-        storage=AnalyticsSecondaryAdapterObjectStorage(object_storage=storage)
-    )
+    return AnalyticsService(storage=AnalyticsSecondaryAdapterObjectStorage(object_storage=storage))
 
 
 # ---------------------------------------------------------------------------
@@ -165,13 +165,9 @@ async def get_user_detail(
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> UserDetail:
     try:
-        return service.get_user_detail(
-            email, scenario_id=scenario_id, workspace_id=workspace_id
-        )
+        return service.get_user_detail(email, scenario_id=scenario_id, workspace_id=workspace_id)
     except UserDetailNotFound as exc:
-        raise HTTPException(
-            status_code=404, detail="No data for user in selected range"
-        ) from exc
+        raise HTTPException(status_code=404, detail="No data for user in selected range") from exc
 
 
 @router.get("/sessions", response_model=SessionsResponse)
@@ -280,7 +276,10 @@ async def get_chat_analytics(
             kpi=ChatAnalyticsKpi(num_chats=0, num_messages=0),
             messages_over_time=zero_series,
             chats_over_time=zero_series,
-            top_agents=[], top_tools=[], feedback_distribution=[], top_chats=[],
+            top_agents=[],
+            top_tools=[],
+            feedback_distribution=[],
+            top_chats=[],
         )
 
     date_start = datetime.fromisoformat(scenario.date_start.replace("Z", "+00:00"))
@@ -309,7 +308,10 @@ async def get_chat_analytics(
             kpi=ChatAnalyticsKpi(num_chats=0, num_messages=0),
             messages_over_time=zero_series,
             chats_over_time=zero_series,
-            top_agents=[], top_tools=[], feedback_distribution=[], top_chats=[],
+            top_agents=[],
+            top_tools=[],
+            feedback_distribution=[],
+            top_chats=[],
         )
 
     ids = [c.id for c in conv_list]
@@ -333,7 +335,7 @@ async def get_chat_analytics(
     feedback_types: dict[str, int] = defaultdict(int)
     msgs_by_slot: dict[str, int] = defaultdict(int)
 
-    for cid, msgs in messages_by_conv.items():
+    for _cid, msgs in messages_by_conv.items():
         for msg in msgs:
             meta = _parse_message_metadata(msg.metadata_)
             if meta:
@@ -382,25 +384,36 @@ async def get_chat_analytics(
         chats_by_slot[conv.updated_at.strftime(slot_fmt)] += 1
 
     if scenario_days:
-        chats_over_time = [TimeseriesPoint(date=d, value=chats_by_slot.get(d, 0)) for d in scenario_days]
-        messages_over_time = [TimeseriesPoint(date=d, value=msgs_by_slot.get(d, 0)) for d in scenario_days]
+        chats_over_time = [
+            TimeseriesPoint(date=d, value=chats_by_slot.get(d, 0)) for d in scenario_days
+        ]
+        messages_over_time = [
+            TimeseriesPoint(date=d, value=msgs_by_slot.get(d, 0)) for d in scenario_days
+        ]
     else:
         all_slots = sorted(set(list(chats_by_slot) + list(msgs_by_slot)))
-        chats_over_time = [TimeseriesPoint(date=d, value=chats_by_slot.get(d, 0)) for d in all_slots]
-        messages_over_time = [TimeseriesPoint(date=d, value=msgs_by_slot.get(d, 0)) for d in all_slots]
+        chats_over_time = [
+            TimeseriesPoint(date=d, value=chats_by_slot.get(d, 0)) for d in all_slots
+        ]
+        messages_over_time = [
+            TimeseriesPoint(date=d, value=msgs_by_slot.get(d, 0)) for d in all_slots
+        ]
 
     # -- Ranked tables ---------------------------------------------------------
     top_agents = sorted(
         [ChatAgentRow(agent=a, messages=agent_msgs[a], chats=agent_chats[a]) for a in agent_chats],
-        key=lambda r: r.messages, reverse=True,
+        key=lambda r: r.messages,
+        reverse=True,
     )
     top_tools = sorted(
         [ChatToolRow(tool_name=t, uses=u) for t, u in tools_used.items()],
-        key=lambda r: r.uses, reverse=True,
+        key=lambda r: r.uses,
+        reverse=True,
     )
     feedback_distribution = sorted(
         [ChatFeedbackRow(feedback_type=ft, count=cnt) for ft, cnt in feedback_types.items()],
-        key=lambda r: r.count, reverse=True,
+        key=lambda r: r.count,
+        reverse=True,
     )
 
     top_chats: list[ChatTopRow] = []
@@ -443,7 +456,9 @@ async def get_chat_analytics(
 
     # Enrich workspace_name from analytics ref-workspaces (best-effort).
     ref_ws: list[dict] = service._storage.load_json("ref-workspaces.json", fallback=[])
-    wsid_to_name = {w.get("workspace_id"): w.get("workspace_name") for w in ref_ws if w.get("workspace_id")}
+    wsid_to_name = {
+        w.get("workspace_id"): w.get("workspace_name") for w in ref_ws if w.get("workspace_id")
+    }
     for row in top_chats:
         conv = conversations.get(row.conversation_id)
         if conv:
